@@ -88,6 +88,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-crtl-math-constants-missing-silently-zero | B | 60 | bug | `math.h`'s `M_*` constants were absent, so `M_PI` silently evaluated to 0 | — |
 | bug-b-crtl-printf-hexfloat-and-float-sign-flags | B | 65 | bug | printf %a SEGFAULTED every 32-bit target (it fell to the unknown-conversion path and did not consume the double); +/space were ignored on all float conversions; NAN was negative; strtod could not parse hex floats at all | — |
 | bug-b-crtl-stat-nlink-hardcoded | B | 30 | bug | `struct stat.st_nlink` is hardcoded to 1 | — |
+| bug-b-crtl-syscall-veneers-return-raw-negative-errno | B | 60 | bug | open/fsync/dup/dup2/chdir/symlink/link/pipe/mkdir/fchmod/utimes returned the kernel's raw negative errno instead of -1, and never set errno — so perror() after a failed open printed 'Success' | — |
 | bug-b-crtl-wchar-wctype-declared-not-implemented | B | 50 | bug | wcslen, the twelve isw* predicates and towlower/towupper were declared by <wchar.h>/<wctype.h> and implemented nowhere, so calling one imported it from glibc | — |
 | bug-b-dns-wire-ipv4-literal-returns-nxdomain | B | 55 | bug | `dns_wire` answers NXDOMAIN for an IPv4 literal, so the facade's answer depends on the backend | — |
 | bug-b-dotfile-treated-as-extension | B | 50 | bug | A dotfile's name was treated as its extension — ChangeFileExt ate the filename | — |
@@ -95,6 +96,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-format-delphi-spec-parity | B | 50 | bug | SysUtils.Format parsed printf's spec, not Delphi's | — |
 | bug-b-o-directory-wrong-value-on-arm | B | 70 | bug | PAL_OPEN_DIRECTORY used the x86 value on every target, so the entire directory-listing surface was dead on arm32 and aarch64 — and opening a regular FILE with the flag wrongly SUCCEEDED there | — |
 | bug-b-pos-empty-substr-returns-1 | B | 50 | bug | SysUtils.Pos returned 1 for an empty substring | — |
+| bug-b-sscanf-scanset-and-percent-n-unsupported | B | 45 | bug | sscanf did not implement %[...] or %n — %[^,] abandoned the whole scan with the destination untouched, and %n left the caller's counter at whatever it held | — |
 | bug-b-stringlist-text-hardcoded-crlf | B | 50 | bug | TStrings.Text hardcoded CRLF, so SaveToFile wrote DOS line endings on Linux | — |
 | bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |
 | bug-b-strtoint-parsers-disagree | B | 50 | bug | Four integer parsers, four different answers — no radix prefixes, silent overflow | — |

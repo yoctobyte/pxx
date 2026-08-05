@@ -1038,7 +1038,10 @@ int vsscanf(const char *s, const char *fmt, va_list ap) {
       conv = *p;
       if (conv == '\0') break;
       p++;
-      if (conv != 'c' && conv != '%')
+      /* Leading whitespace is skipped before every conversion EXCEPT %c, %[ and
+         %n — those three read (or measure) the input exactly where it stands.
+         C99 7.19.6.2p5/p8. */
+      if (conv != 'c' && conv != '%' && conv != '[' && conv != 'n')
         while (isspace((unsigned char)*s)) s++;
       if (conv == 'd' || conv == 'i' || conv == 'u' || conv == 'x' || conv == 'o') {
         char wbuf[64];
@@ -1111,6 +1114,52 @@ int vsscanf(const char *s, const char *fmt, va_list ap) {
         }
         if (taken < want) break;        /* an incomplete %c field fails */
         if (!suppress) count++;
+      } else if (conv == '[') {
+        /* SCANSET. Was an unsupported conversion, so `%[^,]` -- the ordinary way
+           to read a delimited field -- silently abandoned the whole scan and
+           returned a short count with the destination untouched.
+           `p` already points at the first character of the set (past the '['). */
+        unsigned char set[256];
+        int neg = 0, i, taken = 0;
+        char *dst;
+        for (i = 0; i < 256; i++) set[i] = 0;
+        if (*p == '^') { neg = 1; p++; }
+        /* A ']' FIRST in the set is a literal ']', not the terminator. */
+        if (*p == ']') { set[(unsigned char)']'] = 1; p++; }
+        while (*p && *p != ']') {
+          if (p[1] == '-' && p[2] && p[2] != ']') {
+            unsigned char lo = (unsigned char)p[0], hi = (unsigned char)p[2];
+            if (lo <= hi) { for (i = lo; i <= hi; i++) set[i] = 1; }
+            else { set[lo] = 1; set[(unsigned char)'-'] = 1; set[hi] = 1; }
+            p += 3;
+          } else {
+            set[(unsigned char)*p] = 1;
+            p++;
+          }
+        }
+        if (*p == ']') p++;             /* past the closing bracket */
+        dst = suppress ? 0 : va_arg(ap, char *);
+        while (*s && (width < 0 || taken < width) &&
+               (neg ? !set[(unsigned char)*s] : set[(unsigned char)*s])) {
+          if (dst) *dst++ = *s;
+          s++; taken++;
+        }
+        /* C99 7.19.6.2p12: %[ requires at least one matching character. */
+        if (taken == 0) break;
+        if (dst) *dst = '\0';
+        if (!suppress) count++;
+      } else if (conv == 'n') {
+        /* Characters consumed SO FAR. Was unsupported, so the caller's counter
+           kept whatever it held -- usually uninitialised -- and nothing said so.
+           %n takes an argument but does NOT count toward the return value
+           (C99 7.19.6.2p12), which is why the return looked right. */
+        if (!suppress) {
+          if (lng >= 2) *va_arg(ap, long long *) = (long long)(s - s0);
+          else if (lng == 1) *va_arg(ap, long *) = (long)(s - s0);
+          else if (shrt >= 2) *va_arg(ap, signed char *) = (signed char)(s - s0);
+          else if (shrt == 1) *va_arg(ap, short *) = (short)(s - s0);
+          else *va_arg(ap, int *) = (int)(s - s0);
+        }
       } else if (conv == '%') {
         if (*s != '%') break;
         s++;

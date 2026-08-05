@@ -91,10 +91,17 @@ int fstat64(int fd, struct stat *buf)          { return fstat(fd, buf); }
 int stat64(const char *path, struct stat *buf) { return stat(path, buf); }
 int lstat64(const char *path, struct stat *buf){ return lstat(path, buf); }
 
+/* The PAL returns the raw kernel convention (0, or a NEGATIVE errno). These two
+   forwarded it straight out, so mkdir() on a missing parent returned -2 with
+   errno untouched instead of -1/ENOENT. Found by tools/gcc_diff_probe.sh. */
 int mkdir(const char *path, mode_t mode) {
-  return __pxx_mkdir(path, (int)mode);
+  int rc = __pxx_mkdir(path, (int)mode);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
 }
 
 int fchmod(int fd, mode_t mode) {
-  return __pxx_fchmod(fd, (int)mode);
+  int rc = __pxx_fchmod(fd, (int)mode);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
 }

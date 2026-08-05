@@ -10,9 +10,22 @@
 
 #include <fcntl.h>
 #include <stdarg.h>
+#include <errno.h>
 
 extern int __pxx_open(const char *path, int flags, int mode);
 extern int __pxx_fcntl(int fd, int cmd, long long arg);
+
+/* The PAL returns the RAW kernel convention: a negative errno, not -1/errno.
+   Every function here used to return that straight to the caller, so
+   open("/missing") returned -2 and open("/", O_WRONLY) returned -21, with errno
+   left untouched. `if (fd < 0)` still caught it, but `if (fd == -1)` did not,
+   and perror()/strerror(errno) after a failed open printed "Success". unistd.c
+   already converts on read/write/close/lseek; this file never did.
+   Found by tools/gcc_diff_probe.sh. */
+static int sysret(int rc) {
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
+}
 
 int open(const char *path, int flags, ...) {
   int mode = 0;
@@ -22,7 +35,7 @@ int open(const char *path, int flags, ...) {
     mode = va_arg(ap, int);
     va_end(ap);
   }
-  return __pxx_open(path, flags, mode);
+  return sysret(__pxx_open(path, flags, mode));
 }
 
 int openat(int dirfd, const char *path, int flags, ...) {
@@ -34,12 +47,12 @@ int openat(int dirfd, const char *path, int flags, ...) {
     va_end(ap);
   }
   /* Only AT_FDCWD (-100) is supported; sqlite's default VFS uses plain open(). */
-  if (dirfd != -100) return -1;
-  return __pxx_open(path, flags, mode);
+  if (dirfd != -100) { errno = EBADF; return -1; }
+  return sysret(__pxx_open(path, flags, mode));
 }
 
 int creat(const char *path, mode_t mode) {
-  return __pxx_open(path, O_CREAT | O_WRONLY | O_TRUNC, (int)mode);
+  return sysret(__pxx_open(path, O_CREAT | O_WRONLY | O_TRUNC, (int)mode));
 }
 
 int fcntl(int fd, int cmd, ...) {
@@ -48,7 +61,7 @@ int fcntl(int fd, int cmd, ...) {
   va_start(ap, cmd);
   arg = va_arg(ap, long);   /* int (F_SETFL) or struct flock* — both fit a native long */
   va_end(ap);
-  return __pxx_fcntl(fd, cmd, (long long)arg);
+  return sysret(__pxx_fcntl(fd, cmd, (long long)arg));
 }
 
 /* LFS (_LARGEFILE64_SOURCE) aliases sqlite's os_unix.c imports. off_t is already
@@ -62,7 +75,7 @@ int open64(const char *path, int flags, ...) {
     mode = va_arg(ap, int);
     va_end(ap);
   }
-  return __pxx_open(path, flags, mode);
+  return sysret(__pxx_open(path, flags, mode));
 }
 
 int fcntl64(int fd, int cmd, ...) {
@@ -71,5 +84,5 @@ int fcntl64(int fd, int cmd, ...) {
   va_start(ap, cmd);
   arg = va_arg(ap, long);
   va_end(ap);
-  return __pxx_fcntl(fd, cmd, (long long)arg);
+  return sysret(__pxx_fcntl(fd, cmd, (long long)arg));
 }

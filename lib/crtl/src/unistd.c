@@ -100,7 +100,18 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t off) {
   return (ssize_t)r;
 }
 
-int fsync(int fd) { return __pxx_fsync(fd); }
+/* The PAL returns the raw kernel convention (0/positive, or a NEGATIVE errno).
+   Most of this file already translates that to C's -1 + errno inline; the
+   one-line forwards below did not, so fsync/dup/dup2/chdir/symlink/link/pipe
+   handed the caller -9 or -2 with errno untouched. `if (rc < 0)` still caught
+   it, but `if (rc == -1)` did not, and perror() printed "Success".
+   Found by tools/gcc_diff_probe.sh. */
+static int sysret(int rc) {
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
+}
+
+int fsync(int fd) { return sysret(__pxx_fsync(fd)); }
 
 int getpid(void) { return __pxx_getpid(); }
 
@@ -176,14 +187,21 @@ long sysconf(int name) {
  * for redirected output and every "am I interactive" branch — colour, progress
  * bars, prompting — takes the wrong path. Verified in both directions against
  * gcc: /dev/ptmx is a tty, /dev/null and a directory are not. */
-int isatty(int fd) { return __pxx_isatty(fd); }
+int isatty(int fd) {
+  int r = __pxx_isatty(fd);
+  /* isatty answers 0/1, never -1: a negative PAL result (EBADF, ENOTTY) means
+     "not a terminal" and must not leak out as a NEGATIVE, which every
+     `if (isatty(fd))` would read as TRUE. */
+  if (r < 0) { errno = -r; return 0; }
+  return r ? 1 : 0;
+}
 
 /* dup/dup2: duplicate a descriptor. dup2 makes newfd refer to oldfd, closing
    whatever newfd was; dup picks the lowest free descriptor, which is what
    fcntl(F_DUPFD, 0) means and therefore is the primitive, not a substitute for
    a missing one. Both return the new descriptor, or -errno. */
-int dup(int oldfd) { return __pxx_dup(oldfd); }
-int dup2(int oldfd, int newfd) { return __pxx_dup2(oldfd, newfd); }
+int dup(int oldfd) { return sysret(__pxx_dup(oldfd)); }
+int dup2(int oldfd, int newfd) { return sysret(__pxx_dup2(oldfd, newfd)); }
 
 /* chdir changes PROCESS-GLOBAL state: every later relative path in the program
    resolves against it. Nothing in lib/rtl memoises the working directory
@@ -191,12 +209,12 @@ int dup2(int oldfd, int newfd) { return __pxx_dup2(oldfd, newfd); }
 
    symlink/link reach the kernel through symlinkat/linkat with AT_FDCWD, since
    aarch64 and riscv have no legacy symlink/link syscalls at all. */
-int chdir(const char *path) { return __pxx_chdir(path); }
+int chdir(const char *path) { return sysret(__pxx_chdir(path)); }
 int symlink(const char *target, const char *linkpath) {
-  return __pxx_symlink(target, linkpath);
+  return sysret(__pxx_symlink(target, linkpath));
 }
 int link(const char *oldpath, const char *newpath) {
-  return __pxx_link(oldpath, newpath);
+  return sysret(__pxx_link(oldpath, newpath));
 }
 
 /* Real ids, not zero: geteuid was already here, the rest were simply missing —
@@ -207,7 +225,7 @@ int getgid(void)  { return __pxx_getgid(); }
 int getegid(void) { return __pxx_getegid(); }
 int getppid(void) { return __pxx_getppid(); }
 
-int pipe(int fds[2]) { return __pxx_pipe2(fds, 0); }
+int pipe(int fds[2]) { return sysret(__pxx_pipe2(fds, 0)); }
 
 /* sleep/usleep over nanosleep, which crtl already had. sleep() returns the
    number of seconds LEFT if interrupted, which is 0 on a completed sleep — not

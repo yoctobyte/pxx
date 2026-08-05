@@ -20,6 +20,14 @@
 # AND PRINTED — a case the oracle cannot build proves nothing, and a silent skip
 # is how a disarmed case sits here for months looking like coverage.
 #
+# THE RULE THIS HARNESS KEEPS BREAKING: never read a side effect in the argument
+# list of the call that causes it. `printf("%d [%s]", fread(b,...), b)`,
+# `printf("%d %d", ftell(f), fgetc(f))`, `printf("%d %d", strtol(s,&e,0), e-s)`,
+# `printf("%d %d %d", ctr(), ctr(), ctr())` — argument evaluation order is
+# unspecified, gcc evaluates right-to-left, and pxx orders them differently on
+# arm32/aarch64 than on x86-64. All of it legal, and every one of those shapes
+# reported a phantom compiler bug here. Sequence the call, then print.
+#
 # NOT in scope: float formatting and libm rounding. Wrong values and crashes are
 # in scope; ULP-chasing against a high-precision oracle is this repo's rabbit
 # hole and is deliberately left to the libm tickets.
@@ -768,7 +776,7 @@ int main(void) {
   close(fd);
   fd = open(path, O_RDONLY);
   memset(buf, 0, sizeof buf);
-  printf("%d [%s]\n", (int)read(fd, buf, sizeof buf), buf);
+  { int r = (int)read(fd, buf, sizeof buf); printf("%d [%s]\n", r, buf); }
   printf("%ld\n", (long)lseek(fd, 1, SEEK_SET));
   printf("%d\n", close(fd));
   unlink(path);
@@ -884,6 +892,32 @@ int main(void) {
   return 0;
 }
 C
+probe sscanf-scanset-edges <<'C'
+#include <stdio.h>
+int main(void) {
+  char a[24] = "", b[24] = "";
+  int n;
+  n = sscanf("]abc]", "%[]a-c]", a);            printf("%d [%s]\n", n, a);   /* ']' first is literal */
+  a[0]=0; n = sscanf("a-c", "%[a-]", a);        printf("%d [%s]\n", n, a);   /* '-' last is literal */
+  a[0]=0; n = sscanf("   xy", "%[^0-9]", a);    printf("%d [%s]\n", n, a);   /* no leading-ws skip */
+  a[0]=0; n = sscanf("abcdef", "%3[a-z]", a);   printf("%d [%s]\n", n, a);   /* width */
+  a[0]=0; n = sscanf("123", "%[a-z]", a);       printf("%d [%s]\n", n, a);   /* matching failure */
+  a[0]=0; b[0]=0;
+  n = sscanf("key=value", "%[^=]=%[^\n]", a, b); printf("%d [%s] [%s]\n", n, a, b);
+  a[0]=0; n = sscanf("xyz", "%*[a-z]%n", &(int){0});  printf("%d\n", n);     /* suppressed */
+  return 0;
+}
+C
+probe sscanf-percent-n-positions <<'C'
+#include <stdio.h>
+int main(void) {
+  int v = 0, c1 = -1, c2 = -1, n;
+  n = sscanf("  42abc", "%n%d%n", &c1, &v, &c2);
+  printf("%d %d %d %d\n", n, c1, v, c2);       /* %n counts from the START */
+  { long lc = -1; n = sscanf("abcd", "%*3c%ln", &lc); printf("%d %ld\n", n, lc); }
+  return 0;
+}
+C
 probe sscanf-percent-n <<'C'
 #include <stdio.h>
 int main(void) {
@@ -936,7 +970,7 @@ int main(void) {
   printf("%d\n", fflush(f) == 0);
   rewind(f);
   memset(b, 0, sizeof b);
-  printf("%d [%s]\n", (int)fread(b, 1, 3, f), b);
+  { int r = (int)fread(b, 1, 3, f); printf("%d [%s]\n", r, b); }
   printf("%ld\n", ftell(f));
   fclose(f);
   remove(path);
@@ -953,7 +987,7 @@ int main(void) {
   f = fopen(path, "ab");        fwrite("cd", 1, 2, f); fclose(f);
   f = fopen(path, "rb");
   memset(b, 0, sizeof b);
-  printf("%d [%s]\n", (int)fread(b, 1, sizeof b, f), b);
+  { int r = (int)fread(b, 1, sizeof b, f); printf("%d [%s]\n", r, b); }
   fclose(f);
   remove(path);
   return 0;
@@ -972,7 +1006,7 @@ int main(void) {
   fclose(f);
   f = fopen(path, "rb");
   memset(b, 0, sizeof b);
-  printf("%d %d %d %d\n", (int)fread(b, 1, sizeof b, f), b[0], b[2], b[4]);
+  { int r = (int)fread(b, 1, sizeof b, f); printf("%d %d %d %d\n", r, b[0], b[2], b[4]); }
   fclose(f);
   remove(path);
   return 0;
@@ -994,6 +1028,45 @@ int main(void) {
   return 0;
 }
 C
+probe syscall-errno-convention <<'C'
+#include <stdio.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+int main(void) {
+  int r, e;
+  /* The whole point: a failing syscall veneer must return -1 and SET errno, not
+     hand back the kernel's raw negative errno. `if (rc < 0)` catches both, which
+     is why this hid; `rc == -1` and perror() do not. errno is read on its own
+     statement — never in the argument list of the call that sets it. */
+  errno=0; r = open("/tmp/pxx_nope_9182/x", O_RDONLY); e=errno; printf("open   %d %d\n", r, e);
+  errno=0; r = open("/", O_WRONLY);          e=errno; printf("isdir  %d %d\n", r, e);
+  errno=0; r = fsync(4242);                  e=errno; printf("fsync  %d %d\n", r, e);
+  errno=0; r = dup(4242);                    e=errno; printf("dup    %d %d\n", r, e);
+  errno=0; r = chdir("/tmp/pxx_nope_9182");  e=errno; printf("chdir  %d %d\n", r, e);
+  errno=0; r = mkdir("/tmp/pxx_nope_9182/x", 0755); e=errno; printf("mkdir  %d %d\n", r, e);
+  errno=0; r = link("/tmp/pxx_nope_9182", "/tmp/pxx_nope_9183"); e=errno; printf("link   %d %d\n", r, e);
+  errno=0; r = rmdir("/tmp/pxx_nope_9182");  e=errno; printf("rmdir  %d %d\n", r, e);
+  errno=0; r = unlink("/tmp/pxx_nope_9182"); e=errno; printf("unlink %d %d\n", r, e);
+  errno=0; r = access("/tmp/pxx_nope_9182", 0); e=errno; printf("access %d %d\n", r, e);
+  return 0;
+}
+C
+probe isatty-not-negative <<'C'
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+int main(void) {
+  int fd = open("/tmp/pxx_gdp_tty", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  /* isatty answers 0 or 1. A negative leaking out would make every
+     `if (isatty(fd))` interactivity branch take the terminal path. */
+  printf("%d %d\n", isatty(fd), isatty(fd) ? 1 : 0);
+  printf("%d %d\n", isatty(4242), isatty(4242) ? 1 : 0);
+  close(fd); unlink("/tmp/pxx_gdp_tty");
+  return 0;
+}
+C
 probe unistd-dup-and-pipe <<'C'
 #include <stdio.h>
 #include <unistd.h>
@@ -1004,7 +1077,7 @@ int main(void) {
   if (pipe(fds) != 0) { printf("pipe-fail\n"); return 1; }
   write(fds[1], "hi", 2);
   memset(b, 0, sizeof b);
-  printf("%d [%s]\n", (int)read(fds[0], b, sizeof b), b);
+  { int r = (int)read(fds[0], b, sizeof b); printf("%d [%s]\n", r, b); }
   close(fds[0]); close(fds[1]);
   return 0;
 }
@@ -1060,7 +1133,7 @@ probe static-local-persists <<'C'
 #include <stdio.h>
 static int counter(void) { static int n = 0; return ++n; }
 int main(void) {
-  printf("%d %d %d\n", counter(), counter(), counter());
+  { int a = counter(), b = counter(), c = counter(); printf("%d %d %d\n", a, b, c); }
   return 0;
 }
 C

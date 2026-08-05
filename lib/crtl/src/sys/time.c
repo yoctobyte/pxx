@@ -7,6 +7,7 @@
  */
 
 #include <sys/time.h>
+#include <errno.h>
 
 extern int __pxx_realtime(long long *sec, long long *usec);
 extern int __pxx_utimes(const char *path, long long atimeSec, long long mtimeSec);
@@ -25,5 +26,8 @@ int gettimeofday(struct timeval *tv, void *tz) {
 int utimes(const char *filename, const struct timeval times[2]) {
   long long atime = times ? (long long)times[0].tv_sec : 0;
   long long mtime = times ? (long long)times[1].tv_sec : 0;
-  return __pxx_utimes(filename, atime, mtime);
+  /* raw PAL convention -> C's -1 + errno, like every other veneer here */
+  int rc = __pxx_utimes(filename, atime, mtime);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
 }
