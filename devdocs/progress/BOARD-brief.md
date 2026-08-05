@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:7 blocked:7 backlog:207 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1389 rejected:28`
+`urgent:1 unfinished:7 blocked:7 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1393 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -35,13 +35,9 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 188, ranked
+## Ready — top 30 of 184, ranked
 
 - `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
-- `[p 70] [T]` regression-test-core-test-algol-skeleton
-- `[p 70] [T]` regression-test-core-test-float-write
-- `[p 70] [T]` regression-test-core-test-fortran-skeleton
-- `[p 70] [T]` regression-test-core-test-writeln-nonfinite-float
 - `[p 65] [U]` decide-dynarray-cow-vs-fpc-reference-semantics (unblocks 1)
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -67,5 +63,9 @@ _none — no lane is locked._
 - `[p 55] [A]` bug-a-riscv32-setlength-on-string-array-element-loses-length
 - `[p 55] [A]` bug-a-x86-64-qword-to-double-assign-halves-above-2-63
 - `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
+- `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
+- `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
+- `[p 55] [A]` bug-p-writeln-text-rejects-char
+- `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 
-_158 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_154 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

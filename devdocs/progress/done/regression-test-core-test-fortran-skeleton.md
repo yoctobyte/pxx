@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -60,3 +61,4 @@ against the oracles, not against pxx's own output.
 
 **Verified:** `testmgr --tier native` **1158/1158 pass** (includes the
 self-host fixedpoint and the fpc-bootstrap).
+- 2026-08-05 — resolved, commit PENDING-COMMIT.
