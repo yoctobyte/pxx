@@ -90,4 +90,4 @@ case that caught this uses literals. Whoever fixes it should assert all four
 ordering operators in both operand orders.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 4ccc07383.
