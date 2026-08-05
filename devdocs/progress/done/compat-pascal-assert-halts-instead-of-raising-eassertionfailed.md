@@ -136,4 +136,4 @@ describes, and the three are one piece of work.
 the harness has no non-zero-exit form).
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit ccdc60320.
