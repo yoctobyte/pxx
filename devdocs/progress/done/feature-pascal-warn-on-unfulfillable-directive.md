@@ -157,4 +157,4 @@ Gate: `testmgr --tier limited` 1587/1587 GREEN + self-host fixedpoint.
 **Resolved:** PENDING-COMMIT
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit 277ab2e66.
