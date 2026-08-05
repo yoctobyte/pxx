@@ -42,6 +42,57 @@ resolved between the two copies bind to the first body, calls after bind to the
 second. They are identical today, so nothing misbehaves — but nothing *checks*
 that they stay identical either, and the second silently wins.
 
+## An include guard does NOT fix it — measured, not assumed
+
+The obvious answer is "protect the header", and it does not work. Two reasons,
+in order:
+
+1. **`stdlib.h` already has a guard** (`PXX_CRTL_STDLIB_H`), like every crtl
+   header. The header is not the thing being pulled twice — the **source** is.
+2. **Guarding the source does not help either.** Wrapping
+   `lib/crtl/src/stdlib.c` in `#ifndef PXX_CRTL_STDLIB_C` and rebuilding leaves
+   the count at **51 warnings and a byte-identical code size** (159754B before
+   and after). The second copy never passes through that `#ifndef` at all.
+
+### Why: the preprocessor is per-invocation, as Pascal's defines are per-unit
+
+**User, 2026-08-05: "in pascal, defines are local to the unit."** That is
+exactly it, and the code says so plainly. `CPreprocess`
+(`compiler/cpreproc.inc:2605`) begins by clearing everything:
+
+```pascal
+CPMCount := 0;
+for i := 0 to CPREP_MACRO_HASH_SIZE - 1 do CPMHashHead[i] := -1;
+...
+CPAddLiteral('__linux__', '01');   { predefines re-seeded }
+```
+
+so the macro table is scoped to one *invocation*. That is right for Pascal,
+where `{$DEFINE}` is unit-local — and wrong for C, where `#define` is
+translation-unit-global and an include guard has to survive every nested include
+in that TU. `cparser.inc:8134` calls `CPreprocess` a **second** time for the
+synthetic pull, and that call starts from a clean table, so no guard written
+anywhere can be visible to it.
+
+### And the dedup marker that should have caught it anyway
+
+`CPullCrtlForPrototypes` synthesises `#include <stdlib.h>` lines and runs
+`CPreprocess` over them. If macro state carried across, that synthetic include
+would hit `PXX_CRTL_STDLIB_H` and expand to nothing — the module would never be
+pulled a second time, and the bug would not exist. **It pulls, so the guard
+macros from the earlier pass are not visible there.** Every include guard,
+header or source, is bypassed on that path by construction.
+
+So this cannot be fixed in crtl. It is compiler-side bookkeeping: either the
+late pull consults `CPMarkCrtlSrcPulled` (compiler state, immune to the macro
+table being reset), or the macro table is carried into the synthetic
+preprocess so ordinary guards do their job.
+
+The second option is the more principled one — it would make guards work
+everywhere on that path rather than special-casing the crtl sibling pull — but
+it is also the one more likely to change behaviour elsewhere, so measure the
+pulled-region pass counts before choosing.
+
 ## Lead
 
 `lib/crtl/src/string.c` includes only `<stddef.h>` and `<string.h>` — it does
@@ -52,9 +103,32 @@ that they stay identical either, and the second silently wins.
 > anywhere in the TU) whose name is a known crtl libc function pulls its crtl
 > module, exactly as if the program had included the header.*
 
-`CPMarkCrtlSrcPulled` guards the include-driven pull. The suspicion is that the
-late external-resolution pull does not consult the same marker, or marks under a
-different path spelling, so a module already pulled once is appended again.
+`CrtlSrcPulled[]` / `CrtlSrcPulledCount` (`defs.inc:2060`) are plain globals,
+**never reset** — not by `CPreprocess`, not anywhere — and *both* pull sites do
+consult them (`cpreproc.inc:2125` for the header-driven pull, `:2326` for an
+explicit `#include "...c"`). So the dedup is present and survives the second
+invocation, and it still fails.
+
+That leaves the comparison itself:
+
+```pascal
+for i := 0 to CrtlSrcPulledCount - 1 do
+  if CrtlSrcPulled[i] = src then begin Result := True; Exit; end;
+```
+
+an **exact string match on the path**. The two pulls construct that path by
+different routes — the header-driven one derives it from the already-resolved
+header path (`CPCrtlSrcOf`: prefix up to `crtl/include/`, swapped for
+`crtl/src/`), while the late pull re-resolves a synthetic `#include <stdlib.h>`
+against the include search path. Two spellings of the same file (relative vs
+absolute, or a differing prefix) miss each other and the module is pulled again.
+That is the thing to confirm first: print both strings at the two call sites.
+
+**Also worth fixing while there:** the marker array is bounded by
+`MAX_C_INCLUDE_DIRS` (= 64, *"user `-I` C include search roots"*) — the wrong
+constant for a list of pulled sources. crtl has far fewer than 64 `.c` files so
+it is not reachable today, but past the cap `CPMarkCrtlSrcPulled` silently stops
+recording and every later module loses its dedup.
 
 ## The check that found it
 
