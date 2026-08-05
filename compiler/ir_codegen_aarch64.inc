@@ -2260,7 +2260,15 @@ begin
               end
               else if specialId = 206 then
               begin
-                EmitI32($9E620000); { scvtf d0, x0 }
+                { scvtf is SIGNED, so a QWord above 2^63 converted negative:
+                  `(double)18446744073709551615ULL` was -1
+                  (bug-c-int64-to-double-cast-truncates-on-32bit). aarch64 has
+                  the unsigned form outright. A 32-bit unsigned source is already
+                  zero-extended in x0, so scvtf is right for it. }
+                if IntToTypeKind(IRTk[valNode]) = tyUInt64 then
+                  EmitI32($9E630000)  { ucvtf d0, x0 }
+                else
+                  EmitI32($9E620000); { scvtf d0, x0 }
                 EmitI32($9E660000); { fmov x0, d0 }
               end;
               { 203/204 Trunc/Round: x0 already holds it }

@@ -1532,6 +1532,28 @@ int main(void) {
   return 0;
 }
 C
+# Integer -> floating CASTS at every width and signedness. Not float formatting
+# (%.17g of a value that is exactly representable is exact everywhere): these are
+# WRONG VALUES. Each target got a different subset wrong and every one of them
+# was invisible below 2^31, which is where ordinary code lives —
+# bug-c-int64-to-double-cast-truncates-on-32bit. Keep the 2^53-1, 2^63 and
+# ULLONG_MAX rows: they are the three thresholds that separate the bugs
+# (high-word drop, signed-vs-unsigned 64, and unsigned-32 sign).
+probe int-to-float-casts <<'C'
+#include <stdio.h>
+int main(void) {
+  unsigned long long m = 0x1FFFFFFFFFFFFFULL;    /* 2^53-1, exact in a double */
+  unsigned long long big = 18446744073709551615ULL;
+  long long s = 4886718345LL, neg = -5LL, at31 = 2147483648LL;
+  unsigned int u = 4294967295u, u2 = 2147483648u;
+  long long v = 4294967296LL;
+  printf("%.17g %.17g %.17g\n", (double)m, (double)s, (double)neg);
+  printf("%.17g %.17g %.17g\n", (double)at31, (double)u, (double)u2);
+  printf("%.17g %.17g\n", (double)big, (double)v);
+  printf("%.17g %.17g %.17g\n", (float)v, (float)u, (float)4294967296LL);
+  return 0;
+}
+C
 # Plain `char` is signed on x86-64 and UNSIGNED under the ARM procedure call
 # standard, so this case is right to differ under --target and is tagged rather
 # than fixed. Kept as a case because a target getting its OWN char signedness

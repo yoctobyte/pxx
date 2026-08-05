@@ -2171,6 +2171,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx, lastOrd: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
+    pUnsNeg, pUnsDone: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
@@ -4983,7 +4984,29 @@ begin
               begin EmitB($48); EmitB($31); EmitB($C0); end                          { xor rax,rax (Frac(int)=0) }
               else if specialId = 206 then
               begin
-                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);           { cvtsi2sd xmm0, rax }
+                { cvtsi2sd is SIGNED and x86-64 has no unsigned 64->double, so a
+                  QWord above 2^63 converted negative: `(double)18446744073709551615ULL`
+                  was -1 (bug-c-int64-to-double-cast-truncates-on-32bit — the
+                  x86-64 corner the ticket's 2^53-1 case could not reach). Halve
+                  the odd-bit-preserving way, convert, double back — the standard
+                  sequence, exact for every input. }
+                if IntToTypeKind(IRTk[val1Node]) = tyUInt64 then
+                begin
+                  EmitB($48); EmitB($85); EmitB($C0);                     { test rax, rax }
+                  EmitB($78); pUnsNeg := CodeLen; EmitB(0);               { js .neg }
+                  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);   { cvtsi2sd xmm0, rax }
+                  EmitB($EB); pUnsDone := CodeLen; EmitB(0);              { jmp .done }
+                  Code[pUnsNeg] := Byte(CodeLen - (pUnsNeg + 1));         { .neg: }
+                  EmitB($48); EmitB($89); EmitB($C1);                     { mov rcx, rax }
+                  EmitB($48); EmitB($D1); EmitB($E8);                     { shr rax, 1 }
+                  EmitB($83); EmitB($E1); EmitB($01);                     { and ecx, 1 (keep the odd bit) }
+                  EmitB($48); EmitB($09); EmitB($C8);                     { or rax, rcx }
+                  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);   { cvtsi2sd xmm0, rax }
+                  EmitB($F2); EmitB($0F); EmitB($58); EmitB($C0);         { addsd xmm0, xmm0 }
+                  Code[pUnsDone] := Byte(CodeLen - (pUnsDone + 1));       { .done: }
+                end
+                else
+                  begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, rax }
                 EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);           { movq rax, xmm0 (Int(int) as double) }
               end;
               { 203/204 Trunc/Round of an integer: rax already holds it }

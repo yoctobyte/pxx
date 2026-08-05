@@ -182,6 +182,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-init-struct-designators | C | 50 | bug | C struct field designators `.field = v` in braced initializers | — |
 | bug-c-inline-fnptr-param-call | C | 55 | bug | C: calling through an INLINE fn-pointer parameter — "call to undeclared function" | — |
 | bug-c-int-mod-unsigned-uses-signed-conversion | C | 50 | bug | C `int op unsigned` does SIGNED arithmetic — the usual arithmetic conversions don't convert the signed operand to unsigned, so `-13 % 61u` yields -13 (should be 3); silent wrong values for %, /, and comparisons | — |
+| bug-c-int64-to-double-cast-truncates-on-32bit | C | 80 | bug | i386/arm32: a C cast from a 64-bit integer to double/float TRUNCATES to the low 32 bits and sign-extends — (double)9007199254740991 is -1. Pascal is correct on the same targets, so it is the C cast lowering | — |
 | bug-c-large-record-byval-param | C | 50 | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | C | 50 | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-line-file-func-and-predefined-macros-missing | C | 55 | bug | C: __LINE__ is 0, __FILE__ is empty and __func__ is empty; __unix__, __BYTE_ORDER__, __SIZEOF_* and __CHAR_BIT__ are absent | — |

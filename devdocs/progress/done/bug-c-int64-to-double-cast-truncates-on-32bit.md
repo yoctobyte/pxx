@@ -9,7 +9,7 @@ prio: 80
 
 - **Type:** bug — Track C (C frontend, cast lowering). May hand off to A if the
   fix turns out to be in the shared conversion path.
-- **Status:** urgent
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track B, cross-checking a new `strtod` hex-float path — a
   correct implementation produced `-1.9958403095347198e+292` for
@@ -81,3 +81,6 @@ That is soft-float flush-to-zero in the subnormal range, a different question
 from this one, and not chased — the user has asked that float
 rounding/representation work not absorb time. Recorded here so the next reader
 knows the two divergences in that test row are unrelated.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

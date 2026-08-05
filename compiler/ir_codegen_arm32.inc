@@ -2201,7 +2201,13 @@ begin
                 EmitI32($EC410B10);                 { vmov d0, r0, r1 = 0.0 }
               end
               else if j = 206 then
-                EmitIntToD0Arm32;
+                { Int(integer) -> double. The typeless wrapper hardcodes
+                  tyInteger, so a 64-bit source dropped r1 and a Cardinal >= 2^31
+                  read negative — `(double)9007199254740991ULL` was -1
+                  (bug-c-int64-to-double-cast-truncates-on-32bit). Pass the real
+                  source type; EmitIntToD0Arm32Tk already routes 64-bit through
+                  __pxx_l2d / __pxx_ul2d and unsigned-32 through vcvt.f64.u32. }
+                EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[valNode]));
               { 203/204: r0 already holds the value }
             end;
             Exit;

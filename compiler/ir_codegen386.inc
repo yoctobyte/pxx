@@ -2694,7 +2694,14 @@ begin
               if j = 205 then
                 begin EmitB($66); EmitB($0F); EmitB($EF); EmitB($C0); end  { pxor xmm0, xmm0 = 0.0 }
               else if j = 206 then
-                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end  { cvtsi2sd xmm0, eax }
+                { Int(integer) -> double. MUST go through the typed helper: a
+                  bare cvtsi2sd converts eax only, SIGNED, so a 64-bit source
+                  lost edx and a Cardinal >= 2^31 came out negative. This is the
+                  path a C `(double)` cast takes, so `(double)9007199254740991ULL`
+                  was -1 on i386 (bug-c-int64-to-double-cast-truncates-on-32bit).
+                  EmitIntToXmm386 already handled all of this for the assignment
+                  path — this site just never called it. }
+                EmitIntToXmm386(0, IntToTypeKind(IRTk[valNode]))
               else
                 EmitB($99);   { 203/204: eax already holds the value; cdq -> Int64 }
             end;

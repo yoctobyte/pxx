@@ -869,6 +869,21 @@ begin
       EmitFloatConvRISCV32(tyDouble, wantTk);
       Exit;
     end;
+    if (ntk = tyUInt32) or (ntk = tyNativeUInt) then
+    begin
+      { UNSIGNED 32-bit: __pxx_i2s/i2d read a0 as SIGNED, so a Cardinal >= 2^31
+        converted negative — `(double)4294967295u` was -1
+        (bug-c-int64-to-double-cast-truncates-on-32bit). Zero-extend into the
+        64-bit pair and reuse the proven unsigned kernel rather than adding a
+        u2d; a1 must be cleared AFTER the node emits (it may clobber a1). }
+      IREmitNodeRISCV32(node);                 { a0 = value }
+      rv32_addi(reg_a1, reg_zero, 0);          { a1 = 0 (zero-extend) }
+      procIdx := FindProc('__pxx_ul2d');
+      if procIdx < 0 then Error('compiler error: __pxx_ul2d not found (uses softfloat?)');
+      EmitCallProc(procIdx);                   { a0:a1 = double bits }
+      EmitFloatConvRISCV32(tyDouble, wantTk);
+      Exit;
+    end;
     IREmitNodeRISCV32(node);                   { a0 = 32-bit int }
     if wantTk = tySingle then procIdx := FindProc('__pxx_i2s')
     else procIdx := FindProc('__pxx_i2d');
@@ -2023,6 +2038,13 @@ begin
             procIdx := FindProc(sVal);
             if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
             EmitCallProc(procIdx);                  { a0:a1 = double result }
+            { The kernels always yield a DOUBLE, but this node's type is whatever
+              the cast asked for — a C `(float)x` lowers to Int(x) with a tySingle
+              result. Without this narrowing the caller read double bits as a
+              single: `(float)4294967296LL` was 0 on riscv32 (every other target
+              was right). }
+            if IntToTypeKind(IRTk[node]) = tySingle then
+              EmitFloatConvRISCV32(tyDouble, tySingle);
             Exit;
           end;
           if procIdx = -Ord(tkArgCount) then
