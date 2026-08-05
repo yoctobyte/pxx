@@ -3,6 +3,8 @@ track: A
 prio: 45
 type: bug
 summary: "sqrt/sin/cos/exp/ln/arctan require `uses math`; in FPC they are System-unit intrinsics available with no uses clause. Loud (undefined variable), but it breaks unmodified FPC/Delphi source on its first line"
+status: done
+owner: claude-A
 ---
 
 # `sqrt`, `sin`, `cos`, `exp`, `ln`, `arctan` are not available without `uses math`
@@ -78,3 +80,57 @@ A Pascal test diffed against FPC calling each of the six with no uses clause and
 comparing formatted output, plus the same program WITH `uses math` (which must
 still compile and give the same answers), plus `make test` and the self-host
 fixedpoint, then `stabilize` + `pin`.
+
+
+## Resolved 2026-08-05 — pulled on demand, not redeclared
+
+`sqrt/exp/ln/sin/cos/arctan` now compile with no `uses`, matching FPC:
+
+    writeln(sqrt(16.0):0:1)   ->  4.0     (FPC: 4.0)
+
+**Not** by redeclaring them in builtin. `lib/rtl/math.pas` is 618 lines of
+correctly-rounded numerics — `Sqrt` alone carries a Dekker two-product
+correction step because plain Newton has an FP fixed point 1 ULP below the
+correctly-rounded root. Copying six of those into builtin would recreate exactly
+the one-formatter-written-N-times problem the float tickets spent today
+collapsing (four hand-written float emitters -> one shim).
+
+So instead the parser pulls the `math` unit **on demand**, reusing the existing
+`textfile` mechanism (`needsTextfile` -> `ParseUsesUnit('textfile')`, pulled for
+Text/IOResult/Flush). Same guards: skipped under `NoDefaultRtl` and on
+xtensa / bare-boot riscv32.
+
+### The scan requires a following '('
+
+The names are short and `ln` is a plausible variable (a line number). A bare
+identifier scan would silently pull 35KB of math into any program with
+`var ln: Integer`. Requiring `Tokens[i+1].Kind = tkLParen` costs nothing —
+these are all functions — and measurably fixes it:
+
+    program with `var ln: Integer` only   ->  procs=93   (unchanged)
+    program calling sqrt()               ->  procs=156
+
+### Verified
+
+- all six values byte-identical to FPC;
+- an explicit `uses math` still works and still reaches `Power` etc.
+  (no double-load);
+- a user routine of the same name still binds — and a `var ln` coexists with
+  the pulled unit's `Ln`;
+- a program using none of the names is unchanged (procs=93).
+
+Test: `test/test_math_intrinsics_no_uses.pas`, which carries both halves —
+the five calls and the `ln` variable that must not trigger the pull.
+
+### Caveat found while doing this
+
+An *exact-signature* redeclaration (`function Sqrt(x: Double): Double` in the
+program) would now lose to the pulled unit — but that is
+[[bug-p-program-function-does-not-shadow-used-unit]], a pre-existing name-
+resolution defect this change only makes reachable by a new route. Filed
+separately and urgent; not introduced here.
+
+**Resolved:** PENDING-COMMIT
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

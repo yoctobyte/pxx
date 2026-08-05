@@ -30152,6 +30152,7 @@ procedure ParseProgram;
 var jmpPatch, i, j: Integer; needsPromoInt: Boolean;
     doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
+    usesMath, needsMath: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
     dummyNames: array[0..7] of AnsiString;
@@ -30213,6 +30214,8 @@ begin
   hasCoroutine := False;
   needsBuiltin := False;
   needsTextfile := False;
+  usesMath := False;
+  needsMath := False;
   needsPromoInt := False;
   { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
     loaded by default on every non-ESP program, so `var f: Text` resolves
@@ -30255,6 +30258,35 @@ begin
       needsBuiltin := True;
       needsTextfile := True;
     end;
+  end;
+  { FPC declares the elementary math functions in the System unit, so
+    `writeln(sqrt(16.0))` compiles with no `uses` at all. We keep them in the
+    `math` unit — 618 lines of correctly-rounded numerics (Sqrt alone carries a
+    Dekker two-product correction step) that has no business being duplicated
+    into builtin. So instead of redeclaring them, pull `math` in on demand the
+    same way `textfile` is pulled for Text/IOResult/Flush: scan the token stream
+    for a bare use of one of the System-surface names and add the unit.
+    A user routine of the same name still shadows at the call site, exactly as
+    with the textfile names. }
+  if (not NoDefaultRtl) and
+     (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+  begin
+    { Require a following '(' — these are all functions, and `ln` in
+      particular is a plausible variable name (a line number). Without the
+      check, `var ln: Integer` would silently pull 35KB of math into a program
+      that never calls it. }
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind = tkIdent) and
+         (Tokens[i].SLen >= 2) and (Tokens[i].SLen <= 6) then
+      begin
+        tnm := GetTokenStr(i);
+        if (CaseEqual(tnm, 'sqrt') or CaseEqual(tnm, 'exp') or
+            CaseEqual(tnm, 'ln') or CaseEqual(tnm, 'sin') or
+            CaseEqual(tnm, 'cos') or CaseEqual(tnm, 'arctan')) and
+           (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then
+        begin usesMath := True; Break; end;
+      end;
+    if usesMath then needsMath := True;
   end;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime, needsDivStub);
   { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
@@ -30735,6 +30767,7 @@ begin
     Text record + its procedures resolve and proc-local `var f: Text` gets normal
     managed-field zero-init. }
   if needsTextfile then ParseUsesUnit('textfile');
+  if needsMath then ParseUsesUnit('math');
   FixupTVarRecLayout;
   DbgGlobalScopeBase := SymCount;  { -g: program globals are declared past here }
 

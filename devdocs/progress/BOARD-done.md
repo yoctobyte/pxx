@@ -854,6 +854,7 @@ should not read it to find out what to do. Grep it freely._
 | compat-pascal-const-expr-ord-chr-succ | P | 45 | compat | `Ord()` / `Chr()` / `Length()` / `Succ()` are not folded in constant expressions | — |
 | compat-pascal-copy-of-char-literal | P | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
 | compat-pascal-format-g-and-e-specifiers | B | 25 | compat | compat: Format's %g ignores its precision and uses 15 digits where FPC uses 17; %e is not implemented at all — fully closed 2026-08-04 once the exact dtoa existed | — |
+| compat-pascal-math-intrinsics-not-in-the-system-unit | A | 45 | compat | sqrt/sin/cos/exp/ln/arctan require `uses math`; in FPC they are System-unit intrinsics available with no uses clause. Loud (undefined variable), but it breaks unmodified FPC/Delphi source on its first line | — |
 | compat-pascal-no-command-line-mode-switch | P | 45 | compat | FPC's -Mdelphi / -Mobjfpc command-line mode switch has no pxx equivalent — the dialect can only be set with a {$MODE} directive in the source. Real projects set it in the build, not the file, so their sources carry no directive and pxx silently compiles them in the wrong dialect | — |
 | doc-licensing-split-mpl-zlib | D | 45 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
 | docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |

@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (199)
+## backlog (198)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -83,7 +83,6 @@ lives in git, not in a timestamp._
 | compat-pascal-directive-in-comment-ignores-nested-comments-off | P | 25 | compat | With nested comments OFF (delphi mode), a {$...} sequence inside a brace comment does not end the comment in pxx, but does in FPC. Lax direction — pxx accepts sources FPC rejects | — |
 | compat-pascal-index-a-function-call-result | P | 40 | compat | Indexing a function call's result — `Copy(s,2,3)[1]`, `Make[0]`, `b.ArrP(3)[0]` — either fails to parse or reaches IR lowering as an un-lowerable AN_CALL; FPC accepts all three | — |
 | compat-pascal-inline-generic-specialization | P | 35 | compat | pxx accepts only the declaration form `specialize Max<Integer> as MaxInt;` — FPC's inline `specialize Max<Integer>(a, b)` in an expression or statement is rejected with 'undefined variable' | — |
-| compat-pascal-math-intrinsics-not-in-the-system-unit | A | 45 | compat | sqrt/sin/cos/exp/ln/arctan require `uses math`; in FPC they are System-unit intrinsics available with no uses clause. Loud (undefined variable), but it breaks unmodified FPC/Delphi source on its first line | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | compat-pascal-sqrt-requires-uses-math | A | 30 | compat | Sqrt (and friends) need `uses math`, where FPC has them as system intrinsics | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
@@ -356,9 +355,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1413)
+## done (1414)
 
-1413 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1414 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -468,7 +467,6 @@ lives in git, not in a timestamp._
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
-- [p 45] [A] compat-pascal-math-intrinsics-not-in-the-system-unit
 - [p 45] [D] docs-canonical-domain
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
