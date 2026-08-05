@@ -44,11 +44,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-a-aarch64-float-field-width-ignored | A | 45 | bug | aarch64 ignores the field WIDTH in writeln(d:w:n) — `writeln(x:10:4)` prints `3.1416` where FPC and x86-64 print `    3.1416`. Pre-existing; the aarch64 emitter never took a width parameter at all | — |
 | bug-a-duplicate-definition-silently-accepted | A | 55 | bug | two definitions of the same function (or global) are silently accepted in BOTH frontends — last one wins, except calls placed between them bind to the earlier, so identical source text calls different functions depending on position | — |
-| bug-a-i386-scalar-string-local-never-released | A | 60 | bug | i386 only: a scalar `string` local is never released at scope exit — `procedure R; var s: string; begin SetLength(s, 40) end;` called in a loop leaks ~150 MB per 60k calls. Every other target is flat | — |
 | bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc | A | 30 | bug | InterLockedIncrement and family now exist (lib/rtl/palatomic.pas) but need an explicit `uses palatomic`; FPC declares them in the `system` unit, so real code calls them with no uses line at all | — |
 | bug-a-promoint-function-result-crashes | A | 45 | bug | A Pascal function RETURNING PromoInt crashes — `function mk: PromoInt; begin Result := 12 end` segfaults on writeln(mk). Confirmed on `pinned` too, so pre-existing; split out of the parameter ticket, which conflated the two | — |
 | bug-a-promoint-parameter-32bit-by-ref-indirection-hangs | A | 40 | bug | On 32-bit targets a PromoInt parameter still does not work: it does not compile today, and simply extending the 64-bit by-ref fix makes it HANG — the by-ref indirection is not resolved, so PromoShiftCount reads a garbage tag and `n shr 4` spins in BShr's doubling loop | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
+| bug-a-riscv32-setlength-on-string-array-element-loses-length | A | 55 | bug | riscv32: SetLength(a[i], n) on a string ARRAY ELEMENT leaves a malformed handle — Length() reads back 0 where every other target reads n. Scalar SetLength is fine. Blocks the scope-exit element release on that target | — |
 | bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path | A | 45 | bug | `uses sysutils\|baseunix\|unix` degrades to a SILENT no-op when the unit is not on the search path, so a build outside the repo root reports `undefined variable (Format)` instead of naming the missing RTL | — |
 | bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing | A | 65 | bug | x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALIASING — writes through either name are invisible to the other. FPC, i386, arm32, aarch64 and riscv32 all alias. Dynamic arrays are reference types; this is silent wrong behaviour on the flagship target | decide-dynarray-cow-vs-fpc-reference-semantics |
 | bug-a-x86-64-qword-to-double-assign-halves-above-2-63 | A | 55 | bug | x86-64 only: assigning a QWord above 2^63 to a Double yields ~half the value (QWord max -> 9223372036854775809). The Int() intrinsic path is correct; the ASSIGNMENT conversion is not | — |
@@ -410,7 +410,6 @@ _none_
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [A] bug-a-i386-scalar-string-local-never-released
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] feature-a-abi-oracle
@@ -429,6 +428,7 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-duplicate-definition-silently-accepted
+- [p 55] [A] bug-a-riscv32-setlength-on-string-array-element-loses-length
 - [p 55] [A] bug-a-x86-64-qword-to-double-assign-halves-above-2-63
 - [p 55] [C] bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed

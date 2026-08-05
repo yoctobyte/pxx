@@ -147,3 +147,52 @@ rounds from `pinned` and agrees with `compiler/pascal26`.
 
 ## Log
 - 2026-08-05 — resolved, commit a6d0c701a.
+
+## CORRECTION (2026-08-05, same day) — the i386 claim above was wrong
+
+The section above says i386 "could not be measured" because of a separate
+~150 MB scalar-string leak, and a ticket was filed for it
+(`bug-a-i386-scalar-string-local-never-released`). **Both were wrong, and the
+ticket has been withdrawn.**
+
+There is no i386 leak. The measurement was **max RSS under `qemu-i386`**, which
+counts the EMULATOR's memory — its translation cache — not the guest's heap.
+The tell was there and was missed: the growth is sublinear. 1 000 iterations
+gave 7.5 MB, 60 000 gave 118 MB, 240 000 gave 152 MB. A real leak scales
+linearly; 4x the work giving 1.3x the memory is the emulator warming up.
+
+Measured properly — by watching whether the guest's own heap ADDRESSES advance,
+which is what a leak actually means:
+
+```pascal
+GetMem(p, 64); ... FreeMem(p);     { 240 000 times }
+writeln('first=', first, ' last=', last);
+```
+
+i386 returns the **identical address** at iteration 1 and 240 000. Blocks are
+reused perfectly. So is x86-64. The i386 allocator is fine.
+
+**Under that method the real result is better than reported above**: i386 was
+leaking the array elements exactly like everyone else, and the fix works there
+too.
+
+| target | pinned | fixed |
+| --- | --- | --- |
+| x86-64 | grew=1 | **grew=0** |
+| i386 | grew=1 | **grew=0** |
+| arm32 | grew=1 | **grew=0** |
+| aarch64 | grew=1 | **grew=0** |
+| riscv32 | grew=1 | grew=1 (see below) |
+
+**Method note for anyone measuring a leak on a cross target: RSS under qemu is
+not a leak signal.** Use heap-address growth, or measure natively.
+
+### riscv32 is deliberately left leaking
+
+Adding the arm there **segfaults**, because riscv32's array-element string
+handles are already malformed: `SetLength(a[i], n)` leaves `Length()` reading 0
+(pre-existing, `pinned` too; scalar SetLength is fine). Walking those at scope
+exit crashes. Trading a pre-existing leak for a crash is the wrong direction, so
+the riscv32 branch of `EmitProcEpilog` carries an explicit comment and no arm.
+Filed as `bug-a-riscv32-setlength-on-string-array-element-loses-length`
+(prio 55), which unblocks it.

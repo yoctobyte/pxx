@@ -7328,38 +7328,18 @@ begin
       Result handle is skipped (ownership transfers to the caller). }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+        { NO static-array-with-managed-elements arm here, unlike the other four
+          backends. riscv32 has a PRE-EXISTING defect that makes releasing
+          those elements unsafe: `SetLength(a[i], n)` on a string ARRAY ELEMENT
+          leaves a malformed handle — Length() reads back 0 where every other
+          target reads n (measured on `pinned` too, so it is not recent, and the
+          SCALAR SetLength is fine). Walking those handles at scope exit
+          segfaults. Adding the arm here would trade riscv32's pre-existing LEAK
+          for a CRASH, which is the wrong direction.
+          Blocked on bug-a-riscv32-setlength-on-string-array-element-loses-length;
+          add the arm (copy the arm32 one, a0..a3) once that lands.
+          bug-a-local-static-array-of-string-never-released-at-scope-exit }
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-                (SymElemDynDepth[i] = 0) and
-                ((Syms[i].TypeKind = tyAnsiString) or
-                 ((Syms[i].TypeKind = tyRecord) and
-                  RecordHasManagedFields(SymTR[i].ElemRec))) then
-        begin
-          { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
-            exit. Without this arm an `array[0..N] of string` either fell into
-            the scalar arm below and released element 0 ONLY (i386/arm32, like
-            x86-64 did), or was skipped entirely (riscv32) — leaking silently
-            and linearly either way. N-D arrays are stored flat, so ArrLen is
-            the right count.
-            bug-a-local-static-array-of-string-never-released-at-scope-exit }
-          procIdx := FindProc('PXXArrayReleaseImmediate');
-          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
-          EmitSlotAddrRISCV32(reg_a0, i);        { a0 = &arr }
-          EmitLoadImmRISCV32(reg_a1, Syms[i].ArrLen);
-          if Syms[i].TypeKind = tyAnsiString then
-          begin
-            EmitLoadImmRISCV32(reg_a2, 1);
-            EmitLoadImmRISCV32(reg_a3, 0);
-          end
-          else
-          begin
-            EmitLoadImmRISCV32(reg_a2, 3);
-            EmitLoadDataRefRISCV32(reg_a3,
-              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
-          end;
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
            (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
         begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }

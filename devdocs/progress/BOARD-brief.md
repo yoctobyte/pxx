@@ -46,7 +46,6 @@ _none — no lane is locked._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [A]` bug-a-i386-scalar-string-local-never-released
 - `[p 60] [T]` bug-t-gate-sh-fixedpoint-does-not-iterate
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle
@@ -65,6 +64,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` bug-a-duplicate-definition-silently-accepted
+- `[p 55] [A]` bug-a-riscv32-setlength-on-string-array-element-loses-length
 - `[p 55] [A]` bug-a-x86-64-qword-to-double-assign-halves-above-2-63
 - `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 
