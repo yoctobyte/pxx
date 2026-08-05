@@ -6700,16 +6700,28 @@ begin
         begin
           { Pointer difference `p - q` = (address_p - address_q) / sizeof(element)
             (C ptrdiff). Both operands are pointers; subtract addresses then divide
-            by the element stride. }
+            by the element stride.
+
+            Typed tyNativeInt, NOT tyInt64: `ptrdiff_t` is POINTER-WIDTH, so it
+            is 8 bytes on a 64-bit target and 4 on ILP32. The hardcoded tyInt64
+            made the node claim 8 bytes everywhere, and the variadic push
+            believes the node's tag — so on i386/arm32 `printf("%d %d", p-q, 7)`
+            pushed 8 bytes for a 4-byte value and EVERY later argument read one
+            slot low: it printed `3 0`. The first value still came out right,
+            which is what made it look like a library bug (three crtl string
+            functions were the prime suspects).
+            tyNativeInt is signed and pointer-width, so 64-bit codegen is
+            unchanged and 32-bit gets the 4-byte push and a 32-bit divide.
+            bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit }
           left := IRLowerAST(ASTLeft[node]);
           right := IRLowerAST(ASTRight[node]);
-          Result := IRAppend(IR_BINOP, left, right, Ord(tkMinus), 0, Ord(tyInt64));
+          Result := IRAppend(IR_BINOP, left, right, Ord(tkMinus), 0, Ord(tyNativeInt));
           elemSize := IRPointerStride(ASTLeft[node]);
           if elemSize > 1 then
           begin
-            item := IRAppend(IR_CONST_INT, -1, -1, -1, elemSize, Ord(tyInt64));
+            item := IRAppend(IR_CONST_INT, -1, -1, -1, elemSize, Ord(tyNativeInt));
             { tkDiv = integer division (tkSlash is the float `/` path) }
-            Result := IRAppend(IR_BINOP, Result, item, Ord(tkDiv), 0, Ord(tyInt64));
+            Result := IRAppend(IR_BINOP, Result, item, Ord(tkDiv), 0, Ord(tyNativeInt));
           end;
         end
         else if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
