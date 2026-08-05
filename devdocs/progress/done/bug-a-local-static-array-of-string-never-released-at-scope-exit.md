@@ -146,4 +146,4 @@ release surfaces as corruption. Identical on all five targets and under FPC.
 rounds from `pinned` and agrees with `compiler/pascal26`.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit a6d0c701a.
