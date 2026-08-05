@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-05T13:35:37Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "3ff2c3a14a9640e333022e467d9adc9af418e86f",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-05T13:44:38Z",
    "fixed": [],
    "new_red": [],
@@ -429,6 +421,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "c05e647ba05e3a43ab621361edb91b68d516cf00",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-05T20:27:14Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "aba953cae03106e2b53a0ef178d85489062c08c1",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -958,6 +958,7 @@
   "test-core#src:test/cprintf_exact_digits_b376.c": "native",
   "test-core#src:test/cprintf_ll_b252.c@1": "native",
   "test-core#src:test/cprintf_ll_b252.c@2": "native",
+  "test-core#src:test/cpthread_needs_threadsafe_b.c": "native",
   "test-core#src:test/cptr_array_decay_stride_b61.c": "native",
   "test-core#src:test/cptr_b2.c": "native",
   "test-core#src:test/cptr_deref_stride_b187.c": "native",
@@ -3074,6 +3075,7 @@
   "test-core#src:test/cprintf_exact_digits_b376.c": "pass",
   "test-core#src:test/cprintf_ll_b252.c@1": "pass",
   "test-core#src:test/cprintf_ll_b252.c@2": "pass",
+  "test-core#src:test/cpthread_needs_threadsafe_b.c": "pass",
   "test-core#src:test/cptr_array_decay_stride_b61.c": "pass",
   "test-core#src:test/cptr_b2.c": "pass",
   "test-core#src:test/cptr_deref_stride_b187.c": "pass",
@@ -4667,8 +4669,8 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-05T20:18:04Z",
-  "sha": "c05e647ba05e3a43ab621361edb91b68d516cf00",
+  "date": "2026-08-05T20:27:14Z",
+  "sha": "aba953cae03106e2b53a0ef178d85489062c08c1",
   "tier": "native",
   "verdict": "GREEN",
   "wall": 124.5
