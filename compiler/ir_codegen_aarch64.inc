@@ -412,13 +412,16 @@ end;
   numbers rather than a hang, which is the worse half of the same defect.
   Shimming them matches what arm32/i386/riscv32 already do.
   bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked }
-procedure EmitFloatCallWriterA64(const name: AnsiString; decs: Integer);
+procedure EmitFloatCallWriterA64(const name: AnsiString; decs: Integer; wid: Integer);
 var procIdx: Integer;
 begin
   EmitI32($F81F0FE0);        { str x0, [sp, #-16]!  — the double bits }
   EmitI32($910003E0);        { mov x0, sp           — arg0 = &value   }
   if decs >= 0 then
+  begin
     EmitLoadImmA64(1, decs); { arg1 = decimals }
+    EmitLoadImmA64(2, wid);  { arg2 = field width }
+  end;
   procIdx := FindProc(name);
   if procIdx < 0 then Error('compiler error: float writer helper not found');
   EmitCallProc(procIdx);
@@ -427,12 +430,12 @@ end;
 
 procedure EmitWriteFloatNatA64;
 begin
-  EmitFloatCallWriterA64('PXXWriteFloatNat', -1);
+  EmitFloatCallWriterA64('PXXWriteFloatNat', -1, 0);
 end;
 
-procedure EmitWriteFloatFixedA64(decimals: Integer);
+procedure EmitWriteFloatFixedA64(width, decimals: Integer);
 begin
-  EmitFloatCallWriterA64('PXXWriteFloatFixed', decimals);
+  EmitFloatCallWriterA64('PXXWriteFloatFixed', decimals, width);
 end;
 
 procedure EmitWriteFloatSciA64;
@@ -3051,7 +3054,7 @@ begin
         begin
           IREmitNodeAarch64(valNode);
           if decs = -2 then EmitWriteFloatNatA64
-          else if decs >= 0 then EmitWriteFloatFixedA64(decs)
+          else if decs >= 0 then EmitWriteFloatFixedA64(wid, decs)
           else EmitWriteFloatSciA64;
         end
         else if decs = -3 then

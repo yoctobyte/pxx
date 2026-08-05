@@ -2509,6 +2509,7 @@ begin
               if i >= 0 then
               begin
                 EmitLoadImmRISCV32(reg_a1, i);
+                EmitLoadImmRISCV32(reg_a2, j);         { a2 = field width }
                 procIdx := FindProc('PXXWriteFloatFixed');
               end
               else if i = -2 then

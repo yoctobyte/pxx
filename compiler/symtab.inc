@@ -5934,41 +5934,34 @@ end;
 procedure EmitWriteFloatFixedNative(width, decimals: Integer); forward;
 
 procedure EmitWriteFloatFixed(width, decimals: Integer);
-{ Double value in xmm0, [-]intpart.frac with `decimals` fractional digits,
-  right-justified in `width` columns.
+{ Double value in xmm0 -> [-]intpart.frac with `decimals` fractional digits,
+  right-justified in `width` columns. A shim onto the runtime PXXWriteFloatFixed.
 
-  Routed to the RUNTIME helper whenever there is no field width to honour and
-  the RTL is linked. The native emitter below scales the integer part through
-  Int64 — exact only for |v| < 2^63, as its own header states — so
-  `writeln(1e20:0:2)` printed 9223372036854775809.00, the SATURATION value, and
-  `d := QWordMax; writeln(d:0:1)` printed the same. Every other target already
-  routes to PXXWriteFloatFixed and prints the right number
-  (bug-a-x86-64-writeln-fixed-saturates-at-int64).
-
-  width > 0 keeps the native path because the runtime helper takes no field
-  width yet — shimming those today would trade a wrong number for lost padding,
-  which is the defect bug-a-aarch64-float-field-width-ignored describes on the
-  other targets. Give PXXWriteFloatFixed a width parameter and this whole
-  routine collapses into the shim, as EmitWriteFloatSci already has. }
+  The hand-written native emitter this replaces scaled the integer part through
+  Int64 — exact only for |v| < 2^63, as its own header said — so
+  writeln(1e20:0:2) printed 9223372036854775809.00, the saturation value
+  (bug-a-x86-64-writeln-fixed-saturates-at-int64). It survived one more round
+  only because the runtime helper had no field-width parameter and shimming
+  would have dropped padding; the helper now takes one
+  (bug-a-aarch64-float-field-width-ignored), so the last hand-written float
+  formatter on this target is gone. x86-64 now has none. }
 var procIdx: Integer;
 begin
-  if width <= 0 then
+  procIdx := FindProc('PXXWriteFloatFixed');
+  if procIdx < 0 then
   begin
-    procIdx := FindProc('PXXWriteFloatFixed');
-    if procIdx >= 0 then
-    begin
-      EmitAsmX64([
-        'sub rsp, 16',
-        'movsd [rsp], xmm0',
-        'mov rdi, rsp',
-        'mov rsi, %', decimals
-      ]);
-      EmitCallProc(procIdx);
-      EmitAsmX64(['add rsp, 16']);
-      Exit;
-    end;
+    EmitWriteFloatFixedNative(width, decimals);
+    Exit;
   end;
-  EmitWriteFloatFixedNative(width, decimals);
+  EmitAsmX64([
+    'sub rsp, 16',
+    'movsd [rsp], xmm0',
+    'mov rdi, rsp',
+    'mov rsi, %', decimals,
+    'mov rdx, %', width
+  ]);
+  EmitCallProc(procIdx);
+  EmitAsmX64(['add rsp, 16']);
 end;
 
 procedure EmitWriteFloatFixedNative(width, decimals: Integer);

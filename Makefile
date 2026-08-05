@@ -4006,6 +4006,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_int64_cast_of_nativeint26)" = "$$(printf '5\n-3\n-3\n7\n7000000\n1234567890\n1\nOK')"
 	./$(COMPILER) test/test_writeln_float_exact.pas /tmp/test_writeln_float_exact26
 	test "$$(/tmp/test_writeln_float_exact26)" = "$$(printf ' 1.0000000000000000E+030\n 1.0000000000000000E+100\n 9.9999999999999997E+199\n 9.9999999999999995E-021\n 1.2345678901234500E+014\n 2.4999999999999999E+100\n 1.0000000000000000E+100\n 0.0000000000000000E+000\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 4.9406564584124654E-324\n 9.9998886718268301E-321\n 1.7976931348623157E+308\n 1.0000000000000001E-001\n 9.9999999999999982E+099\nOK')"
+	./$(COMPILER) test/test_writeln_float_width.pas /tmp/test_writeln_float_width26
+	test "$$(/tmp/test_writeln_float_width26)" = "$$(printf '[      3.1416]\n[     -3.1416]\n[  10.0]\n[    1]\n[   -1]\n[123456.0]\n[    0.00]\n[      100000000000000000000.00]\n[     -100000000000000000000.00]\n[3.14]\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas /tmp/test_static_array_managed_scope_exit26
 	test "$$(/tmp/test_static_array_managed_scope_exit26)" = "$$(printf '0\nOK')"
 	./$(COMPILER) test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26

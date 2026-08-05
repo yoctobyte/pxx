@@ -30306,7 +30306,8 @@ begin
     i := RegisterProc('PXXWriteFloatNat', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXWriteFloatSci', False, tyPointer, 1, dummyNames, dummyTypes);
     dummyNames[1] := 'decimals';  dummyTypes[1] := tyNativeInt;
-    i := RegisterProc('PXXWriteFloatFixed', False, tyPointer, 2, dummyNames, dummyTypes);
+    dummyNames[2] := 'width';     dummyTypes[2] := tyNativeInt;
+    i := RegisterProc('PXXWriteFloatFixed', False, tyPointer, 3, dummyNames, dummyTypes);
   end;
 
     CurrentUnitIdx := savedUnitIdx;

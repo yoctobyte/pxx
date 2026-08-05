@@ -2984,7 +2984,7 @@ begin
   end;
 end;
 
-procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
+procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt; width: NativeInt);
 { [-]intpart.frac with exactly 'decimals' fractional digits (0 -> rounded
   integer, no point). Mirrors EmitWriteFloatFixed (x86-64), and must keep
   mirroring it: this is the i386 / arm32 / riscv32 route to the same output, so
@@ -3000,7 +3000,8 @@ procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
   Splitting first keeps the product below 1e18, and digits past the 18th are
   printed as zeros rather than guessed: a double carries no information there,
   and FPC pads the same way. }
-var x, pw, v, ip, rem, dv, r, two52: Double; d, fdigits: Integer; i: Int64; ch: Char;
+var x, pw, v, ip, rem, dv, r, two52, ipc: Double; d, fdigits: Integer; i: Int64; ch: Char;
+    neg: Boolean; ndig, total: Int64;
 begin
   { NON-FINITE first — see PXXWriteFloatSci. The digit loops here do not
     terminate on an infinity either, and on x86-64 the native twin does not hang
@@ -3032,11 +3033,8 @@ begin
     i := i + 1;
   end;
   x := PDouble(p)^;
-  if PByte(Int64(p) + 7)^ >= 128 then
-  begin
-    write('-');
-    x := -x;
-  end;
+  neg := PByte(Int64(p) + 7)^ >= 128;
+  if neg then x := -x;
   fdigits := decimals;
   if fdigits > 18 then fdigits := 18;
   pw := 1;
@@ -3075,6 +3073,27 @@ begin
     rem := 0;
     ip := ip + 1;
   end;
+  { FIELD WIDTH. Counted AFTER the rounding above, because a carry out of the
+    fraction (9.96:0:1 -> 10.0) adds an integer digit and would otherwise pad
+    one column too many. ip is a non-negative integral Double here, possibly
+    past 2^63, so the digit count is taken in double arithmetic rather than
+    through Int64 — the same reason this routine exists rather than the
+    Int64-scaling native emitter.
+    bug-a-aarch64-float-field-width-ignored }
+  if width > 0 then
+  begin
+    ndig := 1; ipc := ip;
+    while ipc >= 10 do begin ipc := ipc / 10; ndig := ndig + 1; end;
+    total := ndig;
+    if neg then total := total + 1;
+    if decimals > 0 then total := total + 1 + decimals;
+    while total < width do
+    begin
+      write(' ');
+      total := total + 1;
+    end;
+  end;
+  if neg then write('-');
   if decimals <= 0 then      { fdigits = 0, so `rem >= pw` above IS the rounding }
   begin
     PXXWriteUIntD(@ip);

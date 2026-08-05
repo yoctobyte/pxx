@@ -957,15 +957,18 @@ begin
   EmitI32($EF000000);   { svc #0 }
 end;
 
-procedure EmitFloatCallWriterArm32(const name: AnsiString; decs: Integer);
-{ d0 = value. Spill to a stack slot, pass its address (plus decimals for the
-  fixed writer) to the builtinheap float writer. }
+procedure EmitFloatCallWriterArm32(const name: AnsiString; decs: Integer; wid: Integer);
+{ d0 = value. Spill to a stack slot, pass its address (plus decimals and the
+  field WIDTH for the fixed writer) to the builtinheap float writer. }
 var procIdx: Integer;
 begin
   EmitI32($ED2D0B02);            { vpush {d0} }
   EmitI32($E1A0000D);            { mov r0, sp (slot addr) }
   if decs >= 0 then
+  begin
     EmitLoadImmArm32(1, decs);   { r1 = decimals }
+    EmitLoadImmArm32(2, wid);    { r2 = width }
+  end;
   procIdx := FindProc(name);
   if procIdx < 0 then Error('compiler error: float writer helper not found');
   EmitCallProc(procIdx);
@@ -3671,9 +3674,9 @@ begin
           begin
             IREmitNodeArm32(valNode);             { value -> d0 }
             j := IRC[node];                       { decimals }
-            if j = -2 then EmitFloatCallWriterArm32('PXXWriteFloatNat', -1)
-            else if j >= 0 then EmitFloatCallWriterArm32('PXXWriteFloatFixed', j)
-            else EmitFloatCallWriterArm32('PXXWriteFloatSci', -1);
+            if j = -2 then EmitFloatCallWriterArm32('PXXWriteFloatNat', -1, 0)
+            else if j >= 0 then EmitFloatCallWriterArm32('PXXWriteFloatFixed', j, wid)
+            else EmitFloatCallWriterArm32('PXXWriteFloatSci', -1, 0);
           end
           else if tk = tyChar then
           begin
