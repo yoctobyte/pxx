@@ -5,20 +5,19 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:8 unfinished:7 blocked:7 backlog:198 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1368 rejected:28`
+`urgent:7 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1369 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (8) — jump the queue
+## urgent (7) — jump the queue
 
 - `bug-a-arm32-write-after-free-kills-four-lib-tests` [A]
 - `bug-a-i386-int64-arg-high-half-uninitialized` [A]
 - `bug-a-static-array-of-managed-whole-assign-loses-data` [A]
 - `bug-a-virtual-method-int64-in-and-out-32bit` [A]
 - `bug-c-int64-to-double-cast-truncates-on-32bit` [C]
-- `bug-p-member-off-a-constructor-result-yields-garbage` [P]
 - `bug-p-program-function-does-not-shadow-used-unit` [P]
 - `bug-p-string-char-relational-compares-lengths` [A]
 
@@ -50,10 +49,10 @@ _none — no lane is locked._
 - `[p 80] [C]` bug-c-int64-to-double-cast-truncates-on-32bit
 - `[p 75] [A]` bug-a-arm32-write-after-free-kills-four-lib-tests
 - `[p 75] [A]` bug-a-i386-int64-arg-high-half-uninitialized
-- `[p 70] [P]` bug-p-member-off-a-constructor-result-yields-garbage
 - `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
 - `[p 70] [A]` bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
 - `[p 70] [B]` regression-test-core-csocket-loopback-b88
+- `[p 70] [T]` regression-test-core-test-stmt-call-result-selector-b318
 - `[p 65] [A]` bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)

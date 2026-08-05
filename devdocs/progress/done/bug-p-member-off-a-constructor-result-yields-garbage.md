@@ -3,12 +3,13 @@ summary: "`TThing.Create(2).n` in an expression compiles and yields garbage; the
 type: bug
 track: P
 prio: 70
+owner: claude-b-night2
 ---
 
 # A member read off a CONSTRUCTOR result silently yields garbage
 
 - **Type:** bug — Track P (Pascal frontend, shared `compiler/parser.inc`)
-- **Status:** urgent — **silent wrong value**
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** writing `test/test_procedure_as_value_ok.pas`. The line meant to
   prove constructors stay usable as values printed junk, which is how this
@@ -72,8 +73,58 @@ Two more facts worth having before touching it:
   filed as a `bug-` in its own right per CLAUDE.md's escape rule rather than
   folded into the compat ticket.
 
+## Root cause (measured, FIXED)
+
+`PXXDBG=a.ir:<proc>` on the two shapes side by side said it in six lines:
+
+```
+ViaFunc  (Make(4).n, correct)        ViaCtor  (TThing.Create(2).n, wrong)
+  2: call  a=90                        4: call  a=-45   (-Ord(tkGetMem))
+  3: field a=2 ival=8 [offset=8]       5: store_sym [sym=Result]
+  4: load_mem a=3
+  5: store_sym [sym=Result]
+```
+
+The `field` + `load_mem` pair is simply **absent**. The expression-position
+constructor branch in `ParseFactorCore` built the GetMem node and did
+`CurASTNode := node; Exit` without ever looking at what followed, so the
+selector chain was dropped on the floor and the store received the instance
+POINTER. No reasoning needed once the IR was printed — this is the
+debugging-playbook case exactly.
+
+The fix is the `ParseClassRecordSelectors` call every other class-valued path
+already makes, at that exit.
+
+One trap on the way in: `idx` there is **already a full rec id**
+(`REC_UCLASS_BASE + ci`, assigned a few lines above with the arity check),
+despite `ASTRight`'s "preserve created user-class id" comment reading like a
+bare class index. Passing `REC_UCLASS_BASE + idx` lands on an unrelated record
+and every member comes back "no such member".
+
+## Verification
+
+`2|3|4|5`, = FPC. Also correct now, all previously broken or unparseable:
+`writeln(TThing.Create(2).Val)` (this was the parse-error half),
+`TThing.Create(4).Twice + 1`, `TThing.Create(5).ClassName`,
+`TStringList.Create.Count`.
+
+- self-host fixedpoint converged in one round
+- `tools/gate.sh quick` GREEN incl. the FPC seed canary, `tools/gate.sh lib` GREEN
+- `make demos` 34/34 with the changed compiler
+- `tools/fpc_diff_probe.sh` firing `[known]` set byte-identical to the
+  pre-change run; the `member-off-a-constructor-result` case is untagged and
+  must stay green
+- `test/test_ctor_result_member.pas` wired into `make test`
+
+## Not fixed by this
+
+[[compat-pascal-index-a-function-call-result]] — `Copy(s,2,3)[1]` and `Make[1]`
+still do not parse, and `b.ArrP(3)[0]` still hits IR_UNSUPPORTED. Those are the
+loud half of the family and a different code path.
+
 ## Gate
 
-Track P: `make test` + self-host fixedpoint (byte-identical). Track P catch —
-the Pascal frontend lives in the shared `lexer.inc`/`parser.inc`, so this must
-not be edited concurrently with Track A.
+Track P: `make test` + self-host fixedpoint (byte-identical).
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

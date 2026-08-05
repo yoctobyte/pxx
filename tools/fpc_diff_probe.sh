@@ -1740,11 +1740,13 @@ begin
   writeln(Length(a), '|', High(a));
 end.
 P
-# [known] and SILENT — bug-p-member-off-a-constructor-result-yields-garbage.
-# The Make() half is correct today, and is in the same case on purpose: it is
-# what says the "member off a call result" machinery works and the CONSTRUCTOR
-# path is the broken one.
-probe member-off-a-constructor-result known <<'P'
+# bug-p-member-off-a-constructor-result-yields-garbage (FIXED): the selector
+# chain after a constructor call was DROPPED, so an Integer variable received
+# the instance pointer and the program printed garbage silently. The Make()
+# half was correct throughout and stays in the same case — it is what said the
+# "member off a call result" machinery works and only the constructor exit was
+# missing it. Untagged: must stay green.
+probe member-off-a-constructor-result <<'P'
 type
   TThing = class
     n: Integer;

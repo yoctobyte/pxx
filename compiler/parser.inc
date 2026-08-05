@@ -12966,6 +12966,28 @@ begin
         if argsHead <> -1 then
           ASTRight[szArg] := argsHead;
 
+        { A SELECTOR on the fresh instance — `TThing.Create(2).n`,
+          `TList.Create.Count`. Without this the chain was simply DROPPED: the
+          IR went straight from the GetMem call to the store, so an Integer
+          variable received the instance POINTER and the program printed
+          garbage with no diagnostic at all
+          (bug-p-member-off-a-constructor-result-yields-garbage). The identical
+          shape on an ordinary function result — `Make(4).n` — was always
+          correct, which is what said the machinery works and only this exit
+          was missing it. Same call the TClass(expr) path makes.
+
+          `idx` is ALREADY a full rec id here (REC_UCLASS_BASE + ci, assigned
+          just above alongside the arity check) — not a bare class index,
+          despite what ASTRight's "user-class id" comment reads like. Adding
+          REC_UCLASS_BASE again lands on a different record and every member
+          comes back "no such member". }
+        castTk := tyClass;
+        if CurTok.Kind in [tkDot, tkLBrack] then
+        begin
+          node := ParseClassRecordSelectors(node, idx, castTk);
+          LastExprTk := castTk;
+        end;
+
         CurASTNode := node;
         Exit;
       end;

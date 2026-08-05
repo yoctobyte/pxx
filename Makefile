@@ -2397,6 +2397,12 @@ test-core: $(COMPILER)
 	grep -q "is a procedure and has no result" /tmp/test_pav.log
 	./$(COMPILER) test/test_procedure_as_value_ok.pas /tmp/test_pav_ok26
 	test "$$(/tmp/test_pav_ok26 | tail -1)" = "PASS"
+	# A selector on a CONSTRUCTOR result -- the chain was dropped, so an Integer
+	# got the instance pointer and the program printed garbage silently
+	# (bug-p-member-off-a-constructor-result-yields-garbage). The Make() lines in
+	# there are the control: the same shape on a function result always worked.
+	./$(COMPILER) test/test_ctor_result_member.pas /tmp/test_tcrm26
+	test "$$(/tmp/test_tcrm26 | tail -1)" = "PASS"
 	# what a RECORD may legally contain (b347): no published, no protected (records don't
 	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
 	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.
