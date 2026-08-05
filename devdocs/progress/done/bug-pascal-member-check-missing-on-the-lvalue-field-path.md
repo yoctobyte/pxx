@@ -116,4 +116,4 @@ wants its own change with its own gate, not a rider on an audit.
 nothing to regress.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 03a25f105.
