@@ -17765,9 +17765,21 @@ begin
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, -1, -1, -1, -1);
   end
+  else if tk = tyChar then
+  begin
+    { A Char is written as its CHARACTER, not its ordinal — which is exactly why
+      the ordinal arm above excludes tyChar. Without this arm the exclusion fell
+      straight through to the error below, so `write(f, 'a')` — a one-character
+      literal IS a Char in Pascal — did not compile while `write(f, 'ab')` did.
+      stdout has always accepted both. bug-p-writeln-text-rejects-char }
+    pi := FindProc('StrChar');
+    if pi < 0 then Error('write(Text): StrChar not loaded');
+    Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
+                widthNode, -1, -1, -1, -1);
+  end
   else
   begin
-    Error('write(Text): unsupported argument type (string/integer/float only)');
+    Error('write(Text): unsupported argument type (string/Char/integer/float only)');
     Result := exprNode;
   end;
 end;

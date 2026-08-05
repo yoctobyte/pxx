@@ -19,6 +19,11 @@ interface
 
 function StrInt(v: Int64; width: Integer): AnsiString;
 function StrQWord(v: QWord; width: Integer): AnsiString;
+{ One Char as a string, right-justified to `width`. The Text-file write
+  lowering needs it: a Char must NOT go through StrInt (that prints the
+  ORDINAL — 120 for 'x'), which is why the ordinal arm there excludes
+  tyChar. bug-p-writeln-text-rejects-char }
+function StrChar(c: Char; width: Integer): AnsiString;
 function FloatToStr(v: Double): AnsiString;
 function FloatToExpStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
@@ -691,6 +696,18 @@ begin
   Result := digits;
   while Length(Result) < width do
     Result := ' ' + Result;
+end;
+
+function StrChar(c: Char; width: Integer): AnsiString;
+{ One Char as a string, space-padded on the LEFT to `width` (width <= 1 = no
+  padding), matching what StrInt/StrFloat do with their width argument.
+  bug-p-writeln-text-rejects-char }
+var r: AnsiString;
+begin
+  r := ' ';
+  r[1] := c;
+  while Length(r) < width do r := ' ' + r;
+  StrChar := r;
 end;
 
 function StrInt(v: Int64; width: Integer): AnsiString;

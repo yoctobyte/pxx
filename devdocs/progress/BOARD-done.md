@@ -651,6 +651,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-p-member-off-a-constructor-result-yields-garbage | P | 70 | bug | `TThing.Create(2).n` in an expression compiles and yields garbage; the same shape on an ordinary function result (`Make(4).n`) is correct, and in a writeln argument it is a parse error instead | — |
 | bug-p-procedure-method-in-an-expression-yields-garbage | P | 75 | bug | A METHOD declared as a procedure (no result) is accepted in an expression and silently yields garbage — `n := f.DoIt` assigns stack junk, `f.DoArg(3) + 1` evaluates to 4. FPC rejects all of it | — |
 | bug-p-string-char-relational-compares-lengths | A | 85 | bug | `<` `>` `<=` `>=` between a string and a Char compare LENGTHS, not content | — |
+| bug-p-writeln-text-rejects-char | A | 55 | bug | write/writeln to a Text FILE rejects a Char (stdout accepts one) | — |
 | bug-parallel-for-captured-boolean-loses-type | A | 50 | bug | Captured Boolean loses its type inside a parallel-for body (overload resolution fails) | — |
 | bug-parallel-for-captured-dynarray-var-arg-segfault | A | 60 | bug | Passing a captured dynamic array by `var` from a parallel-for body segfaults | — |
 | bug-paramless-self-recursion-silent-result-read | A | 50 | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
