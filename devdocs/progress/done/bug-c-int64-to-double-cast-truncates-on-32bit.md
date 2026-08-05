@@ -83,4 +83,4 @@ rounding/representation work not absorb time. Recorded here so the next reader
 knows the two divergences in that test row are unrelated.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 9f42ddc67.
