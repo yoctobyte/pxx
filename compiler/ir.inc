@@ -188,7 +188,7 @@ begin
   { Pass 1: populate seen labels and verify uniqueness }
   for i := 0 to IRCount - 1 do
   begin
-    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyPromoInt64)) then
+    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyBool8)) then
       Error('invalid type kind in IR node');
 
     if IRKind[i] = IR_LABEL then

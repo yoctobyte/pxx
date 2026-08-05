@@ -1,11 +1,11 @@
 ---
-summary: "Three gcc_diff_probe cases are still tagged `known` but no longer diverge — the compiler bug behind them is fixed, so the tag now hides future regressions in str-chr-nul / str-str-empty / mem-chr-miss"
+summary: "Four gcc_diff_probe cases are still tagged `known` but no longer diverge — the compiler bug behind them is fixed, so the tag now hides future regressions in str-chr-nul / str-str-empty / mem-chr-miss"
 type: task
 track: T
 prio: 50
 ---
 
-# Drop the stale `known` tags on the string.h probes
+# Drop the stale `known` tags on the string.h and _Bool probes
 
 - **Type:** task — Track T (test tooling: `tools/gcc_diff_probe.sh`)
 - **Status:** backlog
@@ -47,11 +47,14 @@ Drop the `known` tag from all three so they are judged normally. Confirm with
 `tools/gcc_diff_probe.sh --target i386` and `--target arm32` — both should stay
 at 0 new / 0 known.
 
-Worth a quick sweep of the other `known`-tagged probes at the same time
-(`int64-to-double`, `bool-and-negative-zero-int`) to see whether either has also
-been fixed out from under its tag; `int64-to-double` in particular has its own
-ticket (`bug-c-int64-to-double-cast-truncates-on-32bit`) and did NOT diverge on
-i386 in these runs.
+**`bool-and-negative-zero-int` is stale too — confirmed since filing.**
+`bug-a-bool-conversion-does-not-normalise-to-0-or-1` landed and that probe now
+passes natively (x86-64 went `1 new, 1 known` -> `1 new, 0 known`). Drop its tag
+as well; it is declared at `tools/gcc_diff_probe.sh:1348`.
+
+That leaves `int64-to-double` as the only `known` tag still worth checking — it
+has its own ticket (`bug-c-int64-to-double-cast-truncates-on-32bit`) and did NOT
+diverge on i386 in these runs, so it may be stale too.
 
 ## Note on the pin
 

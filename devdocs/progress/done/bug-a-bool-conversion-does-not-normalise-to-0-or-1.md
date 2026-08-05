@@ -3,13 +3,14 @@ summary: "_Bool is plain tyUInt8, so conversion to it truncates instead of norma
 type: bug
 track: A
 prio: 60
+owner: claude-A
 ---
 
 # Conversion to `_Bool` truncates instead of normalising to 0/1
 
 - **Type:** bug — Track A (shared type system; the fix needs `_Bool` to be
   distinguishable from `unsigned char`, which is a `defs.inc`/symtab change)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** `tools/gcc_diff_probe.sh`, third case batch
   ([[feature-c-gcc-oracle-differential-probe]]).
@@ -87,3 +88,65 @@ passing and return.
 The repro matches gcc on every target; `tools/gcc_diff_probe.sh` case
 `bool-and-negative-zero-int` clean (currently tagged `known`); self-host
 fixedpoint; cross.
+
+## Resolution (2026-08-05)
+
+Implemented the shape the ticket suggested: a distinct type kind, storage
+unchanged.
+
+**`tyBool8` (ordinal 29, `defs.inc`).** One unsigned byte, identical layout to
+`tyUInt8` — the reason it is its own kind is CONVERSION, not layout. Wired into
+`TypeSize` (1), `TypeIsOrdinal` (true) and the diagnostic name (`_Bool`);
+`TypeAlign` derives from `TypeSize` so it needed nothing. `cparser`'s `tkCBool`
+now maps here instead of `tyUInt8`.
+
+**The surface was much smaller than "a new type kind" sounds** — 62 `tyUInt8`
+references repo-wide, and the backends barely switch on the kind at all because
+they size things through `TypeSize`. The only backend-side change needed was
+none. One shared-internals fix was required: `IRValidate`'s range check was
+`IRTk > Ord(tyPromoInt64)`, i.e. hardcoded to the old last enum member, so every
+`_Bool` node tripped "invalid type kind in IR node". Now `Ord(tyBool8)`. That
+check will need touching again by whoever appends the next kind — worth knowing.
+
+**`CNormalizeToBool(dstTk, e)`** rewrites the value as `(e != 0)`, which is a
+0/1 `tyBoolean` and stores correctly into the byte. Uniform for integer, pointer
+and float sources because `!= 0` is exactly what C specifies for all of them,
+and idempotent (an operand already `tyBoolean`/`tyBool8` is returned untouched).
+
+Applied at every conversion site the standard names:
+
+| site | C reference |
+| --- | --- |
+| assignment | 6.5.16.1p2 |
+| declaration initializer | 6.7.8 |
+| explicit cast `(_Bool)e` | 6.3.1.2 |
+| argument passing | 6.5.2.2p7 (converted as if by assignment) |
+| `return e;` | 6.8.6.4p3 |
+
+The cast arm is gated on `castDepth = 0`: `(_Bool *)e` is an ordinary pointer
+cast and must NOT normalise. Arguments are walked after `procIdx` resolves,
+since the parameter types are not known in the collection loop.
+
+Compound assignment (`b += 256`), `!b`, ternary, struct fields, globals and
+array elements all came out correct without separate handling — they route
+through the assignment path.
+
+**Verified** byte-identical to gcc on x86-64, i386, arm32 and aarch64 for both
+the ticket's repro and a second program covering return/argument/field/global/
+compound-assign/ternary. `tools/gcc_diff_probe.sh` native: the `known`-tagged
+case `bool-and-negative-zero-int` now PASSES (1 known -> 0 known), which was the
+ticket's stated gate. Its stale tag is folded into
+`task-t-drop-stale-known-tags-on-string-h-probes`.
+
+Locked in as `test/cbool_normalise_b.c` (exit 42), which also pins the two
+things that must NOT change: `sizeof(_Bool) == 1`, and `(_Bool *)` staying a
+plain pointer cast.
+
+**Gate:** `testmgr --tier quick` 15/15 green (it carries the dense C and NilPy
+canaries that matter for a shared type-system change); `selfhost_fixedpoint.sh`
+converges in 2 rounds from `pinned` and agrees with `compiler/pascal26` — the
+self-host is itself the strongest evidence the new enum member did not shift
+anything for the Pascal frontend.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

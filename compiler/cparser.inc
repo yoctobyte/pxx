@@ -341,6 +341,31 @@ begin
   Result := CPromoteChar(e);
 end;
 
+{ C99 6.3.1.2: "When any scalar value is converted to _Bool, the result is 0 if
+  the value compares equal to 0; otherwise the result is 1." That is a
+  COMPARISON, not a truncation — `_Bool b = 256` is 1, not 0, and `_Bool ok = p`
+  is 1 for any non-null p rather than the pointer's low byte.
+
+  Rewrite the value as `(e != 0)`, whose result is already a 0/1 tyBoolean and
+  stores correctly into the 1-byte slot. Works uniformly for integer, pointer
+  and float sources because `!= 0` is exactly what C specifies for all of them.
+  Idempotent: an operand that is already tyBoolean/tyBool8 is 0/1 by
+  construction, so it is returned untouched rather than wrapped again.
+  bug-a-bool-conversion-does-not-normalise-to-0-or-1 }
+function CNormalizeToBool(dstTk: TTypeKind; e: Integer): Integer;
+var zero, cmp: Integer; etk: TTypeKind;
+begin
+  Result := e;
+  if dstTk <> tyBool8 then Exit;
+  if e < 0 then Exit;
+  etk := IntToTypeKind(ASTTk[e]);
+  if (etk = tyBoolean) or (etk = tyBool8) then Exit;   { already 0/1 }
+  zero := AllocNode(AN_INT_LIT); ASTIVal[zero] := 0; ASTTk[zero] := Ord(tyInteger);
+  cmp := AllocNode(AN_BINOP); ASTIVal[cmp] := Ord(tkNeq);
+  ASTLeft[cmp] := e; ASTRight[cmp] := zero; ASTTk[cmp] := Ord(tyBoolean);
+  Result := cmp;
+end;
+
 { C99 6.7.8p21: an aggregate initializer with fewer initializers than members
   zero-initializes the remainder (and 6.7.8p10 semantics for what "zero" means).
   Lower as an `x := Default(T)` assignment BEFORE the listed element stores:
@@ -1441,6 +1466,17 @@ begin
               Error('undeclared identifier passed as argument ' + AIntToStr(vaK + 1) +
                     ' of ''' + name + ''', where a pointer is expected — ' +
                     'this would call/dereference through NULL');
+          { A _Bool PARAMETER takes the 0/1 conversion too (6.5.2.2p7 says the
+            argument is converted as if by assignment). Walked here rather than
+            in the collection loop above because procIdx — and therefore the
+            parameter types — is only known now. }
+          vaK := 0; argNode := argHead;
+          while (argNode >= 0) and (vaK < Procs[procIdx].ParamCount) do
+          begin
+            if Procs[procIdx].Params[vaK].TypeKind = tyBool8 then
+              ASTLeft[argNode] := CNormalizeToBool(tyBool8, ASTLeft[argNode]);
+            argNode := ASTRight[argNode]; Inc(vaK);
+          end;
           node := AllocNode(AN_CALL);
           ASTIVal[node] := procIdx;
           ASTTk[node] := Ord(Procs[procIdx].RetType);
@@ -2655,6 +2691,17 @@ begin
       call and is not pruned as a dead retag node. A `void *` cast (depth > 0)
       is a real pointer cast and stays on the retag path below. }
     if isVoidCast then begin Result := operand; Exit; end;
+    { `(_Bool)e` is a COMPARISON against zero, not a 1-byte truncation
+      (C99 6.3.1.2) — `(_Bool)256` is 1 and `(_Bool)ptr` is 1 for any non-null
+      ptr. Handled before the numeric/retag paths below, which would otherwise
+      truncate. castDepth = 0 only: `(_Bool *)e` is an ordinary pointer cast and
+      must NOT normalise.
+      bug-a-bool-conversion-does-not-normalise-to-0-or-1 }
+    if (castDepth = 0) and (castTk = tyBool8) then
+    begin
+      Result := CNormalizeToBool(tyBool8, operand);
+      Exit;
+    end;
     { A NUMERIC float<->int cast must CONVERT, not bit-reinterpret: `(int)1.5`==1,
       `(double)i`==(double)i. AN_PTR_CAST only retags, so it left the IEEE bits
       and read them as an integer (-> 0). Route through the existing cross-target
@@ -3345,6 +3392,8 @@ begin
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := left;
       ASTRight[node] := CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs);
+      { assignment into a _Bool normalises to 0/1 (C99 6.3.1.2) }
+      ASTRight[node] := CNormalizeToBool(IntToTypeKind(ASTTk[left]), ASTRight[node]);
       ASTTk[node] := ASTTk[left];
       Result := node;
     end;
@@ -3703,7 +3752,7 @@ begin
       tkCVoid:     begin isVoid := True; sawBase := True; Next; end;
       tkCFloat:    begin base := tySingle; isFloatTy := True; sawBase := True; Next; end;
       tkCDouble:   begin base := tyDouble; isFloatTy := True; sawBase := True; Next; end;
-      tkCBool:     begin base := tyUInt8; sawBase := True; Next; end;
+      tkCBool:     begin base := tyBool8; sawBase := True; Next; end;
       tkRecord:    { 'struct' [tag] [inline body] in type position }
         begin
           Next;
@@ -3782,8 +3831,10 @@ begin
     Result := base               { typedef carries its own resolved kind }
   else if isFloatTy then
     Result := base
+  else if base = tyBool8 then
+    Result := base               { _Bool: 1-byte storage, but 0/1 conversion — see tyBool8 }
   else if base = tyUInt8 then
-    Result := base               { _Bool is a 1-byte integer type }
+    Result := base               { `unsigned char` reached here already resolved }
   else if base = tyChar then
   begin
     if isSigned then base := tyInt8
@@ -4915,6 +4966,7 @@ begin
         idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
         asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn;
         ASTRight[asn] := CPromoteCharTo(declTk, initExpr);
+        ASTRight[asn] := CNormalizeToBool(declTk, ASTRight[asn]);
         ASTTk[asn] := Ord(declTk);
         seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
         if head = -1 then head := seq else ASTRight[tail] := seq;
@@ -5282,7 +5334,13 @@ begin
     Next;
     node := AllocNode(AN_EXIT);
     if CurTok.Kind <> tkSemicolon then
-      ASTLeft[node] := ParseCExpr
+    begin
+      ASTLeft[node] := ParseCExpr;
+      { `return e;` from a _Bool function converts to 0/1 like any other
+        assignment to _Bool (C99 6.8.6.4p3 -> 6.3.1.2). }
+      if (CurProc >= 0) and (Procs[CurProc].RetType = tyBool8) then
+        ASTLeft[node] := CNormalizeToBool(tyBool8, ASTLeft[node]);
+    end
     else
       ASTLeft[node] := -1;
     Eat(tkSemicolon);

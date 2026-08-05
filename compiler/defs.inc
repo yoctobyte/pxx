@@ -913,7 +913,17 @@ type
       either way), which is what makes a per-target default safe under
       differential testing against x86-64. }
     tyPromoInt32,  { 27: promotable int on a 32-bit native word — {tag, payload}, 2x4 bytes }
-    tyPromoInt64   { 28: promotable int on a 64-bit native word — {tag, payload}, 2x8 bytes }
+    tyPromoInt64,  { 28: promotable int on a 64-bit native word — {tag, payload}, 2x8 bytes }
+    { C99 `_Bool`. Storage is one unsigned byte, identical to tyUInt8 — the
+      reason it is its own kind is CONVERSION, not layout: C99 6.3.1.2 says any
+      scalar converted to _Bool yields 0 or 1, never a truncation. While _Bool
+      was spelled tyUInt8 nothing downstream could tell the two apart at the
+      point of USE, so `_Bool b = 256` stored 0 and `_Bool ok = ptr` kept the
+      pointer's low byte. Everything that cares about SIZE goes through
+      TypeSize/TypeIsOrdinal and needs no change; only the conversion sites ask
+      for this kind by name.
+      bug-a-bool-conversion-does-not-normalise-to-0-or-1 }
+    tyBool8        { 29: C99 _Bool — 1 unsigned byte, but converts as 0/1 }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);

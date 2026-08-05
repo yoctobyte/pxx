@@ -1941,6 +1941,7 @@ begin
     24: Result := 0;  { tyAuto }
     { Promotable int family — {tag, payload}, tag width matches the payload so
       the struct stays naturally aligned (feature-a-promotable-int). }
+    29: Result := 1;  { tyBool8 — C99 _Bool, one unsigned byte (same storage as tyUInt8) }
     27: Result := 8;  { tyPromoInt32 — two 32-bit NATIVE words: tag + inline payload }
     28: Result := 16; { tyPromoInt64 — two 64-bit NATIVE words: tag + inline payload }
   end;
@@ -2134,7 +2135,8 @@ begin
     1, 2, 3,         { tyInteger, tyBoolean, tyChar — legacy }
     7, 8, 9, 10,     { tyInt8..tyUInt16 }
     11, 12, 13, 14,  { tyInt32..tyUInt64 }
-    15, 16, 17:      { tyNativeInt, tyNativeUInt, tyPointer }
+    15, 16, 17,      { tyNativeInt, tyNativeUInt, tyPointer }
+    29:              { tyBool8 — C99 _Bool; ordinal for every purpose except conversion }
       Result := True;
   end;
 end;
@@ -5171,6 +5173,7 @@ begin
     tyClass:       Result := 'class';
     tyInt8:        Result := 'ShortInt';
     tyUInt8:       Result := 'Byte';
+    tyBool8:       Result := '_Bool';
     tyInt16:       Result := 'SmallInt';
     tyUInt16:      Result := 'Word';
     tyInt32:       Result := 'LongInt';
