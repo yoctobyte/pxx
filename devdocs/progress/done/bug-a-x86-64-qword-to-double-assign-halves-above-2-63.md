@@ -111,4 +111,4 @@ already has exactly that (`EmitCvtSi2SdOrU64`) and it is why this site was
 fine. The observation is right; it is simply already done on this target.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 4f1930039.
