@@ -11,6 +11,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-32bit-truthiness-high-half | A | 70 | bug | `if (v)` on a 64-bit value tested only the LOW half on every 32-bit target | — |
 | bug-64bit-named-const-truncated-32bit-targets | A | 80 | bug | 64-bit named constants are truncated to 32 bits on the 32-bit targets | — |
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-a-aarch64-large-double-decimal-formatting | A | 45 | bug | aarch64: writeln(d:0:1) of a large Double prints a wrong integer part — 9007199254740991 comes out as 9007199254740990.4, and QWord-max shifts a whole decimal digit. Not ULP rounding: the digits are wrong | — |
 | bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |
 | bug-a-aarch64-signed-vs-unsigned-narrow-comparison-is-wrong | A | 85 | bug | aarch64 only: comparing a signed Integer/int against a narrow UNSIGNED value (Byte/Word, unsigned char/short, and plain char) gives the wrong answer — `-1 < Byte(1)` is FALSE. Silent, both frontends, every -O level | — |
 | bug-a-aarch64-variant-string-compare-always-false | A | 70 | bug | aarch64: comparing two string-valued Variants is always FALSE | — |

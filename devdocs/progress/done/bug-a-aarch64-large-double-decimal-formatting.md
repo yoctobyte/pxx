@@ -3,12 +3,13 @@ summary: "aarch64: writeln(d:0:1) of a large Double prints a wrong integer part 
 type: bug
 track: A
 prio: 45
+owner: claude-A
 ---
 
 # aarch64: `writeln(d:0:1)` of a large Double prints wrong digits
 
 - **Type:** bug — Track A (aarch64 backend or the shared decimal-formatting path)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track A+C, cross-checking the Pascal side while fixing
   `bug-c-int64-to-double-cast-truncates-on-32bit`. **Pre-existing** — reproduced
@@ -63,3 +64,45 @@ share one line; do not conflate them.
 printf 'var d: Double;\nbegin d := 9007199254740991; writeln(d:0:1); end.\n' > /tmp/a.pas
 ./compiler/pascal26 --target=aarch64 /tmp/a.pas /tmp/a_p && qemu-aarch64 /tmp/a_p
 ```
+
+## Resolution (2026-08-05) — fixed as a side effect, and one row re-triaged
+
+**Rows 1 and 3 are fixed.** aarch64 now prints `9007199254740991.0` for both,
+matching FPC and every other target. Not fixed by work aimed at this ticket:
+`bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked` replaced
+`EmitWriteFloatFixedA64` — ~140 lines of hand-written aarch64 that scaled
+through doubles — with a shim onto the runtime's `PXXWriteFloatFixed`. The wrong
+digits were that emitter's, and deleting it took them with it.
+
+That is consistent with the ticket's own reasoning that this looked like the
+aarch64 *backend* rather than the shared decimal path: it was.
+
+**Row 2 is NOT a pxx defect and is being closed as re-triaged, not fixed.**
+
+    q := 18446744073709551615; d := q; writeln(d:0:1);
+
+| | |
+| --- | --- |
+| pxx aarch64 / i386 / arm32 | `18446744073709551616.0` |
+| **CPython** `f'{float(2**64):.1f}'` | `18446744073709551616.0` |
+| FPC | `18446744073709552000.0` |
+
+`18446744073709551616` is 2^64 — the EXACT value of the double. pxx and CPython
+print it exactly; FPC rounds to 17 significant digits and zero-pads the rest.
+So pxx is not wrong here, it is *more* precise than FPC, and this ticket's own
+verification recipe says to "require both FPC and CPython to agree before
+trusting either". They do not agree, so the row was never evidence of a pxx bug.
+
+If FPC's 17-significant-digit cap is wanted for the fixed-decimals form, that is
+a deliberate parity choice about output precision, not a correctness fix — file
+it as a `compat-` item with a decision behind it rather than silently making the
+output less exact.
+
+**x86-64's `9223372036854775809.0` on that row is a real and separate bug** —
+the Int64 saturation in its still-hand-written fixed emitter — already filed as
+`bug-a-x86-64-writeln-fixed-saturates-at-int64`.
+
+**Verified:** rows 1 and 3 identical on x86-64, aarch64, i386 and arm32.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

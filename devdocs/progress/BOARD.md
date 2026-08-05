@@ -38,12 +38,11 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (208)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-aarch64-float-field-width-ignored | A | 45 | bug | aarch64 ignores the field WIDTH in writeln(d:w:n) — `writeln(x:10:4)` prints `3.1416` where FPC and x86-64 print `    3.1416`. Pre-existing; the aarch64 emitter never took a width parameter at all | — |
-| bug-a-aarch64-large-double-decimal-formatting | A | 45 | bug | aarch64: writeln(d:0:1) of a large Double prints a wrong integer part — 9007199254740991 comes out as 9007199254740990.4, and QWord-max shifts a whole decimal digit. Not ULP rounding: the digits are wrong | — |
 | bug-a-duplicate-definition-silently-accepted | A | 55 | bug | two definitions of the same function (or global) are silently accepted in BOTH frontends — last one wins, except calls placed between them bind to the earlier, so identical source text calls different functions depending on position | — |
 | bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc | A | 30 | bug | InterLockedIncrement and family now exist (lib/rtl/palatomic.pas) but need an explicit `uses palatomic`; FPC declares them in the `system` unit, so real code calls them with no uses line at all | — |
 | bug-a-local-static-array-of-string-never-released-at-scope-exit | A | 55 | bug | a local `array[0..N] of string` never releases its element handles at scope exit — merely FILLING one in a called procedure leaks linearly (~60 MB per 1M calls) | — |
@@ -363,9 +362,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1387)
+## done (1388)
 
-1387 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1388 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (28)
 
@@ -472,7 +471,6 @@ _none_
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-aarch64-float-field-width-ignored
-- [p 45] [A] bug-a-aarch64-large-double-decimal-formatting
 - [p 45] [A] bug-a-promoint-function-result-crashes
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [A] bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path
