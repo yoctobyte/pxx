@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:7 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1371 rejected:28`
+`urgent:7 unfinished:7 blocked:7 backlog:200 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1371 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -41,7 +41,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 187, ranked
+## Ready — top 30 of 188, ranked
 
 - `[p 85] [A]` bug-a-virtual-method-int64-in-and-out-32bit
 - `[p 85] [A]` bug-p-string-char-relational-compares-lengths
@@ -53,6 +53,7 @@ _none — no lane is locked._
 - `[p 70] [A]` bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
 - `[p 70] [B]` regression-test-core-csocket-loopback-b88
 - `[p 70] [T]` regression-test-core-test-stmt-call-result-selector-b318
+- `[p 70] [T]` regression-test-core-test-syncobjs
 - `[p 65] [A]` bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -72,6 +73,5 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 
-_157 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_158 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

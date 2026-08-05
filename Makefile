@@ -4248,7 +4248,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_relpath_uses.pas /tmp/test_relpath_uses26
 	test "$$(/tmp/test_relpath_uses26)" = "$$(printf '13\n15\n100')"
 	./$(COMPILER) test/test_syncobjs.pas /tmp/test_syncobjs26
-	test "$$(/tmp/test_syncobjs26)" = "$$(printf '1\n2\n3')"
+	test "$$(/tmp/test_syncobjs26)" = "$$(printf '1\n2\n3\n4')"
 	./$(COMPILER) test/test_getmem_proc.pas /tmp/test_getmem_proc26
 	test "$$(/tmp/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_freemem.pas /tmp/test_freemem26

@@ -3,7 +3,7 @@ summary: "syncobjs.TCriticalSection had empty method bodies and a TryEnter that 
 type: bug
 track: B
 prio: 70
-commit: PENDING-COMMIT
+commit: 503f1e94b
 ---
 
 # `TCriticalSection` was a no-op stub

@@ -14136,13 +14136,13 @@ begin
     Pascal only. C has its own void-value diagnostics and NilPy's `None`-typed
     calls are values by design, so neither goes through this.
 
-    StmtParenCallDepth: the `(`-led STATEMENT branch of ParseStatementAST runs
+    StmtCallDepth: the `(`-led STATEMENT branch of ParseStatementAST runs
     the expression parser over what is really a statement — `(o as T).M;` — so
     the check stands down inside it. Sub-expressions of such a statement are
     unchecked as a result; that shape is rare and the alternative is a false
     error on every `(o as T).M;`. }
   if (not isNilPy) and (not PyExprMode) and (not CProgramMode) and
-     (StmtParenCallDepth = 0) and (CurASTNode >= 0) and
+     (StmtCallDepth = 0) and (CurASTNode >= 0) and
      ((ASTKind[CurASTNode] = AN_CALL) or (ASTKind[CurASTNode] = AN_VIRTUAL_CALL)) and
      (ASTIVal[CurASTNode] >= 0) and (ASTIVal[CurASTNode] < ProcCount) and
      (not Procs[ASTIVal[CurASTNode]].IsFunc) and
@@ -20413,7 +20413,16 @@ begin
           end;
           if frDot then
           begin
+            { A STATEMENT delegated to the expression parser, exactly like the
+              tkLParen branch — so the no-result-call check stands down for it.
+              `GetBox.Poke;` (test_stmt_call_result_selector_b318) is the shape,
+              and TRACK T caught it: gate.sh quick, gate.sh lib, 34 demos and
+              the whole fpc probe were green with this false positive in place.
+              Only the statement's own expression is wrapped; the RHS after a
+              trailing `:=` below is a genuine value context and stays checked. }
+            Inc(StmtCallDepth);
             ParseExpr;
+            Dec(StmtCallDepth);
             valNode := CurASTNode;
             if CurTok.Kind = tkAssign then
             begin
@@ -21036,9 +21045,9 @@ begin
         no-result-call check has to stand down here, or `(o as T).M;` on a
         `procedure M` becomes an error. The probe case as-inline-call is
         exactly that and caught this. }
-      Inc(StmtParenCallDepth);
+      Inc(StmtCallDepth);
       ParseExpr;
-      Dec(StmtParenCallDepth);
+      Dec(StmtCallDepth);
       valNode := CurASTNode;
       if CurTok.Kind = tkAssign then
       begin

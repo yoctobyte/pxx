@@ -44,7 +44,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (199)
+## backlog (200)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -243,6 +243,7 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-test-core-csocket-loopback-b88 | B | 70 | regression | csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since | — |
 | regression-test-core-test-stmt-call-result-selector-b318 | T | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at 33cd0117f9f9 (auto-filed by twatch) | — |
+| regression-test-core-test-syncobjs | T | 70 | regression | regression: test-core#src:test/test_syncobjs.pas red at 9df868bf3680 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -409,6 +410,7 @@ _none_
 - [p 70] [A] bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
 - [p 70] [B] regression-test-core-csocket-loopback-b88
 - [p 70] [T] regression-test-core-test-stmt-call-result-selector-b318
+- [p 70] [T] regression-test-core-test-syncobjs
 - [p 65] [A] bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
