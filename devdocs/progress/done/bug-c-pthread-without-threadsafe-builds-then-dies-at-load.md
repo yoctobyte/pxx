@@ -3,13 +3,14 @@ summary: "a C program using <pthread.h> without --threadsafe builds clean and th
 type: bug
 track: C
 prio: 55
+owner: claude-A
 ---
 
 # `<pthread.h>` without `--threadsafe` builds clean, then dies at load
 
 - **Type:** bug — Track C (C frontend / external resolution). Diagnostics, not
   codegen: the code is fine once the flag is passed.
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track B, sweeping all 317 buildable `test/c*.c` for a spurious
   `DT_NEEDED` while fixing
@@ -79,3 +80,51 @@ and genuinely needs a runtime the flag selects.
 `#include <pthread.h>` + a pthread call, with no flags, either compiles to a
 working static binary or fails at COMPILE time naming `--threadsafe`. Never a
 binary that imports `__pxx_*` from libc.
+
+## Resolution (2026-08-05)
+
+The check lives in `RegisterExternal` (`symtab.inc`) — the single choke point
+where an unresolved external becomes a real dynamic import. A `__pxx_p*` name
+reaching it without `ThreadSafeMode` is refused:
+
+    error: __pxx_pmutex_init needs the thread-safe runtime: rebuild with
+           --threadsafe (<pthread.h> lowers onto the pxx thread PAL, which that
+           flag selects; without it this would import a pxx-internal symbol from
+           libc and fail at load)
+
+Compile time, names the flag, and names why — which is the whole ask.
+
+| | before | after |
+| --- | --- | --- |
+| pthread calls, no flag | builds; dies at load, rc 127 | **compile error naming --threadsafe** |
+| pthread calls, `--threadsafe` | works | works |
+| header only, no flag | builds; dies at load | **compile error naming --threadsafe** |
+| header only, `--threadsafe` | works | works |
+
+### One claim I had to correct
+
+I first wrote that the choke point means "a reference DCE removed never reaches
+it, so a program that merely INCLUDES the header still builds". Tested it: false.
+`pthread.c` is compiled whole and its bodies reference the externs, so the error
+fires with no user call at all.
+
+The right question was whether that is a REGRESSION, and it is not — measured on
+`pinned`, the header-only program also builds clean and also dies at load with
+the identical `undefined symbol: __pxx_pmutex_init`. Every program now rejected
+was already broken; what changed is that it says so at compile time. The code
+comment was rewritten to state that, with the measurement, rather than the
+convenient version.
+
+### Test
+
+`test/cpthread_needs_threadsafe_b.c` covers the WORKING half — `--threadsafe`
+builds and the mutex round-trip returns 42. The rejection half is not a test:
+this harness has no "must not compile" form, so asserting it would mean
+inventing one. The before/after above is the record instead.
+
+`testmgr --tier native` **1167/1167 pass** — which also confirms the check does
+not fire across the 368-file C corpus, the concern with putting anything in
+`RegisterExternal`.
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

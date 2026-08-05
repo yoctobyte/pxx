@@ -7810,8 +7810,37 @@ end;
 
 { Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
 function RegisterExternal(procIdx: Integer): Integer;
-var i, extIdx: Integer;
+var i, extIdx: Integer; enm: AnsiString;
 begin
+  { A `__pxx_p*` name is one of OUR OWN pthread PAL helpers (palpthread.pas),
+    not anything a shared library can supply. Reaching this point means a C
+    program called into <pthread.h> without --threadsafe, so palpthread was
+    never pulled and the extern stayed unbodied — it was then imported from
+    libc.so.6, which has never heard of it, and the program died at LOAD with
+
+        symbol lookup error: undefined symbol: __pxx_pmutex_init
+
+    That message names an internal symbol absent from the user's source, after
+    a build that reported no diagnostic at all, and survives every link-time
+    check because it is a dynamic-loader failure. Refuse here instead — the
+    choke point where an unresolved external becomes a real import.
+
+    This fires for `#include <pthread.h>` even when nothing is CALLED, because
+    pthread.c is compiled whole and its bodies reference the externs. That is
+    not a regression: measured, `pinned` builds that program too and it dies at
+    load the same way. Every program this rejects was already broken; the change
+    is that it now says so at compile time, with the flag named.
+    bug-c-pthread-without-threadsafe-builds-then-dies-at-load }
+  if (procIdx >= 0) and (procIdx < MAX_PROCS) then
+  begin
+    enm := Procs[procIdx].Name;
+    if (Length(enm) >= 7) and (Copy(enm, 1, 7) = '__pxx_p') and
+       (not ThreadSafeMode) then
+      Error(enm + ' needs the thread-safe runtime: rebuild with --threadsafe '
+            + '(<pthread.h> lowers onto the pxx thread PAL, which that flag '
+            + 'selects; without it this would import a pxx-internal symbol '
+            + 'from libc and fail at load)');
+  end;
   extIdx := -1;
   for i := 0 to ExternalCount-1 do
     if ExternalProc[i] = procIdx then extIdx := i;

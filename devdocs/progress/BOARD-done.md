@@ -238,6 +238,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-preproc-paste-rescan | C | 60 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-preprocessor-defined-expression-sqlite | C | 50 | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-c-pthread-without-threadsafe-builds-then-dies-at-load | C | 55 | bug | a C program using <pthread.h> without --threadsafe builds clean and then dies at load with `undefined symbol: __pxx_pmutex_init` — a pxx-internal symbol imported from glibc, which cannot possibly have it | — |
 | bug-c-ptr-to-array-parameter | C | 30 | bug | MULTI-dim ptr-to-array param `int f(int (*q)[A][B])` fails to lower (AN_BINOP/kind-5 gap). Single-dim `int (*q)[N]` FIXED in 85c233a2. | — |
 | bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
 | bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |

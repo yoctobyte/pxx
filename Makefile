@@ -3069,6 +3069,8 @@ test-core: $(COMPILER)
 	/tmp/cptrdiff_vararg_b26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cbool_normalise_b.c /tmp/cbool_normalise_b26
 	/tmp/cbool_normalise_b26; test "$$?" = "42"
+	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/cpthread_needs_threadsafe_b.c /tmp/cpthread_needs_threadsafe_b26
+	/tmp/cpthread_needs_threadsafe_b26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_conv_b176.c /tmp/cfloat_conv_b17626
 	/tmp/cfloat_conv_b17626; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csizeof_deref_field_b177.c /tmp/csizeof_deref_field_b17726
