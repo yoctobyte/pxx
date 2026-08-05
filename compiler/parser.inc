@@ -30492,6 +30492,17 @@ begin
        (CaseEqual(GetTokenStr(i), 'delete') or CaseEqual(GetTokenStr(i), 'insert')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
+    { `InterLocked*(...)` resolve to the wrappers in the builtin unit — FPC
+      declares them in `system`, so real FPC source calls them with NO uses
+      line and must still compile (bug-a-interlocked-family-needs-a-uses-clause-
+      unlike-fpc). Prefix-matched so the *64 peers come along. A user routine or
+      `uses palatomic` shadows at the call site, leaving these unused. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (Length(GetTokenStr(i)) >= 11) and
+       CaseEqual(Copy(GetTokenStr(i), 1, 11), 'InterLocked') and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
     { Bare `Abs(...)` / `Sqr(...)` lower to the __pxxAbs*/__pxxSqr* helpers in the
       builtin unit (see ParseFactor). Pull the unit so they resolve; a user
       routine of the same name shadows. ESP can't compile builtin. }

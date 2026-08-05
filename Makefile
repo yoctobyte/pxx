@@ -4018,6 +4018,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_promoint_arg_literal26)" = "$$(printf '24\n-10\n4865804016353280000\n14\n2000000\n14\n12\nintstr\n15511210043330985984000000\nOK')"
 	./$(COMPILER) test/test_index_getter_string_property.pas /tmp/test_index_getter_string26
 	test "$$(/tmp/test_index_getter_string26)" = "$$(printf 'h\nh\no\ne\na\nb\ny\nhello\n5 hello\nOK')"
+	./$(COMPILER) test/test_interlocked_no_uses.pas /tmp/test_interlocked_no_uses26
+	test "$$(/tmp/test_interlocked_no_uses26)" = "$$(printf '6 6\n5 5\n5 42\n42 50\n50 99\n99 99\n101 101\n101 1001\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas /tmp/test_static_array_managed_scope_exit26
 	test "$$(/tmp/test_static_array_managed_scope_exit26)" = "$$(printf '0\nOK')"
 	./$(COMPILER) test/test_string_array_element_charwrite.pas /tmp/test_string_array_element_charwrite26

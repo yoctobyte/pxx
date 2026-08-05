@@ -24,6 +24,45 @@ function StrQWord(v: QWord; width: Integer): AnsiString;
   ORDINAL — 120 for 'x'), which is why the ordinal arm there excludes
   tyChar. bug-p-writeln-text-rejects-char }
 function StrChar(c: Char; width: Integer): AnsiString;
+
+{ ---- InterLocked* : FPC declares these in the `system` unit --------------
+
+  So FPC source that uses them carries NO `uses` line, and requiring one meant
+  such code did not compile as-is. They live here, the system-unit analogue,
+  rather than only in lib/rtl/palatomic.pas
+  (bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc).
+
+  `uses palatomic` keeps working: a user RTL unit shadows a builtin of the same
+  name, which is the documented rule and is what lets a program override any
+  builtin. So both spellings resolve and neither is a duplicate definition.
+
+  RETURN-VALUE CONTRACT, straight from palatomic and verified against FPC:
+  Increment/Decrement return the value AFTER the operation, Exchange /
+  ExchangeAdd / CompareExchange return the value BEFORE it. Every intrinsic
+  returns the OLD value, so only the first two adjust.
+
+  ESP is excluded: the atomic intrinsics are not available on that target and
+  the declarations alone would break every ESP build. }
+{$ifndef PXX_ESP}
+function InterLockedIncrement(var Target: LongInt): LongInt;
+function InterLockedDecrement(var Target: LongInt): LongInt;
+function InterLockedExchange(var Target: LongInt; Source: LongInt): LongInt;
+function InterLockedExchangeAdd(var Target: LongInt; Source: LongInt): LongInt;
+function InterLockedCompareExchange(var Target: LongInt;
+                                    NewValue, Comperand: LongInt): LongInt;
+{ 64-bit peers on 64-bit targets only: a 32-bit target has no
+  single-instruction 64-bit read-modify-write and the intrinsic refuses at
+  compile time, so the DECLARATIONS alone would break every 32-bit build.
+  Same guard palatomic carries, and for the same measured reason. }
+{$IFDEF CPU64}
+function InterLockedIncrement64(var Target: Int64): Int64;
+function InterLockedDecrement64(var Target: Int64): Int64;
+function InterLockedExchange64(var Target: Int64; Source: Int64): Int64;
+function InterLockedExchangeAdd64(var Target: Int64; Source: Int64): Int64;
+function InterLockedCompareExchange64(var Target: Int64;
+                                      NewValue, Comperand: Int64): Int64;
+{$ENDIF}
+{$endif}
 function FloatToStr(v: Double): AnsiString;
 function FloatToExpStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
@@ -697,6 +736,64 @@ begin
   while Length(Result) < width do
     Result := ' ' + Result;
 end;
+
+{$ifndef PXX_ESP}
+function InterLockedIncrement(var Target: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_add(@Target, 1)) + 1;
+end;
+
+function InterLockedDecrement(var Target: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_add(@Target, -1)) - 1;
+end;
+
+function InterLockedExchange(var Target: LongInt; Source: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_xchg(@Target, Source));
+end;
+
+function InterLockedExchangeAdd(var Target: LongInt; Source: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_add(@Target, Source));
+end;
+
+function InterLockedCompareExchange(var Target: LongInt;
+                                    NewValue, Comperand: LongInt): LongInt;
+begin
+  { ARGUMENT ORDER: FPC takes (new, expected), the intrinsic takes
+    (expected, new). Swapping them is the whole point of the wrapper. }
+  Result := LongInt(__pxxatomic_cas(@Target, Comperand, NewValue));
+end;
+
+{$IFDEF CPU64}
+function InterLockedIncrement64(var Target: Int64): Int64;
+begin
+  Result := __pxxatomic_add64(@Target, 1) + 1;
+end;
+
+function InterLockedDecrement64(var Target: Int64): Int64;
+begin
+  Result := __pxxatomic_add64(@Target, -1) - 1;
+end;
+
+function InterLockedExchange64(var Target: Int64; Source: Int64): Int64;
+begin
+  Result := __pxxatomic_xchg64(@Target, Source);
+end;
+
+function InterLockedExchangeAdd64(var Target: Int64; Source: Int64): Int64;
+begin
+  Result := __pxxatomic_add64(@Target, Source);
+end;
+
+function InterLockedCompareExchange64(var Target: Int64;
+                                      NewValue, Comperand: Int64): Int64;
+begin
+  Result := __pxxatomic_cas64(@Target, Comperand, NewValue);
+end;
+{$ENDIF}
+{$endif}
 
 function StrChar(c: Char; width: Integer): AnsiString;
 { One Char as a string, space-padded on the LEFT to `width` (width <= 1 = no
