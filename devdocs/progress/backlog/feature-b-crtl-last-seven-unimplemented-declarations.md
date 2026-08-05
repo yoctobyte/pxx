@@ -1,16 +1,17 @@
 ---
-summary: "The 7 crtl declarations still without bodies — atexit, poll, ioctl, chmod, umask, msync, mremap. Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
+summary: "The crtl declarations still without bodies — now 5: atexit, poll, ioctl, msync, mremap (chmod and umask landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
 type: feature
 track: B
 prio: 40
 ---
 
-# crtl: the last 7 declared-but-unimplemented functions
+# crtl: the last declared-but-unimplemented functions
 
 - **Type:** feature (gap) — Track B (`lib/crtl`, `lib/rtl/pxxcio.pas` bridges)
 - **Status:** backlog
 - **Opened:** 2026-08-05
-- **Found by:** `tools/crtl_decl_probe.sh` (366 declared, 359 implemented).
+- **Found by:** `tools/crtl_decl_probe.sh`. Was 366 declared / 359 implemented;
+  **`chmod` and `umask` landed 2026-08-05**, so it is now 361 / 5 remaining.
 
 ## Why a missing body is worse than a missing declaration
 
@@ -34,12 +35,18 @@ output** — that is what this probe is for.
 | **`atexit`** | `stdlib.h` | The awkward one — see below. Today it is a hard *runtime* link error (`undefined symbol: atexit`), so at least it is loud. |
 | **`poll`** | `poll.h` | `PalPoll` exists but is **per-handle** (`PalPoll(handle, events, timeoutMs)`); real `poll(fds[], nfds, timeout)` needs an array-shaped PAL bridge, not a loop over the existing one (a loop cannot block on the set). |
 | **`ioctl`** | `sys/ioctl.h` | No general bridge. `__pxx_isatty` already does the one TCGETS case crtl needs; a generic `ioctl(fd, req, arg)` is a new PAL entry. Note ESP refuses it. |
-| **`chmod`** | `sys/stat.h` | Simple syscall; `fchmod` is already bridged (`__pxx_fchmod`), so this is the path-taking sibling. |
-| **`umask`** | `sys/stat.h` | Simple syscall, process-global state. |
+| ~~`chmod`~~ | `sys/stat.h` | **DONE 2026-08-05.** Goes through `fchmodat(AT_FDCWD, …)` — aarch64 and riscv have no legacy `chmod` syscall, same as `symlink`/`link`. |
+| ~~`umask`~~ | `sys/stat.h` | **DONE 2026-08-05.** The one syscall here with no error path: it always succeeds and returns the previous mask, so no -1/errno conversion. |
 | **`msync`** | `sys/mman.h` | mmap family; only worth it alongside a real mmap story. |
 | **`mremap`** | `sys/mman.h` | Same. Linux-specific. |
 
-`chmod` and `umask` are the cheapest and are ordinary things build tooling does.
+`chmod` and `umask` were the cheapest and are done. Their syscall numbers were
+added to all five arch tables in `platform_backend.pas` and **verified by running
+the probe on x86-64, i386, arm32 and aarch64** — a wrong number there is exactly
+how `exit_group` came to be `fgetxattr` on 32-bit
+([[bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit]]'s sibling,
+fixed the same night). riscv32 shares aarch64's asm-generic numbers and is not
+runnable here.
 
 ## `atexit` cannot be finished inside crtl
 

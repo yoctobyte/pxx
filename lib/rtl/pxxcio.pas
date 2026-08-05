@@ -96,6 +96,8 @@ function __pxx_link(oldPath, newPath: PChar): Integer;
 function __pxx_dup(oldFd: Integer): Integer;
 function __pxx_dup2(oldFd, newFd: Integer): Integer;
 function __pxx_fchmod(fd, mode: Integer): Integer;
+function __pxx_chmod(path: PChar; mode: Integer): Integer;
+function __pxx_umask(mask: Integer): Integer;
 function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
 function __pxx_access(path: PChar; mode: Integer): Integer;
 function __pxx_fchown(fd, owner, group: Integer): Integer;
@@ -437,6 +439,16 @@ end;
 function __pxx_fchmod(fd, mode: Integer): Integer;
 begin
   Result := PalFchmod(fd, mode);
+end;
+
+function __pxx_chmod(path: PChar; mode: Integer): Integer;
+begin
+  Result := PalChmod(path, mode);
+end;
+
+function __pxx_umask(mask: Integer): Integer;
+begin
+  Result := PalUmask(mask);
 end;
 
 function __pxx_ftruncate(fd: Integer; length: Int64): Integer;

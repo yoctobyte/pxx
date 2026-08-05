@@ -142,6 +142,8 @@ function PalLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalFsync(handle: Integer): Integer;
 function PalFchmod(handle, mode: Integer): Integer;
+function PalChmod(path: PChar; mode: Integer): Integer;
+function PalUmask(mask: Integer): Integer;
 function PalFtruncate(handle: Integer; length: Int64): Integer;
 function PalAccess(path: PChar; mode: Integer): Integer;
 function PalFchown(handle, owner, group: Integer): Integer;
@@ -398,6 +400,16 @@ end;
 function PalFsync(handle: Integer): Integer;
 begin
   Result := PalBackendFsync(handle);
+end;
+
+function PalChmod(path: PChar; mode: Integer): Integer;
+begin
+  Result := PalBackendChmod(path, mode);
+end;
+
+function PalUmask(mask: Integer): Integer;
+begin
+  Result := PalBackendUmask(mask);
 end;
 
 function PalFchmod(handle, mode: Integer): Integer;

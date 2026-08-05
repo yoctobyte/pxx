@@ -37,6 +37,8 @@ extern int __pxx_stat(const char *path, struct __pxx_statbuf *sb);
 extern int __pxx_lstat(const char *path, struct __pxx_statbuf *sb);
 extern int __pxx_mkdir(const char *path, int mode);
 extern int __pxx_fchmod(int fd, int mode);
+extern int __pxx_chmod(const char *path, int mode);
+extern int __pxx_umask(int mask);
 
 static void fill(struct stat *buf, const struct __pxx_statbuf *sb) {
   buf->st_dev     = (dev_t)sb->dev;
@@ -104,4 +106,16 @@ int fchmod(int fd, mode_t mode) {
   int rc = __pxx_fchmod(fd, (int)mode);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
+}
+
+int chmod(const char *path, mode_t mode) {
+  int rc = __pxx_chmod(path, (int)mode);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+/* umask cannot fail and returns the PREVIOUS mask, so there is no -1/errno
+   path here — the raw PAL result IS the answer. */
+mode_t umask(mode_t mask) {
+  return (mode_t)__pxx_umask((int)mask);
 }

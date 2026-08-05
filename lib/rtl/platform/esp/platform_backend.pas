@@ -37,6 +37,8 @@ function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
+function PalBackendChmod(path: PChar; mode: Integer): Integer;
+function PalBackendUmask(mask: Integer): Integer;
 function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
 function PalBackendFchown(handle, owner, group: Integer): Integer;
@@ -489,6 +491,19 @@ begin
 end;
 
 function PalBackendFchmod(handle, mode: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ ESP is not a Unix: FreeRTOS/SPIFFS has no permission bits and no per-process
+  file-creation mask, so these are refused loudly rather than faked. Same
+  treatment as fchmod right above. }
+function PalBackendChmod(path: PChar; mode: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendUmask(mask: Integer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

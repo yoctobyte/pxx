@@ -41,6 +41,8 @@ function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
+function PalBackendChmod(path: PChar; mode: Integer): Integer;
+function PalBackendUmask(mask: Integer): Integer;
 function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
 function PalBackendFchown(handle, owner, group: Integer): Integer;
@@ -123,6 +125,7 @@ const
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
   SYS_mmap = 9; SYS_munmap = 11; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
+  SYS_fchmodat = 268; SYS_umask = 95;
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
@@ -141,6 +144,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
+  SYS_fchmodat = 306; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
@@ -157,6 +161,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
+  SYS_fchmodat = 53; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
@@ -173,6 +178,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
+  SYS_fchmodat = 333; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
@@ -193,6 +199,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
+  SYS_fchmodat = 53; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
@@ -607,6 +614,21 @@ end;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_fchmod, handle, mode, 0, 0, 0, 0));
+end;
+
+{ chmod BY PATH goes through fchmodat(AT_FDCWD, path, mode, 0): aarch64 and
+  riscv have no legacy chmod syscall at all, exactly like symlink/link above.
+  AT_FDCWD = -100. }
+function PalBackendChmod(path: PChar; mode: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_fchmodat, -100, Int64(path), mode, 0, 0, 0));
+end;
+
+{ umask always succeeds and returns the PREVIOUS mask — it has no error case,
+  which is why it is the one syscall here with no negative-errno path. }
+function PalBackendUmask(mask: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_umask, mask, 0, 0, 0, 0, 0));
 end;
 
 function PalBackendGetpid: Integer;

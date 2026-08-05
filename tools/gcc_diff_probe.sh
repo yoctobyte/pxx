@@ -1229,6 +1229,28 @@ int main(void) {
   return 0;
 }
 C
+probe chmod-umask <<'C'
+#include <stdio.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
+int main(void) {
+  const char *p = "@TMP@/chmod_probe";
+  struct stat st;
+  int r, e; mode_t old;
+  int fd = open(p, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  close(fd);
+  r = chmod(p, 0600); stat(p, &st); printf("%d %o\n", r, st.st_mode & 07777);
+  r = chmod(p, 0755); stat(p, &st); printf("%d %o\n", r, st.st_mode & 07777);
+  errno = 0; r = chmod("@TMP@/nope_31337/x", 0644); e = errno;
+  printf("%d %d\n", r, e == ENOENT);
+  old = umask(022);
+  printf("%d %d\n", (old & ~07777) == 0, umask(old) == 022);
+  unlink(p);
+  return 0;
+}
+C
 probe clock-gettime-selfcontained <<'C'
 #include <stdio.h>
 #include <time.h>
