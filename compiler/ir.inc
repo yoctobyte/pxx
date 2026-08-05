@@ -2377,6 +2377,24 @@ begin
     Result := IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer));
     Exit;
   end;
+  { An ORDINAL argument to a promo parameter: box it into the same kind of
+    hidden temp, through PXXPromoFromInt — the identical lowering the widening
+    assignment `p := 12` uses. TypesCompatible now admits this direction, so
+    `f(12)` resolves; without the boxing here it would resolve and then hand the
+    callee a machine int where it expects a {tag, payload} slot address.
+    bug-a-promoint-parameter-rejects-literals-and-call-results }
+  if (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     TypeIsPromoInt(Procs[cpi].Params[pathIdx].TypeKind) and
+     TypeIsOrdinal(IntToTypeKind(ASTTk[argAST])) and
+     (IntToTypeKind(ASTTk[argAST]) <> tyPointer) then
+  begin
+    caArg1 := IRPromoTempSlot(caSym);
+    IRMarkStatementNode(IRPromoCall('PXXPromoFromInt', caArg1,
+                                    IRLowerAST(argAST), -1, tyUnknown));
+    Result := IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer));
+    Exit;
+  end;
   { PROMO argument to a POINTER parameter: pass the slot ADDRESS, which is what
     every promocore entry point takes.
 

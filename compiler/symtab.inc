@@ -4844,6 +4844,20 @@ begin
     Result := pType <> tyBoolean;
     Exit;
   end;
+  { ...and the REVERSE: an integer ARGUMENT matches a promo PARAMETER, boxed
+    into a hidden promo temp by IRLowerCallArg exactly as the widening
+    assignment `p := 12` boxes through PXXPromoFromInt. Without it `f(12)` on
+    `function f(n: PromoInt)` failed with "no overload matches / argument types:
+    (Integer)" while every other numeric parameter type accepts a literal —
+    which made arbitrary precision awkward at exactly the boundary it is most
+    useful, `Fact(20)` and friends.
+    Boolean excluded on the same grounds as the rule above.
+    bug-a-promoint-parameter-rejects-literals-and-call-results }
+  if TypeIsPromoInt(pType) and TypeIsOrdinal(aType) then
+  begin
+    Result := aType <> tyBoolean;
+    Exit;
+  end;
   if (pType = tyString) and (aType = tyChar) then
   begin
     Result := True;

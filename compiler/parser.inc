@@ -13554,9 +13554,18 @@ begin
               { A `const Variant` param likewise accepts a non-lvalue: the
                 scalar is boxed into a hidden variant temp at IR lowering
                 (IRLowerCallArg) and the temp's address is passed. }
+              { A PROMO param is the same case as the by-value record above: it
+                is by-ref for ABI only ({tag, payload} is 8 or 16 bytes and the
+                rvalue IS the slot address), and IRLowerCallArg copies it into a
+                hidden temp with PXXPromoCopy before the call — the callee always
+                gets its own slot. So a non-lvalue is sound, and rejecting it
+                made `f(g())` fail for a promo parameter while every other
+                numeric parameter type accepts it.
+                bug-a-promoint-parameter-rejects-literals-and-call-results }
               if not (((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
+                      TypeIsPromoInt(Procs[procIdx].Params[i].TypeKind) or
                       ((Procs[procIdx].Params[i].TypeKind = tyVariant) and
                        ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i])) then
   Error('by-reference argument must be a variable');

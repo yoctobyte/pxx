@@ -4014,6 +4014,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_promoint_function_result26)" = "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas /tmp/test_promoint_parameter_32bit26
 	test "$$(/tmp/test_promoint_parameter_32bit26)" = "$$(printf '16\n0\n36\n4\n263\n768\n257\n256\n62500000000000000000000000000\n142857142857142857142857142857\nOK')"
+	./$(COMPILER) test/test_promoint_arg_literal_and_result.pas /tmp/test_promoint_arg_literal26
+	test "$$(/tmp/test_promoint_arg_literal26)" = "$$(printf '24\n-10\n4865804016353280000\n14\n2000000\n14\n12\nintstr\n15511210043330985984000000\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas /tmp/test_static_array_managed_scope_exit26
 	test "$$(/tmp/test_static_array_managed_scope_exit26)" = "$$(printf '0\nOK')"
 	./$(COMPILER) test/test_string_array_element_charwrite.pas /tmp/test_string_array_element_charwrite26
