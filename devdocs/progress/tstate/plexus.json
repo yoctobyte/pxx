@@ -309,6 +309,14 @@
    "sha": "33cd0117f9f98d0b2fa08b13fb1b8364e8ca1266",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-05T07:48:38Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "65baa25f64df75cbdf3e5f7017f29ed7d02c412c",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -1129,6 +1137,7 @@
   "test-core#src:test/test_cross_typed_const.pas": "native",
   "test-core#src:test/test_cross_write_pchar.pas": "native",
   "test-core#src:test/test_ctor_arrayofconst_overload_b298.pas": "native",
+  "test-core#src:test/test_ctor_result_member.pas": "native",
   "test-core#src:test/test_ctor_string_literal_arg.pas": "native",
   "test-core#src:test/test_decl_order_global_error.pas@2": "native",
   "test-core#src:test/test_decl_order_lax.pas": "native",
@@ -3223,6 +3232,7 @@
   "test-core#src:test/test_cross_typed_const.pas": "pass",
   "test-core#src:test/test_cross_write_pchar.pas": "pass",
   "test-core#src:test/test_ctor_arrayofconst_overload_b298.pas": "pass",
+  "test-core#src:test/test_ctor_result_member.pas": "pass",
   "test-core#src:test/test_ctor_string_literal_arg.pas": "pass",
   "test-core#src:test/test_decl_order_global_error.pas@2": "pass",
   "test-core#src:test/test_decl_order_lax.pas": "pass",
@@ -4501,11 +4511,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-05T07:40:28Z",
-  "sha": "33cd0117f9f98d0b2fa08b13fb1b8364e8ca1266",
+  "date": "2026-08-05T07:48:38Z",
+  "sha": "65baa25f64df75cbdf3e5f7017f29ed7d02c412c",
   "tier": "native",
   "verdict": "RED",
-  "wall": 118.4
+  "wall": 118.2
  },
  "last_bench": {
   "conf_rows": 550,
