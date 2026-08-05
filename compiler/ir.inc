@@ -5376,13 +5376,26 @@ begin
           which turns the operand's 4-byte field LOAD into an 8-byte one and
           drags in whatever field sits next in the record — the same hazard the
           float branch below documents. See bug-nativeuint-cast-widens-load. }
+        { The SOURCE-side test asks "is the operand already 64 bits, so no widen
+          is needed?" — and it must apply the same pointer-width rule the
+          cast-side test above applies. It used to list tyNativeInt/tyNativeUInt
+          unconditionally, which is only true on a 64-bit target: on i386/arm32
+          a NativeInt is FOUR bytes, so `Int64(n)` took the "already wide"
+          branch, skipped the widen, and fell through to the in-place retag —
+          turning a 4-byte load into an 8-byte one and picking up whatever sat
+          in the adjacent storage. Int64(5) read 4294967301.
+          Silent, and the garbage moved with the stack layout. The IMPLICIT
+          conversion (`q := n`) never came through here, which is why it stayed
+          correct and hid this.
+          bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit }
         if ((castTk = tyInt64) or (castTk = tyUInt64) or
             (((castTk = tyNativeInt) or (castTk = tyNativeUInt)) and
              (TypeSize(castTk) = 8)))
            and not ((IntToTypeKind(IRTk[Result]) = tyInt64) or
                     (IntToTypeKind(IRTk[Result]) = tyUInt64) or
-                    (IntToTypeKind(IRTk[Result]) = tyNativeInt) or
-                    (IntToTypeKind(IRTk[Result]) = tyNativeUInt)) then
+                    (((IntToTypeKind(IRTk[Result]) = tyNativeInt) or
+                      (IntToTypeKind(IRTk[Result]) = tyNativeUInt)) and
+                     (TypeSize(IntToTypeKind(IRTk[Result])) = 8))) then
         begin
           { Widening numeric reinterpret 32->64 (e.g. Int64(someInteger)): on a
             32-bit target the inner value occupies one register and its high word

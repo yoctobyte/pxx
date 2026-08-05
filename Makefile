@@ -3998,6 +3998,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_whole_assign26)" = "$$(printf '8 42 7\n3 pqr\n3 pqr\n8 42 42\nOK')"
 	./$(COMPILER) test/test_i386_int64_high_half.pas /tmp/test_i386_int64_high_half26
 	test "$$(/tmp/test_i386_int64_high_half26)" = "$$(printf '1\n-1\n1\n-1\n1\n1\n0\n3\nOK')"
+	./$(COMPILER) test/test_int64_cast_of_nativeint.pas /tmp/test_int64_cast_of_nativeint26
+	test "$$(/tmp/test_int64_cast_of_nativeint26)" = "$$(printf '5\n-3\n-3\n7\n7000000\n1234567890\n1\nOK')"
 	./$(COMPILER) test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26
 	test "$$(/tmp/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
 	./$(COMPILER) test/test_ir_unary.pas /tmp/test_ir_unary26
