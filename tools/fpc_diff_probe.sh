@@ -1118,6 +1118,334 @@ end.
 P
 
 
+# ---- classes: inheritance, virtual dispatch, properties ----
+probe cls-virtual-override <<'P'
+type
+  TA = class
+    function Name: string; virtual;
+    function Describe: string;
+  end;
+  TB = class(TA)
+    function Name: string; override;
+  end;
+function TA.Name: string; begin Result := 'A'; end;
+function TA.Describe: string; begin Result := '<' + Name + '>'; end;
+function TB.Name: string; begin Result := 'B'; end;
+var a: TA; b: TB;
+begin
+  a := TA.Create; b := TB.Create;
+  writeln(a.Describe, '|', b.Describe);
+  a.Free; b.Free;
+end.
+P
+probe cls-inherited-call <<'P'
+type
+  TA = class
+    function Name: string; virtual;
+  end;
+  TB = class(TA)
+    function Name: string; override;
+  end;
+function TA.Name: string; begin Result := 'A'; end;
+function TB.Name: string; begin Result := 'B+' + inherited Name; end;
+var b: TB;
+begin
+  b := TB.Create; writeln(b.Name); b.Free;
+end.
+P
+probe cls-polymorphic-var <<'P'
+type
+  TA = class function V: Integer; virtual; end;
+  TB = class(TA) function V: Integer; override; end;
+function TA.V: Integer; begin Result := 1; end;
+function TB.V: Integer; begin Result := 2; end;
+var a: TA;
+begin
+  a := TA.Create; write(a.V); a.Free;
+  a := TB.Create; write(a.V); a.Free;
+  writeln;
+end.
+P
+probe cls-is-as <<'P'
+type
+  TA = class end;
+  TB = class(TA) end;
+  TC = class(TA) end;
+var a: TA; b: TB;
+begin
+  b := TB.Create;
+  a := b;
+  writeln(a is TB, '|', a is TC, '|', a is TA);
+  writeln((a as TB) = b);
+  a.Free;
+end.
+P
+probe cls-classname <<'P'
+type
+  TA = class end;
+  TB = class(TA) end;
+var b: TB;
+begin
+  b := TB.Create;
+  writeln(b.ClassName, '|', b.InheritsFrom(TA), '|', TB.ClassName);
+  b.Free;
+end.
+P
+probe cls-property-getter <<'P'
+type
+  TBox = class
+  private
+    FV: Integer;
+    function GetV: Integer;
+    procedure SetV(x: Integer);
+  public
+    property V: Integer read GetV write SetV;
+  end;
+function TBox.GetV: Integer; begin Result := FV * 10; end;
+procedure TBox.SetV(x: Integer); begin FV := x + 1; end;
+var b: TBox;
+begin
+  b := TBox.Create;
+  b.V := 4;
+  writeln(b.V);
+  b.Free;
+end.
+P
+probe cls-property-field <<'P'
+type
+  TBox = class
+  private
+    FV: Integer;
+  public
+    property V: Integer read FV write FV;
+  end;
+var b: TBox;
+begin
+  b := TBox.Create; b.V := 7; writeln(b.V); b.Free;
+end.
+P
+probe cls-constructor-chain <<'P'
+type
+  TA = class
+    N: Integer;
+    constructor Create(x: Integer);
+  end;
+  TB = class(TA)
+    M: Integer;
+    constructor Create(x, y: Integer);
+  end;
+constructor TA.Create(x: Integer); begin N := x; end;
+constructor TB.Create(x, y: Integer); begin inherited Create(x); M := y; end;
+var b: TB;
+begin
+  b := TB.Create(3, 4); writeln(b.N, '|', b.M); b.Free;
+end.
+P
+probe cls-destructor-order <<'P'
+type
+  TA = class
+    destructor Destroy; override;
+  end;
+  TB = class(TA)
+    destructor Destroy; override;
+  end;
+destructor TA.Destroy; begin write('A'); inherited Destroy; end;
+destructor TB.Destroy; begin write('B'); inherited Destroy; end;
+var b: TB;
+begin
+  b := TB.Create; b.Free; writeln;
+end.
+P
+
+# ---- exceptions: custom classes, nesting, re-raise ----
+probe exc-custom-class <<'P'
+uses sysutils;
+type EMine = class(Exception) end;
+begin
+  try
+    raise EMine.Create('boom');
+  except
+    on e: EMine do writeln('mine:', e.Message);
+  end;
+end.
+P
+probe exc-hierarchy-match <<'P'
+uses sysutils;
+type EBase = class(Exception) end;
+     EDeriv = class(EBase) end;
+begin
+  try
+    raise EDeriv.Create('x');
+  except
+    on e: EBase do writeln('base-caught');
+  end;
+end.
+P
+probe exc-reraise <<'P'
+uses sysutils;
+begin
+  try
+    try
+      raise Exception.Create('inner');
+    except
+      on e: Exception do begin write('first:', e.Message, '|'); raise; end;
+    end;
+  except
+    on e: Exception do writeln('second:', e.Message);
+  end;
+end.
+P
+probe exc-finally-order <<'P'
+uses sysutils;
+begin
+  try
+    try
+      raise Exception.Create('x');
+    finally
+      write('fin|');
+    end;
+  except
+    on e: Exception do writeln('caught');
+  end;
+end.
+P
+probe exc-nested-finally <<'P'
+uses sysutils;
+procedure P1;
+begin
+  try
+    try
+      raise Exception.Create('e');
+    finally
+      write('inner|');
+    end;
+  finally
+    write('outer|');
+  end;
+end;
+begin
+  try P1 except on e: Exception do writeln('caught'); end;
+end.
+P
+probe exc-else-branch <<'P'
+uses sysutils;
+type EOther = class(Exception) end;
+begin
+  try
+    raise EOther.Create('z');
+  except
+    on e: EConvertError do writeln('convert');
+    else writeln('else-branch');
+  end;
+end.
+P
+
+# ---- procedure / method pointers, nested procedures ----
+probe procvar-plain <<'P'
+type TFn = function(a, b: Integer): Integer;
+function Add(a, b: Integer): Integer; begin Result := a + b; end;
+function Sub(a, b: Integer): Integer; begin Result := a - b; end;
+var f: TFn;
+begin
+  f := @Add; write(f(7, 3), '|');
+  f := @Sub; writeln(f(7, 3));
+end.
+P
+probe procvar-array <<'P'
+type TFn = function(a, b: Integer): Integer;
+function Add(a, b: Integer): Integer; begin Result := a + b; end;
+function Mul(a, b: Integer): Integer; begin Result := a * b; end;
+var fs: array[0..1] of TFn; i: Integer;
+begin
+  fs[0] := @Add; fs[1] := @Mul;
+  for i := 0 to 1 do write(fs[i](3, 4), ' ');
+  writeln;
+end.
+P
+probe method-pointer <<'P'
+type
+  TObj = class
+    N: Integer;
+    function Get: Integer;
+  end;
+  TMeth = function: Integer of object;
+function TObj.Get: Integer; begin Result := N * 3; end;
+var o: TObj; m: TMeth;
+begin
+  o := TObj.Create; o.N := 5;
+  m := @o.Get;
+  writeln(m());
+  o.Free;
+end.
+P
+probe nested-proc-locals <<'P'
+function Outer(n: Integer): Integer;
+var acc: Integer;
+  procedure Bump(k: Integer);
+  begin acc := acc + k; end;
+var i: Integer;
+begin
+  acc := 0;
+  for i := 1 to n do Bump(i);
+  Result := acc;
+end;
+begin
+  writeln(Outer(4), '|', Outer(0));
+end.
+P
+
+# ---- variant records, sets of enums, open arrays ----
+probe variant-record <<'P'
+type
+  TKind = (kInt, kStr);
+  TVal = record
+    case Kind: TKind of
+      kInt: (I: Integer);
+      kStr: (C: array[0..3] of Char);
+  end;
+var v: TVal;
+begin
+  v.Kind := kInt; v.I := 65;
+  writeln(Ord(v.Kind), '|', v.I, '|', Ord(v.C[0]));
+end.
+P
+probe set-of-enum-ops <<'P'
+type TC = (cRed, cGreen, cBlue, cWhite);
+     TCs = set of TC;
+var a, b: TCs;
+begin
+  a := [cRed, cGreen];
+  b := [cGreen, cBlue];
+  writeln((cGreen in a), '|', (cBlue in a));
+  writeln((a + b) = [cRed, cGreen, cBlue], '|', (a * b) = [cGreen], '|', (a - b) = [cRed]);
+  writeln(a <= [cRed, cGreen, cBlue], '|', [cRed] <= a);
+end.
+P
+probe openarray-sum <<'P'
+function SumOf(const a: array of Integer): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := Low(a) to High(a) do Result := Result + a[i];
+end;
+var arr: array[0..3] of Integer;
+begin
+  arr[0]:=1; arr[1]:=2; arr[2]:=3; arr[3]:=4;
+  writeln(SumOf(arr), '|', SumOf([10, 20, 30]), '|', Length(arr));
+end.
+P
+probe class-var-and-method <<'P'
+type
+  TCounter = class
+    class function Twice(n: Integer): Integer;
+  end;
+class function TCounter.Twice(n: Integer): Integer; begin Result := n * 2; end;
+begin
+  writeln(TCounter.Twice(21));
+end.
+P
+
+
 echo "---"
 echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
 # A skip is not a pass. It is a case that silently compared nothing, so it is
