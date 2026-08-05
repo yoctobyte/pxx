@@ -44,6 +44,33 @@ But it is a real, observable divergence from FPC in ordinary output, and the
 `compat` tag exists precisely for "behave like the reference implementation".
 Someone has to say which rule pxx follows.
 
+## Further evidence (2026-08-05): FPC has a THIRD behaviour at extreme magnitudes
+
+Measured while re-triaging
+`compat-pascal-write-fixed-huge-magnitude-differs-from-fpc`:
+
+    1e20:0:2    pxx 100000000000000000000.00          FPC 100000000000000000000.00   AGREE
+    1e30:0:3    pxx 1000000000000000140737488355328.  FPC 1000000000000000000020000000000.00
+    1e300:0:5   pxx 99999999999999983567616651958...  FPC  1.0E+0300
+
+Three things this adds:
+
+- at 1e30 **neither** is the exact double — pxx prints the true value, FPC
+  prints its own approximation, because **FPC computes in Extended**. So "match
+  FPC" is not merely "print fewer digits", it is "reproduce Extended-precision
+  intermediate results", which is a different and much larger promise;
+- at 1e300 FPC **abandons the fixed form** and emits exponent notation
+  (` 1.0E+0300`) despite `:0:5` asking for 5 decimals — a third behaviour, and
+  one no option here had accounted for;
+- the ordinary range already agrees exactly, so whatever is chosen only affects
+  magnitudes past ~2^53.
+
+That makes option 2 ("adopt FPC's cap") materially harder than it looked: a
+17-significant-digit cap alone would still not reproduce the 1e30 row, and would
+not produce the 1e300 fallback at all. A faithful option 2 is really "emulate
+FPC's Extended-based formatter", which is worth stating plainly before anyone
+signs up for it.
+
 ## Options
 
 1. **Keep exact.** Every digit printed is a real digit of the value; matches

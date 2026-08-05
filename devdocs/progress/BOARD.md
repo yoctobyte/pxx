@@ -10,9 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-p-program-function-does-not-shadow-used-unit | P | 70 | bug | SILENT: a function declared in the PROGRAM does not shadow a same-named routine from a used unit — the unit's version is called instead. FPC calls the program's. Verified on sysutils IntToStr, Trim and UpperCase | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | decide-float-fixed-output-exact-or-fpc-17-digit-cap |
 
 ## unfinished (7)
 
@@ -38,7 +40,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (200)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -87,7 +89,6 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-thread-api-surface-differs-from-fpc | B | 35 | compat | Threaded FPC code does not compile as-is: TThread lives in palthreadobj rather than Classes, there is no cthreads shim, WaitFor is a procedure where FPC's returns LongWord, and BeginThread/TThreadID do not exist | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
-| compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-assertions-directive-and-message-format | U | 40 | decide | FPC compiles Assert OUT unless -Sa/{$ASSERTIONS ON} and appends '(file, line N)' to the message; pxx always evaluates and omits the position. Adopt both, neither, or one? | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
@@ -461,13 +462,13 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [U] decide-float-fixed-output-exact-or-fpc-17-digit-cap (unblocks 1)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [A] compat-pascal-math-intrinsics-not-in-the-system-unit
-- [p 45] [U] decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - [p 45] [D] docs-canonical-domain
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
@@ -503,7 +504,6 @@ _none_
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [P] compat-pascal-index-a-function-call-result
-- [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
 - [p 40] [U] decide-assertions-directive-and-message-format
 - [p 40] [U] decide-nilpy-builtin-keyword-only-parameters
 - [p 40] [S] feature-a-promoint-variant-esp-targets
@@ -584,6 +584,7 @@ _none_
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
 - **1** — decide-dynamic-array-value-vs-reference-semantics
+- **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — decide-pxxpdf-ticket-obsolete
