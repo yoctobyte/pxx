@@ -177,4 +177,4 @@ neither, and four direct repeated runs against the x86-64 reference all match.
 It is a concurrency test.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 9b78948b6.
