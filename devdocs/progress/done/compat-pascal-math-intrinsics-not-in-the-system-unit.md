@@ -133,4 +133,4 @@ separately and urgent; not introduced here.
 **Resolved:** PENDING-COMMIT
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit f2ef106e0.
