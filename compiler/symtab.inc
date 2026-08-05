@@ -6419,6 +6419,16 @@ begin
     Result := True
   else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
           RecordHasManagedFields(SymTR[i].RecId) then
+    Result := True
+  { A STATIC array whose ELEMENTS are managed records. The tyAnsiString arm at
+    the top already (accidentally) catches an array of strings, because an
+    array's TypeKind IS its element kind — but the record arm above excludes
+    arrays, so a proc whose only managed local was an `array[0..N] of TRec`
+    got no cleanup emitted at all and leaked every element.
+    bug-a-local-static-array-of-string-never-released-at-scope-exit }
+  else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
+          (SymElemDynDepth[i] = 0) and (Syms[i].TypeKind = tyRecord) and
+          RecordHasManagedFields(SymTR[i].ElemRec) then
     Result := True;
 end;
 
@@ -6473,6 +6483,44 @@ begin
         if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
         x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { lea rdi, [rbp+off] }
         x64_mov_reg_imm(8, rRSI, SymTR[i].RecId - REC_UCLASS_BASE);  { rsi = interface id }
+        EmitCallProc(procIdx);
+      end
+      else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
+              (SymElemDynDepth[i] = 0) and
+              ((Syms[i].TypeKind = tyAnsiString) or
+               ((Syms[i].TypeKind = tyRecord) and
+                RecordHasManagedFields(SymTR[i].ElemRec))) then
+      begin
+        { STATIC array with MANAGED ELEMENTS: release EVERY element.
+
+          This arm did not exist. An array's TypeKind is its ELEMENT kind, so
+          `array[0..N] of string` fell into the scalar tyAnsiString arm below
+          and released element 0 ONLY — the other N leaked, silently and
+          linearly. Measured: 1 element flat, 3 elements leak 2, 6 leak 5.
+          An array of managed RECORDS leaked all of them (SymNeedsManagedCleanup
+          did not even flag it, so no cleanup was emitted).
+
+          PXXArrayReleaseImmediate is the header-free element walk already
+          added for whole-array assignment — a static array has no
+          [refcount][length] prefix, so the count is passed explicitly. N-D
+          arrays are stored flat, so ArrLen is the right count.
+          MUST precede the scalar arms below, which would otherwise claim it.
+          bug-a-local-static-array-of-string-never-released-at-scope-exit }
+        procIdx := FindProc('PXXArrayReleaseImmediate');
+        if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+        x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);   { rdi = &arr }
+        x64_mov_reg_imm(8, rRSI, Syms[i].ArrLen);               { rsi = count }
+        if Syms[i].TypeKind = tyAnsiString then
+        begin
+          x64_mov_reg_imm(8, rRDX, 1);                          { baseKind = string }
+          x64_mov_reg_imm(8, rRCX, 0);                          { desc = nil }
+        end
+        else
+        begin
+          x64_mov_reg_imm(8, rRDX, 3);                          { baseKind = record }
+          EmitAsmX64(['mov rcx, @data',
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE))]);
+        end;
         EmitCallProc(procIdx);
       end
       else if Syms[i].TypeKind = tyAnsiString then
@@ -6734,6 +6782,38 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
           end
+          else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
+                (SymElemDynDepth[i] = 0) and
+                ((Syms[i].TypeKind = tyAnsiString) or
+                 ((Syms[i].TypeKind = tyRecord) and
+                  RecordHasManagedFields(SymTR[i].ElemRec))) then
+          begin
+          { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
+            exit. Without this arm an `array[0..N] of string` either fell into
+            the scalar arm below and released element 0 ONLY (i386/arm32, like
+            x86-64 did), or was skipped entirely (riscv32) — leaking silently
+            and linearly either way. N-D arrays are stored flat, so ArrLen is
+            the right count.
+            bug-a-local-static-array-of-string-never-released-at-scope-exit }
+            procIdx := FindProc('PXXArrayReleaseImmediate');
+            if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+            EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);   { lea eax, [ebp+off] }
+            EmitB($50);                                        { push arg0 = &arr }
+            EmitB($68); EmitI32(Syms[i].ArrLen);               { push arg1 = count }
+            if Syms[i].TypeKind = tyAnsiString then
+            begin
+              EmitB($68); EmitI32(1);                          { push arg2 = kind string }
+              EmitB($68); EmitI32(0);                          { push arg3 = desc nil }
+            end
+            else
+            begin
+              EmitB($68); EmitI32(3);                          { push arg2 = kind record }
+              EmitB($68);
+              EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
+            end;
+            EmitCallProc(procIdx);
+            EmitB($81); EmitB($C4); EmitI32(16);               { add esp, 16 }
+          end
           else if Syms[i].TypeKind = tyAnsiString then
           begin
             { mov eax, [ebp + Offset] }
@@ -6848,6 +6928,38 @@ begin
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
+                (SymElemDynDepth[i] = 0) and
+                ((Syms[i].TypeKind = tyAnsiString) or
+                 ((Syms[i].TypeKind = tyRecord) and
+                  RecordHasManagedFields(SymTR[i].ElemRec))) then
+        begin
+          { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
+            exit. Without this arm an `array[0..N] of string` either fell into
+            the scalar arm below and released element 0 ONLY (i386/arm32, like
+            x86-64 did), or was skipped entirely (riscv32) — leaking silently
+            and linearly either way. N-D arrays are stored flat, so ArrLen is
+            the right count.
+            bug-a-local-static-array-of-string-never-released-at-scope-exit }
+          procIdx := FindProc('PXXArrayReleaseImmediate');
+          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+          EmitLoadImmArm32(0, Syms[i].Offset);
+          EmitI32($E08B0000);                          { add r0, fp, r0 = &arr }
+          EmitLoadImmArm32(1, Syms[i].ArrLen);         { r1 = count }
+          if Syms[i].TypeKind = tyAnsiString then
+          begin
+            EmitLoadImmArm32(2, 1);                    { r2 = kind string }
+            EmitLoadImmArm32(3, 0);                    { r3 = desc nil }
+          end
+          else
+          begin
+            EmitLoadImmArm32(2, 3);                    { r2 = kind record }
+            EmitLoadDataRefArm32(3,
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
+          end;
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
            (Syms[i].TypeKind = tyAnsiString) then
         begin
           EmitLoadVarArm32(i);                         { r0 = handle }
@@ -6956,6 +7068,37 @@ begin
           EmitLoadImmA64(1, SymTR[i].RecId - REC_UCLASS_BASE);   { x1 = interface id }
           procIdx := FindProc('PXXIntfRelease');
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
+                (SymElemDynDepth[i] = 0) and
+                ((Syms[i].TypeKind = tyAnsiString) or
+                 ((Syms[i].TypeKind = tyRecord) and
+                  RecordHasManagedFields(SymTR[i].ElemRec))) then
+        begin
+          { STATIC array with MANAGED ELEMENTS — every arm here guards
+            `not IsArray`, so an array of strings/managed records was simply
+            SKIPPED and leaked every element at scope exit. Same gap and same
+            fix as the x86-64 EmitManagedLocalCleanup arm; N-D arrays are flat
+            so ArrLen is the right count.
+            bug-a-local-static-array-of-string-never-released-at-scope-exit }
+          EmitLoadImmA64(9, Syms[i].Offset);
+          EmitI32($8B0903A0);                      { add x0, x29, x9 = &arr }
+          EmitLoadImmA64(1, Syms[i].ArrLen);       { x1 = count }
+          if Syms[i].TypeKind = tyAnsiString then
+          begin
+            EmitLoadImmA64(2, 1);                  { x2 = baseKind string }
+            EmitLoadImmA64(3, 0);                  { x3 = desc nil }
+          end
+          else
+          begin
+            EmitLoadImmA64(2, 3);                  { x2 = baseKind record }
+            EmitLoadDataRefA64(3,
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
+          end;
+          procIdx := FindProc('PXXArrayReleaseImmediate');
+          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
@@ -7186,6 +7329,37 @@ begin
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
+                (SymElemDynDepth[i] = 0) and
+                ((Syms[i].TypeKind = tyAnsiString) or
+                 ((Syms[i].TypeKind = tyRecord) and
+                  RecordHasManagedFields(SymTR[i].ElemRec))) then
+        begin
+          { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
+            exit. Without this arm an `array[0..N] of string` either fell into
+            the scalar arm below and released element 0 ONLY (i386/arm32, like
+            x86-64 did), or was skipped entirely (riscv32) — leaking silently
+            and linearly either way. N-D arrays are stored flat, so ArrLen is
+            the right count.
+            bug-a-local-static-array-of-string-never-released-at-scope-exit }
+          procIdx := FindProc('PXXArrayReleaseImmediate');
+          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+          EmitSlotAddrRISCV32(reg_a0, i);        { a0 = &arr }
+          EmitLoadImmRISCV32(reg_a1, Syms[i].ArrLen);
+          if Syms[i].TypeKind = tyAnsiString then
+          begin
+            EmitLoadImmRISCV32(reg_a2, 1);
+            EmitLoadImmRISCV32(reg_a3, 0);
+          end
+          else
+          begin
+            EmitLoadImmRISCV32(reg_a2, 3);
+            EmitLoadDataRefRISCV32(reg_a3,
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
+          end;
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
            (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
         begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
