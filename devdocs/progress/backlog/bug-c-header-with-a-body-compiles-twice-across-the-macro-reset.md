@@ -80,3 +80,44 @@ Save and restore the macro table around the **nested** invocation
 
 `test/cvariadic_struct_b208.c` compiles with zero duplicate-definition
 warnings; the whole `test/*.c` set stays silent; self-host fixedpoint.
+
+
+## ATTEMPTED 2026-08-05 — the prescribed fix is NOT sufficient; measured and reverted
+
+The two-part fix above was implemented exactly as written and **does not fix the
+bug**. Recording it so the next attempt does not repeat it.
+
+Implemented:
+
+1. `CPrepKeepMacros` flag; `CPreprocess` skips the table reset when it is set.
+2. Save/restore of `CPMCount` + `CPMHashHead[]` **and** `CPMNameLen[0..saved)`
+   around the nested Pascal-`uses`-a-C-file invocation (the `#undef` tombstone
+   edge the ticket flagged — snapshotting the name lengths is cheap, bounded by
+   the outer TU's macro count, so it was taken rather than accepted).
+3. The flag set around `CPreprocess` in `CPullCrtlForPrototypes`.
+
+**It works as designed and changes nothing that matters.** Trace at the top of
+`CPreprocess`, this ticket's own instrument:
+
+    CPPINVOKE keep=FALSE count=0     <- main TU
+    CPPINVOKE keep=FALSE count=27    <- nested C file via a Pascal unit
+    CPPINVOKE keep=TRUE  count=27    <- late crtl pull: WAS 22, now 27
+
+So the carry is real — the third invocation now inherits the outer TU's 27
+macros instead of resetting to the 22 predefines, which is precisely what the
+ticket predicted would fix it. **The six duplicate-definition warnings are
+unchanged**, and the file still builds and runs correctly (exit 42).
+
+Therefore the guard's visibility is NOT the whole cause. Something else emits
+`stdarg.h`'s bodies a second time — a candidate worth checking first is whether
+the duplicate comes from the token stream rather than the preprocessor at all,
+i.e. the already-expanded pass-1 text being re-parsed, in which case no amount
+of macro-table carrying can help.
+
+Reverted rather than left in: it is machinery with a measurable effect on the
+macro table and no effect on the defect, and `testmgr --tier quick` stayed green
+either way, so keeping it would only make the next diagnosis harder.
+
+Still benign (the two bodies are identical) and still the last warning in the C
+corpus: 5 of 369 files, of which 4 are the separate
+`bug-c-static-functions-in-different-crtl-modules-collide`.
