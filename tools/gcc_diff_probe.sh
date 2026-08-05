@@ -1229,6 +1229,22 @@ int main(void) {
   return 0;
 }
 C
+probe clock-gettime-selfcontained <<'C'
+#include <stdio.h>
+#include <time.h>
+int main(void) {
+  struct timespec a, b;
+  int r1 = clock_gettime(CLOCK_REALTIME, &a);
+  int r2 = clock_gettime(2 /* CLOCK_PROCESS_CPUTIME_ID */, &b);
+  /* values only; the LINKAGE half of this (no DT_NEEDED on libc.so.6) is what
+     tools/crtl_decl_probe.sh checks — clock_gettime produced correct output
+     here for months while binding to glibc. */
+  printf("%d %d %d %d\n", r1, r2, a.tv_sec > 1600000000,
+         a.tv_nsec >= 0 && a.tv_nsec < 1000000000);
+  printf("%d %d\n", b.tv_sec >= 0, b.tv_nsec >= 0 && b.tv_nsec < 1000000000);
+  return 0;
+}
+C
 probe time-difftime-clock <<'C'
 #include <stdio.h>
 #include <time.h>

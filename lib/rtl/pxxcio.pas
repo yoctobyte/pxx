@@ -116,6 +116,7 @@ function __pxx_nanosleep(sec, nsec: Int64): Integer;
 function __pxx_utimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 { fills two Int64 out-slots the C gettimeofday veneer narrows into struct timeval }
 function __pxx_realtime(secOut, usecOut: Pointer): Integer;
+function __pxx_clock_gettime(clkId: Integer; secOut, nsecOut: Pointer): Integer;
 
 implementation
 
@@ -554,6 +555,30 @@ begin
   Result := PalRealtime(sec, nsec);
   PInt64(secOut)^ := sec;
   PInt64(usecOut)^ := nsec div 1000;
+end;
+
+{ General clock_gettime for crtl. Without it, C's clock_gettime was DECLARED in
+  <time.h> but had no body, so the C frontend's unresolved-extern fallback bound
+  it to libc.so.6: the program ran correctly on a glibc host while quietly
+  turning a self-contained static binary into a dynamic one (readelf showed the
+  NEEDED entry). That is the failure mode the crtl declaration probe exists to
+  catch — "it works" and "it links libc-free" are different questions.
+  Nanosecond precision, unlike __pxx_realtime which narrows to microseconds. }
+function __pxx_clock_gettime(clkId: Integer; secOut, nsecOut: Pointer): Integer;
+var ts: TKernelTimeSpec2; n: Integer; r: Int64;
+begin
+  Result := -1;
+  PInt64(secOut)^ := 0;
+  PInt64(nsecOut)^ := 0;
+  n := SysClockGettimeNr;
+  if n = -1 then Exit;
+  r := __pxxrawsyscall(n, clkId, Int64(@ts), 0, 0, 0, 0);
+  if r <> 0 then Exit;
+  { implicit widening, NOT Int64(ts.Sec) — see the __pxx_clock note above and
+    bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit }
+  PInt64(secOut)^ := ts.Sec;
+  PInt64(nsecOut)^ := ts.Nsec;
+  Result := 0;
 end;
 
 end.

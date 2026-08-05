@@ -12,12 +12,14 @@
  */
 
 #include <time.h>
+#include <errno.h>
 #include <sys/time.h>
 #include <stdlib.h>   /* getenv, for $TZ */
 
 extern long long __pxx_time(void);
 extern long long __pxx_clock(void);
 extern int __pxx_nanosleep(long long sec, long long nsec);
+extern int __pxx_clock_gettime(int clk_id, long long *sec, long long *nsec);
 
 /* nanosleep: suspend for req->tv_sec + req->tv_nsec. `rem` (unslept remainder on
    signal) is zeroed — the PAL bridge does not surface EINTR partial sleeps, which
@@ -263,6 +265,18 @@ static const char *mon_abbr[12] =
 static const char *mon_full[12] =
   { "January","February","March","April","May","June","July","August",
     "September","October","November","December" };
+
+/* clock_gettime was declared in <time.h> with no body here, so it bound to
+   libc.so.6 through the unresolved-extern fallback — correct output on a glibc
+   host, and a DT_NEEDED on a binary that is supposed to be self-contained.
+   Found by tools/crtl_decl_probe.sh; the linkage, not the values, was wrong. */
+int clock_gettime(int clk_id, struct timespec *tp) {
+  long long sec = 0, nsec = 0;
+  int r = __pxx_clock_gettime(clk_id, &sec, &nsec);
+  if (r < 0) { errno = EINVAL; return -1; }
+  if (tp) { tp->tv_sec = (long)sec; tp->tv_nsec = (long)nsec; }
+  return 0;
+}
 
 /* ---- asctime / ctime / timegm ------------------------------------------- */
 
