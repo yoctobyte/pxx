@@ -172,4 +172,4 @@ port under qemu) and it appears in 3 of the 4 sweeps run today, including the
 baseline.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit 6efa71c5a.
