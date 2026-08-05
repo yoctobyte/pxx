@@ -2105,11 +2105,42 @@ def host_hardware():
     return hw
 
 
+# The hardware fields host_hardware() reports, and so the only keys a stored
+# epoch may contribute to its fingerprint: an epoch also carries fp/from/to and
+# rename bookkeeping, and hashing those would make the fp depend on when it was
+# written rather than on what the box is.
+HW_KEYS = ("cpu", "sockets", "cores", "threads", "mhz_max", "mem_total_kb",
+           "kernel", "gcc", "governor", "turbo")
+
+
+def fp_of_hardware(hw):
+    """Fingerprint a hardware dict — live or read back out of an epoch.
+
+    MemTotal is NOT stable across boots. The kernel reserves a slightly
+    different amount each time, so /proc/meminfo drifts by a few kB (63424932
+    -> 63424944 on this box across the 2026-08-05 rename reboot) and hashing it
+    raw minted a spurious epoch for EVERY host on EVERY reboot — which reads as
+    "new hardware, earlier rows are not comparable" and breaks the join the
+    fingerprint exists to make. Quantise to GiB before hashing: the question is
+    "is this the same machine", and a few kB of firmware reservation is not an
+    answer to it. Rounded, not truncated, and at GiB rather than MiB, so boot
+    drift cannot straddle the boundary — at MiB a 12 kB wobble still lands on a
+    different bucket about 1% of reboots, which would resurrect this bug rarely
+    enough to be baffling. Any real RAM change is >= 1 GiB and still lands.
+
+    The raw kB stays in the stored epoch; only the hash input is normalised.
+    """
+    hw = {k: hw.get(k) for k in HW_KEYS}
+    mem = hw.pop("mem_total_kb", None)
+    hw["mem_total_gib"] = int(round(int(mem) / 1048576.0)) if mem else None
+    return hashlib.sha256(
+        json.dumps(hw, sort_keys=True).encode()).hexdigest()[:12]
+
+
 def host_hardware_fp():
     """The current fingerprint, without touching the file — for stamping a run
     with the epoch it belongs to."""
-    return hashlib.sha256(
-        json.dumps(host_hardware(), sort_keys=True).encode()).hexdigest()[:12]
+    return fp_of_hardware(host_hardware())
 
 
 def record_host_epoch(clone, host):
