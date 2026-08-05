@@ -145,4 +145,4 @@ cross run — `tools/gcc_diff_probe.sh --target aarch64` and
 `tools/lib_cross_sweep.sh` (A/B its known reds; do not read them as new).
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit a5cd2c32b.
