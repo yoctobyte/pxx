@@ -171,4 +171,4 @@ workaround before `make pin` moves would produce a lib built by a compiler that
 still has the bug. The revert must wait for the pin.
 
 ## Log
-- 2026-08-05 — resolved, commit PENDING-COMMIT.
+- 2026-08-05 — resolved, commit ebc6f2fd3.
