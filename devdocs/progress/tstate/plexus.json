@@ -291,6 +291,14 @@
    "sha": "1787b2cf4b6103936f6720c0546a46b927ab0873",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-05T06:50:25Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1787b2cf4b6103936f6720c0546a46b927ab0873",
+   "tier": "opt",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -4481,11 +4489,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-05T06:47:11Z",
+  "date": "2026-08-05T06:50:25Z",
   "sha": "1787b2cf4b6103936f6720c0546a46b927ab0873",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 421.7
+  "wall": 187.5
  },
  "last_bench": {
   "conf_rows": 550,
