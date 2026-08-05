@@ -3,12 +3,13 @@ track: A
 prio: 55
 type: bug
 summary: "read(f, c) for a Char destination on a Text file SEGFAULTS — the Char slot is handed to TextReadLn, which expects an AnsiString var, so a string handle is written into one byte. FPC reads the character"
+owner: claude-A
 ---
 
 # `read(f, c)` into a Char from a Text file segfaults
 
 - **Type:** bug — Track A (builtin lowering) / Track P
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-05
 - **Found by:** Track A, immediately after fixing the write-side twin
   `bug-p-writeln-text-rejects-char`. **Pre-existing** — `pinned` segfaults
@@ -76,3 +77,25 @@ than a segfault.
 
 - `bug-p-writeln-text-rejects-char` — the write-side twin, fixed. Its `StrChar`
   helper and Char arm are the shape to mirror.
+
+
+## PARTIAL 2026-08-05 — the segfault is now a diagnostic; the feature is Track B's
+
+The crash is gone. `read(f, c)` on a Char destination is now a compile error
+naming this ticket, instead of writing a string handle into a one-byte slot:
+
+    error: read(Text): reading into a Char is not supported yet — read into a
+           string and index it (bug-p-read-text-file-into-a-char-segfaults)
+
+That is deliberately NOT the line-read-and-take-[1] arm. As set out above, that
+shape is right for the first read and wrong for the second, and a character loop
+— the main reason to read a Char — would silently skip the rest of every line.
+Turning memory corruption into a silent wrong answer is not an improvement.
+
+**The real fix stays open and is Track B's to land**: `TextReadChar(var f; var c)`
+with one-character pushback in `lib/rtl/textfile.pas`, then a Char arm here that
+routes to it. `lib/rtl/**` is Track B's lane, so this half was not taken.
+Ticket stays open for that; only the crash is closed.
+
+String reads are unaffected (`readln(f, s)` verified working), and the numeric
+path is untouched.

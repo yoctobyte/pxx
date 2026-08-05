@@ -17902,6 +17902,21 @@ begin
         ASTRight[tailSeq] := newSeq; tailSeq := newSeq;
       end;
     end
+    else if trTk = tyChar then
+      { A Char destination used to fall into the string branch below, which
+        hands the slot straight to TextReadLn(f, dest) — whose second parameter
+        is a `var AnsiString`. That wrote a string handle into ONE BYTE and
+        segfaulted. Refuse it instead: a diagnostic beats memory corruption,
+        and the caller can read a string and index it today.
+
+        Not simply routed through a line-read + [1], because that is right for
+        the first read and WRONG for the second — pxx's Text read is
+        line-oriented while FPC's read(f, c) consumes one character, so a
+        character loop would silently skip the rest of every line. The real fix
+        is a TextReadChar with pushback in the textfile RTL (Track B's file).
+        bug-p-read-text-file-into-a-char-segfaults }
+      Error('read(Text): reading into a Char is not supported yet — read into a '
+            + 'string and index it (bug-p-read-text-file-into-a-char-segfaults)')
     else
     begin
       callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),

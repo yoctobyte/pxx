@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1399 rejected:28`
+`urgent:1 working:1 unfinished:7 blocked:7 backlog:198 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1399 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-p-read-text-file-into-a-char-segfaults` [A] — owner: claude-A
 
 ## urgent (1) — jump the queue
 
@@ -35,7 +35,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 180, ranked
+## Ready — top 30 of 179, ranked
 
 - `[p 70] [P]` bug-p-program-function-does-not-shadow-used-unit
 - `[p 65] [U]` decide-dynarray-cow-vs-fpc-reference-semantics (unblocks 1)
@@ -62,10 +62,10 @@ _none — no lane is locked._
 - `[p 55] [C]` bug-c-pthread-without-threadsafe-builds-then-dies-at-load
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
 - `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
-- `[p 55] [A]` bug-p-read-text-file-into-a-char-segfaults
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-empty-range-regression-cannot-be-bisected
 - `[p 55] [P]` compat-pascal-assert-halts-instead-of-raising-eassertionfailed
 - `[p 55] [U]` decide-dynamic-array-value-vs-reference-semantics
+- `[p 55] [A]` feature-a-declaration-phase
 
-_150 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_149 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
