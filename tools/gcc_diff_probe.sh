@@ -1500,11 +1500,12 @@ int main(void) {
   return 0;
 }
 C
-# [known] under --target aarch64 ONLY, and it is the sharpest thing this probe
-# has found: `-1 < (unsigned char)1` is FALSE there, in BOTH frontends, at every
-# -O level (bug-a-aarch64-signed-vs-unsigned-narrow-comparison-is-wrong). Native,
-# i386, arm32 and riscv32 all agree with gcc.
-probe integer-promotion-in-comparison known <<'C'
+# The case that found bug-a-aarch64-signed-vs-unsigned-narrow-comparison-is-wrong
+# (FIXED): `-1 < (unsigned char)1` was FALSE on aarch64 in both frontends at
+# every -O level, because that backend decided compare signedness with
+# `unsigned(l) or unsigned(r)` instead of TypeCompareUnsigned. Kept untagged —
+# it must stay green on every target.
+probe integer-promotion-in-comparison <<'C'
 #include <stdio.h>
 int main(void) {
   unsigned u = 1;

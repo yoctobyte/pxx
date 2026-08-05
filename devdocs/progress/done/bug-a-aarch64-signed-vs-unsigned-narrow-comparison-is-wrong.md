@@ -3,12 +3,13 @@ summary: "aarch64 only: comparing a signed Integer/int against a narrow UNSIGNED
 type: bug
 track: A
 prio: 85
+owner: claude-b-night2
 ---
 
 # aarch64: `signed < unsigned-narrow` compares as unsigned
 
 - **Type:** bug — Track A (aarch64 backend / comparison lowering)
-- **Status:** urgent — **silent wrong value**, not a crash
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** `tools/gcc_diff_probe.sh --target aarch64`, new
   integer-promotion case batch.
@@ -82,17 +83,45 @@ the comparison is signed; Pascal likewise widens `Byte` into the signed
 sentinel check mixing an int against a byte-sized quantity silently takes the
 wrong branch on aarch64 and nowhere else. No crash, no diagnostic.
 
-## Hypothesis (NOT verified — do not record this as the cause)
+## Root cause (measured, FIXED)
 
-Consistent with the data: the aarch64 backend compares in 64-bit registers and
-the signed operand is not sign-extended to 64 bits when the other side is a
-narrow unsigned load — `-1` sitting as `0x00000000FFFFFFFF` compares greater
-than `1` under either signed or unsigned 64-bit comparison, which matches every
-line above including `neg > uc` flipping to 1. The alternative — the compare
-being emitted with unsigned condition codes because one operand's type is
-unsigned — fits equally well. **Measure before writing a cause into this
-ticket:** dump the emitted compare (`PXXDBG=a.ir:main`, or objdump the aarch64
-binary) rather than reasoning about it, per `devdocs/dev/debugging-playbook.md`.
+The second of the two hypotheses this ticket was opened with. The aarch64
+backend picked its condition codes with its own rule instead of the shared one
+(`compiler/ir_codegen_aarch64.inc`, the `tkEq..tkGe` arm):
+
+```pascal
+EmitSetccA64Ex(op,
+  TypeDivideUnsigned(IntToTypeKind(IRTk[left])) or
+  TypeDivideUnsigned(IntToTypeKind(IRTk[right])));
+```
+
+`TypeDivideUnsigned` answers a *division* question — is this one operand an
+unsigned dividend — and OR-ing it over both operands says "unsigned if either
+side is unsigned". That is not the comparison rule. Integer promotion sends any
+operand narrower than `int` to **signed** `int`, so a comparison against a
+`Byte`/`unsigned char` is signed; `TypeCompareUnsigned` in `symtab.inc` already
+encodes exactly this (including the csmith-hardened C sub-int and equal-rank
+cases), and it is what x86-64 and the fused-jump path have always used. aarch64
+was the only backend applying its own rule to comparisons — the other three use
+`TypeDivideUnsigned` for division only, which is why they were all correct.
+
+The fix is the one-line substitution. The case the old code was written for
+(`bug-aarch64-unsigned-compare`, lua's `(size_t)x <= 0xFFFF...F`) still gets an
+unsigned compare: `TypeCompareUnsigned` returns True for a genuinely wide
+unsigned operand.
+
+## Verification
+
+Fixed compiler, self-host fixedpoint converged in one round.
+
+- Pascal repro: `TRUE|TRUE|TRUE|TRUE|TRUE`, = FPC.
+- C repro: `A 1 0 B 1 C 1 D 1 1 E 1 F 0 G 1 H 1`, = gcc.
+- `tools/gcc_diff_probe.sh` against the fixed compiler: **0 new** on native,
+  i386, arm32 and aarch64 (116 / 111 / 111 / 111 cases). The
+  `integer-promotion-in-comparison` case is untagged again and must stay green
+  on every target.
+- `tools/gate.sh quick` GREEN (self-host fixedpoint + testmgr quick + the FPC
+  seed canary, which ran because compiler/ was dirty).
 
 ## Coverage after the fix
 
@@ -114,3 +143,6 @@ mentioned here so the two are not conflated.
 Track A: `make test` + self-host fixedpoint (byte-identical), plus the aarch64
 cross run — `tools/gcc_diff_probe.sh --target aarch64` and
 `tools/lib_cross_sweep.sh` (A/B its known reds; do not read them as new).
+
+## Log
+- 2026-08-05 — resolved, commit PENDING-COMMIT.

@@ -1908,11 +1908,20 @@ begin
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
           EmitI32($EB01001F); { cmp x0, x1 }
-          { Unsigned magnitude compare when either operand is an unsigned ordinal
-            (C usual-arithmetic-conversions make the whole compare unsigned). }
+          { TypeCompareUnsigned, the SAME rule x86-64 and the fused-jump path
+            use — not `unsigned(l) or unsigned(r)`, which this backend used to
+            do. That version ignored integer promotion: an operand narrower than
+            int promotes to SIGNED int, so `-1 < Byte(1)` is a signed compare and
+            must be TRUE. Taking the unsigned answer made every
+            signed-vs-narrow-unsigned comparison wrong on aarch64 and nowhere
+            else, silently, in both frontends
+            (bug-a-aarch64-signed-vs-unsigned-narrow-comparison-is-wrong).
+            TypeCompareUnsigned still returns True for the case the old code was
+            written for — a genuinely wide unsigned operand, e.g. size_t vs a
+            64-bit constant (bug-aarch64-unsigned-compare, the lua case). }
           EmitSetccA64Ex(op,
-            TypeDivideUnsigned(IntToTypeKind(IRTk[left])) or
-            TypeDivideUnsigned(IntToTypeKind(IRTk[right])));
+            TypeCompareUnsigned(IntToTypeKind(IRTk[left]),
+                                IntToTypeKind(IRTk[right])));
         end
         else if op = Ord(tkIn) then
         begin

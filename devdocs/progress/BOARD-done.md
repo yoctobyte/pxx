@@ -12,6 +12,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-64bit-named-const-truncated-32bit-targets | A | 80 | bug | 64-bit named constants are truncated to 32 bits on the 32-bit targets | — |
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |
+| bug-a-aarch64-signed-vs-unsigned-narrow-comparison-is-wrong | A | 85 | bug | aarch64 only: comparing a signed Integer/int against a narrow UNSIGNED value (Byte/Word, unsigned char/short, and plain char) gives the wrong answer — `-1 < Byte(1)` is FALSE. Silent, both frontends, every -O level | — |
 | bug-a-aarch64-variant-string-compare-always-false | A | 70 | bug | aarch64: comparing two string-valued Variants is always FALSE | — |
 | bug-a-cfront-riscv32-byval-record-result-pxxmemmove | A | 70 | bug | bug: C→riscv32 by-value record result emits PXXMemMove but the C compile never injects builtinheap | — |
 | bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock | — |
