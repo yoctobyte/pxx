@@ -136,4 +136,4 @@ of what was actually observed when it was filed. The summary line and this
 section carry the correct behaviour.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit 1602523d0.
