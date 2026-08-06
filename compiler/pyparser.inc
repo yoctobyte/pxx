@@ -13188,7 +13188,14 @@ begin
     iteration (bug-nilpy-range-for-variant-loop-var). }
   if Syms[symIdx].TypeKind = tyVariant then
   begin
-    keyN := AllocVar(PyHiddenName('i'), tyInteger);
+    { tyInt64 for the same reason the visible counter is (see the range arm's
+      own note): this hidden counter carries the RANGE bounds, so a 4-byte cell
+      wrapped at 2^31 and `for i in range(3000000000, 3000000003)` looped
+      forever whenever the loop variable happened to be variant-typed — i.e.
+      whenever the name was also bound to something non-int elsewhere. The
+      visible-counter fix did not cover this path because it allocates its own
+      symbol (bug-nilpy-for-range-loop-counter-is-32-bit-and-never-terminates). }
+    keyN := AllocVar(PyHiddenName('i'), tyInt64);
     node := AllocNode(AN_ASSIGN);              { x = __py_i (boxes the int) }
     ASTLeft[node] := PyMakeIdent(symIdx);
     ASTRight[node] := PyMakeIdent(keyN);

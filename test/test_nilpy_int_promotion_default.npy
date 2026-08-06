@@ -208,3 +208,13 @@ for k in range(2147483646, 2147483650):
     cnt += 1
 print(cnt)
 print(list(range(3000000000, 3000000003)))
+
+# ...and again when the loop variable is VARIANT-typed (bound to something
+# non-int elsewhere), which takes a different lowering with its OWN hidden
+# counter — that one was allocated tyInteger too, so it kept looping forever
+# after the visible counter was widened.
+vi = "a string"
+vseen = []
+for vi in range(3000000000, 3000000003):
+    vseen.append(vi)
+print(vseen)

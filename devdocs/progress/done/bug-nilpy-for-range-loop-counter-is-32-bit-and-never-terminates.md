@@ -82,6 +82,32 @@ clean against CPython. `tools/gate.sh quick` GREEN.
 The counter's SURVIVING value after the loop is wrong, independently of width —
 filed as [[bug-nilpy-for-range-counter-survives-with-the-wrong-value]].
 
+## Second site, same bug (found by sweeping the class)
+
+The fix above covered the VISIBLE counter. Grepping the rest of
+`pyparser.inc` for `AllocVar(..., tyInteger)` — i.e. every NilPy local that
+bypasses the `PyNoteLocalType` choke point — turned up a second range counter:
+when the loop variable is VARIANT-typed (because the same name is also bound to
+a non-int elsewhere), the lowering counts with its own hidden int and boxes it
+into the variant per iteration
+([[bug-nilpy-range-for-variant-loop-var]]'s machinery). That hidden counter was
+`tyInteger` too, so
+
+```python
+i = "a string"
+for i in range(3000000000, 3000000003): ...
+```
+
+still looped forever after the first fix. Widened to `tyInt64` as well, and the
+test carries the variant-typed case beside the plain one.
+
+Three sites in that grep were left alone deliberately: the container-iteration
+length/index pair and the `zip()` quartet are bounded by a container's element
+count, not by user-supplied range bounds, so they are a different (and far more
+remote) risk — worth revisiting only if a >2^31-element container becomes
+reachable.
+
 ## Log
 
-- 2026-08-06 — found, fixed and verified in one pass.
+- 2026-08-06 — found, fixed and verified in one pass; second site found by
+  sweeping the bug class and fixed in the same pass.
