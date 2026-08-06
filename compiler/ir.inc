@@ -4479,6 +4479,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     vrElemTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
     dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
+    dcRetData: Integer;
     dcCntTmp, dcTempSym, dcTempIdent, dcCountIdent, dcSlArg1, dcSlArg2: Integer;
     dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
     dcNewLenTmp, dcValTmp, dcGapTmp, dcZeroIdent: Integer;
@@ -4944,6 +4945,69 @@ begin
         stream — a bare call whose result is unused is not emitted. }
       IRAppend(IR_STORE_SYM, dcDestData, IRAppendCall(procIdx, first, -1, Ord(tyPointer)),
         -1, 0, Ord(tyPointer));
+
+      { MANAGED elements: retain every handle now sitting in the fresh buffer.
+        The copy above is a raw byte copy, so the temp's elements are the SOURCE's
+        handles with no refcount adjustment — and the temp is element-aware
+        released at scope exit, which then frees strings the source still owns.
+        Measured, and only visible with the right tool: `b := Copy(a, 0, 2)` over
+        an `array of AnsiString` then `b[0] := 'CHANGED'` printed the correct
+        a[0] on a plain run and an EMPTY a[0] under -dPXX_HEAP_DEBUG, because the
+        freed bytes still held the old text until something reused them
+        (devdocs/dev/debugging-playbook.md — the expensive bugs produce a
+        plausible wrong value, not a crash).
+
+        This was latent, not new: the retain was accidentally supplied by
+        IR_DYNUNIQUE's copy-on-write clone, which calls PXXDynArrayRetainImmediate
+        on the block it clones. Removing the COW
+        (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing) took the
+        side effect away and exposed the missing retain underneath — the
+        lowering's own note above ("shallow — deep element copy is a later
+        extension") had said so all along.
+
+        Same RetainImmediate-after-copy pattern as AN_DYN_DELETE below. The dest
+        pointer is re-derived rather than reused: the PXXMemCopy call overwrote
+        dcDestData with its own result to link the call into the statement
+        stream. }
+      if (dcElemTk = tyAnsiString) or
+         ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
+      begin
+        procIdx := FindProc('PXXDynArrayRetainImmediate');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
+        dcRetData := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, dcRetData,
+          IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+        first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcRetData, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+        last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcCntTmp, -1, -1, 0, Ord(tyInteger)),
+                  -1, -1, 0, Ord(tyInteger));
+        IRB[first] := last;
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                     -1, -1, 0, Ord(tyInteger));
+        IRB[last] := argNode; last := argNode;                 { depth = 1 }
+        if dcElemTk = tyAnsiString then
+        begin
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 1 (string) }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = nil }
+        end
+        else
+        begin
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 3 (record) }
+          argNode := IRAppend(IR_ARG,
+                       IRAppend(IR_CONST_DATA, -1, -1, -1,
+                         -(RECORD_RTTI_DATAREF_BASE + (dcElemRec - REC_UCLASS_BASE)), Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = layout blob }
+        end;
+        dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
+        IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
+      end;
 
       { Like a dyn-array variable read: lea on the dyn-array symbol loads the
         handle (pointer-sized), so tag it tyPointer (an element-typed tag would

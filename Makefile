@@ -2814,6 +2814,14 @@ test-core: $(COMPILER)
 	# double case stays half-broken.
 	./$(COMPILER) test/test_dynarray_copy_uses_sysutils.pas /tmp/test_dyncopy_sysutils26
 	test "$$(/tmp/test_dyncopy_sysutils26)" = "$$(printf '3 1 3\n1 99\nell\n5 4')"
+	# Copy() over MANAGED elements must RETAIN what it copied. Run TWICE, the
+	# second time with -dPXX_HEAP_DEBUG: without the poison a plain run passes
+	# even when the retain is missing, because the freed bytes still hold the old
+	# text. That second line is the one that can actually fail.
+	./$(COMPILER) test/test_dynarray_copy_managed_elems.pas /tmp/test_dyncopy_managed26
+	test "$$(/tmp/test_dyncopy_managed26)" = "checks 2211 fails 0"
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_managed_elems.pas /tmp/test_dyncopy_managed_hd26
+	test "$$(/tmp/test_dyncopy_managed_hd26)" = "checks 2211 fails 0"
 	./$(COMPILER) test/test_val_builtin.pas /tmp/test_val_builtin26
 	test "$$(/tmp/test_val_builtin26)" = "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 1\n1000000000000 0\n0')"
 	./$(COMPILER) test/test_hilo_swap.pas /tmp/test_hilo_swap26

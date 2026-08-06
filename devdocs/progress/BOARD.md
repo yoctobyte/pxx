@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name | P | 60 | bug | Copy() on a dynamic array only accepts a bare IDENTIFIER. Copy(g[0]), Copy(r.items) and their 3-argument forms are all rejected, though FPC accepts every one — so the deep-copy idiom for a nested array cannot be spelled at all. | — |
 
 ## unfinished (7)
 
@@ -36,7 +38,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (210)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -77,7 +79,6 @@ _none_
 | bug-nilpy-truediv-and-pow-assign-on-a-class-instance-skip-the-dunder | N | 50 | bug | bug(N): `obj /= n` and `obj **= n` on a class instance skip the dunder and raise "expected a number, got object" | — |
 | bug-nilpy-two-name-for-over-a-variant-assumes-a-dict | N | 55 | bug | NilPy: `for k, v in <variant>` is lowered as a DICT unconditionally, so iterating a variant-held list of pairs raises TypeError: expected a dict, got object — the same list unpacks fine when its type is statically known | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
-| bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name | P | 60 | bug | Copy() on a dynamic array only accepts a bare IDENTIFIER. Copy(g[0]), Copy(r.items) and their 3-argument forms are all rejected, though FPC accepts every one — so the deep-copy idiom for a nested array cannot be spelled at all. | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -132,6 +133,7 @@ _none_
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
+| feature-dynarray-copy-nested-element-type | A | 45 | feature | Copy() on a NESTED dynamic array (`array of array of T`) is refused. It used to segfault: the raw byte copy moved sub-array handles using the DEEPEST element's size. FPC supports it. | — |
 | feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-embed-dwscript-rtti | P | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
@@ -240,8 +242,6 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-test-core-test-exception-unhandled | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@1 red at 899e51cda3ba (auto-filed by twatch) | — |
-| regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-i386-test-dynarray-field | T | 70 | regression | regression: test-i386#src:test/test_dynarray_field.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
@@ -367,9 +367,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1445)
+## done (1447)
 
-1445 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1447 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -408,13 +408,10 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [U] decide-re-pin-after-the-dynarray-aliasing-flip
-- [p 70] [T] regression-test-core-test-exception-unhandled
-- [p 70] [T] regression-test-core-test-nested-cow
 - [p 70] [T] regression-test-i386-test-dynarray-field
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [P] bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [T] bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
@@ -490,6 +487,7 @@ _none_
 - [p 45] [A] feature-dynamic-compiler-tables
 - [p 45] [A] feature-dynamic-include-paths-config
 - [p 45] [A] feature-dynamic-soname-discovery
+- [p 45] [A] feature-dynarray-copy-nested-element-type
 - [p 45] [A] feature-dynarray-insert-delete-managed-elements
 - [p 45] [P] feature-embed-dwscript-rtti
 - [p 45] [P] feature-embed-pascal-script

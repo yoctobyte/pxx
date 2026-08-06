@@ -12369,6 +12369,19 @@ begin
         if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
            Syms[ASTIVal[exprNode]].IsArray and (Syms[ASTIVal[exprNode]].ArrLen = -1) then
         begin
+          { NESTED element type: the raw byte copy in AN_DYN_COPY would move
+            SUB-ARRAY HANDLES with the base element's size — TypeSize of the
+            deepest type, 4 for `array of array of Integer` — so element 1
+            onward read a bogus handle and `h[1][1]` segfaulted. Refused loudly
+            here, exactly as dynamic-array Delete and Insert already refuse the
+            same shape, until AN_DYN_COPY learns the handle stride AND the
+            element-aware retain a nested copy needs
+            (feature-dynarray-copy-nested-element-type). Reproduced on pinned, so
+            it is not a regression — just a crash nobody had asked for yet. }
+          if (Syms[ASTIVal[exprNode]].ArrLen = -1) and
+             ((SymDynDepth[ASTIVal[exprNode]] > 1) or
+              (SymElemDynDepth[ASTIVal[exprNode]] > 0)) then
+            Error('Copy: nested element type not yet supported for dynamic-array Copy');
           if node = -1 then
           begin
             node := AllocNode(AN_INT_LIT);
@@ -13400,6 +13413,9 @@ begin
              Syms[ASTIVal[ASTLeft[argsHead]]].IsArray and
              (Syms[ASTIVal[ASTLeft[argsHead]]].ArrLen = -1) then
           begin
+            if (SymDynDepth[ASTIVal[ASTLeft[argsHead]]] > 1) or
+               (SymElemDynDepth[ASTIVal[ASTLeft[argsHead]]] > 0) then
+              Error('Copy: nested element type not yet supported for dynamic-array Copy');
             node := AllocNode(AN_DYN_COPY);
             ASTLeft[node] := ASTLeft[argsHead];                 { source array }
             if nArgs >= 2 then

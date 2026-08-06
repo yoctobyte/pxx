@@ -3,6 +3,8 @@ summary: "Copy() on a dynamic array only accepts a bare IDENTIFIER. Copy(g[0]), 
 type: bug
 track: P
 prio: 60
+status: working
+owner: claude-A-N
 ---
 
 # `Copy` rejects any dynamic-array expression that is not a bare name
