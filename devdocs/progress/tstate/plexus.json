@@ -4740,14 +4740,11 @@
  "open_regressions": [
   {
    "bad": "e8450c58d67efc3df7d655782ec6f72255dbdaa6",
-   "good": "412fda7a31022289ab0e1384b1f92d909501082a",
+   "good": "5abca9d8ee96e8816ed5e9b9813f6573b8725692",
    "job": "test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy",
    "name": "test-core#1044",
    "opened": "2026-08-06T07:39:25Z",
    "range": [
-    "635667ad3fb36a94c18756ed0aff07cab51cfdf1",
-    "0e1826d1bb7053aca7821f23525433d1ee08b390",
-    "5abca9d8ee96e8816ed5e9b9813f6573b8725692",
     "5be62deab9dd1d82628dbdfc97352808512fe9b5",
     "c9e388386ce0b0ecf99a2de3ecae9b07fee9add3",
     "7b42c8345829a338abdadd8174d39722194dc22e",
