@@ -3,7 +3,7 @@ summary: "Copy() on a dynamic array only accepts a bare IDENTIFIER. Copy(g[0]), 
 type: bug
 track: P
 prio: 60
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -96,3 +96,48 @@ The four forms above compiling and matching FPC's output, the bare-name forms
 unchanged, `Copy(s, i, n)` on a string unchanged, and the nested deep-copy idiom
 working. Then simplify `test_threadsafe_layout_rtti.pas`'s worker back to
 `Copy(SharedGrid[0])`, which is what it wanted to say.
+
+## 2026-08-06 — FIXED for the shapes that were the point; one limit remains
+
+`AN_DYN_COPY` now takes its element metadata from the NODE — `NodeDynBaseTk` /
+`NodeDynBaseRec`, exactly the pair `IR_SETLEN_DYN` already used for
+`SetLength(r.items, n)` and `SetLength(a[i], n)` — and the source pointer from
+`IRLowerAST` when the source is not a symbol (an ordinary read of a
+dyn-array-typed element or field IS its handle). Both parse sites share a new
+`CopySrcDynDepth` helper, a small mirror of `NodeDynDepth`'s ident/field/index
+arms, needed because `parser.inc` is included before `ir.inc`.
+
+All four measured forms now match FPC exactly:
+
+| form | FPC | pxx |
+| --- | --- | --- |
+| `Copy(g[0])` | `2 1` | `2 1` |
+| `Copy(g[0], 0, 2)` | `2 1` | `2 1` |
+| `Copy(r.items)` | `2 7` | `2 7` |
+| `Copy(r.items, 0, 2)` | `2 7` | `2 7` |
+
+Covered by `test/test_dynarray_copy_expr_source.pas`, run twice (the second time
+under `-dPXX_HEAP_DEBUG`, since one of the cases has managed elements and a
+missing retain is invisible without the poison). Deliberately a separate file
+from `test_dynarray_copy.pas`: that one is wired into the four cross
+differentials, and the nested-array element source dies on riscv32 on
+[[bug-a-riscv32-nested-dynamic-array-element-write-segfaults]] — pre-existing,
+reproduces on pinned, nothing to do with this change. Verified all four cross
+differentials still match after the split.
+
+### What this ticket claimed that turned out to be only half true
+
+It said there was "NO way to write a deep copy of a nested dynamic array". The
+second level — `local[0] := Copy(shared[0])` — now works. The FIRST level,
+`local := Copy(shared)` where `shared` is itself nested, is still refused: it used
+to SEGFAULT (element size taken from the deepest type, so sub-array handles were
+strided by 4) and is now a diagnostic, tracked as
+[[feature-dynarray-copy-nested-element-type]]. So the idiom is unblocked halfway,
+and the remaining half is a named, scoped ticket rather than an unspellable gap.
+
+Two bugs were found and fixed on the way here, both in `AN_DYN_COPY`, both landed
+in `cbae55b06`: the missing managed-element retain (a regression from the aliasing
+flip, exposed only under `-dPXX_HEAP_DEBUG`) and the nested-source crash above.
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.

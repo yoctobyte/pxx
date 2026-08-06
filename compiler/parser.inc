@@ -8635,6 +8635,36 @@ begin
   PyReflectedDunder := PyCallMeth1(ci, rname, right, left);
 end;
 
+{ Is `node` a DYNAMIC-ARRAY-typed expression, and at what nesting depth?
+  Copy's parse sites need the answer before ir.inc's NodeDynDepth exists (parser.inc
+  is included first), and they need it for more than a bare name: an element of a
+  nested array (`g[0]`), a record/class field (`r.items`). Deliberately a small
+  mirror of NodeDynDepth's ident / field / index arms rather than a general type
+  walker — anything it cannot recognise answers 0 and Copy falls through to its
+  existing string/error paths, which is the safe direction
+  (bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name). }
+function CopySrcDynDepth(node: Integer): Integer;
+var si, bd: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT:
+      begin
+        si := ASTIVal[node];
+        if (si >= 0) and Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+          Result := SymDynDepth[si];
+      end;
+    AN_FIELD:
+      Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+    AN_INDEX:
+      begin
+        bd := CopySrcDynDepth(ASTLeft[node]);
+        if bd > 0 then Result := bd - 1;
+      end;
+  end;
+end;
+
 procedure ParseFactorCore;
 var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
@@ -12366,21 +12396,24 @@ begin
           if Eat(tkComma) then begin ParseExpr; addrNode := CurASTNode; end;  { count }
         end;
         Expect(tkRParen, ')');
-        if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
-           Syms[ASTIVal[exprNode]].IsArray and (Syms[ASTIVal[exprNode]].ArrLen = -1) then
+        { ANY dyn-array-typed expression, not just a bare name: `Copy(g[0])` and
+          `Copy(r.items)` are what a per-level deep copy is spelled with, and FPC
+          accepts both. }
+        if CopySrcDynDepth(exprNode) >= 1 then
         begin
-          { NESTED element type: the raw byte copy in AN_DYN_COPY would move
-            SUB-ARRAY HANDLES with the base element's size — TypeSize of the
-            deepest type, 4 for `array of array of Integer` — so element 1
-            onward read a bogus handle and `h[1][1]` segfaulted. Refused loudly
-            here, exactly as dynamic-array Delete and Insert already refuse the
-            same shape, until AN_DYN_COPY learns the handle stride AND the
-            element-aware retain a nested copy needs
-            (feature-dynarray-copy-nested-element-type). Reproduced on pinned, so
-            it is not a regression — just a crash nobody had asked for yet. }
-          if (Syms[ASTIVal[exprNode]].ArrLen = -1) and
-             ((SymDynDepth[ASTIVal[exprNode]] > 1) or
-              (SymElemDynDepth[ASTIVal[exprNode]] > 0)) then
+          { NESTED source: the raw byte copy in AN_DYN_COPY would move SUB-ARRAY
+            HANDLES with the base element's size — TypeSize of the deepest type, 4
+            for `array of array of Integer` — so element 1 onward read a bogus
+            handle and `h[1][1]` segfaulted. Refused loudly here, exactly as
+            dynamic-array Delete and Insert already refuse the same shape, until
+            AN_DYN_COPY learns the handle stride AND the element-aware retain a
+            nested copy needs (feature-dynarray-copy-nested-element-type).
+            Reproduced on pinned, so it is not a regression — just a crash nobody
+            had asked for yet. }
+          if CopySrcDynDepth(exprNode) > 1 then
+            Error('Copy: nested element type not yet supported for dynamic-array Copy');
+          if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
+             (SymElemDynDepth[ASTIVal[exprNode]] > 0) then
             Error('Copy: nested element type not yet supported for dynamic-array Copy');
           if node = -1 then
           begin
@@ -13408,12 +13441,12 @@ begin
             double case stays half-broken
             (devdocs/dev/normalise-dont-special-case.md). }
           if CaseEqual(name, 'Copy') and (nArgs >= 1) and (nArgs <= 3) and
-             (ASTKind[ASTLeft[argsHead]] = AN_IDENT) and
-             (ASTIVal[ASTLeft[argsHead]] >= 0) and
-             Syms[ASTIVal[ASTLeft[argsHead]]].IsArray and
-             (Syms[ASTIVal[ASTLeft[argsHead]]].ArrLen = -1) then
+             (CopySrcDynDepth(ASTLeft[argsHead]) >= 1) then
           begin
-            if (SymDynDepth[ASTIVal[ASTLeft[argsHead]]] > 1) or
+            if CopySrcDynDepth(ASTLeft[argsHead]) > 1 then
+              Error('Copy: nested element type not yet supported for dynamic-array Copy');
+            if (ASTKind[ASTLeft[argsHead]] = AN_IDENT) and
+               (ASTIVal[ASTLeft[argsHead]] >= 0) and
                (SymElemDynDepth[ASTIVal[ASTLeft[argsHead]]] > 0) then
               Error('Copy: nested element type not yet supported for dynamic-array Copy');
             node := AllocNode(AN_DYN_COPY);

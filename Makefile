@@ -2818,6 +2818,15 @@ test-core: $(COMPILER)
 	# second time with -dPXX_HEAP_DEBUG: without the poison a plain run passes
 	# even when the retain is missing, because the freed bytes still hold the old
 	# text. That second line is the one that can actually fail.
+	# Copy() from a dyn-array EXPRESSION (nested element, record field) rather than
+	# a bare name. Not folded into test_dynarray_copy.pas because that file is in
+	# the cross differentials and the nested element source dies on riscv32 for an
+	# unrelated pre-existing reason
+	# (bug-a-riscv32-nested-dynamic-array-element-write-segfaults).
+	./$(COMPILER) test/test_dynarray_copy_expr_source.pas /tmp/test_dyncopy_expr26
+	test "$$(/tmp/test_dyncopy_expr26)" = "$$(printf '3 10 30\n10 99\n2 20\n3 7 9\n9 77\n1 9\nkeep REPLACED also\nalso SECOND')"
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_expr_source.pas /tmp/test_dyncopy_expr_hd26
+	test "$$(/tmp/test_dyncopy_expr_hd26)" = "$$(printf '3 10 30\n10 99\n2 20\n3 7 9\n9 77\n1 9\nkeep REPLACED also\nalso SECOND')"
 	./$(COMPILER) test/test_dynarray_copy_managed_elems.pas /tmp/test_dyncopy_managed26
 	test "$$(/tmp/test_dyncopy_managed26)" = "checks 2211 fails 0"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_managed_elems.pas /tmp/test_dyncopy_managed_hd26

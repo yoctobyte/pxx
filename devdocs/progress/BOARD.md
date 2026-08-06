@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name | P | 60 | bug | Copy() on a dynamic array only accepts a bare IDENTIFIER. Copy(g[0]), Copy(r.items) and their 3-argument forms are all rejected, though FPC accepts every one — so the deep-copy idiom for a nested array cannot be spelled at all. | — |
+_none_
 
 ## unfinished (7)
 
@@ -367,9 +365,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1447)
+## done (1448)
 
-1447 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1448 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 

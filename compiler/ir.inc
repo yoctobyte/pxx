@@ -4479,7 +4479,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     vrElemTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
     dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
-    dcRetData: Integer;
+    dcRetData, dcSrcAst: Integer;
     dcCntTmp, dcTempSym, dcTempIdent, dcCountIdent, dcSlArg1, dcSlArg2: Integer;
     dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
     dcNewLenTmp, dcValTmp, dcGapTmp, dcZeroIdent: Integer;
@@ -4850,19 +4850,40 @@ begin
         the local's scope-exit release balances it. NOTE: a raw byte copy, so an
         array of a managed element type (AnsiString / managed record) is shallow
         — deep element copy is a later extension. }
-      dcSrcSym := ASTIVal[ASTLeft[node]];
-      dcElemTk := Syms[dcSrcSym].ElemType;
-      dcElemRec := Syms[dcSrcSym].ElemRecName;
+      { The source may be a bare dyn-array SYMBOL or any dyn-array-typed
+        EXPRESSION — an element of a nested array (`g[0]`), a record field
+        (`r.items`). Element metadata therefore comes from the NODE, not from a
+        symbol: NodeDynBaseTk / NodeDynBaseRec walk the ident / field / index
+        chain to the root, which is the same pair IR_SETLEN_DYN already uses to
+        support `SetLength(r.items, n)` and `SetLength(a[i], n)`. Reading it off
+        `Syms[ASTIVal[...]]` is what forced the parser to demand a bare name
+        (bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name).
+        A nested SOURCE is still refused in the parser, so the elements here are
+        always base values, never sub-array handles. }
+      dcSrcAst := ASTLeft[node];
+      dcElemTk := NodeDynBaseTk(dcSrcAst);
+      dcElemRec := NodeDynBaseRec(dcSrcAst);
       if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
       else dcElemSz := TypeSize(dcElemTk);
       dcIdxAst := ASTLeft[ASTRight[node]];
       dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
 
-      { Materialize source data pointer and index once. (IR_LEA on a dyn-array
-        symbol in read context loads the handle = data pointer, like indexing.) }
+      { Materialize source data pointer and index once. For a SYMBOL, IR_LEA in
+        read context loads the handle = data pointer (feeding it straight into a
+        call-arg position lowered it as an lvalue instead — the slot address — so
+        it is parked in a temp). For an expression, an ordinary read of a
+        dyn-array-typed element/field IS its handle, so IRLowerAST gives the same
+        thing; kept as a separate arm rather than unifying, because the IR_LEA
+        path is what the existing tests exercise. }
       dcSrcTmp := AllocVar('', tyPointer);
-      IRAppend(IR_STORE_SYM, dcSrcTmp,
-        IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      if ASTKind[dcSrcAst] = AN_IDENT then
+      begin
+        dcSrcSym := ASTIVal[dcSrcAst];
+        IRAppend(IR_STORE_SYM, dcSrcTmp,
+          IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      end
+      else
+        IRAppend(IR_STORE_SYM, dcSrcTmp, IRLowerAST(dcSrcAst), -1, 0, Ord(tyPointer));
       dcIdxTmp := AllocVar('', tyInteger);
       IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
 
