@@ -41,4 +41,27 @@ begin
   { reuse in a loop must not crash or corrupt }
   for j := 1 to 200 do b := Copy(a, 0, 6);
   Writeln(Length(b), ' ', b[5]);                { 6 60 }
+
+  { ONE-ARGUMENT form: FPC's whole-array shorthand, Copy(a) = Copy(a, 0, Length(a)).
+    This is the escape hatch that matters once assignment aliases — `b := a` shares
+    the handle, `b := Copy(a)` is how you ask for a duplicate — so the independence
+    check below is the point of the test, not the length
+    (bug-p-copy-single-argument-form-missing-for-dynamic-arrays). }
+  b := Copy(a);
+  Writeln(Length(b), ' ', b[0], ' ', b[5]);     { 6 10 60 }
+  b[0] := 999;                                  { must NOT reach `a` }
+  Writeln(a[0], ' ', b[0]);                     { 10 999 }
+
+  { …and for a 24-byte record element type, where the length must be scaled by
+    the element size rather than assumed to be 8. }
+  rb := Copy(ra);
+  Writeln(Length(rb), ' ', rb[4].z);            { 5 400 }
+  rb[0].x := 777;
+  Writeln(ra[0].x, ' ', rb[0].x);               { 0 777 }
+
+  { an EMPTY dynamic array — the shorthand's count comes from Length(), so a nil
+    handle must give a length-0 result rather than reading the header of nil }
+  SetLength(a, 0);
+  b := Copy(a);
+  Writeln(Length(b));                           { 0 }
 end.

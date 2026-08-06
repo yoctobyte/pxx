@@ -2801,7 +2801,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_set_runtime.pas /tmp/test_set_runtime26
 	test "$$(/tmp/test_set_runtime26)" = "$$(printf 'TRUE TRUE FALSE\nTRUE\nFALSE TRUE\nFALSE TRUE TRUE FALSE\nTRUE TRUE TRUE FALSE\nTRUE FALSE TRUE')"
 	./$(COMPILER) test/test_dynarray_copy.pas /tmp/test_dynarray_copy26
-	test "$$(/tmp/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60')"
+	test "$$(/tmp/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60\n6 10 60\n10 999\n5 400\n0 777\n0')"
+	# ...and the SAME one-argument shorthand with a string `Copy` overload in
+	# scope, which takes an entirely different parse path (the no-overload-match
+	# fallback, not the bare intrinsic). Both arms implement dynarray Copy, and
+	# before the fix they failed with two different messages -- exactly how a
+	# double case stays half-broken.
+	./$(COMPILER) test/test_dynarray_copy_uses_sysutils.pas /tmp/test_dyncopy_sysutils26
+	test "$$(/tmp/test_dyncopy_sysutils26)" = "$$(printf '3 1 3\n1 99\nell\n5 4')"
 	./$(COMPILER) test/test_val_builtin.pas /tmp/test_val_builtin26
 	test "$$(/tmp/test_val_builtin26)" = "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 1\n1000000000000 0\n0')"
 	./$(COMPILER) test/test_hilo_swap.pas /tmp/test_hilo_swap26

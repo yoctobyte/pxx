@@ -665,6 +665,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-overload-mismatch-dumps-internals-to-stdout | A | 30 | bug | Overload-resolution failure dumps compiler internals to stdout | — |
 | bug-overload-resolution-by-type | A | 50 | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
 | bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
+| bug-p-copy-single-argument-form-missing-for-dynamic-arrays | P | 55→65 | bug | Copy(a) on a dynamic array — FPC's whole-array shorthand — does not parse; pxx demands Copy(a, 0, Length(a)). It is the escape hatch users need once assignment aliases, so it blocks the dynamic-array semantics change | — |
 | bug-p-free-and-destroy-only-work-on-a-simple-variable | P | 60 | bug | `.Free` is only accepted on a plain variable — `a[0].Free`, `r.f.Free`, `h.f.Free` are all `\"Free\": no such member on this record/class`, and `v.Destroy` fails even on a plain variable | — |
 | bug-p-index-getter-backed-string-property | A | 40 | bug | Indexing a getter-backed string property fails to lower (IR_UNSUPPORTED) | — |
 | bug-p-member-off-a-constructor-result-yields-garbage | P | 70 | bug | `TThing.Create(2).n` in an expression compiles and yields garbage; the same shape on an ordinary function result (`Make(4).n`) is correct, and in a writeln argument it is a parse error instead | — |

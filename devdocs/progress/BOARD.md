@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (204)
+## backlog (203)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -75,7 +75,6 @@ _none_
 | bug-nilpy-truediv-and-pow-assign-on-a-class-instance-skip-the-dunder | N | 50 | bug | bug(N): `obj /= n` and `obj **= n` on a class instance skip the dunder and raise "expected a number, got object" | — |
 | bug-nilpy-two-name-for-over-a-variant-assumes-a-dict | N | 55 | bug | NilPy: `for k, v in <variant>` is lowered as a DICT unconditionally, so iterating a variant-held list of pairs raises TypeError: expected a dict, got object — the same list unpacks fine when its type is statically known | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
-| bug-p-copy-single-argument-form-missing-for-dynamic-arrays | P | 55→65 | bug | Copy(a) on a dynamic array — FPC's whole-array shorthand — does not parse; pxx demands Copy(a, 0, Length(a)). It is the escape hatch users need once assignment aliases, so it blocks the dynamic-array semantics change | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -361,9 +360,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1442)
+## done (1443)
 
-1442 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1443 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -401,7 +400,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 65] [P] bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
+- [p 65] [A] bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing
 - [p 65] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -593,7 +592,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-p-copy-single-argument-form-missing-for-dynamic-arrays
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-parallel-capture-semantics

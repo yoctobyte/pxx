@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:7 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1442 rejected:29`
+`unfinished:7 blocked:7 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1443 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,7 +33,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 184, ranked
 
-- `[p 65] [P]` bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
+- `[p 65] [A]` bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing
 - `[p 65] [N]` bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)

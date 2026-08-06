@@ -12352,14 +12352,28 @@ begin
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;            { source array }
-        Expect(tkComma, ',');
-        ParseExpr; node := CurASTNode;                { index }
-        addrNode := -1;
-        if Eat(tkComma) then begin ParseExpr; addrNode := CurASTNode; end;  { count }
+        { The index is OPTIONAL: `Copy(a)` is FPC's whole-array shorthand for a
+          dynamic array, and it is the escape hatch users need once assignment
+          aliases, so it is the natural way to duplicate an array
+          (bug-p-copy-single-argument-form-missing-for-dynamic-arrays). Parsed
+          permissively here and rejected below for a non-array, because the
+          string-vs-dynarray decision needs the first argument's TYPE and that is
+          not known until it has been parsed. }
+        node := -1; addrNode := -1;
+        if Eat(tkComma) then
+        begin
+          ParseExpr; node := CurASTNode;              { index }
+          if Eat(tkComma) then begin ParseExpr; addrNode := CurASTNode; end;  { count }
+        end;
         Expect(tkRParen, ')');
         if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
            Syms[ASTIVal[exprNode]].IsArray and (Syms[ASTIVal[exprNode]].ArrLen = -1) then
         begin
+          if node = -1 then
+          begin
+            node := AllocNode(AN_INT_LIT);
+            ASTIVal[node] := 0; ASTTk[node] := Ord(tyInteger);
+          end;
           if addrNode = -1 then
           begin
             addrNode := AllocNode(AN_INT_LIT);
@@ -12377,6 +12391,15 @@ begin
           CurASTNode := argSeq;
           Exit;
         end;
+        { One argument and NOT a dynamic array. FPC rejects `Copy(s)` on a string
+          too — the shorthand is a dynamic-array feature only — so this is a
+          match with the reference implementation, not a gap. Diagnosed by name
+          rather than falling into the string path below, which would report a
+          missing index as a type error. }
+        if node = -1 then
+          Error('Copy: the one-argument Copy(a) is the whole-array shorthand and ' +
+                'needs a DYNAMIC ARRAY; on a string give the index and count ' +
+                '(Copy(s, 1, n)), which is what FPC requires too');
         { A Char first argument (`Copy('a', 1, 1)`): FPC promotes char -> string,
           so materialise a 1-char string and route through the string-Copy path
           below — the same promotion `+` and String() already do. Without this a
@@ -13357,12 +13380,21 @@ begin
         procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
         if procIdx < 0 then
         begin
-          { Generic dynamic-array Copy(arr, index [, count]) intrinsic. Only when
+          { Generic dynamic-array Copy(arr[, index [, count]]) intrinsic. Only when
             no Copy function matches (so a string `sysutils.Copy` is never
             shadowed) and the first argument is a dynamic array. Lowered into a
             fresh element-type-aware `array of T` (AN_DYN_COPY). String Copy keeps
-            the RTL path. }
-          if CaseEqual(name, 'Copy') and (nArgs >= 2) and (nArgs <= 3) and
+            the RTL path.
+
+            nArgs = 1 — FPC's whole-array shorthand — is accepted here as well as
+            at the bare-intrinsic site in ParseFactor, and BOTH are needed: which
+            path a program takes depends on whether a `Copy` function is in scope
+            at all, so fixing only one made `Copy(a)` compile without `uses
+            sysutils` and fail with "no overload of Copy matches" with it. The two
+            arms even failed with different messages, which is exactly how a
+            double case stays half-broken
+            (devdocs/dev/normalise-dont-special-case.md). }
+          if CaseEqual(name, 'Copy') and (nArgs >= 1) and (nArgs <= 3) and
              (ASTKind[ASTLeft[argsHead]] = AN_IDENT) and
              (ASTIVal[ASTLeft[argsHead]] >= 0) and
              Syms[ASTIVal[ASTLeft[argsHead]]].IsArray and
@@ -13370,7 +13402,13 @@ begin
           begin
             node := AllocNode(AN_DYN_COPY);
             ASTLeft[node] := ASTLeft[argsHead];                 { source array }
-            exprNode := ASTLeft[ASTRight[argsHead]];            { index }
+            if nArgs >= 2 then
+              exprNode := ASTLeft[ASTRight[argsHead]]           { index }
+            else
+            begin
+              exprNode := AllocNode(AN_INT_LIT);
+              ASTIVal[exprNode] := 0; ASTTk[exprNode] := Ord(tyInteger);
+            end;
             if nArgs = 3 then
               addrNode := ASTLeft[ASTRight[ASTRight[argsHead]]] { count }
             else

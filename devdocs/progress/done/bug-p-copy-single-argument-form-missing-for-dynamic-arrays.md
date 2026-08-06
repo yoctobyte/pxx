@@ -3,6 +3,7 @@ summary: "Copy(a) on a dynamic array — FPC's whole-array shorthand — does no
 type: bug
 track: P
 prio: 55
+status: done
 ---
 
 # `Copy(a)` on a dynamic array does not parse
@@ -60,3 +61,6 @@ so they are in exactly that state today: FPC assignment semantics, no
 
 `Copy(a)` compiles and yields an independent array on every target; the 3-arg
 form is unchanged; `Copy(s)` on a string still errors, matching FPC.
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.
