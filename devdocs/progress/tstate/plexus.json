@@ -4719,14 +4719,11 @@
  "open_regressions": [
   {
    "bad": "899e51cda3ba24d5faa2e5e6d4c3985e3cdc53d1",
-   "good": "ce6cdc29af37145a025efc0bffa96fd4a93e095c",
+   "good": "051422c785bf37be45a7a22265a40509d19cf505",
    "job": "test-core#src:test/test_exception_unhandled.pas@1",
    "name": "test-core#1101",
    "opened": "2026-08-06T18:55:40Z",
    "range": [
-    "067cedc7ee287d85312b3c3ea14f6c9787884ac6",
-    "6f14ae087dbd274a3c44f8f2fd421f780a0d9640",
-    "051422c785bf37be45a7a22265a40509d19cf505",
     "120c636fd06ac5e717a7bcb484043d62ebce8420",
     "937c51dc220a48f2b3ba827b9bdf8b5bd7fb7146",
     "899e51cda3ba24d5faa2e5e6d4c3985e3cdc53d1"
