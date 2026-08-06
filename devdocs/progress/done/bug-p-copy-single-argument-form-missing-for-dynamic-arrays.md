@@ -63,4 +63,4 @@ so they are in exactly that state today: FPC assignment semantics, no
 form is unchanged; `Copy(s)` on a string still errors, matching FPC.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit a855d1d5f.
