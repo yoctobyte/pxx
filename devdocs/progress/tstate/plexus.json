@@ -4730,12 +4730,11 @@
   },
   {
    "bad": "899e51cda3ba24d5faa2e5e6d4c3985e3cdc53d1",
-   "good": "051422c785bf37be45a7a22265a40509d19cf505",
+   "good": "120c636fd06ac5e717a7bcb484043d62ebce8420",
    "job": "test-core#src:test/test_nested_cow.pas",
    "name": "test-core#991",
    "opened": "2026-08-06T18:55:40Z",
    "range": [
-    "120c636fd06ac5e717a7bcb484043d62ebce8420",
     "937c51dc220a48f2b3ba827b9bdf8b5bd7fb7146",
     "899e51cda3ba24d5faa2e5e6d4c3985e3cdc53d1"
    ],
