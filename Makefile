@@ -1175,6 +1175,12 @@ test-nilpy: $(COMPILER)
 	# `nonlocal` through an ESCAPING closure: the by-ref capture used to be bound
 	# as a VALUE, so the body stored through the value-as-address and died. Now a
 	# heap CELL is bound, which also gives the escaped counter shared state.
+	# After `for i in range(...)` the name holds the LAST VALUE YIELDED, and an
+	# EMPTY range leaves an existing binding alone. The counter used to be the
+	# user's variable, which left the failing value on exit and `start` on zero
+	# iterations. A comprehension's loop name must still not leak.
+	./$(COMPILER) test/test_nilpy_range_counter_after_loop.npy /tmp/test_nilpy_range_after26
+	test "$$(/tmp/test_nilpy_range_after26)" = "$$(printf 'i 2\nj 7\nk 9\nd 1\nm 99\np 7\nnested 2 1\nbreak 4\nonce 0\nsum 6 last 3\nrebound 20\ncomp [0, 1, 2] untouched\ncomp2 [0, 4, 8]\ncomputed 2')"
 	./$(COMPILER) test/test_nilpy_nonlocal_escaping_closure.npy /tmp/test_nilpy_nonlocal_esc26
 	test "$$(/tmp/test_nilpy_nonlocal_esc26)" = "$$(printf 'before\nafter\n1\n2\n3\n1 2 1\nalive: 2\nreadonly: 7\ntwo: 2020 3030\nfloat: 0.75 1.0\nlist: 1 2\nassign plain: 41\nassign nonlocal: 41\nassign counter: 1 2 3')"
 	@# a PROVABLE operand-type clash warns at compile time -- and still raises at

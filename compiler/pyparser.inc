@@ -11697,6 +11697,25 @@ end;
   position instead of a counter makes the rename idempotent: pass two sees
   the token already renamed, matches nothing, and simply allocates its own
   fresh symbol under the same deterministic name the token already reads. }
+{ `<userVar> = <counter>` prepended to a counted loop's body, so the user's loop
+  variable only ever holds a value the loop actually YIELDED. See the note in the
+  range lowering: making the user's variable be the counter left it one step past
+  the end on normal exit and clobbered it with `start` on zero iterations.
+
+  Prepend, not append: the body READS the variable, so the copy has to be the
+  first statement. PySeqAppend only appends, hence the explicit re-link here. }
+function PyPrependLoopVarCopy(bodyNode, userSym, cntSym: Integer): Integer;
+var cp, seq: Integer;
+begin
+  cp := AllocNode(AN_ASSIGN);
+  ASTLeft[cp] := PyMakeIdent(userSym);
+  ASTRight[cp] := PyMakeIdent(cntSym);
+  seq := AllocNode(AN_SEQ);
+  ASTLeft[seq] := cp;
+  ASTRight[seq] := bodyNode;
+  PyPrependLoopVarCopy := seq;
+end;
+
 function PyCompHiddenLoopName(tokIdx, slot: Integer): AnsiString;
 begin
   Result := '__py_cv' + PyIntLiteralText(tokIdx) + '_' + PyIntLiteralText(slot);
@@ -13190,6 +13209,8 @@ var name, name2: AnsiString;
     parenTarget: Boolean; pDepth, pScan: Integer;
     forTokIdx: Integer;   { token index of the `for` keyword itself }
     hName: AnsiString; ifCondStart, closerPos2, filtDummy: Integer;
+    userSym: Integer;   { the user's loop variable; -1 for a comprehension, whose
+                          hidden name IS the counter (see the range lowering) }
 begin
   forTokIdx := TokPos - 1;   { CurTok is `for` at entry }
   Next;
@@ -13294,6 +13315,7 @@ begin
       typing pre-pass and the real pass over the same tokens. }
     hName := PyCompHiddenLoopName(forTokIdx, 0);
     symIdx := AllocVar(hName, tyInt64);
+    userSym := -1;              { the hidden name IS the target; no copy needed }
   end
   else
   begin
@@ -13309,6 +13331,28 @@ begin
       AllocVar bypasses that choke point, so it has to say so itself
       (bug-nilpy-for-range-loop-counter-is-32-bit-and-never-terminates). }
     if symIdx < 0 then symIdx := AllocVar(name, tyInt64);
+    { The loop runs on a HIDDEN counter and the user's variable is assigned from
+      it at the top of each body iteration. Making the user's variable BE the
+      counter is what produced two silent wrong values, and both are the same
+      choice: it is initialised before the guard and incremented before the guard
+      is re-tested, so on normal exit it holds the value that FAILED the test
+      (`for i in range(3)` left 3, CPython leaves 2; with a step the gap widens,
+      `range(0, 10, 3)` left 12 against CPython's 9), and on ZERO iterations it
+      holds `start` — so `i = 99` then an unentered `for i in range(0)` silently
+      overwrote 99 with 0. CPython binds the loop variable only when the body
+      runs (bug-nilpy-for-range-counter-survives-with-the-wrong-value).
+
+      A copy at the top of the body gets all of it by construction: the last
+      value assigned is the last one yielded, an unentered loop assigns nothing,
+      and `break` leaves the value at the break point — which was already correct
+      and had to stay so.
+
+      Only the statement form needs this. A COMPREHENSION already loops on a
+      hidden name (PyCompHiddenLoopName above, so its variable cannot leak), and
+      that name IS the counter with nothing outside able to observe its terminal
+      value — so comprehensions keep the old shape and pay nothing. }
+    userSym := symIdx;
+    symIdx := AllocVar(PyCompHiddenLoopName(forTokIdx, 1), tyInt64);
   end;
   PyExpectIdent('range');
   Expect(tkLParen, '(');
@@ -13571,6 +13615,10 @@ begin
       must be wrapped into a chain first, or PySeqAppend walks a non-sequence. }
     if ASTKind[bodyNode] <> AN_SEQ then bodyNode := PySeqAppend(-1, bodyNode);
     bodyNode := PySeqAppend(bodyNode, node);
+    { ...and the user's variable is assigned from the hidden counter FIRST, so it
+      only ever holds a value the loop actually yielded — see the note where the
+      counter is allocated. Prepended rather than appended: the body reads it. }
+    if userSym >= 0 then bodyNode := PyPrependLoopVarCopy(bodyNode, userSym, symIdx);
 
     whileNode := AllocNode(AN_WHILE);
     ASTLeft[whileNode] := cmpNode;
@@ -13596,6 +13644,12 @@ begin
   stepNode := AllocNode(AN_INT_LIT);
   ASTIVal[stepNode] := 0;
   ASTTk[stepNode] := Ord(tyInteger);
+  { The no-explicit-step shape is a Pascal AN_FOR over `start..stop-1`, and it
+    needs the same copy the stepped shape above gets: the AN_FOR counter is left
+    one past the limit on normal exit and is initialised whether or not the body
+    runs. This is the arm `for i in range(3)` takes — the commonest form of all —
+    so it was the one producing `i = 3` and the empty-range clobber. }
+  if userSym >= 0 then bodyNode := PyPrependLoopVarCopy(bodyNode, userSym, symIdx);
   pair2 := AllocNode(AN_PAIR);
   ASTLeft[pair2] := stepNode;
   ASTRight[pair2] := bodyNode;
