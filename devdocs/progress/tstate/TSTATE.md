@@ -3,12 +3,10 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 6d2h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `7d5c0107d9f8` | 2026-08-06T20:40:00Z | RED (native) | 144.6s | `899e51cda3ba` RED |
+| plexus | `baa606d36caf` | 2026-08-06T20:48:44Z | GREEN (native) | 155.8s | `899e51cda3ba` RED |
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_exception_unhandled.pas@1** — test/test_exception_unhandled.pas test/test_threadsafe_layout_rtti.pas (plexus): bad `937c51dc220a`, last good `120c636fd06a`, 1 commit(s) in range
-- **test-core#src:test/test_nested_cow.pas** — test/test_nested_cow.pas (plexus): bad `937c51dc220a`, last good `120c636fd06a`, 1 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (xeon): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
 
 ## Held — quiet hosts (not actionable)

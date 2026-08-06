@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-06T05:08:35Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "cc4116ba900d58810a9e83890f786c1002372b49",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-06T05:40:38Z",
    "fixed": [],
    "new_red": [],
@@ -416,6 +408,16 @@
    "sha": "7d5c0107d9f89732c73411804d35869c98514d33",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-06T20:48:44Z",
+   "fixed": [
+    "test-core#src:test/test_exception_unhandled.pas@1"
+   ],
+   "new_red": [],
+   "sha": "baa606d36caf3e505f924eaec03d75cc45a48726",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -1471,6 +1473,7 @@
   "test-core#src:test/test_named_operators.pas": "native",
   "test-core#src:test/test_narrowing_typecast_rvalue.pas": "native",
   "test-core#src:test/test_nativeint_cast_field.pas": "native",
+  "test-core#src:test/test_nested_alias.pas": "native",
   "test-core#src:test/test_nested_class_type_b348.pas": "native",
   "test-core#src:test/test_nested_comments.pas": "native",
   "test-core#src:test/test_nested_cow.pas": "native",
@@ -3416,7 +3419,7 @@
   "test-core#src:test/test_exception_control_error.pas": "pass",
   "test-core#src:test/test_exception_finally.pas": "pass",
   "test-core#src:test/test_exception_typed.pas": "pass",
-  "test-core#src:test/test_exception_unhandled.pas@1": "fail",
+  "test-core#src:test/test_exception_unhandled.pas@1": "pass",
   "test-core#src:test/test_exception_unhandled.pas@2": "pass",
   "test-core#src:test/test_exception_unhandled.pas@3": "pass",
   "test-core#src:test/test_exception_unit.pas": "pass",
@@ -3598,6 +3601,7 @@
   "test-core#src:test/test_named_operators.pas": "pass",
   "test-core#src:test/test_narrowing_typecast_rvalue.pas": "pass",
   "test-core#src:test/test_nativeint_cast_field.pas": "pass",
+  "test-core#src:test/test_nested_alias.pas": "pass",
   "test-core#src:test/test_nested_class_type_b348.pas": "pass",
   "test-core#src:test/test_nested_comments.pas": "pass",
   "test-core#src:test/test_nested_cow.pas": "fail",
@@ -4674,11 +4678,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-06T20:40:00Z",
-  "sha": "7d5c0107d9f89732c73411804d35869c98514d33",
+  "date": "2026-08-06T20:48:44Z",
+  "sha": "baa606d36caf3e505f924eaec03d75cc45a48726",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 144.6
+  "verdict": "GREEN",
+  "wall": 155.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4700,28 +4704,5 @@
   "date": "2026-08-06T19:07:05Z",
   "sha": "899e51cda3ba24d5faa2e5e6d4c3985e3cdc53d1"
  },
- "open_regressions": [
-  {
-   "bad": "937c51dc220a48f2b3ba827b9bdf8b5bd7fb7146",
-   "good": "120c636fd06ac5e717a7bcb484043d62ebce8420",
-   "job": "test-core#src:test/test_exception_unhandled.pas@1",
-   "name": "test-core#1101",
-   "opened": "2026-08-06T18:55:40Z",
-   "range": [
-    "937c51dc220a48f2b3ba827b9bdf8b5bd7fb7146"
-   ],
-   "src": "test/test_exception_unhandled.pas test/test_threadsafe_layout_rtti.pas"
-  },
-  {
-   "bad": "937c51dc220a48f2b3ba827b9bdf8b5bd7fb7146",
-   "good": "120c636fd06ac5e717a7bcb484043d62ebce8420",
-   "job": "test-core#src:test/test_nested_cow.pas",
-   "name": "test-core#991",
-   "opened": "2026-08-06T18:55:40Z",
-   "range": [
-    "937c51dc220a48f2b3ba827b9bdf8b5bd7fb7146"
-   ],
-   "src": "test/test_nested_cow.pas"
-  }
- ]
+ "open_regressions": []
 }
