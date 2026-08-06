@@ -1176,7 +1176,7 @@ test-nilpy: $(COMPILER)
 	# as a VALUE, so the body stored through the value-as-address and died. Now a
 	# heap CELL is bound, which also gives the escaped counter shared state.
 	./$(COMPILER) test/test_nilpy_nonlocal_escaping_closure.npy /tmp/test_nilpy_nonlocal_esc26
-	test "$$(/tmp/test_nilpy_nonlocal_esc26)" = "$$(printf 'before\nafter\n1\n2\n3\n1 2 1\nalive: 2\nreadonly: 7\ntwo: 2020 3030\nfloat: 0.75 1.0\nlist: 1 2')"
+	test "$$(/tmp/test_nilpy_nonlocal_esc26)" = "$$(printf 'before\nafter\n1\n2\n3\n1 2 1\nalive: 2\nreadonly: 7\ntwo: 2020 3030\nfloat: 0.75 1.0\nlist: 1 2\nassign plain: 41\nassign nonlocal: 41\nassign counter: 1 2 3')"
 	@# a PROVABLE operand-type clash warns at compile time -- and still raises at
 	@# run time, so the diagnostic and the program agree. It must NOT abort:
 	@# `if False: 3 - "ab"` is legal CPython (decide-nilpy-mixed-type-operand-policy).

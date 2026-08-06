@@ -111,3 +111,42 @@ def viaList():
     return bump
 h = viaList()
 print("list:", h(), h())
+
+
+# A nested def taken as a VALUE THROUGH A LOCAL, not returned directly. This is a
+# different lowering: `return inner` goes through ParseFactor, which has always
+# called PyNestedDefClosureValue, while `f = inner` goes through
+# PyMakeFuncValueFor — which built a bare code address with NO captures bound, so
+# the callee read them out of the dead parent frame. Measured before the fix:
+# `def peek(): return c` over `c = 41` printed 5580016 (a raw address) and the
+# nonlocal form printed a constant 8 for every value of c, while `return peek` on
+# the identical body printed 41.
+def viaLocalPlain():
+    c = 41
+    def peek():
+        return c
+    f = peek
+    return f
+print("assign plain:", viaLocalPlain()())
+
+def viaLocalNonlocal():
+    c = 41
+    def peek():
+        nonlocal c
+        return c
+    f = peek
+    return f
+print("assign nonlocal:", viaLocalNonlocal()())
+
+# ...and the counter, reached the same way, so the CELL survives the assignment
+# path too rather than only the return path
+def viaLocalCounter():
+    n = 0
+    def bump():
+        nonlocal n
+        n += 1
+        return n
+    f = bump
+    return f
+q = viaLocalCounter()
+print("assign counter:", q(), q(), q())

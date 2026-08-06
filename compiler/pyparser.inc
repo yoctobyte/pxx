@@ -6002,12 +6002,26 @@ var defTok, i, j, k, depth: Integer;
     ASTLeft[argC] := valNode;
     ASTRight[argB] := argC;
     node := AllocNode(AN_CALL);
-    { cell FIRST: a by-ref capture needs an address whatever its value's shape,
-      and for a variant the 16-byte bind_var slot is already an address, so that
-      case stays with bind_var. }
-    if isCell and (cellBindPi >= 0) then ASTIVal[node] := cellBindPi
-    else if isObj and (objBindPi >= 0) then ASTIVal[node] := objBindPi
+    { The cell is the LAST resort. bind_var already passes an ADDRESS — of a
+      16-byte heap Variant slot — which is what a by-ref parameter needs, so a
+      VARIANT by-ref capture keeps bind_var; giving it an 8-byte cell would hand
+      the body half the storage a variant writes.
+
+      Honest about the evidence: NO test distinguishes this ordering from
+      cell-first. Both were built and every closure case measured identically,
+      and the variant-cell shape that would tell them apart is blocked earlier by
+      a different limitation (a str capture is refused as "cannot travel as a
+      register word"). This ordering is chosen because the failure it avoids is
+      heap corruption rather than a wrong value, not because it fixed something.
+      I first changed it believing it explained the constant-8 read; it did not —
+      that was PyMakeFuncValueFor never binding captures at all.
+
+      The obj/var precedence is unchanged from before the cell existed. A CLASS
+      capture declared nonlocal keeps bind_obj and so still lacks a writable
+      cell — recorded on the ticket rather than guessed at here. }
+    if isObj and (objBindPi >= 0) then ASTIVal[node] := objBindPi
     else if isVar then ASTIVal[node] := varBindPi
+    else if isCell and (cellBindPi >= 0) then ASTIVal[node] := cellBindPi
     else ASTIVal[node] := bindPi;
     ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
     Inc(bindIdx);
@@ -8032,6 +8046,33 @@ var procAddr, argA, argB, argC, callNode, nilNode, isFuncNode, boundPi,
 begin
   Result := -1;
   if (pi < 0) or (pi >= ProcCount) then Exit;
+  { A NESTED def whose meaning depends on values live NOW — captured enclosing
+    locals, default-arg expressions — cannot travel as a bare code address. The
+    `return inner` path has always known this (ParseFactor calls
+    PyNestedDefClosureValue); the ASSIGNMENT path did not, and this is the
+    function it uses. So `f = inner; return f` built pybound_new(addr, nil,
+    isFunc) with NO captures bound and the callee read them out of the dead
+    parent frame: measured, `def peek(): return c` over `c = 41` printed
+    5580016 — a raw address — and the `nonlocal` form printed a constant 8 for
+    every value of c. `return peek` on the identical body printed 41.
+
+    Tried FIRST, before the overload/wrapper resolution below: that logic can
+    replace `pi` with a synthesized wrapper, which has no PyDefTokOf and is not
+    the def whose captures need binding. PyNestedDefClosureValue answers -1 for
+    anything with nothing to bind, so an ordinary def still takes the plain
+    pybound_new path underneath.
+
+    PyBoxCallableValue is what makes the result a tyVariant like the rest of this
+    function returns — the bind chain hands back a pointer, and a pointer-typed
+    local never reaches the dynamic-call path
+    (bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame). }
+  Result := PyNestedDefClosureValue(pi);
+  if Result >= 0 then
+  begin
+    Result := PyBoxCallableValue(Result);
+    Exit;
+  end;
+  Result := -1;
   { The first FindProc match may not be the SAFE overload: `len`'s first
     declared one takes a TPyBytes, not a Variant, and a wrapper built around
     the wrong overload would silently misread a string argument as a bytes

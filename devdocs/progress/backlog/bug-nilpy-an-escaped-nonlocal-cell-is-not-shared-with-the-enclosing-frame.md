@@ -3,6 +3,8 @@ summary: "An escaped closure's `nonlocal` cell is separate storage from the encl
 type: bug
 track: N
 prio: 55
+status: working
+owner: claude-A-N
 ---
 
 # An escaped `nonlocal` cell is not shared with the enclosing frame
@@ -107,3 +109,71 @@ The three cases above diffed against CPython, plus
 `test/test_nilpy_nonlocal_escaping_closure.npy` and
 `test/test_nilpy_escaping_closure.npy` staying green, plus `make test-nilpy` and
 self-host byte-identical. Fold the three into the former test once they pass.
+
+## 2026-08-06 — the `8` was NOT a cell problem, and it is fixed
+
+This ticket said cases (b) and (c) "answer 8, not the seeded 0 — so the read path
+through a `nonlocal` by-ref parameter is separately wrong". That was the right
+observation and the wrong explanation, and the difference matters because the
+explanation pointed at the cell.
+
+Measured instead of reasoned. Two programs with an IDENTICAL closure body:
+
+```python
+def mk():
+    c = 41
+    def peek():
+        return c
+    return peek          # -> 41, correct
+```
+```python
+def mk():
+    c = 41
+    def peek():
+        return c
+    f = peek             # <- through a LOCAL
+    return f             # -> 5580016 : a raw ADDRESS
+```
+
+`nonlocal` is not involved: the plain-capture form printed a heap address, and the
+`nonlocal` form printed the constant 8. `return inner` was right, `f = inner` was
+wrong. Dumping both with `PXXDBG=a.ir:mk` showed why — the return form emits
+`pyboundfn_new` and a bind chain; the assignment form emits a different helper
+with the bare code address and no chain at all.
+
+**Root cause:** `return inner` goes through ParseFactor, which has always called
+`PyNestedDefClosureValue`. `f = inner` goes through `PyMakeFuncValueFor`, which
+built `pybound_new(addr, nil, isFunc)` and **never consulted it** — so no captures
+were bound and the callee read them out of the dead parent frame. Pre-existing:
+both wrong answers reproduce on `stable_linux_amd64/default/pinned`.
+
+**Fixed** by trying `PyNestedDefClosureValue` first in `PyMakeFuncValueFor` and
+boxing its result with the existing `PyBoxCallableValue` (the bind chain hands
+back a pointer; this function must return a tyVariant). Tried FIRST because the
+overload/wrapper logic below it can replace `pi` with a synthesized wrapper that
+has no `PyDefTokOf`; and `PyNestedDefClosureValue` answers -1 when there is
+nothing to bind, so an ordinary def still takes the plain path underneath.
+
+All three now match CPython, and `test_nilpy_nonlocal_escaping_closure.npy` covers
+the assignment path for a plain capture, a `nonlocal` read, and the counter.
+
+## What is left — and it IS this ticket's actual subject
+
+With the garbage gone, the cases below now print the **honest stale value** rather
+than nonsense, which is exactly the cell-not-shared divergence the ticket
+describes:
+
+| case | CPython | pxx now | pxx before |
+| --- | --- | --- | --- |
+| (a) frame reads its own name after an escaped closure wrote it | 1 | 0 | 0 |
+| (b) closure reads the name after the frame wrote it post-def | 99 | 0 | **8** |
+| (c) two closures over one frame must share | 1 | 0 | **8** |
+
+So the remaining work is the single thing the ticket recommends and nothing else:
+**one shared heap cell** between the enclosing frame and every closure over it,
+instead of a fresh cell seeded per closure. The "do the read path first" advice
+above is now spent — that was this fix.
+
+Also still open, and narrower than it looks: a CLASS capture declared `nonlocal`
+keeps `pyboundfn_bind_obj`, so it has no writable cell at all. Not reachable from
+any test today; recorded here rather than guessed at.
