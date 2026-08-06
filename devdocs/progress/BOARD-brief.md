@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1418 rejected:29`
+`working:1 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:39 done:1418 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,7 +40,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-markupsafe
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-dotted-package-import
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-qualifier-vs-cproc
-- `[p 65] [U]` decide-dynamic-array-value-vs-reference-semantics (unblocks 1)
+- `[p 65] [P]` bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [U]` decide-scope-hiding-vs-flat-overload-set (unblocks 1)

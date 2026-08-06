@@ -2,6 +2,8 @@
 summary: "dynamic arrays: pxx gives b := a VALUE semantics (a copy), FPC/Delphi give REFERENCE semantics (an alias) — is ours deliberate?"
 type: decision
 track: U
+status: resolved
+resolved: 2026-08-06
 prio: 55
 ---
 
@@ -125,3 +127,80 @@ Option 1. Whoever takes it should measure the blast radius first — build the
 corpora and `make test` with the x86-64 copy disabled — before committing.
 `bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing` is the
 implementation ticket and is already `blocked-by` this decision.
+
+
+
+## DECIDED 2026-08-06 — match FPC: assignment aliases, `Copy` duplicates
+
+**User's call**, on the same reasoning as the scope-hiding decision: FPC sets a
+strong precedent and there is no good argument for diverging silently. Recorded
+from the review conversation — if the intent was narrower than "adopt FPC
+semantics", correct this note.
+
+### What settled it
+
+Measured against FPC rather than argued:
+
+    SetLength(a,3); a[0]:=1;  b:=a;  b[0]:=99;  writeln(a[0])
+
+    FPC                                    a[0]=99   aliased (reference semantics)
+    pxx x86-64                             a[0]=1    copied
+    pxx i386 / arm32 / aarch64 / riscv32   a[0]=99   aliased — already FPC-correct
+
+    FPC   b := Copy(a)   ->   a[0]=1       the duplication escape hatch
+
+So this is **a one-backend change**, not a compiler-wide semantics change — four
+of five targets already do the right thing, and the real defect is that the five
+disagree with each other. That is
+[[bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing]].
+
+### Blocked on the escape hatch
+
+`Copy` is how a user asks for a duplicate once assignment stops copying — and
+**`Copy(a)` does not parse in pxx today**
+([[bug-p-copy-single-argument-form-missing-for-dynamic-arrays]]). Flipping
+x86-64 to alias before that lands would remove the natural way to copy an array
+in the same change that stops assignment from copying: silent data sharing in
+code that currently relies on the copy.
+
+Sequence:
+
+1. `bug-p-copy-single-argument-form-missing-for-dynamic-arrays` — parse-level,
+   `Copy(a)` = `Copy(a, 0, Length(a))`; the deep-copy machinery already works;
+2. then `bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing`.
+
+Doing (2) first is the ordering that hurts, and it is the tempting one because
+(2) is the ticket that already existed.
+
+### Self-compile: measured, and the compiler is NOT at risk
+
+The user's question — the compiler uses dynamic arrays itself, so would flipping
+x86-64 to aliasing break the self-host? Measured rather than reasoned:
+
+    compiler/**            named dynarray types: 0   assignments to a dynarray var: 0
+    lib/rtl + builtin/**   dynarray vars: 63         candidate assignments: 79 (UPPER BOUND)
+
+The compiler figure is **conclusive, not merely encouraging**. The scan
+deliberately over-approximates: it collects every identifier declared as
+`array of ...` anywhere in `compiler/**` (115 names) and then flags any
+assignment to a bare name in that set. An over-approximation that returns
+**zero** cannot be concealing a case. The compiler builds dynamic arrays with
+`SetLength` plus element writes and never assigns one whole array to another,
+so the operation whose meaning changes does not occur in its own sources.
+
+The 79 RTL hits are the same over-approximation and are dominated by **name
+collisions** — a local `idx: Integer` in one unit colliding with an
+`idx: array of ...` in another. That is an upper bound, not a finding; it needs
+per-scope resolution before it means anything, and it is the surface to check at
+implementation time.
+
+Two things the scan does not cover, to be checked when the change is written:
+passing a dynamic array **by value** to a routine (parameter passing, not
+assignment) and any dynamic-array **function result**. Neither is what this
+decision changes, but both touch the same lowering.
+
+Backstop: the self-host fixedpoint is the gate, and since `compiler/**` contains
+no such assignment, the prediction is that the change leaves the compiler binary
+**byte-identical**. If it does not, something in the linked RTL does use the
+construct — which makes self-host a *detector* for the RTL surface above rather
+than a risk.

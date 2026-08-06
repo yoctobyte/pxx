@@ -3,7 +3,7 @@ summary: "x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALI
 type: bug
 track: A
 prio: 65
-blocked-by: decide-dynamic-array-value-vs-reference-semantics
+blocked-by: bug-p-copy-single-argument-form-missing-for-dynamic-arrays
 ---
 
 # x86-64: dynamic-array assignment copies instead of aliasing
@@ -85,3 +85,31 @@ direction is blocked.
   during that fix and **deliberately does not assert aliasing**, so it stays
   green either way; whoever takes this ticket should add the aliasing assertions
   there once the direction is settled.
+
+
+## 2026-08-06 — unblocked in direction, re-blocked on the escape hatch
+
+[[decide-dynamic-array-value-vs-reference-semantics]] is decided: **match FPC**,
+so x86-64 should alias like the other four targets already do. The semantics
+question is closed; this ticket is now plain work.
+
+But it must land **after**
+[[bug-p-copy-single-argument-form-missing-for-dynamic-arrays]]. `Copy` is the
+only way to ask for a duplicate once assignment aliases, and `Copy(a)` does not
+parse today. Flipping this first would take away the copy and the way to
+request one in a single change.
+
+
+### Self-compile risk: measured as zero for the compiler
+
+`compiler/**` declares no named dynamic-array types and contains **no
+assignment to a dynamic-array variable at all** (over-approximating scan across
+115 candidate names returning zero, so it cannot be hiding a case). The compiler
+uses `SetLength` + element writes throughout.
+
+Prediction to check when implementing: the self-host binary should come out
+**byte-identical**. If it does not, the linked RTL uses whole-array assignment
+somewhere — `lib/rtl` + `compiler/builtin` have 63 dynamic-array variables and
+an upper bound of 79 candidate assignments, most of which are name collisions
+and need per-scope resolution. Also check by-value dynamic-array parameters and
+dynamic-array function results, which the scan does not cover.
