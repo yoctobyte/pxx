@@ -2362,6 +2362,15 @@ test-core: $(COMPILER)
 	# bug-b-writeln-float-with-17-decimals-prints-garbage
 	./$(COMPILER) test/lib_writefloat_fixed.pas /tmp/lib_writefloat_fixed26
 	test "$$(/tmp/lib_writefloat_fixed26 | tail -1)" = "WRITEFLOAT OK"
+	# ...and past 2^53 the digits it prints must be the VALUE's digits, not the
+	# binary granularity a divide-down loop recovers there. The WriteLn tail of
+	# the same program carries those; expectations are exact (decimal.Decimal),
+	# not FPC. bug-a-write-fixed-emits-false-digits-past-1e22
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^99999999999999991611392$$')" = "1"
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^10000000000000000905969664$$')" = "1"
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^1000000000000000019884624838656\.00$$')" = "1"
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^-99999999999999991611392\.00$$')" = "1"
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^       99999999999999991611392$$')" = "1"
 	./$(COMPILER) --strict-fpc -Fulib/rtl test/lib_strict_fpc.pas /tmp/lib_strict_fpc26
 	test "$$(/tmp/lib_strict_fpc26)" = "42 OK"
 	# ...and it activates its member flags (StrictCase rejects a duplicate label

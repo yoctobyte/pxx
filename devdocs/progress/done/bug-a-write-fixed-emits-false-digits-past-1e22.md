@@ -3,6 +3,8 @@ summary: "SILENT: write(v:w:d) prints digits that are not the value's digits onc
 type: bug
 track: A
 prio: 60
+status: done
+owner: claude-AB
 ---
 
 # `write(v:w:d)` prints false digits past 1e22
@@ -90,3 +92,54 @@ expansion.
 past 2^53 on every target (oracle: Python `decimal.Decimal(float(x))`), or —
 if [[decide-float-fixed-output-exact-or-fpc-17-digit-cap]] chooses a cap —
 emits only digits it can justify and zeros beyond, never binary artifacts.
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.
+
+## Resolution 2026-08-06
+
+`PXXWriteUIntD` — the shared integer-part writer behind `PXXWriteFloatFixed`,
+which every backend now shims onto — routes anything at or above 2^53 to a new
+`PxxIntDDigits`, the exact base-10^9 limb expansion the file already carried
+for the scientific path. Only the `exp2 >= 0` half of the expansion is needed:
+a double at or above 2^53 is an integer times a power of two, so multiplying
+the limbs by two IS the conversion. The field-width digit count goes through
+the same routine, since `while ipc >= 10 do ipc := ipc / 10` is inexact for the
+same reason and can land the count a column off.
+
+    1e23   99999999999999991611392
+    1e25   10000000000000000905969664
+    1e27   1000000000000000013287555072
+    1e30   1000000000000000019884624838656.00
+    1e300  1000000000000000052504760255204420248704...
+
+Every one matches `decimal.Decimal(float(x))`. Verified over **3000 random
+doubles** (1e-8 to 1e100, `:0:0` through `:0:12`) against `decimal.Decimal`
+quantized ROUND_HALF_UP: exact, and **byte-identical on x86-64, i386, arm32,
+aarch64 and riscv32** — the whole corpus re-run under qemu on i386 and riscv32,
+diff-clean against the native output. `test/lib_writefloat_fixed.pas` carries
+the huge-magnitude cases (Makefile-checked, since `Chk` cannot reach them —
+see below); `gate.sh quick` testmgr GREEN.
+
+**Note on `gate.sh quick`'s fixedpoint leg.** It seeds from the PINNED binary,
+which links the FROZEN `stable_linux_amd64/default/builtin/`, so generation A
+carries the pre-change runtime and A != B for any `compiler/builtin/**` edit.
+B == C byte-for-byte and `make compiler/pascal26` converges in one round — the
+fixedpoint holds. It clears on the next `make pin`, which is not taken here
+because Track B does not need this change.
+
+Left open on purpose, both filed rather than guessed:
+
+- the FRACTION past ~16 digits is still a Double-scaled approximation zero-
+  padded past 18 — same defect class, other half of the number, now
+  [[bug-a-write-fixed-fraction-digits-past-16-are-invented]] (prio 35: it only
+  bites where no correct program can be relying on the answer);
+- `Str(v:w:d)` and `WriteLn(v:w:d)` now DISAGREE past 9.2e18 — `StrFloat` hands
+  that range to `FloatToExpStr` and answers `1e+23`. Noted on
+  [[compat-pascal-write-fixed-huge-magnitude-differs-from-fpc]], which is
+  blocked on [[decide-float-fixed-output-exact-or-fpc-17-digit-cap]]: *which*
+  form to print past the Int64 range is exactly that parked decision, so
+  routing StrFloat through the expansion waits for it.
+
+The display-policy question is now answerable, which it was not while the
+digits were wrong.

@@ -37,15 +37,14 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (200)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
-| bug-a-write-fixed-emits-false-digits-past-1e22 | A | 60 | bug | SILENT: write(v:w:d) prints digits that are not the value's digits once \|v\| > 1e22 — the integer part is expanded in Double arithmetic, so past 2^53 it leaks binary granularity (2^31, 2^47) into decimal output. Looks like extra precision, is noise | — |
+| bug-a-write-fixed-fraction-digits-past-16-are-invented | A | 35 | bug | SILENT: write(v:w:d) gets the INTEGER part exactly now, but the fraction is still scaled through a Double — 1/3 at :0:30 prints ...333312 where the double's exact tail is ...333314829616256247, so digits 17-18 are wrong and 19+ are zeros presented as digits | — |
 | bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing | A | 65 | bug | x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALIASING — writes through either name are invisible to the other. FPC, i386, arm32, aarch64 and riscv32 all alias. Dynamic arrays are reference types; this is silent wrong behaviour on the flagship target | bug-p-copy-single-argument-form-missing-for-dynamic-arrays |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-format-fixed-overflows-int64-and-loses-digits | B | 65 | bug | SILENT: sysutils Format('%.2f') scales through Int64 — wrong last digit from \|v\| ~9e13 and outright garbage (-92233720368547758.-8, minus sign INSIDE the fraction) from ~9.2e16. FPC is correct throughout. Reachable at ordinary magnitudes: cents, byte counts, nanosecond timestamps | — |
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
@@ -358,9 +357,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1419)
+## done (1421)
 
-1419 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1421 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -406,10 +405,8 @@ _none_
 - [p 70] [T] regression-test-nilpy-test-nilpy-dotted-package-import
 - [p 70] [T] regression-test-nilpy-test-nilpy-qualifier-vs-cproc
 - [p 65] [P] bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
-- [p 65] [B] bug-b-format-fixed-overflows-int64-and-loses-digits
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
-- [p 60] [A] bug-a-write-fixed-emits-false-digits-past-1e22 (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
@@ -465,6 +462,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [U] decide-float-fixed-output-exact-or-fpc-17-digit-cap (unblocks 1)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
@@ -520,6 +518,7 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 35] [A] bug-a-write-fixed-fraction-digits-past-16-are-invented
 - [p 35] [B] bug-b-futex-helpers-are-trapped-behind-pxxclone
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-nilpy-container-membership-ignores-the-eq-dunder
@@ -585,7 +584,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-write-fixed-emits-false-digits-past-1e22
 - **1** — bug-p-copy-single-argument-form-missing-for-dynamic-arrays
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration

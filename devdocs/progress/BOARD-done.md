@@ -88,6 +88,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-variant-fn-return-forward-nrvo-corruption | A | 55 | bug | Variant FUNCTION forwarding another Variant call's result corrupts the value | — |
 | bug-a-variant-unbox-wrong-on-32bit-and-unavailable-cross | A | 70 | bug | Variant -> scalar unbox is unavailable on cross targets | — |
 | bug-a-virtual-method-int64-in-and-out-32bit | A | 85 | bug | every 32-bit target: a VIRTUAL method taking an Int64 AND returning an Int64 returns garbage (arm32/riscv32) or crashes (i386) — hits TStream.Position, and riscv32 is ESP32 | — |
+| bug-a-write-fixed-emits-false-digits-past-1e22 | A | 60 | bug | SILENT: write(v:w:d) prints digits that are not the value's digits once \|v\| > 1e22 — the integer part is expanded in Double arithmetic, so past 2^53 it leaks binary granularity (2^31, 2^47) into decimal output. Looks like extra precision, is noise | — |
 | bug-a-writeln-float-exponent-form-not-correctly-rounded | A | 60 | bug | writeln(Double) and Str(F,S) scale by repeated /10.0 and are wrong from the 16th digit; 1e200 even gets the wrong EXPONENT | — |
 | bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked | A | 45 | bug | aarch64 has its own EmitWriteFloatSciA64 / EmitWriteFloatNatA64 emitters, not touched by the non-finite fix — very likely the same never-terminating normalise loop, unverified because no emulator run was done | — |
 | bug-a-writeln-of-a-non-finite-double-hangs | A | 55 | bug | writeln() of an Inf or NaN Double HANGS (emits one space, then spins forever). FloatToStr renders the same value as 'Inf' correctly, so the correct behaviour already exists one layer away — this is writeln's own formatter | — |
@@ -118,6 +119,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-dotfile-treated-as-extension | B | 50 | bug | A dotfile's name was treated as its extension — ChangeFileExt ate the filename | — |
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-b-format-delphi-spec-parity | B | 50 | bug | SysUtils.Format parsed printf's spec, not Delphi's | — |
+| bug-b-format-fixed-overflows-int64-and-loses-digits | B | 65 | bug | SILENT: sysutils Format('%.2f') scales through Int64 — wrong last digit from \|v\| ~9e13 and outright garbage (-92233720368547758.-8, minus sign INSIDE the fraction) from ~9.2e16. FPC is correct throughout. Reachable at ordinary magnitudes: cents, byte counts, nanosecond timestamps | — |
 | bug-b-o-directory-wrong-value-on-arm | B | 70 | bug | PAL_OPEN_DIRECTORY used the x86 value on every target, so the entire directory-listing surface was dead on arm32 and aarch64 — and opening a regular FILE with the flag wrongly SUCCEEDED there | — |
 | bug-b-pos-empty-substr-returns-1 | B | 50 | bug | SysUtils.Pos returned 1 for an empty substring | — |
 | bug-b-sscanf-scanset-and-percent-n-unsupported | B | 45 | bug | sscanf did not implement %[...] or %n — %[^,] abandoned the whole scan with the destination untouched, and %n left the caller's counter at whatever it held | — |

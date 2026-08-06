@@ -122,3 +122,28 @@ backends genuinely agree now, NaN/Inf are genuinely correct, and
 characterisation of the large-magnitude output as exact.
 
 Filed as [[bug-a-write-fixed-emits-false-digits-past-1e22]].
+
+## UPDATE 2026-08-06 — the digits are exact now; `Str` and `WriteLn` disagree
+
+[[bug-a-write-fixed-emits-false-digits-past-1e22]] landed:
+`PXXWriteFloatFixed` expands the integer part in base-10^9 integer limbs, so
+`WriteLn(1e30:0:2)` prints `1000000000000000019884624838656.00` — the double's
+exact value, byte-identical across x86-64 / i386 / arm32 / aarch64 / riscv32,
+verified against `decimal.Decimal` over 3000 random doubles. So the "what are
+the digits" question is settled and only the **display policy** is left, which
+is [[decide-float-fixed-output-exact-or-fpc-17-digit-cap]].
+
+That leaves a NEW, pxx-internal divergence for this ticket to carry, on top of
+the FPC one it was opened for: **`Str(v:w:d)` and `WriteLn(v:w:d)` no longer
+agree.** `StrFloat` (`compiler/builtin/builtin.pas`) hands anything at or past
+9.2e18 to `FloatToExpStr`:
+
+    WriteLn(1e23:0:0)                 99999999999999991611392
+    Str(1e23:0:0, s)                  1e+23
+
+Both are "a number rather than debris", which is what that branch was written
+for, but they are two spellings of one operation answering differently. The
+fix is the same routing — `StrFloat`'s `v >= 9.2e18` branch wants the exact
+expansion as a string — and it is deliberately NOT done under the bug ticket,
+because *which* form to print past the Int64 range is the parked decision this
+ticket is blocked on. Do it when that resolves.
