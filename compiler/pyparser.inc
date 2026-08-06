@@ -5952,7 +5952,7 @@ var defTok, i, j, k, depth: Integer;
     pDefS, pDefE: array[0..15] of Integer;
     nP, nDef, nOwn, bindIdx, savedTok, ownPi: Integer;
     node, argA, argB, argC, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
-    objBindPi: Integer;
+    objBindPi, cellBindPi: Integer;
     nm: AnsiString;
     anyBind: Boolean;
 
@@ -5972,9 +5972,24 @@ var defTok, i, j, k, depth: Integer;
                            (Procs[procIdx].Params[pidx].TypeKind = tyVariant);
   end;
 
-  { chain one pyboundfn_bind / _bind_var / _bind_obj call:
+  { Is the callee's parameter for bound value `bi` declared BY-REF? That is how a
+    `nonlocal` capture is marked (PyBodyDeclaresNonlocal sets Params[].IsRef), and
+    it changes what must be BOUND: the body stores THROUGH the word, so it needs
+    the address of a cell, not a value. Same nOwn + bi indexing as
+    BoundParamIsVariant, and for the same reason — the captures sit after the
+    def's own parameters. }
+  function BoundParamIsRef(bi: Integer): Boolean;
+  var pidx: Integer;
+  begin
+    pidx := nOwn + bi;
+    BoundParamIsRef := (pidx < Procs[procIdx].ParamCount) and
+                       Procs[procIdx].Params[pidx].IsRef;
+  end;
+
+  { chain one pyboundfn_bind / _bind_var / _bind_obj / _bind_cell call:
     node := bind(node, idx, valNode) }
-  procedure ChainBind(valNode: Integer; isVar: Boolean; isObj: Boolean);
+  procedure ChainBind(valNode: Integer; isVar: Boolean; isObj: Boolean;
+                      isCell: Boolean);
   begin
     argA := AllocNode(AN_ARG);
     ASTLeft[argA] := node;
@@ -5987,7 +6002,11 @@ var defTok, i, j, k, depth: Integer;
     ASTLeft[argC] := valNode;
     ASTRight[argB] := argC;
     node := AllocNode(AN_CALL);
-    if isObj and (objBindPi >= 0) then ASTIVal[node] := objBindPi
+    { cell FIRST: a by-ref capture needs an address whatever its value's shape,
+      and for a variant the 16-byte bind_var slot is already an address, so that
+      case stays with bind_var. }
+    if isCell and (cellBindPi >= 0) then ASTIVal[node] := cellBindPi
+    else if isObj and (objBindPi >= 0) then ASTIVal[node] := objBindPi
     else if isVar then ASTIVal[node] := varBindPi
     else ASTIVal[node] := bindPi;
     ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
@@ -6010,6 +6029,7 @@ begin
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
   objBindPi := FindProc('pyboundfn_bind_obj');
+  cellBindPi := FindProc('pyboundfn_bind_cell');
   if (newPi < 0) or (bindPi < 0) or (varBindPi < 0) then Exit;
 
   { scan the header straight off the tokens: def NAME ( params ) ... }
@@ -6183,7 +6203,8 @@ begin
       Next;
       { pass mode follows the CALLEE PARAM's type: a variant param reads an
         ADDRESS (bind_var heap-boxes the value), a concrete one a raw word }
-      ChainBind(k, BoundParamIsVariant(bindIdx), False);
+      ChainBind(k, BoundParamIsVariant(bindIdx), False,
+                BoundParamIsRef(bindIdx));
     end;
 
   { then each scanned CAPTURE, by current value }
@@ -6192,9 +6213,16 @@ begin
     nm := PyCapName[procIdx * PY_MAX_CAPS + j];
     symIdx := PyProgSym(nm);
     { a CLASS capture binds through the retaining form: the enclosing scope
-      releases its own reference on return, and the closure outlives it }
+      releases its own reference on return, and the closure outlives it.
+      A `nonlocal` capture instead binds a heap CELL: its parameter is by-ref, so
+      the body stores through the bound word, and binding the VALUE meant storing
+      through the value-as-address — `c = 0` then `c = 5` wrote to address 0 and
+      the process died (measured: `mov %eax,(%rcx)` with rcx = the captured
+      value). The cell also outlives the frame, which is what gives an escaped
+      counter its shared state across calls
+      (bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse). }
     ChainBind(PyMakeIdent(symIdx), BoundParamIsVariant(bindIdx),
-              Syms[symIdx].TypeKind = tyClass);
+              Syms[symIdx].TypeKind = tyClass, BoundParamIsRef(bindIdx));
   end;
 
   Result := node;
@@ -7468,7 +7496,8 @@ begin
   if (nm <> 'pyclosure_src_new') and (nm <> 'pyclosure_src_cap') and
      (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
      (nm <> 'pyboundfn_setown') and
-     (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') then Exit;
+     (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') and
+     (nm <> 'pyboundfn_bind_cell') then Exit;
   boxPi := FindProc('pyvar_of_callable');
   if boxPi < 0 then Exit;
   pi := AllocNode(AN_ARG);
@@ -9430,7 +9459,8 @@ begin
     (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
     (nm = 'pyboundfn_setown') or
-    (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj');
+    (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
+    (nm = 'pyboundfn_bind_cell');
 end;
 
 function PyBareNoneHere: Boolean;

@@ -3,6 +3,8 @@ track: N
 prio: 65
 type: bug
 summary: "NilPy: a `nonlocal` write through an ESCAPED closure segfaults (re-measured 2026-08-06 — it used to be a parse error). The write itself faults; read-only captures and the list-cell workaround are fine."
+status: done
+owner: claude-A-N
 ---
 
 # A `nonlocal` capture in an ESCAPING closure fails to parse at the call site
@@ -132,3 +134,6 @@ The slug still says "fails to parse", which is now wrong. Left alone on purpose:
 renaming it would break the `[[...]]` links pointing here and rewrite the record
 of what was actually observed when it was filed. The summary line and this
 section carry the correct behaviour.
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.

@@ -140,6 +140,16 @@ function pyboundfn_is(p: Pointer): Boolean;
   (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
 function pycallable_obj_is(p: Pointer): Boolean;
 function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer;
+{ Bind a `nonlocal` capture: an 8-byte heap CELL seeded with the current value,
+  whose ADDRESS is what travels. The callee's parameter for such a capture is
+  declared BY-REF (PyBodyDeclaresNonlocal -> Params[].IsRef), so the body stores
+  THROUGH the bound word — and every other binder passes a value, so the body
+  wrote through `0` and the process died
+  (bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse). The cell
+  outliving the enclosing frame is the point: it is what lets two calls to one
+  escaped closure share state, the way CPython's cell does. Leaked with the
+  bound-fn object, like pyboundfn_bind_var's slot — same reasoning, same rarity. }
+function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
   the discarding form, so a lifted def reached through a VALUE always answered
@@ -1852,6 +1862,23 @@ begin
   pv^ := v;
   o^.Bound[idx] := Int64(NativeInt(Pointer(pv)));
   pyboundfn_bind_var := obj;
+end;
+
+{ Bind a `nonlocal` capture as an 8-byte heap cell holding the current value and
+  bind its ADDRESS — see the declaration for why nothing else will do. Eight
+  bytes regardless of the capture's width: the by-ref store may be a 32-bit
+  `mov %eax,(%rcx)` for an inferred int or a full word for an Int64/Double, and
+  over-allocating is free here while under-allocating would scribble the next
+  heap object. A VARIANT capture keeps pyboundfn_bind_var, whose 16-byte slot is
+  already the right shape for a by-address variant. }
+function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
+var o: PBoundFnObj; pc: PInt64;
+begin
+  o := PBoundFnObj(obj);
+  pc := PInt64(GetMem(8));
+  pc^ := v;
+  o^.Bound[idx] := Int64(NativeInt(Pointer(pc)));
+  pyboundfn_bind_cell := obj;
 end;
 
 { Call code(a0, bound...). a0 is the ONE user argument — a class/object variant

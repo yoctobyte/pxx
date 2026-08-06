@@ -1,0 +1,113 @@
+# `nonlocal` through an ESCAPING closure — the textbook counter.
+#
+# A `nonlocal` capture is lifted as a BY-REF trailing parameter, so the body
+# stores THROUGH the bound word. Every binder passed a VALUE, so the store went
+# to the value-as-address: `c = 0` then `c = 5` wrote to address 0 and the
+# process died. Measured as `mov %eax,(%rcx)` with rcx holding the captured
+# value (0, and 4096 when the initialiser was changed to 4096).
+#
+# Fixed by binding an 8-byte heap CELL seeded with the current value and passing
+# its ADDRESS (pyboundfn_bind_cell). The cell outliving the enclosing frame is
+# what gives an escaped counter its state across calls, the way CPython's cell
+# does. bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
+#
+# Every line below is diffed against CPython. The cases that still DIVERGE —
+# where the enclosing frame's own name and the escaped closure's cell are
+# separate storage — are deliberately NOT here; they are
+# bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame.
+
+
+# the bare write that used to segfault: no read, no return, still fatal
+def mk():
+    c = 0
+    def bump():
+        nonlocal c
+        c = 5
+    return bump
+
+f = mk()
+print("before")
+f()
+print("after")
+
+
+# the counter: state must PERSIST across calls to one escaped closure
+def counter():
+    n = 0
+    def bump():
+        nonlocal n
+        n += 1
+        return n
+    return bump
+
+bp = counter()
+print(bp())
+print(bp())
+print(bp())
+
+
+# ...and two counter() results must have INDEPENDENT cells
+c1 = counter()
+c2 = counter()
+print(c1(), c1(), c2())
+
+
+# called while the parent frame is still ALIVE, which takes the real by-ref
+# parameter rather than a cell — this arm always worked and must stay working
+def alive():
+    c = 0
+    def bump():
+        nonlocal c
+        c += 1
+    bump()
+    bump()
+    return c
+print("alive:", alive())
+
+
+# a read-only capture (no `nonlocal`) is a by-VALUE parameter and unaffected
+def ro():
+    k = 7
+    def get():
+        return k
+    return get
+print("readonly:", ro()())
+
+
+# TWO nonlocals in one closure: each needs its own cell, and the bind index
+# must not confuse them
+def two():
+    a = 1
+    b = 10
+    def step():
+        nonlocal a, b
+        a += 1
+        b += 10
+        return a * 1000 + b
+    return step
+s = two()
+print("two:", s(), s())
+
+
+# a non-integer cell: the 8-byte cell has to hold a float payload too
+def flt():
+    x = 0.5
+    def add():
+        nonlocal x
+        x += 0.25
+        return x
+    return add
+g = flt()
+print("float:", g(), g())
+
+
+# the list-cell idiom Python programmers use to avoid `nonlocal` must keep
+# working — it never went through the by-ref path at all
+def viaList():
+    box = [0]
+    def bump():
+        box[0] += 1
+        return box[0]
+    return bump
+h = viaList()
+print("list:", h(), h())

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:7 backlog:205 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1444 rejected:29`
+`unfinished:7 blocked:7 backlog:208 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1445 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,10 +31,12 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 186, ranked
+## Ready — top 30 of 189, ranked
 
 - `[p 70] [U]` decide-re-pin-after-the-dynarray-aliasing-flip
-- `[p 65] [N]` bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
+- `[p 70] [T]` regression-test-core-test-exception-unhandled
+- `[p 70] [T]` regression-test-core-test-nested-cow
+- `[p 70] [T]` regression-test-i386-test-dynarray-field
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -56,12 +58,10 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [N]` bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
 - `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - `[p 55] [N]` bug-nilpy-for-range-counter-survives-with-the-wrong-value
 - `[p 55] [N]` bug-nilpy-int-of-a-long-decimal-string-narrows
-- `[p 55] [N]` bug-nilpy-two-name-for-over-a-variant-assumes-a-dict
-- `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- `[p 55] [T]` bug-t-empty-range-regression-cannot-be-bisected
 
-_156 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_159 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -1172,6 +1172,11 @@ test-nilpy: $(COMPILER)
 	@# bridge marshals the body's own arity before them, not a hardcoded one
 	./$(COMPILER) test/test_nilpy_escaping_closure.npy /tmp/test_nilpy_escaping_closure26
 	test "$$(/tmp/test_nilpy_escaping_closure26)" = "$$(printf '42\n42\n13\n16\n42\n3\n6\n42\n42\n7')"
+	# `nonlocal` through an ESCAPING closure: the by-ref capture used to be bound
+	# as a VALUE, so the body stored through the value-as-address and died. Now a
+	# heap CELL is bound, which also gives the escaped counter shared state.
+	./$(COMPILER) test/test_nilpy_nonlocal_escaping_closure.npy /tmp/test_nilpy_nonlocal_esc26
+	test "$$(/tmp/test_nilpy_nonlocal_esc26)" = "$$(printf 'before\nafter\n1\n2\n3\n1 2 1\nalive: 2\nreadonly: 7\ntwo: 2020 3030\nfloat: 0.75 1.0\nlist: 1 2')"
 	@# a PROVABLE operand-type clash warns at compile time -- and still raises at
 	@# run time, so the diagnostic and the program agree. It must NOT abort:
 	@# `if False: 3 - "ab"` is legal CPython (decide-nilpy-mixed-type-operand-policy).
