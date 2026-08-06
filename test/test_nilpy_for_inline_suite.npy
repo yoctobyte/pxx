@@ -1,0 +1,55 @@
+# `for` accepts a one-line suite, like `if` and `while` do.
+#
+# PyParseForIn (the container form) already called PyParseSuite, which takes
+# both the indented and the one-line body. The RANGE and ZIP forms hand-rolled
+# newline+indent+block instead, so `for i in range(4): t += i` was a parse
+# error — and the message ("expected newline") named the body rather than the
+# form. `for` was the only compound statement in the language that demanded an
+# indent.
+#
+# It also HID other bugs: the factorial loop that first exposed the augmented-
+# assignment truncation was written this way, and the parse error masked the
+# wrong value until the body was re-indented.
+# bug-nilpy-for-rejects-an-inline-suite
+# Every expectation is CPython's own output.
+
+f = 1
+for i in range(1, 5): f *= i
+print(f)
+
+t = 0
+for x in [1, 2, 3]: t += x
+print(t)
+
+s = 0
+for a, b in zip([1, 2], [10, 20]): s += a * b
+print(s)
+
+# several statements on the line, separated by semicolons
+n = 0
+for i in range(3): n += 1; n += 10
+print(n)
+
+# an inline body that is itself a compound statement
+m = 0
+for i in range(4):
+    if i == 2: continue
+    m += 1
+print(m)
+
+# for/else still works over an inline body
+for i in range(2): pass
+else:
+    print("else ran")
+
+# and the indented form is untouched
+k = 0
+for i in range(5):
+    k += i
+print(k)
+
+# nested, one inline and one indented
+tot = 0
+for i in range(3):
+    for j in range(2): tot += i * j
+print(tot)

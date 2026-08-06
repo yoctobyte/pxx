@@ -1437,6 +1437,11 @@ test-nilpy: $(COMPILER)
 	# all and reported type().__name__ == 'list'. .expected is CPython's.
 	./$(COMPILER) test/test_nilpy_container_kind_tag.npy /tmp/test_nilpy_ckt26
 	/tmp/test_nilpy_ckt26 | diff -u test/test_nilpy_container_kind_tag.expected -
+	# `for i in range(4): body` on one line — the range and zip forms hand-rolled
+	# newline+indent+block, so `for` was the only compound statement demanding an
+	# indent. .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_for_inline_suite.npy /tmp/test_nilpy_fis26
+	/tmp/test_nilpy_fis26 | diff -u test/test_nilpy_for_inline_suite.expected -
 	# repr() and range() as an ITERABLE: both existed in the runtime but were not
 	# reachable from where a program uses them — repr's name was bound to nothing,
 	# and range materialised only inside a literal `list(`. .expected is CPython's.

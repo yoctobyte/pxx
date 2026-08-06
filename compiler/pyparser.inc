@@ -12941,9 +12941,8 @@ begin
   node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(ySym);
   ASTRight[node] := PyCallMeth1(listCi, 'at', PyMakeIdent(cbSym), PyMakeIdent(iSym));
   bodyNode := PySeqAppend(bodyNode, node);
-  Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
-  bodyNode := PySeqAppend(bodyNode, PyParseBlock);
-  Expect(tkDedent, 'dedent');
+  { one-line suite accepted too — see the range path's note }
+  bodyNode := PySeqAppend(bodyNode, PyParseSuite);
   { zi = zi + 1 }
   oneN := AllocNode(AN_INT_LIT); ASTIVal[oneN] := 1; ASTTk[oneN] := Ord(tyInteger);
   incN := AllocNode(AN_BINOP); ASTIVal[incN] := Ord(tkPlus);
@@ -13354,10 +13353,16 @@ begin
   else
   begin
     Expect(tkColon, ':');
-    Expect(tkNewline, 'newline');
-    Expect(tkIndent, 'indent');
-    bodyNode := PyParseBlock;
-    Expect(tkDedent, 'dedent');
+    { PyParseSuite, not a hand-rolled newline+indent+block: it takes BOTH the
+      indented form and the one-line one, so `for i in range(4): t += i` parses
+      like the `if` and `while` it sits beside. Spelled out here because the
+      hand-rolled version was the whole of
+      bug-nilpy-for-rejects-an-inline-suite — `for` was the only compound
+      statement that demanded an indent, and the error ("expected newline")
+      named the body rather than the form. The container `for ... in xs:` path
+      (PyParseForIn) already called PyParseSuite, which is why only the range
+      and zip spellings were affected. }
+    bodyNode := PyParseSuite;
   end;
 
   { A pre-existing VARIANT loop variable (x was a container-loop target

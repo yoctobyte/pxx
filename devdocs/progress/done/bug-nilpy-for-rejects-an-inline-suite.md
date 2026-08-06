@@ -2,6 +2,8 @@
 track: N
 prio: 35
 type: bug
+status: done
+owner: claude-AN
 summary: "NilPy: `for i in r: body` on one line is a parse error, while `if c: body` and `while c: body` both accept the same inline suite"
 ---
 
@@ -48,3 +50,23 @@ the suite parser is shared ground.
 
 Per-fix loop. A `.npy` test with inline `for`, `if` and `while` suites (and a
 `for … else`) diffed against CPython.
+
+
+## Log
+
+- 2026-08-06 — **resolved.** `PyParseSuite` already accepted both the indented
+  and the one-line body, and `PyParseForIn` (the container form) already used
+  it — which is exactly why `for x in xs: body` worked while
+  `for i in range(4): body` did not. The RANGE arm of `PyParseFor` and
+  `PyParseForZip` hand-rolled `Expect(newline) + Expect(indent) + PyParseBlock +
+  Expect(dedent)` instead; both now call `PyParseSuite`.
+
+  Two lines of real change. The bug was not the parser lacking the ability — it
+  was two sites not using the routine that already had it, which is the
+  double-case shape `devdocs/dev/normalise-dont-special-case.md` is about.
+
+  Verified: `test/test_nilpy_for_inline_suite.npy` (new, in `make test-nilpy`) —
+  inline range / container / zip bodies, semicolon-separated statements on the
+  line, an inline body that is itself a compound statement, `for`/`else` over an
+  inline body, the indented form, and a nested inline-inside-indented loop. All
+  lines match CPython. `tools/gate.sh quick` GREEN.

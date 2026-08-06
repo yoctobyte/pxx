@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (214)
+## backlog (213)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -57,7 +57,6 @@ _none_
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
 | bug-nilpy-for-range-counter-survives-with-the-wrong-value | N | 55 | bug | NilPy: after `for i in range(3)` the variable holds 3 (the value that FAILED the test), CPython says 2 — and after an EMPTY range it is clobbered to `start` instead of keeping its previous value | — |
-| bug-nilpy-for-rejects-an-inline-suite | N | 35 | bug | NilPy: `for i in r: body` on one line is a parse error, while `if c: body` and `while c: body` both accept the same inline suite | — |
 | bug-nilpy-int-of-a-long-decimal-string-narrows | N | 55 | bug | NilPy: int('<30 digits>') wraps mod 2^64 instead of producing an arbitrary-precision int — int('123456789012345678901234567890') prints -4362896299872285998 | — |
 | bug-nilpy-int-of-a-variant-held-bignum-raises | N | 40 | bug | NilPy: int(x) where x is a variant-held arbitrary-precision int raises EVariantError instead of being the identity — and pyint_v, the variant-returning helper that would answer it, exists in pylib but is never emitted by the frontend | — |
 | bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module | N | 40 | bug | A def shadowing a builtin that has NO pylib proc (ord, chr, …) takes effect from the top of the module — `print(ord('A'))` ABOVE the def prints the user's answer where CPython prints 65. Silent. | — |
@@ -371,9 +370,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1430)
+## done (1431)
 
-1430 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1431 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -546,7 +545,6 @@ _none_
 - [p 35] [B] bug-b-futex-helpers-are-trapped-behind-pxxclone
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-nilpy-container-membership-ignores-the-eq-dunder
-- [p 35] [N] bug-nilpy-for-rejects-an-inline-suite
 - [p 35] [N] bug-nilpy-list-sort-ignores-lt-dunder-on-objects
 - [p 35] [N] bug-nilpy-list-sort-method-missing
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
