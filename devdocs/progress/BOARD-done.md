@@ -553,6 +553,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
 | bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment | N | 55 | bug | nilpy: at module level, a name first bound inside if/for/with is 'undefined variable' on the RHS of a later top-level assignment | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
+| bug-nilpy-nested-comprehension-over-range-evaluates-the-inner-one-once | N | 75 | bug | NilPy: in [[expr for j in ...] for i in range(n)] the inner comprehension is hoisted OUT of the outer loop and evaluated once with i at its initial value — and the same list object is appended to every row, so mutating one row mutates all | — |
 | bug-nilpy-nested-def-capture-sets-are-not-final | N | 85 | bug | A nested def's capture set is read before it is final | — |
 | bug-nilpy-nested-def-capturing-self-called-from-a-sibling-returns-nothing | N | 50 | bug | Inside a METHOD, a nested def that captures self returns nothing when called from a SIBLING nested def — `C().run()` prints an empty line where CPython prints 17. Pre-existing (identical on pinned), and needs no lambda to reproduce. | — |
 | bug-nilpy-nested-def-nonint-result-garbage | N | 75 | bug | A nested def's non-integer result is read as a number — silent garbage | — |

@@ -1406,6 +1406,13 @@ test-nilpy: $(COMPILER)
 	# .expected is CPython's own output for the same file.
 	./$(COMPILER) test/test_nilpy_int_promotion_default.npy /tmp/test_nilpy_intpromo26
 	/tmp/test_nilpy_intpromo26 | diff -u test/test_nilpy_int_promotion_default.expected -
+	# A comprehension nested inside one whose OUTER iterable is range(): the inner
+	# build stayed hoisted to the enclosing statement, so it ran ONCE with the
+	# outer variable at its initial value and every row was an ALIAS of that one
+	# list. A matrix built the ordinary way had identical rows and a matrix
+	# multiply over it returned plausible wrong numbers. .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_nested_comprehension_over_range.npy /tmp/test_nilpy_nestcomp26
+	/tmp/test_nilpy_nestcomp26 | diff -u test/test_nilpy_nested_comprehension_over_range.expected -
 	# repr() and range() as an ITERABLE: both existed in the runtime but were not
 	# reachable from where a program uses them — repr's name was bound to nothing,
 	# and range materialised only inside a literal `list(`. .expected is CPython's.

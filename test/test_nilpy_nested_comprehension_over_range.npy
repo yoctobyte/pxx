@@ -1,0 +1,65 @@
+# A comprehension nested inside a comprehension whose OUTER iterable is range().
+#
+# The inner comprehension hoists its own build loop onto PyHoistHead. The
+# container path (`for x in xs`) ends up draining that per-iteration; the range
+# path drained nothing, so the inner build stayed hoisted to the enclosing
+# STATEMENT and ran ONCE, before the outer loop ever started. The outer loop
+# then appended THE SAME list object on every iteration:
+#
+#   [[i for j in range(2)] for i in range(3)]
+#       CPython [[0, 0], [1, 1], [2, 2]]
+#       pxx     [[0, 0], [0, 0], [0, 0]]      <- inner evaluated once, i frozen at 0
+#
+# Two separate wrongs, and the second is the nastier: the rows were ALIASES of
+# one list, so mutating one row mutated all of them. A matrix built the ordinary
+# Python way came out with every row identical, and a matrix multiply over it
+# returned confident, plausible, wrong numbers.
+# bug-nilpy-nested-comprehension-over-range-evaluates-the-inner-one-once
+# Every expectation is CPython's own output.
+
+# the headline: outer over range, inner over range
+print([[i * 3 + j for j in range(3)] for i in range(3)])
+print([[i for j in range(2)] for i in range(3)])
+print([[j for j in range(2)] for i in range(3)])
+
+# the inner iterable's kind does not matter; the OUTER one is what mattered
+xs = ["p", "q"]
+print([[i for c in xs] for i in range(3)])
+
+# outer over a CONTAINER was always correct — keep it covered so a fix to the
+# range path cannot regress it
+print([[c for c in x] for x in xs])
+print([[x for c in xs] for x in xs])
+
+# ALIASING: each row must be its own list
+g = [[i for j in range(2)] for i in range(3)]
+g[0][0] = 99
+print(g)
+h = [[0 for j in range(2)] for i in range(3)]
+h[1].append(7)
+print(h)
+
+# single-level range comprehensions were never affected
+print([i for i in range(3)])
+print([i * 10 for i in range(3)])
+
+# a real use: build a matrix, transpose it, multiply it
+def mk(r, c):
+    return [[i * c + j for j in range(c)] for i in range(r)]
+A = mk(3, 3)
+print(A)
+print([[A[i][j] for i in range(len(A))] for j in range(len(A[0]))])
+def mul(X, Y):
+    out = []
+    for i in range(len(X)):
+        row = []
+        for j in range(len(Y[0])):
+            s = 0
+            for t in range(len(Y)):
+                s += X[i][t] * Y[t][j]
+            row.append(s)
+        out.append(row)
+    return out
+I = [[1 if i == j else 0 for j in range(3)] for i in range(3)]
+print(mul(A, I))
+print(mul(A, A))

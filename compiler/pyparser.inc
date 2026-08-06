@@ -13153,6 +13153,17 @@ begin
                              PyMakeIdent(PyCompTarget), CurASTNode);
       if bodyNode < 0 then Error('Nil Python: pylib TPyList.append not loaded');
     end;
+    { A NESTED comprehension in the element expression hoists its own build loop
+      onto PyHoistHead. Drain it INTO this body, ahead of the append that
+      consumes its result — the container path's equivalent already ends up
+      per-iteration, but nothing here drained it, so the inner build stayed
+      hoisted to the enclosing STATEMENT and ran ONCE, before the outer loop.
+      `[[i for j in range(2)] for i in range(3)]` therefore evaluated its inner
+      list a single time with `i` at its initial value and appended THE SAME
+      list object three times: `[[0,0],[0,0],[0,0]]`, and mutating one row
+      mutated all of them
+      (bug-nilpy-nested-comprehension-over-range-evaluates-the-inner-one-once). }
+    bodyNode := PySeqAppend(PyFlushHoist(-1), bodyNode);
     TokPos := compSaved; Next;
     { `... if COND]`: gate the append on the filter — the range path sees the
       `if` directly (no ITER expression ahead of it), same wrap as the
