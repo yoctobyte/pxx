@@ -3,6 +3,8 @@ summary: "cpyext PyErr_Format delegates to vsnprintf, which does not know CPytho
 type: bug
 track: N
 prio: 50
+status: done
+owner: claude-A-N
 ---
 
 # `PyErr_Format` prints CPython's `%U` / `%S` / `%R` specifiers literally
@@ -72,3 +74,6 @@ actively misleading rather than merely vague.
 `make test-nilpy` green plus a probe extension calling `PyErr_Format` with each
 supported specifier, including `%U` followed by `%d` (the misalignment case),
 diffed against the same calls under CPython.
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.

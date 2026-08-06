@@ -980,7 +980,11 @@ PyObject *PyUnicode_FromFormat(const char *format, ...) {
     char buf[512];
     va_list ap;
     va_start(ap, format);
-    vsnprintf(buf, sizeof(buf), format, ap);
+    /* Same printf superset as PyErr_Format — CPython documents %U %S %R %A for
+       this function too, so it had the identical vsnprintf bug. (PyOS_snprintf
+       below deliberately keeps vsnprintf: CPython documents THAT one as a plain
+       snprintf wrapper, with no object specifiers.) */
+    __pxx_cpyext_vformat(buf, sizeof(buf), format, ap);
     va_end(ap);
     return PyUnicode_FromString(buf);
 }
@@ -1068,11 +1072,140 @@ void PyErr_Restore(PyObject *type, PyObject *value, PyObject *traceback) {
                             ? (const char *)value->ob_ptr : "");
 }
 
+/* CPython's PyErr_Format accepts a SUPERSET of printf: %U is a PyObject* that
+   must be a str, %S is str() of any object, %R is repr(), %A is ascii(). glibc
+   knows none of them — it printed them literally AND consumed no argument, so
+   every specifier after one read the wrong va_arg. An extension's own
+   "unexpected keyword argument '%U'" came out with the %U still in it, and a
+   message mixing %U with %d printed a garbage number
+   (bug-cpyext-pyerr-format-prints-U-and-S-literally).
+
+   So the format is walked here, and each PASS-THROUGH specifier is handed to
+   snprintf on its own — number and width formatting stays the C library's job
+   rather than being reimplemented. Only the object specifiers are rendered
+   locally.
+
+   One function shared by PyErr_Format and PyErr_WarnFormat, which had identical
+   bodies and therefore the identical bug; taking va_list as a parameter is
+   confirmed to work through cfront. */
+static void obj_text(PyObject *o, int quoted, char *out, size_t cap) {
+    const char *s;
+
+    if (cap == 0) return;
+    out[0] = 0;
+    if (o == 0) { snprintf(out, cap, "<NULL>"); return; }
+    switch (o->ob_kind) {
+        case PYOBJ_STR:
+            s = (const char *)o->ob_ptr;
+            if (s == 0) s = "";
+            if (quoted) snprintf(out, cap, "'%s'", s);
+            else snprintf(out, cap, "%s", s);
+            return;
+        case PYOBJ_BYTES:
+            s = (const char *)o->ob_ptr;
+            if (s == 0) s = "";
+            snprintf(out, cap, "b'%s'", s);
+            return;
+        case PYOBJ_LONG:  snprintf(out, cap, "%ld", o->ob_ival); return;
+        case PYOBJ_FLOAT: snprintf(out, cap, "%g", o->ob_fval); return;
+        case PYOBJ_NONE:  snprintf(out, cap, "None"); return;
+        case PYOBJ_TUPLE: snprintf(out, cap, "<tuple>"); return;
+        case PYOBJ_LIST:  snprintf(out, cap, "<list>"); return;
+        case PYOBJ_DICT:  snprintf(out, cap, "<dict>"); return;
+        case PYOBJ_MODULE: snprintf(out, cap, "<module>"); return;
+        case PYOBJ_CFUNC: snprintf(out, cap, "<built-in function>"); return;
+        default:
+            /* Named by KIND rather than left empty: a message that identifies
+               something beats one that identifies nothing. */
+            snprintf(out, cap, "<object kind %d>", o->ob_kind);
+            return;
+    }
+}
+
+void __pxx_cpyext_vformat(char *buf, size_t cap, const char *format, va_list ap) {
+    size_t out;
+    int i, j;
+    char spec[32];
+    char piece[256];
+    PyObject *o;
+
+    out = 0;
+    i = 0;
+    if (cap == 0) return;
+    buf[0] = 0;
+    while (format[i] != 0 && out + 1 < cap) {
+        if (format[i] != '%') { buf[out] = format[i]; out = out + 1; i = i + 1; continue; }
+        if (format[i + 1] == '%') { buf[out] = '%'; out = out + 1; i = i + 2; continue; }
+
+        /* copy the whole specifier: flags, width, precision, length modifiers,
+           then the conversion letter */
+        j = 0;
+        spec[j] = format[i]; j = j + 1; i = i + 1;
+        while (format[i] != 0 && j < 24 &&
+               (format[i] == '-' || format[i] == '+' || format[i] == ' ' ||
+                format[i] == '#' || format[i] == '0' || format[i] == '.' ||
+                (format[i] >= '1' && format[i] <= '9') ||
+                format[i] == 'l' || format[i] == 'z' || format[i] == 'h')) {
+            spec[j] = format[i]; j = j + 1; i = i + 1;
+        }
+        if (format[i] == 0) break;
+        spec[j] = format[i]; j = j + 1;
+        spec[j] = 0;
+        piece[0] = 0;
+
+        switch (format[i]) {
+            case 'U':                      /* PyObject* known to be a str */
+            case 'S':                      /* str() of any object */
+                o = va_arg(ap, PyObject *);
+                obj_text(o, 0, piece, sizeof(piece));
+                break;
+            case 'R':                      /* repr() */
+            case 'A':                      /* ascii(); this runtime is byte-only,
+                                              so identical to repr here */
+                o = va_arg(ap, PyObject *);
+                obj_text(o, 1, piece, sizeof(piece));
+                break;
+            case 's':
+                snprintf(piece, sizeof(piece), spec, va_arg(ap, const char *));
+                break;
+            case 'p':
+                snprintf(piece, sizeof(piece), spec, va_arg(ap, void *));
+                break;
+            case 'c':
+                snprintf(piece, sizeof(piece), spec, va_arg(ap, int));
+                break;
+            case 'd': case 'i': case 'u': case 'x': case 'X': case 'o':
+                /* the length modifier decides the argument's width, and reading
+                   an `int` for a %ld would misalign the rest of the list */
+                if ((j >= 3) && (spec[j - 2] == 'l' || spec[j - 2] == 'z'))
+                    snprintf(piece, sizeof(piece), spec, va_arg(ap, long));
+                else
+                    snprintf(piece, sizeof(piece), spec, va_arg(ap, int));
+                break;
+            case 'f': case 'g': case 'e': case 'G': case 'E':
+                snprintf(piece, sizeof(piece), spec, va_arg(ap, double));
+                break;
+            default:
+                /* Unknown conversion: emit it verbatim and consume NOTHING,
+                   which is what glibc effectively did. Kept deliberate rather
+                   than guessing an argument width, since guessing wrong
+                   misaligns everything after it. */
+                snprintf(piece, sizeof(piece), "%s", spec);
+                break;
+        }
+        i = i + 1;
+
+        j = 0;
+        while (piece[j] != 0 && out + 1 < cap) { buf[out] = piece[j]; out = out + 1; j = j + 1; }
+    }
+    buf[out] = 0;
+}
+
 PyObject *PyErr_Format(PyObject *exc, const char *format, ...) {
     char buf[512];
     va_list ap;
     va_start(ap, format);
-    vsnprintf(buf, sizeof(buf), format, ap);
+    __pxx_cpyext_vformat(buf, sizeof(buf), format, ap);
     va_end(ap);
     PyErr_SetString(exc, buf);
     return 0;   /* always NULL, as CPython's does */
@@ -1093,7 +1226,7 @@ int PyErr_WarnFormat(PyObject *category, Py_ssize_t stacklevel,
     va_list ap;
     (void)category; (void)stacklevel;
     va_start(ap, format);
-    vsnprintf(buf, sizeof(buf), format, ap);
+    __pxx_cpyext_vformat(buf, sizeof(buf), format, ap);   /* same superset */
     va_end(ap);
     fprintf(stderr, "pxx cpyext warning: %s\n", buf);
     return 0;

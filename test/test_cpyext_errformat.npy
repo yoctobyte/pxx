@@ -1,0 +1,30 @@
+# cpyext: PyErr_Format accepts a printf SUPERSET, and we used to drop half of it.
+#
+# CPython's PyErr_Format / PyUnicode_FromFormat take %U (a PyObject* str),
+# %S (str() of anything), %R (repr()) and %A (ascii()) on top of printf. This
+# runtime delegated to vsnprintf, which knows none of them — it printed them
+# literally AND consumed no argument, so every specifier AFTER one read the
+# wrong va_arg. A Cython module's own "unexpected keyword argument '%U'" came
+# out with the %U still in it.
+# bug-cpyext-pyerr-format-prints-U-and-S-literally
+#
+# Every expected line below is what the SAME PyErr_Format calls print under real
+# CPython 3.12, captured from a gcc-built extension:
+#
+#   gcc -shared -fPIC -I/usr/include/python3.12 -o fmt.so fmt.c
+#
+# The two lines that matter most are `mix=` and `ld=`: they are the misalignment
+# cases. With %U consuming nothing, the %d after it printed a garbage number, and
+# reading an int where a %ld was asked for would shift everything following it.
+import fmt_ext
+
+print(fmt_ext.fmtCase(0))
+print(fmt_ext.fmtCase(1))
+print(fmt_ext.fmtCase(2))
+print(fmt_ext.fmtCase(3))
+print(fmt_ext.fmtCase(4))
+print(fmt_ext.fmtCase(5))
+print(fmt_ext.fmtCase(6))
+print(fmt_ext.fmtCase(7))
+print(fmt_ext.fmtCase(8))
+print(fmt_ext.fmtUnicode())

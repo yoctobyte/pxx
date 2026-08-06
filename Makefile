@@ -1632,6 +1632,17 @@ test-nilpy: $(COMPILER)
 	# cfront. Proves real PEP 489 init (Py_mod_create/Py_mod_exec are EXECUTED),
 	# module-dict function objects rather than a static PyMethodDef table, and
 	# METH_FASTCALL. Both -D flags are load-bearing — see that vendor README.
+	# PyErr_Format / PyUnicode_FromFormat take a printf SUPERSET (%U %S %R %A).
+	# vsnprintf knows none of them and consumed NO argument for them, so anything
+	# after one read the wrong va_arg. Each line is what the same calls print
+	# under real CPython 3.12.
+	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_errformat.npy /tmp/test_cpyext_errformat26
+	# The literal quote and percent characters travel as printf ARGUMENTS, not as
+	# escapes in the format: make expands %% to % before running a recipe, but
+	# testmgr extracts this line and runs it directly, so a %%-escape means two
+	# different things in the two paths. Same family as the absolute-/tmp-path trap
+	# in devdocs/dev/gating-and-waiting.md.
+	test "$$(/tmp/test_cpyext_errformat26)" = "$$(printf 'U=[keyname]\nS=[1234]\nR=[%s]\nA=[%s]\nmix=[keyname][77]\ns=[txt] d=[-5]\nld=[9876543210] zd=[42]\npct=[100%s] c=[Z]\nx=[ff] wide=[    7]\nfmt=[keyname][5]' "'keyname'" "'keyname'" "%")"
 	./$(COMPILER) -DPy_LIMITED_API=0x030c0000 -DCYTHON_COMPRESS_STRINGS=0 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_cython.npy /tmp/test_cpyext_cython26
 	test "$$(/tmp/test_cpyext_cython26)" = "$$(printf '42\n0\n3000000\n1\n720\n3628800\n479001600\n22\n22\n22\n22\n42\nbadkw raised')"
 

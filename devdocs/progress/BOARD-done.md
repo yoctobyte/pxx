@@ -332,6 +332,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-consteval-named-type-cast | A | 50 | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-consteval-precedence | A | 50 | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
+| bug-cpyext-pyerr-format-prints-U-and-S-literally | N | 50 | bug | cpyext PyErr_Format delegates to vsnprintf, which does not know CPython's %U / %S / %R / %A object specifiers — so an extension's own error message reads \"unexpected keyword argument '%U'\", and any specifier AFTER one of them reads a misaligned argument. | — |
 | bug-cross-32bit-int64-to-double-low-word | A | 55 | bug | arm32/i386: Int64/QWord -> Double conversion converts only the LOW word — d := int64(1) shl 40 gives 0, silently | — |
 | bug-cross-32bit-shift-operand-width | A | 60 | bug | arm32/i386/riscv32: shr/shl on a 32-bit operand ran at 64-bit pair width on the sign-extended value — longint($80000000) shr 9 gave -4194304 | — |
 | bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |

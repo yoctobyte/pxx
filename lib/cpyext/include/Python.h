@@ -500,6 +500,9 @@ int PyObject_SetAttr(PyObject *o, PyObject *name, PyObject *v);
 int PyObject_SetAttrString(PyObject *o, const char *name, PyObject *v);
 PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs);
 PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...);
+/* PyErr_Format / PyErr_WarnFormat's shared formatter: printf plus CPython's
+   object specifiers %U %S %R %A. Exposed so both can share one implementation. */
+void __pxx_cpyext_vformat(char *buf, size_t cap, const char *format, va_list ap);
 
 /* unicode / bytes / bytearray */
 Py_ssize_t PyTuple_Size(PyObject *t);
