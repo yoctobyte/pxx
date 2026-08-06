@@ -142,4 +142,4 @@ computed (non-literal) bound. Swept the whole nilpy for/range/comprehension/
 enumerate corpus: zero failures.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit 58cc242da.
