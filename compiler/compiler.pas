@@ -127,7 +127,7 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 
 { ===== Main ===== }
 
-var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j: Integer;
+var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd: Integer;
 begin
 {$ifdef FPC}
   { The exact-decimal core in exdec.inc is lib/rtl code, written for a runtime
@@ -772,6 +772,25 @@ begin
   isF90 := (n >= 5) and (inFile[n] = '0') and (inFile[n-1] = '9') and (inFile[n-2] = 'f') and (inFile[n-3] = '.');
   isAlgol := (n >= 5) and (inFile[n] = 'g') and (inFile[n-1] = 'l') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
   isErl := (n >= 5) and (inFile[n] = 'l') and (inFile[n-1] = 'r') and (inFile[n-2] = 'e') and (inFile[n-3] = '.');
+
+  { The MAIN input must EXIST. LoadFile answers "" for an unopenable path, which
+    is indistinguishable from a genuinely empty file — and an empty NilPy source
+    is a perfectly valid (empty) program, so `pxx typo.py out` reported `ok`,
+    exited 0, and emitted a runnable binary that did nothing. A permission-denied
+    source did the same, swallowing the EACCES entirely. Pascal only looked
+    better by accident: the empty source fell through to the units path and
+    failed with a bewildering complaint about `unit builtinheap`.
+    Checked HERE, at the driver, rather than inside LoadFile: units and includes
+    rely on empty-means-absent to drive their own search chains, and tightening
+    the shared routine would break every one of them
+    (bug-a-missing-source-file-compiles-to-an-empty-program). }
+  probeFd := sysopen(inFile, 0);
+  if probeFd < 0 then
+  begin
+    writeln('pascal26: error: cannot read input file: ', inFile);
+    Halt(1);
+  end;
+  sysclose(probeFd);
 
   LoadFile(inFile, Source);
   DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
