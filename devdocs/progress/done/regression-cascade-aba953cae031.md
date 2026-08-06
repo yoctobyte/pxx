@@ -76,4 +76,4 @@ ticket for the gap existed, instead of asking why previously-green jobs changed.
 **Resolved:** PENDING-COMMIT
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit 6532d45ac.
