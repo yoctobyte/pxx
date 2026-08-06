@@ -41,9 +41,17 @@ function StrChar(c: Char; width: Integer): AnsiString;
   ExchangeAdd / CompareExchange return the value BEFORE it. Every intrinsic
   returns the OLD value, so only the first two adjust.
 
-  ESP is excluded: the atomic intrinsics are not available on that target and
-  the declarations alone would break every ESP build. }
+  Excluded where the BACKEND cannot lower an atomic: riscv32 and xtensa have no
+  IR_ATOMIC arm (x86-64 / i386 / arm32 / aarch64 do). The guard is on the CPU,
+  not on PXX_ESP: gating on the ESP platform alone left plain `--target=riscv32`
+  exposed, and because these bodies live in the builtin unit that EVERY program
+  pulls, the failure was not "InterLocked is missing" but `unsupported node in
+  IR codegen: atomic` on programs that never mention it — 15 riscv32 jobs that
+  had nothing to do with atomics. Lifting the guard is
+  bug-a-riscv32-and-xtensa-have-no-atomic-codegen. }
 {$ifndef PXX_ESP}
+{$ifndef CPURISCV32}
+{$ifndef CPUXTENSA}
 function InterLockedIncrement(var Target: LongInt): LongInt;
 function InterLockedDecrement(var Target: LongInt): LongInt;
 function InterLockedExchange(var Target: LongInt; Source: LongInt): LongInt;
@@ -62,6 +70,8 @@ function InterLockedExchangeAdd64(var Target: Int64; Source: Int64): Int64;
 function InterLockedCompareExchange64(var Target: Int64;
                                       NewValue, Comperand: Int64): Int64;
 {$ENDIF}
+{$endif}
+{$endif}
 {$endif}
 function FloatToStr(v: Double): AnsiString;
 function FloatToExpStr(v: Double): AnsiString;
@@ -757,6 +767,8 @@ begin
 end;
 
 {$ifndef PXX_ESP}
+{$ifndef CPURISCV32}
+{$ifndef CPUXTENSA}
 function InterLockedIncrement(var Target: LongInt): LongInt;
 begin
   Result := LongInt(__pxxatomic_add(@Target, 1)) + 1;
@@ -812,6 +824,8 @@ begin
   Result := __pxxatomic_cas64(@Target, Comperand, NewValue);
 end;
 {$ENDIF}
+{$endif}
+{$endif}
 {$endif}
 
 function StrChar(c: Char; width: Integer): AnsiString;

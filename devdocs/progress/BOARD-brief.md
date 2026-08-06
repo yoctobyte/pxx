@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:7 blocked:7 backlog:201 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1417 rejected:28`
+`working:1 unfinished:7 blocked:7 backlog:200 experimental:20 rainy-day:31 done-followup:3 decided:38 done:1418 rejected:28`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,9 +31,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 181, ranked
+## Ready — top 30 of 180, ranked
 
-- `[p 70] [T]` regression-cascade-aba953cae031
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-args-errors
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-containers
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-cython
@@ -63,5 +62,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
+- `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 
-_151 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_150 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
