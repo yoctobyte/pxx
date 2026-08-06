@@ -59,4 +59,4 @@ Also spot-checked bare and correct: `abs`, `round` (banker's, matching FPC),
 **Resolved:** PENDING-COMMIT
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit d530a5090.
