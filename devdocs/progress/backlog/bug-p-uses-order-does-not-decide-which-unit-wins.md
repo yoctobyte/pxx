@@ -3,6 +3,7 @@ summary: "Two units exporting the same routine: FPC takes the LAST in the uses c
 type: bug
 track: P
 prio: 35
+blocked-by: decide-scope-hiding-vs-flat-overload-set
 ---
 
 # `uses a, b` — pxx picks the first unit's routine, FPC picks the last
@@ -81,3 +82,33 @@ NilPy suite and self-host both stay green. Test material to restore:
 `test_shadow_last_uses_wins.pas` with `shadow_a.pas` / `shadow_b.pas` (removed
 when this half was split out; the program-vs-unit test remains as
 `test/test_shadow_program_over_unit.pas`).
+
+
+## 2026-08-06 — this is one facet of a single rule, not its own problem
+
+Reframed with the user. `uses a, b` taking the first unit is not a separate
+defect from "a program's routine does not shadow a used unit's" — both are the
+same missing rule:
+
+> A declaration **hides** a same-named one from an outer or earlier scope,
+> unless marked `overload`.
+
+pxx behaves as if everything were `overload` — one flat set across scopes, with
+registration order as the tiebreak. Under the hiding rule, the second `uses`
+declares into a later scope, so it hides the first, and this ticket's symptom
+disappears without a uses-order-specific mechanism.
+
+So **do not fix this in isolation.** A bespoke uses-order ranking would be a
+third mechanism sitting next to the two that already exist (name mangling for
+nested routines, current-scope preference for exact matches), and it would be
+invisible to anyone reading either FPC's rule or ours.
+
+Now blocked on [[decide-scope-hiding-vs-flat-overload-set]], which also carries
+the measured reason the one-line "prefer the last chain entry" fix is wrong —
+`FindProc` returns an overload-set representative that the parser reads
+signatures off and NilPy reads return types off, so ranking there breaks the
+self-compile and the NilPy stdlib. Hiding is candidate *removal*, which is a
+different and probably safer change.
+
+The repro and test material in this ticket stay valid and are what the decision
+should be gated against.

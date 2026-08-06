@@ -130,7 +130,7 @@ nothing wins on fit: `5` types as `tyInteger`, the exact-match phase misses
 The real difference is structural — **FPC hides, pxx competes**: an FPC inner
 declaration removes the outer same-named set from consideration entirely absent
 an explicit `overload`. That is a repo-wide resolution semantics change, parked
-as [[decide-inner-declaration-hides-or-competes-with-outer-overloads]] rather
+as [[decide-scope-hiding-vs-flat-overload-set]] rather
 than guessed at.
 
 The ticket's practical motivation — patching an RTL routine locally — now works
