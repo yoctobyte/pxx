@@ -1413,6 +1413,13 @@ test-nilpy: $(COMPILER)
 	# multiply over it returned plausible wrong numbers. .expected is CPython's.
 	./$(COMPILER) test/test_nilpy_nested_comprehension_over_range.npy /tmp/test_nilpy_nestcomp26
 	/tmp/test_nilpy_nestcomp26 | diff -u test/test_nilpy_nested_comprehension_over_range.expected -
+	# `d[k] += 1` where the BASE is a variant (a nested container, or a local
+	# bound from one): the variant subscript route only handled a plain `=`, so
+	# an augmented token fell through to the getter and the store was never
+	# built — silently. The statically-typed base took a different path and was
+	# already correct, which is what hid it. .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_augmented_subscript_variant_base.npy /tmp/test_nilpy_augsubvar26
+	/tmp/test_nilpy_augsubvar26 | diff -u test/test_nilpy_augmented_subscript_variant_base.expected -
 	# repr() and range() as an ITERABLE: both existed in the runtime but were not
 	# reachable from where a program uses them — repr's name was bound to nothing,
 	# and range materialised only inside a literal `list(`. .expected is CPython's.

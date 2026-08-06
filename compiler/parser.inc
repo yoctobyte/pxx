@@ -3836,6 +3836,7 @@ var
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   setTmpSym, setTmpAssign, setInnerComma: Integer;   { chained subscript-assign value }
+  binNode: Integer; augTk2: TTokenKind;   { `v[k] op= x` on a variant base }
   sharedNeedsOvr: Boolean;   { the shared class-attribute slot also has per-instance overrides }
 begin
   prevTok := identTokIdx;
@@ -4818,6 +4819,34 @@ begin
           Next;
           PyParseBoolExpr;
           node := PyMakeVariantSetItem(node, indexNode, CurASTNode);
+          tk := tyUnknown;
+          Result := node;
+          Exit;
+        end;
+        { `v[k] += x` on a VARIANT base. Only tkAssign was handled, so an
+          augmented token fell through to the getter below and the enclosing
+          augmented-assign machinery built a value that was never stored —
+          SILENTLY. `d["a"]["n"] += 1` left n at 0 while the plain
+          `d["a"]["n"] = d["a"]["n"] + 1` worked, and so did `e["n"] += 1` one
+          level up, because a STATICALLY dict-typed base takes the
+          default-indexed-property path instead. Any variant base hits this:
+          a nested container (`grid[0][0] += 1`), or a local bound from one
+          (`row = grid[0]; row[0] += 1`).
+          Desugared to `v[k] = v[k] OP x` like the property path does, and like
+          it, the base and index expressions are evaluated TWICE — the same
+          accepted trade, invisible for the pure index expressions this reaches
+          (bug-nilpy-augmented-assign-through-a-variant-subscript-is-dropped). }
+        augTk2 := PyAugBinTok(CurTok.Kind);
+        if PyExprMode and (augTk2 <> tkEOF) then
+        begin
+          Next;
+          PyParseBoolExpr;
+          binNode := AllocNode(AN_BINOP);
+          ASTIVal[binNode] := Ord(augTk2);
+          ASTLeft[binNode] := PyMakeVariantGetItem(node, indexNode);
+          ASTRight[binNode] := CurASTNode;
+          ASTTk[binNode] := Ord(tyVariant);
+          node := PyMakeVariantSetItem(node, indexNode, binNode);
           tk := tyUnknown;
           Result := node;
           Exit;

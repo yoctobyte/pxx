@@ -1,0 +1,81 @@
+# Augmented assignment to a subscript whose BASE is a variant.
+#
+# feature-nilpy-augmented-subscript-assign made `d[k] += 1` work when the base
+# is STATICALLY a dict or list: that path goes through the default indexed
+# property, which desugars the read-modify-write itself. A VARIANT base takes a
+# different route (pyvar_getitem / pyvar_setitem), and that route only ever
+# handled a plain `=`. An augmented token fell through to the GETTER, and the
+# enclosing machinery built a value that was never stored — silently:
+#
+#   d = {"a": {"n": 0}}
+#   d["a"]["n"] += 1      -> CPython {'a': {'n': 1}}   pxx {'a': {'n': 0}}
+#   d["a"]["n"] = d["a"]["n"] + 1                      worked
+#   e = {"n": 0}; e["n"] += 1                          worked (static base)
+#
+# Any variant base reaches it, not just a nested literal: a container element,
+# or a local bound from one. Found by a record-aggregation program whose
+# per-category counters all came out 0.
+# bug-nilpy-augmented-assign-through-a-variant-subscript-is-dropped
+# Every expectation is CPython's own output.
+
+# nested dict — the headline
+d = {"a": {"n": 0}}
+d["a"]["n"] += 1
+print(d)
+
+# ...and through a LOCAL bound from the container, which is the same variant
+inner = d["a"]
+inner["n"] += 10
+print(d, inner)
+
+# nested list
+grid = [[1, 2], [3, 4]]
+grid[0][0] += 10
+grid[1][1] *= 2
+print(grid)
+row = grid[0]
+row[1] += 100
+print(grid)
+
+# every augmented operator over a variant base
+v = {"a": {"n": 10, "s": "x", "l": [1]}}
+v["a"]["n"] += 5
+v["a"]["n"] -= 2
+v["a"]["n"] *= 3
+v["a"]["n"] //= 2
+v["a"]["n"] %= 7
+print(v["a"]["n"])
+v["a"]["n"] <<= 4
+print(v["a"]["n"])
+v["a"]["s"] += "y"
+print(v["a"]["s"])
+v["a"]["l"] += [2, 3]
+print(v["a"]["l"])
+f = {"q": {"f": 7.0}}
+f["q"]["f"] /= 2
+print(f["q"]["f"])
+
+# the STATIC-base path must stay correct
+e = {"n": 0}
+e["n"] += 1
+xs = [1, 2]
+xs[0] += 5
+print(e, xs)
+
+# plain assignment through a variant base was already right
+d["a"]["n"] = 99
+print(d)
+
+# the aggregation shape this was found by: counters under a category key
+recs = []
+for i in range(30):
+    recs.append({"id": i, "cat": "abc"[i % 3], "val": (i * 13) % 17})
+agg = {}
+for r in recs:
+    c = r["cat"]
+    if c not in agg:
+        agg[c] = {"n": 0, "sum": 0}
+    agg[c]["n"] += 1
+    agg[c]["sum"] += r["val"]
+for c in sorted(agg.keys()):
+    print(c, agg[c]["n"], agg[c]["sum"])
