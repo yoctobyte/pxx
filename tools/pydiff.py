@@ -165,6 +165,225 @@ def bisect(path, argv, pxx):
 # primitive against CPython. Kept small on purpose: a probe that fails should
 # name the bug, not require reading.
 PROBES = [
+    # ---- REAL PROGRAMS ----------------------------------------------------
+    # Added 2026-08-06 after a day of bughunting in which ~40 unit-shaped
+    # probes over arithmetic, strings, lists, dicts, classes, slicing,
+    # closures and exceptions came back almost entirely GREEN — and then a
+    # plain matrix multiply broke immediately.
+    #
+    # Features in isolation work; COMBINATIONS break. Every entry below is a
+    # small program a person would actually write, and three of them are here
+    # because they each caught a silent bug no unit probe had:
+    #
+    #   prog-matrix            -> a nested comprehension over range() ran ONCE
+    #                             and every row was the same list object
+    #   prog-tokenizer-parser  -> a nested def's own local counted as a capture,
+    #                             AND a method call in a `while` condition was
+    #                             evaluated once, so the scanner never stopped
+    #   prog-aggregate         -> `d[k]["n"] += 1` computed and never stored
+    #
+    # When adding here, prefer a program over a feature. Keep it deterministic
+    # (no time, no randomness, and SORT anything set-derived — set order is
+    # unspecified and CPython's own varies per run).
+    #
+    # Use a RAW triple-quoted string (r'''...''') for the source. A plain one
+    # eats the program's own backslash escapes: prog-json's `"{\n"` arrived as a
+    # literal newline and CPython refused the file with an unterminated string
+    # literal, which reads like a pxx bug and is not one.
+    ("prog-matrix", r'''
+def mk(r, c, f):
+    return [[f(i,j) for j in range(c)] for i in range(r)]
+A = mk(3,3, lambda i,j: i*3+j)
+B = mk(3,3, lambda i,j: 1 if i==j else 0)
+def mul(X, Y):
+    n = len(X); m = len(Y[0]); k = len(Y)
+    out = []
+    for i in range(n):
+        row = []
+        for j in range(m):
+            s = 0
+            for t in range(k):
+                s += X[i][t]*Y[t][j]
+            row.append(s)
+        out.append(row)
+    return out
+print(A)
+print(mul(A,B))
+print(mul(A,A))
+def transpose(X):
+    return [[X[i][j] for i in range(len(X))] for j in range(len(X[0]))]
+print(transpose(A))
+tot = 0
+for row in A:
+    for v in row:
+        tot += v
+print("sum", tot)
+'''),
+    ("prog-tokenizer-parser", r'''
+def tokenize(s):
+    toks = []
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c == " ":
+            i += 1
+            continue
+        if c in "+-*/()":
+            toks.append(c); i += 1; continue
+        if c.isdigit():
+            j = i
+            while j < len(s) and s[j].isdigit(): j += 1
+            toks.append(s[i:j]); i = j; continue
+        raise ValueError("bad char " + c)
+    return toks
+print(tokenize("12 + 34*(5-6)"))
+def evaluate(toks):
+    pos = [0]
+    def peek():
+        return toks[pos[0]] if pos[0] < len(toks) else None
+    def take():
+        t = toks[pos[0]]; pos[0] += 1; return t
+    def factor():
+        t = take()
+        if t == "(":
+            v = expr(); take(); return v
+        return int(t)
+    def term():
+        v = factor()
+        while peek() in ("*","/"):
+            op = take()
+            r = factor()
+            v = v * r if op == "*" else v // r
+        return v
+    def expr():
+        v = term()
+        while peek() in ("+","-"):
+            op = take()
+            r = term()
+            v = v + r if op == "+" else v - r
+        return v
+    return expr()
+print(evaluate(tokenize("12 + 34*(5-6)")))
+print(evaluate(tokenize("2*3+4*5")))
+print(evaluate(tokenize("(1+2)*(3+4)")))
+'''),
+    ("prog-aggregate", r'''
+def process(recs):
+    out = {}
+    for r in recs:
+        cat = r["cat"]
+        if cat not in out:
+            out[cat] = {"n": 0, "sum": 0, "items": []}
+        out[cat]["n"] += 1
+        out[cat]["sum"] += r["val"]
+        out[cat]["items"].append(r["id"])
+    return out
+recs = []
+for i in range(60):
+    recs.append({"id": i, "cat": "abc"[i % 3], "val": (i * 13) % 17})
+res = process(recs)
+for c in sorted(res.keys()):
+    e = res[c]
+    print(c, e["n"], e["sum"], e["items"][:4], e["items"][-2:])
+tot = 0
+for c in res:
+    tot += res[c]["sum"]
+print("tot", tot)
+'''),
+    ("prog-graph", r'''
+edges = {"a":["b","c"], "b":["d"], "c":["d","e"], "d":["e"], "e":[]}
+def bfs(start):
+    seen = [start]
+    queue = [start]
+    order = []
+    while len(queue) > 0:
+        n = queue[0]
+        queue = queue[1:]
+        order.append(n)
+        for m in edges[n]:
+            if m not in seen:
+                seen.append(m)
+                queue.append(m)
+    return order
+print(bfs("a"))
+def dfs(n, seen):
+    if n in seen: return []
+    seen.append(n)
+    out = [n]
+    for m in edges[n]:
+        out.extend(dfs(m, seen))
+    return out
+print(dfs("a", []))
+def toposort():
+    indeg = {}
+    for k in edges: indeg[k] = 0
+    for k in edges:
+        for m in edges[k]:
+            indeg[m] = indeg[m] + 1
+    ready = sorted([k for k in indeg if indeg[k] == 0])
+    out = []
+    while len(ready) > 0:
+        n = ready[0]; ready = ready[1:]
+        out.append(n)
+        for m in edges[n]:
+            indeg[m] -= 1
+            if indeg[m] == 0:
+                ready.append(m)
+                ready = sorted(ready)
+    return out
+print(toposort())
+'''),
+    ("prog-lru", r'''
+class LRU:
+    def __init__(self, cap):
+        self.cap = cap
+        self.keys = []
+        self.vals = {}
+    def get(self, k):
+        if k not in self.vals: return -1
+        self.keys.remove(k)
+        self.keys.append(k)
+        return self.vals[k]
+    def put(self, k, v):
+        if k in self.vals:
+            self.keys.remove(k)
+        elif len(self.keys) >= self.cap:
+            old = self.keys[0]
+            self.keys = self.keys[1:]
+            del self.vals[old]
+        self.keys.append(k)
+        self.vals[k] = v
+c = LRU(2)
+c.put("a",1); c.put("b",2)
+print(c.get("a"))
+c.put("c",3)
+print(c.get("b"), c.get("a"), c.get("c"))
+print(sorted(c.vals.items()), c.keys)
+'''),
+    ("prog-json", r'''
+def dumps(v, ind=0):
+    sp = " " * ind
+    if isinstance(v, dict):
+        if len(v) == 0: return "{}"
+        parts = []
+        for k in sorted(v.keys()):
+            parts.append(sp + "  " + '"' + str(k) + '": ' + dumps(v[k], ind+2))
+        return "{\n" + ",\n".join(parts) + "\n" + sp + "}"
+    if isinstance(v, list):
+        if len(v) == 0: return "[]"
+        parts = []
+        for e in v:
+            parts.append(sp + "  " + dumps(e, ind+2))
+        return "[\n" + ",\n".join(parts) + "\n" + sp + "]"
+    if isinstance(v, str): return '"' + v + '"'
+    if isinstance(v, bool): return "true" if v else "false"
+    if v is None: return "null"
+    return str(v)
+doc = {"name":"x","tags":["a","b"],"meta":{"n":3,"ok":True,"none":None},"empty":[],"eo":{}}
+print(dumps(doc))
+'''),
+
+    # ---- UNIT SHAPES ------------------------------------------------------
     ("not-on-object", '''
 import re
 m = re.match(r'^(A)$', "A")

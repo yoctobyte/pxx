@@ -125,3 +125,49 @@ and `[1, 2, 3, 4, 5]` here. Filed as
 `bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance`. The split
 between these two halves — lax mutation is fine, a wrong type answer is not — is
 the cleanest worked example of the rule on this page.
+
+---
+
+## Set ITERATION ORDER is insertion order — and this is NOT a divergence
+
+*Measured 2026-08-06, after a set started printing with braces and its order
+became visible.*
+
+pxx iterates and prints a set in **insertion** order, so `{3, 1, 2}` prints
+`{3, 1, 2}` where CPython prints `{1, 2, 3}`. That looks like a divergence and
+is not one, for a reason worth writing down rather than re-deriving:
+
+**The language does not specify an order.** A `set` is defined as an *unordered*
+collection of distinct hashable objects; iteration order is an implementation
+detail of the hash table, not part of the contract.
+
+**And CPython is not even self-consistent.** String hashing is randomised per
+process by default (PEP 456, on since 3.3), so CPython's own set order changes
+between runs of the same program:
+
+```
+$ PYTHONHASHSEED=0 python3 -c 'print({"alpha","beta","gamma","delta"})'
+{'alpha', 'delta', 'beta', 'gamma'}
+$ PYTHONHASHSEED=1 python3 -c 'print({"alpha","beta","gamma","delta"})'
+{'beta', 'delta', 'gamma', 'alpha'}
+$ PYTHONHASHSEED=2 python3 -c 'print({"alpha","beta","gamma","delta"})'
+{'delta', 'gamma', 'alpha', 'beta'}
+```
+
+Small integers only look stable because CPython's `hash(n)` **is** `n` — an
+artifact of the hash function, not a promise.
+
+So a working CPython program **cannot** depend on set order; one that did would
+already be broken under CPython. Under the upward-compatibility rule at the top
+of this page, insertion order is therefore fully conforming, and pxx's answer is
+if anything the more useful one (deterministic, reproducible across runs).
+
+**Do not "fix" this to match CPython's output.** Chasing it would mean
+reproducing CPython's hash function and its per-process randomisation — copying
+an implementation detail that CPython itself does not guarantee, to make a
+diff-based comparison look tidier. Any test that pins a set's order must sort it
+(`sorted(s)`), exactly as it must under CPython.
+
+The genuinely open set questions — whether `[1] - [2]` should raise — remain in
+`../progress/backlog/decide-nilpy-set-as-a-distinct-type-or-a-list.md`. Ordering
+is not among them.

@@ -188,7 +188,14 @@ prints `{1, 2, 3}`. pxx preserves insertion order; CPython's set order follows
 hashing. Before this change the same set printed `[3, 1, 2]` — wrong brackets
 *and* the same order — so this is strictly closer, not a new defect.
 
-Matching CPython's order needs real hash-set semantics, which is exactly
-[[decide-nilpy-set-as-a-distinct-type-or-a-list]]'s option A and stays with that
-decision. Noted here so the next person to see `{3, 1, 2}` knows it is known and
-where it belongs.
+**And it should NOT be chased** — checked the same day, after the question was
+raised: the language defines a set as *unordered* and does not specify an
+iteration order, and CPython's own order is randomised per process for strings
+(PEP 456, default since 3.3), so it differs between runs of the same program.
+Small ints only look stable because CPython's `hash(n)` is `n`. A working
+CPython program therefore cannot depend on set order, which makes insertion
+order fully conforming under the upward-compatibility rule.
+
+Written up as an explicit NON-divergence in
+`devdocs/dev/nilpy-semantics-divergences.md`, with the measurement, so the next
+person to see `{3, 1, 2}` does not "fix" it.
