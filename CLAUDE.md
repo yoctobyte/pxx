@@ -202,6 +202,16 @@ frontend)"). **At session start, infer your track from the request:**
   self-host byte-identical + cross. Land only green. NOTE the two-hats split: the
   *language* is N; a **NilPy IDE or app built with it is an E app** (Track B
   file-ownership), never N — same P-vs-A distinction as everywhere.
+  **What counts as an N bug — NilPy is UPWARD COMPATIBLE with CPython:** *if code
+  works on CPython, it must work on NilPy.* One direction only. NilPy accepting
+  something CPython **rejects** (a mutated tuple, a stricter-in-CPython form) is a
+  **language feature, not a defect** — the same call the Pascal dialect makes for
+  restrictions that were historic rather than necessary. So before filing "we are
+  laxer than CPython", ask whether a program CPython *accepts and runs* can
+  observe it; if not, it belongs in `devdocs/dev/nilpy-semantics-divergences.md`,
+  not in a bug ticket. (Worked example on that page: a NilPy tuple being mutable
+  is NOT a bug; `isinstance(t, list)` answering True IS, because ordinary
+  working code branches on it.)
 - **Track U — User (the decision lane).** Where human judgment lives. NOT a
   file-lane: owns no source, has no gate, builds nothing — it is the **escalation
   target**. The rule for every agent, and *especially* an autonomous/scheduled

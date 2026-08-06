@@ -52,21 +52,41 @@ make a later accidental use fail loudly. NilPy grants neither, and the second
 one inverts: code that used `del` as a guard rail gets the OPPOSITE of what it
 asked for, with no sign.
 
-## Two ways to land it
+## It survives the upward-compatibility rule — checked
 
-1. **Actually unbind.** Correct, and it wants a notion of "bound" the frontend
-   does not have today (a NilPy local is a frame slot, always present), so it
-   likely means a sentinel plus a check on read — a real cost on every read of
-   any name that is ever `del`'d.
-2. **Refuse it.** `del <name>` becomes a diagnostic ("del of a plain name is not
-   supported; del of a list element or dict key is"). Honest, cheap, and turns
-   a silent wrong answer into a compile error the author can act on.
+> If code works on CPython, it must work on NilPy. Accepting what CPython
+> rejects is a feature, not a defect. (User, 2026-08-06 — see
+> `devdocs/dev/nilpy-semantics-divergences.md`.)
 
-Recommend **2** unless someone has a corpus that needs 1 — this repo's own rule
-is that a clear refusal beats a plausible wrong answer, and option 1's cost
-lands on every read, not just on the `del`.
-Escalate to Track U if that reads as a language-surface call rather than an
-implementation one.
+Most "we are laxer than CPython" findings are NOT bugs under that rule, so this
+one was re-checked against it rather than assumed. It survives, because a
+program CPython **accepts and runs to completion** can observe the difference:
+
+```python
+x = 5
+del x
+try:
+    print("read:", x)
+except NameError:
+    print("gone")
+```
+
+CPython prints `gone`; pxx prints `read: 5`. Nothing is rejected on either side —
+this is a working program giving two answers, which is the definition of the
+bug.
+
+## How to land it
+
+**Actually unbind.** It wants a notion of "bound" the frontend does not have
+today (a NilPy local is a frame slot, always present), so it likely means a
+sentinel plus a check on read — a real cost on every read of any name that is
+ever `del`'d, which is why this sits at prio 30 rather than higher.
+
+An earlier draft of this ticket recommended *refusing* `del <name>` outright, on
+the general principle that a clear refusal beats a plausible wrong answer. **That
+is wrong here** and is struck: `del x` is valid CPython, and refusing it would
+break upward compatibility — the one direction that is not negotiable. Refusal
+is the right answer for a form CPython also rejects, not for one it accepts.
 
 ## Gate
 

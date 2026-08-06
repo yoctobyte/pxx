@@ -83,3 +83,43 @@ dict; that would introduce a divergence where there is none.
 
 `test/test_nilpy_iterate_live_list.npy` pins the list half;
 `test/test_nilpy_dict_mutation_during_iteration.npy` pins the dict half.
+
+---
+
+## A tuple is mutable
+
+*Decided 2026-08-06 (Rene), while triaging what was almost filed as a bug.*
+
+A NilPy tuple is built as a `TPyList` and nothing marks it read-only, so every
+mutating operation CPython refuses on a tuple succeeds here:
+
+| expression | CPython | pxx |
+| --- | --- | --- |
+| `t[0] = 9` | `TypeError` | succeeds |
+| `t.append(4)` | `AttributeError` | succeeds |
+| `del t[0]` | `TypeError` | succeeds |
+
+Everything else about a tuple is already CPython-exact: `type(t).__name__`,
+`isinstance(t, tuple)`, indexing, slicing, iteration, `len`, `==`, `+`,
+unpacking, and use as a dict key.
+
+**This is not a bug**, and the reasoning generalises past tuples:
+
+> If code works on CPython, it must work on NilPy. NilPy is *upward compatible*
+> with the reference implementation. Doing something you shouldn't do, and
+> having it still work under NilPy, is a language feature — not a defect.
+>
+> — Rene, 2026-08-06
+
+No working CPython program mutates a tuple, so no working CPython program can
+observe this. Enforcing immutability would reject nothing anyone legitimately
+writes and would put a check on every store. The same call was made in the
+Pascal dialect for restrictions that were historic rather than necessary — see
+`../progress/backlog/meta-dialect-extensions-and-fpc-strict.md`, which is the
+Pascal-side charter for exactly this trade.
+
+**The half that IS a bug** is `isinstance(t, list)` answering True, because a
+program CPython accepts *can* observe it — `flatten([[1,2], (3,4), 5])` returns
+`[1, 2, (3, 4), 5]` under CPython and `[1, 2, 3, 4, 5]` here. Filed as
+`bug-nilpy-isinstance-of-a-tuple-against-list-is-true`. The split between these
+two halves is the cleanest worked example of the rule on this page.
