@@ -76,4 +76,4 @@ supported specifier, including `%U` followed by `%d` (the misalignment case),
 diffed against the same calls under CPython.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit fdc714609.
