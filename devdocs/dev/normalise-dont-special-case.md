@@ -64,7 +64,8 @@ test — correct, and needlessly so. Normalising them (bind once above the loop,
 reference the variable inside) recovers that **and** keeps one path, which is
 the point: the invariant case becomes a *variable*, so downstream stops having
 to ask. Filed as
-`feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition`.
+`feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition`, under
+the umbrella `meta-constant-normalisation`.
 
 ## Live double-cases worth collapsing
 
@@ -109,6 +110,18 @@ close the ticket.** Concretely, on 2026-08-06 one `grep AllocVar(..., tyInteger)
 after fixing a 32-bit loop counter found a second live instance of the identical
 bug in another file. That grep costs a minute and is the single highest-yield
 habit in this whole note.
+
+## The work list
+
+`meta-constant-normalisation` (in `../progress/backlog/`) is the standing index
+for collapsing these. Its framing is worth repeating here because it is the
+reason this note exists at all, and it is **not** about speed or memory:
+
+> When you are about to write "if this operand is a literal, do X, else do Y" —
+> don't. Bind the literal to a variable and write only Y.
+
+Each constant expression gets its own uniquely-named variable, bound once and
+only read. The gain is that a future fix is single work instead of double.
 
 See also: `differential-probes.md` (the oracles that make a silent sibling
 visible at all) and `debugging-playbook.md` (measure, do not reason).

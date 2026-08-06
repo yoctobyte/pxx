@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (213)
+## backlog (215)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -47,6 +47,7 @@ _none_
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
+| bug-nilpy-a-tuple-is-mutable-and-isinstance-list-is-true | N | 50 | bug | NilPy: a tuple is a TPyList wearing a tuple name — `t[0] = 9`, `t.append(4)` and `del t[0]` all succeed where CPython raises, and `isinstance(t, list)` is True. Read semantics are all correct; only the immutability contract is missing. | — |
 | bug-nilpy-augmented-subscript-evaluates-its-index-twice | N | 30 | bug | NilPy: `d[key()] += 1` calls key() TWICE — the augmented-subscript desugar re-evaluates the base and index. CPython evaluates each once. The stored value is correct; only a side-effecting index is observable. | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -230,6 +231,7 @@ _none_
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 10 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
 | idea-public-status-page | D | 30 | idea | Publish a live compatibility/corpus status report on the website — the static docs/reference/status.md page exists; wire it to the already-generated tstate reports (twatch_web conformance.html/bench.html/dashboard.html) so public numbers stay current instead of hand-maintained | — |
+| meta-constant-normalisation | A | 45 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 40 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
@@ -466,6 +468,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
+- [p 50] [N] bug-nilpy-a-tuple-is-mutable-and-isinstance-list-is-true
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-b-textreadchar-with-pushback
@@ -512,6 +515,7 @@ _none_
 - [p 45] [T] feature-t-uforth-benchmark-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
+- [p 45] [A] meta-constant-normalisation
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [B] task-b-revert-pxxcio-clock-int64-cast-workaround
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
