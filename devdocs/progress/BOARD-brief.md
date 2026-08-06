@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:7 backlog:213 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1432 rejected:29`
+`unfinished:7 blocked:7 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1442 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,24 +31,15 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 193, ranked
+## Ready — top 30 of 184, ranked
 
-- `[p 70] [T]` regression-test-nilpy-test-cpyext-args-errors
-- `[p 70] [T]` regression-test-nilpy-test-cpyext-containers
-- `[p 70] [T]` regression-test-nilpy-test-cpyext-cython
-- `[p 70] [T]` regression-test-nilpy-test-cpyext-hello
-- `[p 70] [T]` regression-test-nilpy-test-cpyext-markupsafe
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-augmented-assign-class-dunder
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-dotted-package-import
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-list-mutators-return-none
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-pyexpr-semantics
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-qualifier-vs-cproc
 - `[p 65] [P]` bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
 - `[p 65] [N]` bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
+- `[p 60] [T]` bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue
 - `[p 60] [T]` bug-t-gate-sh-fixedpoint-does-not-iterate
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle
@@ -63,5 +54,14 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
+- `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
+- `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
+- `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
+- `[p 55] [N]` bug-nilpy-for-range-counter-survives-with-the-wrong-value
+- `[p 55] [N]` bug-nilpy-int-of-a-long-decimal-string-narrows
+- `[p 55] [N]` bug-nilpy-two-name-for-over-a-variant-assumes-a-dict
+- `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
+- `[p 55] [T]` bug-t-empty-range-regression-cannot-be-bisected
 
-_163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_154 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (213)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -77,6 +77,7 @@ _none_
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-p-copy-single-argument-form-missing-for-dynamic-arrays | P | 55→65 | bug | Copy(a) on a dynamic array — FPC's whole-array shorthand — does not parse; pxx demands Copy(a, 0, Length(a)). It is the escape hatch users need once assignment aliases, so it blocks the dynamic-array semantics change | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
+| bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-empty-range-regression-cannot-be-bisected | T | 55 | bug | When a run's parent_tested IS the tested sha, the regression's range is empty and idle bisect can never narrow it — so those tickets sit until a human bisects by hand | — |
 | bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition | T | 55 | bug | tools/gate.sh's fixedpoint seeds from PINNED and demands A==B==C, so it goes RED for every agent after any new builtin lands and stays red until re-pin — indistinguishable from the agent's own breakage | — |
@@ -236,16 +237,6 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-cpyext-containers | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-cpyext-cython | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-cpyext-hello | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_hello.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-cpyext-markupsafe | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_markupsafe.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_augmented_assign_class_dunder.npy red at 9294bce2c800 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-dotted-package-import | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-list-mutators-return-none | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_list_mutators_return_none.npy red at 9294bce2c800 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-pyexpr-semantics | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pyexpr_semantics.npy red at 9294bce2c800 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -370,9 +361,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1432)
+## done (1442)
 
-1432 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1442 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -410,22 +401,13 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-nilpy-test-cpyext-args-errors
-- [p 70] [T] regression-test-nilpy-test-cpyext-containers
-- [p 70] [T] regression-test-nilpy-test-cpyext-cython
-- [p 70] [T] regression-test-nilpy-test-cpyext-hello
-- [p 70] [T] regression-test-nilpy-test-cpyext-markupsafe
-- [p 70] [T] regression-test-nilpy-test-nilpy-augmented-assign-class-dunder
-- [p 70] [T] regression-test-nilpy-test-nilpy-dotted-package-import
-- [p 70] [T] regression-test-nilpy-test-nilpy-list-mutators-return-none
-- [p 70] [T] regression-test-nilpy-test-nilpy-pyexpr-semantics
-- [p 70] [T] regression-test-nilpy-test-nilpy-qualifier-vs-cproc
 - [p 65] [P] bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
 - [p 65] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
+- [p 60] [T] bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] feature-a-abi-oracle

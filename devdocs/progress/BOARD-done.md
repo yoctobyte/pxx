@@ -1403,11 +1403,21 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-i386-test-timer | T | 70 | regression | regression: test-i386#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-lua-00 | T | 70 | regression | regression: test-lua#00 red at 074e902b62ef (auto-filed by twatch) | — |
 | regression-test-lua-cross-runner | T | 70 | regression | regression: test-lua-cross#src:test/lua/runner.c red at 940b261f8678 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-containers | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-cython | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-hello | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_hello.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-markupsafe | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_markupsafe.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_augmented_assign_class_dunder.npy red at 9294bce2c800 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-bytes-decode | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bytes_decode.npy red at 74a925112afc (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-class-return | N | 70 | regression | a def whose body is a FORWARD call loses its annotated class result, so attribute access on the call no longer parses | — |
+| regression-test-nilpy-test-nilpy-dotted-package-import | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-list-mutators-return-none | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_list_mutators_return_none.npy red at 9294bce2c800 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-print-arg-eval-order | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_print_arg_eval_order.npy@1 red at 9df2717684a3 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-pyexpr-semantics | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pyexpr_semantics.npy red at 9294bce2c800 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
 | regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |
