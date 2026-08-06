@@ -9,7 +9,7 @@ blocked-by: bug-p-copy-single-argument-form-missing-for-dynamic-arrays
 # x86-64: dynamic-array assignment copies instead of aliasing
 
 - **Type:** bug — Track A (x86-64 codegen / dynamic-array reference semantics)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track A, cross-checking the fix for
   `bug-a-arm32-dynamic-array-assignment-has-no-store-arm` against the other
@@ -113,3 +113,6 @@ somewhere — `lib/rtl` + `compiler/builtin` have 63 dynamic-array variables and
 an upper bound of 79 candidate assignments, most of which are name collisions
 and need per-scope resolution. Also check by-value dynamic-array parameters and
 dynamic-array function results, which the scan does not cover.
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.

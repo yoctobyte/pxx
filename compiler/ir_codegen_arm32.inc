@@ -1681,19 +1681,20 @@ begin
 
     IR_DYNUNIQUE:
       begin
-        { Nested dyn-array copy-on-write. IRA = slot-address node. Read: load the
-          level's data pointer; write: clone-if-shared via
-          PXXDynArrayUnique(slotAddr, desc), returning the data pointer in r0. }
+        { Load this level's data pointer. IRA = slot-address node, so one deref,
+          in read AND write mode alike — see the IR_DYNUNIQUE note in
+          ir_codegen.inc for why the nested copy-on-write is gone (dynamic arrays
+          are FPC reference types at every depth,
+          bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing).
+
+          arm32 mattered here even though that ticket is about x86-64: the
+          ELEMENT-write COW lived only in the x86-64 backend, so the flat case
+          `b := a; b[0] := 77` was already right on every cross target — but this
+          NESTED clone is per-backend, and arm32 still detached `b[0][0] := 77`
+          from `a[0][0]` after x86-64 was fixed. Measured, not assumed: i386 and
+          aarch64 came out correct and arm32 did not. }
         IREmitNodeArm32(IRA[node]);    { r0 = slot addr }
-        if InLValueWrite then
-        begin
-          EmitLoadDataRefArm32(1, GetOrAllocDynUniqueDesc(node)); { r1 = desc }
-          procIdx := FindProc('PXXDynArrayUnique');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
-          EmitCallProc(procIdx);            { r0 = unique data ptr }
-        end
-        else
-          EmitI32($E5900000);          { ldr r0, [r0] }
+        EmitI32($E5900000);            { ldr r0, [r0] = data pointer }
       end;
 
     IR_BINOP:

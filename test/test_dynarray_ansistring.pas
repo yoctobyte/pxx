@@ -33,10 +33,15 @@ begin
   Check(a[0] = 'one');
   Check(a[2] = 'three');
 
-  { Indexed writes clone shared array storage and preserve element refs. }
+  { Assignment ALIASES, managed element type included: `b := a` copies the
+    handle, so writing b[0] writes the one shared array and the element refs are
+    retained/released in place. This asserted the copy-on-write answer
+    (`a[0] = 'one'`) until 2026-08-06 — x86-64's alone, now gone; an FPC build of
+    the same sequence prints 'ONE' through both names
+    (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing). }
   b := a;
   b[0] := 'ONE';
-  Check(a[0] = 'one');
+  Check(a[0] = 'ONE');
   Check(b[0] = 'ONE');
   Check(b[1] = 'two');
 

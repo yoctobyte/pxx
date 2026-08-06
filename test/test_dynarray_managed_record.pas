@@ -45,11 +45,16 @@ begin
   Check(a[0].LabelText = 'zero');
   Check(a[0].Value = 10);
 
+  { Aliased, and the element being a RECORD with managed fields changes nothing:
+    the array data is shared, so writing b[0]'s fields writes a[0]'s. Asserted
+    the copy-on-write answer ('one' / 'zero') until 2026-08-06; measured against
+    an FPC build of this exact record shape, which prints 'changed' through both
+    (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing). }
   b := a;
   b[0].Inner.Text := 'changed';
   b[0].LabelText := 'changed-label';
-  Check(a[0].Inner.Text = 'one');
-  Check(a[0].LabelText = 'zero');
+  Check(a[0].Inner.Text = 'changed');
+  Check(a[0].LabelText = 'changed-label');
   Check(b[0].Inner.Text = 'changed');
   Check(b[0].LabelText = 'changed-label');
 

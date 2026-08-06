@@ -2670,20 +2670,14 @@ begin
 
     IR_DYNUNIQUE:
       begin
-        { Nested dyn-array copy-on-write. IRA = slot-address node. Read: load
-          the level's data pointer; write: clone-if-shared via
-          PXXDynArrayUnique(slotAddr, desc), returning the data pointer in a0.
+        { Load this level's data pointer. IRA = slot-address node, so one deref,
+          in read AND write mode alike — the nested copy-on-write is gone because
+          a dynamic array is an FPC reference type at every depth. Full note in
+          ir_codegen.inc's IR_DYNUNIQUE
+          (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing).
           Mirrors arm32; was an "unsupported node" error on riscv32. }
         IREmitNodeRISCV32(IRA[node]);          { a0 = slot addr }
-        if InLValueWrite then
-        begin
-          EmitLoadDataRefRISCV32(reg_a1, GetOrAllocDynUniqueDesc(node)); { a1 = desc }
-          procIdx := FindProc('PXXDynArrayUnique');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
-          EmitCallProc(procIdx);               { a0 = unique data ptr }
-        end
-        else
-          rv32_lw(reg_a0, reg_a0, 0);
+        rv32_lw(reg_a0, reg_a0, 0);            { a0 = data pointer }
       end;
 
     IR_COPY_REC_MANAGED:

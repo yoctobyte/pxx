@@ -38,14 +38,21 @@ begin
   Chk(7, (Low(a) = 0) and (High(a) = 3));
 end;
 
-{ ---- deep-copy semantics on assignment (PXX deep-copies) ---- }
+{ ---- REFERENCE semantics on assignment: `b := a` aliases (FPC/Delphi) ---- }
 procedure CopySemantics;
 var a, b: array of Integer;
 begin
   SetLength(a, 3); a[0] := 1; a[1] := 2; a[2] := 3;
-  b := a;                               { PXX: deep copy }
+  b := a;                               { one array, two names }
   b[0] := 99;
-  Chk(8, (a[0] = 1) and (b[0] = 99));   { a unchanged => deep copy }
+  { This asserted the OPPOSITE until 2026-08-06 — `a[0] = 1`, labelled "PXX
+    deep-copies". That was x86-64's copy-on-write, which no other target had and
+    FPC does not have; an FPC build of this exact case prints a[0]=99. The
+    direction was settled in favour of FPC by
+    decide-dynamic-array-value-vs-reference-semantics and the COW removed by
+    bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing. `Copy(a)` is now
+    how you ask for a duplicate (checks 21-22 below). }
+  Chk(8, (a[0] = 99) and (b[0] = 99));  { write through B is visible through A }
   Chk(9, (Length(b) = 3) and (b[1] = 2));
 end;
 
@@ -199,14 +206,18 @@ begin
   Chk(22, b[0] = 2);
 end;
 
-{ ---- record-by-value copy deep-copies its dynarray field ---- }
+{ ---- record-by-value copy SHARES its dynarray field (the handle is copied) ---- }
 procedure RecCopy;
 var x, y: TRec;
 begin
   SetLength(x.nums, 3); x.nums[0] := 1; x.nums[1] := 2; x.nums[2] := 3;
-  y := x;                               { PXX deep-copies the dynarray field }
+  y := x;                               { copies the record's bytes, so the
+                                          dynarray HANDLE — not the elements }
   y.nums[0] := 99;
-  Chk(23, (x.nums[0] = 1) and (y.nums[0] = 99));
+  { Also flipped on 2026-08-06, and measured against FPC rather than deduced from
+    the assignment rule: a record copy duplicates the field's handle and retains
+    it, so both records name one array and FPC prints x.nums[0]=99. Same ticket. }
+  Chk(23, (x.nums[0] = 99) and (y.nums[0] = 99));
 end;
 
 { ---- element passed as a var actual ---- }

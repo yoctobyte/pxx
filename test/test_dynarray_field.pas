@@ -87,15 +87,24 @@ begin
   Check(sl.Get(0) = 'alpha');
   Check(sl.Get(2) = 'gamma');
 
-  { Record value copy shares the dynarray field, copy-on-write keeps them
-    independent on mutation. }
+  { Record value copy SHARES the dynarray field: the record's bytes are copied,
+    which duplicates the field's HANDLE, not its elements — so both records name
+    one array. That is FPC/Delphi, measured against an FPC build of this exact
+    shape rather than deduced.
+
+    This asserted the opposite ("copy-on-write keeps them independent on
+    mutation") until 2026-08-06. The nested/element copy-on-write was x86-64's
+    alone and is gone; see
+    bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing and
+    decide-dynamic-array-value-vs-reference-semantics. `Copy` is the way to ask
+    for an independent array. }
   SetLength(a.items, 3);
   a.items[0] := 10; a.items[1] := 20; a.items[2] := 30;
   b := a;
   Check(b.items[1] = 20);
   Check(Length(b.items) = 3);
   b.items[1] := 99;
-  Check(a.items[1] = 20);     { original untouched }
+  Check(a.items[1] = 99);     { shared: the write is visible through `a` too }
   Check(b.items[1] = 99);
 
   { Finalization: 200k scope exits of a record-local dynarray field must not

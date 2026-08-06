@@ -1311,19 +1311,13 @@ begin
 
     IR_DYNUNIQUE:
       begin
-        { Nested dyn-array copy-on-write. IRA = slot-address node. Read: load the
-          level's data pointer; write: clone-if-shared via
-          PXXDynArrayUnique(slotAddr, desc), returning the data pointer in x0. }
+        { Load this level's data pointer. IRA = slot-address node, so one deref,
+          in read AND write mode alike — the nested copy-on-write is gone because
+          a dynamic array is an FPC reference type at every depth. Full note in
+          ir_codegen.inc's IR_DYNUNIQUE
+          (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing). }
         IREmitNodeAarch64(IRA[node]);     { x0 = slot addr }
-        if InLValueWrite then
-        begin
-          EmitLoadDataRefA64(1, GetOrAllocDynUniqueDesc(node)); { x1 = desc }
-          procIdx := FindProc('PXXDynArrayUnique');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
-          EmitCallProc(procIdx);              { x0 = unique data ptr }
-        end
-        else
-          EmitI32($F9400000);            { ldr x0, [x0] }
+        EmitI32($F9400000);               { ldr x0, [x0] = data pointer }
       end;
 
     IR_FRAME:

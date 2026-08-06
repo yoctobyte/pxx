@@ -3063,43 +3063,30 @@ begin
 
     IR_DYNUNIQUE:
       begin
-        { Nested-array copy-on-write. IRA gives the address of the slot holding
-          this level's array handle. On a read, just load the data pointer; on a
-          write (InLValueWrite, set across the whole LHS address chain), clone
-          the level if it is shared, publishing the unique handle back into the
-          slot, so a write through one alias never mutates the other. Recursion
-          up the chain happens naturally: IRA is itself an IR_DYNUNIQUE / element
-          address that was emitted under the same InLValueWrite. }
+        { Load this level's array data pointer. IRA gives the address of the slot
+          holding the handle, so the node is one deref, in read AND write mode
+          alike. Recursion up the chain happens naturally: IRA is itself an
+          IR_DYNUNIQUE / element address.
+
+          The name is now historical. This node used to implement NESTED
+          copy-on-write: on a write it cloned the level when shared and published
+          the unique handle back into the slot, "so a write through one alias
+          never mutates another at any depth". That invariant was the deliberate
+          x86-64 design, and it is the opposite of FPC/Delphi, where a dynamic
+          array is a REFERENCE type all the way down — `b := a; b[0][0] := 77`
+          leaves `a[0][0] = 77`. decide-dynamic-array-value-vs-reference-semantics
+          settled on matching FPC, so the clone is gone at every depth rather
+          than made conditional
+          (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing).
+
+          SetLength still detaches, matching FPC: it goes through IR_SETLEN_DYN,
+          which always allocates a fresh block and never consulted the refcount.
+
+          Left as a node rather than folded into its callers: it is emitted by
+          four backends and carries element metadata other paths read, so
+          deleting it would renumber IR ops for a cosmetic gain. }
         IREmitNode(IRA[node]);                  { rax = slot address }
-        if InLValueWrite then
-        begin
-          if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
-          AnonDynArrayOff[AnonDynArrayCount] := DataLen;
-          AnonDynArrayDepth[AnonDynArrayCount] := IRB[node];
-          AnonDynArrayBaseTk[AnonDynArrayCount] := IRTk[node];
-          AnonDynArrayBaseRec[AnonDynArrayCount] := IRC[node];
-          AnonDynArrayElSize[AnonDynArrayCount] := Integer(IRIVal[node]);
-
-          for i := 0 to 19 do
-          begin
-            if DataLen >= MAX_DATA then Error('data overflow');
-            Data[DataLen] := 0;
-            Inc(DataLen);
-          end;
-
-          EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax  (arrSlot) }
-          EmitB($48); EmitB($BE); EmitDataRef(AnonDynArrayOff[AnonDynArrayCount]); { mov rsi, desc }
-
-          Inc(AnonDynArrayCount);
-
-          procIdx := FindProc('PXXDynArrayUnique');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
-          EmitAcquireHeapLock;
-          EmitCallProc(procIdx);
-          EmitReleaseHeapLock;
-        end
-        else
-          begin EmitB($48); EmitB($8B); EmitB($00); end;  { mov rax, [rax] }
+        EmitB($48); EmitB($8B); EmitB($00);     { mov rax, [rax] = data pointer }
       end;
 
     IR_INDEX:
@@ -3147,12 +3134,33 @@ begin
             (Writes were handled above: AnsiStrUnique wants the slot address.) }
           EmitB($48); EmitB($8B); EmitB($00);     { mov rax,[rax] }
         end;
+        { Root dynamic array being written through: IR_LEA left the SLOT address
+          in rax (its write branch above), so deref once to reach the heap data
+          pointer that indexing needs.
+
+          This used to call EmitDynArrayUnique, which did the same deref but
+          CLONED the block first when the refcount was above one — copy-on-write.
+          That made `b := a` a copy rather than an alias on x86-64 and ONLY on
+          x86-64: this is the one call site in the tree, so i386 / arm32 /
+          aarch64 / riscv32 all aliased like FPC while the flagship target did
+          not. Writes through either name were invisible to the other, silently
+          (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing).
+
+          Dynamic arrays are REFERENCE types in FPC/Delphi — `b := a` aliases and
+          only `Copy` detaches — and that is the direction
+          decide-dynamic-array-value-vs-reference-semantics settled on. So the
+          clone is gone rather than made conditional; there is no shape in which
+          an element write should detach.
+
+          SetLength is unaffected and still detaches, which matches FPC too: it
+          goes through IR_SETLEN_DYN, which always allocates a fresh block ("No
+          COW") and never consulted the refcount. }
         if InLValueWrite and (IRKind[baseAddr] = IR_LEA) then
         begin
           symIdx := IRA[baseAddr];
           if (symIdx >= 0) and Syms[symIdx].IsArray and
              (Syms[symIdx].ArrLen = -1) then
-            EmitDynArrayUnique(symIdx, elemSize);
+            begin EmitB($48); EmitB($8B); EmitB($00); end;   { mov rax, [rax] }
         end;
 
         { -O2 W1 (promoted from -O3 2026-07-11): a leaf index skips the push-base / eval-index / pop dance.

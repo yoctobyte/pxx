@@ -4053,7 +4053,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_record_byvalue_managed_small.pas /tmp/test_record_byvalue_managed_small26
 	test "$$(/tmp/test_record_byvalue_managed_small26)" = "$$(printf '104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\nOK')"
 	./$(COMPILER) test/test_dynarray_whole_assign.pas /tmp/test_dynarray_whole_assign26
-	test "$$(/tmp/test_dynarray_whole_assign26)" = "$$(printf '8 42 7\n3 pqr\n3 pqr\n8 42 42\nOK')"
+	test "$$(/tmp/test_dynarray_whole_assign26)" = "$$(printf '8 42 7\n3 pqr\n3 pqr\n8 42 42\n77 77 88 88\n77 77 88 88\nzz zz b b\n1 9 2 3\n1 9\nOK')"
 	./$(COMPILER) test/test_i386_int64_high_half.pas /tmp/test_i386_int64_high_half26
 	test "$$(/tmp/test_i386_int64_high_half26)" = "$$(printf '1\n-1\n1\n-1\n1\n1\n0\n3\nOK')"
 	./$(COMPILER) test/test_int64_cast_of_nativeint.pas /tmp/test_int64_cast_of_nativeint26
