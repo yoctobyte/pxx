@@ -29,4 +29,4 @@ pascal26:28: error: Nil Python: annotate the type / too dynamic [a=6 b=28]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit 48150cd3b.
