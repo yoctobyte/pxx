@@ -241,3 +241,4 @@
 2026-08-03T08:17:46Z  v241  60758ce6ed3facbd4b89e14530c1d15513e4ea80520676faafceb2b402a47433  52667a754ed4b88475574784e9dbfc0ef02f38e7  fix(A): float literals are correctly rounded — 23 of 490 were 1 ULP off
 2026-08-04T06:51:36Z  v242  ad4cadddba7e0947fe917bc8d072adca73cdf2a1bde3b4f713e6b000c6503f65  9220a445601156535c7e938b0025e8b17c586d28  tstate(xeon): c4f6ef4b9149 GREEN (native)
 2026-08-04T16:00:47Z  v243  ef5c8582ad0db011d127dbde07341f1ce443b1474c056a3390e86feeb63b7122  8d0ea6d1924096b3ce7375238ea5c8978c1baa6e  docs(progress): promo div-by-zero data, and a writeln hang found beside it
+2026-08-06T05:36:39Z  v244  4075a05838b9f7261d92f2d1f82b2bc05ea041d155f76c58958d26a26981d9a9  6fd006cac5d5aa5bc95fd52ba01ae0a887f7737d  tstate(U): reject the pin ticket — re-litigated a decided question

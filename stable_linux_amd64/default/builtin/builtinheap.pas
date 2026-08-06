@@ -221,6 +221,11 @@ function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeI
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
+{ Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
+  Exposed so builtin.pas's `Str(F, S)` shares the ONE correct implementation
+  rather than carrying its own normalise loop (which disagreed with writeln's
+  by a digit). See PxxSciDigits17's own header. }
+procedure PxxSciDigits17(value: Double; var mant17: Int64; var decExp: Integer);
 {$endif}
 implementation
 
@@ -1997,6 +2002,46 @@ begin
   end;
 end;
 
+{ Element-aware release over a RAW element buffer of `len` elements — the exact
+  mirror of PXXDynArrayRetainImmediate, and deliberately header-free: a STATIC
+  array has no [refcount][length] prefix, so PXXDynArrayReleaseDepth (which
+  decrements a header and may free the block) cannot serve it. Used by whole
+  static-array assignment `b := a` to release the destination's old element
+  handles before the bulk byte copy overwrites them.
+  baseKind: 1 = AnsiString elements, 3 = record elements (walked via desc). }
+procedure PXXArrayReleaseImmediate(arrData: Pointer; len: NativeInt; baseKind: Integer; baseRecDesc: Pointer);
+var
+  i: Int64;
+  itemAddr: Pointer;
+  elSize: Int64;
+begin
+  if arrData = nil then Exit;
+  if baseKind = 1 then
+  begin
+    i := 0;
+    while i < len do
+    begin
+      itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+      PXXStrDecRef(Pointer(PWord(itemAddr)^));
+      i := i + 1;
+    end;
+  end
+  else if baseKind = 3 then
+  begin
+    if baseRecDesc <> nil then
+    begin
+      elSize := PInt32(Int64(baseRecDesc) + 4)^;
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * elSize);
+        PXXRecordRelease(itemAddr, baseRecDesc);
+        i := i + 1;
+      end;
+    end;
+  end;
+end;
+
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 var
   memberCount, i, j: Integer;
@@ -2939,7 +2984,7 @@ begin
   end;
 end;
 
-procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
+procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt; width: NativeInt);
 { [-]intpart.frac with exactly 'decimals' fractional digits (0 -> rounded
   integer, no point). Mirrors EmitWriteFloatFixed (x86-64), and must keep
   mirroring it: this is the i386 / arm32 / riscv32 route to the same output, so
@@ -2955,7 +3000,8 @@ procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
   Splitting first keeps the product below 1e18, and digits past the 18th are
   printed as zeros rather than guessed: a double carries no information there,
   and FPC pads the same way. }
-var x, pw, v, ip, rem, dv, r, two52: Double; d, fdigits: Integer; i: Int64; ch: Char;
+var x, pw, v, ip, rem, dv, r, two52, ipc: Double; d, fdigits: Integer; i: Int64; ch: Char;
+    neg: Boolean; ndig, total: Int64;
 begin
   { NON-FINITE first — see PXXWriteFloatSci. The digit loops here do not
     terminate on an infinity either, and on x86-64 the native twin does not hang
@@ -2987,11 +3033,8 @@ begin
     i := i + 1;
   end;
   x := PDouble(p)^;
-  if PByte(Int64(p) + 7)^ >= 128 then
-  begin
-    write('-');
-    x := -x;
-  end;
+  neg := PByte(Int64(p) + 7)^ >= 128;
+  if neg then x := -x;
   fdigits := decimals;
   if fdigits > 18 then fdigits := 18;
   pw := 1;
@@ -3030,6 +3073,27 @@ begin
     rem := 0;
     ip := ip + 1;
   end;
+  { FIELD WIDTH. Counted AFTER the rounding above, because a carry out of the
+    fraction (9.96:0:1 -> 10.0) adds an integer digit and would otherwise pad
+    one column too many. ip is a non-negative integral Double here, possibly
+    past 2^63, so the digit count is taken in double arithmetic rather than
+    through Int64 — the same reason this routine exists rather than the
+    Int64-scaling native emitter.
+    bug-a-aarch64-float-field-width-ignored }
+  if width > 0 then
+  begin
+    ndig := 1; ipc := ip;
+    while ipc >= 10 do begin ipc := ipc / 10; ndig := ndig + 1; end;
+    total := ndig;
+    if neg then total := total + 1;
+    if decimals > 0 then total := total + 1 + decimals;
+    while total < width do
+    begin
+      write(' ');
+      total := total + 1;
+    end;
+  end;
+  if neg then write('-');
   if decimals <= 0 then      { fdigits = 0, so `rem >= pw` above IS the rounding }
   begin
     PXXWriteUIntD(@ip);
@@ -3053,6 +3117,177 @@ begin
   begin
     write('0');
     i := i + 1;
+  end;
+end;
+
+{ ---- exact decimal expansion of a Double, string-free -------------------
+
+  Every finite double IS a finite decimal, exactly: value = mant * 2^exp2 with
+  mant a 53-bit integer, and 2^-k = 5^k * 10^-k, so the exact decimal form is
+  the integer mant*5^k with the point pushed k places left (k = -exp2), or the
+  plain integer mant*2^exp2 when exp2 >= 0. No approximation enters, so every
+  digit produced is a real digit of the value.
+
+  This is the same algorithm as `ExDecDigits`/`ExDecRound` in
+  `lib/rtl/sysutils.pas` (and its `Py`-prefixed twin in
+  `compiler/builtin/pylib.pas`), but it does NOT build a digit STRING: this
+  layer is the allocator and has no IntToStr or AnsiString concat to lean on.
+  Since the caller only ever wants 17 significant digits, and 17 digits max out
+  at 99999999999999999 < 9.2e18, the answer fits an Int64 and the whole thing
+  stays integer arithmetic. That also makes it usable from the write path
+  without touching the heap.
+
+  Replaces the repeated `x := x / 10` normalise loop that every float writer
+  used to carry (four copies: the two native emitters, this one, and
+  builtin.pas's Str). One rounding per iteration, ~100 of them for 1e100, put
+  the error inside the 17 digits being printed — and for 1e200 it moved the
+  EXPONENT, printing E+200 for a value just under it. FloatToExpStr's own
+  comment already recorded that scaling the double first is a dead end and that
+  "any real fix has to round the DIGITS from an integer representation".
+  bug-a-writeln-float-exponent-form-not-correctly-rounded }
+const
+  PXX_SCI_LIMBS = 96;             { 9 digits each; the 767-digit worst case needs 86 }
+  PXX_SCI_BASE  = 1000000000;     { 10^9 }
+  PXX_SCI_P5_13 = 1220703125;     { 5^13  — largest 5^k with limb*5^k inside Int64 }
+  PXX_SCI_P2_30 = 1073741824;     { 2^30 }
+type
+  TPxxSciBuf = array[0..PXX_SCI_LIMBS - 1] of Int64;
+
+{ buf := buf * f, f small enough that limb*f + carry cannot leave Int64. }
+procedure PxxSciMul(var buf: TPxxSciBuf; var n: Integer; f: Int64);
+var i: Integer; t, carry: Int64;
+begin
+  { One division per limb, not two: a 64-bit div is ~30-90 cycles and this is
+    the inner loop of the whole expansion (~10 passes over ~12 limbs for 1e100).
+    q := t div BASE then t - q*BASE costs a multiply instead of a second div. }
+  carry := 0;
+  for i := 0 to n - 1 do
+  begin
+    t := buf[i] * f + carry;
+    carry := t div PXX_SCI_BASE;
+    buf[i] := t - carry * PXX_SCI_BASE;
+  end;
+  while (carry > 0) and (n < PXX_SCI_LIMBS) do
+  begin
+    t := carry div PXX_SCI_BASE;
+    buf[n] := carry - t * PXX_SCI_BASE;
+    carry := t;
+    n := n + 1;
+  end;
+end;
+
+{ Split a finite non-zero |value| into mant * 2^exp2, mant an integer. }
+procedure PxxSciSplit(value: Double; var mant: Int64; var exp2: Integer);
+var bits, frac: Int64; be: Integer;
+begin
+  bits := PInt64(@value)^;
+  be := Integer((bits shr 52) and 2047);
+  frac := bits and $000FFFFFFFFFFFFF;
+  if be = 0 then
+  begin
+    mant := frac;                 { subnormal: no implicit leading 1 }
+    exp2 := -1074;
+  end
+  else
+  begin
+    mant := frac or $0010000000000000;
+    exp2 := be - 1075;
+  end;
+end;
+
+{ The 17 leading significant digits of |value| as an integer, plus the decimal
+  exponent of the FIRST digit (so value ~ d.dddd... * 10^decExp). Rounded
+  half-to-EVEN on the exact remainder — the remainder here really is exact, so
+  a tie is a genuine tie rather than an artifact of scaling. value must be
+  finite and non-zero. }
+procedure PxxSciDigits17(value: Double; var mant17: Int64; var decExp: Integer);
+var
+  buf: TPxxSciBuf;
+  n, i, k, fracDigits, total, topLen, idx, dpos: Integer;
+  mant, t, scale, rem, half: Int64;
+  exp2: Integer;
+  up, sawNonZero: Boolean;
+begin
+  PxxSciSplit(value, mant, exp2);
+  for i := 0 to PXX_SCI_LIMBS - 1 do buf[i] := 0;
+  buf[0] := mant mod PXX_SCI_BASE;
+  buf[1] := mant div PXX_SCI_BASE;
+  n := 2;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+  fracDigits := 0;
+  if exp2 >= 0 then
+  begin
+    k := exp2;
+    while k >= 30 do begin PxxSciMul(buf, n, PXX_SCI_P2_30); k := k - 30; end;
+    while k > 0 do begin PxxSciMul(buf, n, 2); k := k - 1; end;
+  end
+  else
+  begin
+    k := -exp2;
+    fracDigits := k;
+    while k >= 13 do begin PxxSciMul(buf, n, PXX_SCI_P5_13); k := k - 13; end;
+    while k > 0 do begin PxxSciMul(buf, n, 5); k := k - 1; end;
+  end;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+
+  { total decimal digits: the top limb unpadded, the rest nine each }
+  topLen := 1; t := buf[n - 1];
+  while t >= 10 do begin t := t div 10; topLen := topLen + 1; end;
+  total := topLen + (n - 1) * 9;
+  decExp := total - 1 - fracDigits;
+
+  { Take the leading 17 digits. dpos counts digits already consumed from the
+    most significant end; digit i of the whole number is read out of its limb. }
+  mant17 := 0;
+  dpos := 0;
+  while dpos < 17 do
+  begin
+    if dpos < total then
+    begin
+      idx := total - 1 - dpos;          { 0-based index from the LOW end }
+      scale := 1;
+      for k := 1 to (idx mod 9) do scale := scale * 10;
+      mant17 := mant17 * 10 + ((buf[idx div 9] div scale) mod 10);
+    end
+    else
+      mant17 := mant17 * 10;            { value has fewer digits than 17 }
+    dpos := dpos + 1;
+  end;
+
+  { Round on digit 18 and the exact tail beyond it. }
+  if total > 17 then
+  begin
+    idx := total - 1 - 17;
+    scale := 1;
+    for k := 1 to (idx mod 9) do scale := scale * 10;
+    rem := (buf[idx div 9] div scale) mod 10;
+    up := False;
+    if rem > 5 then up := True
+    else if rem = 5 then
+    begin
+      sawNonZero := False;
+      for i := 0 to total - 19 do
+      begin
+        idx := i;                       { every digit BELOW the round digit }
+        scale := 1;
+        for k := 1 to (idx mod 9) do scale := scale * 10;
+        if ((buf[idx div 9] div scale) mod 10) <> 0 then
+        begin sawNonZero := True; break; end;
+      end;
+      if sawNonZero then up := True
+      else up := (mant17 mod 2) = 1;    { exact tie -> half to EVEN }
+    end;
+    if up then mant17 := mant17 + 1;
+  end;
+
+  { A carry out of the leading digit (99999... -> 100000...) drops one digit
+    and moves the exponent. }
+  half := 1;
+  for k := 1 to 17 do half := half * 10;    { 10^17 }
+  if mant17 >= half then
+  begin
+    mant17 := mant17 div 10;
+    decExp := decExp + 1;
   end;
 end;
 
@@ -3104,35 +3339,11 @@ begin
     write('0.0000000000000000E+000');
     Exit;
   end;
-  e := 0;
-  while x >= 10 do
-  begin
-    x := x / 10;
-    e := e + 1;
-  end;
-  while x < 1 do
-  begin
-    x := x * 10;
-    e := e - 1;
-  end;
-  m := 0;
-  for k := 0 to 16 do
-  begin
-    d := Trunc(x);
-    if d > 9 then d := 9;
-    m := m * 10 + d;
-    x := (x - d) * 10;
-  end;
-  d := Trunc(x);                 { guard digit }
-  if d >= 5 then m := m + 1;
-  { carry past the leading digit (9.99..->10.0): drop a digit, bump exponent }
-  divisor := 1;
-  for k := 0 to 16 do divisor := divisor * 10;   { 10^17 }
-  if m >= divisor then
-  begin
-    m := m div 10;
-    e := e + 1;
-  end;
+  { EXACT digits — see PxxSciDigits17. The normalise-by-repeated-division loop
+    that used to live here was wrong from the 16th digit (one rounding per
+    iteration, ~100 of them for 1e100) and for 1e200 produced the wrong
+    EXPONENT. }
+  PxxSciDigits17(x, m, e);
   for k := 16 downto 0 do
   begin
     divisor := 1;

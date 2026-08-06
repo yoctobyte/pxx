@@ -19,6 +19,60 @@ interface
 
 function StrInt(v: Int64; width: Integer): AnsiString;
 function StrQWord(v: QWord; width: Integer): AnsiString;
+{ One Char as a string, right-justified to `width`. The Text-file write
+  lowering needs it: a Char must NOT go through StrInt (that prints the
+  ORDINAL — 120 for 'x'), which is why the ordinal arm there excludes
+  tyChar. bug-p-writeln-text-rejects-char }
+function StrChar(c: Char; width: Integer): AnsiString;
+
+{ ---- InterLocked* : FPC declares these in the `system` unit --------------
+
+  So FPC source that uses them carries NO `uses` line, and requiring one meant
+  such code did not compile as-is. They live here, the system-unit analogue,
+  rather than only in lib/rtl/palatomic.pas
+  (bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc).
+
+  `uses palatomic` keeps working: a user RTL unit shadows a builtin of the same
+  name, which is the documented rule and is what lets a program override any
+  builtin. So both spellings resolve and neither is a duplicate definition.
+
+  RETURN-VALUE CONTRACT, straight from palatomic and verified against FPC:
+  Increment/Decrement return the value AFTER the operation, Exchange /
+  ExchangeAdd / CompareExchange return the value BEFORE it. Every intrinsic
+  returns the OLD value, so only the first two adjust.
+
+  Excluded where the BACKEND cannot lower an atomic: riscv32 and xtensa have no
+  IR_ATOMIC arm (x86-64 / i386 / arm32 / aarch64 do). The guard is on the CPU,
+  not on PXX_ESP: gating on the ESP platform alone left plain `--target=riscv32`
+  exposed, and because these bodies live in the builtin unit that EVERY program
+  pulls, the failure was not "InterLocked is missing" but `unsupported node in
+  IR codegen: atomic` on programs that never mention it — 15 riscv32 jobs that
+  had nothing to do with atomics. Lifting the guard is
+  bug-a-riscv32-and-xtensa-have-no-atomic-codegen. }
+{$ifndef PXX_ESP}
+{$ifndef CPURISCV32}
+{$ifndef CPUXTENSA}
+function InterLockedIncrement(var Target: LongInt): LongInt;
+function InterLockedDecrement(var Target: LongInt): LongInt;
+function InterLockedExchange(var Target: LongInt; Source: LongInt): LongInt;
+function InterLockedExchangeAdd(var Target: LongInt; Source: LongInt): LongInt;
+function InterLockedCompareExchange(var Target: LongInt;
+                                    NewValue, Comperand: LongInt): LongInt;
+{ 64-bit peers on 64-bit targets only: a 32-bit target has no
+  single-instruction 64-bit read-modify-write and the intrinsic refuses at
+  compile time, so the DECLARATIONS alone would break every 32-bit build.
+  Same guard palatomic carries, and for the same measured reason. }
+{$IFDEF CPU64}
+function InterLockedIncrement64(var Target: Int64): Int64;
+function InterLockedDecrement64(var Target: Int64): Int64;
+function InterLockedExchange64(var Target: Int64; Source: Int64): Int64;
+function InterLockedExchangeAdd64(var Target: Int64; Source: Int64): Int64;
+function InterLockedCompareExchange64(var Target: Int64;
+                                      NewValue, Comperand: Int64): Int64;
+{$ENDIF}
+{$endif}
+{$endif}
+{$endif}
 function FloatToStr(v: Double): AnsiString;
 function FloatToExpStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
@@ -133,6 +187,16 @@ function __pxxRorQWord(v: QWord; n: Integer): QWord;
   this hidden name), so NO real proc named Assert exists to shadow a user's own Assert or
   a method of the enclosing class. On failure it reports and halts with 227, FPC's
   assertion runtime error. The message is a defaulted parameter, so both arities work. }
+{ FPC's assertion mechanism is a HOOK, not a fixed action: System's
+  AssertErrorProc defaults to "print and run-error 227", and SysUtils REPLACES
+  it with one that raises EAssertionFailed. That single indirection is the whole
+  difference between `Assert` aborting and `Assert` being catchable, and it is
+  why a no-sysutils program must keep the 227 behaviour — that is FPC's too.
+  compat-pascal-assert-halts-instead-of-raising-eassertionfailed }
+type
+  TAssertErrorProc = procedure(const msg: AnsiString);
+var
+  AssertErrorProc: TAssertErrorProc;
 procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
 
 procedure __pxxMove(const Source; var Dest; Count: Integer);
@@ -424,6 +488,15 @@ end;
 procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
 begin
   if cond then Exit;
+  { Installed hook wins (sysutils installs one that RAISES EAssertionFailed, so
+    `try Assert(...) except` can run its handler). Unset — a program that does
+    not use sysutils — keeps the print + Halt(227) below, which is exactly what
+    FPC does in that case. }
+  if Assigned(AssertErrorProc) then
+  begin
+    AssertErrorProc(msg);
+    Exit;                          { a raising hook never returns; a print-only one may }
+  end;
   if msg = '' then
     writeln('Assertion failed')
   else
@@ -693,6 +766,80 @@ begin
     Result := ' ' + Result;
 end;
 
+{$ifndef PXX_ESP}
+{$ifndef CPURISCV32}
+{$ifndef CPUXTENSA}
+function InterLockedIncrement(var Target: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_add(@Target, 1)) + 1;
+end;
+
+function InterLockedDecrement(var Target: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_add(@Target, -1)) - 1;
+end;
+
+function InterLockedExchange(var Target: LongInt; Source: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_xchg(@Target, Source));
+end;
+
+function InterLockedExchangeAdd(var Target: LongInt; Source: LongInt): LongInt;
+begin
+  Result := LongInt(__pxxatomic_add(@Target, Source));
+end;
+
+function InterLockedCompareExchange(var Target: LongInt;
+                                    NewValue, Comperand: LongInt): LongInt;
+begin
+  { ARGUMENT ORDER: FPC takes (new, expected), the intrinsic takes
+    (expected, new). Swapping them is the whole point of the wrapper. }
+  Result := LongInt(__pxxatomic_cas(@Target, Comperand, NewValue));
+end;
+
+{$IFDEF CPU64}
+function InterLockedIncrement64(var Target: Int64): Int64;
+begin
+  Result := __pxxatomic_add64(@Target, 1) + 1;
+end;
+
+function InterLockedDecrement64(var Target: Int64): Int64;
+begin
+  Result := __pxxatomic_add64(@Target, -1) - 1;
+end;
+
+function InterLockedExchange64(var Target: Int64; Source: Int64): Int64;
+begin
+  Result := __pxxatomic_xchg64(@Target, Source);
+end;
+
+function InterLockedExchangeAdd64(var Target: Int64; Source: Int64): Int64;
+begin
+  Result := __pxxatomic_add64(@Target, Source);
+end;
+
+function InterLockedCompareExchange64(var Target: Int64;
+                                      NewValue, Comperand: Int64): Int64;
+begin
+  Result := __pxxatomic_cas64(@Target, Comperand, NewValue);
+end;
+{$ENDIF}
+{$endif}
+{$endif}
+{$endif}
+
+function StrChar(c: Char; width: Integer): AnsiString;
+{ One Char as a string, space-padded on the LEFT to `width` (width <= 1 = no
+  padding), matching what StrInt/StrFloat do with their width argument.
+  bug-p-writeln-text-rejects-char }
+var r: AnsiString;
+begin
+  r := ' ';
+  r[1] := c;
+  while Length(r) < width do r := ' ' + r;
+  StrChar := r;
+end;
+
 function StrInt(v: Int64; width: Integer): AnsiString;
 var
   neg: Boolean;
@@ -890,15 +1037,13 @@ begin
       digs := '00000000000000000'
     else
     begin
-      m := v;
-      while m >= 10.0 do begin m := m / 10.0; e := e + 1; end;
-      while m < 1.0 do begin m := m * 10.0; e := e - 1; end;
-      scaled := Round(m * 1e16);            { 17 significant digits }
-      if scaled >= 100000000000000000 then  { rounding carried into a new digit }
-      begin
-        scaled := scaled div 10;
-        e := e + 1;
-      end;
+      { EXACT digits, shared with the writeln path — this branch used to carry
+        its own normalise-by-repeated-division loop (the "third copy" its own
+        header names), which was adrift from the 16th digit AND disagreed with
+        writeln's copy: 1e100 printed ...006 here and ...007 there. Two
+        spellings of one conversion in one file, giving different answers.
+        bug-a-writeln-float-exponent-form-not-correctly-rounded }
+      PxxSciDigits17(v, scaled, e);
       digs := StrInt(scaled, 0);
       while Length(digs) < 17 do digs := '0' + digs;
     end;

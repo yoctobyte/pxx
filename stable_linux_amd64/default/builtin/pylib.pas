@@ -129,8 +129,11 @@ type
       NEW sequence. Returns Self so the statement lowering can use it as a
       value node, the same shape sort() and extend() use. }
     function reverse: Variant;
-    { list.sort() -- in place, returns None. No key=/reverse= yet. }
-    function sort: Variant;
+    { list.sort(reverse=) -- in place, returns None. `key=` is still absent: it
+      needs PyCallKey1's callable dispatch, which lives in pyeval (which USES
+      this unit, so it cannot be called from here). `reverse=` needs no callable
+      at all — just the opposite pyvar_gt comparison. }
+    function sort(reverse: Boolean = False): Variant;
     { `with open(p, "r") as f: f.read()`. The read-slurp model makes open()
       yield the file's LINES, and each keeps its newline, so joining them
       reproduces the file byte for byte — which is what CPython's read()
@@ -2840,14 +2843,27 @@ begin
   Result := pynone;   { Python returns None }
 end;
 
-{ Python's list.sort() — IN PLACE, unlike sorted() (pyeval.pas), which
-  returns a new list. No `key=`/`reverse=` yet: those need PyCallKey1's
+{ Python's list.sort(reverse=) — IN PLACE, unlike sorted() (pyeval.pas), which
+  returns a new list. `key=` is still absent: it needs PyCallKey1's
   generic-callable dispatch, which lives in pyeval.pas and cannot be called
-  from here (pyeval `uses pylib`, not the reverse) — refused loudly rather
-  than guessed at; a plain `.sort()` needs no callable at all, just the
-  `pyvar_gt` content-order comparison this unit already has (see max()/min()
-  above). bug-nilpy-list-sort-method-missing. }
-function TPyList.sort: Variant;
+  from here (pyeval `uses pylib`, not the reverse) — refused rather than
+  guessed at. `reverse=` has no such constraint: it needs no callable, only the
+  opposite `pyvar_gt` content-order comparison this unit already has (see
+  max()/min() above). bug-nilpy-list-sort-method-missing,
+  bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error.
+
+  Declaring the parameter is the whole frontend fix. The method call path in
+  parser.inc drives its argument loop off ParamCount (`while mai <=
+  ParamCount-1`), so with sort() taking nothing the loop body never ran, the
+  keyword recognizer inside it never saw `reverse`, and control fell to
+  Expect(tkRParen) — which is why a missing FEATURE surfaced as a bare
+  "unexpected token" pointing at the keyword name.
+
+  reverse=True is NOT "sort then reverse": Python keeps the sort stable either
+  way, so equal elements must retain input order in both directions. Flipping
+  which operand `pyvar_gt` gets keeps the comparison STRICT, so equal elements
+  still do not swap and stability is preserved. }
+function TPyList.sort(reverse: Boolean): Variant;
 var i, j: Integer; v: Variant; swapped: Boolean;
 begin
   for i := 1 to Self.count - 1 do
@@ -2856,7 +2872,10 @@ begin
     swapped := True;
     while (j > 0) and swapped do
     begin
-      swapped := pyvar_gt(Self.at(j - 1), Self.at(j));
+      if reverse then
+        swapped := pyvar_gt(Self.at(j), Self.at(j - 1))
+      else
+        swapped := pyvar_gt(Self.at(j - 1), Self.at(j));
       if swapped then
       begin
         v := Self.at(j);
