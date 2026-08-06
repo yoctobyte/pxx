@@ -7,7 +7,7 @@
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy** — test/test_nilpy_augmented_assign_class_dunder.npy (plexus): bad `e8450c58d67e`, last good `c9e388386ce0`, 2 commit(s) in range
+- **test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy** — test/test_nilpy_augmented_assign_class_dunder.npy (plexus): bad `e8450c58d67e`, last good `7b42c8345829`, 1 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (xeon): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
