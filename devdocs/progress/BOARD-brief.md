@@ -33,6 +33,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 195, ranked
 
+- `[p 70] [N]` bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance
 - `[p 70] [T]` regression-test-core-test-nilpy-augmented-assign-class-dunder
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-args-errors
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-containers
@@ -62,6 +63,5 @@ _none — no lane is locked._
 - `[p 60] [P]` feature-pascal-corpus-oop
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
-- `[p 58] [O]` feature-opt-o3-register-pressure
 
 _165 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

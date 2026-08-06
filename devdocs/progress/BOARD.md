@@ -61,10 +61,10 @@ _none_
 | bug-nilpy-int-of-a-long-decimal-string-narrows | N | 55 | bug | NilPy: int('<30 digits>') wraps mod 2^64 instead of producing an arbitrary-precision int — int('123456789012345678901234567890') prints -4362896299872285998 | — |
 | bug-nilpy-int-of-a-variant-held-bignum-raises | N | 40 | bug | NilPy: int(x) where x is a variant-held arbitrary-precision int raises EVariantError instead of being the identity — and pyint_v, the variant-returning helper that would answer it, exists in pylib but is never emitted by the frontend | — |
 | bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module | N | 40 | bug | A def shadowing a builtin that has NO pylib proc (ord, chr, …) takes effect from the top of the module — `print(ord('A'))` ABOVE the def prints the user's answer where CPython prints 65. Silent. | — |
-| bug-nilpy-isinstance-of-a-tuple-against-list-is-true | N | 50 | bug | NilPy: isinstance(t, list) is True for a tuple, so a working CPython program that branches on it takes the wrong arm — `flatten` over [[1,2], (3,4), 5] flattens the tuple too. The tuple being MUTABLE is not a bug (see the divergences doc); this is. | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
+| bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance | N | 70 | bug | NilPy: list, tuple and set all answer True to isinstance(x, list) AND isinstance(x, tuple), and a set reports type(x).__name__ == 'list'. Libraries routinely accept several container kinds and branch on isinstance to tell them apart, so working CPython code takes the wrong arm silently. | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
@@ -412,6 +412,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [N] bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance
 - [p 70] [T] regression-test-core-test-nilpy-augmented-assign-class-dunder
 - [p 70] [T] regression-test-nilpy-test-cpyext-args-errors
 - [p 70] [T] regression-test-nilpy-test-cpyext-containers
@@ -468,7 +469,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
-- [p 50] [N] bug-nilpy-isinstance-of-a-tuple-against-list-is-true
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-b-textreadchar-with-pushback

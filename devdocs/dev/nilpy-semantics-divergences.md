@@ -118,8 +118,10 @@ Pascal dialect for restrictions that were historic rather than necessary — see
 `../progress/backlog/meta-dialect-extensions-and-fpc-strict.md`, which is the
 Pascal-side charter for exactly this trade.
 
-**The half that IS a bug** is `isinstance(t, list)` answering True, because a
-program CPython accepts *can* observe it — `flatten([[1,2], (3,4), 5])` returns
-`[1, 2, (3, 4), 5]` under CPython and `[1, 2, 3, 4, 5]` here. Filed as
-`bug-nilpy-isinstance-of-a-tuple-against-list-is-true`. The split between these
-two halves is the cleanest worked example of the rule on this page.
+**The half that IS a bug** is the TYPE tag, because a program CPython accepts
+*can* observe it: `isinstance(t, list)` answers True for a tuple (and for a
+set), so `flatten([[1,2], (3,4), 5])` returns `[1, 2, (3, 4), 5]` under CPython
+and `[1, 2, 3, 4, 5]` here. Filed as
+`bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance`. The split
+between these two halves — lax mutation is fine, a wrong type answer is not — is
+the cleanest worked example of the rule on this page.
