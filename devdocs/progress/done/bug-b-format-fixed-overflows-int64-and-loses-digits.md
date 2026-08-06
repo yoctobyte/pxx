@@ -80,7 +80,7 @@ them are wrong in two different ways.
 FPC plus `decimal.Decimal(float(x))` for the exact value.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit f82f04321.
 
 ## Resolution 2026-08-06
 

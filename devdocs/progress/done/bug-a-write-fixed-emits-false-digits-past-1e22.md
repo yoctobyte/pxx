@@ -94,7 +94,7 @@ if [[decide-float-fixed-output-exact-or-fpc-17-digit-cap]] chooses a cap —
 emits only digits it can justify and zeros beyond, never binary artifacts.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit fb594eb1b.
 
 ## Resolution 2026-08-06
 
