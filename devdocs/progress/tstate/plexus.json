@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-06T05:40:38Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c82a911b91a78d84d36e7563642033561e7a7dd4",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-06T05:48:25Z",
    "fixed": [],
    "new_red": [],
@@ -416,6 +408,14 @@
    ],
    "new_red": [],
    "sha": "baa606d36caf3e505f924eaec03d75cc45a48726",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-06T21:00:52Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "cbae55b069cd4fe6555a08863d47b843658ec054",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1262,6 +1262,8 @@
   "test-core#src:test/test_dynarray_ansistring.pas@1": "native",
   "test-core#src:test/test_dynarray_ansistring.pas@2": "native",
   "test-core#src:test/test_dynarray_copy.pas": "native",
+  "test-core#src:test/test_dynarray_copy_managed_elems.pas@1": "native",
+  "test-core#src:test/test_dynarray_copy_managed_elems.pas@2": "native",
   "test-core#src:test/test_dynarray_copy_uses_sysutils.pas": "native",
   "test-core#src:test/test_dynarray_field.pas": "native",
   "test-core#src:test/test_dynarray_global_after_method.pas": "native",
@@ -3390,6 +3392,8 @@
   "test-core#src:test/test_dynarray_ansistring.pas@1": "pass",
   "test-core#src:test/test_dynarray_ansistring.pas@2": "pass",
   "test-core#src:test/test_dynarray_copy.pas": "pass",
+  "test-core#src:test/test_dynarray_copy_managed_elems.pas@1": "pass",
+  "test-core#src:test/test_dynarray_copy_managed_elems.pas@2": "pass",
   "test-core#src:test/test_dynarray_copy_uses_sysutils.pas": "pass",
   "test-core#src:test/test_dynarray_field.pas": "pass",
   "test-core#src:test/test_dynarray_global_after_method.pas": "pass",
@@ -4678,11 +4682,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-06T20:48:44Z",
-  "sha": "baa606d36caf3e505f924eaec03d75cc45a48726",
+  "date": "2026-08-06T21:00:52Z",
+  "sha": "cbae55b069cd4fe6555a08863d47b843658ec054",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 155.8
+  "wall": 167.5
  },
  "last_bench": {
   "conf_rows": 550,
