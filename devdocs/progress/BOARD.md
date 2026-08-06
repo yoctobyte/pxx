@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (209)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -49,6 +49,7 @@ _none_
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
+| bug-nilpy-closure-over-a-loop-variable-captures-by-value | N | 45 | bug | NilPy: a closure created in a loop captures the loop variable's VALUE at creation, so [f() for f in fs] gives [0, 1, 2] where CPython gives [2, 2, 2] — Python closes over the variable, not the value | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
 | bug-nilpy-def-body-scans-run-on-when-no-indent-is-found | N | 40 | bug | Five token-level scans locate a def/class BODY with an unbounded `while Tokens[j].Kind <> tkIndent` walk. Nothing makes them fail safe: with no INDENT they run on into the NEXT construct and attribute its body to this one. Latent today only because the lexer guarantees the INDENT exists. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
@@ -64,7 +65,7 @@ _none_
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
-| bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 45 | bug | A `nonlocal` capture in an ESCAPING closure fails to parse at the call site | — |
+| bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 65 | bug | NilPy: a `nonlocal` write through an ESCAPED closure segfaults (re-measured 2026-08-06 — it used to be a parse error). The write itself faults; read-only captures and the list-cell workaround are fine. | — |
 | bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced | N | 35 | bug | PyParseClass's `only pass is supported as a one-line class body` branch is unreachable — the lexer now normalises every one-line suite, so `class C: x = 1` compiles and matches CPython. The behaviour is BETTER than documented; the comments describing the restraint and calling the def half open are false, and they are what produced a stale five-site patch plan. | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
@@ -419,6 +420,7 @@ _none_
 - [p 70] [T] regression-test-nilpy-test-nilpy-qualifier-vs-cproc
 - [p 65] [P] bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
 - [p 65] [A] bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum
+- [p 65] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
@@ -481,7 +483,7 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [U] decide-float-fixed-output-exact-or-fpc-17-digit-cap (unblocks 1)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
-- [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
+- [p 45] [N] bug-nilpy-closure-over-a-loop-variable-captures-by-value
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
