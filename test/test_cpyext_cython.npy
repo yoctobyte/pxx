@@ -1,11 +1,16 @@
 # cpyext M5 "a Cython-generated module" (feature-nilpy-cpyext-c-api-from-source):
-# Cython 3.2.9's unmodified 6057-line output for a 6-line .pyx, compiled by
+# Cython 3.2.9's unmodified 6212-line output for an 11-line .pyx, compiled by
 # cfront against pxx's own Python.h, imported from NilPy and called.
 #
 # What this proves beyond M1-M4: real PEP 489 multi-phase module init (the
 # Py_mod_create and Py_mod_exec slots are actually EXECUTED, not collapsed),
 # builtin-function objects registered into a module dict rather than a static
 # PyMethodDef table, and the METH_FASTCALL calling convention.
+#
+# M5b adds KEYWORD arguments through that fastcall path (the vectorcall layout
+# puts the keyword values in the same array past the positional ones, described
+# by a `kwnames` tuple), the variadic PyObject_CallFunctionObjArgs form, and an
+# unknown keyword reaching Cython's own parser as a TypeError.
 #
 # Every number below is the output of the SAME generated C running under real
 # CPython 3.12 (test/nilpy_units/vendor/README.md has the recipe).
@@ -18,3 +23,24 @@ print(cyadd_ext.cyfact(0))
 print(cyadd_ext.cyfact(6))
 print(cyadd_ext.cyfact(10))
 print(cyadd_ext.cyfact(12))
+
+
+# --- M5b ------------------------------------------------------------------
+# cysub, not cyadd, is the keyword subject: addition is COMMUTATIVE, so a
+# kwnames tuple whose order disagreed with the values it describes would still
+# produce the right sum and the bug would be invisible. 30 - 8 is 22 and 8 - 30
+# is -22, so these lines actually pin the pairing down.
+print(cyadd_ext.cysub(30, 8))          # positional baseline
+print(cyadd_ext.cysubKw(30, 8))        # cysub(a=30, b=8) — all keyword
+print(cyadd_ext.cysubKwRev(30, 8))     # cysub(b=8, a=30) — inserted in reverse
+print(cyadd_ext.cysubMixed(30, 8))     # cysub(30, b=8) — nargs < array length
+
+# the NULL-terminated variadic call form, which used to be a hard stop
+print(cyadd_ext.cyaddObjArgs(20, 22))
+
+# an unknown keyword must reach Cython's parser and raise, not be dropped
+try:
+    print(cyadd_ext.cysubBadKw(30))
+    print("NOT REACHED")
+except Exception:
+    print("badkw raised")

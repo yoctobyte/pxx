@@ -786,6 +786,12 @@ PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs) {
     PyObject **fastargs;
     Py_ssize_t n;
     Py_ssize_t i;
+    Py_ssize_t nkw;
+    Py_ssize_t kwi;
+    Py_ssize_t pos;
+    PyObject *kwnames;
+    PyObject *kwkey;
+    PyObject *kwval;
     PyObject *r;
     int flags;
 
@@ -804,18 +810,52 @@ PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs) {
        optimisation. kwnames NULL = no keyword arguments; passing keywords
        through the fast path needs the names tuple and is not wired up. */
     if ((flags & METH_FASTCALL) != 0) {
-        if (kwargs != 0 && PyDict_Size(kwargs) > 0) {
-            PyErr_SetString(PyExc_TypeError,
-                            "keyword arguments through the fastcall path are not supported");
-            return 0;
+        /* The vectorcall layout: ONE array holding the positional arguments
+           followed by the keyword VALUES, with `kwnames` a tuple of the matching
+           keyword names. So keywords need no separate channel — they ride the
+           same array past the positional count, which is why nargs and the array
+           length differ once keywords are present.
+
+           This used to refuse keywords outright. Refusing was the right call
+           while the names tuple did not exist (mis-passing them would have been
+           silent), but a Cython module's `f(a, b=2)` is ordinary code. */
+        nkw = 0;
+        kwnames = 0;
+        if (kwargs != 0) {
+            nkw = PyDict_Size(kwargs);
+            if (nkw < 0) nkw = 0;
         }
-        fastargs = (PyObject **)malloc((size_t)((n > 0 ? n : 1)) * sizeof(PyObject *));
+        if (nkw > 0) {
+            if ((flags & METH_KEYWORDS) == 0) {
+                PyErr_SetString(PyExc_TypeError,
+                                "function takes no keyword arguments");
+                return 0;
+            }
+            kwnames = PyTuple_New(nkw);
+            if (kwnames == 0) return 0;
+        }
+        fastargs = (PyObject **)malloc(
+            (size_t)((n + nkw > 0 ? n + nkw : 1)) * sizeof(PyObject *));
         for (i = 0; i < n; i++) fastargs[i] = PyTuple_GetItem(args, i);  /* borrowed */
+        if (nkw > 0) {
+            /* PyDict_Next walks in insertion order here, and the names tuple must
+               agree index-for-index with the values written past nargs — one walk
+               fills both, so they cannot drift. */
+            pos = 0;
+            kwi = 0;
+            while (PyDict_Next(kwargs, &pos, &kwkey, &kwval) && kwi < nkw) {
+                Py_INCREF(kwkey);
+                PyTuple_SetItem(kwnames, kwi, kwkey);   /* steals the reference */
+                fastargs[n + kwi] = kwval;              /* borrowed, like above */
+                kwi++;
+            }
+        }
         if ((flags & METH_KEYWORDS) != 0)
-            r = ((PyCFunctionFastWithKeywords)md->ml_meth)(0, fastargs, n, 0);
+            r = ((PyCFunctionFastWithKeywords)md->ml_meth)(0, fastargs, n, kwnames);
         else
             r = ((PyCFunctionFast)md->ml_meth)(0, fastargs, n);
         free(fastargs);
+        Py_XDECREF(kwnames);
         return r;
     }
     if ((flags & METH_KEYWORDS) != 0)
@@ -832,12 +872,42 @@ PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs) {
 }
 
 PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...) {
-    (void)callable;
-    /* The variadic NULL-terminated form needs an argument tuple built from a
-       va_list of PyObject*; not wired up because nothing generated has
-       reached it yet. Deliberately loud rather than a wrong empty call. */
-    __pxx_cpyext_unsupported("PyObject_CallFunctionObjArgs");
-    return 0;
+    /* NULL-terminated PyObject* varargs -> a positional tuple -> PyObject_Call.
+       Two passes over the list rather than a growing buffer: the count has to be
+       known to size the tuple, and va_start may legally be used twice. The
+       arguments are BORROWED by the caller's convention, and PyTuple_SetItem
+       steals, so each one is retained on the way in and released with the
+       tuple. */
+    va_list ap;
+    va_list ap2;
+    PyObject *a;
+    PyObject *tup;
+    PyObject *r;
+    Py_ssize_t n;
+    Py_ssize_t i;
+
+    n = 0;
+    va_start(ap, callable);
+    for (;;) {
+        a = va_arg(ap, PyObject *);
+        if (a == 0) break;
+        n++;
+    }
+    va_end(ap);
+
+    tup = PyTuple_New(n);
+    if (tup == 0) return 0;
+    va_start(ap2, callable);
+    for (i = 0; i < n; i++) {
+        a = va_arg(ap2, PyObject *);
+        Py_INCREF(a);
+        PyTuple_SetItem(tup, i, a);   /* steals */
+    }
+    va_end(ap2);
+
+    r = PyObject_Call(callable, tup, 0);
+    Py_DECREF(tup);
+    return r;
 }
 
 /* --- tuple / bytes / bytearray ------------------------------------------- */
@@ -1270,6 +1340,27 @@ PyObject *PyModuleDef_Init(PyModuleDef *def) {
                     Py_DecRef(spec);
                     return 0;
                 }
+                /* A slot that reports SUCCESS may still have left an error
+                   pending, and Cython does exactly that: its
+                   __Pyx_init_co_variables calls PyImport_ImportModule("inspect")
+                   UNCONDITIONALLY, then only reads the result for CO_* flags it
+                   could not get as macros. Our Python.h defines all of them, so
+                   every use is preprocessed out, `result` stays 1, and the failed
+                   import's ImportError is simply abandoned. Under real CPython
+                   the import succeeds, so the extension never notices.
+
+                   Leaving it pending is not harmless: the next Cython code to
+                   consult PyErr_Occurred() as its own error check fails on
+                   somebody else's stale error. Measured — `cysub(a=30, b=8)`
+                   returned -1 with the message "inspect", while the same call
+                   with one positional argument worked, because only the
+                   all-keyword path reached such a check. Clearing here made all
+                   of them pass.
+
+                   A successful init that leaves an error set is the extension
+                   violating the contract, so discarding it is the honest repair
+                   at exactly the boundary that knows init succeeded. */
+                if (PyErr_Occurred() != 0) PyErr_Clear();
             }
         }
     }

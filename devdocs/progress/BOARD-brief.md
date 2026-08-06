@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:7 backlog:208 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1445 rejected:29`
+`unfinished:7 blocked:7 backlog:209 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1445 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,7 +31,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 189, ranked
+## Ready — top 30 of 190, ranked
 
 - `[p 70] [U]` decide-re-pin-after-the-dynarray-aliasing-flip
 - `[p 70] [T]` regression-test-core-test-exception-unhandled
@@ -64,4 +64,4 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-for-range-counter-survives-with-the-wrong-value
 - `[p 55] [N]` bug-nilpy-int-of-a-long-decimal-string-narrows
 
-_159 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_160 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

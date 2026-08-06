@@ -557,3 +557,82 @@ load-bearing" vs "unsupported and decorative" — is the useful one.
 - Keyword arguments through the fastcall path are refused rather than
   mis-passed — needs the `kwnames` tuple.
 - A `cdef class`, and a real Cython-built package from PyPI, are M5c.
+
+## 2026-08-06 — M5b PART 1: keyword arguments and the variadic call form
+
+Two of M5b's three "Remaining" items done; CyFunction (`-X binding=False`) is
+untouched and remains the honest boundary of Cython support.
+
+**Keyword arguments through the fastcall path** now work instead of being
+refused. The vectorcall layout puts the keyword VALUES in the same array after
+the positional ones, described by a `kwnames` tuple — so keywords need no
+separate channel, they ride past `nargs`. `PyObject_Call` builds the names tuple
+and the value tail in ONE `PyDict_Next` walk, so the two cannot drift apart.
+`BoundParamIsRef`-style care was not needed here, but the ordering was: see
+below.
+
+**`PyObject_CallFunctionObjArgs`** is implemented — NULL-terminated varargs into
+a positional tuple, two `va_start` passes (the count has to be known to size the
+tuple). It was a hard stop; nothing had reached it, and now the test does.
+
+### The oracle, and why `cysub` exists now
+
+`test/nilpy_units/vendor/cyadd.pyx` gained `def cysub(a, b): return a - b` and
+was regenerated with the README's exact recipe. Before changing it, that recipe
+was checked to reproduce the vendored 6057-line file **byte-for-byte** with the
+freshly installed Cython 3.2.9 — so the regeneration is faithful and not a
+version drift.
+
+`cysub` is not padding. `cyadd` is COMMUTATIVE, so a `kwnames` tuple whose order
+disagreed with the values it describes would still produce the right sum and the
+bug would have been invisible. `cysub(b=8, a=30)` is 22 if the pairing is right
+and -22 if it is swapped.
+
+The oracle is the real thing, not expectation: the same vendored generated C was
+built with gcc against `/usr/include/python3.12` into a real `.so` and imported
+by CPython. All six behaviours (positional, all-keyword, reversed-keyword,
+mixed, `CallFunctionObjArgs`, unknown-keyword TypeError) match it.
+
+### The actual bug this uncovered: a STALE PENDING ERROR after successful init
+
+The kwargs code was right on the first build, and the all-keyword calls still
+failed — while the same call with one positional argument worked. Measured
+rather than reasoned (a temporary probe printing `__pxx_PyErr_Message()`): the
+message was **"inspect"**.
+
+Cython's `__Pyx_init_co_variables` calls `PyImport_ImportModule("inspect")`
+**unconditionally**, then only reads the result for `CO_*` flags it could not get
+as macros. Our `Python.h` deliberately defines all of them (the M5a note above
+explains why), so every use is preprocessed out, its `result` stays 1, and the
+failed import's ImportError is simply **abandoned**. Under real CPython the
+import succeeds, so no extension ever notices.
+
+Leaving it pending is not harmless: the next Cython code to consult
+`PyErr_Occurred()` as its own error check fails on somebody else's stale error.
+Only the all-keyword path reached such a check, which is exactly why the failure
+looked like a keyword bug and was not one.
+
+Fixed at the boundary that knows init succeeded: `PyModuleDef_Init`'s exec-slot
+runner clears a pending error after a slot returns success. A successful init
+that leaves an error set is the extension violating the contract.
+
+**Generalisable warning for M5c and any future package:** an extension may leave
+a pending error behind a successful init, and the symptom surfaces arbitrarily
+far away in an unrelated call. This is the second time a Cython
+"works under CPython because a stdlib module happens to be importable"
+assumption has cost real time — the first was `zlib.decompress` at init
+(M5a). Worth checking for deliberately on each new package.
+
+### Also filed
+
+- [[bug-cpyext-pyerr-format-prints-U-and-S-literally]] (prio 50) —
+  `PyErr_Format` delegates to `vsnprintf`, which does not know CPython's `%U` /
+  `%S` / `%R` / `%A`. The unknown-keyword message reads `'%U'` instead of `'c'`,
+  and because those specifiers consume no `va_arg`, anything after one of them
+  reads a misaligned argument. `PyErr_WarnFormat` has the same body and bug.
+
+### Still remaining for M5b/M5c
+
+- `-X binding=False` is still required. Dropping it needs CyFunction: a heap type
+  via `PyType_FromSpec`, `tp_descr_get`, GC traverse/clear, vectorcall.
+- A `cdef class`, and a real Cython-built package from PyPI (M5c).

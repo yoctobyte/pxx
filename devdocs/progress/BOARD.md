@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (208)
+## backlog (209)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,6 +48,7 @@ _none_
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
+| bug-cpyext-pyerr-format-prints-U-and-S-literally | N | 50 | bug | cpyext PyErr_Format delegates to vsnprintf, which does not know CPython's %U / %S / %R / %A object specifiers — so an extension's own error message reads \"unexpected keyword argument '%U'\", and any specifier AFTER one of them reads a misaligned argument. | — |
 | bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame | N | 55 | bug | An escaped closure's `nonlocal` cell is separate storage from the enclosing frame's own local, so the frame does not see the closure's writes and the closure does not see the frame's later writes. CPython shares ONE cell. Silent wrong values. | — |
 | bug-nilpy-augmented-subscript-evaluates-its-index-twice | N | 30 | bug | NilPy: `d[key()] += 1` calls key() TWICE — the augmented-subscript desugar re-evaluates the base and index. CPython evaluates each once. The stored value is correct; only a side-effecting index is observable. | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
@@ -456,6 +457,7 @@ _none_
 - [p 50] [A] bug-a-open-array-value-parameter-aliases-instead-of-copying
 - [p 50] [A] bug-a-riscv32-nested-dynamic-array-element-write-segfaults
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
+- [p 50] [N] bug-cpyext-pyerr-format-prints-U-and-S-literally
 - [p 50] [N] bug-nilpy-truediv-and-pow-assign-on-a-class-instance-skip-the-dunder
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build

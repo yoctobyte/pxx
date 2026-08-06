@@ -6,3 +6,6 @@ def cyfact(int n):
     for i in range(1, n + 1):
         r *= i
     return r
+
+def cysub(int a, int b):
+    return a - b

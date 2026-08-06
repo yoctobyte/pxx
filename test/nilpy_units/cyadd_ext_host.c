@@ -13,6 +13,11 @@
 
 #include <Python.h>
 
+/* pyruntime.c's own accessor for the pending error's text — the limited API has
+   no way to read a message without building an exception object, and this driver
+   only needs the string to hand to the Pascal side. */
+extern const char *__pxx_PyErr_Message(void);
+
 extern PyObject *PyInit_cyadd(void);
 
 static PyObject *g_cyadd_module = 0;
@@ -54,4 +59,127 @@ int cyadd_ext_add(int a, int b) {
 
 int cyadd_ext_fact(int n) {
     return (int)cyadd_call("cyfact", (long)n, 0, 1);
+}
+
+/* --- M5b: keyword arguments through the vectorcall path -------------------
+ *
+ * The calls above pass kwargs = 0. Cython's generated functions are
+ * METH_FASTCALL|METH_KEYWORDS, and the vectorcall layout puts the keyword
+ * VALUES in the same array after the positional ones with a `kwnames` tuple
+ * carrying the matching names. pyruntime.c used to refuse keywords here
+ * outright; these entry points are what exercise the wiring.
+ *
+ * cysub is deliberately the function under test rather than cyadd: addition is
+ * commutative, so a kwnames tuple whose order did not match the values it
+ * describes would still produce the right sum and the bug would be invisible.
+ * `cysub(b=8, a=30)` is 22 under CPython and -22 if the pairing is swapped.
+ */
+static long cyadd_call_kw(const char *name, long pos0, int npos,
+                          const char *k1, long v1,
+                          const char *k2, long v2) {
+    PyObject *module;
+    PyObject *fn;
+    PyObject *args;
+    PyObject *kw;
+    PyObject *result;
+    PyObject *nameobj;
+    long rv;
+
+    module = cyadd_module();
+    if (module == 0) return -1;
+    fn = PyObject_GetAttrString(module, name);
+    if (fn == 0) return -1;
+
+    args = PyTuple_New(npos);
+    if (npos > 0) PyTuple_SetItem(args, 0, PyLong_FromLong(pos0));
+
+    kw = PyDict_New();
+    /* insertion order is the order the names tuple will be built in */
+    if (k1 != 0) {
+        nameobj = PyUnicode_FromString(k1);
+        PyDict_SetItem(kw, nameobj, PyLong_FromLong(v1));
+        Py_DECREF(nameobj);
+    }
+    if (k2 != 0) {
+        nameobj = PyUnicode_FromString(k2);
+        PyDict_SetItem(kw, nameobj, PyLong_FromLong(v2));
+        Py_DECREF(nameobj);
+    }
+
+    result = PyObject_Call(fn, args, kw);
+    rv = (result != 0) ? PyLong_AsLong(result) : -1;
+    Py_XDECREF(result);
+    Py_XDECREF(kw);
+    Py_XDECREF(args);
+    Py_XDECREF(fn);
+    return rv;
+}
+
+int cyadd_ext_sub(int a, int b) {
+    return (int)cyadd_call("cysub", (long)a, (long)b, 2);
+}
+
+/* cysub(a=a, b=b) — every argument by keyword, none positional */
+int cyadd_ext_sub_kw(int a, int b) {
+    return (int)cyadd_call_kw("cysub", 0, 0, "a", (long)a, "b", (long)b);
+}
+
+/* cysub(b=b, a=a) — the SAME call with the keywords inserted in the opposite
+   order, which must still answer a - b */
+int cyadd_ext_sub_kw_rev(int a, int b) {
+    return (int)cyadd_call_kw("cysub", 0, 0, "b", (long)b, "a", (long)a);
+}
+
+/* cysub(a, b=b) — positional and keyword in one call, the layout where nargs
+   and the array length genuinely differ */
+int cyadd_ext_sub_mixed(int a, int b) {
+    return (int)cyadd_call_kw("cysub", (long)a, 1, "b", (long)b, 0, 0);
+}
+
+/* an UNKNOWN keyword must reach Cython's own parser and raise TypeError, not be
+   silently dropped — the failure mode a hand-rolled kwnames invites. The message
+   is copied out for the Pascal side to raise, the same way argerr_ext does it:
+   returning -1 alone would be indistinguishable from a result. */
+int cyadd_ext_sub_badkw(int a, char *errbuf, int errcap) {
+    long rv;
+    const char *msg;
+    int i;
+
+    if (errcap > 0) errbuf[0] = 0;
+    PyErr_Clear();
+    rv = cyadd_call_kw("cysub", (long)a, 1, "c", 1, 0, 0);
+    if (PyErr_Occurred() != 0) {
+        msg = __pxx_PyErr_Message();
+        i = 0;
+        while (msg[i] != 0 && i < errcap - 1) { errbuf[i] = msg[i]; i++; }
+        if (errcap > 0) errbuf[i] = 0;
+        PyErr_Clear();
+    }
+    return (int)rv;
+}
+
+/* --- M5b: PyObject_CallFunctionObjArgs -----------------------------------
+ * The NULL-terminated variadic form, which used to be a hard stop. Same call as
+ * cyadd_ext_add, reached the other way. */
+int cyadd_ext_add_objargs(int a, int b) {
+    PyObject *module;
+    PyObject *fn;
+    PyObject *pa;
+    PyObject *pb;
+    PyObject *result;
+    long rv;
+
+    module = cyadd_module();
+    if (module == 0) return -1;
+    fn = PyObject_GetAttrString(module, "cyadd");
+    if (fn == 0) return -1;
+    pa = PyLong_FromLong((long)a);
+    pb = PyLong_FromLong((long)b);
+    result = PyObject_CallFunctionObjArgs(fn, pa, pb, (PyObject *)0);
+    rv = (result != 0) ? PyLong_AsLong(result) : -1;
+    Py_XDECREF(result);
+    Py_DECREF(pb);
+    Py_DECREF(pa);
+    Py_DECREF(fn);
+    return (int)rv;
 }

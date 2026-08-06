@@ -22,7 +22,7 @@ forced.
 # Cython-generated source (cpyext M5)
 
 `cyadd.pyx` is the input; `cyadd_cython.c` is **Cython 3.2.9's unmodified
-output** for it (6057 lines from a 6-line `.pyx` — the boilerplate IS the
+output** for it (6212 lines from an 11-line `.pyx` — the boilerplate IS the
 point of the milestone). Regenerate with:
 
 ```sh

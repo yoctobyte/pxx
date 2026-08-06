@@ -2070,6 +2070,7 @@ int __pyx_module_is_main_cyadd = 0;
 /* #### Code section: decls ### */
 static PyObject *__pyx_pf_5cyadd_cyadd(CYTHON_UNUSED PyObject *__pyx_self, int __pyx_v_a, int __pyx_v_b); /* proto */
 static PyObject *__pyx_pf_5cyadd_2cyfact(CYTHON_UNUSED PyObject *__pyx_self, int __pyx_v_n); /* proto */
+static PyObject *__pyx_pf_5cyadd_4cysub(CYTHON_UNUSED PyObject *__pyx_self, int __pyx_v_a, int __pyx_v_b); /* proto */
 /* #### Code section: late_includes ### */
 /* #### Code section: module_state ### */
 /* SmallCodeConfig */
@@ -2093,7 +2094,7 @@ typedef struct {
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_items;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_pop;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_values;
-  PyObject *__pyx_string_tab[17];
+  PyObject *__pyx_string_tab[18];
 /* #### Code section: module_state_contents ### */
 /* CodeObjectCache.module_state_decls */
 struct __Pyx_CodeObjectCache __pyx_code_cache;
@@ -2130,16 +2131,17 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 #define __pyx_n_u_cline_in_traceback __pyx_string_tab[4]
 #define __pyx_n_u_cyadd __pyx_string_tab[5]
 #define __pyx_n_u_cyfact __pyx_string_tab[6]
-#define __pyx_n_u_items __pyx_string_tab[7]
-#define __pyx_n_u_main __pyx_string_tab[8]
-#define __pyx_n_u_module __pyx_string_tab[9]
-#define __pyx_n_u_n __pyx_string_tab[10]
-#define __pyx_n_u_name __pyx_string_tab[11]
-#define __pyx_n_u_pop __pyx_string_tab[12]
-#define __pyx_n_u_qualname __pyx_string_tab[13]
-#define __pyx_n_u_setdefault __pyx_string_tab[14]
-#define __pyx_n_u_test __pyx_string_tab[15]
-#define __pyx_n_u_values __pyx_string_tab[16]
+#define __pyx_n_u_cysub __pyx_string_tab[7]
+#define __pyx_n_u_items __pyx_string_tab[8]
+#define __pyx_n_u_main __pyx_string_tab[9]
+#define __pyx_n_u_module __pyx_string_tab[10]
+#define __pyx_n_u_n __pyx_string_tab[11]
+#define __pyx_n_u_name __pyx_string_tab[12]
+#define __pyx_n_u_pop __pyx_string_tab[13]
+#define __pyx_n_u_qualname __pyx_string_tab[14]
+#define __pyx_n_u_setdefault __pyx_string_tab[15]
+#define __pyx_n_u_test __pyx_string_tab[16]
+#define __pyx_n_u_values __pyx_string_tab[17]
 /* #### Code section: module_state_clear ### */
 #if CYTHON_USE_MODULE_STATE
 static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
@@ -2154,7 +2156,7 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   #if CYTHON_PEP489_MULTI_PHASE_INIT
   __Pyx_State_RemoveModule(NULL);
   #endif
-  for (int i=0; i<17; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<18; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* #### Code section: module_state_clear_end ### */
 return 0;
@@ -2171,7 +2173,7 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   __Pyx_VISIT_CONST(traverse_module_state->__pyx_empty_tuple);
   __Pyx_VISIT_CONST(traverse_module_state->__pyx_empty_bytes);
   __Pyx_VISIT_CONST(traverse_module_state->__pyx_empty_unicode);
-  for (int i=0; i<17; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<18; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* #### Code section: module_state_traverse_end ### */
 return 0;
@@ -2450,6 +2452,7 @@ static PyObject *__pyx_pf_5cyadd_2cyfact(CYTHON_UNUSED PyObject *__pyx_self, int
  *     for i in range(1, n + 1):
  *         r *= i             # <<<<<<<<<<<<<<
  *     return r
+ * 
 */
     __pyx_v_r = (__pyx_v_r * __pyx_v_i);
   }
@@ -2458,6 +2461,8 @@ static PyObject *__pyx_pf_5cyadd_2cyfact(CYTHON_UNUSED PyObject *__pyx_self, int
  *     for i in range(1, n + 1):
  *         r *= i
  *     return r             # <<<<<<<<<<<<<<
+ * 
+ * def cysub(int a, int b):
 */
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_4 = __Pyx_PyLong_From_int(__pyx_v_r); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 8, __pyx_L1_error)
@@ -2478,6 +2483,145 @@ static PyObject *__pyx_pf_5cyadd_2cyfact(CYTHON_UNUSED PyObject *__pyx_self, int
   __pyx_L1_error:;
   __Pyx_XDECREF(__pyx_t_4);
   __Pyx_AddTraceback("cyadd.cyfact", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cyadd.pyx":10
+ *     return r
+ * 
+ * def cysub(int a, int b):             # <<<<<<<<<<<<<<
+ *     return a - b
+*/
+
+/* Python wrapper */
+static PyObject *__pyx_pw_5cyadd_5cysub(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+); /*proto*/
+static PyMethodDef __pyx_mdef_5cyadd_5cysub = {"cysub", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_5cyadd_5cysub, __Pyx_METH_FASTCALL|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_5cyadd_5cysub(PyObject *__pyx_self, 
+#if CYTHON_METH_FASTCALL
+PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
+#else
+PyObject *__pyx_args, PyObject *__pyx_kwds
+#endif
+) {
+  int __pyx_v_a;
+  int __pyx_v_b;
+  #if !CYTHON_METH_FASTCALL
+  CYTHON_UNUSED Py_ssize_t __pyx_nargs;
+  #endif
+  CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
+  PyObject* values[2] = {0,0};
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("cysub (wrapper)", 0);
+  #if !CYTHON_METH_FASTCALL
+  #if CYTHON_ASSUME_SAFE_SIZE
+  __pyx_nargs = PyTuple_GET_SIZE(__pyx_args);
+  #else
+  __pyx_nargs = PyTuple_Size(__pyx_args); if (unlikely(__pyx_nargs < 0)) return NULL;
+  #endif
+  #endif
+  __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
+  {
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_a,&__pyx_mstate_global->__pyx_n_u_b,0};
+    const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
+    if (unlikely(__pyx_kwds_len < 0)) __PYX_ERR(0, 10, __pyx_L3_error)
+    if (__pyx_kwds_len > 0) {
+      switch (__pyx_nargs) {
+        case  2:
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 10, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  1:
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 10, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      const Py_ssize_t kwd_pos_args = __pyx_nargs;
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "cysub", 0) < (0)) __PYX_ERR(0, 10, __pyx_L3_error)
+      for (Py_ssize_t i = __pyx_nargs; i < 2; i++) {
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("cysub", 1, 2, 2, i); __PYX_ERR(0, 10, __pyx_L3_error) }
+      }
+    } else if (unlikely(__pyx_nargs != 2)) {
+      goto __pyx_L5_argtuple_error;
+    } else {
+      values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 10, __pyx_L3_error)
+      values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 10, __pyx_L3_error)
+    }
+    __pyx_v_a = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_a == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 10, __pyx_L3_error)
+    __pyx_v_b = __Pyx_PyLong_As_int(values[1]); if (unlikely((__pyx_v_b == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 10, __pyx_L3_error)
+  }
+  goto __pyx_L6_skip;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("cysub", 1, 2, 2, __pyx_nargs); __PYX_ERR(0, 10, __pyx_L3_error)
+  __pyx_L6_skip:;
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L3_error:;
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_AddTraceback("cyadd.cysub", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  __pyx_r = __pyx_pf_5cyadd_4cysub(__pyx_self, __pyx_v_a, __pyx_v_b);
+
+  /* function exit code */
+  for (Py_ssize_t __pyx_temp=0; __pyx_temp < (Py_ssize_t)(sizeof(values)/sizeof(values[0])); ++__pyx_temp) {
+    Py_XDECREF(values[__pyx_temp]);
+  }
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_5cyadd_4cysub(CYTHON_UNUSED PyObject *__pyx_self, int __pyx_v_a, int __pyx_v_b) {
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("cysub", 0);
+
+  /* "cyadd.pyx":11
+ * 
+ * def cysub(int a, int b):
+ *     return a - b             # <<<<<<<<<<<<<<
+*/
+  __Pyx_XDECREF(__pyx_r);
+  __pyx_t_1 = __Pyx_PyLong_From_int((__pyx_v_a - __pyx_v_b)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 11, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_r = __pyx_t_1;
+  __pyx_t_1 = 0;
+  goto __pyx_L0;
+
+  /* "cyadd.pyx":10
+ *     return r
+ * 
+ * def cysub(int a, int b):             # <<<<<<<<<<<<<<
+ *     return a - b
+*/
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_AddTraceback("cyadd.cysub", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
@@ -2855,6 +2999,17 @@ __Pyx_RefNannySetupContext("PyInit_cyadd", 0);
   if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_cyfact, __pyx_t_2) < (0)) __PYX_ERR(0, 4, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
+  /* "cyadd.pyx":10
+ *     return r
+ * 
+ * def cysub(int a, int b):             # <<<<<<<<<<<<<<
+ *     return a - b
+*/
+  __pyx_t_2 = PyCFunction_NewEx(&__pyx_mdef_5cyadd_5cysub, NULL, __pyx_mstate_global->__pyx_n_u_cyadd); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 10, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_cysub, __pyx_t_2) < (0)) __PYX_ERR(0, 10, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+
   /* "cyadd.pyx":1
  * def cyadd(int a, int b):             # <<<<<<<<<<<<<<
  *     return a + b
@@ -2925,23 +3080,23 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 5; } index[] = {{1},{20},{1},{1},{18},{5},{6},{5},{8},{10},{1},{8},{3},{12},{10},{8},{6}};
-    #if (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (102 bytes) */
-const char* const cstring = "x\332%\214K\n\3040\014C\217\326\315\254K\231\013\010\327Q!\324I?q\206\346\366c\250@B\017\201&`\031O\370\223\3251\363\361/7Y\325r%r\205\337\242\\Ew\035\222\222\216M\324\263\2634\240H\354\241r\244n\004\002\252\224(\347q\002W\027{\261\321S|vs\300\331\"\177b\235\355\017\323\0351t";
-    PyObject *data = __Pyx_DecompressString(cstring, 102, 1);
+    const struct { const unsigned int length: 5; } index[] = {{1},{20},{1},{1},{18},{5},{6},{5},{5},{8},{10},{1},{8},{3},{12},{10},{8},{6}};
+    #if (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (105 bytes) */
+const char* const cstring = "x\332%\214Q\n\3030\014C\217\266\237~\217\322\013\010\307q!\324I\273\331\036\315\355g\250@B\017\204^\300:\357\364\322\330\361\226\3337\331\251\260\266!h\003\376%\226B|\360\244Zy\356\304\316\323\2424\227n@\247\034\245\372YC\005H\030\324\263\\\347\005|\202\364A\023\257y\034\352\200\213e\376HC\354\017\330\3263\232";
+    PyObject *data = __Pyx_DecompressString(cstring, 105, 1);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (123 bytes) */
-const char* const bytes = "?__Pyx_PyDict_NextRefabcline_in_tracebackcyaddcyfactitems__main____module__n__name__pop__qualname__setdefault__test__values";
+    #else /* compression: none (128 bytes) */
+const char* const bytes = "?__Pyx_PyDict_NextRefabcline_in_tracebackcyaddcyfactcysubitems__main____module__n__name__pop__qualname__setdefault__test__values";
     PyObject *data = NULL;
     CYTHON_UNUSED_VAR(__Pyx_DecompressString);
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 17; i++) {
+    for (int i = 0; i < 18; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
       if (likely(string) && i >= 1) PyUnicode_InternInPlace(&string);
@@ -2953,7 +3108,7 @@ const char* const bytes = "?__Pyx_PyDict_NextRefabcline_in_tracebackcyaddcyfacti
       pos += bytes_length;
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 17; i++) {
+    for (Py_ssize_t i = 0; i < 18; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
