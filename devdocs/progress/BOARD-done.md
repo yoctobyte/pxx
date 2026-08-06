@@ -540,6 +540,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-list-ordering-compares-heap-addresses | N | 70 | bug | NilPy: ordering two statically-typed lists compares their HEAP ADDRESSES, not their contents — `[9,9] < [1,1]` is True; no comparison helper is called at all | — |
 | bug-nilpy-list-plus-nonlist-silently-corrupts-instead-of-typeerror | N | 55 | bug | `[list] + non-list` silently corrupted instead of raising TypeError | — |
 | bug-nilpy-list-reverse-method-missing | N | 50 | bug | `list.reverse()` was missing | — |
+| bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance | N | 70 | bug | NilPy: list, tuple and set all answer True to isinstance(x, list) AND isinstance(x, tuple), and a set reports type(x).__name__ == 'list'. Libraries routinely accept several container kinds and branch on isinstance to tell them apart, so working CPython code takes the wrong arm silently. | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
 | bug-nilpy-method-chaining-on-a-call-result | N | 65 | bug | Chaining a method call on the RESULT of a method call does not parse | — |

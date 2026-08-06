@@ -627,6 +627,15 @@ const
   VT_PROMO_RESERVED = 8194;  { 8194..8199 reserved: tagged classes (promoint31/63) and wider inline }
   VT_PROMO_LAST     = 8199;
 
+  { Which Python kind a TPyList was built as. list, tuple and set share ONE
+    representation, so a class test cannot tell them apart — isinstance() and
+    type().__name__ read this instead. MUST match pylib.pas's PYSEQ_* block;
+    mirrored here for the same reason the VT_ tags above are.
+    (bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance) }
+  PYSEQ_LIST  = 0;
+  PYSEQ_TUPLE = 1;
+  PYSEQ_SET   = 2;
+
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
   EXC_FRAME_SIZE_386 = 32;

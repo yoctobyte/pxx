@@ -2,6 +2,8 @@
 track: N
 prio: 70
 type: bug
+status: done
+owner: claude-AN
 summary: "NilPy: list, tuple and set all answer True to isinstance(x, list) AND isinstance(x, tuple), and a set reports type(x).__name__ == 'list'. Libraries routinely accept several container kinds and branch on isinstance to tell them apart, so working CPython code takes the wrong arm silently."
 ---
 
@@ -145,3 +147,48 @@ Per-fix loop. A `.npy` test asserting the full table above — `isinstance` agai
 tuple, a set, a dict, a str, an int, a float, a bool and None — plus the
 `describe` and `flatten` idioms, diffed against CPython with `tools/pydiff.py`.
 Every currently-correct read path must stay green.
+
+
+## Log
+
+- 2026-08-06 — **resolved**, as scoped: the tag, not a class.
+
+  `TPyList.FIsTuple: Boolean` became **`FKind: Integer`** with `PYSEQ_LIST=0` /
+  `PYSEQ_TUPLE=1` / `PYSEQ_SET=2` (`compiler/builtin/pylib.pas`; mirrored in
+  `defs.inc` beside the `VT_` tags, which the frontend needs and already does
+  for those). LIST is 0 so a freshly-created `TPyList` is a list without anyone
+  saying so. All 31 `FIsTuple` sites moved over mechanically — the assignments,
+  and the propagations (`Result.FKind := FKind`, tuple repeat, concat), which
+  now carry set-ness for free.
+
+  - **`isinstance`**: new `pyseq_kind_v(v)` returns the kind (or -1 for a
+    non-`TPyList`), and `PyParseIsinstance` answers `list`/`tuple`/`set` from it
+    instead of mapping two names onto one class.
+  - **`set` was never stamped at all** — hence `type({1,2}).__name__ == 'list'`.
+    Three sites now do it: the `{...}` display (`PyParseListLiteralT`, whose
+    comment used to read *"Set-literal braces stay lists"*), the `set(xs)`
+    constructor (`pyset_of`), and the empty `set()` (`PyParseEmptySet`, via a
+    new `pylist_mark_set`).
+  - **repr follows the kind**: `{1, 2}` for a set, and `set()` for the empty one,
+    since CPython has no empty-set display. That closes consequence 3 of
+    [[decide-nilpy-set-as-a-distinct-type-or-a-list]] as a side effect.
+
+  Verified: `test/test_nilpy_container_kind_tag.npy` (new, in `make test-nilpy`)
+  — the full `isinstance` × type-name surface for all nine value kinds, the
+  `describe`/`flatten` narrowing idioms, kind survival through `+`, `*`,
+  `list()`, `sorted()` and a comprehension, runtime-produced tuples
+  (`dict.items()`, `zip()`), both `set` constructors, and repr. All lines match
+  CPython. `tools/gate.sh quick` GREEN; the probe corpus shows no regressions
+  and `isinstance` probes that previously failed now pass.
+
+### One divergence this made VISIBLE (pre-existing, not introduced)
+
+A set now prints with braces, so its ORDER is on show: `{3, 1, 2}` where CPython
+prints `{1, 2, 3}`. pxx preserves insertion order; CPython's set order follows
+hashing. Before this change the same set printed `[3, 1, 2]` — wrong brackets
+*and* the same order — so this is strictly closer, not a new defect.
+
+Matching CPython's order needs real hash-set semantics, which is exactly
+[[decide-nilpy-set-as-a-distinct-type-or-a-list]]'s option A and stays with that
+decision. Noted here so the next person to see `{3, 1, 2}` knows it is known and
+where it belongs.

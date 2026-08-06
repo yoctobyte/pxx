@@ -1431,6 +1431,12 @@ test-nilpy: $(COMPILER)
 	# "captures op, which is not in scope at this call". .expected is CPython's.
 	./$(COMPILER) test/test_nilpy_nested_def_own_local_not_a_capture.npy /tmp/test_nilpy_ndcap26
 	/tmp/test_nilpy_ndcap26 | diff -u test/test_nilpy_nested_def_own_local_not_a_capture.expected -
+	# list, tuple and set share one representation, so only a KIND stamped at
+	# construction tells them apart. isinstance asked a CLASS test and answered
+	# True for list AND tuple whatever the value was; a set was not stamped at
+	# all and reported type().__name__ == 'list'. .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_container_kind_tag.npy /tmp/test_nilpy_ckt26
+	/tmp/test_nilpy_ckt26 | diff -u test/test_nilpy_container_kind_tag.expected -
 	# repr() and range() as an ITERABLE: both existed in the runtime but were not
 	# reachable from where a program uses them — repr's name was bound to nothing,
 	# and range materialised only inside a literal `list(`. .expected is CPython's.

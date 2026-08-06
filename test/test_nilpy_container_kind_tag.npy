@@ -1,0 +1,68 @@
+# list, tuple and set share ONE representation (TPyList), so nothing but a KIND
+# stamped at construction can tell them apart afterwards.
+#
+# It used to be a Boolean FIsTuple, read only by type(x).__name__. isinstance
+# mapped BOTH `list` and `tuple` onto FindUClass('TPyList') and asked a class
+# test, which cannot separate rows that are the same row — so every one of the
+# three answered True to isinstance(x, list) AND isinstance(x, tuple), and a set
+# additionally reported type(x).__name__ == 'list' because nothing stamped it
+# at all. Libraries routinely accept several container kinds through one
+# parameter and branch on isinstance to tell them apart, so working CPython code
+# took the wrong arm silently.
+# bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance
+# Every expectation is CPython's own output.
+
+# the full surface: isinstance against each name, and the type name
+vals = [[1,2], (1,2), {1,2}, {"a":1}, "s", 5, 2.5, True, None]
+names = ["list", "tuple", "set", "dict", "str", "int", "float", "bool", "None"]
+for i in range(len(vals)):
+    v = vals[i]
+    print(names[i],
+          "L" if isinstance(v, list) else "-",
+          "T" if isinstance(v, tuple) else "-",
+          "D" if isinstance(v, dict) else "-",
+          "S" if isinstance(v, str) else "-",
+          "I" if isinstance(v, int) else "-",
+          "F" if isinstance(v, float) else "-",
+          type(v).__name__)
+
+# the idiom that makes it matter: narrowing an untyped value
+def describe(x):
+    if isinstance(x, list):  return "list of %d" % len(x)
+    if isinstance(x, tuple): return "tuple of %d" % len(x)
+    if isinstance(x, set):   return "set of %d" % len(x)
+    return "scalar"
+print(describe([1,2]), describe((1,2)), describe({1,2}), describe(5))
+
+def flatten(v):
+    out = []
+    for e in v:
+        if isinstance(e, list):
+            out.extend(e)
+        else:
+            out.append(e)
+    return out
+print(flatten([[1, 2], (3, 4), 5]))
+
+# the kind must SURVIVE the operations that copy or derive a sequence
+print(type(((1,2) + (3,))).__name__)
+print(type(((1,2) * 2)).__name__)
+print(type(list((1,2))).__name__)
+print(type(sorted({3,1,2})).__name__)
+print(type([x for x in (1,2)]).__name__)
+
+# tuples that the RUNTIME produces, not a display
+d = {"a": 1}
+for kv in d.items():
+    print(type(kv).__name__, kv)
+for zv in zip([1], ["a"]):
+    print(type(zv).__name__, zv)
+
+# the set constructor stamps the kind too, not just the {...} display
+print(type(set([1,1,2])).__name__, set([1,1,2]))
+print(type(set()).__name__, set())
+
+# repr follows the kind: braces for a set, parens (and the lone comma) for a
+# tuple, and CPython's `set()` for the empty set which has no display form
+print((1,), (1,2), [1], [])
+print(len({1,2,3}), sorted({1,2,3}))

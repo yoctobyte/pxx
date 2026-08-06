@@ -1514,6 +1514,33 @@ var xNode, node, left, term, callN, argN, tagCall: Integer;
     ASTTk[Result] := Ord(tyBoolean);
   end;
 
+  { `pyseq_kind_v(x) = K` — the test for list / tuple / set.
+
+    These three share one representation (TPyList), so the class test the arm
+    below uses cannot separate them: mapping both `list` and `tuple` onto
+    FindUClass('TPyList') made isinstance answer True for either name whatever
+    the value actually was, and a set matched both. The kind is stamped at the
+    display that built the value and is what type().__name__ already reads
+    (bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance). }
+  function KindEq(k: Int64): Integer;
+  var c, a, e: Integer;
+  begin
+    a := AllocNode(AN_ARG);
+    ASTLeft[a] := xNode;
+    c := AllocNode(AN_CALL);
+    ASTIVal[c] := FindProc('pyseq_kind_v');
+    if ASTIVal[c] < 0 then Error('Nil Python: pylib (pyseq_kind_v) not loaded');
+    ASTTk[c] := Ord(tyInteger);
+    ASTLeft[c] := a;
+    e := AllocNode(AN_INT_LIT);
+    ASTIVal[e] := k;
+    ASTTk[e] := Ord(tyInteger);
+    Result := AllocNode(AN_BINOP);
+    ASTIVal[Result] := Ord(tkEq);
+    ASTLeft[Result] := c; ASTRight[Result] := e;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+
   function OrJoin(a, b: Integer): Integer;
   begin
     if a < 0 then begin Result := b; Exit; end;
@@ -1545,6 +1572,10 @@ begin
     else if nm = 'float' then term := TagEq(VT_DOUBLE)
     else if nm = 'str' then term := TagEq(VT_STRING)
     else if nm = 'bool' then term := TagEq(VT_BOOL)
+    { the three TPyList-backed kinds answer from the KIND, not the class }
+    else if nm = 'list' then term := KindEq(PYSEQ_LIST)
+    else if nm = 'tuple' then term := KindEq(PYSEQ_TUPLE)
+    else if nm = 'set' then term := KindEq(PYSEQ_SET)
     else
     begin
       { Python's container type NAMES map to the pylib classes that back them;
@@ -4300,7 +4331,7 @@ end;
   pylib's pyset_of — which also accepts a dict (its keys) and a string (its
   characters), like CPython. }
 function PyParseEmptySet: Integer;
-var ci, recId, sizeNode, argNode: Integer;
+var ci, recId, sizeNode, argNode, mkPi, markArg, markCall: Integer;
 begin
   if not PyIsEmptySetCall then
   begin
@@ -4333,6 +4364,22 @@ begin
   argNode := AllocNode(AN_ARG);
   ASTLeft[argNode] := sizeNode;
   ASTLeft[Result] := argNode;
+  { ...and stamp it a SET. A bare TPyList allocation is a LIST by default, so
+    without this `set()` reprs as `[]` and answers isinstance(x, list) True.
+    The non-empty arm above gets its kind inside pyset_of. }
+  mkPi := FindProc('pylist_mark_set');
+  if mkPi >= 0 then
+  begin
+    markArg := AllocNode(AN_ARG);
+    ASTLeft[markArg] := Result;
+    ASTRight[markArg] := -1;
+    markCall := AllocNode(AN_CALL);
+    ASTIVal[markCall] := mkPi;
+    ASTTk[markCall] := Ord(tyClass);
+    ASTRight[markCall] := recId;
+    ASTLeft[markCall] := markArg;
+    Result := markCall;
+  end;
   CurASTNode := Result;
 end;
 
@@ -9919,14 +9966,22 @@ begin
     if not Eat(tkComma) then break;
   end;
   Expect(closer, ']/}');
-  { A parenthesised display is a TUPLE, and a tuple is the same TPyList as a
-    list here — so the only thing that can tell them apart when rendering is a
-    flag set now, at the one place the syntax is still visible. Without it
-    `print((1, 2))` printed `[1, 2]`
-    (bug-nilpy-str-of-tuple-is-empty). Set-literal braces stay lists. }
-  if opener = tkLParen then
+  { A parenthesised display is a TUPLE and a braced one is a SET; both are the
+    same TPyList as a list here, so the only thing that can tell the three apart
+    later is a KIND stamped now, at the one place the syntax is still visible.
+    Without it `print((1, 2))` printed `[1, 2]`
+    (bug-nilpy-str-of-tuple-is-empty).
+
+    The SET arm is new (2026-08-06). This comment used to end "Set-literal
+    braces stay lists", and that was the whole reason `type({1,2}).__name__`
+    answered 'list' and a set was indistinguishable from a list to isinstance
+    (bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance). A dict
+    display never reaches here — PyParseSetLiteral sends it to
+    PyParseDictLiteral — so tkBegin at this point is always a set. }
+  if (opener = tkLParen) or (opener = tkBegin) then
   begin
-    mpi := FindProc('pylist_mark_tuple');
+    if opener = tkBegin then mpi := FindProc('pylist_mark_set')
+    else mpi := FindProc('pylist_mark_tuple');
     if mpi >= 0 then
     begin
       selfArg := AllocNode(AN_ARG);
