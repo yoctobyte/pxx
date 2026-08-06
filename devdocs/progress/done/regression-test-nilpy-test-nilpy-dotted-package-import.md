@@ -51,4 +51,4 @@ re-checked against current HEAD before acting.
 Track T follow-up filed separately: the watcher does not close or annotate a
 NEW-RED stub when a later report moves the same job to FIXED, so a self-healing
 red leaves a permanent prio-70 item at the head of the queue.
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit f66c75e75.

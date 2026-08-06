@@ -69,4 +69,4 @@ watcher files a stub on NEW-RED but does not appear to close or annotate that
 stub when a later report moves the same job to FIXED, so a self-healing red
 leaves a permanent prio-70 item at the head of the queue. If that is not already
 handled, auto-closing would keep the ranked queue honest.
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit f66c75e75.

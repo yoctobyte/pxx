@@ -50,4 +50,4 @@ landed). Re-verified locally at HEAD with the exact watcher job, PASS.
 
 Fix: the arm now notes promo only when the target is ALREADY KNOWN to be an
 integer, deferring to a later round of the pre-pass fixpoint otherwise.
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit f66c75e75.
