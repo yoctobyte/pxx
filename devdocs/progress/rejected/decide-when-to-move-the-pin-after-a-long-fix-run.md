@@ -2,6 +2,7 @@
 summary: "32 compiler fixes sit on master unpinned; Track B builds against pinned and has a workaround waiting on the move. Pin all at once, pin incrementally, or leave it — the brake is deliberate and this is a judgment call, not a default"
 type: decision
 track: U
+status: rejected
 prio: 60
 ---
 
@@ -73,3 +74,50 @@ and B is genuinely blocked in the meantime.
 - `task-b-revert-pxxcio-clock-int64-cast-workaround` (Track B)
 - the false RED in [[bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition]]
   (partially — that gate is worth fixing regardless)
+
+
+## REJECTED 2026-08-06 — user's call: bogus ticket
+
+Rejected on review with the user. Two independent reasons, both mine:
+
+**1. It re-litigated a decided question.** [[decide-track-t-autopin-criteria]]
+was decided 2026-08-01 — *option D, never auto-pin; a human runs `make pin`,
+matching current practice*, deferred until the baseline is stable enough to
+automate against. The policy was settled. This ticket should at most have
+asked "is now the time", and instead re-opened "what is the rule". I did not
+read the sibling decision before filing.
+
+**2. Its recommendation cited an unreachable criterion.** I recommended
+"wait for Track T's full matrix, then pin". That same decided ticket records
+that the full tier was *permanently* RED — 18 jobs on xeon, 16 on borg, every
+one ticketed or advisory — and that a naive "pin when green" rule would
+**never fire**. I recommended waiting for something that structurally could not
+happen.
+
+## What was actually true when this was reviewed
+
+The baseline had moved. At `cc4116ba900d` the full tier went **GREEN** —
+native, full and opt — clearing 15 jobs, and that red set was *entirely* the
+riscv32 cascade this session caused and fixed (`6532d45ac`). Nothing else was
+red. As far as the tstate record shows this is the first fully green full
+matrix, and HEAD at review time was 6 commits past it with **no `compiler/` or
+`lib/` change** among them.
+
+So the question this ticket asked had no judgment left in it.
+
+## The one thing worth carrying forward
+
+`decide-track-t-autopin-criteria` deferred option A (baseline allowlist)
+explicitly *"until the baseline justifies the machinery"* — "clear the ground
+first, then revisit once 'stable enough to pin' is a much shorter, more
+tractable list". **That trigger has now fired**: the list is empty, not shorter.
+
+That is a real successor question — *build auto-pin now that the baseline is
+green?* — and it belongs on Track T/U as a fresh item against the decided
+ticket, not as this one. Filed nothing automatically; raising it with the user
+rather than guessing that a first green sweep is a durable enough baseline to
+automate against.
+
+Note for whoever reads this next: **no auto-pin machinery exists today.** Every
+`pin` reference in `tools/twatch.py` concerns reseeding a gate *from* the
+pinned binary; none moves it. Waiting for T to pin will wait indefinitely.

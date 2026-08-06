@@ -38,7 +38,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (200)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -98,7 +98,6 @@ _none_
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
 | decide-pxxpdf-ticket-obsolete | U | 50 | decide | Close `feature-lib-pxxpdf-reportlab-compat` as obsolete, or keep it? | — |
 | decide-scope-hiding-vs-flat-overload-set | U | 60 | decide | One rule explains four separate symptoms: a declaration should HIDE a same-named one from an outer/earlier scope unless marked `overload`. pxx behaves as if everything were `overload` — one flat set, first-in-chain wins. Decide whether to adopt hiding, and which marker carries it: any {$mode}, --strict-overload/{$MIMIC FPC}, or the default | — |
-| decide-when-to-move-the-pin-after-a-long-fix-run | U | 60 | decide | 32 compiler fixes sit on master unpinned; Track B builds against pinned and has a workaround waiting on the move. Pin all at once, pin incrementally, or leave it — the brake is deliberate and this is a judgment call, not a default | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -359,7 +358,7 @@ _none_
 
 1418 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (28)
+## rejected (29)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -376,6 +375,7 @@ _none_
 | bugfix-cfront-bitfield-packing-gcc-compat | A+C | 50 | bugfix | bugfix: C front — bitfield packing GCC-compatibility | — |
 | chore-inc-to-units | A | 50 | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | 50 | chore | Finer runtime-support emission (code size) | — |
+| decide-when-to-move-the-pin-after-a-long-fix-run | U | 60 | decide | 32 compiler fixes sit on master unpinned; Track B builds against pinned and has a workaround waiting on the move. Pin all at once, pin incrementally, or leave it — the brake is deliberate and this is a judgment call, not a default | — |
 | feature-asm-structured-ir-library | A | 50 | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-dynamic-compiler-arrays-ast-fixups | A | 25 | feature | Apply the dynamic-array pattern (proven on the IR arrays) to the other fixed compiler caps: AST nodes, global fixups, label arrays | — |
 | feature-lazy-standard-unit-emission | A | 50 | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
@@ -408,7 +408,6 @@ _none_
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
 - [p 60] [U] decide-abi-portable-vs-target-split
-- [p 60] [U] decide-when-to-move-the-pin-after-a-long-fix-run
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
