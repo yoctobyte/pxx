@@ -25,3 +25,6 @@ ok: /tmp/testmgr-scratch-2450276/test_nested_cow26  [code=51111B  data=1664B  bs
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-06 — auto-closed by the plexus watcher: `test-core#src:test/test_nested_cow.pas` passes at baa606d36caf (tier native); it was red at 937c51dc220a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
