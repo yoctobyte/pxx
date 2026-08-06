@@ -7707,6 +7707,12 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas /tmp/lib_format
 	test "$$(/tmp/lib_format | grep -c '=ok')" = "27"
 	test "$$(/tmp/lib_format | grep -c 'FAIL')" = "0"
+	# Format('%.Nf') on the EXACT decimal expansion: no Int64 threshold at
+	# ~9e13 (silent) or ~9.2e16 (garbage), and no 10^prec overflow.
+	# bug-b-format-fixed-overflows-int64-and-loses-digits
+	$(PXX_STABLE) -Fulib/rtl test/lib_format_fixed.pas /tmp/lib_format_fixed
+	test "$$(/tmp/lib_format_fixed | grep -c '=ok')" = "40"
+	test "$$(/tmp/lib_format_fixed | tail -1)" = "FORMATFIXED OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "20"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"

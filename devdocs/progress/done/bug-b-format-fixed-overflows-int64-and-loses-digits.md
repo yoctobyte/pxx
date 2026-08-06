@@ -3,6 +3,8 @@ summary: "SILENT: sysutils Format('%.2f') scales through Int64 — wrong last di
 type: bug
 track: B
 prio: 65
+status: done
+owner: claude-AB
 ---
 
 # `Format('%.Nf')` scales through Int64 and breaks at ordinary magnitudes
@@ -76,3 +78,45 @@ them are wrong in two different ways.
 `Format('%.2f', ...)` matches FPC across 1e3 .. 1e30 and for
 `123456789012345.67`; no `-9223372036854775` debris at any magnitude; oracle is
 FPC plus `decimal.Decimal(float(x))` for the exact value.
+
+## Log
+- 2026-08-06 — resolved, commit PENDING-COMMIT.
+
+## Resolution 2026-08-06
+
+`FmtFixed` now runs on the exact base-10^9 expansion the file already carried
+for `%g`/`%e` (`ExDecDigits`), with a new `ExDecKeepHalfUp` doing the cut —
+half-AWAY-FROM-ZERO, which is FPC's fixed-point rule and what the old `+ 0.5`
+implemented, deliberately not `ExDecRound`'s half-to-even (that one serves
+`%g`/`%e`, where glibc's rule applies). Both Int64 thresholds are gone, and so
+is the `10^prec` overflow that made `%.20f` of 0.1 answer
+`0.00776627963145224192`.
+
+    Format('%.2f',[123456789012345.67])   123456789012345.67
+    Format('%.2f',[1e17])                 100000000000000000.00
+    Format('%.2f',[1e30])                 1000000000000000019884624838656.00
+    Format('%.20f',[0.1])                 0.10000000000000000555
+
+Verified against `decimal.Decimal` quantized ROUND_HALF_UP over **3000 random
+doubles** spanning 1e-8 to 1e100 at precisions 0..12: exact on x86-64 and,
+re-run through qemu, byte-identical on i386. Plus `test/lib_format_fixed.pas`
+(40 checks, wired into `lib-test`), `gate.sh lib` GREEN, and
+`tools/lib_cross_sweep.sh` clean of new failures — its i386 `lib_vecmath`
+segfault reproduces with the pre-change `sysutils.pas`, so it is not this.
+
+Two behaviours changed beyond the digits, both toward FPC and both covered by
+the new test:
+
+- `Nan` / `+Inf` / `-Inf` are spelled out instead of formatted as numbers
+  (the old body ran `Trunc(NaN * k + 0.5)`);
+- the sign is dropped once every digit has rounded away — `%.0f` of -0.4 is
+  `0`, as FPC gives, not glibc's `-0`.
+
+Deliberately NOT done: the three copies of the exact-decimal core stay
+separate, per the user's 2026-08-06 call recorded in
+[[decide-builtin-and-library-code-sharing]]. Past 2^53 the output diverges from
+FPC by being *exact* where FPC prints an 18-significant-digit approximation,
+and past ~1e300 by keeping the fixed form where FPC bails to `1.0E+0300`; that
+is the display-policy question in
+[[decide-float-fixed-output-exact-or-fpc-17-digit-cap]], and it is answerable
+now only because the digits underneath it are right.

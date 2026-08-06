@@ -2033,24 +2033,104 @@ begin
   end;
 end;
 
-{ Fixed-point: exactly prec fraction digits, rounded (printf %f). }
-function FmtFixed(v: Double; prec: Integer): AnsiString;
-var neg: Boolean; ip, scaled, k: Int64; i: Integer; fracStr: AnsiString;
+{ Keep the first `keep` digits of an EXACT digit string, rounding
+  half-AWAY-FROM-ZERO on the remainder — FPC's fixed-point rule, and the one
+  the old scaled-Int64 FmtFixed implemented with `+ 0.5` ('%.2f' of 0.125 is
+  '0.13' here, where glibc's half-to-even gives '0.12'). Deliberately NOT
+  ExDecRound: that one is half-to-EVEN because it serves %g/%e, where the rule
+  is glibc's.
+
+  `keep` may be 0 — "everything is below the last printed place", which still
+  has to round (0.5 at %.0f is '1'). A carry out of the leading digit sets
+  carryOut and the caller prepends the '1'. Placed here, below the
+  CHANGE-ONE-CHANGE-BOTH block, because pylib.pas has no Format and so needs
+  no copy of it. }
+function ExDecKeepHalfUp(const s: AnsiString; keep: Integer;
+                         var carryOut: Boolean): AnsiString;
+var r: AnsiString; i, c: Integer;
 begin
+  carryOut := False;
+  if keep >= Length(s) then
+  begin
+    r := s;
+    for i := Length(s) + 1 to keep do r := r + '0';
+    Result := r;
+    Exit;
+  end;
+  r := Copy(s, 1, keep);
+  if s[keep + 1] >= '5' then
+  begin
+    i := keep;
+    while i >= 1 do
+    begin
+      c := Ord(r[i]) - Ord('0') + 1;
+      if c < 10 then begin r[i] := Chr(Ord('0') + c); break; end;
+      r[i] := '0';
+      i := i - 1;
+    end;
+    if i = 0 then carryOut := True;
+  end;
+  Result := r;
+end;
+
+{ Fixed-point: exactly prec fraction digits, rounded (printf %f).
+
+  Runs on the EXACT decimal expansion of the double. The old body scaled the
+  whole value into an Int64 (`Trunc(v * 10^prec + 0.5)`), which had two
+  thresholds: past 2^53 the scaled double could not hold the value exactly and
+  the last digits were silently wrong (from |v| ~ 9e13 at prec = 2 — cents,
+  byte counts, nanosecond timestamps), and past 2^63 the Trunc wrapped to
+  Int64.Min and every value printed the same string, with a minus sign INSIDE
+  the fraction: '-92233720368547758.-8'. A large `prec` overflowed `k` the same
+  way ('%.20f' of 0.1). Exact integer expansion has neither threshold —
+  bug-b-format-fixed-overflows-int64-and-loses-digits.
+
+  Past 2^53 we now print the double's TRUE digits, where FPC prints an
+  18-significant-digit approximation and, past ~1e300, abandons the fixed form
+  for '1.0E+0300'. That divergence is deliberate and is the display-policy
+  question in decide-float-fixed-output-exact-or-fpc-17-digit-cap; printing
+  digits that are not the value's digits is not an option on either answer. }
+function FmtFixed(v: Double; prec: Integer): AnsiString;
+var neg, carry, allZero: Boolean;
+    ds, digits, frac: AnsiString;
+    e10, q, keep, i: Integer;
+begin
+  if prec < 0 then prec := 0;
+  if v <> v then begin Result := 'Nan'; Exit; end;
+  if v > 1.7976931348623157e308 then begin Result := '+Inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin Result := '-Inf'; Exit; end;
   neg := v < 0;
   if neg then v := -v;
-  k := 1;
-  for i := 1 to prec do k := k * 10;
-  scaled := Trunc(v * k + 0.5);            { round half up }
-  ip := scaled div k;
-  Result := IntToStr(ip);
+  if v = 0.0 then
+  begin
+    { ExDecDigits would answer '0' with decExp -1074 and send us padding a
+      thousand leading zeros for nothing }
+    ds := '0'; e10 := 0;
+  end
+  else
+    ExDecDigits(v, ds, e10);   { v = ds[1].ds[2..] * 10^e10, no leading zero }
+  q := e10 + 1;                { digits before the point }
+  if q < 0 then
+  begin
+    for i := 1 to -q do ds := '0' + ds;
+    q := 0;
+  end;
+  keep := q + prec;
+  digits := ExDecKeepHalfUp(ds, keep, carry);
+  if carry then begin digits := '1' + digits; q := q + 1; end;
+  Result := Copy(digits, 1, q);
+  if Result = '' then Result := '0';
   if prec > 0 then
   begin
-    fracStr := IntToStr(scaled mod k);
-    while Length(fracStr) < prec do fracStr := '0' + fracStr;
-    Result := Result + '.' + fracStr;
+    frac := Copy(digits, q + 1, prec);
+    Result := Result + '.' + frac;
   end;
-  if neg then Result := '-' + Result;
+  { FPC drops the sign once every digit has rounded away: '%.0f' of -0.4 is
+    '0', not glibc's '-0'. }
+  allZero := True;
+  for i := 1 to Length(digits) do
+    if digits[i] <> '0' then begin allZero := False; break; end;
+  if neg and not allZero then Result := '-' + Result;
 end;
 
 { ---- %g and %e ------------------------------------------------------------
