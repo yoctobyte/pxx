@@ -3647,6 +3647,7 @@ var pa, pb: PPyVarRec;
     la, lb, k, n: Int64;
     ea, eb: Variant;
     oa, ob: TObject;
+    pg: Integer;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   { Two SEQUENCES compare LEXICOGRAPHICALLY: the first index where the elements
@@ -3692,7 +3693,14 @@ begin
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
     pyvar_gt := pyvar_to_float(a) > pyvar_to_float(b)
   else
-    pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+  begin
+    { arbitrary precision stays exact — see pycmp_v. This is the SORT path, so
+      without it sorted([2**65, 2**64, 5]) came back in the order it was given:
+      every element narrowed to the same wrapped value and no swap ever fired. }
+    pg := PXXPromoVarCmpTry(@a, @b, 5);        { 5 = greater-than }
+    if pg <> 0 then pyvar_gt := (pg = 2)
+    else pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+  end;
 end;
 
 
@@ -4360,6 +4368,7 @@ end;
 function pyvar_to_float(const v: Variant): Double;
 var
   p: PPyVarRec;
+  pslot: array[0..1] of NativeInt;   { a promo slot, like PXXPromoVarArithTry's }
 begin
   p := PPyVarRec(@v);
   if p^.VType = 3 then
@@ -4367,10 +4376,20 @@ begin
   else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     Result := p^.Payload
   else if p^.VType = 8193 then
+  begin
     { VT_PROMO_INT64 is a NUMBER; it was missing here, so a heap-tier
       promotable int reaching a float context raised "expected a number, got
-      <unknown>". pyvar_to_int owns the decimal-payload narrowing rule. }
-    Result := pyvar_to_int(v)
+      <unknown>".
+      Read off the LIMBS via PXXPromoToDouble, not through pyvar_to_int: that
+      narrows mod 2^64, so `float(2**64)` answered 0.0 — silently, since 0.0 is
+      a perfectly ordinary float. A heap-tier promo is by construction outside
+      Int64, which is exactly when the narrowing is guaranteed to be wrong
+      (bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum). }
+    PXXPromoInit(@pslot);
+    PXXPromoFromVariant(@pslot, @v);
+    Result := PXXPromoToDouble(@pslot);
+    PXXPromoClear(@pslot);
+  end
   else
   begin
     PyTypeError(p^.VType, 'a number');
@@ -4749,6 +4768,13 @@ begin
   end
   else
   begin
+    { An ARBITRARY-PRECISION operand stays exact — the same first line pyadd_v /
+      pysub_v / pymul_v already carry. Without it BOTH operands went through
+      pyvar_to_int below, which narrows mod 2^64: `(2**64 + 5) // 1` answered 5,
+      and `x % (2**64)` raised ZeroDivisionError because the DIVISOR narrowed to
+      0. Op 11 is FLOOR div, not the truncating 4 — see PXXPromoVarArithTry
+      (bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum). }
+    if PXXPromoVarArithTry(@Result, @a, @b, 11) <> 0 then Exit;
     r^.VType := 2;
     { pyvar_to_int, not raw Payload: a non-int-tagged operand (e.g. a VT_CHAR /
       VT_STRING digit, or an int arriving under a tag whose value is not stored
@@ -4784,6 +4810,9 @@ begin
   end
   else
   begin
+    { arbitrary precision stays exact — see pyfloordiv_v. Op 12 is FLOOR mod
+      (remainder takes the DIVISOR's sign), not the truncating 5. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 12) <> 0 then Exit;
     r^.VType := 2;
     { pyvar_to_int, not raw Payload — see pyfloordiv_v: a non-directly-tagged
       operand otherwise reads 0 and modulo divides by zero. }
@@ -5076,7 +5105,7 @@ end;
 
 function pycmp_v(const a: Variant; const b: Variant): Int64;
 var pa, pb: PPyVarRec; sa, sb: AnsiString; fa, fb: Double; ia, ib: Int64;
-    oa, ob: TObject;
+    oa, ob: TObject; pc: Integer;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   if (pa^.VType = 7) and (pb^.VType = 7) then
@@ -5107,6 +5136,22 @@ begin
     if fa < fb then Result := -1
     else if fa > fb then Result := 1
     else Result := 0;
+    Exit;
+  end;
+  { An ARBITRARY-PRECISION operand must not go through pyvar_to_int, which
+    narrows mod 2^64: `2**64 > 5` answered False (0 > 5) and sorted() put the
+    biggest value first. PXXPromoVarCmpTry answers 0 when NEITHER side is
+    promo-tagged, so the ordinary path below is untouched for every other pair;
+    on a promo pair it returns 1=False / 2=True. Asked twice — `<` then `=` —
+    because this routine owes a three-way answer and the Try helper is
+    predicate-shaped; both calls are on the promo path only
+    (bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum). }
+  pc := PXXPromoVarCmpTry(@a, @b, 3);          { 3 = less-than }
+  if pc <> 0 then
+  begin
+    if pc = 2 then Result := -1
+    else if PXXPromoVarCmpTry(@a, @b, 1) = 2 then Result := 0   { 1 = equal }
+    else Result := 1;
     Exit;
   end;
   ia := pyvar_to_int(a); ib := pyvar_to_int(b);

@@ -7,13 +7,19 @@ summary: "Five ordinary Python forms NilPy diagnoses cleanly but does not accept
 
 # Small NilPy syntax gaps found by the 2026-08-06 differential sweep
 
+(Extended later the same day as the sweep widened from unit-shaped probes to
+real programs; the last four rows came from a JSON writer, a hash table and a
+matrix builder rather than from targeted probing.)
+
 - **Type:** feature (subset boundary) — **Track N**
 - **Found:** 2026-08-06, bughunting with `tools/pydiff.py`.
 
-All five **fail loudly with a clear, accurate diagnostic** — none is a silent
-wrong value, and each names its workaround. They are grouped in one ticket
-because each is small and they were found in one pass; split if any turns out to
-be substantial.
+All of these **fail loudly**, and most with a clear, accurate diagnostic — none is a silent
+wrong value, and each names its workaround. They are grouped in one ticket because each is small and they were found in one
+sweep; split if any turns out to be substantial. The last three rows have the
+weakest diagnostics — *"undefined variable (c)"* and *"expected expression"* do
+not tell the author that the FORM is unsupported, which is worth fixing even
+before the forms themselves are.
 
 | form | today's diagnostic |
 | --- | --- |
@@ -22,6 +28,13 @@ be substantial.
 | `type(1) == int` | *"type(x) is only supported as type(x).__name__"* |
 | `lambda x, y=1: x + y` | *"a lambda default capture must be a plain name (key=key)"* |
 | `print("a", "b", sep="-")` | *"print sep= is not supported yet"* |
+| `d = dict(x=1, y=2)` | *"dict has no parameter named 'x'"* |
+| `f.update(b=2)` | *"TPyDict.update has no parameter named 'b'"* |
+| `c[::2] = [7, 8]` (extended-slice assign) | *"assigning to an extended slice (with a step) is not implemented; only x[lo:hi] = src is"* |
+| `self.__class__.__name__` | `AttributeError: 'Base' object has no attribute '__class__'` (runtime) — note `type(self).__name__` works |
+| `(c, d), e = (3, 4), 5` (nested unpacking) | *"undefined variable (c)"* |
+| `t = 1, 2, 3` (bare tuple, no parens) | *"expected expression"* — note `t = (1, 2, 3)` and `p, q = two()` both work |
+| `[(i, j) for i in range(2) for j in range(2)]` (two-`for` comprehension) | *"undefined variable (j)"* |
 
 Everything else the sweep covered agrees with CPython: int/float arithmetic and
 division semantics, string methods and slicing, list/dict/set operations and

@@ -56,10 +56,10 @@ _none_
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
-| bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum | A | 65 | bug | NilPy: `//`, `%`, ordering comparisons, float(), max/min and sorted() narrow a Variant-held arbitrary-precision int through pyvar_to_int — (2**64+5) // 1 prints 5; the promo guards test the STATIC type, which is tyVariant, so they never fire | — |
 | bug-nilpy-for-range-counter-survives-with-the-wrong-value | N | 55 | bug | NilPy: after `for i in range(3)` the variable holds 3 (the value that FAILED the test), CPython says 2 — and after an EMPTY range it is clobbered to `start` instead of keeping its previous value | — |
 | bug-nilpy-for-rejects-an-inline-suite | N | 35 | bug | NilPy: `for i in r: body` on one line is a parse error, while `if c: body` and `while c: body` both accept the same inline suite | — |
 | bug-nilpy-int-of-a-long-decimal-string-narrows | N | 55 | bug | NilPy: int('<30 digits>') wraps mod 2^64 instead of producing an arbitrary-precision int — int('123456789012345678901234567890') prints -4362896299872285998 | — |
+| bug-nilpy-int-of-a-variant-held-bignum-raises | N | 40 | bug | NilPy: int(x) where x is a variant-held arbitrary-precision int raises EVariantError instead of being the identity — and pyint_v, the variant-returning helper that would answer it, exists in pylib but is never emitted by the frontend | — |
 | bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module | N | 40 | bug | A def shadowing a builtin that has NO pylib proc (ord, chr, …) takes effect from the top of the module — `print(ord('A'))` ABOVE the def prints the user's answer where CPython prints 65. Silent. | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
@@ -369,9 +369,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1425)
+## done (1426)
 
-1425 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1426 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -421,7 +421,6 @@ _none_
 - [p 70] [T] regression-test-nilpy-test-nilpy-pyexpr-semantics
 - [p 70] [T] regression-test-nilpy-test-nilpy-qualifier-vs-cproc
 - [p 65] [P] bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
-- [p 65] [A] bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum
 - [p 65] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
@@ -522,6 +521,7 @@ _none_
 - [p 40] [N] feature-nilpy-multi-arg-callback-bridges (unblocks 1)
 - [p 40] [N] bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
 - [p 40] [N] bug-nilpy-def-body-scans-run-on-when-no-indent-is-found
+- [p 40] [N] bug-nilpy-int-of-a-variant-held-bignum-raises
 - [p 40] [N] bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse

@@ -2,6 +2,8 @@
 track: A
 prio: 65
 type: bug
+status: done
+owner: claude-AN
 summary: "NilPy: `//`, `%`, ordering comparisons, float(), max/min and sorted() narrow a Variant-held arbitrary-precision int through pyvar_to_int — (2**64+5) // 1 prints 5; the promo guards test the STATIC type, which is tyVariant, so they never fire"
 ---
 
@@ -110,3 +112,59 @@ Per-fix loop. A `.npy` test diffing `//`, `%`, `< <= > >=`, `float()`, `max`,
 `min` and `sorted` over operands straddling 2^63 and 2^64 — **including negative
 operands**, to pin the floor-vs-truncate rule — against CPython via
 `tools/pydiff.py`.
+
+
+## Log
+
+- 2026-08-06 — **resolved.** Four call sites, all following the pattern
+  `pyadd_v` / `pysub_v` / `pymul_v` already used: ask the promo runtime first,
+  fall through to the machine-int path when neither side is promo-tagged (the
+  Try helpers answer 0 in that case, so nothing else changes).
+
+  - **`pyfloordiv_v` / `pyfloormod_v`** (`compiler/builtin/pylib.pas`) now call
+    `PXXPromoVarArithTry` before `pyvar_to_int`. The trap this ticket flagged
+    was real: ops 4/5 are Pascal's TRUNCATING div/mod, so reusing them would
+    have swapped a loud wrong answer for a quiet one on negatives. Added **ops
+    11/12** to `PXXPromoVarArithTry` (`compiler/builtin/promocore.pas`) routing
+    to the existing `PXXPromoFloorDiv` / `PXXPromoFloorMod`, and the test pins
+    `(0 - bx) // 3` and `(0 - bx) % 3` against CPython for exactly that reason.
+  - **`pycmp_v`** (the operator path) consults `PXXPromoVarCmpTry`. It owes a
+    three-way answer and the Try helper is predicate-shaped, so it asks twice
+    (`<`, then `=`) — both calls on the promo path only.
+  - **`pyvar_gt`** (the SORT path, a separate entry point) does the same with
+    the `>` predicate. Without it `sorted([2**65, 2**64, 5])` returned its
+    input order: every element narrowed to the same wrapped value, so no swap
+    ever fired.
+  - **`pyvar_to_float`** reads a heap-tier promo off the LIMBS via
+    `PXXPromoToDouble` instead of through `pyvar_to_int`. `float(2**64)` was
+    answering 0.0, which is silent because 0.0 is an ordinary float.
+
+  Verified against CPython: `//`, `%`, `divmod`, `< <= > >= == !=`, `float()`,
+  `min`, `max` and `sorted` over operands straddling 2^63 and 2^64, both signs.
+  `test/test_nilpy_int_promotion_default.npy` extended with that surface.
+  `tools/gate.sh quick` GREEN.
+
+### Residual, deliberately NOT fixed here: `int()` of a variant-held bignum
+
+```python
+x = 2**64
+print(int(x))    # CPython 18446744073709551616
+                 # pxx     Runtime error: EVariantError, promotable integer
+                 #         18446744073709551616 does not fit an Int64
+```
+
+`int()` of an int is the identity in Python, including past Int64. This one
+**raises** rather than answering wrongly, so it is not in the silent class the
+rest of this ticket was about, and fixing it is a FRONTEND change rather than a
+runtime one: `PXXDBG=a.ir` shows `int(x)` lowering to a helper typed `tk=13`
+(Int64), i.e. the narrowing `pyvar_to_int`.
+
+Worth recording for whoever takes it: **`pyint_v` — the variant-in/variant-out
+helper that would answer this correctly — already exists in `pylib.pas` and is
+never emitted by the frontend at all** (`grep pyint_v compiler/pyparser.inc`
+finds nothing). So the fix is likely "route `int()` on a variant argument to the
+helper that is already there", not new runtime code. I patched `pyint_v` to be
+promo-aware, measured that it changed nothing because it is unreachable, and
+**reverted it** rather than ship a speculative edit.
+
+Filed as a follow-up: [[bug-nilpy-int-of-a-variant-held-bignum-raises]].

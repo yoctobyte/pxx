@@ -1721,6 +1721,14 @@ begin
   else if op = 8 then PXXPromoXor(@pr, @pa, @pb)
   else if op = 9 then PXXPromoShl(@pr, @pa, @pb)
   else if op = 10 then PXXPromoShr(@pr, @pa, @pb)
+  { 11/12 are Python's FLOOR div/mod, distinct from 4/5 (Pascal's truncating
+    div/mod) — the two languages genuinely disagree on negative operands, which
+    is why promocore exports both pairs rather than one routine with a mode
+    flag. pyfloordiv_v / pyfloormod_v ask for these; a Pascal `div` on a variant
+    still asks for 4/5. Reusing 4/5 for `//` would have traded a loud wrong
+    answer for a quiet one (-7 // 3 is -3 in Python, -2 truncating). }
+  else if op = 11 then PXXPromoFloorDiv(@pr, @pa, @pb)
+  else if op = 12 then PXXPromoFloorMod(@pr, @pa, @pb)
   else
   begin
     { an operator with no promotable-int meaning (e.g. `/`): leave it to the

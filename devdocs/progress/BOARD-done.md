@@ -505,6 +505,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-float-repr-not-shortest-roundtrip | N | 70 | bug | NilPy float repr is fixed-precision, not CPython's shortest round-trip | — |
 | bug-nilpy-float-times-string-hangs | N | 65 | bug | `2.5 * "ab"` hangs forever | — |
 | bug-nilpy-floor-div-assign-is-true-division | N | 55 | bug | `self.n //= v` performs TRUE division — 25 //= 3 gives 8.333… instead of 8. The `//=` token is folded onto the same binop as `/=` | — |
+| bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum | A | 65 | bug | NilPy: `//`, `%`, ordering comparisons, float(), max/min and sorted() narrow a Variant-held arbitrary-precision int through pyvar_to_int — (2**64+5) // 1 prints 5; the promo guards test the STATIC type, which is tyVariant, so they never fire | — |
 | bug-nilpy-for-else-and-while-else-not-supported | N | 30 | bug | The `else` clause on a for/while loop does not parse — `for ... else:` fails with 'expected expression' at the else | — |
 | bug-nilpy-for-range-loop-counter-is-32-bit-and-never-terminates | N | 70 | bug | NilPy: a `for i in range(...)` counter is allocated tyInteger (4 bytes), so a bound at or past 2^31 wraps — range(3000000000, 3000000003) starts at -1294967296 and loops forever, while list(range(...)) of the same bounds is correct | — |
 | bug-nilpy-for-variable-reused-after-a-non-string-binding-iterates-garbage | N | 70 | bug | A `for` variable that was previously bound to a non-string value iterates GARBAGE | — |

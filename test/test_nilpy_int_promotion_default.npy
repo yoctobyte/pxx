@@ -218,3 +218,28 @@ vseen = []
 for vi in range(3000000000, 3000000003):
     vseen.append(vi)
 print(vseen)
+
+# A bignum reached through a VARIANT — a module-scope binding, a container
+# element, an unannotated parameter — is the ordinary NilPy shape, and four
+# operator families narrowed it mod 2^64 on the way in. `//` and `%` went
+# through pyfloordiv_i/pyfloormod_i (Int64 in, Int64 out) because the promo
+# guards test the STATIC type, which is tyVariant; ordering went through
+# pyvar_to_int; float() likewise. All four were SILENT: (2**64+5)//1 answered
+# 5, 2**64 > 5 answered False, sorted() returned its input order, and
+# float(2**64) answered 0.0.
+# bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum
+bx = 2**64 + 5
+print(bx // 1, bx // 3, bx % 7)
+print(bx % (2**64))
+# the FLOOR rule, which is where reusing Pascal's truncating div/mod would have
+# traded a loud wrong answer for a quiet one
+print((0 - bx) // 3, (0 - bx) % 3)
+print((0 - 7) // 3, (0 - 7) % 3, 7 // 3, 7 % 3)
+by = 2**64
+bz = 2**65
+print(by > 5, by < 5, by >= 5, by <= 5, by == 2**64)
+print(by < bz, bz > by, by != bz)
+print(float(by))
+print(max(by, 5), min(by, 5))
+print(sorted([bz, by, 5]))
+print(divmod(by, 3))
