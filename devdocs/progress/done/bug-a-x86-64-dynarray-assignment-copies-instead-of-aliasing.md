@@ -115,4 +115,4 @@ and need per-scope resolution. Also check by-value dynamic-array parameters and
 dynamic-array function results, which the scan does not cover.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit 937c51dc2.
