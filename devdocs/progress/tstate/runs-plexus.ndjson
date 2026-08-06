@@ -134,3 +134,4 @@
 {"date": "2026-08-06T07:48:38Z", "fixed": [], "full": false, "new_red": [], "sha": "08bea94513da9b618653f3e0e19218744fd86bd8", "tier": "native", "verdict": "RED", "wall": 122.4}
 {"date": "2026-08-06T07:53:43Z", "fixed": [], "full": false, "new_red": [], "sha": "6b348ee224c81b9d87af3863090fbe192ea646ba", "tier": "native", "verdict": "RED", "wall": 122.4}
 {"date": "2026-08-06T07:56:42Z", "fixed": [], "full": false, "new_red": [], "sha": "9294bce2c800eaa1dc7242e6ffd01120aaa20ca7", "tier": "native", "verdict": "RED", "wall": 123.1}
+{"date": "2026-08-06T08:04:05Z", "fixed": [], "full": true, "new_red": ["test-nilpy#src:test/test_nilpy_augmented_assign_class_dunder.npy", "test-nilpy#src:test/test_nilpy_list_mutators_return_none.npy", "test-nilpy#src:test/test_nilpy_pyexpr_semantics.npy"], "sha": "9294bce2c800eaa1dc7242e6ffd01120aaa20ca7", "tier": "full", "verdict": "RED", "wall": 434.3}
