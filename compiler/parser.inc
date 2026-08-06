@@ -30338,6 +30338,14 @@ begin
             CaseEqual(tnm, 'cos') or CaseEqual(tnm, 'arctan')) and
            (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then
         begin usesMath := True; Break; end;
+        { Pi is the exception to the '(' rule: FPC's System declares it too, and
+          it is PARAMLESS, so it is written bare. Nothing distinguishes it from
+          a variable named `pi` at this stage, so a program with one pays ~35KB
+          of unreferenced math. That is a size cost, not a correctness one — the
+          variable still shadows the unit's function
+          (bug-p-program-function-does-not-shadow-used-unit). }
+        if CaseEqual(tnm, 'pi') then
+        begin usesMath := True; Break; end;
       end;
     if usesMath then needsMath := True;
   end;

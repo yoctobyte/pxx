@@ -4016,7 +4016,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_shadow_program_over_unit.pas /tmp/test_shadow_program_over_unit26
 	test "$$(/tmp/test_shadow_program_over_unit26)" = "$$(printf 'mine\nmine-trim\nX\n7')"
 	./$(COMPILER) test/test_math_intrinsics_no_uses.pas /tmp/test_math_intrinsics_no_uses26
-	test "$$(/tmp/test_math_intrinsics_no_uses26)" = "$$(printf '4.0\n0.0\n1.0\n1.0\n0.0\n7')"
+	test "$$(/tmp/test_math_intrinsics_no_uses26)" = "$$(printf '4.0\n0.0\n1.0\n1.0\n0.0\n3.14159\n7')"
 	./$(COMPILER) test/test_writeln_text_char.pas /tmp/test_writeln_text_char26
 	test "$$(/tmp/test_writeln_text_char26)" = "$$(printf 'ax   x  Z|\nab42 3.5|\nABCD\nOK')"
 	./$(COMPILER) test/test_promoint_function_result.pas /tmp/test_promoint_function_result26

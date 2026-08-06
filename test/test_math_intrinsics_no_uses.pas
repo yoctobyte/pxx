@@ -13,6 +13,7 @@ begin
   writeln(cos(0.0):0:1);
   writeln(exp(0.0):0:1);
   writeln(arctan(0.0):0:1);
+  writeln(Pi:0:5);
   ln := 7;
   writeln(ln);
 end.
