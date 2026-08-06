@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -28,3 +29,4 @@ pascal26:28: error: Nil Python: annotate the type / too dynamic [a=6 b=28]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-08-06 — resolved, commit PENDING-COMMIT.

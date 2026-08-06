@@ -15890,10 +15890,22 @@ begin
         constraint), only MODULE scope was missing it
         (bug-nilpy-augmented-assignment-truncates-to-32-bits).
 
-        Unconditionally promo, without probing the RHS: unlike `/=` (which must
-        decide float vs int) there is nothing to decide — if the target is an
-        int this is the right type, and if it is not, PyWiden joins promo with
-        whatever the target really is exactly as it does for a wide literal. }
+        Only when the target is ALREADY KNOWN to be an integer — the arm is a
+        token shape, so it cannot see the type, and `+=` is not an int-only
+        operator: `a = Acc(10); a += 5` dispatches __iadd__ and `xs = [1]; xs +=
+        [2, 3]` is an in-place extend. Noting promo unconditionally asserted
+        "this name is an int" about every one of them, and PyWiden(promo, class)
+        is an honest error, so a whole valid program stopped compiling with
+        "annotate the type / too dynamic"
+        (regression-test-core-test-nilpy-augmented-assign-class-dunder). The
+        earlier note here claimed PyWiden would join promo with whatever the
+        target really is; that holds for a variant and for machine ints, and
+        for nothing else.
+
+        Deferring costs nothing: this pre-pass is a FIXPOINT over rounds, so a
+        name whose type is not established yet is simply promoted on the next
+        round — `a = 1` notes tyInt64 in round 1 and this arm fires in round 2,
+        which is still before any code is emitted. }
       else if (depth <= 255) and
               ((depth = 0) or (not blockIsDef[depth])) and
               (Tokens[i].Kind = tkIdent) and
@@ -15901,7 +15913,17 @@ begin
               (Tokens[i + 1].Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkShlEq]) and
               ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
       begin
-        PyNoteLocalType(GetTokenStr(i), tyPromoInt64, REC_NONE);
+        blkName := GetTokenStr(i);
+        blkJ := PyFindConstraint(blkName);
+        if blkJ >= 0 then blkTk := PyLocals[blkJ].TypeKind
+        else
+        begin
+          si := PyProgSym(blkName);
+          if si >= 0 then blkTk := Syms[si].TypeKind else blkTk := tyUnknown;
+        end;
+        if (blkTk = tyInteger) or (blkTk = tyInt64) or (blkTk = tyBoolean) or
+           TypeIsPromoInt(blkTk) then
+          PyNoteLocalType(blkName, tyPromoInt64, REC_NONE);
         Inc(i);
       end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and

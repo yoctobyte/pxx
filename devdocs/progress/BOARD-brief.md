@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:7 backlog:213 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1431 rejected:29`
+`unfinished:7 blocked:7 backlog:213 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1432 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,7 +33,6 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 193, ranked
 
-- `[p 70] [T]` regression-test-core-test-nilpy-augmented-assign-class-dunder
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-args-errors
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-containers
 - `[p 70] [T]` regression-test-nilpy-test-cpyext-cython
@@ -63,5 +62,6 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
+- `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 
 _163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
