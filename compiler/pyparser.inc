@@ -342,6 +342,71 @@ begin
   PyHoistHead := stash;
 end;
 
+{ The current tail of the pending-hoist chain, or -1 when nothing is pending.
+  Snapshot it before parsing a sub-expression; PyFoldHoistSince then takes back
+  exactly what that sub-expression added. }
+function PyHoistTail: Integer;
+begin
+  Result := PyHoistHead;
+  if Result < 0 then Exit;
+  while ASTRight[Result] >= 0 do Result := ASTRight[Result];
+end;
+
+{ Fold the hoisted setup added SINCE `savedTail` into `node`, as a right-nested
+  comma chain (`h1, h2, node`) — ir.inc's AN_COMMA arm evaluates each Left for
+  its effect and yields the Right.
+
+  This is what makes a hoisting sub-expression correct inside a SHORT-CIRCUIT
+  operand. A string method call hoists its setup; left where it was, that setup
+  ran wherever the enclosing statement flushed — outside the loop for a `while`
+  condition, and unconditionally for the right operand of an `and`. The first
+  produced a stale condition (`while s.startswith("a")` tested once and then
+  spun); "fixing" it by folding at the whole condition instead produced the
+  second (`while j < len(s) and s[j].isdigit()` evaluated `s[j]` even when
+  `j < len(s)` was False -> IndexError). Attaching each operand's setup to THAT
+  operand is what satisfies both: the value is fresh, and it is only computed on
+  the path that actually reaches it
+  (bug-nilpy-a-method-call-in-a-while-condition-is-evaluated-once). }
+function PyFoldHoistSince(savedTail, node: Integer): Integer;
+var newHead, scan, n, k, cm: Integer;
+    hStmts: array[0..63] of Integer;
+begin
+  Result := node;
+  if savedTail < 0 then
+  begin
+    newHead := PyHoistHead;
+    PyHoistHead := -1;
+  end
+  else
+  begin
+    newHead := ASTRight[savedTail];
+    ASTRight[savedTail] := -1;
+  end;
+  if newHead < 0 then Exit;
+  n := 0;
+  scan := newHead;
+  while (scan >= 0) and (n <= High(hStmts)) do
+  begin
+    if ASTLeft[scan] >= 0 then
+    begin
+      hStmts[n] := ASTLeft[scan];
+      Inc(n);
+    end;
+    scan := ASTRight[scan];
+  end;
+  { more than the fold can hold: the remainder goes back on the pending chain
+    rather than being dropped }
+  if scan >= 0 then PyHoistPrepend(scan);
+  for k := n - 1 downto 0 do
+  begin
+    cm := AllocNode(AN_COMMA);
+    ASTLeft[cm] := hStmts[k];
+    ASTRight[cm] := Result;
+    ASTTk[cm] := ASTTk[Result];
+    Result := cm;
+  end;
+end;
+
 { Prepend any hoisted setup statements to `seq`, then clear. Called by each
   statement-sequence builder right after it parses one statement, so the
   expression-comprehension setup lands before the statement that uses it. }
@@ -2082,13 +2147,16 @@ end;
 function PyBoolOpReturnsOperand(a, b: Integer): Boolean; forward;
 function PyMakeBoolOpValue(a, b: Integer; isOr: Boolean): Integer; forward;
 procedure PyParseBoolAnd;
-var left, right, node: Integer;
+var left, right, node, hSave: Integer;
 begin
   PyParseBoolNot;
   left := CurASTNode;
   while CurTok.Kind = tkAnd do
   begin
     Next;
+    { the RIGHT operand's own hoisted setup belongs to that operand, so it runs
+      only when short-circuit actually reaches it — see PyFoldHoistSince }
+    hSave := PyHoistTail;
     if PyBareNoneHere then          { `x and None` — see the or-path note }
     begin
       Next;
@@ -2099,6 +2167,7 @@ begin
       PyParseBoolNot;
       right := CurASTNode;
     end;
+    right := PyFoldHoistSince(hSave, right);
     if PyBoolOpReturnsOperand(left, right) then
       node := PyMakeBoolOpValue(left, right, False)
     else
@@ -2440,7 +2509,7 @@ begin
 end;
 
 procedure PyParseBoolExpr;
-var left, right, node, condNode, elseNode, pairNode: Integer;
+var left, right, node, condNode, elseNode, pairNode, hSave: Integer;
 begin
   PyParseBoolAnd;
   left := CurASTNode;
@@ -2451,6 +2520,7 @@ begin
       cell a bare literal parses to; without this the fallback arm printed EMPTY
       where CPython prints None (the feature-nilpy-none-variant family, same
       treatment the conditional expression already gives its else arm). }
+    hSave := PyHoistTail;
     if PyBareNoneHere then
     begin
       Next;
@@ -2461,6 +2531,8 @@ begin
       PyParseBoolAnd;
       right := CurASTNode;
     end;
+    { same rule as the `and` path: the right operand carries its own setup }
+    right := PyFoldHoistSince(hSave, right);
     if PyBoolOpReturnsOperand(left, right) then
       node := PyMakeBoolOpValue(left, right, True)
     else
@@ -11187,20 +11259,62 @@ begin
 end;
 
 function PyParseWhile: Integer;
-var node, condHoist: Integer;
+var node, condHoist, condNode, scan, n, k, cm: Integer;
+    hStmts: array[0..63] of Integer;
 begin
   Next;
   PyParseBoolExpr;
   node := AllocNode(AN_WHILE);
-  ASTLeft[node] := PyMakeTruthy(CurASTNode);
-  { see PyParseIf: keep the condition's hoisted setup for the ENCLOSING
-    flush. NOTE a literal in a while CONDITION is built once, before the
-    loop — CPython rebuilds it per test; acceptable divergence, the pattern
-    is `while x in ("a","b")` membership against constants. }
+  condNode := PyMakeTruthy(CurASTNode);
   condHoist := PyHoistHead; PyHoistHead := -1;
+  { The condition's hoisted setup must be re-evaluated on EVERY test, so it is
+    folded INTO the condition as a right-nested comma chain (`h1, h2, cond` —
+    ir.inc's AN_COMMA arm evaluates each Left for its effect and yields the
+    Right) rather than stashed for the enclosing flush.
+
+    It used to be flushed OUTSIDE the loop, on the reasoning that the hoist is a
+    constant literal build: *"a literal in a while CONDITION is built once,
+    before the loop — CPython rebuilds it per test; acceptable divergence, the
+    pattern is `while x in ("a","b")` membership against constants."* True for a
+    literal, false for everything else that hoists — a string METHOD call hoists
+    too, and it is not loop-invariant:
+
+        while s.startswith("a"): s = s[1:]      { ran 10x on "aaab", CPython 3 }
+        while j < len(s) and s[j].isdigit():    { never stopped at the space }
+            j := j + 1
+
+    The condition was computed once, before the loop, and every later test read
+    the stale result. Silent, and it broke the ordinary scanner idiom — found by
+    a hand-written tokenizer that returned its whole input as one token
+    (bug-nilpy-a-method-call-in-a-while-condition-is-evaluated-once).
+
+    The literal case now rebuilds per test: an allocation per iteration, which
+    is what CPython does anyway, in exchange for the condition being true. }
+  n := 0;
+  scan := condHoist;
+  while (scan >= 0) and (n <= High(hStmts)) do
+  begin
+    if ASTLeft[scan] >= 0 then
+    begin
+      hStmts[n] := ASTLeft[scan];
+      Inc(n);
+    end;
+    scan := ASTRight[scan];
+  end;
+  { More hoisted setup than the fold can hold — leave the REMAINDER to the
+    enclosing flush, as the whole chain used to be. Never silently dropped. }
+  if scan >= 0 then PyHoistPrepend(scan);
+  for k := n - 1 downto 0 do
+  begin
+    cm := AllocNode(AN_COMMA);
+    ASTLeft[cm] := hStmts[k];
+    ASTRight[cm] := condNode;
+    ASTTk[cm] := ASTTk[condNode];
+    condNode := cm;
+  end;
+  ASTLeft[node] := condNode;
   Expect(tkColon, ':');
   ASTRight[node] := PyParseSuite;
-  PyHoistPrepend(condHoist);
   Result := node;
 end;
 
@@ -13604,6 +13718,61 @@ begin
   end;
 end;
 
+{ Does the def body spanning [bodyStart, bodyEnd) BIND `nm` itself — i.e. is
+  `nm` this def's own local rather than something to capture?
+
+  Python's rule, and the one this implements: a name ASSIGNED anywhere in a
+  function body is local to that body for the whole of it. The capture scan
+  needs it because it runs BEFORE the body is parsed, so it has no locals table
+  and asks `FindSym`. In a flattened nested-def world that question is answered
+  by whatever symbol happens to exist — including a SIBLING def's local of the
+  same name, already parsed into the same symbol space. Two siblings each with
+  `op = 1` therefore each recorded `op` as a CAPTURE of the enclosing scope.
+
+  That was invisible while the capture was merely useless (it is immediately
+  overwritten by the body's own assignment — values stayed correct). It became
+  a hard error the moment a THIRD sibling forward-called one of them: the
+  transitive-capture rule made the caller forward `op` too, the caller has no
+  `op`, and the call site reported "nested def captures op, which is not in
+  scope at this call". A recursive-descent parser written as nested defs —
+  factor/term/expr, each with its own `op` — is exactly that shape
+  (bug-nilpy-a-nested-defs-own-local-is-recorded-as-a-capture).
+
+  A name declared `nonlocal` is NOT this body's local: it must still be
+  captured (by ref), so the caller checks that first and never asks here.
+
+  Deliberately only PLAIN `nm =` and `for nm in`, not the augmented forms:
+  `nm += 1` on a name this body never bound is an UnboundLocalError in CPython,
+  so it cannot legitimately mean "local" — and treating it as one here would
+  silently change what today's by-value-capture-then-overwrite code does. Kept
+  narrow on purpose; widen only with a measurement. }
+function PyBodyBindsLocal(bodyStart, bodyEnd: Integer;
+                          const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := bodyStart;
+  while i < bodyEnd do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = nm) then
+    begin
+      { `nm = ...` — an assignment, hence a binding. }
+      if (i + 1 < bodyEnd) and (Tokens[i + 1].Kind = tkAssign) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      { `for nm in ...` — the loop target is a binding too. }
+      if (i > bodyStart) and (Tokens[i - 1].Kind = tkFor) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 { The token index of a sibling nested `def <nm>` that appears LATER in the
   enclosing body. Scanned exactly like PyEnclosingAssigns — forward from fromTok
   until the enclosing block's own DEDENT — so it never leaves the scope. -1 when
@@ -13797,6 +13966,14 @@ begin
           if capNames[j] = cname then already := True;
         if not already then
         begin
+          { THIS body binds the name itself -> it is our own LOCAL, not a
+            capture. Asked before FindSym, which cannot tell an enclosing local
+            from a SIBLING def's local of the same name in the flattened symbol
+            space — see PyBodyBindsLocal for the whole story. `nonlocal nm` is
+            the exception: that IS a capture (by ref), so it is excluded here. }
+          if PyBodyBindsLocal(bodyStart, bodyEnd, cname) and
+             not PyBodyDeclaresNonlocal(bodyStart, bodyEnd, cname) then
+            Continue;
           csym := FindSym(cname);
           { assigned LATER in the enclosing body — materialise it now so it is
             captured like any other name }

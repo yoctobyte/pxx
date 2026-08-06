@@ -1,0 +1,156 @@
+# A sub-expression that HOISTS its setup (a string method call, a container
+# literal) inside a `while` condition, and inside a short-circuit operand.
+#
+# The condition's hoisted setup used to be flushed OUTSIDE the loop, on the
+# reasoning that it is a constant literal build and therefore loop-invariant.
+# True for a literal; false for a method call, which hoists the same way and is
+# not invariant. The condition was computed ONCE, before the loop, and every
+# later test read the stale value:
+#
+#   while s.startswith("a"): s = s[1:]     -> spun until a break; CPython: 3
+#   while j < len(s) and s[j].isdigit():   -> never stopped at the space
+#
+# Folding it into the whole CONDITION instead breaks the other half: the right
+# operand of `and` then runs even when the left is False, so the guarded
+# `s[j]` raised IndexError. Each operand carries its OWN setup, which is what
+# satisfies both — fresh value, and only on the path that reaches it.
+# bug-nilpy-a-method-call-in-a-while-condition-is-evaluated-once
+# Every expectation is CPython's own output.
+
+# a SOLE method call as the whole condition
+def strip_as(s):
+    n = 0
+    while s.startswith("a"):
+        s = s[1:]
+        n += 1
+        if n > 9:
+            break
+    return n
+print(strip_as("aaab"))
+
+# a method call as the RIGHT operand of `and` — the scanner idiom
+def scan(s, i):
+    j = i
+    while j < len(s) and s[j].isdigit():
+        j += 1
+    return j
+print(scan("12 34", 0), scan("12 34", 3))
+
+# ...and the SHORT CIRCUIT that guards it: at j == len(s) the right operand
+# must not run at all, or s[j] raises
+print(scan("99", 0))
+
+def scan_alpha(s):
+    j = 0
+    while j < len(s) and s[j].isalpha():
+        j += 1
+    return j
+print(scan_alpha("ab 12"))
+
+# method call FIRST, ordinary comparison second
+def lead_digits(s):
+    j = 0
+    while s[j].isdigit() and j < len(s) - 1:
+        j += 1
+    return j
+print(lead_digits("12 34"))
+
+# a method call in the loop that MUTATES what the condition reads
+def count_x(s):
+    n = 0
+    while s.find("x") >= 0:
+        s = s.replace("x", "", 1)
+        n += 1
+        if n > 9:
+            break
+    return n
+print(count_x("axbxc"))
+
+# a container LITERAL in the condition — loop-invariant, and must stay correct
+def take_ab(xs):
+    n = 0
+    i = 0
+    while xs[i] in ("a", "b"):
+        n += 1
+        i += 1
+    return n
+print(take_ab(["a", "b", "z"]))
+
+def take_ab_dict(xs):
+    n = 0
+    i = 0
+    while xs[i] in {"a": 1, "b": 2}:
+        n += 1
+        i += 1
+    return n
+print(take_ab_dict(["a", "b", "z"]))
+
+# short-circuit itself, independent of hoisting: the right operand must not be
+# evaluated when the left decides the answer
+calls = []
+def side(v):
+    calls.append(v)
+    return True
+print(False and side("A"), len(calls))
+print(True or side("B"), len(calls))
+print(True and side("C"), len(calls))
+
+# `or` carries the same rule as `and`
+def until_ab(s):
+    n = 0
+    while s.startswith("z") or s.startswith("a"):
+        s = s[1:]
+        n += 1
+        if n > 9:
+            break
+    return n
+print(until_ab("zaab"))
+
+# ordinary while shapes must be untouched
+i = 0
+while i < 3:
+    i += 1
+print(i)
+n = 0
+while n < 3:
+    n += 1
+else:
+    print("else", n)
+k = 0
+while True:
+    k += 1
+    if k > 2:
+        break
+print(k)
+a = 0
+while a < 2:
+    b = 0
+    while b < 2:
+        b += 1
+    a += 1
+print(a, b)
+
+# a real tokenizer: the program that found this
+def tokenize(s):
+    toks = []
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c == " ":
+            i += 1
+            continue
+        if c in "+-*/()":
+            toks.append(c)
+            i += 1
+            continue
+        if c.isdigit():
+            j = i
+            while j < len(s) and s[j].isdigit():
+                j += 1
+            toks.append(s[i:j])
+            i = j
+            continue
+        toks.append("?")
+        i += 1
+    return toks
+print(tokenize("12 + 34*(5-6)"))

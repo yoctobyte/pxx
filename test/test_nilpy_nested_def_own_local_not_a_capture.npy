@@ -1,0 +1,111 @@
+# A nested def's OWN local must not be recorded as a capture.
+#
+# The capture scan runs BEFORE the body is parsed, so it has no locals table and
+# asks FindSym. In a flattened nested-def world that finds whatever symbol
+# exists — including a SIBLING def's local of the same name, already parsed into
+# the same symbol space. Two siblings each with `op = 1` therefore each recorded
+# `op` as a CAPTURE of the enclosing scope.
+#
+# Invisible while the capture was merely useless (the body's own assignment
+# overwrites it, so values stayed correct). It became a hard error the moment a
+# THIRD sibling forward-called one of them: the transitive-capture rule made the
+# caller forward `op` too, the caller has no `op`, and the call site reported
+#   nested def captures op, which is not in scope at this call
+# A recursive-descent parser written as nested defs — factor/term/expr, each
+# with its own `op` — is exactly that shape, and is why this was found.
+# bug-nilpy-a-nested-defs-own-local-is-recorded-as-a-capture
+# Every expectation is CPython's own output.
+
+# the minimal shape: a forward call to a sibling, two siblings sharing a local
+def minimal():
+    def fwd():
+        return second()
+    def first():
+        op = 1
+        return op
+    def second():
+        op = 2
+        return op + first()
+    return fwd()
+print(minimal())
+
+# a genuine capture of an ENCLOSING name still works, and an inner local of the
+# same spelling shadows it rather than clobbering it
+def shadowing():
+    op = 100
+    def a():
+        op = 1
+        return op
+    def b():
+        op = 2
+        return op + a()
+    return b() + op
+print(shadowing())
+
+# a real capture the siblings must still forward: `n` belongs to the enclosing
+# def and every nested def reads it
+def genuine(n):
+    def factor(k):
+        if k <= 0:
+            return n
+        return expr(k - 1)
+    def term(k):
+        opT = 1
+        return opT + factor(k - 1)
+    def expr(k):
+        opE = 2
+        return opE + term(k - 1)
+    return expr(3)
+print(genuine(7))
+
+# `for` targets bind too, so a shared loop variable is not a capture either
+def loopvars():
+    def p():
+        t = 0
+        for i in range(3):
+            t += i
+        return t
+    def q():
+        t = 0
+        for i in range(4):
+            t += i
+        return t
+    def r():
+        return p() + q()
+    return r()
+print(loopvars())
+
+# a recursive-descent expression parser: the program that found it
+def evaluate(toks):
+    pos = [0]
+    def peek():
+        return toks[pos[0]] if pos[0] < len(toks) else None
+    def take():
+        t = toks[pos[0]]
+        pos[0] += 1
+        return t
+    def factor():
+        t = take()
+        if t == "(":
+            v = expr()
+            take()
+            return v
+        return int(t)
+    def term():
+        v = factor()
+        while peek() in ("*", "/"):
+            op = take()
+            r = factor()
+            v = v * r if op == "*" else v // r
+        return v
+    def expr():
+        v = term()
+        while peek() in ("+", "-"):
+            op = take()
+            r = term()
+            v = v + r if op == "+" else v - r
+        return v
+    return expr()
+print(evaluate(["12", "+", "34", "*", "(", "5", "-", "6", ")"]))
+print(evaluate(["2", "*", "3", "+", "4", "*", "5"]))
+print(evaluate(["(", "1", "+", "2", ")", "*", "(", "3", "+", "4", ")"]))

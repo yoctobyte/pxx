@@ -47,7 +47,6 @@ _none_
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
-| bug-nilpy-a-nested-defs-own-local-is-recorded-as-a-capture | N | 50 | bug | NilPy: when two sibling nested defs each have a local of the SAME name, the capture scan records that name as a CAPTURE of each — harmless until a third sibling forward-calls one of them, which then fails with `nested def captures op, which is not in scope at this call`. Renaming one local fixes it. | — |
 | bug-nilpy-augmented-subscript-evaluates-its-index-twice | N | 30 | bug | NilPy: `d[key()] += 1` calls key() TWICE — the augmented-subscript desugar re-evaluates the base and index. CPython evaluates each once. The stored value is correct; only a side-effecting index is observable. | — |
 | bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
@@ -154,6 +153,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
+| feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition | N | 30 | feature | NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on every test. A provably-constant container build is loop-invariant and should be hoisted to a variable once — what a person would write by hand — while everything else keeps being folded into the condition. | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
@@ -370,9 +370,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1427)
+## done (1429)
 
-1427 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1429 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -466,7 +466,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
-- [p 50] [N] bug-nilpy-a-nested-defs-own-local-is-recorded-as-a-capture
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-b-textreadchar-with-pushback
@@ -571,6 +570,7 @@ _none_
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [U] decide-builtin-and-library-code-sharing
 - [p 30] [B] feature-b-tstrings-commatext
+- [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured

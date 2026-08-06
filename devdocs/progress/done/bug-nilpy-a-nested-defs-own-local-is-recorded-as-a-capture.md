@@ -2,6 +2,8 @@
 track: N
 prio: 50
 type: bug
+status: done
+owner: claude-AN
 summary: "NilPy: when two sibling nested defs each have a local of the SAME name, the capture scan records that name as a CAPTURE of each — harmless until a third sibling forward-calls one of them, which then fails with `nested def captures op, which is not in scope at this call`. Renaming one local fixes it."
 ---
 
@@ -91,3 +93,34 @@ Per-fix loop. A `.npy` test with the recursive-descent parser shape (`factor` /
 `term` / `expr`, each with a same-named local, forward calls between them),
 plus the enclosing-name-shadowing case above to pin that values stay correct,
 diffed against CPython with `tools/pydiff.py`.
+
+
+## Log
+
+- 2026-08-06 — **resolved.** New `PyBodyBindsLocal(bodyStart, bodyEnd, nm)` in
+  `compiler/pyparser.inc`, asked by the capture scan BEFORE `FindSym`: a name the
+  body binds itself is that body's local and is not a capture. That is Python's
+  own rule (a name assigned anywhere in a function body is local to it), and it
+  does not depend on the symbol table, which is exactly what the scan cannot
+  trust — it runs before the body is parsed, so `FindSym` answers with whatever
+  happens to exist, including a sibling's local.
+
+  `nonlocal nm` is excluded: that IS a capture (by ref), so it must keep going
+  through the old path.
+
+  Deliberately narrow — only plain `nm =` and `for nm in` count as bindings, not
+  the augmented forms. `nm += 1` on a name the body never bound is an
+  UnboundLocalError in CPython, so it cannot legitimately mean "local", and
+  treating it as one would silently change what today's
+  capture-then-overwrite code does. Widen only with a measurement.
+
+  Verified: `test/test_nilpy_nested_def_own_local_not_a_capture.npy` (new, wired
+  into `make test-nilpy`) — the minimal three-sibling shape, the enclosing-name
+  shadowing case (values must stay right), a genuine enclosing capture that must
+  still be forwarded, shared `for` targets, and the full recursive-descent
+  expression parser that found it. All lines match CPython.
+  `tools/gate.sh quick` GREEN; the probe corpus shows no regressions.
+
+  The parser probe then hit a SECOND, unrelated bug behind this one — a method
+  call in a `while` condition evaluated once — fixed alongside as
+  [[bug-nilpy-a-method-call-in-a-while-condition-is-evaluated-once]].

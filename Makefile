@@ -1420,6 +1420,17 @@ test-nilpy: $(COMPILER)
 	# already correct, which is what hid it. .expected is CPython's.
 	./$(COMPILER) test/test_nilpy_augmented_subscript_variant_base.npy /tmp/test_nilpy_augsubvar26
 	/tmp/test_nilpy_augsubvar26 | diff -u test/test_nilpy_augmented_subscript_variant_base.expected -
+	# A hoisting sub-expression (a string method call) in a `while` condition was
+	# flushed OUTSIDE the loop and evaluated once, so the condition went stale;
+	# folding it into the whole condition instead broke `and`'s short circuit.
+	# Each operand carries its own setup. .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_while_condition_hoist.npy /tmp/test_nilpy_whilehoist26
+	/tmp/test_nilpy_whilehoist26 | diff -u test/test_nilpy_while_condition_hoist.expected -
+	# A nested def's OWN local was recorded as a capture when a sibling def bound
+	# the same name, and a third sibling forward-calling it then failed with
+	# "captures op, which is not in scope at this call". .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_nested_def_own_local_not_a_capture.npy /tmp/test_nilpy_ndcap26
+	/tmp/test_nilpy_ndcap26 | diff -u test/test_nilpy_nested_def_own_local_not_a_capture.expected -
 	# repr() and range() as an ITERABLE: both existed in the runtime but were not
 	# reachable from where a program uses them — repr's name was bound to nothing,
 	# and range materialised only inside a literal `list(`. .expected is CPython's.
