@@ -3,11 +3,10 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 6d0h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `86d767151cd4` | 2026-08-06T17:52:20Z | GREEN (opt) | 205.1s | `86d767151cd4` RED |
+| plexus | `733be3321179` | 2026-08-06T18:11:29Z | GREEN (native) | 122.8s | `86d767151cd4` RED |
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy** — test/test_nilpy_augmented_assign_class_dunder.npy (plexus): bad `e8450c58d67e`, last good `7b42c8345829`, 1 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (xeon): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
