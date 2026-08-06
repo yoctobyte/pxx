@@ -231,6 +231,13 @@ discovery→ticket loop, and shared-checkout coordination, is in
 multiplier, so push generality down into the core and keep frontends thin — is
 the north-star note **`devdocs/dev/ir-as-substrate.md`**.
 
+Its sibling **`devdocs/dev/normalise-dont-special-case.md`** is the same idea one
+level down: when a construct is reachable through two shapes (const vs variable,
+literal vs named receiver, static type vs variant), normalise rather than growing
+a second path — because the second path is the one that stays broken. **If you
+fix a bug on one arm of a double case, grep for the sibling before closing the
+ticket.**
+
 ### Track A in one line
 Own `compiler/**` (shared internals: AST, IR, symtab, backends, ABI, ELF). Gate
 = `make test` + self-host fixedpoint (byte-identical). When a feature B/C needs

@@ -13,6 +13,12 @@ summary: "NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on e
   fixed: *"in python, it would be totally fair to move a const list or dict to a
   variable, to avoid all double cases (variable or const)"*.
 
+The principle behind it — normalise the special shape into the general one so
+downstream has a single path — is written up in
+**`devdocs/dev/normalise-dont-special-case.md`**, which this ticket is the
+motivating instance of. Read that before implementing; it also states the
+safe-direction rule the predicate below has to obey.
+
 ## Where this comes from
 
 A `while` condition's hoisted setup used to be emitted once, before the loop.
