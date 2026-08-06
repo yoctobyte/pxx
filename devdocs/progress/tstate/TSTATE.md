@@ -2,15 +2,17 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg **QUIET 6d0h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `ce6cdc29af37` | 2026-08-06T18:46:47Z | GREEN (opt) | 211.5s | `ce6cdc29af37` GREEN |
+| borg **QUIET 6d1h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
+| plexus | `899e51cda3ba` | 2026-08-06T18:55:40Z | RED (native) | 152.1s | `ce6cdc29af37` GREEN |
 | xeon | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
+- **test-core#src:test/test_exception_unhandled.pas@1** — test/test_exception_unhandled.pas test/test_threadsafe_layout_rtti.pas (plexus): bad `899e51cda3ba`, last good `ce6cdc29af37`, 6 commit(s) in range
+- **test-core#src:test/test_nested_cow.pas** — test/test_nested_cow.pas (plexus): bad `899e51cda3ba`, last good `ce6cdc29af37`, 6 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (xeon): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 6d0h): bad `b1976742df2c`, 1 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 6d1h): bad `b1976742df2c`, 1 commit(s) in range
