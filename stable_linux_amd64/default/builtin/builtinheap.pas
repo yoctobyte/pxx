@@ -2919,11 +2919,29 @@ end;
   semantics) is done with the 2^52 add/sub trick, written as separate
   statements so no constant folding can collapse it. }
 
+function PxxIntDDigits(pv: Pointer; emit: NativeInt): NativeInt; forward;
+
 procedure PXXWriteUIntD(pv: Pointer);
-{ Print a non-negative integral double in decimal (writeUInt, double domain). }
-var v, p: Double; d: Integer; ch: Char;
+{ Print a non-negative integral double in decimal (writeUInt, double domain).
+
+  Past 2^53 the divide-down loop below cannot work: consecutive integers are no
+  longer distinct doubles there, so `v / p` recovers the value's BINARY
+  granularity rather than its decimal digits — 1e25 printed
+  10000000000000002147483648, where the tail is 2^31 and no part of the number.
+  Above that threshold the value is an exact integer of the form mant * 2^exp2
+  with exp2 >= 0, so PxxIntDDigits expands it exactly in base-10^9 integer limbs
+  and every digit emitted is a real digit.
+  bug-a-write-fixed-emits-false-digits-past-1e22 }
+var v, p, two53: Double; d, i: Integer; ch: Char; nd: NativeInt;
 begin
   v := PDouble(pv)^;
+  two53 := 1;
+  for i := 1 to 53 do two53 := two53 * 2;
+  if v >= two53 then
+  begin
+    nd := PxxIntDDigits(pv, 1);
+    Exit;
+  end;
   p := 1;
   while p * 10 <= v do p := p * 10;
   while p >= 1 do
@@ -3082,8 +3100,13 @@ begin
     bug-a-aarch64-float-field-width-ignored }
   if width > 0 then
   begin
-    ndig := 1; ipc := ip;
-    while ipc >= 10 do begin ipc := ipc / 10; ndig := ndig + 1; end;
+    if ip >= two52 * 2 then
+      ndig := PxxIntDDigits(@ip, 0)      { exact, and it is what will be printed }
+    else
+    begin
+      ndig := 1; ipc := ip;
+      while ipc >= 10 do begin ipc := ipc / 10; ndig := ndig + 1; end;
+    end;
     total := ndig;
     if neg then total := total + 1;
     if decimals > 0 then total := total + 1 + decimals;
@@ -3289,6 +3312,59 @@ begin
     mant17 := mant17 div 10;
     decExp := decExp + 1;
   end;
+end;
+
+function PxxIntDDigits(pv: Pointer; emit: NativeInt): NativeInt;
+{ The EXACT decimal digits of a non-negative integral Double at or above 2^53:
+  their count, and — when emit <> 0 — the digits themselves, most significant
+  first. Same base-10^9 limb expansion as PxxSciDigits17, minus the rounding:
+  nothing is dropped, so the answer is the whole number.
+
+  Only the exp2 >= 0 half of the expansion is needed. A double is
+  mant * 2^exp2 with mant 53 bits, so any value at or above 2^53 has exp2 >= 1
+  — it is a plain integer times a power of two, and multiplying the limbs by
+  two is all the conversion there is. Below 2^53 a caller must use the
+  divide-down loop instead (this routine would be correct but pays a multiply
+  per bit of a negative exp2 for a fraction that is all zeros).
+
+  The count is what the field-width computation needs, and it cannot come from
+  `while ipc >= 10 do ipc := ipc / 10` either: those divisions are inexact and
+  can land the count one column off. }
+var
+  buf: TPxxSciBuf;
+  n, i, k, topLen, idx, total, dpos, d: Integer;
+  mant, t, scale: Int64;
+  exp2: Integer;
+  ch: Char;
+begin
+  PxxSciSplit(PDouble(pv)^, mant, exp2);
+  for i := 0 to PXX_SCI_LIMBS - 1 do buf[i] := 0;
+  buf[0] := mant mod PXX_SCI_BASE;
+  buf[1] := mant div PXX_SCI_BASE;
+  n := 2;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+  k := exp2;
+  while k >= 30 do begin PxxSciMul(buf, n, PXX_SCI_P2_30); k := k - 30; end;
+  while k > 0 do begin PxxSciMul(buf, n, 2); k := k - 1; end;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+  topLen := 1; t := buf[n - 1];
+  while t >= 10 do begin t := t div 10; topLen := topLen + 1; end;
+  total := topLen + (n - 1) * 9;
+  if emit <> 0 then
+  begin
+    dpos := 0;
+    while dpos < total do
+    begin
+      idx := total - 1 - dpos;            { 0-based index from the LOW end }
+      scale := 1;
+      for k := 1 to (idx mod 9) do scale := scale * 10;
+      d := Integer((buf[idx div 9] div scale) mod 10);
+      ch := Chr(48 + d);
+      write(ch);
+      dpos := dpos + 1;
+    end;
+  end;
+  PxxIntDDigits := total;
 end;
 
 procedure PXXWriteFloatSci(p: Pointer);
