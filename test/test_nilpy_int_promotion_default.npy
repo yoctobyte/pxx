@@ -191,3 +191,20 @@ print(w)
 v = 255
 v &= 15
 print(v)
+
+# a counted-loop COUNTER is a 64-bit cell too. It was allocated tyInteger
+# directly (AllocVar, bypassing the PyNoteLocalType choke point), so a bound at
+# or past 2^31 wrapped into 4 bytes: `range(3000000000, 3000000003)` started at
+# -1294967296 and never reached its stop — an unbounded loop printing plausible
+# negative indices. list(range(...)) was correct all along, which is what
+# localised it to the counted-loop lowering
+# (bug-nilpy-for-range-loop-counter-is-32-bit-and-never-terminates).
+seen = []
+for k in range(3000000000, 3000000003):
+    seen.append(k)
+print(seen)
+cnt = 0
+for k in range(2147483646, 2147483650):
+    cnt += 1
+print(cnt)
+print(list(range(3000000000, 3000000003)))

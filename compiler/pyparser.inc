@@ -13054,12 +13054,22 @@ begin
       Deterministic name (see PyCompHiddenLoopName) — stable across the
       typing pre-pass and the real pass over the same tokens. }
     hName := PyCompHiddenLoopName(forTokIdx, 0);
-    symIdx := AllocVar(hName, tyInteger);
+    symIdx := AllocVar(hName, tyInt64);
   end
   else
   begin
     symIdx := PyProgSym(name);
-    if symIdx < 0 then symIdx := AllocVar(name, tyInteger);
+    { tyInt64, not tyInteger: the counter is compared against `stop` and a bound
+      at or past 2^31 wrapped into a 4-byte cell, so
+      `for i in range(3000000000, 3000000003)` started at -1294967296 and never
+      reached its stop — an unbounded loop printing plausible negative indices.
+      `list(range(3000000000, 3000000003))` was correct all along, which is what
+      localises it to this counted-loop lowering rather than to range() itself.
+      A NilPy `int` is a 64-bit cell everywhere else (the `x: int` annotation,
+      class fields, and now every inferred local via PyNoteLocalType); this
+      AllocVar bypasses that choke point, so it has to say so itself
+      (bug-nilpy-for-range-loop-counter-is-32-bit-and-never-terminates). }
+    if symIdx < 0 then symIdx := AllocVar(name, tyInt64);
   end;
   PyExpectIdent('range');
   Expect(tkLParen, '(');

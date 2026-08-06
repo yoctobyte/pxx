@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -54,6 +54,7 @@ _none_
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
 | bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum | A | 65 | bug | NilPy: `//`, `%`, ordering comparisons, float(), max/min and sorted() narrow a Variant-held arbitrary-precision int through pyvar_to_int — (2**64+5) // 1 prints 5; the promo guards test the STATIC type, which is tyVariant, so they never fire | — |
+| bug-nilpy-for-range-counter-survives-with-the-wrong-value | N | 55 | bug | NilPy: after `for i in range(3)` the variable holds 3 (the value that FAILED the test), CPython says 2 — and after an EMPTY range it is clobbered to `start` instead of keeping its previous value | — |
 | bug-nilpy-for-rejects-an-inline-suite | N | 35 | bug | NilPy: `for i in r: body` on one line is a parse error, while `if c: body` and `while c: body` both accept the same inline suite | — |
 | bug-nilpy-int-of-a-long-decimal-string-narrows | N | 55 | bug | NilPy: int('<30 digits>') wraps mod 2^64 instead of producing an arbitrary-precision int — int('123456789012345678901234567890') prints -4362896299872285998 | — |
 | bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module | N | 40 | bug | A def shadowing a builtin that has NO pylib proc (ord, chr, …) takes effect from the top of the module — `print(ord('A'))` ABOVE the def prints the user's answer where CPython prints 65. Silent. | — |
@@ -229,6 +230,7 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
+| regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-containers | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-cython | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
@@ -360,9 +362,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1423)
+## done (1424)
 
-1423 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1424 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -400,6 +402,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-core-test-nilpy-augmented-assign-class-dunder
 - [p 70] [T] regression-test-nilpy-test-cpyext-args-errors
 - [p 70] [T] regression-test-nilpy-test-cpyext-containers
 - [p 70] [T] regression-test-nilpy-test-cpyext-cython
@@ -431,6 +434,7 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
+- [p 55] [N] bug-nilpy-for-range-counter-survives-with-the-wrong-value
 - [p 55] [N] bug-nilpy-int-of-a-long-decimal-string-narrows
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-empty-range-regression-cannot-be-bisected
