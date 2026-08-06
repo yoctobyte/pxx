@@ -38,11 +38,12 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (199)
+## backlog (200)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
+| bug-a-write-fixed-emits-false-digits-past-1e22 | A | 60 | bug | SILENT: write(v:w:d) prints digits that are not the value's digits once \|v\| > 1e22 — the integer part is expanded in Double arithmetic, so past 2^53 it leaks binary granularity (2^31, 2^47) into decimal output. Looks like extra precision, is noise | — |
 | bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing | A | 65 | bug | x86-64 only: `b := a` on a dynamic array copy-on-writes instead of ALIASING — writes through either name are invisible to the other. FPC, i386, arm32, aarch64 and riscv32 all alias. Dynamic arrays are reference types; this is silent wrong behaviour on the flagship target | bug-p-copy-single-argument-form-missing-for-dynamic-arrays |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
@@ -91,7 +92,7 @@ _none_
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-assertions-directive-and-message-format | U | 40 | decide | FPC compiles Assert OUT unless -Sa/{$ASSERTIONS ON} and appends '(file, line N)' to the message; pxx always evaluates and omits the position. Adopt both, neither, or one? | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
-| decide-float-fixed-output-exact-or-fpc-17-digit-cap | U | 45 | decide | writeln(d:0:1) of a huge double: pxx and CPython print the EXACT value (18446744073709551616.0), FPC caps at 17 significant digits and zero-pads (18446744073709552000.0). Which is pxx's rule? | — |
+| decide-float-fixed-output-exact-or-fpc-17-digit-cap | U | 45 | decide | writeln(d:0:1) of a huge double: pxx and CPython print the EXACT value (18446744073709551616.0), FPC caps at 17 significant digits and zero-pads (18446744073709552000.0). Which is pxx's rule? | bug-a-write-fixed-emits-false-digits-past-1e22 |
 | decide-nilpy-builtin-keyword-only-parameters | U | 40 | decide | Should NilPy builtins enforce Python's KEYWORD-ONLY parameters? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
@@ -405,6 +406,7 @@ _none_
 - [p 65] [P] bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
+- [p 60] [A] bug-a-write-fixed-emits-false-digits-past-1e22 (unblocks 1)
 - [p 60] [U] decide-scope-hiding-vs-flat-overload-set (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
@@ -461,7 +463,6 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 3)
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [U] decide-float-fixed-output-exact-or-fpc-17-digit-cap (unblocks 1)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
@@ -581,6 +582,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-a-write-fixed-emits-false-digits-past-1e22
 - **1** — bug-p-copy-single-argument-form-missing-for-dynamic-arrays
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration

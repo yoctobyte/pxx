@@ -3,6 +3,7 @@ summary: "writeln(d:0:1) of a huge double: pxx and CPython print the EXACT value
 type: decision
 track: U
 prio: 45
+blocked-by: bug-a-write-fixed-emits-false-digits-past-1e22
 ---
 
 # Decide: fixed-format float output — exact, or FPC's 17-digit cap?
@@ -91,3 +92,36 @@ user-visible output, which is Track U's, not an agent's.
 
 Whichever way: the natural-form (`writeln(d)`) scientific output is already
 FPC-exact and should not change. Only the `:w:d` fixed form is in question.
+
+
+## 2026-08-06 — the premise was FALSE; reframed and blocked
+
+This was filed as "pxx prints the exact expansion, FPC prints a 17-significant-
+digit approximation — which do we want?". Measured against the exact value of
+the double (not against FPC), **pxx does not print the exact expansion**:
+
+    1e30   pxx 1000000000000000140737488355328   exact 1000000000000000019884624838656
+    1e300  pxx 99999999999999983567616651958...  exact 10000000000000000525047602552...
+
+Correct through 1e22, wrong from 1e23 — and at 1e300 wrong from the first
+significant digit. The integer part is expanded in `Double` arithmetic, so past
+2^53 it leaks binary granularity into the output (`...2147483648` = 2^31,
+`...140737488355328` = 2^47). Filed as
+[[bug-a-write-fixed-emits-false-digits-past-1e22]].
+
+**What that changes.** The fork was never "exact vs capped" — today it is
+"false precision vs capped", and false precision is not a policy anyone would
+choose. FPC's cap looks defensible precisely *because* the extra digits do not
+exist. So:
+
+- the option "keep printing the exact expansion" was **not available** as
+  described. It becomes available only once the bug is fixed — and it genuinely
+  can be, since `PxxSciDigits17` already expands a double exactly with base-10^9
+  integer limbs and the fixed path simply does not use it;
+- the option "adopt FPC's cap" is unchanged, and is now the *cheaper* of the
+  two rather than the lesser one;
+- FPC's third behaviour — abandoning the fixed form for exponent notation past
+  ~1e300 — still has no counterpart here and still needs an answer either way.
+
+Blocked on the bug. Deciding a display policy while the digits are wrong would
+be choosing between two things neither of which we currently do.

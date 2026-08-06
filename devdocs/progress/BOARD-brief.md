@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:7 blocked:7 backlog:199 experimental:20 rainy-day:31 done-followup:3 decided:39 done:1418 rejected:29`
+`working:1 unfinished:7 blocked:7 backlog:200 experimental:20 rainy-day:31 done-followup:3 decided:39 done:1418 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -43,6 +43,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` bug-p-copy-single-argument-form-missing-for-dynamic-arrays (unblocks 1)
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
+- `[p 60] [A]` bug-a-write-fixed-emits-false-digits-past-1e22 (unblocks 1)
 - `[p 60] [U]` decide-scope-hiding-vs-flat-overload-set (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [T]` bug-t-gate-sh-fixedpoint-does-not-iterate
@@ -62,6 +63,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
-- `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 
 _148 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

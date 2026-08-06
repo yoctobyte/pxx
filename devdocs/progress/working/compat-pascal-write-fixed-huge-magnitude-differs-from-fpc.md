@@ -101,3 +101,24 @@ a third option nobody had written down.
 
 Whichever way it goes, the implementation is one place now (`PXXWriteFloatFixed`)
 rather than the three divergent backends this ticket was opened against.
+
+
+## CORRECTION 2026-08-06 — the claim "pxx prints the true value" was wrong
+
+The note above states that at 1e30 "pxx prints the true value
+(`1000000000000000140737488355328`), FPC prints its own approximation". The
+second half is right; **the first half is false**. The exact value of the
+double is `1000000000000000019884624838656`. pxx's digits are wrong from about
+the 17th significant digit, and at 1e300 wrong from the first.
+
+The error in method is the one this repo has a rule against: I compared two
+implementations *against each other* and concluded ours was the exact one,
+without ever checking either against an oracle. `decimal.Decimal(float(x))`
+answers it in one line.
+
+What stands from that note: the x86-64 Int64 saturation is genuinely gone, the
+backends genuinely agree now, NaN/Inf are genuinely correct, and
+`1e20:0:2` is genuinely byte-identical to FPC. What does not stand is the
+characterisation of the large-magnitude output as exact.
+
+Filed as [[bug-a-write-fixed-emits-false-digits-past-1e22]].
