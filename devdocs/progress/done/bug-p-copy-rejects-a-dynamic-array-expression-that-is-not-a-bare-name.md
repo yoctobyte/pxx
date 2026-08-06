@@ -140,4 +140,4 @@ in `cbae55b06`: the missing managed-element retain (a regression from the aliasi
 flip, exposed only under `-dPXX_HEAP_DEBUG`) and the nested-source crash above.
 
 ## Log
-- 2026-08-06 — resolved, commit PENDING-COMMIT.
+- 2026-08-06 — resolved, commit 7f10e3a4a.
