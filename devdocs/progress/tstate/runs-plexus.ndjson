@@ -161,3 +161,4 @@
 {"date": "2026-08-06T17:48:48Z", "fixed": [], "full": true, "new_red": [], "sha": "86d767151cd4d3e252c4fe56c493d17adadbfcea", "tier": "full", "verdict": "RED", "wall": 442.0}
 {"date": "2026-08-06T17:52:20Z", "fixed": [], "full": false, "new_red": [], "sha": "86d767151cd4d3e252c4fe56c493d17adadbfcea", "tier": "opt", "verdict": "GREEN", "wall": 205.1}
 {"date": "2026-08-06T18:11:29Z", "fixed": ["test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy"], "full": false, "new_red": [], "sha": "733be332117980b61b32265be14b5b7b2b8eb84a", "tier": "native", "verdict": "GREEN", "wall": 122.8}
+{"date": "2026-08-06T18:19:41Z", "fixed": ["test-nilpy#src:test/test_nilpy_augmented_assign_class_dunder.npy", "test-nilpy#src:test/test_nilpy_list_mutators_return_none.npy", "test-nilpy#src:test/test_nilpy_pyexpr_semantics.npy"], "full": true, "new_red": [], "sha": "733be332117980b61b32265be14b5b7b2b8eb84a", "tier": "full", "verdict": "GREEN", "wall": 459.7}
