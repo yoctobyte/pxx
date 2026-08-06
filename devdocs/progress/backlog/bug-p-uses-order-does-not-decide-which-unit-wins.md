@@ -144,3 +144,72 @@ what keeps `EmitAsmX64`'s `array of const` / `AnsiString` pair working.
 whatever `FindProc` returns, and hiding can change which procs are candidates
 across `pylib` / `pyeval` / `builtin`. That is exactly where `sum(range(i))`
 segfaulted. **`--tier limited` minimum.**
+
+## 2026-08-06 — INVESTIGATION (no code changed): the insertion point and the rank source
+
+Spent a session reading rather than editing, because this ticket has already
+broken the self-compile and the NilPy stdlib once and the expensive part is
+knowing *where* the removal goes. Three findings, all read off the source.
+
+### 1. `MatchElig` is the candidate-removal hook, and it already does this once
+
+`compiler/symtab.inc`'s
+
+```pascal
+function MatchElig(idx: Integer; const name: AnsiString; demote: Boolean;
+                   bIdx: Integer; userOnly: Boolean): Boolean;
+```
+
+is the shared eligibility predicate — **9 call sites, one per matching phase**
+(exact, compatible, lifting, …). Adding the hiding test there removes hidden
+declarations from the candidate set in *every* phase at once, which is exactly
+what the decision demands, and it never touches `FindProc`'s representative. That
+is the whole reason ranking failed before: `FindProc` is a different query.
+
+Better still, **the shape is already implemented next door.** `userOnly` /
+`PyUserShadowsProc` is name-level candidate removal for NilPy: a module-level
+`def sorted(x)` REPLACES pylib's, decided by NAME rather than argument fit,
+"and it demotes ALL of the unit's overloads together". Pascal scope hiding is the
+same rule with a scope rank in place of "declared by the main program". So this is
+not a new mechanism — it is a third instance of one that exists twice
+(`demote` for builtin-vs-unit, `userOnly` for NilPy).
+
+### 2. The uses-order rank exists: `CompiledUnits[]`
+
+`CompiledUnits : array[0..255] of Integer` / `CompiledUnitCount` (defs.inc ~1857)
+records unit indices **in compile order**, and for a `uses a, b` clause that IS
+the uses order — `a` is compiled before `b`. So the rank the ticket assumed had
+to be invented is already recorded:
+
+- compiling scope (`ProcUnitIdx = CurrentUnitIdx`) → highest;
+- otherwise position in `CompiledUnits` → later = higher;
+- builtin unit → lowest.
+
+Note the main program is `ProcUnitIdx = -1` and `CurrentUnitIdx = -1` while not
+parsing an imported unit, so the "current scope" arm already falls out of the
+existing comparison `ProcUnitIdx[i] = CurrentUnitIdx` used by `FindProc` and
+Phase 1 of `MatchProcCall`.
+
+### 3. What the implementation has to get right
+
+- **Compute the winning rank per NAME, once**, then reject lower-ranked
+  candidates in `MatchElig`. Do NOT rank inside a phase's loop — that is ranking
+  again, and same-scope overloads must all survive together.
+- **`overload` is the exemption.** A declaration marked `overload` joins rather
+  than hides; that is what keeps `EmitAsmX64`'s `array of const` / `AnsiString`
+  pair alive, and same-scope declarations never hide each other anyway.
+- **Empty-set guard.** If removal empties the candidate set the call should fail
+  as "no overload matches", not silently fall through to a lower scope — but check
+  that against FPC before choosing, since a hidden-but-only-candidate case is
+  precisely where a wrong choice becomes a new silent divergence.
+
+### Not started, deliberately
+
+The change itself is high-blast-radius (it re-decides binding across `lib/rtl`,
+`pylib`, `pyeval` and `builtin`) and the decision requires `--tier limited` as the
+minimum evidence, so each iteration is a ~10-minute measurement. Starting it
+without room to finish would leave a half-applied Track A change in the tree,
+which `tools/progress.sh check` treats as critical — worse than not starting.
+
+Left in the backlog with the ground above under it. A session that picks this up
+starts at "add the rank + wire it into MatchElig", not at "where does this go".
