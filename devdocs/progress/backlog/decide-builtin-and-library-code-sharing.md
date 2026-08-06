@@ -60,3 +60,34 @@ exactly the code that is pure, dependency-free and wanted on both sides.
 
 None — nothing is blocked. Revisit when a third instance appears, or when the
 NilPy scope question comes up for its own reasons.
+
+
+## 2026-08-06 — the clash landed; user's call is still WAIT
+
+This ticket says "review when the next clash lands — not a blocker for anything
+now". One landed, and it is a good one:
+
+- `lib/rtl/sysutils.pas` `FmtFixed` scales through an Int64 — wrong from ~9e13
+  ([[bug-b-format-fixed-overflows-int64-and-loses-digits]]);
+- `compiler/builtin/builtinheap.pas` `PXXWriteFloatFixed` expands in Double —
+  wrong from 1e23 ([[bug-a-write-fixed-emits-false-digits-past-1e22]]);
+- and **each unit already contains a correct exact base-10^9 implementation**
+  (`ExDecDigits`/`ExDecRound`, `PxxSciDigits17`) that its own fixed-point path
+  does not use.
+
+So the float core sits in three units and two of the three fixed-point paths
+are wrong, in two different ways. That is the strongest evidence yet for the
+sharing question.
+
+**Still deferred. User's call:** `builtin` has been stable for many weeks, so
+the copies are not actually *drifting* — the two bugs are independent
+pre-existing defects that predate the duplication rather than consequences of
+it. Unifying now would mean a structural refactor of shared ground to fix two
+bugs that each have a local, well-understood fix sitting in the same file.
+
+Fix both in place; keep this ticket as the hook. Revisit if a *future* clash
+shows the copies actually diverging — i.e. a fix applied to one and forgotten in
+the others — which is the failure mode this ticket exists to catch and is not
+what happened here.
+
+Handoff carrying the work: `devdocs/dev/handoffs/2026-08-06-float-exactness-track-a-and-b.md`.

@@ -92,3 +92,23 @@ their sizes. An empty log on a failing step is most of why this was expensive.
 A clean HEAD with a stale pin does not report RED for that reason alone; a
 genuine non-convergence (`B != C`) still does; `fixedpoint.log` names the
 differing pair either way.
+
+
+## 2026-08-06 — diagnosis CONFIRMED by pinning
+
+`make pin` moved `pinned` to v244. `tools/gate.sh quick` immediately went
+**GREEN**, self-host fixedpoint included, with no code change between the RED
+and the GREEN:
+
+    before pin:  FAIL  self-host fixedpoint  (empty fixedpoint.log)
+    after pin:   PASS  self-host fixedpoint  (27s)
+
+That is the predicted behaviour exactly: `A == B` asserts "pinned already emits
+what HEAD emits", so it is false from the moment a builtin is added until the
+next pin, and true again immediately after. The compiler was never
+non-convergent — `B == C` held throughout.
+
+The ticket stands: this **will** recur on the next builtin addition, and the
+next agent will again see a RED that is indistinguishable from having broken
+the self-host gate. The empty `fixedpoint.log` remains the largest part of the
+cost.
