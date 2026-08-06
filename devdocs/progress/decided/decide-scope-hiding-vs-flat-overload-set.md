@@ -1,6 +1,8 @@
 ---
 track: U
 prio: 60
+status: resolved
+resolved: 2026-08-06
 type: decision
 summary: "One rule explains four separate symptoms: a declaration should HIDE a same-named one from an outer/earlier scope unless marked `overload`. pxx behaves as if everything were `overload` — one flat set, first-in-chain wins. Decide whether to adopt hiding, and which marker carries it: any {$mode}, --strict-overload/{$MIMIC FPC}, or the default"
 ---
@@ -149,3 +151,49 @@ Two conditions before committing:
 `IntToStr(5)` reaches the program's declaration; `uses a, b` binds b's and
 `uses b, a` binds a's; `overload` still merges; nested unchanged; NilPy suite
 and self-host both green under `--tier limited`.
+
+
+## DECIDED 2026-08-06 — option 3: hiding becomes the DEFAULT, everywhere
+
+**User's call**, and the stronger of the options on the table — not the
+`{$mode}`-gated one recommended above.
+
+The reasoning that carries it is the one that made option 3 worth listing at
+all: **hiding is standard Pascal, not an FPC dialect quirk.** pxx's flat
+overload set is not a lax-dialect decision anybody made — it is an artifact of
+first-in-chain winning in `FindProc`. That makes it closer to a bug than a
+dialect, and a bug does not belong behind a compatibility flag.
+
+It also avoids the trap flagged in the recommendation: no second strictness
+axis. There is one rule, it is the Pascal rule, and `{$mode}` stays what it is
+today (one behavioural delta, `DelphiMode`).
+
+### What this means concretely
+
+- an unqualified call prefers a declaration in the **current scope**; failing
+  that, the **latest declaring scope**;
+- a hidden declaration is **removed from the candidate set**, not merely ranked
+  below — so `IntToStr(5)` converts for the program's `Int64` version instead
+  of finding sysutils' equally-convertible one;
+- same-scope declarations do **not** hide each other; they are overloads and
+  resolve by signature as today. `overload` keeps its current meaning as the
+  explicit cross-scope merge;
+- `--strict-overload` and `{$MIMIC FPC}` are **not** involved. Nothing new is
+  gated.
+
+### Non-negotiable preconditions, both already measured once
+
+1. **Removal, not ranking.** Ranking inside `FindProc`'s chain broke the
+   self-compile (`EmitAsmX64([...])` parsed as a set, because the parser reads
+   the returned representative's *signature*) and segfaulted the NilPy stdlib at
+   `sum(range(i))` (because `pyparser` reads its *RetType*). Both passed
+   `gate.sh quick`.
+2. **NilPy is unmeasured and must be measured first.** Hiding can still change
+   which procs are candidates across the `pylib` / `pyeval` / `builtin` scopes.
+   `--tier limited` at minimum; the quick tier is not evidence here.
+
+### Implementation
+
+[[bug-p-uses-order-does-not-decide-which-unit-wins]] is unblocked and becomes
+the implementation vehicle — it now covers both remaining facets (uses-order and
+the convertible-argument case), since one rule fixes both.

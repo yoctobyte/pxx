@@ -1,6 +1,8 @@
 ---
 track: U
 prio: 50
+status: resolved
+resolved: 2026-08-06
 type: decision
 ---
 
@@ -52,3 +54,18 @@ My recommendation is **A**, on the grounds that the ticket's own acceptance test
 passes and its name no longer refers to anything real. But which of these is
 right depends on whether the `pxxpdf` module name was ever wanted for its own
 sake, which I cannot tell from the code or the ticket.
+
+
+## DECIDED 2026-08-06 — option A: close it, re-file the remainder
+
+**User's call.** Everything structural shipped, the acceptance criterion passes,
+and the ticket's name, module layout and import strategy describe a design that
+does not exist in the tree. A ticket whose slug names a module nobody can find
+misleads its next reader, which is the cost option B would have kept paying.
+
+The one genuinely open item is narrower than the ticket and is re-filed as
+[[feature-lib-reportlab-fidelity-vs-oracle]]: acceptance asked for output
+"matching the reportlab output", and only **validity** was ever shown — a
+`%PDF-1.3` that `pdftotext` can read — never **agreement** with real reportlab.
+
+The two crtl follow-ups stand on their own and are unaffected.

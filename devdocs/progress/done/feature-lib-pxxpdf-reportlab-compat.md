@@ -161,3 +161,25 @@ Recommendation: close this ticket in favour of a scoped
 is done and its name/design no longer match the tree. Flagged for **Track U**
 rather than decided here — closing a prio-50 feature ticket is the user's call,
 not mine.
+
+
+## CLOSED 2026-08-06 — obsolete by design change; remainder re-filed
+
+Per [[decide-pxxpdf-ticket-obsolete]], user's call.
+
+Structurally complete, but not as written here. This ticket specifies a nilpy
+module named `pxxpdf` reached through a `try/except ImportError` fallback. What
+shipped is seven `lib/pcl/mimic_reportlab_*.pas` units resolved by the
+compiler's own import mapping, so an **unmodified**
+`from reportlab.pdfgen import canvas` just works — a better shape, and one that
+leaves this ticket's name, layout and import strategy obsolete. Vendoring
+pdfgen landed 2026-07-28 (`lib/vendor/pdfgen/`), so the "first committed
+third-party source" framing is history too. The API table is implemented
+including `drawImage`, which this ticket deferred to v1.x.
+
+Acceptance as stated passes: a reportlab-using nilpy program compiles, runs, and
+writes a valid `%PDF-1.3` whose text `pdftotext` extracts.
+
+**What it does not show** is the thing acceptance actually asked for — output
+*matching reportlab's*. Validity is not agreement. Re-filed as
+[[feature-lib-reportlab-fidelity-vs-oracle]].

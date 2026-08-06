@@ -3,6 +3,8 @@ summary: "FPC compiles Assert OUT unless -Sa/{$ASSERTIONS ON} and appends '(file
 type: decision
 track: U
 prio: 40
+status: resolved
+resolved: 2026-08-06
 ---
 
 # Decide: `{$ASSERTIONS}` and the assertion message format
@@ -64,3 +66,16 @@ Note the ordering: `__pxxAssert` lives in `compiler/builtin/`, so this lands
 under Track A's gate. Today's hook change there did NOT need a repin
 (`selfhost_fixedpoint.sh` converged) — worth measuring rather than assuming for
 the next one.
+
+
+## DECIDED 2026-08-06 — option 1: both, full FPC parity
+
+**User's call.** Adopt `{$ASSERTIONS}` / `-Sa` gating **and** the
+`(file, line N)` message suffix.
+
+Consistent with the two other calls made in the same review (scope hiding by
+default, dynamic arrays matching FPC): where FPC sets a clear precedent and
+there is no argument for diverging, follow it rather than accumulate a private
+dialect. Low urgency — nothing is silently wrong today — but not contentious.
+
+Implementation: [[feature-p-assertions-directive-and-position]].

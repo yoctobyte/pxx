@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:7 blocked:7 backlog:201 experimental:20 rainy-day:31 done-followup:3 decided:39 done:1418 rejected:29`
+`working:1 unfinished:7 blocked:6 backlog:200 experimental:20 rainy-day:31 done-followup:3 decided:42 done:1419 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -21,12 +21,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-star-args-kwargs` [N]
 - `feature-pascal-corpus-generics` [P]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-nilpy-dunders-not-dispatched-through-containers` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `bug-nilpy-in-over-objects-ignores-eq` [N]
 - `decide-nilpy-runtime-dunder-dispatch-mechanism` [U] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
-- `feature-lib-pxxpdf-reportlab-compat` [B] — blocked-by: decide-pxxpdf-ticket-obsolete
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
@@ -45,8 +44,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [A]` bug-a-write-fixed-emits-false-digits-past-1e22 (unblocks 1)
-- `[p 60] [U]` decide-scope-hiding-vs-flat-overload-set (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [T]` bug-t-gate-sh-fixedpoint-does-not-iterate
 - `[p 60] [U]` decide-abi-portable-vs-target-split
 - `[p 60] [A]` feature-a-abi-oracle

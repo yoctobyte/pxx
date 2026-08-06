@@ -2,8 +2,7 @@
 summary: "Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off"
 type: bug
 track: P
-prio: 35
-blocked-by: decide-scope-hiding-vs-flat-overload-set
+prio: 60
 ---
 
 # `uses a, b` — pxx picks the first unit's routine, FPC picks the last
@@ -112,3 +111,36 @@ different and probably safer change.
 
 The repro and test material in this ticket stay valid and are what the decision
 should be gated against.
+
+
+## 2026-08-06 — UNBLOCKED and promoted: this is now the implementation ticket
+
+[[decide-scope-hiding-vs-flat-overload-set]] is decided: **hiding becomes the
+default, everywhere** — no flag, no `{$mode}` gate. So this ticket stops being
+"uses-order" and becomes the single implementation of the rule, covering both
+remaining facets:
+
+- `uses a, b` binds b's routine, `uses b, a` binds a's (this ticket's original
+  symptom);
+- `IntToStr(5)` reaches the program's `Int64` declaration rather than sysutils'
+  equally-convertible one (the convertible-argument case split out of
+  [[bug-p-program-function-does-not-shadow-used-unit]]).
+
+One rule fixes both. Prio raised 35 -> 60 to match the decision.
+
+### Build it as candidate REMOVAL, not ranking
+
+This is the part that has already gone wrong once. Do not rank entries inside
+`FindProc`'s chain — build the candidate set with hidden declarations excluded,
+then resolve normally. Ranking broke the self-compile and the NilPy stdlib
+(details above), and both survived `gate.sh quick`.
+
+Same-scope declarations do not hide each other — they are overloads. That is
+what keeps `EmitAsmX64`'s `array of const` / `AnsiString` pair working.
+
+### Measure NilPy before believing any estimate
+
+`pyparser.inc` infers expression types from `Procs[procIdx].RetType` off
+whatever `FindProc` returns, and hiding can change which procs are candidates
+across `pylib` / `pyeval` / `builtin`. That is exactly where `sum(range(i))`
+segfaulted. **`--tier limited` minimum.**
