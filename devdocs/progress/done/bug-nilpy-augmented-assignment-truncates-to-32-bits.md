@@ -2,6 +2,8 @@
 track: N
 prio: 75
 type: bug
+status: done
+owner: claude-AN
 summary: "NilPy: a binding initialised from a small int literal is typed 32-bit tyInteger, and `+=`/`-=`/`*=`/`<<=` KEEP that type and silently truncate — `c = 2000000000; c += 2000000000` prints -294967296, while the plain `c = c + 2000000000` is correct"
 ---
 
@@ -96,3 +98,36 @@ narrow under `//`, `%`, ordering and `float()` —
 Per-fix loop (`make compiler/pascal26`, repro, `tools/gate.sh quick`). Add a
 `.npy` test asserting `x op= y` == `x = x op y` across `+ - * << //` at values
 straddling 2^31 and 2^63, diffed against CPython with `tools/pydiff.py`.
+
+## Log
+
+- 2026-08-06 — **resolved**, in two parts, because the bug had two tiers.
+
+  **Tier 1, the 32-bit slot.** `PyNoteLocalType` (`compiler/pyparser.inc`) now
+  widens `tyInteger` to `tyInt64` on entry, so every inferred NilPy local is a
+  64-bit cell — the same answer the `x: int` annotation and
+  `PyTypeFromTokenIndex`'s tkInteger arm already gave. Widened at that one
+  choke point rather than at the ~15 call sites, so a site added later cannot
+  reintroduce a 32-bit local. This fixed `c += 2000000000` (-294967296 ->
+  4000000000).
+
+  **Tier 2, no promotion.** With the slot 64-bit, the augmented form still
+  wrapped at 2^64 where the plain form promoted: the augmented-assign site
+  hand-builds its `AN_BINOP` and typed it with `PyWiden` alone, and
+  `PyWiden(Int64, Int64)` is `Int64`. Two fixes, one per scope, because the
+  def and module collectors are separate paths:
+  - the augmented-assign site types the node `tyPromoInt64` (and notes the
+    local constraint, so the frame SLOT widens across trial-parse rounds) for
+    the operators that can GROW a value — `+= -= *= <<=`;
+  - `PyCollectModuleLocalsAST` gained a third token-shape arm beside the
+    existing `/=` and `**=` ones, since `PyBlkIntArith` matches only
+    tkIdent-then-tkAssign and so never saw the augmented spelling.
+
+  `//= %= &= |= ^= >>=` are deliberately excluded — none can exceed its
+  operands — and `/=` was already float-typed.
+
+  **Verified** against CPython with `tools/pydiff.py` at both scopes, and
+  `test/test_nilpy_int_promotion_default.npy` extended with the augmented
+  cases (both scopes, the `x op= y == x = x op y` invariant at 24!, and the
+  cannot-grow operators keeping their floor/truncate rule). All 42 lines of that
+  file agree with CPython. `tools/gate.sh quick` GREEN.

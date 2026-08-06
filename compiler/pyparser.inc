@@ -2658,6 +2658,19 @@ procedure PyNoteLocalType(const name: AnsiString; tk: TTypeKind; rec: Integer);
 var ci: Integer; w: TTypeKind;
 begin
   if tk = tyUnknown then Exit;
+  { A NilPy `int` is a 64-bit cell EVERYWHERE else — the `x: int` annotation and
+    PyTypeFromTokenIndex's tkInteger arm both answer tyInt64, the latter because
+    a 4-byte field put a 2^31 cliff on `self.v = 0`
+    (bug-nilpy-int-promotion-decided-statically). Inferred LOCALS were the one
+    binding kind still taking tyInteger from an int-shaped AST node, and the
+    width was observable: `c = 2000000000; c += 2000000000` stored into a 4-byte
+    slot and printed -294967296, while the plain `c = c + 2000000000` was right
+    because that form re-notes the local from the wider RHS and widens it. Two
+    spellings of one operation answering differently is the tell
+    (bug-nilpy-augmented-assignment-truncates-to-32-bits).
+    Widened here rather than at each of the ~15 PyNoteLocalType call sites, so a
+    site added later cannot reintroduce a 32-bit local. }
+  if tk = tyInteger then tk := tyInt64;
   ci := PyFindConstraint(name);
   if ci < 0 then
   begin
@@ -14741,6 +14754,30 @@ begin
     else
       ASTTk[node] := Ord(PyWiden(Syms[symIdx].TypeKind,
                                  IntToTypeKind(ASTTk[CurASTNode])));
+    { An accumulator written the AUGMENTED way is still an accumulator, and
+      Python ints have no ceiling. The PLAIN spelling already promotes — module
+      scope through PyBlkIntArith ("an accumulator: `n = n * 2`"), inside a def
+      through the AST pre-pass — but this site hand-builds its AN_BINOP and
+      typed it with PyWiden alone, and PyWiden(Int64, Int64) is Int64. So
+      `a = 1; for i in range(1,22): a *= i` wrapped mod 2^64 (21! came back
+      -4249290049419214848) while `a = a * i` printed 51090942171709440000.
+      Two spellings of one operation answering differently is the tell.
+
+      Only the operators that can GROW the value: `//=` `%=` `&=` cannot exceed
+      their operands, and `/=` is float and already handled above. tkShl is
+      included for the same reason PyParseShift promotes unconditionally —
+      `1 << 64` must reach past Int64.
+
+      The local's own constraint is noted too, not just the node: the frame SLOT
+      has to widen across the trial-parse rounds, which is the rule `/=` and
+      `**=` each needed one scope over. }
+    if ((augTk = tkPlus) or (augTk = tkMinus) or (augTk = tkStar) or
+        (augTk = tkShl)) and
+       (IntToTypeKind(ASTTk[node]) in [tyInteger, tyInt64, tyBoolean]) then
+    begin
+      ASTTk[node] := Ord(tyPromoInt64);
+      if PyTypingPass then PyNoteLocalType(name, tyPromoInt64, REC_NONE);
+    end;
     rhsNode := node;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);
@@ -15549,8 +15586,9 @@ begin
         function and wrong at the top level
         (bug-nilpy-module-level-true-divide-assign-keeps-an-int-slot).
 
-        `/=` and `**=` need this; every other augmented operator preserves the
-        target's type, and `//=` is deliberately integer division. }
+        `/=`, `**=` and the value-GROWING ops (`+= -= *= <<=`, the arm below
+        these two) need this. `//=` `%=` `&=` `|=` `^=` `>>=` genuinely do
+        preserve the target's type — none can exceed its operands. }
       else if (depth <= 255) and
               ((depth = 0) or (not blockIsDef[depth])) and
               (Tokens[i].Kind = tkIdent) and
@@ -15573,6 +15611,32 @@ begin
               ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
       begin
         PyNoteLocalType(GetTokenStr(i), tyVariant, REC_NONE);
+        Inc(i);
+      end
+      { `n += x` / `n *= x` / `n <<= x` at MODULE level — an accumulator, and
+        Python ints have no ceiling. The PLAIN spelling of the same loop is
+        already promoted by the PyBlkIntArith arm above ("an accumulator:
+        `n = n * 2`"), but that arm matches tkIdent-then-tkAssign, so the
+        augmented spelling was invisible to it and the name kept the Int64 its
+        initialiser gave it: `a = 1` then `for i in range(1,22): a *= i` printed
+        -4249290049419214848 for 21! while `a = a * i` printed
+        51090942171709440000. Same shape as the `/=` arm above — the def-level
+        collector already handles it (the augmented-assign site notes the promo
+        constraint), only MODULE scope was missing it
+        (bug-nilpy-augmented-assignment-truncates-to-32-bits).
+
+        Unconditionally promo, without probing the RHS: unlike `/=` (which must
+        decide float vs int) there is nothing to decide — if the target is an
+        int this is the right type, and if it is not, PyWiden joins promo with
+        whatever the target really is exactly as it does for a wide literal. }
+      else if (depth <= 255) and
+              ((depth = 0) or (not blockIsDef[depth])) and
+              (Tokens[i].Kind = tkIdent) and
+              (i + 1 < MainProgramTokCount) and
+              (Tokens[i + 1].Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkShlEq]) and
+              ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
+      begin
+        PyNoteLocalType(GetTokenStr(i), tyPromoInt64, REC_NONE);
         Inc(i);
       end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and

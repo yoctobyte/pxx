@@ -130,3 +130,64 @@ b = 1
 for k in range(70):
     b = b * 2
 print(abs(0 - b))
+
+# AUGMENTED assignment is the same accumulator and must answer the same as the
+# plain spelling. It did not: the binding took a 32-BIT tyInteger from its small
+# literal initialiser and `+=` truncated into it (`c = 2000000000; c += 2000000000`
+# printed -294967296), and once that was widened the augmented form still typed
+# its hand-built binop with PyWiden alone and wrapped at 2^64 where `a = a * i`
+# promoted (bug-nilpy-augmented-assignment-truncates-to-32-bits).
+# Both scopes, because the module and def collectors are separate code paths.
+c = 2000000000
+c += 2000000000
+print(c)
+e = 100000
+e *= 100000
+print(e)
+s = 1
+s -= 3000000000
+print(s)
+sh = 1
+sh <<= 40
+print(sh)
+af = 1
+for k in range(1, 22):
+    af *= k
+print(af)
+ag = 1
+for k in range(70):
+    ag += ag
+print(ag)
+
+def aug_local():
+    d = 1
+    for k in range(1, 22):
+        d *= k
+    t = 2000000000
+    t += 2000000000
+    u = 1
+    u <<= 70
+    return d, t, u
+print(aug_local())
+
+# the invariant the fix is gated on: `x op= y` == `x = x op y`
+p1 = 1
+p2 = 1
+for k in range(1, 25):
+    p1 *= k
+    p2 = p2 * k
+print(p1 == p2, p1)
+
+# ops that CANNOT grow keep their meaning (and their floor/truncate rule)
+q = 7
+q //= 2
+print(q)
+r = -7
+r //= 2
+print(r)
+w = -7
+w %= 3
+print(w)
+v = 255
+v &= 15
+print(v)
