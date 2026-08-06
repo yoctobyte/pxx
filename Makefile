@@ -4544,8 +4544,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_managed_result_move26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_arg_temp.pas /tmp/test_managed_arg_temp26
 	test "$$(/tmp/test_managed_arg_temp26)" = "$$(printf 'literal\nab\nk\n<x>\n<m>\nkeep\n1\n1')"
-	./$(COMPILER) test/test_nested_cow.pas /tmp/test_nested_cow26
-	test "$$(/tmp/test_nested_cow26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	# Nested dyn-array ALIASING (replaces test_nested_cow.pas — nested
+	# copy-on-write was x86-64's alone and is gone; see
+	# bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing). All 19
+	# values diffed against an FPC build of the same file.
+	./$(COMPILER) test/test_nested_alias.pas /tmp/test_nested_alias26
+	test "$$(/tmp/test_nested_alias26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
 	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\nTrue\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26

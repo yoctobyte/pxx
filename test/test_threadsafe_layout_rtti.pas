@@ -50,10 +50,27 @@ begin
     Check(15, otherBox.Payload.Name = 'worker');
     Check(16, SharedBox.Payload.Name = 'shared payload');
 
-    localGrid := SharedGrid;
+    { A per-thread PRIVATE grid, built rather than aliased. This used to be
+      `localGrid := SharedGrid` followed by a write through localGrid, which
+      relied on nested copy-on-write for its isolation — and that COW was
+      x86-64's alone and is gone
+      (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing). With FPC
+      reference semantics that assignment makes localGrid the SAME array, so four
+      threads writing 'changed' through it were racing on one shared global and
+      the main thread's Check(33) caught it.
+
+      Built with SetLength + an element read instead of Copy(SharedGrid[0]),
+      because Copy still requires a bare dynamic-array IDENTIFIER and rejects an
+      indexed element — bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name.
+      The workers now only READ the shared grid, which is what makes this
+      thread-safe rather than merely passing. }
+    SetLength(localGrid, 1);
+    SetLength(localGrid[0], 1);
+    localGrid[0][0] := SharedGrid[0][0];
+    Check(17, localGrid[0][0] = 'root');
     localGrid[0][0] := 'changed';
-    Check(17, SharedGrid[0][0] = 'root');
     Check(18, localGrid[0][0] = 'changed');
+    Check(19, SharedGrid[0][0] = 'root');
 
     if (i mod 64) = 0 then usleep(1);
   end;

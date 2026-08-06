@@ -1824,22 +1824,19 @@ begin
 
     IR_DYNUNIQUE:
       begin
-        { Nested dyn-array copy-on-write. IRA = slot-address node. On a read just
-          load the level's data pointer; on a write clone-if-shared via
-          PXXDynArrayUnique(slotAddr, desc), publishing the unique handle and
-          returning the data pointer. }
+        { Load this level's data pointer. IRA = slot-address node, so one deref,
+          in read AND write mode alike — the nested copy-on-write is gone because
+          a dynamic array is an FPC reference type at every depth. Full note in
+          ir_codegen.inc's IR_DYNUNIQUE
+          (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing).
+
+          i386 was missed on the first pass because this file is named
+          ir_codegen386.inc, not ir_codegen_i386.inc, so it did not match the
+          grep that found the other backends — and the differential job hid it:
+          x86-64 and i386 both COW'd, so `i386 output == x64 output` PASSED while
+          both were wrong. Track T caught it the moment x86-64 became right. }
         IREmitNode386(IRA[node]);              { eax = slot addr }
-        if InLValueWrite then
-        begin
-          EmitB($50);                          { push slot addr }
-          EmitB($68); EmitDataRef(GetOrAllocDynUniqueDesc(node)); { push desc }
-          procIdx := FindProc('PXXDynArrayUnique');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
-          EmitCallProc(procIdx);
-          EmitB($81); EmitB($C4); EmitI32(8);  { add esp, 8 }
-        end
-        else
-          begin EmitB($8B); EmitB($00); end;   { mov eax, [eax] }
+        EmitB($8B); EmitB($00);                { mov eax, [eax] = data pointer }
       end;
 
     IR_BINOP:
