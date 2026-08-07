@@ -31,6 +31,19 @@ def set(x):
     return "late-set"
 print(set([1, 1]))
 
+# `float` and `bool` had NO shadow guard at all on their NilPy arms — unlike
+# `int` and `str` beside them — so the user's def was never called, on EITHER
+# side of the def. (bug-nilpy-a-def-named-float-or-bool-is-never-called)
+print(float("1.5"))
+def float(x):
+    return "late-float"
+print(float("1.5"))
+
+print(bool(0))
+def bool(x):
+    return "late-bool"
+print(bool(0))
+
 # ...and the pylib-backed case that already worked must not regress
 print(min(3, 1, 2))
 def min(a, b, c, d, e):

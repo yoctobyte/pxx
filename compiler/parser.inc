@@ -10612,7 +10612,13 @@ begin
         LastExprTk := tyClass;
         Exit;
       end
-      else if isNilPy and (name = 'float') then
+      { ...and, like `int` / `str` above, only while the module has not rebound
+        the name: a `def float(x)` is ordinary Python and must win from its own
+        `def` statement onward. Without the guard this arm claimed the name
+        unconditionally and the user's def was NEVER called — silently, on
+        both sides of the def.
+        bug-nilpy-a-def-named-float-or-bool-is-never-called }
+      else if isNilPy and (name = 'float') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr; Expect(tkRParen, ')');
         { Dispatched on the ARGUMENT type, not by overload: a string is PARSED
@@ -10771,7 +10777,13 @@ begin
         LastExprTk := tyVariant;
         Exit;
       end
-      else if isNilPy and (name = 'bool') then
+      { ...and, like `int` / `str` above, only while the module has not rebound
+        the name: a `def bool(x)` is ordinary Python and must win from its own
+        `def` statement onward. Without the guard this arm claimed the name
+        unconditionally and the user's def was NEVER called — silently, on
+        both sides of the def.
+        bug-nilpy-a-def-named-float-or-bool-is-never-called }
+      else if isNilPy and (name = 'bool') and (not PyUserShadowsProc(name)) then
       begin
         { `bool(x)` is Python's TRUTHINESS, the same rule `if x:` and `not x`
           use — so it goes through PyMakeTruthy rather than resolving to pylib's

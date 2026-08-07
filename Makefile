@@ -410,7 +410,7 @@ test-nilpy: $(COMPILER)
 	@# proc (ord/chr/abs, name-dispatched intrinsics) and for one whose arity a
 	@# def happens to match (set): a call ABOVE the def reaches the builtin.
 	./$(COMPILER) test/test_nilpy_def_shadows_builtin_positionally.npy /tmp/test_nilpy_defshadowpos26
-	test "$$(/tmp/test_nilpy_defshadowpos26)" = "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1\n100\n11\n7')"
+	test "$$(/tmp/test_nilpy_defshadowpos26)" = "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1.5\nlate-float\nFalse\nlate-bool\n1\n100\n11\n7')"
 	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
 	# iterable still runs it; a break in a NESTED loop must not skip the outer
 	# one's else) and `try ... else` (runs when the body did not raise, before
@@ -4803,7 +4803,7 @@ test-core: $(COMPILER)
 	@# proc (ord/chr/abs, name-dispatched intrinsics) and for one whose arity a
 	@# def happens to match (set): a call ABOVE the def reaches the builtin.
 	./$(COMPILER) test/test_nilpy_def_shadows_builtin_positionally.npy /tmp/test_nilpy_defshadowpos26
-	test "$$(/tmp/test_nilpy_defshadowpos26)" = "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1\n100\n11\n7')"
+	test "$$(/tmp/test_nilpy_defshadowpos26)" = "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1.5\nlate-float\nFalse\nlate-bool\n1\n100\n11\n7')"
 	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
 	# iterable still runs it; a break in a NESTED loop must not skip the outer
 	# one's else) and `try ... else` (runs when the body did not raise, before
