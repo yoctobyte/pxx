@@ -137,4 +137,4 @@ TypeError at run time so `try/except` compiles. The sibling
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 2145478ac.
