@@ -36,6 +36,13 @@ const
     See the slice functions below for why a sentinel is safe here. }
   PY_SLICE_OMIT = 2147483647;
 
+  { Which Python kind a TPyList was built as. One representation, three
+    languages-level types; see TPyList.FKind. LIST is 0 so a fresh TPyList is a
+    list without anyone having to say so. }
+  PYSEQ_LIST  = 0;
+  PYSEQ_TUPLE = 1;
+  PYSEQ_SET   = 2;
+
 type
   TPyVarRec = record
     VType: Int64;
@@ -74,11 +81,18 @@ type
     FLen: Integer;
     FCap: Integer;
     FItems: Pointer;
-    { A TUPLE is a TPyList too — NilPy has one sequence representation — so the
-      only thing separating `(1, 2)` from `[1, 2]` at render time is this flag,
-      set by the frontend when a tuple DISPLAY was written. Without it every
-      tuple printed with brackets (bug-nilpy-str-of-tuple-is-empty). }
-    FIsTuple: Boolean;
+    { list, TUPLE and SET are all a TPyList — NilPy has one sequence
+      representation — so the only thing separating `(1, 2)` from `[1, 2]` from
+      `{1, 2}` is this KIND, stamped by the frontend from the display that was
+      written. Without it every tuple printed with brackets
+      (bug-nilpy-str-of-tuple-is-empty).
+
+      It was a Boolean FIsTuple until 2026-08-06, which left a SET
+      indistinguishable from a list: `type({1,2}).__name__` answered 'list' and
+      `isinstance({1,2}, list)` was True. Three kinds need three values
+      (bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance).
+      PYSEQ_LIST is 0 so a freshly-created TPyList is a list by default. }
+    FKind: Integer;
     constructor Create;
     { Python's list.append returns NONE. The Self-returning form the frontend
       chains list literals through is append_self, a SEPARATE name — flipping
@@ -146,7 +160,7 @@ type
     procedure close;
     function readlines: TPyList;
     { set methods. NilPy backs `set` with the same TPyList as `list`, built via
-      .add() instead of .append() (one sequence representation, see FIsTuple's
+      .add() instead of .append() (one sequence representation, see FKind's
       comment above), so these are ordinary instance methods rather than a
       distinct set class — set(x).union(set(y)) and the OPERATOR forms
       (pyset_and/or/sub/xor in this unit) share the same pycontains-based
@@ -455,9 +469,18 @@ function repr(dc: TPyDict): AnsiString; overload;
   fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
   Recursive: a nested list/dict element is reprd as a container, not as its
   object tag. }
-{ Mark a list as a TUPLE, for rendering only — the frontend calls it on the temp
-  a tuple display builds. }
+{ Mark a list as a TUPLE / a SET — the frontend calls these on the temp the
+  corresponding display builds. Not "for rendering only" any more: the kind is
+  what `type(x).__name__` and `isinstance` answer from, so a display that fails
+  to stamp it is a wrong TYPE, not just wrong brackets. }
 function pylist_mark_tuple(l: TPyList): TPyList;
+function pylist_mark_set(l: TPyList): TPyList;
+{ The Python type name of a sequence kind: 'list' / 'tuple' / 'set'. }
+function PySeqKindName(k: Integer): AnsiString;
+{ The sequence kind of a VARIANT, or -1 when it does not hold a TPyList. The
+  shape isinstance() asks: it must distinguish the three kinds that share the
+  row, which a class test cannot do. }
+function pyseq_kind_v(const v: Variant): Integer;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
@@ -955,7 +978,7 @@ function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
 { tuple(iterable) — the same sequence with the TUPLE flag set. The tuple TYPE
-  existed (literals work, and FIsTuple distinguishes it) but the CONSTRUCTOR did
+  existed (literals work, and FKind distinguishes it) but the CONSTRUCTOR did
   not, so `tuple([1, 2])` failed with 'undefined variable (tuple)'.
   (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice) }
 function tuple(l: TPyList): TPyList;
@@ -1734,7 +1757,7 @@ function pystr_partition(const s: AnsiString; const sep: AnsiString): TPyList;
 var idx: Integer;
 begin
   Result := TPyList.Create;
-  Result.FIsTuple := True;
+  Result.FKind := PYSEQ_TUPLE;
   idx := Pos(sep, s);
   if idx = 0 then
   begin
@@ -1754,7 +1777,7 @@ function pystr_rpartition(const s: AnsiString; const sep: AnsiString): TPyList;
 var idx, i, n, m, j: Integer; hit: Boolean;
 begin
   Result := TPyList.Create;
-  Result.FIsTuple := True;
+  Result.FKind := PYSEQ_TUPLE;
   n := Length(s); m := Length(sep);
   idx := 0;
   if m > 0 then
@@ -2305,8 +2328,8 @@ end;
   - the pylib CONTAINERS must report their PYTHON names, not the Pascal class
     backing them. Reading the RTTI ClassName gave `TPyList` / `TPyDict` /
     `TPyBytes` — a silently wrong string, the worst failure class here.
-  - `tuple` and `list` share ONE representation, so the answer depends on
-    FIsTuple at run time and cannot come from a class name at all.
+  - `list`, `tuple` and `set` share ONE representation, so the answer depends on
+    FKind at run time and cannot come from a class name at all.
 
   A user NilPy class still falls through to ClassName, which is already its
   Python name (bug-nilpy-type-name-reports-the-internal-pascal-class). }
@@ -2324,7 +2347,7 @@ begin
   o := TObject(obj);
   if o is TPyList then
   begin
-    if TPyList(o).FIsTuple then Result := 'tuple' else Result := 'list';
+    Result := PySeqKindName(TPyList(o).FKind);
   end
   else if o is TPyDict then Result := 'dict'
   else if o is TPyBytes then Result := 'bytes'
@@ -2549,7 +2572,7 @@ function TPyList.copy: TPyList;
 var i: Integer;
 begin
   Result := TPyList.Create;
-  Result.FIsTuple := FIsTuple;
+  Result.FKind := FKind;
   for i := 0 to FLen - 1 do
     Result.append(at(i));
 end;
@@ -3571,7 +3594,7 @@ begin
   n := ks.count - 1;                  { LIFO, matching CPython 3.7+ }
   k := ks.at(n);
   Result := TPyList.Create;
-  Result.FIsTuple := True;            { popitem() yields a (key, value) TUPLE }
+  Result.FKind := PYSEQ_TUPLE;            { popitem() yields a (key, value) TUPLE }
   Result.append(k);
   Result.append(vs.at(n));
   remove(k);
@@ -3647,6 +3670,7 @@ var pa, pb: PPyVarRec;
     la, lb, k, n: Int64;
     ea, eb: Variant;
     oa, ob: TObject;
+    pg: Integer;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   { Two SEQUENCES compare LEXICOGRAPHICALLY: the first index where the elements
@@ -3692,7 +3716,14 @@ begin
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
     pyvar_gt := pyvar_to_float(a) > pyvar_to_float(b)
   else
-    pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+  begin
+    { arbitrary precision stays exact — see pycmp_v. This is the SORT path, so
+      without it sorted([2**65, 2**64, 5]) came back in the order it was given:
+      every element narrowed to the same wrapped value and no swap ever fired. }
+    pg := PXXPromoVarCmpTry(@a, @b, 5);        { 5 = greater-than }
+    if pg <> 0 then pyvar_gt := (pg = 2)
+    else pyvar_gt := pyvar_to_int(a) > pyvar_to_int(b);
+  end;
 end;
 
 
@@ -3726,7 +3757,7 @@ begin
   for i := 0 to a.count - 1 do
   begin
     pair := TPyList.Create;
-    pair.FIsTuple := True;   { enumerate() yields (index, value) tuples }
+    pair.FKind := PYSEQ_TUPLE;   { enumerate() yields (index, value) tuples }
     pair.append(i);
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
@@ -3747,7 +3778,7 @@ begin
   for i := 0 to a.count - 1 do
   begin
     pair := TPyList.Create;
-    pair.FIsTuple := True;
+    pair.FKind := PYSEQ_TUPLE;
     idx := start + i;
     pair.append(idx);
     pair.append(a.at(i));
@@ -3792,7 +3823,7 @@ begin
   for i := 0 to n - 1 do
   begin
     pair := TPyList.Create;
-    pair.FIsTuple := True;   { zip() yields tuples }
+    pair.FKind := PYSEQ_TUPLE;   { zip() yields tuples }
     pair.append(a.at(i));
     pair.append(b.at(i));
     PPyVarRec(@pv)^.VType := 7;
@@ -3905,6 +3936,9 @@ function pyset_of(const v: Variant): TPyList;
 var r, kl: TPyList; o: TObject; i: Integer; sv: AnsiString;
 begin
   r := TPyList.Create;
+  { the CONSTRUCTOR stamps the kind too, not just the `{...}` display — without
+    it `set([1,1,2])` printed `[1, 2]` and answered isinstance(x, list) }
+  r.FKind := PYSEQ_SET;
   Result := r;
   if pyvartag(v) = 6 then
   begin
@@ -4017,7 +4051,7 @@ begin
   for i := 0 to cnt - 1 do
   begin
     pair := TPyList.Create;
-    pair.FIsTuple := True;   { most_common() yields (key, count) tuples }
+    pair.FKind := PYSEQ_TUPLE;   { most_common() yields (key, count) tuples }
     pair.append(ks.at(idx[i]));
     pair.append(vs.at(idx[i]));
     res.append(pair);
@@ -4069,7 +4103,7 @@ begin
   for i := 0 to kl.count - 1 do
   begin
     pair := TPyList.Create;
-    pair.FIsTuple := True;   { dict.items() yields (key, value) tuples }
+    pair.FKind := PYSEQ_TUPLE;   { dict.items() yields (key, value) tuples }
     pair.append(kl.at(i));
     pair.append(vl.at(i));
     { box the pair as a VT_OBJECT slot and retain it — the same shape a nested
@@ -4360,6 +4394,7 @@ end;
 function pyvar_to_float(const v: Variant): Double;
 var
   p: PPyVarRec;
+  pslot: array[0..1] of NativeInt;   { a promo slot, like PXXPromoVarArithTry's }
 begin
   p := PPyVarRec(@v);
   if p^.VType = 3 then
@@ -4367,10 +4402,20 @@ begin
   else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
     Result := p^.Payload
   else if p^.VType = 8193 then
+  begin
     { VT_PROMO_INT64 is a NUMBER; it was missing here, so a heap-tier
       promotable int reaching a float context raised "expected a number, got
-      <unknown>". pyvar_to_int owns the decimal-payload narrowing rule. }
-    Result := pyvar_to_int(v)
+      <unknown>".
+      Read off the LIMBS via PXXPromoToDouble, not through pyvar_to_int: that
+      narrows mod 2^64, so `float(2**64)` answered 0.0 — silently, since 0.0 is
+      a perfectly ordinary float. A heap-tier promo is by construction outside
+      Int64, which is exactly when the narrowing is guaranteed to be wrong
+      (bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum). }
+    PXXPromoInit(@pslot);
+    PXXPromoFromVariant(@pslot, @v);
+    Result := PXXPromoToDouble(@pslot);
+    PXXPromoClear(@pslot);
+  end
   else
   begin
     PyTypeError(p^.VType, 'a number');
@@ -4512,7 +4557,7 @@ begin
     src := TPyList(lo);
     cnt := np^.Payload;
     rep := TPyList.Create;
-    rep.FIsTuple := src.FIsTuple;   { (1, 2) * 2 is a tuple, not a list }
+    rep.FKind := src.FKind;   { (1, 2) * 2 is a tuple, not a list }
     k := 0;
     while k < cnt do
     begin
@@ -4713,7 +4758,7 @@ end;
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
 begin
   Result := TPyList.Create;
-  Result.FIsTuple := True;
+  Result.FKind := PYSEQ_TUPLE;
   Result.append(pyfloordiv_v(a, b));
   Result.append(pyfloormod_v(a, b));
 end;
@@ -4749,6 +4794,13 @@ begin
   end
   else
   begin
+    { An ARBITRARY-PRECISION operand stays exact — the same first line pyadd_v /
+      pysub_v / pymul_v already carry. Without it BOTH operands went through
+      pyvar_to_int below, which narrows mod 2^64: `(2**64 + 5) // 1` answered 5,
+      and `x % (2**64)` raised ZeroDivisionError because the DIVISOR narrowed to
+      0. Op 11 is FLOOR div, not the truncating 4 — see PXXPromoVarArithTry
+      (bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum). }
+    if PXXPromoVarArithTry(@Result, @a, @b, 11) <> 0 then Exit;
     r^.VType := 2;
     { pyvar_to_int, not raw Payload: a non-int-tagged operand (e.g. a VT_CHAR /
       VT_STRING digit, or an int arriving under a tag whose value is not stored
@@ -4784,6 +4836,9 @@ begin
   end
   else
   begin
+    { arbitrary precision stays exact — see pyfloordiv_v. Op 12 is FLOOR mod
+      (remainder takes the DIVISOR's sign), not the truncating 5. }
+    if PXXPromoVarArithTry(@Result, @a, @b, 12) <> 0 then Exit;
     r^.VType := 2;
     { pyvar_to_int, not raw Payload — see pyfloordiv_v: a non-directly-tagged
       operand otherwise reads 0 and modulo divides by zero. }
@@ -4882,7 +4937,7 @@ begin
     if (oa is TPyList) and (ob is TPyList) then
     begin
       joined := TPyList.Create;
-      joined.FIsTuple := TPyList(oa).FIsTuple;
+      joined.FKind := TPyList(oa).FKind;
       for ji := 0 to TPyList(oa).count - 1 do joined.append(TPyList(oa).at(ji));
       for ji := 0 to TPyList(ob).count - 1 do joined.append(TPyList(ob).at(ji));
       Result := joined;
@@ -5076,7 +5131,7 @@ end;
 
 function pycmp_v(const a: Variant; const b: Variant): Int64;
 var pa, pb: PPyVarRec; sa, sb: AnsiString; fa, fb: Double; ia, ib: Int64;
-    oa, ob: TObject;
+    oa, ob: TObject; pc: Integer;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   if (pa^.VType = 7) and (pb^.VType = 7) then
@@ -5107,6 +5162,22 @@ begin
     if fa < fb then Result := -1
     else if fa > fb then Result := 1
     else Result := 0;
+    Exit;
+  end;
+  { An ARBITRARY-PRECISION operand must not go through pyvar_to_int, which
+    narrows mod 2^64: `2**64 > 5` answered False (0 > 5) and sorted() put the
+    biggest value first. PXXPromoVarCmpTry answers 0 when NEITHER side is
+    promo-tagged, so the ordinary path below is untouched for every other pair;
+    on a promo pair it returns 1=False / 2=True. Asked twice — `<` then `=` —
+    because this routine owes a three-way answer and the Try helper is
+    predicate-shaped; both calls are on the promo path only
+    (bug-nilpy-floordiv-mod-compare-and-float-narrow-a-variant-held-bignum). }
+  pc := PXXPromoVarCmpTry(@a, @b, 3);          { 3 = less-than }
+  if pc <> 0 then
+  begin
+    if pc = 2 then Result := -1
+    else if PXXPromoVarCmpTry(@a, @b, 1) = 2 then Result := 0   { 1 = equal }
+    else Result := 1;
     Exit;
   end;
   ia := pyvar_to_int(a); ib := pyvar_to_int(b);
@@ -6733,7 +6804,7 @@ begin
   for i := lastSlash + 2 to Length(p) do
     if p[i] = '.' then dot := i;
   Result := TPyList.Create;
-  Result.FIsTuple := True;
+  Result.FKind := PYSEQ_TUPLE;
   if dot = 0 then
   begin
     Result.append(p);
@@ -7755,7 +7826,7 @@ begin
   lst := nil;
   if PPyVarRec(@args)^.VType = 7 then
     if TObject(pyvarobj(args)) is TPyList then
-      if TPyList(pyvarobj(args)).FIsTuple then lst := TPyList(pyvarobj(args));
+      if TPyList(pyvarobj(args)).FKind = PYSEQ_TUPLE then lst := TPyList(pyvarobj(args));
   if lst <> nil then nargs := lst.count else nargs := 1;
   outS := '';
   argi := 0;
@@ -8872,7 +8943,7 @@ function tuple(l: TPyList): TPyList;
 var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
-  r.FIsTuple := True;
+  r.FKind := PYSEQ_TUPLE;
   if l <> nil then
     for i := 0 to l.count - 1 do r.append(l.at(i));
   Result := r;
@@ -8882,7 +8953,7 @@ function tuple(const s: AnsiString): TPyList; overload;
 var r: TPyList; i: Integer;
 begin
   r := TPyList.Create;
-  r.FIsTuple := True;
+  r.FKind := PYSEQ_TUPLE;
   for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
   Result := r;
 end;
@@ -9037,7 +9108,7 @@ begin
     whose repr pxx already does not reproduce, so nothing that currently matches
     the oracle moves — and `list(reversed(t))` still builds a fresh plain list.
     (bug-nilpy-derived-tuple-loses-tupleness) }
-  if l <> nil then r.FIsTuple := l.FIsTuple;
+  if l <> nil then r.FKind := l.FKind;
   if l <> nil then
     for i := l.count - 1 downto 0 do r.append(l.at(i));
   Result := r;
@@ -9110,7 +9181,7 @@ begin
       explicitly by every DERIVED sequence — pylist_repeat already did this,
       slice and concat did not
       (bug-nilpy-derived-tuple-loses-tupleness). }
-    r.FIsTuple := l.FIsTuple;
+    r.FKind := l.FKind;
     PySliceBounds(l.count, lo, hi);
     for i := lo to hi - 1 do
       r.append(l.at(i));
@@ -9126,7 +9197,7 @@ begin
   begin
     { a slice of a TUPLE is a TUPLE, extended slices included — so `(1,2,3)[::-1]`
       is `(3, 2, 1)`, not `[3, 2, 1]` (bug-nilpy-derived-tuple-loses-tupleness) }
-    r.FIsTuple := l.FIsTuple;
+    r.FKind := l.FKind;
     cnt := PySliceBoundsStep(l.count, lo, hi, step);
     i := lo;
     for k := 1 to cnt do
@@ -9200,7 +9271,7 @@ begin
   { `(1, 2) * 2` is a TUPLE. The variant-dispatch repeat path already carried
     this flag; the statically-typed one did not, so it depended on which path
     the operands took (bug-nilpy-derived-tuple-loses-tupleness). }
-  if l <> nil then r.FIsTuple := l.FIsTuple;
+  if l <> nil then r.FKind := l.FKind;
   if (l <> nil) and (n > 0) then
     for k := 1 to n do
       for i := 0 to l.count - 1 do
@@ -9216,8 +9287,8 @@ begin
   { tuple + tuple is a TUPLE; list + list is a list. Python refuses to
     concatenate the two kinds at all, so taking the LEFT operand's flag matches
     wherever the expression is legal (bug-nilpy-derived-tuple-loses-tupleness). }
-  if a <> nil then r.FIsTuple := a.FIsTuple
-  else if b <> nil then r.FIsTuple := b.FIsTuple;
+  if a <> nil then r.FKind := a.FKind
+  else if b <> nil then r.FKind := b.FKind;
   if a <> nil then for i := 0 to a.count - 1 do r.append(a.at(i));
   if b <> nil then for i := 0 to b.count - 1 do r.append(b.at(i));
   Result := r;
@@ -9450,15 +9521,49 @@ end;
 
 function pylist_mark_tuple(l: TPyList): TPyList;
 begin
-  if l <> nil then l.FIsTuple := True;
+  if l <> nil then l.FKind := PYSEQ_TUPLE;
   pylist_mark_tuple := l;
+end;
+
+function pylist_mark_set(l: TPyList): TPyList;
+begin
+  if l <> nil then l.FKind := PYSEQ_SET;
+  pylist_mark_set := l;
+end;
+
+function PySeqKindName(k: Integer): AnsiString;
+begin
+  if k = PYSEQ_TUPLE then PySeqKindName := 'tuple'
+  else if k = PYSEQ_SET then PySeqKindName := 'set'
+  else PySeqKindName := 'list';
+end;
+
+function pyseq_kind_v(const v: Variant): Integer;
+var o: Pointer;
+begin
+  pyseq_kind_v := -1;
+  if pyvartag(v) <> 7 then Exit;          { not an object }
+  o := pyvarobj(v);
+  if o = nil then Exit;
+  if not (TObject(o) is TPyList) then Exit;
+  pyseq_kind_v := TPyList(o).FKind;
 end;
 
 function pylist_repr(l: TPyList): AnsiString;
 var i: Integer;
 begin
   if l = nil then begin Result := '[]'; Exit; end;
-  if l.FIsTuple then Result := '(' else Result := '[';
+  { CPython has no empty-set DISPLAY — `{}` is an empty dict — so it reprs an
+    empty set as `set()`. Special-cased here for the same reason the one-element
+    tuple keeps its comma below: the general form would be ambiguous. }
+  if (l.FKind = PYSEQ_SET) and (l.count = 0) then
+  begin
+    Result := 'set()';
+    Exit;
+  end;
+  if l.FKind = PYSEQ_TUPLE then Result := '('
+  else if l.FKind = PYSEQ_SET then Result := '{'
+  else Result := '[';
   for i := 0 to l.count - 1 do
   begin
     if i > 0 then Result := Result + ', ';
@@ -9466,8 +9571,10 @@ begin
   end;
   { Python's one-element tuple keeps its comma — `(1,)` — because `(1)` is just
     a parenthesised value. }
-  if l.FIsTuple and (l.count = 1) then Result := Result + ',';
-  if l.FIsTuple then Result := Result + ')' else Result := Result + ']';
+  if (l.FKind = PYSEQ_TUPLE) and (l.count = 1) then Result := Result + ',';
+  if l.FKind = PYSEQ_TUPLE then Result := Result + ')'
+  else if l.FKind = PYSEQ_SET then Result := Result + '}'
+  else Result := Result + ']';
 end;
 
 function pydict_repr(d: TPyDict): AnsiString;

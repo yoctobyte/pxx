@@ -243,3 +243,4 @@
 2026-08-04T16:00:47Z  v243  ef5c8582ad0db011d127dbde07341f1ce443b1474c056a3390e86feeb63b7122  8d0ea6d1924096b3ce7375238ea5c8978c1baa6e  docs(progress): promo div-by-zero data, and a writeln hang found beside it
 2026-08-06T05:36:39Z  v244  4075a05838b9f7261d92f2d1f82b2bc05ea041d155f76c58958d26a26981d9a9  6fd006cac5d5aa5bc95fd52ba01ae0a887f7737d  tstate(U): reject the pin ticket — re-litigated a decided question
 2026-08-06T07:06:59Z  v245  52f378ec682f77bdc3e8d6d6346e477a2165eae958a90d89ab10a9c560602e20  1063d830bc83325254ff20e66b4ba59155580e4f  docs(progress): record the shas the resolves landed as
+2026-08-07T04:33:24Z  v246  85203cdaf90eb14f9df8e55851a5989664cc27741f9a10b3e43633ec7da85cd4  ce63159d5932d13f445ebc46dc7e57613d3f7910  tstate(plexus): bench 398e72d2c758 ok (30 bench rows, 550 conf)
