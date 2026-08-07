@@ -134,4 +134,4 @@ now passes, so it is something else there.
 GREEN.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 8e432cf50.
