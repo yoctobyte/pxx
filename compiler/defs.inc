@@ -1421,6 +1421,15 @@ var
   SymSubLo : array of Int64;
   SymSubHi : array of Int64; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
   SymPtrDepth : array of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
+  { NilPy FRAME CELL: for a local (or parameter) that some nested def declares
+    `nonlocal`, the index of a hidden pointer symbol holding the ONE shared
+    heap cell; -1 = not a cell. The name's own slot is then unused — every read
+    and every write goes through `hidden^`, which is what makes the enclosing
+    frame and every closure over it see one storage, as CPython's cell does
+    (bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame).
+    The symbol keeps its LOGICAL TypeKind so everything that asks what the name
+    holds still gets the right answer; only the access shape changes. }
+  SymCellPtr : array of Integer;
   SymPtrBaseTk : array of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
   SymPtrBaseRec : array of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
   SymPtrElemArrLen : array of Integer; { C pointer-to-array `elem (*p)[N]`: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). For a multi-dim pointee (`elem (*p)[A][B]`) this holds the FLATTENED product A*B (p+1 stride) and SymPtrElemNDims/SymArrDimSpan carry the per-dim shape for multi-subscript indexing. }

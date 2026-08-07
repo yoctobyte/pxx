@@ -2812,6 +2812,7 @@ begin
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
+  SetLength(SymCellPtr, n);
   SymCapacity := n;
 end;
 
@@ -2843,6 +2844,7 @@ begin
     SymSubHi[SymCount] := LastTypeSubHi;
   end;
   SymPtrDepth[SymCount] := 0;
+  SymCellPtr[SymCount] := -1;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
@@ -2981,6 +2983,7 @@ begin
     SymSubHi[SymCount] := LastTypeSubHi;
   end;
   SymPtrDepth[SymCount] := 0;
+  SymCellPtr[SymCount] := -1;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
@@ -3103,6 +3106,7 @@ begin
     SymSubHi[SymCount] := LastTypeSubHi;
   end;
   SymPtrDepth[SymCount] := 0;
+  SymCellPtr[SymCount] := -1;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
@@ -3182,6 +3186,7 @@ begin
     SymSubHi[SymCount] := LastTypeSubHi;
   end;
   SymPtrDepth[SymCount] := 0;
+  SymCellPtr[SymCount] := -1;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;

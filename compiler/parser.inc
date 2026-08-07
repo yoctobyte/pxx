@@ -3817,6 +3817,7 @@ var
   cpIsAssign: Boolean;
   cpName: AnsiString;
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
+  derefNode: Integer;   { NilPy frame-cell read: `hidden^` (SymCellPtr) }
   baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
   remDepth, ptrBaseTk, ptrBaseRec: Integer;
   isND: Boolean; nIdx: Integer; alreadyResolved: Boolean;
@@ -4675,6 +4676,19 @@ begin
     tk := Syms[idx].TypeKind;
     recName := Syms[idx].RecName;
     ASTTk[node] := StrValTk(tk);   { frozen fixed/short string presents as a tyString value }
+    { NilPy FRAME CELL: the name's storage is a heap word shared with every
+      closure over this frame, so reading it is `hidden^`. Same rewrite
+      PyMakeIdent does for the paths that build the node themselves; this is the
+      one the ordinary expression grammar takes (see SymCellPtr). }
+    if PyExprMode and (SymCellPtr[idx] >= 0) then
+    begin
+      ASTIVal[node] := SymCellPtr[idx];   { the CELL, not the name's dead slot }
+      ASTTk[node] := Ord(tyPointer);
+      derefNode := AllocNode(AN_DEREF);
+      ASTLeft[derefNode] := node;
+      ASTTk[derefNode] := Ord(tk);
+      node := derefNode;
+    end;
   end;
   end;
 
@@ -8680,6 +8694,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
+    derefNode: Integer;   { ...through its frame cell, when it has one (SymCellPtr) }
     capIdx: Integer;   { PXXDBG=n.caps probe cursor }
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
@@ -13563,6 +13578,18 @@ begin
             identNode := AllocNode(AN_IDENT);
             ASTIVal[identNode] := capSym;
             ASTTk[identNode] := Ord(Syms[capSym].TypeKind);
+            { a CELL capture travels as the cell itself: the parameter is by-ref
+              and address-of a deref collapses to the pointer, so the callee
+              gets the frame's one storage rather than a copy of its value }
+            if SymCellPtr[capSym] >= 0 then
+            begin
+              ASTIVal[identNode] := SymCellPtr[capSym];
+              ASTTk[identNode] := Ord(tyPointer);
+              derefNode := AllocNode(AN_DEREF);
+              ASTLeft[derefNode] := identNode;
+              ASTTk[derefNode] := Ord(Syms[capSym].TypeKind);
+              identNode := derefNode;
+            end;
             argSeq := AllocNode(AN_ARG);
             ASTLeft[argSeq] := identNode;
             if argsHead = -1 then begin argsHead := argSeq; lastArg := argSeq; end

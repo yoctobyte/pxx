@@ -3,7 +3,7 @@ summary: "An escaped closure's `nonlocal` cell is separate storage from the encl
 type: bug
 track: N
 prio: 55
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -177,3 +177,59 @@ above is now spent — that was this fix.
 Also still open, and narrower than it looks: a CLASS capture declared `nonlocal`
 keeps `pyboundfn_bind_obj`, so it has no writable cell at all. Not reachable from
 any test today; recorded here rather than guessed at.
+
+## 2026-08-07 — FIXED: one shared frame cell
+
+Implemented the ticket's own recommendation, and (a), (b), (c) did fall out
+together as it predicted.
+
+**Shape.** A local (or parameter) that any def nested in the body declares
+`nonlocal` is promoted to a **frame cell**: a hidden pointer local holding one
+heap slot allocated in the prologue. The name keeps its symbol and its LOGICAL
+type — everything that asks "what does this name hold" still gets the right
+answer — and only the ACCESS shape changes: every read and every write becomes
+`hidden^` (`SymCellPtr`, new symbol side-table). Two properties make the rest
+free:
+
+- `IRLowerAddress` of an `AN_DEREF` collapses to the pointer, so passing such a
+  name to the by-ref parameter a `nonlocal` capture already gets hands the
+  callee **the frame's own cell**, not a copy;
+- the closure binder can therefore bind the plain pointer
+  (`pyboundfn_bind`) instead of `pyboundfn_bind_cell`'s fresh per-closure copy,
+  and the cell outlives the frame exactly as the old copy did.
+
+Sites: `PyPromoteNonlocalCells` / `PyPromoteCell` / `PyCellPromotable` (new),
+`PyMakeIdent` + `PyMakeCellPtr`, both closure binders, the nested-def capture
+registration, and two PyExprMode-gated rewrites in the shared parser (the
+ordinary ident read in `ParseLValueAST`, and the direct-call capture actual in
+`ParseFactorCore`). Runtime: `pycell_new` in `pyeval.pas`.
+
+**Two things measurement caught that reasoning would not have:**
+
+1. A read-only sibling closure (`def get(): return c` beside `def inc(): nonlocal
+   c`) printed an address. Its capture parameter had been declared by-VALUE by
+   the enclosing body's local-typing TRIAL parse, which registers the nested
+   def's Proc *before* any cell exists — so the real parse found
+   `procIdx >= 0` and skipped the whole by-ref decision. Fixed by re-applying it
+   in an `else` arm, where the promotion is known. The `nonlocal` arm never had
+   the problem because it is token-based and so agrees across both passes.
+2. An unannotated PARAMETER is a **variant**, and variants are the common NilPy
+   local. A cell therefore had to be 16 bytes with a zeroed `{tag, payload}`,
+   like `pyboundfn_bind_var`'s slot — and a variant param's `IsRef` is merely
+   this dialect's calling convention, not an alias for another frame, so it is
+   the one by-ref shape that may still take a cell.
+
+**Not promoted** (left on the old copy-per-closure path, unchanged): managed
+strings, records, arrays, and class instances — a class capture would need the
+retain that `pyboundfn_bind_obj` does, which is the residue the previous
+write-up already recorded and it is still open.
+
+**Verified**, on a self-hosted build at this commit: `test_nilpy_nonlocal_-
+escaping_closure.npy` — extended with all three ticket cases plus a read-only
+sibling, a parameter, and an escaping pair — diffed **byte-identical against
+CPython**, as do `test_nilpy_escaping_closure`, `test_nilpy_global_scope_binding`
+and `test_nilpy_selfassigned_comprehension`. `tools/gate.sh quick` GREEN
+(self-host fixedpoint + testmgr quick).
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

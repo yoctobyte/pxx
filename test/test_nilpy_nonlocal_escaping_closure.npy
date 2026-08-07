@@ -150,3 +150,91 @@ def viaLocalCounter():
     return f
 q = viaLocalCounter()
 print("assign counter:", q(), q(), q())
+
+
+# ONE SHARED CELL between the enclosing frame and every closure over it — the
+# residue this file's earlier cases did not reach, because they only ever used
+# the closure OR the frame's own name, never both. pxx used to bind a fresh
+# 8-byte copy per closure seeded at the `def`, so the two storages split the
+# moment both sides were used: these three printed 0, 0, 0.
+# (bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame)
+
+# (a) the frame reads its OWN name after an escaped closure wrote it
+def sharedFrameSeesWrite():
+    c = 0
+    def bump():
+        nonlocal c
+        c += 1
+    f = bump
+    f()
+    return c
+print("shared a:", sharedFrameSeesWrite())
+
+# (b) the closure reads the name after the frame wrote it POST-def
+def sharedClosureSeesLateWrite():
+    c = 0
+    def peek():
+        nonlocal c
+        return c
+    f = peek
+    c = 99
+    return f
+print("shared b:", sharedClosureSeesLateWrite()())
+
+# (c) two closures over one frame must share — no ordering between them, which
+# is why nothing short of one cell can be right
+def sharedTwoClosures():
+    c = 0
+    def inc():
+        nonlocal c
+        c += 1
+    def get():
+        nonlocal c
+        return c
+    a = inc
+    b = get
+    a()
+    return b()
+print("shared c:", sharedTwoClosures())
+
+# a READ-ONLY sibling closure sees the writer's updates too: CPython gives it
+# the same cell, so pxx must not hand it a by-value snapshot
+def sharedReadOnlySibling():
+    c = 5
+    def inc():
+        nonlocal c
+        c += 10
+    def get():
+        return c
+    w = inc
+    r = get
+    w()
+    return r()
+print("shared d:", sharedReadOnlySibling())
+
+# a PARAMETER claimed by a nested def: the incoming value must reach the cell
+def sharedParam(c):
+    def bump():
+        nonlocal c
+        c += 1
+    f = bump
+    f()
+    f()
+    return c
+print("shared e:", sharedParam(7))
+
+# the cell OUTLIVES the frame and stays shared across calls
+def sharedEscapes():
+    c = 0
+    def bump():
+        nonlocal c
+        c += 1
+        return c
+    def peek():
+        nonlocal c
+        return c
+    return (bump, peek)
+bp, pk = sharedEscapes()
+bp()
+bp()
+print("shared f:", pk())

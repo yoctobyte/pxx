@@ -150,6 +150,20 @@ function pyboundfn_bind_var(obj: Pointer; idx: Int64; const v: Variant): Pointer
   escaped closure share state, the way CPython's cell does. Leaked with the
   bound-fn object, like pyboundfn_bind_var's slot — same reasoning, same rarity. }
 function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
+{ A FRAME cell: the one shared storage for an enclosing local that some nested
+  def declares `nonlocal`. CPython gives every closure over a frame — and the
+  frame itself — ONE cell; pxx used to give each closure a fresh copy, so the
+  frame did not see the closure's writes and vice versa
+  (bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame).
+  Allocated once in the enclosing prologue; every access on both sides is an
+  indirection through it, and binding it into a closure passes the ADDRESS, so
+  the storage survives the frame. Leaked like the bound-fn object it feeds:
+  nothing owns the cell once both the frame and the closures are gone, and the
+  shapes that reach here are few. Eight bytes whatever the value's width — the
+  store may be a 32-bit `mov %eax,(%rcx)` for an inferred int or a full word for
+  an Int64/Double, and over-allocating is free while under-allocating would
+  scribble the next heap object. }
+function pycell_new: Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
   the discarding form, so a lifted def reached through a VALUE always answered
@@ -1879,6 +1893,22 @@ begin
   pc^ := v;
   o^.Bound[idx] := Int64(NativeInt(Pointer(pc)));
   pyboundfn_bind_cell := obj;
+end;
+
+{ See the declaration: the ONE shared cell for a frame local that a nested def
+  declares `nonlocal`. Zeroed, because Python's cell starts unbound and the
+  enclosing frame's own first assignment is what gives it a value. }
+function pycell_new: Pointer;
+var pv: PVariant;
+begin
+  { SIXTEEN bytes, not eight: a variant cell needs a whole {tag, payload} slot,
+    and over-allocating for a scalar is free while under-allocating would
+    scribble the next heap object. Zeroed exactly as pyboundfn_bind_var zeroes
+    its slot — a variant must not start on stale bytes. }
+  pv := PVariant(GetMem(16));
+  PPyRec(pv)^.VType := 0;
+  PPyRec(pv)^.Payload := 0;
+  pycell_new := Pointer(pv);
 end;
 
 { Call code(a0, bound...). a0 is the ONE user argument — a class/object variant

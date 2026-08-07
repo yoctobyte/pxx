@@ -3542,8 +3542,29 @@ begin
   Result := MainProgramTokCount;
 end;
 
+{ The bare pointer symbol holding a cell-promoted name's shared heap cell.
+  Only the binders want this — everything else wants the VALUE. }
+function PyMakeCellPtr(symIdx: Integer): Integer;
+begin
+  Result := AllocNode(AN_IDENT);
+  ASTIVal[Result] := SymCellPtr[symIdx];
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
 function PyMakeIdent(symIdx: Integer): Integer;
 begin
+  { A cell-promoted name denotes the CELL'S CONTENTS, at every read and every
+    write: `hidden^`, typed as the name's own logical type. Address-of a deref
+    collapses back to the pointer (IRLowerAddress), so passing such a name to
+    the by-ref parameter a `nonlocal` capture gets hands the callee the very
+    same cell — which is the whole point (see SymCellPtr). }
+  if SymCellPtr[symIdx] >= 0 then
+  begin
+    Result := AllocNode(AN_DEREF);
+    ASTLeft[Result] := PyMakeCellPtr(symIdx);
+    ASTTk[Result] := Ord(Syms[symIdx].TypeKind);
+    Exit;
+  end;
   Result := AllocNode(AN_IDENT);
   ASTIVal[Result] := symIdx;
   ASTTk[Result] := Ord(Syms[symIdx].TypeKind);
@@ -5919,10 +5940,14 @@ begin
     ASTLeft[argB] := vNode;
     ASTRight[argA] := argB;
     argC := AllocNode(AN_ARG);
-    ASTLeft[argC] := PyMakeIdent(symIdx);
+    { a CELL capture binds the shared cell's address — see PyNestedDefClosureValue }
+    if SymCellPtr[symIdx] >= 0 then
+      ASTLeft[argC] := PyMakeCellPtr(symIdx)
+    else
+      ASTLeft[argC] := PyMakeIdent(symIdx);
     ASTRight[argB] := argC;
     node := AllocNode(AN_CALL);
-    if Syms[symIdx].TypeKind = tyVariant then
+    if (Syms[symIdx].TypeKind = tyVariant) and (SymCellPtr[symIdx] < 0) then
       ASTIVal[node] := varBindPi
     else
       ASTIVal[node] := bindPi;
@@ -6235,8 +6260,17 @@ begin
       value). The cell also outlives the frame, which is what gives an escaped
       counter its shared state across calls
       (bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse). }
-    ChainBind(PyMakeIdent(symIdx), BoundParamIsVariant(bindIdx),
-              Syms[symIdx].TypeKind = tyClass, BoundParamIsRef(bindIdx));
+    { A CELL capture binds the cell's ADDRESS — the pointer the frame already
+      holds — so the closure and the frame share one storage. The plain binder
+      is right for it: the cell exists, so there is nothing to allocate, and the
+      callee's parameter is by-ref, which is exactly what a cell address wants.
+      pyboundfn_bind_cell (a fresh copy per closure) is the OLD answer, kept for
+      the shapes PyCellPromotable refuses. }
+    if SymCellPtr[symIdx] >= 0 then
+      ChainBind(PyMakeCellPtr(symIdx), False, False, False)
+    else
+      ChainBind(PyMakeIdent(symIdx), BoundParamIsVariant(bindIdx),
+                Syms[symIdx].TypeKind = tyClass, BoundParamIsRef(bindIdx));
   end;
 
   Result := node;
@@ -13903,6 +13937,125 @@ begin
   end;
 end;
 
+{ May `nm` become a FRAME CELL — one heap word both this frame and every
+  closure over it read and write? Only an unmanaged, at-most-word-sized scalar
+  qualifies: the cell is 8 raw bytes, so a 16-byte variant, a managed string, a
+  record, an array and a refcounted class instance are all left on the old
+  copy-per-closure path rather than half-fitted into it. }
+function PyCellPromotable(si: Integer): Boolean;
+var tk: TTypeKind;
+begin
+  Result := False;
+  if si < 0 then Exit;
+  if SymCellPtr[si] >= 0 then Exit;                { already promoted }
+  if not (Syms[si].Kind in [skLocal, skParam]) then Exit;
+  if Syms[si].IsArray then Exit;
+  tk := Syms[si].TypeKind;
+  { A by-ref symbol is already an alias for storage somewhere else — a variant
+    PARAMETER (this dialect passes variants const-by-ref) is the one shape where
+    that is merely the calling convention and the name is still an ordinary
+    rebindable Python local, so it may take a cell; anything else by-ref is a
+    capture of an OUTER frame and promoting it would cut that chain. }
+  if Syms[si].IsRef and not ((tk = tyVariant) and (Syms[si].Kind = skParam)) then Exit;
+  Result := (tk = tyVariant) or
+            (tk = tyInteger) or (tk = tyBoolean) or (tk = tyChar) or
+            (tk = tyInt8) or (tk = tyUInt8) or (tk = tyInt16) or (tk = tyUInt16) or
+            (tk = tyInt32) or (tk = tyUInt32) or (tk = tyInt64) or (tk = tyUInt64) or
+            (tk = tyNativeInt) or (tk = tyNativeUInt) or
+            (tk = tySingle) or (tk = tyDouble);
+end;
+
+{ Is the name in scope here a frame cell? Guards the -1 PyProgSym answers for
+  a name that does not resolve. }
+function PyNameIsCell(const nm: AnsiString): Boolean;
+var si: Integer;
+begin
+  si := PyProgSym(nm);
+  PyNameIsCell := (si >= 0) and (SymCellPtr[si] >= 0);
+end;
+
+{ Promote `nm` to a frame cell and append its prologue initialiser to `seq`.
+  The name keeps its symbol and its logical type; what changes is that
+  SymCellPtr points at a hidden pointer local, and PyMakeIdent then spells every
+  use of the name `hidden^`. A PARAMETER additionally copies its incoming value
+  into the cell — the caller wrote the slot, and from here on the slot is dead. }
+function PyPromoteCell(const nm: AnsiString; seq: Integer): Integer;
+var si, ps, newPi, callNode, asgn, rawNode, derefNode: Integer;
+begin
+  Result := seq;
+  si := PyProgSym(nm);
+  if not PyCellPromotable(si) then Exit;
+  newPi := FindProc('pycell_new');
+  if newPi < 0 then Exit;
+  ps := AllocVar('', tyPointer);
+  Syms[ps].PtrElemTk := Syms[si].TypeKind;
+  SymCellPtr[si] := ps;
+
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := newPi;
+  ASTLeft[callNode] := -1;
+  ASTTk[callNode] := Ord(tyPointer);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeCellPtr(si);
+  ASTRight[asgn] := callNode;
+  Result := PySeqAppend(Result, asgn);
+
+  if Syms[si].Kind = skParam then
+  begin
+    rawNode := AllocNode(AN_IDENT);          { the slot, NOT PyMakeIdent — that
+                                               already reads through the cell }
+    ASTIVal[rawNode] := si;
+    ASTTk[rawNode] := Ord(Syms[si].TypeKind);
+    derefNode := AllocNode(AN_DEREF);
+    ASTLeft[derefNode] := PyMakeCellPtr(si);
+    ASTTk[derefNode] := Ord(Syms[si].TypeKind);
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := derefNode;
+    ASTRight[asgn] := rawNode;
+    Result := PySeqAppend(Result, asgn);
+  end;
+end;
+
+{ Every name a NESTED def in this body declares `nonlocal` becomes a frame cell.
+  Returns the prologue statements that allocate them, to be prepended to the
+  body — the cell must exist before the body's first assignment runs.
+
+  Depth >= 2 on purpose: `nonlocal x` written at depth 1 is THIS body's own
+  declaration about its *enclosing* frame, not a claim on a local of ours.
+  Called once, from the real parse, after the locals are laid out and before the
+  body is parsed — so the body, the nested defs' capture scan and the closure
+  binders all see the same answer. }
+function PyPromoteNonlocalCells(bodyStart: Integer): Integer;
+var i, depth: Integer;
+begin
+  Result := -1;
+  i := bodyStart;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth <= 0 then Break;
+    end
+    else if (depth >= 2) and (Tokens[i].Kind = tkIdent) and (i > 0) and
+            (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) and
+            (GetTokenStr(i) = 'nonlocal') then
+    begin
+      Inc(i);
+      while (i < TokCount) and (Tokens[i].Kind = tkIdent) do
+      begin
+        Result := PyPromoteCell(GetTokenStr(i), Result);
+        Inc(i);
+        if (i < TokCount) and (Tokens[i].Kind = tkComma) then Inc(i) else Break;
+      end;
+      Continue;
+    end;
+    Inc(i);
+  end;
+end;
+
 { Does the def body spanning [bodyStart, bodyEnd) BIND `nm` itself — i.e. is
   `nm` this def's own local rather than something to capture?
 
@@ -14286,14 +14439,38 @@ begin
           (songformatter's parseParams set `song_title`, and the renderer still
           saw None). Declaring THAT parameter by-ref makes the store write
           through to the enclosing local the call site passes. }
-        if PyBodyDeclaresNonlocal(bodyStart, bodyEnd, capNames[j]) then
+          { A CELL name is by-ref even when THIS def only reads it: the frame's
+            one storage is the cell, and a by-value snapshot taken at the call
+            would miss every later write — `def get(): return c` beside a
+            sibling `def inc(): nonlocal c` must answer what inc left, which is
+            what CPython's shared cell gives. }
+        if PyBodyDeclaresNonlocal(bodyStart, bodyEnd, capNames[j]) or
+           PyNameIsCell(capNames[j]) then
         begin
           Procs[procIdx].Params[nOwn + j].IsRef := True;
           ProcParamCapRef[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
         end;
       end;
     end;
-  end;
+  end
+  else
+    { ALREADY REGISTERED — by the enclosing body's local-typing TRIAL parse,
+      which runs BEFORE the frame's cells exist. The by-ref decision above was
+      therefore taken without them, and a read-only sibling of a cell name
+      (`def get(): return c` beside `def inc(): nonlocal c`) kept a by-value
+      parameter while the call site passed the cell — it read the pointer as a
+      value. Re-apply it here, where the promotion is known; the nonlocal arm is
+      token-based and so already agreed across the two passes. }
+    for j := 0 to PyCapCount[procIdx] - 1 do
+    begin
+      nOwn := Procs[procIdx].ParamCount - PyCapCount[procIdx];
+      if (nOwn + j < MAX_PROC_PARAMS) and (nOwn >= 0) and
+         PyNameIsCell(PyCapName[procIdx * PY_MAX_CAPS + j]) then
+      begin
+        Procs[procIdx].Params[nOwn + j].IsRef := True;
+        ProcParamCapRef[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
+      end;
+    end;
   { record the def's token position: a nested def taken AS A VALUE re-lowers
     from this span as a value-binding closure (see PyNestedDefClosureValue) }
   PyDefTokOf[procIdx] := defTok + 1;
@@ -16823,7 +17000,7 @@ var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
     savedNest, savedTok, savedLam, savedHoist, savedSelf2: Integer;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
-    savedDefGlobalCount, dgI: Integer;
+    savedDefGlobalCount, dgI, cellInit: Integer;
     retType: TTypeKind; isProc, capByRef: Boolean;
 begin
   savedHoist := PyHoistHead;
@@ -17034,6 +17211,12 @@ begin
       end;
     end;
 
+  { A local some NESTED def declares `nonlocal` becomes ONE shared heap cell for
+    this frame — done here, after the locals are laid out and before the body is
+    parsed, so the body, the nested defs' capture scan and the closure binders
+    all agree about what the name is (see SymCellPtr). }
+  cellInit := PyPromoteNonlocalCells(bodyStart);
+
   Procs[procIdx].BodyAddr := CodeLen;   { see the note above: AFTER the pre-pass }
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
@@ -17046,6 +17229,8 @@ begin
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock;
   Expect(tkDedent, 'dedent');
+  { the cells are allocated FIRST: the body's first assignment stores through one }
+  if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
@@ -18929,7 +19114,7 @@ var savedHoist: Integer; clsAttrSeq: Integer;
     isCtor: Boolean; isKwP: Boolean; starCi: Integer;
     savedNest, savedTok, savedLam, savedSelf2: Integer; savedPfx, savedPfx2: AnsiString;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
-    savedDefGlobalCount, dgI: Integer;
+    savedDefGlobalCount, dgI, cellInit: Integer;
 begin
   savedHoist := PyHoistHead;
   { PARK the queue on a fresh chain rather than merely remembering its head.
@@ -19133,6 +19318,8 @@ begin
         SymSyncTypeRef(idx);
       end;
     end;
+  { see PyParseDef: a `nonlocal`-claimed local becomes one shared frame cell }
+  cellInit := PyPromoteNonlocalCells(bodyStart);
   Procs[procIdx].BodyAddr := CodeLen;
   { A method may contain nested defs (`def helper(): ...` inside it). They queue
     their bodies just like a plain def's do, so the method must set the nest
@@ -19150,6 +19337,7 @@ begin
     assignment released stale stack bytes (`decq -0x10(%rax)` on garbage). }
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
+  if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   { A CONSTRUCTOR applies the class attributes first — see PyClassAttrInitSeq.
     Prepended to the body so `__init__`'s own writes win, as in Python. }
