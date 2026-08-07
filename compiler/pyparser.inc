@@ -7167,6 +7167,38 @@ end;
   than a silently ignored argument, because both would produce plausible wrong
   bytes rather than a failure. }
 
+{ Does ANY user class declare `nm` as a method or a procedural field? The
+  closed-world dispatcher below answers a variant receiver's `.m()` from this
+  set, so an intrinsic that wants to claim a name on a VARIANT must first check
+  that no user class owns it — otherwise the intrinsic silently shadows a real
+  method the program declared. }
+function PyAnyClassDeclares(const nm: AnsiString): Boolean;
+var ci: Integer;
+begin
+  PyAnyClassDeclares := True;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[ci] then Continue;
+    if FindUMeth(ci, nm) >= 0 then Exit;
+    if FindUField(ci, nm) >= 0 then Exit;
+  end;
+  PyAnyClassDeclares := False;
+end;
+
+{ A receiver the `.to_bytes(` intrinsic may claim: a static int, or a VARIANT
+  that no user class could own. A variant int is the ordinary shape — an
+  untyped parameter, a container element, `int(x)` where x is dynamic — and it
+  used to fall through to closed-world class dispatch and die with "no class
+  declares a method or callable field .to_bytes()". uforth hit it at
+  `int(value).to_bytes(8, "little", signed=True)` and could not compile at all.
+  The intrinsic unboxes such a receiver with pyvar_to_int (see PyParseToBytes).
+  bug-nilpy-to-bytes-on-a-variant-receiver-does-not-compile }
+function PyIsToBytesBaseTk(tk: TTypeKind): Boolean;
+begin
+  PyIsToBytesBaseTk := PyIsIntBaseTk(tk) or
+                       ((tk = tyVariant) and not PyAnyClassDeclares('to_bytes'));
+end;
+
 function PyIsIntBaseTk(tk: TTypeKind): Boolean;
 begin
   { tyPromoInt64: a wide-literal-infected int (`0xFF... if flag else 0`) is
@@ -7201,10 +7233,23 @@ end;
 
 { `<int>.to_bytes(...)`; CurTok is the '(' . }
 function PyParseToBytes(baseNode: Integer): Integer;
-var procIdx, callNode, a0, a1, a2, nNode, sNode: Integer;
+var procIdx, callNode, a0, a1, a2, nNode, sNode, unboxPi: Integer;
 begin
   procIdx := FindProc('pyint_to_bytes');
   if procIdx < 0 then Error('Nil Python: pylib (pyint_to_bytes) not loaded');
+  { pyint_to_bytes takes an Int64, so a VARIANT receiver is unboxed first —
+    the shape uforth uses (`int(value).to_bytes(...)` where value is dynamic). }
+  if IntToTypeKind(ASTTk[baseNode]) = tyVariant then
+  begin
+    unboxPi := FindProc('pyvar_to_int');
+    if unboxPi < 0 then Error('Nil Python: pylib (pyvar_to_int) not loaded');
+    a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode; ASTRight[a0] := -1;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := unboxPi;
+    ASTTk[callNode] := Ord(tyInt64);
+    ASTLeft[callNode] := a0;
+    baseNode := callNode;
+  end;
   Expect(tkLParen, '(');
   PyParseBoolExpr;
   nNode := CurASTNode;

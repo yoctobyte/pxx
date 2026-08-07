@@ -662,6 +662,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-ternary-comprehension-element-stringified | N | 70 | bug | A mixed-type conditional in a comprehension element turns numbers into strings | — |
 | bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
+| bug-nilpy-to-bytes-on-a-variant-receiver-does-not-compile | N | 45 | bug | `.to_bytes()` on a VARIANT receiver failed at COMPILE time with 'no class declares a method or callable field .to_bytes()' — the intrinsic was gated on a statically int receiver. It is what stopped the uforth corpus compiling at all. | — |
 | bug-nilpy-tokenize-managed-temp-release-garbage | A | 60 | bug | NilPy/uforth: managed-string hidden temp released with garbage at method return | — |
 | bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults | N | 75 | bug | NilPy: calling a pylib CONTAINER method with too FEW arguments compiles and SEGFAULTS — xs.index(), d.get() both core-dump; too MANY args is correctly rejected | — |
 | bug-nilpy-truediv-and-pow-assign-on-a-class-instance-skip-the-dunder | N | 50 | bug | bug(N): `obj /= n` and `obj **= n` on a class instance skip the dunder and raise "expected a number, got object" | — |

@@ -15,3 +15,47 @@ print(int.from_bytes(d, "little", signed=False))
 e = (-1).to_bytes(1, "little", signed=True)
 print(int.from_bytes(e, "little", signed=True))
 print(int.from_bytes(e, "little", signed=False))
+
+# bug-nilpy-to-bytes-on-a-variant-receiver-does-not-compile
+#
+# Everything above has a STATICALLY int receiver. The intrinsic was gated on
+# exactly that, so a VARIANT one — an untyped parameter, a container element,
+# `int(x)` where x is dynamic — fell through to closed-world class dispatch and
+# died at COMPILE time with "no class declares a method or callable field
+# .to_bytes()", which reads as a missing user class rather than a missing
+# intrinsic. It is what stopped the uforth corpus compiling at all, at its
+# `int(value).to_bytes(8, "little", signed=True)`.
+#
+# The intrinsic now accepts a variant receiver and unboxes it with pyvar_to_int.
+# It declines when any user class declares `to_bytes`, so it can never shadow a
+# real method — that case is unchanged from before and is covered separately in
+# test_nilpy_to_bytes_user_class_wins.npy.
+
+
+def via_untyped_param(v):
+    return v.to_bytes(8, "little", signed=True)
+
+
+def via_int_call(v):
+    return int(v).to_bytes(8, "little", signed=True)
+
+
+# an untyped parameter is a variant
+p = via_untyped_param(300)
+print(len(p))
+print(p[0])
+print(p[1])
+print(int.from_bytes(p, "little", signed=True))
+
+# int() of a dynamic value — the uforth shape
+q = via_int_call(300)
+print(int.from_bytes(q, "little", signed=True))
+
+# a container element is a variant too
+vals = [1, 258]
+r = vals[1].to_bytes(4, "little", signed=True)
+print(len(r))
+print(int.from_bytes(r, "little", signed=True))
+
+# negative through the variant path
+print(int.from_bytes(via_untyped_param(-2), "little", signed=True))

@@ -939,6 +939,7 @@ function PyRangeAsListWanted: Boolean; forward;   { Nil Python: is this range( i
 function PyParseRangeList: Integer; forward;      { Nil Python: list(range(...)) materialised (pyparser.inc) }
 function PyAnyProcWithArity(const nm: AnsiString; n: Integer): Boolean; forward; { any routine of this name with exactly n params (pyparser.inc) }
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
+function PyIsToBytesBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: may .to_bytes( claim this receiver? (pyparser.inc) }
 function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a value (pyparser.inc) }
@@ -5567,7 +5568,7 @@ begin
         non-lvalue bases like `(10).to_bytes(...)`. Both routes land in
         pyparser's one intrinsic. }
       if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-         PyIsIntBaseTk(tk) and (LowerCase(fieldName) = 'to_bytes') then
+         PyIsToBytesBaseTk(tk) and (LowerCase(fieldName) = 'to_bytes') then
       begin
         Next;   { consume the method name; CurTok is now the '(' }
         node := PyParseToBytes(node);
@@ -14408,7 +14409,7 @@ begin
         (Tokens[TokPos].Kind = tkIdent) and
         (LowerCase(GetTokenStr(TokPos)) = 'to_bytes') and
         (Tokens[TokPos + 1].Kind = tkLParen) and
-        PyIsIntBaseTk(IntToTypeKind(ASTTk[CurASTNode])) do
+        PyIsToBytesBaseTk(IntToTypeKind(ASTTk[CurASTNode])) do
   begin
     smBase := CurASTNode;
     Next; Next;                 { '.' and the name; CurTok = '(' }

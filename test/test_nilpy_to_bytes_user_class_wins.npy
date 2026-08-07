@@ -1,0 +1,43 @@
+# bug-nilpy-to-bytes-on-a-variant-receiver-does-not-compile — the guard half.
+#
+# The `.to_bytes(` intrinsic now claims a VARIANT receiver (see
+# test_nilpy_to_bytes.npy). It must NOT do so when a user class declares a
+# method of that name, or the intrinsic would silently shadow real code.
+#
+# This behaviour is unchanged from before the fix — verified against the pinned
+# binary, which produces this same output — and the test exists so the guard
+# cannot be dropped later by someone widening the intrinsic.
+#
+# Consequence worth knowing: because the guard is whole-PROGRAM, a file that
+# declares its own `to_bytes` keeps the old behaviour for variant INT receivers
+# too (a runtime AttributeError). Also unchanged from before, and the reason
+# the int cases live in the other file rather than here.
+
+
+class Packet:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def to_bytes(self, n, order, signed=False):
+        return "packet:" + str(self.tag)
+
+
+class Frame:
+    def __init__(self, k):
+        self.k = k
+
+    def to_bytes(self, n, order, signed=False):
+        return "frame:" + str(self.k)
+
+
+def use(p):
+    return p.to_bytes(8, "little", signed=True)
+
+
+# statically typed receiver
+print(Packet(7).to_bytes(8, "little", signed=True))
+
+# through an untyped parameter — a variant receiver, the case the intrinsic
+# would have claimed without the guard
+print(use(Packet(1)))
+print(use(Frame(2)))
