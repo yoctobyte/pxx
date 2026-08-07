@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-06T19:07:01Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "899e51cda3ba24d5faa2e5e6d4c3985e3cdc53d1",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-06T20:28:47Z",
    "fixed": [],
    "new_red": [],
@@ -409,6 +401,14 @@
    "sha": "8c112256cb547fdb2495e28df32f708c457bacec",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-07T11:40:45Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8c112256cb547fdb2495e28df32f708c457bacec",
+   "tier": "opt",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -427,7 +427,7 @@
   "optdiff#shard7/12": "opt",
   "optdiff#shard8/12": "opt",
   "optdiff#shard9/12": "opt",
-  "selfhost-fixedpoint#src:compiler/compiler.pas": "full",
+  "selfhost-fixedpoint#src:compiler/compiler.pas": "opt",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "full",
   "test-aarch64#src:test/ccross_args.c": "full",
   "test-aarch64#src:test/ccross_double_to_int.c": "full",
@@ -2585,9 +2585,9 @@
   "test-opt#src:test/test_atomic64.pas": "pass"
  },
  "last": {
-  "date": "2026-08-07T11:40:15Z",
+  "date": "2026-08-07T11:40:45Z",
   "sha": "8c112256cb547fdb2495e28df32f708c457bacec",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "RED",
   "wall": 0.0
  },
