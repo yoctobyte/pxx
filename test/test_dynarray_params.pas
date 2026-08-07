@@ -28,8 +28,24 @@ begin
     Result := Result + arr[i];
 end;
 
-{ Writes through the parameter are visible to the caller. }
+{ A VALUE open array is COPIED, as FPC does, so writes through it are NOT
+  visible to the caller (fix(A) 635b231b9; verified against FPC directly —
+  `caller sees: 1 2 3 4`). This test asserted the opposite until 2026-08-07,
+  which is why it went red: the FIX landed without updating the test, and the
+  watcher auto-filed the resulting failure as a regression. It was a stale
+  expectation, not a code regression. }
 procedure ScaleArr(arr: array of Integer; by: Integer);
+var i: Integer;
+begin
+  for i := 0 to Length(arr) - 1 do
+    arr[i] := arr[i] * by;
+end;
+
+{ ...and the VAR form still aliases, which is the other half of the same
+  distinction and the reason the copy has to be conditional rather than
+  unconditional. Pinned here so a future change cannot "fix" one by breaking
+  the other. }
+procedure ScaleArrVar(var arr: array of Integer; by: Integer);
 var i: Integer;
 begin
   for i := 0 to Length(arr) - 1 do
@@ -53,10 +69,17 @@ begin
   Check(Count(a) = 4);
   Check(SumArr(a) = 10);
 
+  { VALUE parameter: the callee scales its own copy, the caller is untouched }
   ScaleArr(a, 10);
+  Check(a[0] = 1);
+  Check(a[1] = 2);
+  Check(a[2] = 3);
+  Check(a[3] = 4);
+  Check(SumArr(a) = 10);
+
+  { VAR parameter: the callee scales the caller's array in place }
+  ScaleArrVar(a, 10);
   Check(a[0] = 10);
-  Check(a[1] = 20);
-  Check(a[2] = 30);
   Check(a[3] = 40);
   Check(SumArr(a) = 100);
 
