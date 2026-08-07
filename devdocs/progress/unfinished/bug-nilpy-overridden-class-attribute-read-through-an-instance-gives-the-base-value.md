@@ -198,6 +198,67 @@ copy lowering only when `classW` (written through the class name). It must ALSO
 leave it when the attribute is **redeclared by another class in the same
 inheritance chain** — the case the soundness proof forgot.
 
+### Design 3 — SHADOW FIELDS — implemented, measured, and REJECTED 2026-08-07
+
+Worth recording so nobody spends the day on it again. It looks like the most
+surgical option and it is wrong.
+
+The idea: `FindUField` walks the parent chain, so a redeclaring subclass never
+gets its OWN field (`pyparser.inc:18703`) — give it one that shadows the base's,
+and gate the hoisted-temp route on an **own** ctor rather than an inherited one
+(`:4906`). Two small edits, no demotion, no constructor split, and — the
+attraction — **no variant-receiver cost**, since fields stay.
+
+It works on every row this ticket is about:
+
+```
+                     before        after        CPython
+Derived(4).kind      base          derived      derived
+NoCtor(5).kind       base          noctor       noctor
+CtorNoSuper(6).kind  nosuper       nosuper      nosuper
+super-then-read      base          superfirst   superfirst
+```
+
+**But it introduces a NEW silent wrong value**, which is disqualifying:
+
+```python
+class B:
+    v = "b"
+    def __init__(self): self.n = 0
+    def setit(self): self.v = "set-by-base-method"
+class D(B):
+    v = "d"
+o = D(); o.setit(); print(o.v)
+```
+
+| | result |
+| --- | --- |
+| CPython | `set-by-base-method` |
+| **PINNED (pre-change) binary** | `set-by-base-method` ✓ |
+| with shadow fields | **`d`** ✗ |
+
+Controlled against the pinned binary, not a text revert, so the regression is
+real and mine. Cause: shadowing splits ONE logical attribute into TWO storage
+slots. A base method's `self.v` is statically bound to the base's field while an
+external `inst.v` finds the subclass's shadowing field, so a write through one
+is invisible to the other. It trades one silent wrong value for another and adds
+a mechanism to a subsystem whose whole problem is having too many
+(`root-cause-over-microfix.md`). Reverted; only the selector-arm fix from this
+session was kept.
+
+A related row it does NOT fix either, and which no field-based design can:
+`self.attr` inside a BASE method on a DERIVED instance reads the base's value
+(`Speaker`/`LoudSpeaker` probe). That needs the receiver's RUNTIME class, same
+as the variant case.
+
+### Design ranking after the elimination
+
+1. **Shared-slot demotion (design 2) — recommended.** Correct on every static
+   row, measured. Known cost below.
+2. Constructor split (design 1) — larger, and does not address the variant or
+   base-method rows either.
+3. Shadow fields (design 3) — **rejected**, introduces a regression.
+
 ### Open risk to settle before implementing
 
 Two things need care, and neither is hand-waveable:
@@ -207,13 +268,27 @@ Two things need care, and neither is hand-waveable:
    field, `FindUField` finds it, and the class-var arm never fires. Demotion has
    to apply to every class in the chain that declares the name, not just the
    redeclaring one.
-2. **Variant receivers may regress.** `PyClsAttrSharedSym` resolves a slot by
-   NAME for variant receivers and deliberately returns -1 when two distinct
-   slots share a name, to avoid a silently wrong guess. Demoting more attributes
-   to slots creates exactly that collision — a redeclared name is by definition
-   two slots with one name — so a variant-receiver read that works today could
-   start raising AttributeError. That path needs the receiver's runtime class,
-   which is the genuinely harder half and may want its own ticket.
+2. **Variant receivers: MEASURED, and the trade is acceptable.**
+   `PyClsAttrSharedSym` resolves a slot by NAME for variant receivers and
+   returns -1 when two distinct slots share a name — and a redeclared name is by
+   definition two slots with one name. Measured on a heterogeneous list walked in
+   a loop:
+
+   | | `[Base(1), Derived(2)]` → `o.kind` |
+   | --- | --- |
+   | CPython | `base` `derived` |
+   | today (copy model) | `base` `base` — **silently wrong** |
+   | after demotion | `AttributeError` — **loud** |
+
+   So demotion does not break a working row; it converts a silently wrong one
+   into a loud one. The standing rule from
+   [[decide-nilpy-class-attribute-instance-read-model]] is explicit — *"where
+   something is not implemented yet the compilation HALTS rather than being
+   silently wrong"* — so this is doctrine-aligned, not a judgement call, and
+   needs no new decision. Getting the row actually RIGHT needs the receiver's
+   runtime class; that is the same missing capability as
+   [[bug-nilpy-list-of-custom-objects-loses-repr-str]] (a variant-boxed instance
+   loses its class identity) and belongs with that family, not here.
 
 Detection also needs the inheritance links at pre-pass time; classes are
 processed in declaration order, so a base is already registered when the
