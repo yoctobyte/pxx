@@ -3036,24 +3036,36 @@ end;
 procedure PXXVarClear(v: Pointer);
 { Release a string payload and zero the 16-byte slot (both words fully, so
   32-bit targets leave no stale high halves behind). Object payloads
-  (VT_OBJECT 7 / VT_BOUNDMETHOD 8) ride PXXObjRelease, whose PXX_OBJ_MAGIC
-  guard makes it a no-op on manual-lifetime Pascal instances. A promo-block
-  tag (8192..8199) rides in a variant as a managed AnsiString of its decimal —
-  same release as VT_STRING (mirrors the x86-64 EmitVariantClear range test;
-  this portable body previously missed it, a cross-target leak). }
+  (VT_OBJECT 7 / VT_BOUNDMETHOD 8 / VT_PYCLOSURE 9 / VT_BOUNDFN 10) ride
+  PXXObjRelease, whose PXX_OBJ_MAGIC guard makes it a no-op on
+  manual-lifetime Pascal instances. A promo-block tag (8192..8199) rides in a
+  variant as a managed AnsiString of its decimal — same release as VT_STRING
+  (mirrors the x86-64 EmitVariantClear range test; this portable body
+  previously missed it, a cross-target leak).
+
+  THE OBJECT-TAG LIST LIVES IN FOUR PLACES and they must agree — this pair,
+  the x86-64 EmitVariantClear/EmitVariantRetain (compiler/ir_codegen.inc),
+  and PyVarSlotIsObj (compiler/builtin/pylib.pas). A tag added to the emitters
+  but not here does not fail loudly: the slot is simply never released, and
+  the only symptom is RSS. Tag 10 was missed here exactly that way, and it is
+  what made an ESCAPING closure keep leaking after the object itself had been
+  given a refcount — the caller's hidden-destination temp for a
+  variant-returning call is re-prepared through this routine once per loop
+  iteration (bug-nilpy-bound-fn-closure-objects-are-never-freed). }
 begin
   if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) or (PWord(v)^ = 9) then
+  else if (PWord(v)^ >= 7) and (PWord(v)^ <= 10) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
   PXXMemZero(v, 16);
 end;
 
 procedure PXXVarRetain(v: Pointer);
+{ The exact mirror of PXXVarClear — see the four-places note there. }
 begin
   if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
     PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ = 7) or (PWord(v)^ = 8) or (PWord(v)^ = 9) then
+  else if (PWord(v)^ >= 7) and (PWord(v)^ <= 10) then
     PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));
 end;
 

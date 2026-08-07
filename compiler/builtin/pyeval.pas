@@ -1651,7 +1651,12 @@ end;
   enclosing locals into a persistent record. Boxed as a VT_PYCLOSURE (tag 9)
   variant whose payload is the record index; the reverse bridge (NilPy's
   PyMakeDynCall) sees the tag and routes the call to PyClosureCall1. }
+{ MIRRORS compiler/defs.inc's VT_PYCLOSURE_TAG / VT_BOUNDFN_TAG — a builtin unit
+  cannot see defs.inc, so the numbers are written twice and MUST be changed
+  together. The compiler side is what the variant clear/retain emitters test
+  against; this side is what stamps the tag. }
 const VT_PYCLOSURE = 9;
+      VT_BOUNDFN   = 10;
 type
   TPyClosure = record
     Kinds:  array of Integer;
@@ -1697,10 +1702,18 @@ var
   ClosureFreeStk: array of Integer;
   ClosureFreeN: Integer;
 
+{ TWO object families share the RAW2 population and therefore the one finalize
+  hook, told apart by their first word. The bound-fn half is implemented below,
+  next to its own type — TBoundFnObj is declared after this point. }
+procedure PyBoundFnFreeIfMine(objp: Pointer; var handled: Boolean); forward;
+
 procedure PyEvalClosureFree(objp: Pointer);
-var c, i: Integer;
+var c, i: Integer; wasBoundFn: Boolean;
 begin
   if objp = nil then Exit;
+  wasBoundFn := False;
+  PyBoundFnFreeIfMine(objp, wasBoundFn);
+  if wasBoundFn then Exit;
   if PClosureObj(objp)^.Magic <> @PyClosureMagicMarker then Exit;
   c := Integer(PClosureObj(objp)^.Cidx);
   if (c < 0) or (c >= ClosureN) then Exit;
@@ -1790,6 +1803,20 @@ type
     NDefBase:   Int64;
     DefVarMask: Int64;
     Bound:  array[0..19] of Int64;
+    { What each Bound[] slot OWNS, so the finalizer can undo exactly what the
+      binder did — the binders are the only writers and each knows its own
+      answer, so this is recorded, never guessed from the value:
+        BK_PLAIN   0  a copied scalar, or a SHARED frame cell's address; owns nothing
+        BK_OBJ     1  pyboundfn_bind_obj retained it
+        BK_VARSLOT 2  pyboundfn_bind_var's private 16-byte variant slot
+        BK_CELL    3  pyboundfn_bind_cell's private 8-byte cell
+      TWO BITS PER SLOT packed into one word, not an array: this record is
+      allocated once per escaping closure, and the whole point of the change
+      that added this field is to make that allocation cheap enough to reclaim
+      — a per-slot array grew the object enough to push it into the next
+      allocator size class, which MEASURABLY made the still-leaking shapes
+      leak more. 20 slots x 2 bits = 40 bits, so one Int64 is ample. }
+    BKindMask: Int64;
   end;
   PBoundFnObj = ^TBoundFnObj;
   { A plain compiled def taken as a value: the value IS its code address.
@@ -1824,19 +1851,51 @@ type
   TBF9  = function(a0, a1, a2, a3, a4, a5, a6, a7, a8: Int64): Variant;
   TBF11 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10: Int64): Variant;
   TBF13 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12: Int64): Variant;
+const
+  { Bound[] slot ownership — see TBoundFnObj.BKindMask. }
+  BK_PLAIN   = 0;
+  BK_OBJ     = 1;
+  BK_VARSLOT = 2;
+  BK_CELL    = 3;
+
+{ The two-bit field for slot `idx`. Written by the binders, read by the
+  finalizer; nothing else may touch the mask. }
+procedure PyBFSetKind(o: PBoundFnObj; idx: Int64; k: Int64);
+begin
+  if (idx < 0) or (idx > 19) then Exit;
+  o^.BKindMask := (o^.BKindMask and (not (Int64(3) shl (idx * 2))))
+                  or ((k and 3) shl (idx * 2));
+end;
+
+function PyBFGetKind(o: PBoundFnObj; idx: Int64): Int64;
+begin
+  PyBFGetKind := BK_PLAIN;
+  if (idx < 0) or (idx > 19) then Exit;
+  PyBFGetKind := (o^.BKindMask shr (idx * 2)) and 3;
+end;
+
 var
   PyBoundFnMagicMarker: Integer;
 
 function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
 var o: PBoundFnObj; i: Integer;
 begin
-  o := GetMem(SizeOf(TBoundFnObj));
+  { A HEADERED refcounted block, not GetMem: the plain block had no refcount, so
+    nothing could ever free it and every capture it retained stayed retained.
+    RAW2 is the same population TClosureObj uses, and the two are told apart in
+    the finalizer by their Magic field — see PyEvalClosureFree. Both hooks are
+    installed here as well as in PyMakeClosureObj, because a program may create
+    a lifted bound-fn without ever building an interpreted closure. }
+  PXXObjFinalizeHook := @PyObjFinalize;
+  PyClosureFinalizeHook := @PyEvalClosureFree;
+  o := PBoundFnObj(PXXObjAllocRaw2(SizeOf(TBoundFnObj)));
   o^.Magic := @PyBoundFnMagicMarker;
   o^.Code := code;
   o^.NBound := n;
   o^.A0Var := a0var;
   o^.NOwn := 1;   { the historic assumption; pyboundfn_setown overrides it }
   o^.NDef := 0; o^.NDefBase := 0; o^.DefVarMask := 0;   { no defaulted params unless told }
+  o^.BKindMask := 0;
   for i := 0 to 19 do o^.Bound[i] := 0;
   pyboundfn_new := Pointer(o);
 end;
@@ -1872,14 +1931,14 @@ function pyboundfn_bind_obj(obj: Pointer; idx: Int64; p: Pointer): Pointer;
 { Bind a CLASS capture, taking a reference. The enclosing scope releases its own
   reference when it returns, so binding the bare handle left the closure holding
   a freed object — `def b(): return len(L)` over a captured list answered 0
-  once the parent had returned. Never released again, like the heap slot
-  pyboundfn_bind_var leaks: the bound-fn object has no destructor, and the
-  closures that reach this path are few. }
+  once the parent had returned. The matching release is the finalizer's, keyed
+  on BK_OBJ. }
 var o: PBoundFnObj;
 begin
   if p <> nil then PXXObjRetain(p);
   o := PBoundFnObj(obj);
   o^.Bound[idx] := Int64(NativeInt(p));
+  PyBFSetKind(o, idx, BK_OBJ);
   pyboundfn_bind_obj := obj;
 end;
 
@@ -1888,6 +1947,10 @@ var o: PBoundFnObj;
 begin
   o := PBoundFnObj(obj);
   o^.Bound[idx] := v;
+  { BK_PLAIN even though it is sometimes an ADDRESS: this is the binder a
+    SHARED frame cell (pycell_new) uses, and that cell belongs to the frame and
+    to every other closure over it. Freeing it here would dangle the siblings. }
+  PyBFSetKind(o, idx, BK_PLAIN);
   pyboundfn_bind := obj;
 end;
 
@@ -1901,6 +1964,39 @@ begin
   pycallable_obj_is := (p <> nil) and (pyclosure_is(p) or pyboundfn_is(p));
 end;
 
+procedure PyBoundFnFreeIfMine(objp: Pointer; var handled: Boolean);
+{ The bound-fn half of the RAW2 finalize hook. Undoes exactly what the binders
+  recorded in BKind — no guessing from the value, because a plain Int64 slot and
+  a pointer slot are indistinguishable at this point, and one of the pointer
+  shapes (a SHARED pycell_new frame cell, bound with the plain binder) must
+  NOT be freed here: the frame and every sibling closure still hold it.
+  The object block itself is freed by PXXObjRelease, which called us. }
+var bo: PBoundFnObj; pv: PVariant; i: Integer;
+begin
+  handled := False;
+  if objp = nil then Exit;
+  if PBoundFnObj(objp)^.Magic <> @PyBoundFnMagicMarker then Exit;
+  handled := True;
+  bo := PBoundFnObj(objp);
+  for i := 0 to 19 do
+  begin
+    if bo^.Bound[i] = 0 then Continue;
+    if PyBFGetKind(bo, i) = BK_OBJ then
+      PXXObjRelease(Pointer(NativeInt(bo^.Bound[i])))
+    else if PyBFGetKind(bo, i) = BK_VARSLOT then
+    begin
+      { a whole variant slot: release what it carries, then the slot }
+      pv := PVariant(NativeInt(bo^.Bound[i]));
+      pv^ := 0;                     { variant := int releases any payload }
+      FreeMem(Pointer(pv));
+    end
+    else if PyBFGetKind(bo, i) = BK_CELL then
+      FreeMem(Pointer(NativeInt(bo^.Bound[i])));
+    bo^.Bound[i] := 0;
+    PyBFSetKind(bo, i, BK_PLAIN);
+  end;
+end;
+
 { Bind a VARIANT capture: variant params travel BY ADDRESS, and the enclosing
   local dies with its frame — so the value is copied into a small heap slot
   that lives as long as the object (leaked with it; markers are few). }
@@ -1912,6 +2008,7 @@ begin
   PPyRec(pv)^.VType := 0; PPyRec(pv)^.Payload := 0;
   pv^ := v;
   o^.Bound[idx] := Int64(NativeInt(Pointer(pv)));
+  PyBFSetKind(o, idx, BK_VARSLOT);
   pyboundfn_bind_var := obj;
 end;
 
@@ -1929,6 +2026,7 @@ begin
   pc := PInt64(GetMem(8));
   pc^ := v;
   o^.Bound[idx] := Int64(NativeInt(Pointer(pc)));
+  PyBFSetKind(o, idx, BK_CELL);   { a PRIVATE copy, unlike the shared pycell_new one }
   pyboundfn_bind_cell := obj;
 end;
 
@@ -3942,12 +4040,21 @@ end;
 function pyvar_of_callable(p: Pointer): Variant;
 { A lambda's value is a heap OBJECT pointer, and a pointer-typed local never
   reaches the dynamic-call path (that path keys on tyVariant). Box it, tagging a
-  pyeval closure as VT_PYCLOSURE so the existing tag-9 consumers keep working;
-  a lifted bound-fn has no tag of its own and rides as a bare payload, which
-  pyvar_callv* probes for. }
+  pyeval closure as VT_PYCLOSURE so the existing tag-9 consumers keep working,
+  and a lifted bound-fn as VT_BOUNDFN.
+
+  The bound-fn arm used to stamp VType 0 and "ride as a bare payload". That was
+  survivable for DISPATCH — every consumer tells the shapes apart by the
+  object's magic (pyclosure_is / pyboundfn_is / PyCallableObj), never by the tag
+  — but VType 0 is VT_EMPTY, which matches nothing in EmitVariantClear /
+  EmitVariantRetain, so the slot holding an escaping closure was not a managed
+  slot and the object was never released. Every escaping closure leaked itself
+  and everything it had retained
+  (bug-nilpy-bound-fn-closure-objects-are-never-freed). }
 begin
   PPyRec(@Result)^.Payload := Int64(NativeInt(p));
-  if pyclosure_is(p) then PPyRec(@Result)^.VType := 9
+  if pyclosure_is(p) then PPyRec(@Result)^.VType := VT_PYCLOSURE
+  else if pyboundfn_is(p) then PPyRec(@Result)^.VType := VT_BOUNDFN
   else PPyRec(@Result)^.VType := 0;
 end;
 

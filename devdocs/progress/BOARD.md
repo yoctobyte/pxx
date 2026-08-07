@@ -39,7 +39,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (204)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,7 +53,6 @@ _none_
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-nilpy-a-lambda-call-with-the-wrong-argument-count-does-not-raise | N | 45 | bug | NilPy: a lambda called with the wrong number of arguments does not raise — `f = lambda x: x` answers 1 for f(1, 2) and None for f(), where CPython raises TypeError. A def with the same signature is correctly diagnosed at compile time | — |
 | bug-nilpy-augmented-subscript-evaluates-its-index-twice | N | 30 | bug | NilPy: `d[key()] += 1` calls key() TWICE — the augmented-subscript desugar re-evaluates the base and index. CPython evaluates each once. The stored value is correct; only a side-effecting index is observable. | — |
-| bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter | N | 40 | bug | A bound method cannot be passed through a `Callable[...]` parameter | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
 | bug-nilpy-def-body-scans-run-on-when-no-indent-is-found | N | 40 | bug | Five token-level scans locate a def/class BODY with an unbounded `while Tokens[j].Kind <> tkIndent` walk. Nothing makes them fail safe: with no INDENT they run on into the NEXT construct and attribute its body to this one. Latent today only because the lexer guarantees the INDENT exists. | — |
@@ -69,6 +68,7 @@ _none_
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
+| bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
@@ -237,6 +237,7 @@ _none_
 | meta-t-dev-throughput-and-track-a-t-integration | T | 40 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
+| refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | regression-test-i386-test-dynarray-field | T | 70 | regression | regression: test-i386#src:test/test_dynarray_field.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-for-two-names-over-a-variant | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_for_two_names_over_a_variant.npy red at b51f4eeffbf9 (auto-filed by twatch) | — |
@@ -365,9 +366,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1470)
+## done (1471)
 
-1470 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1471 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -429,7 +430,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [N] bug-nilpy-bound-fn-closure-objects-are-never-freed
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-empty-range-regression-cannot-be-bisected
 - [p 55] [T] bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
@@ -498,6 +498,7 @@ _none_
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
 - [p 45] [A] meta-constant-normalisation
+- [p 45] [A] refactor-a-variant-object-tag-list-lives-in-four-places
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [B] task-b-revert-pxxcio-clock-int64-cast-workaround
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
@@ -510,6 +511,7 @@ _none_
 - [p 40] [N] bug-nilpy-def-body-scans-run-on-when-no-indent-is-found
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
+- [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [U] decide-nilpy-builtin-keyword-only-parameters

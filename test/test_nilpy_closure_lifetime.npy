@@ -1,0 +1,89 @@
+# bug-nilpy-bound-fn-closure-objects-are-never-freed
+#
+# The lifted bound-fn object a nested def compiles to is now a REFCOUNTED heap
+# block whose variant carries a real tag (VT_BOUNDFN), where it used to be a
+# plain GetMem block boxed as VT_EMPTY and therefore never released. That fixed
+# the leak; this test pins the correctness half, because "it is now freed" and
+# "it is freed too early" are the same change seen from two sides.
+#
+# Every case below keeps using a closure AFTER something that would free it if
+# the ownership were wrong: after the enclosing frame returned, after a sibling
+# closure over the same capture died, after the variable holding it was
+# reassigned in a loop (which is what actually reclaims, one per iteration), and
+# after the closure was stored into and taken back out of a container.
+#
+# The RSS-slope evidence lives in the ticket, not here: the suite compares
+# stdout, and a memory measurement is not a stdout fact. What this file
+# guarantees is that the reclamation did not start eating live objects.
+
+
+def make_counter(start):
+    n = [start]
+    def bump():
+        n[0] = n[0] + 1
+        return n[0]
+    return bump
+
+
+# used long after make_counter's frame is gone
+c = make_counter(10)
+print(c(), c(), c())
+
+# two closures over the SAME captured list: dropping one must not free the list
+def make_pair():
+    shared = [1, 2, 3]
+    def total():
+        return len(shared)
+    def first():
+        return shared[0]
+    return total, first
+
+
+t, f = make_pair()
+print(t(), f())
+t = 0                       # drop one closure; the other still owns the capture
+print(f())
+
+# reassigned in a loop — the shape that reclaims one object per iteration
+last = 0
+i = 0
+while i < 50:
+    g = make_counter(i)
+    last = g()
+    i = i + 1
+print(last)
+
+# the earlier closure must be untouched by all that churn
+print(c(), f())
+
+# stored in a container, retrieved, and called after the local is gone
+box = []
+k = 0
+while k < 3:
+    box.append(make_counter(k * 100))
+    k = k + 1
+print(box[0](), box[1](), box[2]())
+print(box[0]())
+
+# a closure over an int (no captured object at all) still works
+def adder(d):
+    def add(x):
+        return x + d
+    return add
+
+
+a5 = adder(5)
+print(a5(1), a5(2))
+
+# nonlocal: the frame cell stays SHARED between the frame and the closure
+def make_nl():
+    v = 0
+    def inc():
+        nonlocal v
+        v = v + 2
+        return v
+    return inc
+
+
+nl = make_nl()
+print(nl(), nl(), nl())

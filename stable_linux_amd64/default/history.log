@@ -247,3 +247,4 @@
 2026-08-07T11:34:39Z  v247  f1c77a43d86ba784a7f4cb26988dcf5bed7220a15abba47ab607b623b7948120  d3f06e5ab2693526cdaf20574e0418088b35f05a  docs+tickets(A/N): multi-type string support — design record and two phases
 2026-08-07T12:31:42Z  v248  cf00d461f8318743373b9d88aa7e256a8463617bc3256b266bb5b556e76ca479  5f92f902465f66a9aaf4b97de75b4843b9a46ff9  docs(A): the narrow seed window is Platonic-code POLICY, not a defect
 2026-08-07T14:42:29Z  v249  8461058628a58b4749ce5adeec0893492bd2b7b34afd5268667f7fffffe44cd4  f311584aa24b8ef05801c0da418d2f17b5d8da64  tickets(N): accept the --no-unicode mode, with the default and the sequence fixed
+2026-08-07T18:19:21Z  v250  814341379894a37fd70186e6cc12ff4e04be1c4814e3d44e8716d5a63cb14874  8f0ada08e0caaeb54c3393dffe7b9a6553d97399  docs(progress): record the shas the resolves landed as

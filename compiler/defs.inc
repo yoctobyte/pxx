@@ -596,6 +596,17 @@ const
   VT_OBJECT  = 7;   { payload = class instance pointer (NilPy Any/list slots; isinstance) }
   VT_BOUNDMETHOD = 8; { payload = {code, recv} pair pointer (pylib pybound_new) }
   VT_PYCLOSURE_TAG = 9; { payload = pyeval closure object (refcounted RAW2 block) }
+  { payload = lifted bound-fn object (pyboundfn_new; also a refcounted RAW2
+    block). A SEPARATE tag from 9 rather than a reuse of it: the tag-9 consumers
+    read PClosureObj(payload)^.Cidx, which is a different record, so a bound-fn
+    riding as a 9 would be interpreted at the wrong offsets. It used to ride as
+    VT_EMPTY ("a bare payload"), and VT_EMPTY matches nothing in the variant
+    clear/retain emitters — so the slot was never managed and every escaping
+    closure leaked its object and everything the object had retained
+    (bug-nilpy-bound-fn-closure-objects-are-never-freed). Run-time DISPATCH
+    still keys on the object's magic (pyboundfn_is), never on this tag; the tag
+    exists so the slot is reclaimed. }
+  VT_BOUNDFN_TAG = 10;
 
   { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
     match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it

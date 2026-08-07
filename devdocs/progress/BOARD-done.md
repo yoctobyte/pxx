@@ -462,6 +462,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-bitwise-op-rejects-boolean-variable-operand | N | 30 | bug | `&`/`\|`/`^` on boolean-typed operands unconditionally rejected by PyBitGuard | — |
 | bug-nilpy-bitwise-shift-on-class-operand-segfaults | N | 60 | bug | NilPy: `obj & 1` / `obj << 1` on a class instance SEGFAULTS (core dump); __and__/__or__/__xor__/__lshift__/__rshift__ are never dispatched | — |
 | bug-nilpy-bool-protocol-ignored-object-always-truthy | N | 65 | bug | NilPy: __bool__ and __len__ are ignored in a truth test — every non-nil object is truthy, so `if obj:` takes the WRONG BRANCH silently | bug-a-overload-resolution-ignores-class-identity |
+| bug-nilpy-bound-fn-closure-objects-are-never-freed | N | 55 | bug | Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB | — |
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-builtin-pairs-are-not-flagged-as-tuples | N | 35 | bug | `enumerate`, `zip`, `dict.items` and `most_common` build pairs that print as lists | — |
 | bug-nilpy-bytearray-constructor-only-accepts-a-length | N | 45 | bug | bytearray() only has () and (Integer) overloads — bytearray(b\"abc\") and bytearray([1,2,3]) are compile errors, so a bytearray cannot be built from data | — |

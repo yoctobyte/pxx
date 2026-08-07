@@ -650,6 +650,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_clsattr_callres26 | diff -u test/test_nilpy_class_attr_shared_slot_via_call_result.expected -
 	./$(COMPILER) test/test_nilpy_overridden_class_attribute.npy /tmp/test_nilpy_ovrclsattr26
 	/tmp/test_nilpy_ovrclsattr26 | diff -u test/test_nilpy_overridden_class_attribute.expected -
+	./$(COMPILER) test/test_nilpy_closure_lifetime.npy /tmp/test_nilpy_closure_lifetime26
+	/tmp/test_nilpy_closure_lifetime26 | diff -u test/test_nilpy_closure_lifetime.expected -
 	./$(COMPILER) test/test_nilpy_float_repr.npy /tmp/test_nilpy_floatrepr26
 	/tmp/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_user_class_shadows_builtin.npy /tmp/test_nilpy_shadow26

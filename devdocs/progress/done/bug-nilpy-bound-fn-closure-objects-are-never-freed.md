@@ -2,6 +2,8 @@
 track: N
 prio: 55
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # Every escaping closure leaks its bound-fn object — 320k closures cost 125 MB
@@ -360,3 +362,149 @@ separate defect I introduced and fixed the same day (`PyBodyLiftsANestedDef`):
 that shape leaked 24 bytes per *activation* of the enclosing function even
 though no closure existed, and it is back to a flat 1 MB. What remains here is
 only the genuine case: a closure that really does escape.
+
+## 2026-08-07 — ROOT CAUSE, measured at `8f0ada08e` (fresh self-host, fixedpoint confirmed)
+
+**The ticket's ORIGINAL "Two contributors" section was right. The 2026-07-31
+note that declared it "STALE" is the thing that is wrong**, and it cost rounds
+3 and 4 their fixes: it named `pyclosure_src_new` / `TClosureObj`, but that
+family is never allocated by this repro. `PyNestedDefClosureValue`
+(`pyparser.inc` ~6267) builds `pyboundfn_new` → `pyboundfn_setown` →
+`pyboundfn_bind_obj` → `pyvar_of_callable`, exactly as the original section said.
+
+Baseline reproduced first, so the numbers below are mine and not inherited:
+9 800 KB @ 20k → 136 264 KB @ 320k.
+
+### How the misreading happened — objtrace shows the LIST, not the closure
+
+`-dPXX_OBJTRACE` only instruments the `PXXObjAlloc*` family. `pyboundfn_new`
+uses a **plain `GetMem`**, so the closure object is *invisible to the trace*.
+The one object the trace does show per iteration — `A 1, R 2, R 3, r 2, r 1`,
+stuck at rc=1 — is the captured **list `L`**, retained by `pyboundfn_bind_obj`
+and never released. Every round read that trace as "the closure object is
+leaking with an imbalanced refcount" and went hunting in the wrong family.
+
+Proved by swapping the capture:
+
+| repro | objtrace | RSS @ 20k | RSS @ 320k |
+| --- | --- | --- | --- |
+| captures a **list** | 1 object/iter, settles rc=1 | 9 800 KB | 136 264 KB |
+| captures an **int** | **no traced objects at all** | 5 824 KB | 73 792 KB |
+
+An int capture leaks ~227 B/closure while allocating *nothing objtrace can
+see* — that is the `GetMem`'d `TBoundFnObj` itself. The list row adds ~195 B on
+top: the retained-and-never-released capture.
+
+### The actual defect: the closure variant is stamped VType 0, i.e. UNMANAGED
+
+`pyvar_of_callable` (`pyeval.pas:3942`):
+
+```pascal
+  if pyclosure_is(p) then PPyRec(@Result)^.VType := 9   { VT_PYCLOSURE_TAG }
+  else PPyRec(@Result)^.VType := 0;                     { a bound-fn "rides as a bare payload" }
+```
+
+`EmitVariantClear` / `EmitVariantRetain` (`ir_codegen.inc:874/947`) act on
+`VT_STRING`, `VT_OBJECT`, `VT_BOUNDMETHOD`, `VT_PYCLOSURE_TAG` and the promo
+block. **VType 0 is VT_EMPTY — it matches nothing, so the slot holding a
+bound-fn closure is not a managed slot at all.** Nothing ever releases it; the
+object has no header and no refcount to release anyway.
+
+So there is no refcount imbalance to find. That is why four rounds of
+retain/release archaeology came up empty: the object was never in the
+refcounting system in the first place.
+
+### Why the 2026-08-01 fix attempts could not have worked
+
+Both added `VT_BOUNDFN_TAG` to `EmitVariantRetain`/`EmitVariantClear` and/or
+refcounting to `TBoundFnObj` — but left `pyvar_of_callable` stamping **0**. The
+producer never emits the tag the consumer was taught to handle, so the new code
+is unreachable and the slope is unchanged. The `IR_VAR_STORE` `isFreshCallSrc`
+patch was aimed at a copy path that is irrelevant for the same reason.
+
+### Not the return path
+
+The leak reproduces with the closure never returned and never called —
+`c = b` inside one function, `f = mk2()` discarding an int — with a
+byte-identical objtrace. Creation alone leaks, confirming the ticket's own
+carried-forward note.
+
+### The fix
+
+Put the object into the refcounting system and tag the variant so the existing
+machinery can see it:
+
+1. `pyboundfn_new` allocates a **headered** refcounted block instead of `GetMem`.
+2. `pyvar_of_callable` stamps a real tag for the bound-fn case.
+3. The finalizer frees the object *and* its owning slots — `_bind_obj`'s
+   retained object, `_bind_var`'s heap slot, and the `pycell_new` cell noted
+   above — dispatching on the object's `Magic` field, which already
+   distinguishes `TBoundFnObj` from `TClosureObj`.
+
+Preferring the EXISTING `VT_PYCLOSURE_TAG` over a new tag if the tag-9
+consumers can be made safe: a new tag would have to be added to **six
+hand-written emitters** (`EmitVariantClear`'s own comment says so), and every
+one that got missed would be a silent per-target leak.
+
+### FIXED — and the second half was a FOURTH copy of the same tag list
+
+Giving the object a refcount (above) fixed only the shapes where the closure
+stays a local. An ESCAPING closure kept leaking, and measuring the two
+dimensions separately is what showed why — the variable is the RETURN, not the
+capture:
+
+| shape | pinned | object refcounted only | + tag list fixed |
+| --- | --- | --- | --- |
+| `c = b` (local), int capture | 73 792 KB | **1 088 KB** | 1 088 KB |
+| `c = b` (local), list capture | 136 264 KB | **1 088 KB** | 1 088 KB |
+| `return b`, int capture | 73 800 KB | 83 520 KB *(worse)* | **1 088 KB** |
+| `return b`, list capture | 136 264 KB | 145 984 KB *(worse)* | **1 088 KB** |
+
+The middle column is the interesting one: refcounting alone made the escaping
+shapes leak MORE, because a refcounted block carries a 16-byte header and the
+still-leaking object simply got bigger. A partial fix here is a regression,
+which is why it could not be landed on its own.
+
+`PXXVarClear` / `PXXVarRetain` (`builtinheap.pas`) — the portable Pascal twin of
+the x86-64 `EmitVariantClear`/`EmitVariantRetain` — tested tags 7, 8 and 9 and
+not the new 10. That routine is what prepares the caller's **hidden-destination
+temp** for a variant-returning call, once per loop iteration, so `f = mk()`
+dropped the previous iteration's reference without releasing it: the trace shows
+`A1 R2 r1 R2`, a net +1 per iteration. Teaching it the tag turned all four cells
+flat and made every allocation finalize (objtrace: 4 allocations, 4 `F`).
+
+**The object-tag list exists in FOUR places** — `EmitVariantClear`/`Retain`
+(ir_codegen.inc), `PXXVarClear`/`PXXVarRetain` (builtinheap.pas), and
+`PyVarSlotIsObj` (pylib.pas). Adding a tag to some of them does not fail loudly;
+the slot is simply never released and the only symptom is RSS. That is the
+design flaw behind this ticket, and it is now written down at each site. Worth a
+follow-up to make it one list rather than four.
+
+### Two things deliberately NOT done
+
+1. **The shared `nonlocal` frame cell (`pycell_new`) is still not freed.** It is
+   bound with the PLAIN binder because the frame and every sibling closure share
+   it, so a closure's finalizer cannot free it without dangling the others — it
+   needs its own refcount. Measured residue: `nonlocal` capture is 1 472 KB @ 20k
+   → 8 512 KB @ 320k, i.e. ~23 B/closure, matching this ticket's own 2026-08-07
+   figure. Every other shape is flat. Its own ticket.
+2. **A speculative fix to `ClearVariantSlot` (promocore.pas) was written,
+   measured to change nothing, and REVERTED.** That routine has the same
+   omission — it zeroes an object payload without releasing — so it is probably
+   a real latent bug, but it is not on this path and shipping an unmeasured
+   change to a shared runtime routine is precisely how this ticket accumulated
+   two confidently-wrong "fixed, verified" commits. Filed separately instead.
+
+### Gate
+
+FPC seed build byte-identical (`make fpc-check`), self-host fixedpoint,
+`tools/gate.sh quick`. New test `test/test_nilpy_closure_lifetime.npy`, 9 lines
+byte-identical to the CPython oracle — it pins the CORRECTNESS half, because
+"now freed" and "freed too early" are the same change seen from two sides: every
+closure there is used after something that would free it if the ownership were
+wrong (after its frame returned, after a sibling closure over the same capture
+died, after the holding variable was reassigned in a loop, after a round trip
+through a container).
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

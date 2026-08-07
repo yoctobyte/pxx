@@ -2656,7 +2656,10 @@ end;
   participate (feature-nilpy-object-reclamation slice 2). }
 function PyVarSlotIsObj(t: Int64): Boolean;
 begin
-  PyVarSlotIsObj := (t = 7) or (t = 8) or (t = 9);   { 9 = pyeval closure }
+  { 9 = pyeval closure, 10 = lifted bound-fn — both RAW2 blocks. 10 is here so a
+    closure stored IN a container is reclaimed with the container; the variant
+    clear/retain emitters cover the same tag for a plain slot. }
+  PyVarSlotIsObj := (t = 7) or (t = 8) or (t = 9) or (t = 10);
 end;
 
 function pyvarobj_owned(const v: Variant): Pointer;
