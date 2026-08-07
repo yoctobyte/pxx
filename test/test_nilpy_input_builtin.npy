@@ -1,0 +1,29 @@
+# bug-nilpy-input-builtin-is-shadowed-by-pascals-standard-input-file
+#
+# `input()` never reached a call lowering: `Input` is a STANDARD PASCAL
+# IDENTIFIER (the text file), so `line = input()` bound the file variable
+# instead. Nothing complained there — the failure surfaced later and
+# unrecognisably at the first USE of the result, e.g. `len(line)` reporting
+# "expected newline after statement" with a position pointing into
+# builtinheap's own source.
+#
+# That is what stopped the uforth corpus at its `line = input()`, and it is why
+# the name needs an explicit NilPy arm rather than the ordinary builtin route.
+# Pascal's Input is untouched: the arm is gated on PyExprMode, and on there
+# being no user proc of that name, so a NilPy `def input()` still wins.
+#
+# Driven from the Makefile with stdin piped in, like test_eof_stdin.pas.
+
+a = input()
+print("first:" + a)
+
+b = input("prompt> ")
+print("second:" + b)
+
+print(len(a), len(b))
+print(a.upper())
+
+# the result is a real string: concatenation, slicing, comparison
+print(a + "-" + b)
+print(a[0], b[0])
+print(a == "one", a == "two")

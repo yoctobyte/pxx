@@ -754,6 +754,7 @@ function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
   {code,recv} bound pair. }
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 { input([prompt]): a line from stdin without its trailing newline. }
+function pyinput_p(const prompt: AnsiString): AnsiString;
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
 function pysys_argv: TPyList;
@@ -7473,6 +7474,17 @@ begin
     SetLength(Result, Length(Result) - 1);
   if (Length(Result) > 0) and (Result[Length(Result)] = #13) then
     SetLength(Result, Length(Result) - 1);
+end;
+
+function pyinput_p(const prompt: AnsiString): AnsiString;
+{ `input(prompt)` — CPython writes the prompt to stdout WITHOUT a newline, so
+  Write, not WriteLn. No explicit flush: this RTL has no Flush and its Write
+  goes straight out, which is the property this relies on — if stdout ever
+  becomes buffered, an interactive prompt would appear only after the user has
+  typed, and this is the line to fix. }
+begin
+  Write(prompt);
+  pyinput_p := pyinput;
 end;
 
 function pysys_argv: TPyList;

@@ -12152,6 +12152,42 @@ begin
         Exit;
       end;
 
+      { Python's `input()` / `input(prompt)`. It needs an explicit arm because
+        `Input` is a STANDARD PASCAL IDENTIFIER — the text file — so the name
+        never reached a call lowering at all: `line = input()` bound the file
+        variable, and the failure surfaced later and unrecognisably at the first
+        USE of the result (`len(line)` reported "expected newline after
+        statement" pointing into builtinheap's source). uforth could not compile
+        past its `line = input()`.
+        NilPy only, so Pascal's Input is untouched.
+        bug-nilpy-input-builtin-is-shadowed-by-pascals-standard-input-file }
+      if PyExprMode and CaseEqual(name, 'input') and (procIdx < 0) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind = tkRParen then
+        begin
+          idx := FindProc('pyinput');
+          if idx < 0 then Error('Nil Python: pylib (pyinput) not loaded');
+          Expect(tkRParen, ')');
+          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := -1;
+        end
+        else
+        begin
+          idx := FindProc('pyinput_p');
+          if idx < 0 then Error('Nil Python: pylib (pyinput_p) not loaded');
+          PyParseBoolExpr;
+          Expect(tkRParen, ')');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+          ASTRight[argSeq] := -1;
+          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := argSeq;
+        end;
+        CurASTNode := node; LastExprTk := tyAnsiString;
+        Exit;
+      end;
+
       { Ord(x)/Chr(x): soft-keyword intrinsics (same recipe as Length below —
         plain idents, name dispatch, user proc / in-scope symbol shadows,
         must be followed by '('). }
