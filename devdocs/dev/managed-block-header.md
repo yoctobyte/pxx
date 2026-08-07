@@ -1,0 +1,174 @@
+# The managed-block header, and the kind word
+
+Design record for multi-type string support (Pascal `ByteString` + NilPy
+`TextString`), decided 2026-08-07. Written before implementation so the layout
+is a decision rather than an accident.
+
+## Why a runtime tag at all
+
+The compiler knows a string's type statically almost everywhere — but not
+everywhere, and the gaps are exactly where it matters: a value in a `Variant`, a
+container element, an untyped/generic parameter. This is the same shape as the
+RTTI gap: static knowledge evaporates at the boundary where a consumer most
+needs it.
+
+So the type must travel **with the value**, not only in the symbol table.
+
+## What the header is today
+
+The allocator hands back a block `B`; its own rounded-size word sits at `B-8`.
+pxx lays its header at the front of `B`:
+
+```
+[alloc size:8]   B-8      the ALLOCATOR's, not ours
+[refcount:8]     B+0
+[length:8]       B+8      objects: a SPARE slot holding PXX_OBJ_MAGIC
+[data...]        B+16     = p, the handle
+```
+
+so from the handle: `length` at `p-8`, `refcount` at `p-16`, block base at
+`p-16`, allocator size word at `p-24`.
+
+**16 bytes on every target.** There is no 32-bit variant — `PXXAlloc(len + 17)`
+and `PXXAlloc(16 + n*elSize)` are unconditional, and ILP32 code simply reads the
+low half of each 8-byte slot. This was checked rather than assumed; it is what
+makes the change uniform across all six backends.
+
+Strings, dynamic arrays **and objects share this protocol** — `ir_codegen.inc`:
+*"a refcounted object block shares the string header protocol exactly (rc at
+[p-16], free base = p-16), so the SAME release blob serves."*
+
+## The new layout
+
+One extra word, **below the refcount**:
+
+```
+[alloc size:8]   B-8
+[kind:8]         B+0      NEW
+[refcount:8]     B+8
+[length:8]       B+16     objects: still the spare/magic slot
+[data...]        B+24     = p
+```
+
+From the handle: **`length` stays at `p-8`, `refcount` stays at `p-16`.** Only
+the block base moves, `p-16` → `p-24`.
+
+That is the whole reason for this placement. The two hot fields keep their
+offsets, so all ~73 length reads and every retain/release across six backends are
+untouched. Two alternatives were rejected:
+
+- **Steal the length's high bits.** Free in memory, but it is the hottest field
+  in the compiler (every `Length`, every array bound), it is *already* overloaded
+  (objects squat `PXX_OBJ_MAGIC` in its low 16 bits), and ILP32 reads only 32 of
+  them — which would cap string and array size on 32-bit targets.
+- **Narrow the refcount to 32 bits and use the freed 4 bytes** (FPC's own
+  layout). Zero memory, but it changes atomic widths — `lock xadd` on x86-64,
+  `ldaxr`/`stlxr` on aarch64 — on every target, for 8 bytes.
+
+Cost: **+8 bytes per managed block**, exactly. The allocator rounds to a multiple
+of 8 with bins at 8,16,…,512, so this is one bin up with no rounding cliff. Under
+`PXX_ESP` the heap is a single 64 KiB static arena, where that is proportionally
+expensive — which is what frozen strings (`string[N]`, shortstring) are for. They
+carry no header at all and are unaffected.
+
+## The word
+
+Little-endian, byte 0 at `p-24`. Byte-aligned throughout, so every hot field
+extracts in one instruction on all six backends.
+
+| bits | field | purpose |
+| --- | --- | --- |
+| 0–7 | `BlockKind` | what this block IS |
+| 8–15 | `Flags` | common to every kind |
+| 16–31 | `KindData0` | per-kind |
+| 32–47 | `KindData1` | per-kind |
+| 48–63 | reserved | must be zero |
+
+**BlockKind:** `0 = Legacy/untagged`, `1 = ByteString`, `2 = TextString`,
+`3 = DynArray`, `4 = Object`. 5+ reserved.
+
+`ByteString` vs `TextString` is the real semantic axis — **do positions count
+bytes or characters** — so it belongs in the kind, not in a codepage. This is a
+deliberate divergence from FPC, which discriminates by codepage; encoding and
+width are refinements *within* a kind here.
+
+**Flags:** `bit0 Static` (in `.rodata`, refcount ignored, never freed — reserved,
+speculative: it would enable FPC-style refcount-−1 literal aliasing), `bit1
+Interned`, `bit2 ASCII` (verified no byte ≥ 0x80), `bit3 Extended` (a side-table
+entry exists — the escape hatch), bits 4–7 reserved.
+
+`ASCII` is the one that pays for itself: it makes NilPy `len`/index O(1) on the
+overwhelmingly common string without a wider representation, and lets a Pascal
+`ByteString` be adopted as text for free.
+
+**Per-kind data:**
+
+| kind | `KindData0` | `KindData1` |
+| --- | --- | --- |
+| ByteString | codepage (`CP_UTF8`=65001 fits a Word — FPC-exact) | elemsize (1) |
+| TextString | encoding | bytes/char: 1, 2 or 4 (PEP 393's width) |
+| DynArray | element `TTypeKind` | element size |
+| Object | *(free — kind 4 replaces `PXX_OBJ_MAGIC`)* | |
+
+## The three rules that keep this from being refactored
+
+1. **Zero means legacy.** A block whose word is zero behaves exactly as today.
+   This is what lets the layout land with nothing reading it.
+2. **An unknown kind degrades to 0, never asserts.** Forward compatibility for a
+   binary that predates a kind — which matters because a pinned stable binary
+   has to keep working.
+3. **`Extended` is the escape hatch.** If a future need does not fit, set it and
+   key a side table on the block address. We can be wrong about the bit budget
+   without being stuck.
+
+## Static context wins; the kind answers only where it is lost
+
+Kinds live on **shared, refcounted blocks**, so a kind cannot be flipped when a
+string crosses between the Pascal and NilPy worlds without copying. Therefore:
+
+> **Where a static type exists, it decides. The block kind answers only where the
+> static type has been lost** — a variant, a container element, a generic or
+> untyped parameter.
+
+A `TextString` handed to Pascal code is read with byte semantics (FPC-correct, no
+copy, no mutation). A `ByteString` pulled out of a variant by NilPy is treated as
+UTF-8 text, with `ASCII` making the character count free when set.
+
+## What it absorbs
+
+- **`PXX_OBJ_MAGIC` retires.** `kind = Object` *is* the population tag; release
+  dispatches on it instead of sniffing a magic word that lives inside the length
+  field.
+- **Dynamic arrays gain a runtime element type** — the same RTTI-shaped gap,
+  closed for the other consumer of this header at no extra cost.
+
+## Literals and frozen strings do NOT participate
+
+A raw `.rodata` literal is never a valid managed handle — every path that turns
+one into a string value goes through `AnsiStrFromLiteral` /
+`EmitAnsiStrFromInlineString` and allocates a real block (*"Without this the
+callee reads a raw rodata literal as a managed handle and the length is
+garbage"*). Frozen `string[N]`/shortstring are inline buffers with no header.
+
+Both are statically typed, so neither needs a runtime tag, and the
+literal→managed conversion sites are the natural stamping points — the static
+type is known exactly there. This was re-opened once during design; it is closed.
+
+## Sequencing — READ THIS BEFORE TOUCHING CODE
+
+**This cannot land through a self-host generation.** Stage A emits stage B's
+inline string code using *A's* offsets, while B's linked RTL comes from *new*
+source using the new layout. B is then internally inconsistent and dies before it
+can compile C. Same family as the `TSymbol`-field bootstrap landmine.
+
+**Seed from FPC.** FPC compiles the new source with no old-pxx generation in the
+loop, producing a self-consistent binary to self-host from. `make
+compiler/pascal26` will fail confusingly.
+
+The split is deliberate and was the user's call:
+
+- **Phase 1** — move the layout, allocate the word, write zero, *never read it*.
+  Prove strings, dynamic arrays, objects and RTTI are unchanged. **Then pin.**
+- **Phase 2** — only after the pin, start stamping and reading kinds. Because the
+  pin made the new layout the ground truth, phase 2 never meets an old-offset
+  binary.
