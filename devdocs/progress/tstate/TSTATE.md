@@ -3,11 +3,10 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 6d17h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `8c112256cb54` | 2026-08-07T11:39:45Z | RED (native) | 0.0s | `71d7a326c88b` RED |
+| plexus | `8c112256cb54` | 2026-08-07T11:40:15Z | RED (full) | 0.0s | `8c112256cb54` RED |
 | xeon **QUIET 2d12h** | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_dynarray_params.pas** — test/test_dynarray_params.pas (plexus): bad `635b231b9ba4`, last good `ff90dd52cf4c`, 1 commit(s) in range
 - **selfhost-fixedpoint#src:compiler/compiler.pas** — compiler/compiler.pas (plexus): bad `8c112256cb54`, last good `71d7a326c88b`, 10 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
