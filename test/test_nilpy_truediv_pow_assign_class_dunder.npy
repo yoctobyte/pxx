@@ -1,0 +1,101 @@
+# `obj /= n` and `obj **= n` on a class instance. Neither is a number-only
+# operator — both dispatch a dunder exactly as `+=` dispatches __iadd__ — and
+# both used to die at run time with "TypeError: expected a number, got object"
+# on a program CPython runs.
+# (bug-nilpy-truediv-and-pow-assign-on-a-class-instance-skip-the-dunder)
+
+class D:
+    def __init__(self, v: int):
+        self.v = v
+    def __itruediv__(self, o):
+        return D(self.v // o)
+    def __ipow__(self, o):
+        return D(self.v ** o)
+
+# module scope: the token-shape pre-pass arms asserted float / variant about the
+# target from the operator alone, and PyWiden(tyClass, ...) made it a variant
+# holding an object — where dunder dispatch does not look
+d = D(10)
+d /= 2
+print(d.v)
+e = D(3)
+e **= 2
+print(e.v)
+
+# ...and inside a def, which is a different collector
+def inside():
+    a = D(100)
+    a /= 4
+    b = D(2)
+    b **= 5
+    print(a.v, b.v)
+inside()
+
+# only the BINARY dunder declared: Python falls back to it and REBINDS
+class B:
+    def __init__(self, v: int):
+        self.v = v
+    def __truediv__(self, o):
+        return B(self.v // o)
+    def __pow__(self, o):
+        return B(self.v ** o)
+p = B(9)
+p /= 3
+print(p.v)
+q = B(2)
+q **= 3
+print(q.v)
+
+# a class-typed FIELD target takes the same route through the node twin
+class Holder:
+    def __init__(self):
+        self.d = D(20)
+h = Holder()
+h.d /= 5
+print(h.d.v)
+h.d **= 2
+print(h.d.v)
+
+# `**=` on an lhs EXPRESSION at all: `**` is not a binop token, so that arm had
+# nothing to key on and the parse died on the operator, dunder or not
+class Cell:
+    def __init__(self, n: int):
+        self.n = n
+c = Cell(3)
+c.n **= 4
+print(c.n)
+xs = [2, 3]
+xs[1] /= 3
+print(xs)
+# NOTE: `xs[0] **= 5` — a SUBSCRIPT target with `**=` — is a third arm again,
+# ParseLValueAST's augBin path in the shared parser, and still refuses to parse
+# (identically on pinned). Filed as bug-nilpy-pow-assign-to-a-subscript-does-not-
+# parse rather than folded in here.
+
+# the numeric targets these arms were written for must keep working: `/=` is
+# always true division (so an int target widens to a float) and `**=` widens to
+# whatever the power is
+i = 8
+i /= 4
+print(i)
+n = 2
+n **= 10
+print(n)
+m = 2
+m **= -1
+print(m)
+big = 2
+big **= 70
+print(big)
+
+# NEITHER dunder: CPython raises, and so must pxx — at run time, so a
+# try/except around it still compiles
+class N:
+    def __init__(self, v: int):
+        self.v = v
+try:
+    z = N(1)
+    z /= 2
+    print("unreachable", z.v)
+except TypeError as ex:
+    print("TypeError")

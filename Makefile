@@ -1202,6 +1202,10 @@ test-nilpy: $(COMPILER)
 	@# is the one thing that still says 'dict' after the suffix is stripped.
 	./$(COMPILER) test/test_nilpy_for_two_names_over_a_variant.npy /tmp/test_nilpy_for2var26
 	test "$$(/tmp/test_nilpy_for2var26)" = "$$(printf 'static a 1\nstatic b 2\nfield a 1\nfield b 2\nelem a 1\nelem b 2\nparam a 1\nparam b 2\ndictval a 1\ndictval b 2\nthree x 1 True\nthree y 2 False\nitems x 1\nitems y 2\nitems2 x 1\nitems2 y 2\nbarepair a b\nbarepair c d\nbarekey ab\nbarekey cd\n['ab', 'cd']\nTypeError')"
+	@# /= and **= on a class instance dispatch __itruediv__ / __ipow__ (then the
+	@# binary form and rebind). Both used to raise 'expected a number, got object'.
+	./$(COMPILER) test/test_nilpy_truediv_pow_assign_class_dunder.npy /tmp/test_nilpy_tdivpow26
+	test "$$(/tmp/test_nilpy_tdivpow26)" = "$$(printf '5\n9\n25 32\n3\n8\n4\n16\n81\n[2, 1.0]\n2.0\n1024\n0.5\n1180591620717411303424\nTypeError')"
 	./$(COMPILER) test/test_nilpy_return_nested_def.npy /tmp/test_nilpy_return_nested_def26
 	test "$$(/tmp/test_nilpy_return_nested_def26)" = "$$(printf '11 21\n2\n101\n1001 2002\n35\n45\n8 9 10')"
 	./$(COMPILER) test/test_nilpy_lambda_sibling_capture.npy /tmp/test_nilpy_lambda_sibling_capture26

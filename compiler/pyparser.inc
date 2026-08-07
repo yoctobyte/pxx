@@ -13804,6 +13804,11 @@ begin
     tkXor:   if inPlace then Result := '__ixor__'      else Result := '__xor__';
     tkShl:   if inPlace then Result := '__ilshift__'   else Result := '__lshift__';
     tkShr:   if inPlace then Result := '__irshift__'   else Result := '__rshift__';
+    { `**` has no binary token in this frontend — it lowers through PyMakePow,
+      not AN_BINOP — so the ASSIGNMENT token is what keys this one. Everything
+      else here is keyed on the binary token PyAugBinTok produced, and there is
+      none to produce. }
+    tkPowEq: if inPlace then Result := '__ipow__'       else Result := '__pow__';
     else Result := '';
   end;
 end;
@@ -15111,6 +15116,29 @@ begin
       TokPos := annIdx;
       Next;                          { CurTok = the '=' }
     end;
+    { `h.d **= 2` / `d[k] **= 2`. `**` is not a binop TOKEN — PyAugBinTok has
+      nothing to return for it — so an lhs-EXPRESSION target with `**=` reached
+      no arm at all and the parse died on the operator ("unexpected token"),
+      while the bare-NAME twin two hundred lines up has always handled it. Same
+      desugaring as that twin, `t = t ** e`, with the user-class dunder tried
+      first and the target CLONEd for the store (see PyAugClassDunderNode on why
+      one node index must not sit in two places). }
+    if CurTok.Kind = tkPowEq then
+    begin
+      Next;
+      PyParseBoolExpr;
+      node := PyAugClassDunderNode(lhsNode, tkPowEq, CurASTNode);
+      if node >= 0 then
+      begin
+        Result := node;
+        Exit;
+      end;
+      node := PyMakePow(lhsNode, CurASTNode);
+      Result := AllocNode(AN_ASSIGN);
+      ASTLeft[Result] := CloneAST(lhsNode);
+      ASTRight[Result] := node;
+      Exit;
+    end;
     augTk := PyAugBinTok(CurTok.Kind);
     if augTk <> tkEOF then
     begin
@@ -15286,6 +15314,19 @@ begin
     begin
       Next;
       PyParseBoolExpr;
+      { a USER class instance first: `e = D(3); e **= 2` dispatches __ipow__,
+        else __pow__ and rebind, exactly as `+=` does. This branch used to Exit
+        straight into PyMakePow, so it never reached PyAugClassDunder below and
+        the instance HANDLE went to pypow_v — "TypeError: expected a number, got
+        object" at run time on a valid CPython program
+        (bug-nilpy-truediv-and-pow-assign-on-a-class-instance-skip-the-dunder).
+        Keyed on tkPowEq, since `**` has no binary token — see PyAugDunderName. }
+      node := PyAugClassDunder(symIdx, tkPowEq, CurASTNode);
+      if node >= 0 then
+      begin
+        Result := node;
+        Exit;
+      end;
       node := PyMakePow(PyMakeIdent(symIdx), CurASTNode);
       if PyTypingPass then
         PyNoteLocalType(name, IntToTypeKind(ASTTk[node]), REC_NONE);
@@ -16186,7 +16227,29 @@ begin
               (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkTrueDivEq) and
               ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
       begin
-        PyNoteLocalType(GetTokenStr(i), tyDouble, REC_NONE);
+        { ...and ONLY when the target is already known to be a NUMBER. `/=` is
+          not a float-only operator — `d = D(10); d /= 2` dispatches
+          __itruediv__ exactly as `+=` dispatches __iadd__ — and this arm is a
+          token shape, so it cannot see the type. Noting tyDouble regardless
+          asserted "this name is a float" about a class-typed target;
+          PyWiden(tyClass, tyDouble) falls to the both-kinds-BOX rule and yields
+          tyVariant, the name became a variant holding an object, and augmented
+          dispatch on a variant does not find the dunder — the program compiled
+          and died with "TypeError: expected a number, got object"
+          (bug-nilpy-truediv-and-pow-assign-on-a-class-instance-skip-the-dunder).
+          Same guard, same reason, as the `+=` arm below; deferring is free
+          because this pre-pass is a fixpoint over rounds. }
+        blkName := GetTokenStr(i);
+        blkJ := PyFindConstraint(blkName);
+        if blkJ >= 0 then blkTk := PyLocals[blkJ].TypeKind
+        else
+        begin
+          si := PyProgSym(blkName);
+          if si >= 0 then blkTk := Syms[si].TypeKind else blkTk := tyUnknown;
+        end;
+        if (blkTk = tyInteger) or (blkTk = tyInt64) or (blkTk = tyBoolean) or
+           (blkTk = tySingle) or (blkTk = tyDouble) or TypeIsPromoInt(blkTk) then
+          PyNoteLocalType(blkName, tyDouble, REC_NONE);
         Inc(i);
       end
       { `**=` is the same shape as `/=` and for the same reason, but it widens
@@ -16201,7 +16264,22 @@ begin
               (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkPowEq) and
               ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) then
       begin
-        PyNoteLocalType(GetTokenStr(i), tyVariant, REC_NONE);
+        { the same numeric guard the `/=` arm above carries, and for the same
+          reason: `e = D(3); e **= 2` dispatches __ipow__, and
+          PyWiden(tyClass, tyVariant) is tyVariant directly — an even shorter
+          road to the same "expected a number, got object" }
+        blkName := GetTokenStr(i);
+        blkJ := PyFindConstraint(blkName);
+        if blkJ >= 0 then blkTk := PyLocals[blkJ].TypeKind
+        else
+        begin
+          si := PyProgSym(blkName);
+          if si >= 0 then blkTk := Syms[si].TypeKind else blkTk := tyUnknown;
+        end;
+        if (blkTk = tyInteger) or (blkTk = tyInt64) or (blkTk = tyBoolean) or
+           (blkTk = tySingle) or (blkTk = tyDouble) or (blkTk = tyVariant) or
+           TypeIsPromoInt(blkTk) then
+          PyNoteLocalType(blkName, tyVariant, REC_NONE);
         Inc(i);
       end
       { `n += x` / `n *= x` / `n <<= x` at MODULE level — an accumulator, and
