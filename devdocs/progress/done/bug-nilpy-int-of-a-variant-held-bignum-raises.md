@@ -120,4 +120,4 @@ and a variant-consumer smoke (for-in element, dict value, list index, `sorted`,
 from CPython's own output. `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 1ac653821.
