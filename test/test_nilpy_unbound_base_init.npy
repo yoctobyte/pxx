@@ -1,0 +1,50 @@
+# bug-nilpy-unbound-base-class-init-call-is-rejected
+# `Base.__init__(self, n)` — the pre-super() spelling of a base-class ctor call.
+# The ctor registers under PyMethodName's 'create', so the shared qualified-name
+# path looked up the raw '__init__' and errored out.
+#
+# The `tag` field is the point of the test, not decoration: the obvious fix
+# (resolve the name, let the ctor branch have it) CONSTRUCTS a fresh instance
+# via BuildMetaclassNew, initialises THAT and discards it — so self.n/self.tag
+# would keep their pre-call values with no diagnostic. Asserting the base
+# ctor's writes are visible on the receiver is what catches that.
+
+class Base:
+    def __init__(self, n):
+        self.n = n
+        self.tag = "base"
+    def show(self):
+        return "B(%d,%s)" % (self.n, self.tag)
+
+class Mid(Base):
+    def __init__(self, n, m):
+        Base.__init__(self, n)          # direct base
+        self.m = m
+    def show(self):
+        return "M(%d,%d,%s)" % (self.n, self.m, self.tag)
+
+class Leaf(Mid):
+    def __init__(self, n, m, k):
+        Base.__init__(self, n)          # grandparent, named across two levels
+        self.m = m
+        self.k = k
+    def show(self):
+        return "L(%d,%d,%d,%s)" % (self.n, self.m, self.k, self.tag)
+
+class Sup(Base):
+    def __init__(self, n):
+        super().__init__(n)             # must stay correct
+    def show(self):
+        return "S:" + Base.show(self)   # unbound NON-ctor must stay correct
+    def reinit(self, n):
+        Base.__init__(self, n)          # unbound ctor from a non-ctor method
+        return self.n
+
+m = Mid(1, 2)
+print(m.show(), m.n, m.m, m.tag)
+l = Leaf(3, 4, 5)
+print(l.show(), l.n, l.tag)
+s = Sup(7)
+print(s.show(), s.n, s.tag)
+print(s.reinit(9), s.n)
+print(isinstance(m, Base), isinstance(l, Mid), isinstance(s, Base))

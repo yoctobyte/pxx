@@ -674,6 +674,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_unknown_method26)" = "$$(printf '%b' '5\ncb 5\n7')"
 	./$(COMPILER) test/test_nilpy_super.npy /tmp/test_nilpy_super26
 	test "$$(/tmp/test_nilpy_super26)" = "$$(printf '%b' 'BA 7 3 9\nCA 18')"
+	./$(COMPILER) test/test_nilpy_unbound_base_init.npy /tmp/test_nilpy_unbound_base_init26
+	test "$$(/tmp/test_nilpy_unbound_base_init26)" = "$$(printf '%b' 'M(1,2,base) 1 2 base\nL(3,4,5,base) 3 base\nS:B(7,base) 7 base\n9 9\nTrue True True')"
 	./$(COMPILER) test/test_nilpy_classattr_expr.npy /tmp/test_nilpy_classattr_expr26
 	test "$$(/tmp/test_nilpy_classattr_expr26)" = "$$(printf '%b' 'Normalt8\nNormal\n2 1 5\n1')"
 	./$(COMPILER) test/test_nilpy_minmax.npy /tmp/test_nilpy_minmax26

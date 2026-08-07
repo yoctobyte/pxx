@@ -660,6 +660,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-unannotated-return-infers-number-for-string-concat | N | 70 | bug | nilpy: an unannotated def returning `variant + str` infers a NUMERIC return and prints garbage | — |
 | bug-nilpy-unary-neg-dunder-not-dispatched | N | 40 | bug | `-n` on a user class silently computed garbage — `__neg__` never dispatched | — |
 | bug-nilpy-unary-numeric-dunders-return-raw-handle | N | 55 | bug | NilPy: abs(obj), ~obj and obj-as-index ignore __abs__/__invert__/__index__ — they return the raw instance HANDLE as a number, silently | — |
+| bug-nilpy-unbound-base-class-init-call-is-rejected | A | 55 | bug | NilPy: `Base.__init__(self, n)` — the pre-super() spelling of a base-class constructor call, still ordinary Python — fails to compile with 'class method not found: __init__', because the ctor is registered under the name 'create' and the shared qualified-name path looks up the raw name | — |
 | bug-nilpy-unknown-method-segfaults | N | 70 | bug | nilpy: calling a method that does not exist compiles and SEGFAULTS instead of erroring | — |
 | bug-nilpy-user-class-bytes-method-loses-identity | N | 45 | bug | NilPy: a USER class method `-> bytes` result loses its TPyBytes identity | — |
 | bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed | N | 60 | bug | A user `class Counter:` is shadowed by pylib's `Counter` function, so `Counter.attr` fails with \"no such member on this record/class\" — the user's own class is unreachable by its own name | — |

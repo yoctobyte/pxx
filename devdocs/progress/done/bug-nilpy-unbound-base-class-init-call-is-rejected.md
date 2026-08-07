@@ -3,6 +3,8 @@ track: A
 prio: 55
 type: bug
 summary: "NilPy: `Base.__init__(self, n)` — the pre-super() spelling of a base-class constructor call, still ordinary Python — fails to compile with 'class method not found: __init__', because the ctor is registered under the name 'create' and the shared qualified-name path looks up the raw name"
+status: done
+owner: claude-A-N
 ---
 
 # `Base.__init__(self, n)` is rejected: class method not found
@@ -73,3 +75,6 @@ levels, the `super().__init__` form and `Base.show(self)` (both must stay
 correct), and — the point of the trap above — an assertion that the base
 ctor's writes landed on `self` rather than on a discarded instance. Diffed
 against CPython with `tools/pydiff.py`.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

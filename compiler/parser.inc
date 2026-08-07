@@ -3838,6 +3838,7 @@ var
   autoDeref, peRec: Integer;
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
+  pyInitCall: Boolean;   { NilPy `Base.__init__(self, ...)` — run the ctor BODY on self, never construct }
   setTmpSym, setTmpAssign, setInnerComma: Integer;   { chained subscript-assign value }
   binNode: Integer; augTk2: TTokenKind;   { `v[k] op= x` on a variant base }
   sharedNeedsOvr: Boolean;   { the shared class-attribute slot also has per-instance overrides }
@@ -4423,6 +4424,29 @@ begin
           mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
           if mmi < 0 then mmi := FindUMeth(ci, fieldName);
 
+          { NilPy `Base.__init__(self, n)` — the pre-super() spelling of a
+            base-class constructor call, and still ordinary Python. The ctor is
+            registered under PyMethodName's 'create', so the raw name above
+            finds nothing and this died on 'class method not found: __init__'
+            while the neighbouring `Base.show(self)` and `super().__init__(n)`
+            both worked (bug-nilpy-unbound-base-class-init-call-is-rejected).
+
+            The flag is the load-bearing half. Resolving the name alone would
+            hand a CTOR to the UMthIsCtor branch below, which CONSTRUCTS via
+            BuildMetaclassNew — a fresh instance, initialised and then thrown
+            away, leaving self's base fields unset with no diagnostic. That is
+            a silent wrong value where we currently have a clean error, so the
+            flag steers past that branch into the unbound path, which calls the
+            ctor BODY with the caller's self as receiver — exactly what
+            `super().__init__` already lowers to. }
+          pyInitCall := False;
+          if PyExprMode and (mmi < 0) and (fieldName = '__init__') then
+          begin
+            mmi := FindUMethOverloadAhead(ci, 'create', CountCallArgsAhead);
+            if mmi < 0 then mmi := FindUMeth(ci, 'create');
+            pyInitCall := mmi >= 0;
+          end;
+
           { A CLASS PROPERTY reached through the class name: `TJSONData.CompressedJSON := False`
             (fcl-json). Its accessors are static class methods, whose Self is the METACLASS --
             so the receiver is the class reference itself, and GenMakeStaticMethodCall does the
@@ -4569,7 +4593,7 @@ begin
           EnforceMethVis(mmi, fieldName);
           mpi := UMthProc_[mmi];
 
-          if UMthIsCtor[mmi] then
+          if UMthIsCtor[mmi] and (not pyInitCall) then
           begin
             { TClass.AnyCtor(args) as an expression (raise EListError.CreateFmt
               ... shape) — construct via the metaclass path: static classref,
