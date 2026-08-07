@@ -165,4 +165,4 @@ regress, a forward reference between two defs, and the never-executed
 module-body forward call. Wired into both `test-nilpy` recipes.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit d4d741502.
