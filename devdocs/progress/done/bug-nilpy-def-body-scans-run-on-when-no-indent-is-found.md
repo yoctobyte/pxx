@@ -3,6 +3,8 @@ prio: 40
 type: bug
 track: N
 summary: "Five token-level scans locate a def/class BODY with an unbounded `while Tokens[j].Kind <> tkIndent` walk. Nothing makes them fail safe: with no INDENT they run on into the NEXT construct and attribute its body to this one. Latent today only because the lexer guarantees the INDENT exists."
+status: done
+owner: claude-AN
 ---
 
 # def/class body scans run on when no `tkIndent` is found
@@ -100,3 +102,65 @@ a wrong attribution reported far from the cause.
 so the test is the existing suite staying green plus the one-line suites
 (`test_nilpy_one_line_def_suite.npy`, `test_nilpy_one_line_class_body.npy`,
 `test_nilpy_one_line_def_in_module.npy`) continuing to pass.
+
+## FIXED 2026-08-07 — parts 1 and 2 done, part 3 deliberately not
+
+### What changed
+
+Two new helpers in `pyparser.inc`, and all five sites now go through them:
+
+- `PyFindSuiteIndent(start, limit)` — the INDENT opening the suite of the
+  def/class at `start`, or **-1 when it has none**. Never walks past the end of
+  that construct's HEADER: it stops at a second `tkNewline` (the first ends the
+  header) or at another `tkFunction`/`tkClass`. This is the bound the ticket
+  asked for, in one place.
+- `PySkipNestedSuite(start)` — the position just past the matching DEDENT, or
+  -1. Built on the above, and it replaces the **three textual copies** at the
+  old `16749`/`17052`/`17116` (which had drifted to `18158`/`18488`/`18552`, and
+  live in three functions, not two: `PyInferDefRetType`, `PyMethodReturnsSelf`
+  and `PyDefHasValueReturn`).
+
+Callers on the -1 path now stop instead of proceeding, which is the ticket's
+point 2: the three return-type/self scans `Exit` with their conservative default
+rather than advancing into a later construct and reading ITS returns as this
+def's; `PyRegisterClassMembers` harvests **no** fields for a method with no
+suite instead of the next method's; `PyDefBindsNameLocally` answers False.
+
+### Part 3 (one shared statement-boundary predicate) NOT done
+
+The producer/consumer divergence the ticket documents — `pylexer.inc`'s
+`streamBase`-relative line-start test versus the pre-passes' `PyScanLo`-relative
+one, differing by `tkSemicolon` — is real and still there. It is left alone
+deliberately: it is inert (no legal Python puts `def` after `;`), and unifying a
+predicate ACROSS the lexer/parser boundary is a behaviour-changing edit to the
+one guarantee this whole ticket says is load-bearing. Doing it in the same
+change that removes the scans' dependence on that guarantee would mean touching
+both the safety net and the thing it protects against at once. Worth its own
+ticket if anyone wants it; the scans no longer depend on it being right.
+
+### Measured — behaviour-preserving, controlled against PINNED
+
+No behaviour change is expected, so the evidence is that there is none. New test
+`test/test_nilpy_body_scan_attribution.npy` — 9 lines, one section per affected
+caller, in the shape nearest the hazard (one-line suites and nested defs packed
+directly against their neighbours, so a run-on of even one construct changes an
+answer):
+
+| binary | result |
+| --- | --- |
+| CPython oracle | reference |
+| **PINNED** (pre-change) | byte-identical |
+| this change | byte-identical |
+
+Identical on the pre-change binary is the point: it confirms the refactor
+preserves attribution rather than merely agreeing with CPython for a new reason.
+The three one-line suite tests the ticket names (`test_nilpy_one_line_def_suite`,
+`test_nilpy_one_line_class_body`, `test_nilpy_one_line_def_in_module`) also pass.
+
+### Gate
+
+`make fpc-check` byte-identical (two routines added — the declaration-order
+hazard), self-host fixedpoint, `tools/gate.sh quick`.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

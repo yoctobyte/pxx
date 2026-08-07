@@ -18112,6 +18112,72 @@ begin
     end;
 end;
 
+{ Step over a nested def/class's whole suite, from its introducing token to
+  just past the DEDENT that closes it. Returns -1 when the construct has NO
+  suite of its own — which is the answer the three callers below must not
+  confuse with a position.
+
+  The bound matters more than the walk. These scans used to hunt for the next
+  tkIndent with `while (k < TokCount) and (Tokens[k].Kind <> tkIndent)`, which
+  cannot fail: with no INDENT of its own the walk runs on into a LATER
+  construct and the caller then treats that construct's body as this one's.
+  That exact failure has shipped before — `class G(Exception): pass` had no
+  INDENT, the scan ran on to the next class's, and G was credited with the
+  other class's members ("unresolved forward: G.create", see
+  PyRegisterClassMembers). It is unreachable today only because the lexer
+  synthesises NEWLINE INDENT ... DEDENT for a one-line suite
+  (pylexer.inc), so an INDENT always exists — a single load-bearing guarantee
+  standing behind every one of these scans. This stops at the end of the
+  construct's HEADER instead: a second NEWLINE, or another def/class, means the
+  suite is not there and the next INDENT belongs to somebody else.
+  bug-nilpy-def-body-scans-run-on-when-no-indent-is-found }
+function PyFindSuiteIndent(start, limit: Integer): Integer;
+{ The index of the INDENT opening the suite of the def/class at `start`, or -1
+  when it has none. Never walks past the end of that construct's HEADER — see
+  PySkipNestedSuite for why an unbounded hunt is the bug. }
+var k, nl: Integer;
+begin
+  PyFindSuiteIndent := -1;
+  if limit > TokCount then limit := TokCount;
+  k := start;
+  nl := 0;
+  while k < limit do
+  begin
+    if Tokens[k].Kind = tkIndent then begin PyFindSuiteIndent := k; Exit; end;
+    if Tokens[k].Kind = tkEOF then Exit;
+    if Tokens[k].Kind = tkNewline then
+    begin
+      Inc(nl);
+      { the FIRST newline ends the header; a second means no suite followed }
+      if nl > 1 then Exit;
+    end
+    else if (k > start) and
+            ((Tokens[k].Kind = tkFunction) or (Tokens[k].Kind = tkClass)) then
+      Exit;
+    Inc(k);
+  end;
+end;
+
+function PySkipNestedSuite(start: Integer): Integer;
+var k, depth: Integer;
+begin
+  PySkipNestedSuite := -1;
+  k := PyFindSuiteIndent(start, TokCount);
+  if k < 0 then Exit;
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(depth)
+    else if Tokens[k].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Inc(k); Break; end;
+    end;
+    Inc(k);
+  end;
+  PySkipNestedSuite := k;
+end;
+
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth: Integer;
@@ -18154,19 +18220,11 @@ begin
         (bug-nilpy-nested-def-nonint-result-garbage). The nested def's own
         returns must not be read as this def's, hence skip rather than descend. }
       { step past the nested def's INDENT..matching DEDENT }
-      k := j;
-      while (k < TokCount) and (Tokens[k].Kind <> tkIndent) do Inc(k);
-      e2 := 0;
-      while k < TokCount do
-      begin
-        if Tokens[k].Kind = tkIndent then Inc(e2)
-        else if Tokens[k].Kind = tkDedent then
-        begin
-          Dec(e2);
-          if e2 = 0 then begin Inc(k); Break; end;
-        end;
-        Inc(k);
-      end;
+      k := PySkipNestedSuite(j);
+      { no suite of its own: stop rather than guess. Advancing into a later
+        construct would attribute ITS returns to this def, which is the silent
+        wrong answer this scan exists to avoid. }
+      if k < 0 then Exit;
       j := k;
       Continue;
     end
@@ -18484,19 +18542,11 @@ begin
     end
     else if Tokens[j].Kind = tkFunction then
     begin
-      k := j;
-      while (k < TokCount) and (Tokens[k].Kind <> tkIndent) do Inc(k);
-      e2 := 0;
-      while k < TokCount do
-      begin
-        if Tokens[k].Kind = tkIndent then Inc(e2)
-        else if Tokens[k].Kind = tkDedent then
-        begin
-          Dec(e2);
-          if e2 = 0 then begin Inc(k); Break; end;
-        end;
-        Inc(k);
-      end;
+      k := PySkipNestedSuite(j);
+      { no suite of its own: stop rather than guess. Advancing into a later
+        construct would attribute ITS returns to this def, which is the silent
+        wrong answer this scan exists to avoid. }
+      if k < 0 then Exit;
       j := k;
       Continue;
     end
@@ -18548,19 +18598,11 @@ begin
         (bug-nilpy-nested-def-nonint-result-garbage). The nested def's own
         returns must not be read as this def's, hence skip rather than descend. }
       { step past the nested def's INDENT..matching DEDENT }
-      k := j;
-      while (k < TokCount) and (Tokens[k].Kind <> tkIndent) do Inc(k);
-      e2 := 0;
-      while k < TokCount do
-      begin
-        if Tokens[k].Kind = tkIndent then Inc(e2)
-        else if Tokens[k].Kind = tkDedent then
-        begin
-          Dec(e2);
-          if e2 = 0 then begin Inc(k); Break; end;
-        end;
-        Inc(k);
-      end;
+      k := PySkipNestedSuite(j);
+      { no suite of its own: stop rather than guess. Advancing into a later
+        construct would attribute ITS returns to this def, which is the silent
+        wrong answer this scan exists to avoid. }
+      if k < 0 then Exit;
       j := k;
       Continue;
     end
@@ -19432,8 +19474,11 @@ begin
         method resolution). The scan only ADDS fields, and a name already
         registered by an earlier method keeps its first type. }
       begin
-        while (j < bodyEnd) and (Tokens[j].Kind <> tkIndent) do Inc(j);
-        Inc(j);
+        { bounded: a method with no suite of its own must contribute NO fields,
+          rather than running on and harvesting the next method's
+          (bug-nilpy-def-body-scans-run-on-when-no-indent-is-found) }
+        j := PyFindSuiteIndent(j, bodyEnd);
+        if j < 0 then j := bodyEnd else Inc(j);
         while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
         begin
           { Both `self.NAME = expr` and `self.NAME: ann = expr` declare a
@@ -21208,13 +21253,12 @@ function PyDefBindsNameLocally(defTok: Integer; const nm: AnsiString): Boolean;
 var j, k, bdepth: Integer; atStart: Boolean;
 begin
   Result := False;
-  j := defTok;
-  while (j < MainProgramTokCount) and (Tokens[j].Kind <> tkIndent) do
-  begin
-    if Tokens[j].Kind = tkEOF then Exit;
-    Inc(j);
-  end;
-  if j >= MainProgramTokCount then Exit;
+  { bounded at the header's end: without a suite of its own this used to find a
+    LATER construct's INDENT and answer about that construct's bindings
+    (bug-nilpy-def-body-scans-run-on-when-no-indent-is-found). False — "binds
+    nothing" — is the conservative answer. }
+  j := PyFindSuiteIndent(defTok, MainProgramTokCount);
+  if j < 0 then Exit;
   bdepth := 0;
   while j < MainProgramTokCount do
   begin

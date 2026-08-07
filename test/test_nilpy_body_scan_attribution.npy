@@ -1,0 +1,131 @@
+# bug-nilpy-def-body-scans-run-on-when-no-indent-is-found
+#
+# Five token-level pre-passes locate a def/class BODY by hunting for the next
+# INDENT. They used to hunt unbounded, so a construct with no suite of its own
+# would land on a LATER construct's indent and the caller would treat that
+# construct's body as this one's — the failure that once credited
+# `class G(Exception): pass` with the NEXT class's members. The hunt is now
+# bounded at the end of the construct's header, and the three textual copies of
+# the step-past-a-nested-def walk became one helper.
+#
+# The hazard itself is not reachable from source: the lexer synthesises
+# NEWLINE INDENT ... DEDENT for a one-line suite, so an INDENT always exists.
+# What this file pins is the REFACTOR — the five callers all still attribute
+# bodies to the right construct. Each section is a different one of those
+# callers, exercised in the shape nearest the hazard: one-line suites and
+# nested defs packed directly against their neighbours, so a run-on of even one
+# construct changes an answer.
+
+
+# --- PyInferDefRetType: a nested def must not lend its return type to the
+# --- enclosing one, and neighbouring defs must not lend theirs either.
+def outer_returns_str():
+    def helper_returns_int():
+        return 7
+    return "str-not-int"
+
+
+def neighbour_returns_int():
+    return 11
+
+
+print(outer_returns_str(), neighbour_returns_int())
+
+
+# --- one-line defs packed together: each answer must be its own
+def one(): return "one"
+def two(): return "two"
+def three(): return "three"
+
+
+print(one(), two(), three())
+
+
+# --- PyRegisterClassMembers: fields are declared in a NON-ctor method too, and
+# --- a one-line class immediately before must not absorb them.
+class Marker: pass
+
+
+class Widget:
+    def __init__(self, n):
+        self.n = n
+
+    def build(self):
+        self.label = "built"
+        self.size = 3
+        return self
+
+
+w = Widget(5)
+w.build()
+print(w.n, w.label, w.size)
+
+
+# --- PyMethodReturnsSelf: build() above returns self; a neighbouring method
+# --- that does not must not inherit that answer.
+print(w.build().label)
+
+
+class Chain:
+    def __init__(self):
+        self.v = 0
+
+    def bump(self):
+        self.v = self.v + 1
+        return self
+
+    def value(self):
+        return self.v
+
+
+print(Chain().bump().bump().value())
+
+
+# --- one-line class bodies back to back, each with its own member
+class A: pass
+
+
+class B(Exception): pass
+
+
+class C:
+    tag = "c"
+
+
+print(C.tag)
+
+try:
+    raise B()
+except B:
+    print("caught B")
+
+
+# --- PyDefBindsNameLocally: a name assigned inside one def must not be read as
+# --- bound by its neighbour. `shadow` is local to first(), global to second().
+shadow = "global"
+
+
+def first():
+    shadow = "local"
+    return shadow
+
+
+def second():
+    return shadow
+
+
+print(first(), second())
+
+
+# --- nested def directly followed by another def at the same level
+def wrapper():
+    def inner():
+        return 2
+    return inner() * 3
+
+
+def after_wrapper():
+    return "after"
+
+
+print(wrapper(), after_wrapper())
