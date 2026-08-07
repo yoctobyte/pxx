@@ -417,15 +417,37 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
                       flush=True)
                 kill_child(proc)
                 return None, "aborted"
-    if not os.path.exists(rep_path):
-        # testmgr died before reporting. One likely cause: a STALE seed
-        # binary that cannot compile HEAD's sources (e.g. a since-fixed
-        # compiler bug rejects new valid code — WsPos incident 2026-07-11).
-        # Recovery: reseed from the committed pinned stable and retry once;
-        # without this the watcher wedges retesting the same SHA forever.
-        if not _reseeded and proc.returncode:
-            print("twatch: no report (rc=%s) — reseeding compiler from "
-                  "pinned stable and retrying once" % proc.returncode,
+    report = None
+    if os.path.exists(rep_path):
+        with open(rep_path) as f:
+            report = json.load(f)
+
+    # Two shapes of the SAME condition — this box cannot produce a measurement:
+    #
+    #   * no report at all: testmgr died before reporting;
+    #   * a report whose verdict is INFRA: testmgr reached the end and said so
+    #     (today: the compiler could not be built from these sources here).
+    #
+    # The second case used to be missed, and that is the whole plexus incident
+    # of 2026-08-07. report_build_failure() WRITES a report, so `not
+    # os.path.exists(rep_path)` was False, so this recovery never fired — the
+    # one path that could have healed the box was dead exactly when it was
+    # needed. The seed stayed poisoned (021ead850d60) for hours while every
+    # cycle published a fresh false RED.
+    #
+    # The likely cause is a STALE or poisoned seed binary that cannot compile
+    # HEAD's sources (e.g. a since-fixed compiler bug rejects new valid code —
+    # WsPos incident 2026-07-11; or a mid-bisect binary from an old sha that
+    # miscompiles the current tree into a stage-1 that segfaults on startup).
+    # Recovery: reseed from the committed pinned stable and retry once; without
+    # this the watcher wedges retesting the same SHA forever.
+    infra = report is not None and report.get("verdict") == "INFRA"
+    if report is None or infra:
+        if not _reseeded and (proc.returncode or infra):
+            print("twatch: %s — reseeding compiler from pinned stable and "
+                  "retrying once"
+                  % ("INFRA: %s" % (report.get("reason") or "no measurement")
+                     if infra else "no report (rc=%s)" % proc.returncode),
                   flush=True)
             try:
                 if os.path.exists(comp):
@@ -436,12 +458,14 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
                 os.utime(comp, (0, 0))     # backdate: see CRITICAL above
             except (OSError, subprocess.CalledProcessError) as e:
                 print("twatch: reseed failed (%s)" % e, flush=True)
-                return None, proc.returncode
+                return report, proc.returncode
             return run_gate(clone, tier, job_glob=job_glob,
                             abort_check=abort_check, _reseeded=True)
-        return None, proc.returncode       # testmgr died before reporting
-    with open(rep_path) as f:
-        return json.load(f), proc.returncode
+        # Reseeding already happened and it STILL cannot build: a real box
+        # fault. Hand the INFRA report up so test_sha can mark the host
+        # degraded instead of silently treating it as "nothing happened".
+        return report, proc.returncode
+    return report, proc.returncode
 
 
 # ----------------------------------------------------------------- state ---
@@ -782,6 +806,18 @@ def regen_index(clone):
         last = st.get("last") or {}
         lf = st.get("last_full") or {}
         quiet = host_quiet_secs(st)
+        if st.get("retired_at"):
+            # Retired: one row for the record, and NOTHING in the regression or
+            # held sections — it holds no entries and can never clear any.
+            rows.append("| %s _(retired %s%s)_ | `%s` | %s | %s (%s) | %ss | `%s` %s |" %
+                        (st["host"], st["retired_at"],
+                         " → %s" % st["retired_into"]
+                         if st.get("retired_into") else "",
+                         (last.get("sha") or "")[:12],
+                         last.get("date", ""), last.get("verdict", "never-ran"),
+                         last.get("tier", "?"), last.get("wall", ""),
+                         (lf.get("sha") or "")[:12], lf.get("verdict", "")))
+            continue
         rows.append("| %s%s | `%s` | %s | %s (%s) | %ss | `%s` %s |" %
                     (st["host"], " **QUIET %s**" % fmt_age(quiet) if quiet else "",
                      (last.get("sha") or "")[:12],
@@ -838,6 +874,45 @@ def regen_index(clone):
 
 
 # ------------------------------------------------------------------ core ---
+def no_measurement(report):
+    """Did this run produce no measurement at all? Returns a reason, or "".
+
+    The publish-time backstop for the whole false-RED family. A verdict is a
+    claim about the SOURCES; it may only be published by a run that actually
+    executed something. Two independent tells, either of which is conclusive:
+
+      * `compiler_sha256` absent or "unknown" — a real run always snapshots the
+        binary it tested (testmgr writes `snap_sha or repo_sha0`), so a verdict
+        that cannot name its compiler was not produced by one;
+      * no jobs — nothing ran, so there is nothing to have a verdict about.
+
+    `wall == 0.0` is deliberately NOT conclusive on its own: a tier that
+    matches no job legitimately finishes in no time. Paired with a missing
+    compiler hash it is the exact signature the ticket named.
+
+    This is belt-and-braces with the INFRA verdict, on purpose. INFRA depends
+    on testmgr correctly labelling its own failure; this guard depends on
+    nothing but the shape of the report, and so still holds if some future
+    path invents a third way to emit an empty run.
+    """
+    if not report.get("compiler_sha256") or \
+            report.get("compiler_sha256") == "unknown":
+        return "compiler_sha256 is %s" % (report.get("compiler_sha256")
+                                          or "absent")
+    if not report.get("jobs"):
+        return "0 jobs in the report"
+    return ""
+
+
+def mark_infra(clone, host, st, sha, tier, reason):
+    """Record that this box could not run — and keep it out of the ledger."""
+    inf = st.get("infra") or {}
+    st["infra"] = {"since": inf.get("since") or utcnow(), "last": utcnow(),
+                   "sha": sha, "tier": tier, "reason": reason,
+                   "count": int(inf.get("count") or 0) + 1}
+    save_state(clone, host, st)
+
+
 def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     """Gate `sha` at `tier` and publish. full=True replaces the per-job
     status map and records last_full; full=False (fast phase) merges into
@@ -854,6 +929,32 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     if report is None:
         print("twatch: testmgr produced no report (rc=%s) — infra problem, "
               "not recording a verdict" % rc, flush=True)
+        mark_infra(clone, host, st, sha, tier, "no report (rc=%s)" % rc)
+        return False
+
+    # INFRA: the run did not happen — the box could not build the compiler,
+    # and run_gate already reseeded from the pinned stable and retried once.
+    # Publish NOTHING: no verdict, no job map, no ledger entry, no bisect, no
+    # ticket. A box that cannot run is not evidence about the sources, and the
+    # cost of pretending otherwise is an innocent commit accused by a bisect
+    # that had nothing real to narrow.
+    if report.get("verdict") == "INFRA":
+        why = report.get("reason") or "no measurement"
+        print("twatch: %s INFRA — %s; host degraded, publishing no verdict "
+              "(the sha stays untested and will be retried)"
+              % (sha[:12], why), flush=True)
+        mark_infra(clone, host, st, sha, tier, why)
+        return False
+
+    # Structural backstop, independent of the verdict label: refuse anything
+    # that carries a verdict without having measured anything. See
+    # no_measurement() for why these two tells are conclusive.
+    empty = no_measurement(report)
+    if empty:
+        print("twatch: %s claims verdict %s but produced no measurement (%s) "
+              "— refusing to publish it; host degraded"
+              % (sha[:12], report.get("verdict"), empty), flush=True)
+        mark_infra(clone, host, st, sha, tier, empty)
         return False
 
     # INVALID: the compiler changed underneath the run, so its PASS/FAIL cannot
@@ -955,6 +1056,10 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         rel = write_report_md(clone, host, sha, parent, report,
                               new_red, fixed, still_red)
 
+    # A run that measured something proves the box works again — drop any
+    # degraded marker, so the host stops reporting DOWN on its own the moment
+    # it recovers (a reseed usually does it) with no manual clearing.
+    st.pop("infra", None)
     st["last"] = {"sha": sha, "date": utcnow(), "verdict": report["verdict"],
                   "wall": report["wall"], "tier": report["tier"]}
     if full:
@@ -2259,6 +2364,84 @@ def states_at(repo, ref):
     return out
 
 
+def retire_host(repo, old, into=None, tdir=None):
+    """Retire host `old`, optionally moving its open regressions `into` another.
+
+    A regression only clears when a later run ON THAT HOST passes the job. That
+    is the right rule while a host is merely quiet — it may come back — but it
+    becomes a trap when the host can never publish again, and the commonest
+    reason for that is the most mundane event there is: somebody renamed the
+    box. `xeon` became `plexus` on 2026-08-05 and its open
+    `test-core#src:csocket_loopback_b88.c` turned into a phantom that no run
+    could ever clear, sitting in every `--status` readout indefinitely.
+
+    Renaming a box is not rare, so this is a general operation rather than a
+    one-off edit of the JSON:
+
+      --retire-host xeon --into plexus   # same box, new name: migrate
+      --retire-host oldbox               # box is gone: close its entries out
+
+    With `--into`, entries move to the new host and clear normally there — the
+    signal is preserved, and if the job still fails on that box the next run
+    re-reports it honestly. Without it, they are closed as unclearable. Either
+    way the tombstone stays: the host's tested shas keep counting toward
+    coverage, because those runs really did happen.
+    """
+    tdir = tdir or os.path.join(repo, TSTATE_REL)
+    op = os.path.join(tdir, old + ".json")
+    if not os.path.exists(op):
+        print("twatch: no such host state: %s" % op)
+        return 1
+    with open(op) as f:
+        ost = json.load(f)
+    if ost.get("retired_into") or ost.get("retired_at"):
+        print("twatch: %s is already retired%s" %
+              (old, " into %s" % ost["retired_into"]
+               if ost.get("retired_into") else ""))
+        return 0
+    regs = ost.get("open_regressions") or []
+    moved = 0
+    if into:
+        np_ = os.path.join(tdir, into + ".json")
+        if not os.path.exists(np_):
+            print("twatch: no such host state to migrate into: %s" % np_)
+            return 1
+        with open(np_) as f:
+            nst = json.load(f)
+        # Dedupe on the ledger's own identity (job selector + accused sha), so
+        # retiring twice, or into a host that already saw the same regression,
+        # cannot double-list it.
+        have = {(r.get("job"), r.get("bad")) for r in nst.get("open_regressions", [])}
+        for r in regs:
+            if (r.get("job"), r.get("bad")) in have:
+                continue
+            r = dict(r, migrated_from=old, migrated_at=utcnow())
+            nst.setdefault("open_regressions", []).append(r)
+            moved += 1
+        nst["renamed_from"] = sorted(set(nst.get("renamed_from") or []) | {old})
+        with open(np_, "w") as f:
+            json.dump(nst, f, indent=1, sort_keys=True)
+            f.write("\n")
+    ost["retired_at"] = utcnow()
+    if into:
+        ost["retired_into"] = into
+    # Nothing here is actionable any more: the entries either moved or are
+    # closed, and the job map can never be diffed against again.
+    ost["open_regressions"] = []
+    ost["jobs"] = {}
+    with open(op, "w") as f:
+        json.dump(ost, f, indent=1, sort_keys=True)
+        f.write("\n")
+    print("twatch: retired host %s%s — %d open regression(s) %s"
+          % (old, " into %s" % into if into else "", len(regs),
+             "migrated (%d new)" % moved if into else "closed as unclearable"))
+    print("twatch: commit %s (and %s) to publish the retirement."
+          % (os.path.relpath(op, repo),
+             os.path.relpath(os.path.join(tdir, into + ".json"), repo)
+             if into else "TSTATE.md"))
+    return 0
+
+
 def status(repo, grace_min, tdir=None, ref="HEAD"):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
@@ -2346,10 +2529,26 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
         if now - int(ct) > grace_min * 60:
             untested_old = (sha, int(ct))
             break
+    live, degraded = 0, 0
     for st in hosts:
+        if st.get("retired_at"):
+            # One line, no ledger, never QUIET: a retired host holds nothing,
+            # so it must not appear among the hosts an agent could wait on.
+            # Its tested shas still count toward coverage above — those runs
+            # happened, whatever the box is called now.
+            print("tstate: host %-12s RETIRED %s%s"
+                  % (st["host"], st["retired_at"],
+                     " → %s" % st["retired_into"]
+                     if st.get("retired_into") else ""))
+            continue
         last = st.get("last") or {}
         lf = st.get("last_full") or {}
         quiet = host_quiet_secs(st, now)
+        inf = st.get("infra") or {}
+        if not quiet:
+            live += 1
+            if inf:
+                degraded += 1
         print("tstate: host %-12s last %s %s (%s, %s)%s%s" %
               (st["host"], (last.get("sha") or "")[:12],
                last.get("verdict", "never"), last.get("tier", "?"),
@@ -2362,6 +2561,16 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
                # enrollment's green is not mistaken for coverage.
                else "  [NOT BASELINED — NEW-RED not meaningful yet]"
                if not st.get("jobs") else ""))
+        if inf:
+            # LOUD, and above the ledger dump: this host is running but cannot
+            # produce a measurement, so it is publishing nothing. Saying only
+            # "quiet" would understate it, and saying nothing is how a box that
+            # could not build spent a day inventing reds nobody doubted.
+            print("tstate:   DEGRADED — %s cannot run here since %s (%s; %d "
+                  "cycle(s), last tried %s at %s): publishing no verdicts"
+                  % (st["host"], inf.get("since", "?"), inf.get("reason", "?"),
+                     int(inf.get("count") or 0), (inf.get("sha") or "")[:12],
+                     inf.get("last", "?")))
         # --status is a liveness check read before a push, not a report: cap
         # the ledger dump so one bad sweep can never bury the verdict line
         # (2026-07-20 it printed 467 entries / 49KB above the UP/DOWN answer).
@@ -2391,6 +2600,14 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
         age = int((now - untested_old[1]) / 60)
         print("tstate: DOWN — %s untested for %d min (> %d min grace); "
               "run your own full gate" % (untested_old[0][:12], age, grace_min))
+        return 1
+    if live and degraded == live:
+        # Every host that is supposed to be publishing is degraded. Coverage
+        # WILL lapse; waiting for the grace window to notice would hand out an
+        # UP in the meantime, and "T is up → offload the matrix" is precisely
+        # the rule that must not fire here.
+        print("tstate: DOWN — all %d live host(s) degraded (cannot build/run); "
+              "run your own full gate" % live)
         return 1
     if newest_tested:
         print("tstate: UP — commits through %s tested; offload the matrix to T"
@@ -2552,15 +2769,25 @@ def main():
                     help="single iteration (cron / smoke test); with --follow, "
                          "check once and exit instead of waiting")
     ap.add_argument("--no-bisect", action="store_true")
+    ap.add_argument("--retire-host", metavar="HOST",
+                    help="retire a host that will never publish again (a "
+                         "renamed or decommissioned box), so its open "
+                         "regressions stop being unclearable. Run in any "
+                         "checkout, then commit the tstate change")
+    ap.add_argument("--into", metavar="HOST",
+                    help="--retire-host: migrate the open regressions to this "
+                         "host (same box, new name). Omit to close them out")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="install any missing corpus trees at startup instead "
                          "of just warning (jobs whose corpus is absent SKIP, "
                          "and a skipped job is invisible in a GREEN verdict)")
     args = ap.parse_args()
 
-    if args.status or args.follow is not None:
+    if args.status or args.follow is not None or args.retire_host:
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if args.retire_host:
+            return retire_host(repo, args.retire_host, args.into)
         if args.follow is not None:
             return follow(repo, args.follow, args.poll, args.branch, args.once)
         return status(repo, args.grace)

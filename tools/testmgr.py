@@ -1925,24 +1925,35 @@ def build_compiler():
 
 
 def report_build_failure(args):
-    """Turn an unbuildable compiler into a RED verdict the watcher can act on.
+    """Report an unbuildable compiler as INFRA — a run that did not happen.
 
-    Without this the run dies rc=1 with no report, twatch says "infra problem,
-    not recording a verdict", and the sha is simply never tested — no red, no
-    ticket, no bisect, and a watcher that silently falls further behind. Emitting
-    a report makes it a normal failing job: it goes RED, the bisect narrows it to
-    a commit, and the Track T agent files it like any other regression.
+    This used to emit a RED verdict carrying a synthetic failing
+    `selfhost-fixedpoint#00` job, so that a build failure would "act like a
+    normal red": bisected to a commit and filed as a regression. That was
+    backwards, and on 2026-08-07 it cost plexus a day of false reds. A build
+    failure is a statement about THIS BOX (a stale or poisoned seed binary,
+    a missing toolchain, a full disk), not about the sources — and the box is
+    exactly the thing a per-sha verdict is not allowed to be about. The
+    synthetic job then made it worse: it diffed to NEW-RED, opened a ledger
+    entry, and the bisector narrowed it to an innocent commit
+    (4ce9b3fc0974), which a lane could legitimately have reverted.
+
+    So: emit a report — the watcher NEEDS to see this, and dying rc=1 with no
+    report is what made the failure look like a mystery — but emit it as
+    `INFRA` with NO jobs. No jobs means nothing can be diffed, so no NEW-RED,
+    no ledger entry, and no bisect can be manufactured out of it. twatch
+    treats INFRA as "reseed from the pinned stable and retry once", and
+    reports the host DEGRADED if that does not fix it. The sha stays untested
+    and honestly says so, which is the whole point: a broken box must not be
+    able to say "master is broken".
     """
-    print("\n== testmgr report (tier %s) ==\n  FAIL     selfhost-fixedpoint#00 "
-          "— the compiler cannot be built from these sources\n" % args.tier)
+    print("\n== testmgr report (tier %s) ==\n  INFRA    the compiler cannot be "
+          "built from these sources on this box — no verdict\n" % args.tier)
     if args.report_json:
-        rep = {"tier": args.tier, "wall": 0.0, "scale": 1.0, "verdict": "RED",
-               "slow": [],
-               "jobs": [{"name": "selfhost-fixedpoint#00", "cls": "selfhost",
-                         "src": "compiler/compiler.pas",
-                         "sel": "selfhost-fixedpoint#src:compiler/compiler.pas",
-                         "advisory": False, "status": "fail", "dur": 0.0,
-                         "mem": 0, "cpu": 0.0}]}
+        rep = {"tier": args.tier, "wall": 0.0, "scale": 1.0,
+               "verdict": "INFRA",
+               "reason": "compiler build failed (see log); no test was run",
+               "slow": [], "jobs": []}
         with open(args.report_json, "w") as f:
             json.dump(rep, f, indent=1)
     return 1
