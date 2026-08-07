@@ -63,10 +63,19 @@ Two consequences worth holding on to:
    fine from seed 2. It is the escape hatch for a checkout whose committed binary
    has aged past the window, and for pure source with no binary at all.
 
-If a wider window were ever wanted, the lever is discipline rather than
-machinery: have the compiler's own source lag its own features by a release or
-two. That is a real cost against a benefit nobody has needed yet — recorded, not
-recommended.
+**The obvious lever is deliberately rejected.** One could widen the window by
+having the compiler's own source lag its own features by a release or two —
+avoid `Ord()` in a case label until every seed in circulation can fold it. Do
+not propose this: it is **compiler-appeasement in the compiler's own source**,
+which CLAUDE.md's *"Platonic code — no compiler-appeasement workarounds (all
+tracks)"* forbids, and that section names self-hosting explicitly rather than
+exempting it.
+
+The narrow window is therefore a **consequence of policy, not a defect**. The
+compiler's source uses the language as it should be written, the moment the
+compiler supports it; the seed window pays for that, and FPC is what covers the
+gap. Recorded so this is not "improved" later by someone who has not connected
+the two.
 
 ### The one case where seed 1 is the wrong seed
 
