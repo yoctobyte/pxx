@@ -1304,7 +1304,13 @@ begin
         { Slot holds a heap data pointer (handle) loaded in read/index position:
           a local dynamic array, or an open-array value param (caller passed the
           handle). SetLength keeps the slot address by computing it directly.
-          (No COW / by-ref open arrays yet.) }
+          (No COW / by-ref open arrays yet.)
+
+          Deliberately NOT gated on InLValueWrite the way arm32's twin is: on
+          this backend an indexed WRITE (`a[3] := 42`) also arrives here with
+          InLValueWrite set and needs the DATA pointer, so gating it segfaults
+          every element store. IR_SETLEN_DYN takes the slot address from
+          EmitDynSetLenSlotAddrRISCV32 instead — see that routine. }
         if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
            ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
           rv32_lw(reg_a0, reg_a0, 0)
@@ -2656,7 +2662,27 @@ begin
           "unsupported node" error on riscv32. }
         savedLVW := InLValueWrite;
         InLValueWrite := True;
-        IREmitNodeRISCV32(IRA[node]);          { a0 = slot addr }
+        { A plain dyn-array SYMBOL target has to bypass IR_LEA. On this backend
+          IR_LEA always dereferences a dynamic array's slot — an indexed WRITE
+          arrives in the same InLValueWrite mode and needs the data pointer, so
+          it cannot be gated the way arm32 gates its twin — and that handed
+          PXXDynSetLen the CURRENT handle instead of the slot address. For a
+          fresh array that is nil, so it took its `arrSlot = nil` early exit:
+          `SetLength(a, 2)` on an `array of array of Integer` silently did
+          nothing, and indexing the still-nil outer level then segfaulted.
+          Compute the slot address directly, exactly as the flat SetLength path
+          above does. bug-a-riscv32-nested-dynamic-array-element-write-segfaults }
+        if (IRKind[IRA[node]] = IR_LEA) and Syms[IRA[IRA[node]]].IsArray and
+           (Syms[IRA[IRA[node]]].ArrLen = -1) then
+        begin
+          si := IRA[IRA[node]];
+          EmitSlotAddrRISCV32(reg_a0, si);
+          { var-array param: the frame slot holds the CALLER's slot address }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            rv32_lw(reg_a0, reg_a0, 0);
+        end
+        else
+          IREmitNodeRISCV32(IRA[node]);        { a0 = slot addr }
         InLValueWrite := savedLVW;
         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
         IREmitNodeRISCV32(IRB[node]);          { a0 = n }

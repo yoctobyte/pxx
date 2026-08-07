@@ -5912,7 +5912,17 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_dynarray.pas /tmp/test_rv32x_dynarray
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas /tmp/test_rv32x_dynarray_x64
 	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_dynarray)" = "$$(/tmp/test_rv32x_dynarray_x64)"
-	# SKIP test/test_nested_dynarray_setlen.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# UN-SKIPPED 2026-08-07: the gap was IR_SETLEN_DYN handing PXXDynSetLen the
+	# array's HANDLE instead of its slot address, so SetLength on a nested array
+	# silently did nothing (bug-a-riscv32-nested-dynamic-array-element-write-segfaults).
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_nested_dynarray_setlen.pas /tmp/test_rv32x_nestsetlen
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_nested_dynarray_setlen.pas /tmp/test_rv32x_nestsetlen_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_nestsetlen)" = "$$(/tmp/test_rv32x_nestsetlen_x64)"
+	@# ...and the whole-array assignment battery, whose AliasesNested case is the
+	@# same shape; deliberately not wired before, because it landed red on the above.
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_whole_assign.pas /tmp/test_rv32x_dynwhole
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_whole_assign.pas /tmp/test_rv32x_dynwhole_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_dynwhole)" = "$$(/tmp/test_rv32x_dynwhole_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_exception.pas /tmp/test_rv32x_exception
 	./$(COMPILER) test/test_cross_exception.pas /tmp/test_rv32x_exception_x64
 	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_exception)" = "$$(/tmp/test_rv32x_exception_x64)"
