@@ -40,7 +40,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -94,6 +94,7 @@ _none_
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
 | decide-float-fixed-output-exact-or-fpc-17-digit-cap | U | 45 | decide | writeln(d:0:1) of a huge double: pxx and CPython print the EXACT value (18446744073709551616.0), FPC caps at 17 significant digits and zero-pads (18446744073709552000.0). Which is pxx's rule? | bug-a-write-fixed-emits-false-digits-past-1e22 |
 | decide-nilpy-builtin-keyword-only-parameters | U | 40 | decide | Should NilPy builtins enforce Python's KEYWORD-ONLY parameters? | — |
+| decide-nilpy-multiple-inheritance-c3-or-delegate | U | 40 | decide | class D(B, C) is refused with a clear diagnostic (option 3 landed 2026-08-04). The FEATURE is still open and the remaining choice is a design fork: full C3 linearisation, or second-base-as-delegate. Needs a call before anyone builds it. | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45→55 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
@@ -512,6 +513,7 @@ _none_
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [U] decide-nilpy-builtin-keyword-only-parameters
+- [p 40] [U] decide-nilpy-multiple-inheritance-c3-or-delegate
 - [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [B] feature-b-crtl-last-seven-unimplemented-declarations
 - [p 40] [A] feature-c-package-namespace-decision
