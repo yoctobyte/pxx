@@ -138,4 +138,4 @@ file's output is byte-identical to CPython's; `.expected` regenerated.
 `tools/gate.sh quick` GREEN, self-host byte-identical.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 1178b04b3.
