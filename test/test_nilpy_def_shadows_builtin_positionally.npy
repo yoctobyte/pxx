@@ -1,0 +1,61 @@
+# A module-level `def` binds its name when the `def` STATEMENT runs, so a call
+# ABOVE it still reaches the builtin. That rule was enforced by COMPETITION —
+# the user's def merely lost to a pylib overload — so it lapsed for every
+# builtin lowered by NAME dispatch with no proc of its own (`ord`, `chr`,
+# `abs`), and for a pylib-backed one whose arity the def happened to match
+# (`set`). Both printed the user's answer from the top of the module, silently.
+# (bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module)
+
+# intrinsic-only: no proc of this name exists at all, so the user's def was the
+# only candidate and ordinary resolution found it from anywhere
+print(ord("A"))
+def ord(x):
+    return "late-ord"
+print(ord("A"))
+
+print(chr(66))
+def chr(x):
+    return "late-chr"
+print(chr(66))
+
+print(abs(-3))
+def abs(x):
+    return "late-abs"
+print(abs(-3))
+
+# pylib-backed, but the def matches its arity: PyUserShadowsProc correctly said
+# "not bound yet", which only removed the def's PRIVILEGE — it stayed in the
+# candidate set and won on argument fit
+print(set([1, 1]))
+def set(x):
+    return "late-set"
+print(set([1, 1]))
+
+# ...and the pylib-backed case that already worked must not regress
+print(min(3, 1, 2))
+def min(a, b, c, d, e):
+    return 100
+print(min(1, 2, 3, 4, 5))
+
+# an ordinary forward reference between two defs is legal Python — the body runs
+# after the whole module has executed — and must keep working
+def a():
+    return b() + 1
+def b():
+    return 10
+print(a())
+
+# a module-body forward call in code that never runs: CPython compiles and runs
+# this file, so refusing it at COMPILE time is not allowed (NilPy is upward
+# compatible with CPython, one direction only)
+if False:
+    helper()
+def helper():
+    return 7
+print(helper())
+
+# NOT covered, and still wrong: a def body that calls a builtin the module
+# shadows LATER, invoked BEFORE the shadowing def runs — `def f(): return ord("B")`
+# called above a later `def ord(x)` is 66 in CPython and the user's def here.
+# Which one is right depends on WHEN the call happens, not where it stands, so
+# a token-position rule cannot answer it. Pre-existing, identical on pinned.

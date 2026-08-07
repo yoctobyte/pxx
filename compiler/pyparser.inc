@@ -4328,10 +4328,16 @@ end;
   current unit) or imported it by name. A def in some OTHER module does not,
   even though flat unit scope makes it findable. bug-nilpy-imported-name-shadows-builtin-everywhere. }
 function PyUserNameShadowsHere(const nm: AnsiString): Boolean;
-var si, i, ni: Integer;
+var si, i, ni, pi: Integer;
 begin
   Result := True;
-  if FindProcInUnit(nm, CurrentUnitIdx) >= 0 then Exit;
+  { ...but a module-level def does not shadow the builtin ABOVE its own `def`
+    statement — `print(set([1,1]))` standing over a `def set(x)` is the builtin's
+    `{1}` in CPython, and reached the user's def here. PyDefBoundHere is the one
+    place that question is answered.
+    bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
+  pi := FindProcInUnit(nm, CurrentUnitIdx);
+  if (pi >= 0) and PyDefBoundHere(pi) then Exit;
   si := FindSym(nm);
   if (si >= 0) and (SymUnitIdx[si] = CurrentUnitIdx) then Exit;
   ni := InternStr(LowerCase(nm));

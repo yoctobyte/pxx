@@ -8786,6 +8786,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
+    pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
 begin
   LastExprTk := tyInteger;
   { Nil Python: ClassName(args) in ANY expression position is construction
@@ -11806,6 +11807,42 @@ begin
          (FindUClassInUnit(name, -1) >= 0) then
         procIdx := -1;
 
+      { A NilPy module-level `def` is NOT bound above its own `def` statement —
+        Python rebinds the name when that statement RUNS, so a module-body call
+        that precedes it still reaches whatever the name meant before.
+
+        PyUserShadowsProc already answers that question, and it gates both the
+        overload demote and every name-keyed intrinsic below. But each of those
+        intrinsic guards ALSO requires `procIdx < 0`, and for a builtin that has
+        no proc of its own name — `ord`, `chr`, `abs`, `set`, `id`, `hash`,
+        `ascii`, `callable`, `iter`, `range`, … are lowered by NAME dispatch,
+        not as pylib routines — the user's def is then the ONLY proc called
+        `ord`, ordinary resolution found it from anywhere in the module, and the
+        intrinsic never got the chance. `print(ord("A"))` above a `def ord(x)`
+        printed the user's answer where CPython prints 65, silently. The
+        positional rule was being enforced by COMPETITION, not by the gate, and
+        it lapsed for exactly the builtins that have no competitor.
+        bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module
+
+        So unbind the name here, where every intrinsic guard downstream reads
+        it, and REBIND it just before the ordinary call paths (`sci :=
+        FindStrConst(name)` below). Unbinding it permanently would turn a
+        module-body forward call into a compile error, and CPython accepts one
+        that never executes (`if False: helper()` above `def helper()`) — NilPy
+        is upward compatible with CPython, so refusing that is not allowed.
+
+        Module body only (CurProc < 0): inside a def body the code runs after
+        the whole module has executed, so an ordinary forward reference between
+        two defs is legal Python and must keep working. }
+      pyLateDefPi := -1;
+      if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and
+         (ProcUnitIdx[procIdx] = -1) and (not PyDefBoundHere(procIdx)) and
+         (not PyUserShadowsProc(name)) then
+      begin
+        pyLateDefPi := procIdx;
+        procIdx := -1;
+      end;
+
       { Bare class const inside a method body — `Result := Max` where TFoo declares
         `const Max`. FPC scope order: a genuine local/param shadows it, but a class
         const BEATS a unit global of the same name (repro 2: a method's `Size` is
@@ -13380,6 +13417,10 @@ begin
         LastExprTk := tySet;
         Exit;
       end;
+      { Past every name-keyed intrinsic: nothing claimed the name, so restore the
+        not-yet-bound NilPy def unbound above and let the ordinary call paths use
+        it. See the comment at the unbind for why this is not left at -1. }
+      if pyLateDefPi >= 0 then procIdx := pyLateDefPi;
       sci := FindStrConst(name);
       { A VARIABLE in scope beats an untyped string constant of the same name. The string
         constant table is not scoped -- a `const S = 'A string';` declared inside one method

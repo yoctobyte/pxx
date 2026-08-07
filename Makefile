@@ -406,6 +406,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
 	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
+	@# ...and the positional half of the same rule for builtins with NO pylib
+	@# proc (ord/chr/abs, name-dispatched intrinsics) and for one whose arity a
+	@# def happens to match (set): a call ABOVE the def reaches the builtin.
+	./$(COMPILER) test/test_nilpy_def_shadows_builtin_positionally.npy /tmp/test_nilpy_defshadowpos26
+	test "$$(/tmp/test_nilpy_defshadowpos26)" = "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1\n100\n11\n7')"
 	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
 	# iterable still runs it; a break in a NESTED loop must not skip the outer
 	# one's else) and `try ... else` (runs when the body did not raise, before
@@ -4794,6 +4799,11 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26
 	test "$$(/tmp/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
+	@# ...and the positional half of the same rule for builtins with NO pylib
+	@# proc (ord/chr/abs, name-dispatched intrinsics) and for one whose arity a
+	@# def happens to match (set): a call ABOVE the def reaches the builtin.
+	./$(COMPILER) test/test_nilpy_def_shadows_builtin_positionally.npy /tmp/test_nilpy_defshadowpos26
+	test "$$(/tmp/test_nilpy_defshadowpos26)" = "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1\n100\n11\n7')"
 	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
 	# iterable still runs it; a break in a NESTED loop must not skip the outer
 	# one's else) and `try ... else` (runs when the body did not raise, before

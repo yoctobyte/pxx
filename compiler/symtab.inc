@@ -5155,13 +5155,44 @@ end;
   winner name-level, not arg-width-level, so a used unit's routine can never be
   silently split with the intrinsic by argument width
   (bug-pascal-unqualified-call-binds-builtin-over-used-unit). }
+{ Is NilPy proc `pi` BOUND at the cursor? A module-level `def` binds its name
+  when the `def` STATEMENT runs, so a module-BODY call standing above it must not
+  see it — that is the whole of Python's rule here. ProcPyDefTok is 0 for
+  everything that is not a NilPy module-level def, so this answers True there at
+  no cost, and inside a def body (CurProc >= 0) the code runs after the entire
+  module has executed, which is what makes an ordinary forward reference between
+  two defs legal.
+
+  One place for the question, because it is asked from three: MatchElig (the
+  candidate set), ParseFactorCore (the intrinsic guards' procIdx), and
+  PyUserNameShadowsHere (`set(...)`'s own hook test).
+  bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
+function PyDefBoundHere(pi: Integer): Boolean;
+begin
+  Result := (pi < 0) or (ProcPyDefTok[pi] = 0) or (CurProc >= 0) or
+            (ProcPyDefTok[pi] <= TokPos);
+end;
+
 function MatchElig(idx: Integer; const name: AnsiString; demote: Boolean;
-                  bIdx: Integer; userOnly: Boolean): Boolean;
+                  bIdx: Integer; userOnly, dropLateDef: Boolean): Boolean;
 begin
   Result := ProcNameMatches(idx, name) and not (demote and (ProcUnitIdx[idx] = bIdx));
   { ...and, in a NilPy program that declares this name itself, ONLY that
     declaration is a candidate — see PyUserShadowsProc. }
   if Result and userOnly and (ProcUnitIdx[idx] <> -1) then Result := False;
+  { ...and the mirror image: a module-level `def` is not bound ABOVE its own
+    `def` statement, so at a module-body call site that precedes it the def is
+    not a candidate at all and the builtin it shadows must win. userOnly is
+    False here by construction (PyUserShadowsProc said the def is not bound
+    yet), which left the def in the set to win on ARGUMENT FIT — `set([1,1])`
+    above a `def set(x)` reached the user's, silently.
+
+    Only when dropLateDef says another candidate exists: with no alternative the
+    call would become a compile error, and CPython accepts a module-body forward
+    call that never executes.
+    bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
+  if Result and dropLateDef and (ProcUnitIdx[idx] = -1) and
+     (not PyDefBoundHere(idx)) then Result := False;
 end;
 
 { Does the NilPy program itself declare a routine called `name`?
@@ -5330,6 +5361,7 @@ end;
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
     userOnly: Boolean; ownM, anyM: Integer;
+    dropLateDef: Boolean;   { NilPy: a def below this call site is not bound yet }
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
     once, then match normally (the exact-name phases below then find it). }
@@ -5348,6 +5380,26 @@ begin
     than by argument fit — see PyUserShadowsProc. Independent of the builtin
     demote below: pylib and pyeval are ordinary units, not the builtin unit. }
   userOnly := PyUserShadowsProc(name);
+  { ...and, when it says the def is NOT bound here, the def has to be taken out
+    of the candidate set rather than merely un-privileged — otherwise it wins on
+    argument fit and the builtin it shadows is never reached. Only in the module
+    BODY (inside a def body the code runs after the whole module has executed,
+    so a forward reference between two defs is legal Python), and only when some
+    OTHER routine of this name exists to fall back to: with no alternative this
+    would turn a never-executed module-body forward call into a compile error,
+    which CPython accepts.
+    bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
+  dropLateDef := False;
+  if NilPyUserCode and (not userOnly) and (CurProc < 0) then
+  begin
+    i := ProcChainHead(name);
+    while i >= 0 do
+    begin
+      if ProcNameMatches(i, name) and (ProcUnitIdx[i] <> -1) then
+      begin dropLateDef := True; Break; end;
+      i := ProcHashNext[i];
+    end;
+  end;
   demote := False;
   bIdx := -1;
   if suppressBuiltin then
@@ -5378,7 +5430,7 @@ begin
   ownM := -1; anyM := -1;
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx, userOnly) then
+    if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -5413,7 +5465,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx, userOnly) then
+    if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
@@ -5444,7 +5496,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx, userOnly) and ProcArityMatches(i, nArgs) then
+    if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -5472,7 +5524,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx, userOnly) then
+    if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -5500,7 +5552,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx, userOnly) then
+    if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -5526,7 +5578,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx, userOnly) then
+    if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
@@ -5554,7 +5606,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if MatchElig(i, name, demote, bIdx, userOnly) and ProcArityMatches(i, nArgs) then
+    if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -5594,7 +5646,7 @@ begin
     i := ProcChainHead(name);
     while i >= 0 do
     begin
-      if MatchElig(i, name, demote, bIdx, userOnly) then
+      if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) then
       begin
         OverloadReport := OverloadReport + nl + '    ' + name + '(';
         for j := 0 to Procs[i].ParamCount-1 do
