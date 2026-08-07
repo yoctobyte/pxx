@@ -128,3 +128,37 @@ contract, unset-field traps) and (b) one real prescan bug. That is exactly
 the differential-testing value the category was created for; the marginal
 value of further grammar-shape diversity is now low. COBOL stays available
 as opportunistic; nothing else queued.
+
+
+## 2026-08-07 — the probes have a SECOND value: shared-IR canaries
+
+Recorded because this umbrella currently justifies the probes as opportunistic
+fun, and one of them just earned its keep on the gate.
+
+Landing `tyUCS4Char` (feature-nilpy-text-string-kind) added a conversion hook in
+`ir.inc` that re-typed a concat node on **any** `tkPlus` with a string operand,
+with no guard that a code point was involved. It therefore fired for every
+string concat in every frontend.
+
+**Pascal, C, NilPy, Rust and Zig all passed.** The failure was
+`test_lolcode_skeleton.lol` — `SMOOSH` (string concat) went into an infinite
+loop until it blew the stack.
+
+That is not luck, and it is the argument for keeping these:
+
+> A probe frontend is a thin lowering onto the shared IR and nothing else. It
+> has no frontend-specific machinery to absorb an IR-level mistake, so it fails
+> where a mature frontend quietly copes.
+
+The mature frontends have enough of their own typing and lowering to mask a
+change that is wrong in general but harmless in their particular shape. The
+skeleton has none, so it reports. That makes the probes worth keeping GREEN and
+worth keeping IN the full tier — their value is not the language, it is that
+they exercise the substrate from an angle nothing else does.
+
+Consistent with `devdocs/dev/ir-as-substrate.md`: if the claim is that
+generality lives in the IR and frontends stay thin, then the thinnest frontends
+are the sharpest test of that claim.
+
+(No change of priority intended — still opportunistic to ADD one. This is about
+not deleting or skipping the ones that exist.)
