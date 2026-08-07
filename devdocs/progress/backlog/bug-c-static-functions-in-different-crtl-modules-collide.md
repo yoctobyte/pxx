@@ -9,7 +9,7 @@ summary: "`static` functions with the same name in two crtl .c files (or a stati
 # `static` functions in different crtl modules are treated as one unit
 
 - **Type:** bug — Track C (C frontend, translation-unit identity)
-- **Status:** working
+- **Status:** backlog
 - **Opened:** 2026-08-05
 - **Found by:** Track A, scanning the tree before promoting
   `bug-a-duplicate-definition-silently-accepted`'s warning to an error.

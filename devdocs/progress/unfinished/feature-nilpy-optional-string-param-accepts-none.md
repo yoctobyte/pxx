@@ -8,7 +8,7 @@ prio: 50
 # nilpy: `f(None)` where the parameter is `Optional[str]`
 
 - **Type:** feature (Nil-Python frontend, Optional lowering) — **Track N**
-- **Status:** working
+- **Status:** unfinished
 - **Opened:** 2026-07-26 — found while adding PEP 604 unions
   ([[feature-demo-songformatter-pxx-target]]). PRE-EXISTING: reproduces on the
   pinned stable with the `Optional[...]` spelling, so it is not a union-specific

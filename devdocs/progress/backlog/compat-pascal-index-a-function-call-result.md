@@ -8,7 +8,7 @@ prio: 40
 # `f(...)[i]` — indexing a call result
 
 - **Type:** compat (Pascal frontend parity) — Track P
-- **Status:** working
+- **Status:** backlog
 - **Opened:** 2026-08-05
 - **Found by:** `tools/fpc_diff_probe.sh`, dynamic-array case batch
   (`dynarray-copy-and-alias`, now tagged `[known]`).

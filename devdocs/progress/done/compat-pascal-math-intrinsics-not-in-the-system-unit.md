@@ -130,7 +130,7 @@ program) would now lose to the pulled unit — but that is
 resolution defect this change only makes reachable by a new route. Filed
 separately and urgent; not introduced here.
 
-**Resolved:** PENDING-COMMIT
+**Resolved:** f2ef106e0
 
 ## Log
 - 2026-08-05 — resolved, commit f2ef106e0.

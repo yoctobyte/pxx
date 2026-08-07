@@ -56,7 +56,7 @@ variable still shadows the unit's function, which works because of
 Also spot-checked bare and correct: `abs`, `round` (banker's, matching FPC),
 `trunc`.
 
-**Resolved:** PENDING-COMMIT
+**Resolved:** d530a5090
 
 ## Log
 - 2026-08-06 — resolved, commit d530a5090.

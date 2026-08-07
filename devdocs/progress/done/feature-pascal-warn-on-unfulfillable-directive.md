@@ -154,7 +154,7 @@ Docs are Track D's: [[task-d-document-warn-ignored-directives]].
 
 Gate: `testmgr --tier limited` 1587/1587 GREEN + self-host fixedpoint.
 
-**Resolved:** PENDING-COMMIT
+**Resolved:** 277ab2e66
 
 ## Log
 - 2026-08-06 — resolved, commit 277ab2e66.

@@ -158,7 +158,7 @@ minimum. That is the whole reason this landed as current-scope-only.
 Test: `test/test_shadow_program_over_unit.pas` — all four cases at once (unit,
 builtin, qualified, own).
 
-**Resolved:** PENDING-COMMIT
+**Resolved:** a4962e2a7
 
 ## Log
 - 2026-08-05 — resolved, commit a4962e2a7.

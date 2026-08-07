@@ -8,7 +8,7 @@ prio: 50
 # nilpy: `*args` / `**kwargs` parameters
 
 - **Type:** feature (Nil-Python frontend) — **Track N**
-- **Status:** working
+- **Status:** unfinished
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 

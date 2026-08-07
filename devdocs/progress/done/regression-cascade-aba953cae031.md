@@ -73,7 +73,7 @@ night **without noticing it had turned 15 green jobs red**. That is the
 miss worth recording: I read the cascade as a pre-existing target gap because a
 ticket for the gap existed, instead of asking why previously-green jobs changed.
 
-**Resolved:** PENDING-COMMIT
+**Resolved:** 6532d45ac
 
 ## Log
 - 2026-08-06 — resolved, commit 6532d45ac.

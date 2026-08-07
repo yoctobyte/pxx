@@ -6,7 +6,7 @@ blocked-by: [bug-pascal-procvar-in-value-context-takes-address-instead-of-callin
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
 
 - **Type:** feature / design decision (runtime infrastructure)
-- **Status:** working
+- **Status:** backlog
 - **Owner:** trackB-agent
   the link-libc profile / loader-vs-link decision)
 - **Opened:** 2026-06-24

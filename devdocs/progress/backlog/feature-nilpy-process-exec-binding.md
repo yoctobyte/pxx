@@ -8,7 +8,7 @@ prio: 45
 # nilpy: spawn a process (open a file in the desktop's viewer)
 
 - **Type:** feature (Nil-Python frontend, stdlib surface) — **Track N**
-- **Status:** working
+- **Status:** backlog
 - **Opened:** 2026-07-26 — needed by songformatter's Preview PDF action
   ([[feature-demo-songformatter-pxx-target]]).
 

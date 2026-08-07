@@ -6,7 +6,7 @@ prio: 45  # auto
 
 - **Type:** feature / investigation (real-world compat target + feature)
 - **Track:** P (Pascal frontend) — rung of [[feature-pascal-corpus-expansion]]
-- **Status:** working
+- **Status:** backlog
 - **Owner:** opus-p
   compiler. Compiler gaps it surfaces → Track A tickets.)
 - **Opened:** 2026-06-26
