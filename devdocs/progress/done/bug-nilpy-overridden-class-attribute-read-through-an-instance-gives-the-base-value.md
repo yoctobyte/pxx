@@ -392,4 +392,4 @@ guard against the shadow-field design being retried.
 **Gate:** self-host fixedpoint + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit e3827d30b.
