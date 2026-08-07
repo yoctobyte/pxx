@@ -124,4 +124,4 @@ GREEN. `test_nilpy_lambda_container_result.npy` added, covering both lowerings,
 shape; diffed against CPython. No re-pin: the compiler does not `use` pyeval.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit d851525bd.
