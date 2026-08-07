@@ -10185,6 +10185,28 @@ begin
         begin
           ASTIVal[node] := -203; ASTTk[node] := Ord(tyInt64);
         end
+        else if (IntToTypeKind(ASTTk[CurASTNode]) = tyString) or
+                (IntToTypeKind(ASTTk[CurASTNode]) = tyAnsiString) then
+        begin
+          { int(<str>) is where a value WIDER THAN Int64 actually enters a
+            program — the digits are data, so nothing about the parse can be
+            decided at compile time — and Python's int has no width. So it is
+            typed a PROMOTABLE INT, the same type a wide LITERAL already gets a
+            few hundred lines up, which is what makes `n = int(s)` then `n + 1`
+            and `str(n)` all stay exact. Typed HERE and not patched during
+            lowering: `write` reads its argument's type before lowering the
+            argument, so a retype at lowering lands too late for the one
+            consumer that most needs it
+            (bug-nilpy-int-of-a-long-decimal-string-narrows).
+            tyChar is deliberately NOT here: a one-character string cannot
+            exceed 9, so it keeps the cheaper Int64 path. }
+          ASTIVal[node] := -200; ASTTk[node] := Ord(tyPromoInt64);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+          ASTLeft[node] := argSeq;
+          CurASTNode := node;
+          LastExprTk := tyPromoInt64;
+          Exit;
+        end
         else
         begin
           { tyInt64, not tyInteger: NilPy's int is a 64-bit cell. The -200

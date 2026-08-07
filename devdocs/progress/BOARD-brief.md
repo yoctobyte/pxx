@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:7 blocked:8 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1451 rejected:29`
+`unfinished:7 blocked:8 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1452 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 185, ranked
+## Ready — top 30 of 184, ranked
 
 - `[p 70] [T]` regression-test-i386-test-dynarray-field
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
@@ -58,11 +58,11 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
-- `[p 55] [N]` bug-nilpy-int-of-a-long-decimal-string-narrows
 - `[p 55] [N]` bug-nilpy-two-name-for-over-a-variant-assumes-a-dict
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-empty-range-regression-cannot-be-bisected
 - `[p 55] [T]` bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
 - `[p 55] [A]` feature-a-declaration-phase
+- `[p 55] [E]` feature-demo-portable-userland
 
-_155 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_154 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

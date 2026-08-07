@@ -807,6 +807,18 @@ procedure pyexec(const src: AnsiString; g: TPyDict; l: TPyDict);
   loudly here rather than yielding a silent 0 -- the whole point of the
   ticket was that int() of a string returned a plausible wrong number. }
 function pystr_to_int(const s: AnsiString): Int64;
+{ ...and the ARBITRARY-PRECISION form, which is what `int(<str>)` actually
+  means: Python's int has no width, so a 30-digit string is a 30-digit int.
+  pystr_to_int is Int64-bound (it parses with Val) and wrapped mod 2^64 in
+  silence — int("123456789012345678901234567890") answered
+  -4362896299872285998 (bug-nilpy-int-of-a-long-decimal-string-narrows).
+  Writes a promo SLOT rather than returning one: a promotable int is an
+  aggregate, and every other producer in promocore has the same dst-first
+  shape. The validation is spelled out here rather than delegated because Val
+  is exactly the part that cannot be reused — it is the narrowing — while the
+  ValueError wording must stay identical to pystr_to_int's, which is the
+  wording the tests and the corpus already expect. }
+procedure pystr_to_promo(dst: Pointer; const s: AnsiString);
 { Python's `s * n` / `n * s`: repeat the text. Multiplying a string by an
   integer otherwise multiplied its HANDLE
   (bug-a-nilpy-string-repeat-returns-a-pointer). n <= 0 yields ''. }
@@ -5297,6 +5309,30 @@ begin
     raise ValueError.Create('invalid literal for int() with base 10: ' + Chr(39) + s + Chr(39));
   end;
   Result := v;
+end;
+
+procedure pystr_to_promo(dst: Pointer; const s: AnsiString);
+var t: AnsiString; i, lo: Integer; ok: Boolean;
+begin
+  t := pystr_strip(s);          { Python's int() tolerates surrounding space }
+  ok := t <> '';
+  lo := 1;
+  if ok and ((t[1] = '-') or (t[1] = '+')) then
+  begin
+    lo := 2;
+    if Length(t) < 2 then ok := False;
+  end;
+  if ok then
+    for i := lo to Length(t) do
+      { explicit range rather than a set: the same reason PXXPromoFromStr
+        spells it out — set membership does not lower on every target }
+      if (t[i] < '0') or (t[i] > '9') then begin ok := False; Break; end;
+  if not ok then
+    raise ValueError.Create('invalid literal for int() with base 10: ' + Chr(39) + s + Chr(39));
+  { PXXPromoFromStr reads the sign itself and STOPS at the first non-digit —
+    which is why the loop above must reject junk first: without it `int("12x")`
+    would quietly answer 12 where pystr_to_int raises. }
+  PXXPromoFromStr(dst, t);
 end;
 
 { Python's `/` ALWAYS yields a float and raises ZeroDivisionError on a zero

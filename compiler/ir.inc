@@ -8133,6 +8133,24 @@ begin
           Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
           Exit;
         end;
+        if ((argTk = tyString) or (argTk = tyAnsiString)) and
+           TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
+        begin
+          { ...and the ARBITRARY-PRECISION form the parser now types this call
+            as: the digits are data, so the only honest result type is one with
+            no width. Produces a promo SLOT, whose address IS the value of a
+            promo-typed expression here (see IRPromoAddrOf). }
+          procIdx := FindProc('pystr_to_promo');
+          if procIdx < 0 then Error('int: pystr_to_promo (pylib) not loaded');
+          promoDst := IRPromoTempSlot(promoSym);
+          value := IRLowerCallArg(procIdx, 1, argVal, Procs[procIdx].Params[1].IsRef);
+          argNode := IRAppend(IR_ARG, promoDst, -1, -1, 0, Ord(tyPointer));
+          value := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
+          IRB[argNode] := value;
+          IRMarkStatementNode(IRAppendCall(procIdx, argNode, -1, Ord(tyUnknown)));
+          Result := IRAppend(IR_SLOTADDR, promoSym, -1, -1, 0, Ord(tyPointer));
+          Exit;
+        end;
         if (argTk = tyString) or (argTk = tyAnsiString) then
         begin
           { int("42") parses the TEXT. pystr_to_int reports a Python-shaped

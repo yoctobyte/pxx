@@ -1,0 +1,70 @@
+# int(<str>) is where a value wider than Int64 enters a program: the digits are
+# data, so nothing about the parse can be decided at compile time, and Python's
+# int has no width. It used to answer the value mod 2^64, read signed, with no
+# diagnostic (bug-nilpy-int-of-a-long-decimal-string-narrows).
+
+s20 = "12345678901234567890"
+s30 = "123456789012345678901234567890"
+s60 = "123456789012345678901234567890123456789012345678901234567890"
+
+print(int(s20))
+print(int(s30))
+print(int(s60))
+print(int("-" + s30))
+print(int("+" + s20))
+
+# round-trip: str(int(s)) must be s again, which is the property the narrowing
+# broke silently
+print(str(int(s30)) == s30)
+print(str(int("-" + s60)) == "-" + s60)
+
+# arithmetic stays exact rather than being exact only until it is used
+n = int(s30)
+print(n + 1)
+print(n * 2)
+print(n - n)
+print(n // 1000000000000000)
+print(n % 7)
+
+# ...and comparisons, which is where a narrowed value reads as NEGATIVE
+print(n > 0)
+print(n > 9223372036854775807)
+print(int(s20) == 12345678901234567890)
+
+# the ORDINARY small cases must not regress — this is the shape all existing
+# code uses
+print(int("42"))
+print(int("-7") - 1)
+print(int("  8  "))
+print(int("0"))
+i = int("3")
+xs = [10, 20, 30, 40]
+print(xs[i])
+total = 0
+for k in range(int("4")):
+    total = total + k
+print(total)
+
+# junk still raises ValueError with Python's wording, and does not answer a
+# truncated prefix: PXXPromoFromStr stops at the first non-digit, so without an
+# explicit validation `int("12x")` would quietly be 12
+try:
+    print(int("12x"))
+except ValueError as e:
+    print("ValueError")
+try:
+    print(int("abc"))
+except ValueError as e:
+    print("ValueError")
+try:
+    print(int(""))
+except ValueError as e:
+    print("ValueError")
+
+# int() of an already-arbitrary-precision int is the identity — as long as the
+# value is not sitting in a VARIANT, which is the sibling case this file
+# deliberately does not cover: `int(10 ** 30 + 1)` still raises, because `**`
+# yields a variant and int(<variant>) narrows through VariantToInt64
+# (bug-nilpy-int-of-a-variant-held-bignum-raises). Same one problem — int()
+# cannot express a result wider than Int64 — seen from the other side.
+print(int(int(s30)))

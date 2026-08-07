@@ -1192,6 +1192,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_static_clash26)" = "$$(printf 'sub TE\nadd TE\ndiv TE\nfdiv TE\nlt TE\nge TE\nababab ababab\n3/ab\n4 2 1.25 abc True True')"
 	./$(COMPILER) test/test_nilpy_none_value_semantics.npy /tmp/test_nilpy_none_value_semantics26
 	test "$$(/tmp/test_nilpy_none_value_semantics26)" = "$$(printf 'False False True True\nFalse False True\nFalse False\nFalse False\nFalse False\nFalse False\nTrue False\nTrue False False False False\nFalse False False False\nNone None v=None False\nNone\nn None a None\nTrue True True True True\ngood')"
+	@# int(<str>) is arbitrary precision: the digits are data, so the width
+	@# cannot be decided at compile time and Python's int has none. It used to
+	@# answer the value mod 2^64, read signed, in silence.
+	./$(COMPILER) test/test_nilpy_int_of_string_is_arbitrary_precision.npy /tmp/test_nilpy_int_str_promo26
+	test "$$(/tmp/test_nilpy_int_str_promo26)" = "$$(printf '12345678901234567890\n123456789012345678901234567890\n123456789012345678901234567890123456789012345678901234567890\n-123456789012345678901234567890\n12345678901234567890\nTrue\nTrue\n123456789012345678901234567891\n246913578024691357802469135780\n0\n123456789012345\n0\nTrue\nTrue\nTrue\n42\n-8\n8\n0\n40\n6\nValueError\nValueError\nValueError\n123456789012345678901234567890')"
 	./$(COMPILER) test/test_nilpy_return_nested_def.npy /tmp/test_nilpy_return_nested_def26
 	test "$$(/tmp/test_nilpy_return_nested_def26)" = "$$(printf '11 21\n2\n101\n1001 2002\n35\n45\n8 9 10')"
 	./$(COMPILER) test/test_nilpy_lambda_sibling_capture.npy /tmp/test_nilpy_lambda_sibling_capture26
