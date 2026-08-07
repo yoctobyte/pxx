@@ -7,7 +7,7 @@
 | xeon **QUIET 2d9h** | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_dynarray_params.pas** — test/test_dynarray_params.pas (plexus): bad `34670fe9b872`, last good `c20ab260bcb7`, 4 commit(s) in range
+- **test-core#src:test/test_dynarray_params.pas** — test/test_dynarray_params.pas (plexus): bad `34670fe9b872`, last good `ff90dd52cf4c`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
