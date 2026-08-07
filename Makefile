@@ -1205,7 +1205,7 @@ test-nilpy: $(COMPILER)
 	@# /= and **= on a class instance dispatch __itruediv__ / __ipow__ (then the
 	@# binary form and rebind). Both used to raise 'expected a number, got object'.
 	./$(COMPILER) test/test_nilpy_truediv_pow_assign_class_dunder.npy /tmp/test_nilpy_tdivpow26
-	test "$$(/tmp/test_nilpy_tdivpow26)" = "$$(printf '5\n9\n25 32\n3\n8\n4\n16\n81\n[2, 1.0]\n2.0\n1024\n0.5\n1180591620717411303424\nTypeError')"
+	test "$$(/tmp/test_nilpy_tdivpow26)" = "$$(printf '5\n9\n25 32\n3\n8\n4\n16\n81\n[2, 1.0]\n[32, 1.0]\n[2.0, 2.0]\n{'"'"'a'"'"': 9}\n2.0\n1024\n0.5\n1180591620717411303424\nTypeError')"
 	@# hasattr over a receiver whose class is a RUN-TIME fact (list element, dict
 	@# value, untyped parameter): the declared-field half is answered by testing
 	@# the object's class against the set that declares the name.

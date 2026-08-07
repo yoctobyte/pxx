@@ -3,6 +3,8 @@ track: N
 prio: 35
 type: bug
 summary: "`xs[0] **= 5` does not parse — 'expected expression'. `**` is not a binop token, and the subscript-target augmented path (ParseLValueAST's augBin) has no arm for tkPowEq, so the third of three augmented-assign target shapes still refuses a valid CPython statement."
+status: done
+owner: claude-AN
 ---
 
 # `**=` to a SUBSCRIPT target does not parse
@@ -62,3 +64,51 @@ Per-fix loop. Extend `test/test_nilpy_truediv_pow_assign_class_dunder.npy` —
 which already carries the other two target shapes and marks this one as the
 known gap — with the subscript form over an int, a float and a class instance,
 diffed against CPython.
+
+## 2026-08-07 — FIXED
+
+The third arm landed exactly where the ticket sized it: `ParseLValueAST`'s
+default-property subscript route in `parser.inc`. `PyAugBinTok(tkPowEq)` is
+`tkEOF`, so the route's `isAssign` peek never fired and the statement died on
+"expected expression" before any augmented handling ran. Added an `augPow`
+flag beside `augBin`: it is set when the token past `]` is `tkPowEq`, drives the
+same `augRead` construction (so the read half is built over a CLONE of the index
+chain, as before), and combines through `PyMakePow` instead of `AN_BINOP` —
+which carries the `__pow__` / `__rpow__` dispatch with it for free.
+
+The sibling `__getitem__`/`__setitem__` route beside it also keyed its named
+refusal on `PyAugBinTok(...) <> tkEOF`, so `obj[k] **= v` on a user class fell
+past it into the same bare "expected expression". It now names itself.
+
+### Measured (self-hosted at HEAD + this change), diffed against CPython
+
+| form | pxx | CPython |
+| --- | --- | --- |
+| `xs[0] **= 5` (list, int) | `[32, 3]` | same |
+| `ys[1] **= 0.5` (list, float) | `[2.0, 2.0]` | same |
+| `dd["a"] **= 2` (dict) | `{'a': 9}` | same |
+
+### Deliberately NOT fixed here
+
+- **A subscript holding a class INSTANCE** (`ps[0] **= 7` with `__pow__`) still
+  raises `TypeError: expected a number, got object`. Measured the sibling: `+=`
+  with `__add__` and `*=` with `__mul__` fail identically, so this is not
+  specific to `**=` — a container erases the element's static class and no
+  dunder dispatch happens. That is the blocked
+  [[bug-nilpy-dunders-not-dispatched-through-containers]] family. Parity with
+  the other augmented operators is the bar this ticket set, and it is met.
+- **The index is still evaluated twice** (`xs[k()] **= 1` calls `k` twice) — the
+  ticket's fix-shape note assumed `augRead` already evaluated it once; it does
+  not, and neither does any other augmented operator on this route. That is
+  [[bug-nilpy-augmented-subscript-evaluates-its-index-twice]], pre-existing and
+  filed.
+
+### Test
+
+`test/test_nilpy_truediv_pow_assign_class_dunder.npy` extended as the Gate line
+asked (it already carried the other two target shapes and a NOTE marking this
+one as the known gap; the NOTE is replaced by the real coverage). Output is
+byte-identical to CPython's for the whole file. Makefile expectation updated.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

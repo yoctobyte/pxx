@@ -3812,6 +3812,7 @@ end;
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
+  augPow: Boolean;   { `d[k] **= v` — `**` has no binary token, see PyAugDunderName }
   viaProp: Boolean;   { fieldName was rewritten from a PROPERTY's backing field — visibility is the property's, skip the field check }
   mblobNode, cpPri, cpMmi, cpMpi: Integer;
   mkw, mslot, mnArgs: Integer;   { NilPy keyword argument: binding+1, target param, rebound count }
@@ -4917,10 +4918,20 @@ begin
             pure index expressions the corpus uses.
             (feature-nilpy-augmented-subscript-assign) }
           augBin := tkEOF;
+          augPow := False;
           if PyExprMode and (i < TokCount) then
           begin
             augBin := PyAugBinTok(Tokens[i].Kind);
-            if augBin <> tkEOF then isAssign := True;
+            if augBin <> tkEOF then isAssign := True
+            { `xs[0] **= 5`. `**` is not a binary TOKEN in this frontend — it
+              lowers through PyMakePow, not AN_BINOP — so PyAugBinTok has
+              nothing to return for tkPowEq and this route saw no assignment at
+              all ("expected expression"). The third and last of the three
+              augmented-assign target shapes to get its own arm; the other two
+              live in pyparser.inc and are keyed on tkPowEq the same way.
+              bug-nilpy-pow-assign-to-a-subscript-does-not-parse }
+            else if Tokens[i].Kind = tkPowEq then
+            begin augPow := True; isAssign := True; end;
           end;
 
           ParsePropIndexArgs(margIdx, mlastArg);   { [a {, b}] (bracket consumed here) }
@@ -4955,7 +4966,7 @@ begin
             if mmi < 0 then Error('setter method not found: ' + methName);
             mpi := UMthProc_[mmi];
             augRead := -1;
-            if augBin <> tkEOF then
+            if (augBin <> tkEOF) or augPow then
             begin
               { the read is built HERE, over a CLONE of the index arguments: the
                 setter appends its value to margIdx's chain, and sharing that
@@ -4987,7 +4998,11 @@ begin
             end
             else
               ParseExpr;
-            if augBin <> tkEOF then
+            if augPow then
+              { value := <current element> ** <rhs> — PyMakePow, not AN_BINOP,
+                and it carries the __pow__/__rpow__ dispatch with it. }
+              CurASTNode := PyMakePow(augRead, CurASTNode)
+            else if augBin <> tkEOF then
             begin
               { value := <current element> OP <rhs> }
               augNode := AllocNode(AN_BINOP);
@@ -5075,7 +5090,11 @@ begin
             Inc(i);
           end;
           if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True
-          else if (i < TokCount) and (PyAugBinTok(Tokens[i].Kind) <> tkEOF) then
+          else if (i < TokCount) and ((PyAugBinTok(Tokens[i].Kind) <> tkEOF)
+                                      or (Tokens[i].Kind = tkPowEq)) then
+            { tkPowEq is listed explicitly: `**` has no binary token, so
+              PyAugBinTok returns tkEOF for it and `obj[k] **= v` fell past this
+              named refusal into a bare "expected expression". }
             Error('Nil Python: augmented assignment to a __getitem__/__setitem__ '
                   + 'subscript is not supported');
           Next;                       { consume '[' }

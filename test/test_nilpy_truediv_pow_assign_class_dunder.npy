@@ -67,10 +67,24 @@ print(c.n)
 xs = [2, 3]
 xs[1] /= 3
 print(xs)
-# NOTE: `xs[0] **= 5` — a SUBSCRIPT target with `**=` — is a third arm again,
-# ParseLValueAST's augBin path in the shared parser, and still refuses to parse
-# (identically on pinned). Filed as bug-nilpy-pow-assign-to-a-subscript-does-not-
-# parse rather than folded in here.
+# ...and the third target shape: a SUBSCRIPT, which lives in the SHARED parser's
+# ParseLValueAST rather than pyparser.inc. Same root cause as the other two —
+# `**` is not a binary token, so PyAugBinTok returned tkEOF and the route never
+# saw an assignment at all ("expected expression").
+# (bug-nilpy-pow-assign-to-a-subscript-does-not-parse)
+xs[0] **= 5
+print(xs)
+ys = [2.0, 4.0]
+ys[1] **= 0.5
+print(ys)
+dd = {"a": 3}
+dd["a"] **= 2
+print(dd)
+# NOTE deliberately NOT covered here: a subscript holding a class INSTANCE
+# (`ps[0] **= 7` with __pow__). That fails for EVERY augmented operator, not
+# just `**=` — a container erases the element's static class, so no dunder
+# dispatch happens — and belongs to the blocked runtime-dunder-dispatch family
+# (bug-nilpy-dunders-not-dispatched-through-containers), not to this arm.
 
 # the numeric targets these arms were written for must keep working: `/=` is
 # always true division (so an int target widens to a float) and `**=` widens to
