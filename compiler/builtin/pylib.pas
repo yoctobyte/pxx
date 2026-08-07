@@ -4888,8 +4888,31 @@ begin
 end;
 
 function pyint_v(const v: Variant): Variant;
+var p: PPyVarRec; pr: array[0..1] of NativeInt;
 begin
-  Result := pyvar_of_int(pyvar_to_int(v));
+  p := PPyVarRec(@v);
+  { VT_PROMO_INT64: an arbitrary-precision int is ALREADY an int, and int() of
+    an int is the identity in Python at any magnitude — so hand the slot back
+    rather than routing through pyvar_to_int, whose mod-2^64 narrowing is the
+    right rule for a masked-cell idiom and the wrong one for int() itself
+    (bug-nilpy-int-of-a-variant-held-bignum-raises). }
+  if p^.VType = 8193 then
+    Result := v
+  else if p^.VType = 6 then
+  begin
+    { VT_STRING: `int(v)` where the variant holds TEXT parses it — pyvar_to_int
+      would raise TypeError, which is right for a string in an ARITHMETIC
+      context and wrong for int() itself, whose whole job on a string is to
+      parse. Through the arbitrary-precision path, so a variant-held 30-digit
+      string is as exact as the statically-typed one
+      (bug-nilpy-int-of-a-long-decimal-string-narrows). }
+    PXXPromoInit(@pr);
+    pystr_to_promo(@pr, PPyAnsiString(@p^.Payload)^);
+    PXXPromoToVariant(@Result, @pr);   { same shape as pyabs_v's promo arm }
+    PXXPromoClear(@pr);
+  end
+  else
+    Result := pyvar_of_int(pyvar_to_int(v));
 end;
 
 { Redo an int operation in ARBITRARY PRECISION after the machine one overflowed.

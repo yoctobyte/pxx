@@ -10185,6 +10185,22 @@ begin
         begin
           ASTIVal[node] := -203; ASTTk[node] := Ord(tyInt64);
         end
+        else if IntToTypeKind(ASTTk[CurASTNode]) = tyVariant then
+        begin
+          { int(<variant>) — the ordinary shape for a module-scope binding, a
+            container element or an unannotated parameter. The variant may hold
+            an arbitrary-precision int, so the result cannot be Int64 either:
+            typed VARIANT and lowered to pylib's pyint_v, which passes a
+            VT_PROMO_INT64 payload straight through and narrows nothing.
+            (bug-nilpy-int-of-a-variant-held-bignum-raises — `int(2**64)` used
+            to abort with EVariantError, which is not a value Python has.) }
+          ASTIVal[node] := -200; ASTTk[node] := Ord(tyVariant);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+          ASTLeft[node] := argSeq;
+          CurASTNode := node;
+          LastExprTk := tyVariant;
+          Exit;
+        end
         else if (IntToTypeKind(ASTTk[CurASTNode]) = tyString) or
                 (IntToTypeKind(ASTTk[CurASTNode]) = tyAnsiString) then
         begin

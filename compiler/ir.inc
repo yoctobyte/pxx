@@ -8110,11 +8110,18 @@ begin
         argTk := IntToTypeKind(ASTTk[argVal]);
         if argTk = tyVariant then
         begin
-          procIdx := FindProc('VariantToInt64');
-          if procIdx < 0 then Error('int: VariantToInt64 builtin not loaded');
+          { pyint_v, not VariantToInt64: the variant may hold an
+            arbitrary-precision int, and VariantToInt64 ABORTS on one
+            (EVariantError, "does not fit an Int64") rather than answering the
+            identity Python answers. pyint_v passes such a payload through and
+            boxes everything else, so the result is a variant — which is what
+            the parser now types this call (bug-nilpy-int-of-a-variant-held-
+            bignum-raises). }
+          procIdx := FindProc('pyint_v');
+          if procIdx < 0 then Error('int: pyint_v (pylib) not loaded');
           value := IRVariantAddr(argVal);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
-          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyVariant));
           Exit;
         end;
         if argTk = tyChar then

@@ -3164,7 +3164,17 @@ begin
             (bug-nilpy-unannotated-return-infers-number-for-string-concat is the
             operator half of the same blind spot). }
           else if (lo = 'str') or (lo = 'repr') or (lo = 'format') then tk := tyAnsiString
-          else if lo = 'int' then tk := tyInt64
+          { `int(...)` the CALL — not `int` the annotation (PyAnnTypeAt) nor the
+            bare type name (PyTypeFromTokenIndex), both of which still mean a
+            64-bit cell. Python's int has no width, and the call is now typed by
+            its ARGUMENT: a string yields a promotable int, a variant yields a
+            variant, everything else an Int64. A token scan cannot tell those
+            apart, and answering the narrowest of them made an unannotated
+            `return int(v)` register an Int64 SIGNATURE over a variant-returning
+            body — the silent ABI mismatch — so `anyint(2**64)` came back 0.
+            tyVariant is the one answer that holds every case, and it is what
+            this scan already answers for any call it cannot type. }
+          else if lo = 'int' then tk := tyVariant
           else if lo = 'float' then tk := tyDouble
           else if lo = 'bool' then tk := tyBoolean
           else if (lo = 'len') or (lo = 'index') then tk := tyInteger

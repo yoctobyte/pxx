@@ -243,3 +243,22 @@ print(float(by))
 print(max(by, 5), min(by, 5))
 print(sorted([bz, by, 5]))
 print(divmod(by, 3))
+
+# int() of a VARIANT-held arbitrary-precision int — the ordinary shape for a
+# module-scope binding, a container element or an unannotated parameter. It used
+# to ABORT (EVariantError, "does not fit an Int64"), which is not a value Python
+# has: int() of an int is the identity at any magnitude
+# (bug-nilpy-int-of-a-variant-held-bignum-raises)
+print(int(by))
+print(int(0 - bz))
+print(int(by) + 1, int(by) // 2, str(int(by)))
+elems = [by, 5, 0 - bz]
+for e in elems:
+    print(int(e))
+def anyint(v):
+    return int(v)
+print(anyint(by), anyint(5), anyint(5.9), anyint(-5.9), anyint(True))
+# ...and a variant holding TEXT: int()'s job on a string is to parse it, at any
+# width — pyvar_to_int's TypeError is right for arithmetic, wrong for int()
+print(anyint("12"), anyint(" -34 "))
+print(anyint("123456789012345678901234567890"))
