@@ -50,3 +50,31 @@ regresses a live corpus. Any fix has to bind correctly, not just reject.
 `make test-nilpy` plus a `.npy` calling a host method with kwargs in a
 NON-declaration order through a lambda the lifter refuses, asserting the effect
 (read the value back off the widget), and uforth still green.
+
+## 2026-08-07 — assessed and put back down deliberately, not started
+
+Read in full and parked rather than begun, so the next session does not
+re-derive the cost. Confirmed at `pyeval.pas` ~3184: `ParseArgs` appends every
+non-`signed` kwarg with `args.append(v)` and no name matching at all — the
+ticket's description is accurate and current.
+
+Why it was not taken:
+
+- **The real fix (route 1) is a Track A RTTI change**, and it lands on the
+  method table's THREE stride consumers, which must change together
+  ([[project_rtti_method_table_multi_consumer_stride_landmine]]). That is not a
+  tail-of-session change.
+- **The gate needs a live Tk widget** to assert the effect (insert text, read it
+  back), i.e. a display and the xvfb lock — not something to run blind.
+- **uforth cannot serve as the corpus check right now**: it fails to compile on
+  the PINNED binary at `uforth.py:411` (*"no class declares a method or callable
+  field .to_bytes()"*), measured 2026-08-07, so "uforth still green" is not
+  currently a signal anyone can read. That blocker should be cleared, or the
+  gate reworded, before this is attempted.
+- The ticket's own constraint is the sharp one: uforth **depends** on the
+  positional behaviour, so a fix must bind CORRECTLY, not merely refuse. Route 2
+  (widen the lifter) narrows the hole without closing it and would leave the
+  same silent-wrong-option class reachable through a def.
+
+Left claim-free at prio 45. Route 1 remains the right answer; it wants a session
+that can hold the RTTI change and a display.

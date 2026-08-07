@@ -3,8 +3,6 @@ track: N
 prio: 40
 type: bug
 summary: "class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable"
-status: working
-owner: claude-AN
 ---
 
 # `class D(B, C):` does not parse

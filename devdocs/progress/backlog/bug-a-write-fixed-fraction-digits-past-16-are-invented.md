@@ -84,3 +84,39 @@ integer half, which broke at magnitudes a program reaches by accident.
 `write(v:0:d)` for d up to 30 matches `decimal.Decimal(float(x))` quantized
 half-away-from-zero, on every target; `test/lib_writefloat_fixed.pas` extended
 with the cases above.
+
+## 2026-08-07 — assessed, not started; and the DECISION is now unblocked
+
+Two findings worth recording so the next attempt starts from them.
+
+**1. The blocking decision is ready for Track U.**
+[[decide-float-fixed-output-exact-or-fpc-17-digit-cap]] is `blocked-by:
+bug-a-write-fixed-emits-false-digits-past-1e22` — and that ticket is **done**.
+So the decision is unblocked and is the gating question for this one: it decides
+whether the target is "every digit exact" or "exact below a 17-significant-digit
+cap, zeros above". Both are a change from today (digits 16-18 are currently
+*wrong*, not capped), but they are different implementations.
+
+Worth noting for whoever answers it: pxx **already** prints the INTEGER half
+exactly, on all five targets, matching CPython against FPC's cap. So today the
+two halves of one number follow different rules — the integer part exact, the
+fraction approximated — which is an argument for "exact" on consistency grounds
+alone, independent of the FPC-parity question.
+
+**2. The fix is bigger than "port FmtFixed", because of the mirroring rule.**
+`PXXWriteFloatFixed` (builtinheap.pas) carries an explicit contract in its own
+header: *"Mirrors EmitWriteFloatFixed (x86-64), and must keep mirroring it: this
+is the i386 / arm32 / riscv32 route to the same output, so a program's text must
+not depend on which backend built it."* So an exact base-10^9 expansion has to
+land in the **hand-emitted x86-64 float writer** as well as the portable body,
+or the targets diverge — and diverging text across backends is a worse bug than
+the one being fixed.
+
+The honest shape is therefore to route both to ONE shared Pascal helper, the way
+the sci path already routes to `PxxSciDigits17` (`PXXWriteFloatSci` is exact
+precisely because it does this). That is the real task: not a numeric tweak but
+removing a hand-written duplicate, which is also what stops this pair drifting
+again.
+
+Left in backlog at prio 35. It wants a session that can hold the emitter change
+and run the cross-target gate.
