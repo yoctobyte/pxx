@@ -157,4 +157,4 @@ Cross: compiles for i386, aarch64 and arm32; the i386 and aarch64 binaries run
 under qemu and produce output identical to FPC's. `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 635b231b9.
