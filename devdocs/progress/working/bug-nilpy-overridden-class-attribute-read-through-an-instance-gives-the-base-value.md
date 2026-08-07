@@ -103,6 +103,42 @@ all**, so every class takes the hoisted-temp route and the per-constructor
 prologue never enters the picture. The untested combination is *redeclared
 attribute + a constructor in the chain*.
 
+### A SECOND, separate defect found by the same sweep
+
+An **instance read of a class-WRITTEN (shared-slot) attribute is a compile
+error**, while the class-name read of the same attribute works:
+
+```python
+class Base:
+    made = 0
+    def __init__(self, n):
+        Base.made += 1        # class write -> 'made' takes the shared-slot row
+Base(1)
+print(Base.made)              # 1        — correct
+print(Base(1).made)           # pxx: error "made": no such member on this record/class
+```
+
+Loud, not silent, so it is not urgent the way the clobber is — but it is a
+different empty cell, not a variant of the bug above, and it should be filed and
+fixed with the same change rather than separately.
+
+### The real shape: a matrix with holes
+
+A class attribute has **three lowerings** (copy-at-construction field; shared
+global slot; slot + per-instance override — chosen per attribute by
+`PyClsAttrWriteScan`, pyparser.inc:3822) and **four access routes** (`C.attr`,
+bare `attr` in a method, `inst.attr` statically typed, `inst.attr` on a variant).
+The matrix is not filled in. Four bugs in `done/` and both defects above are each
+one empty cell, and each arrived as its own "small" bug with its own plausible
+cause. That is the design flaw; the individual cells are symptoms.
+
+The macro answer is already DECIDED and needs no new fork:
+[[decide-nilpy-class-attribute-instance-read-model]] (2026-08-03) chose full
+CPython fall-through, *"not phased, not approximated"*, with the scan surviving
+**as an optimization only, never as semantics**. This ticket is therefore
+authorised to fill the matrix rather than patch a cell. See
+`devdocs/dev/root-cause-over-microfix.md`, for which this is the worked example.
+
 ### Shape of the fix
 
 The prologue must be keyed on the **constructed** class and run **exactly

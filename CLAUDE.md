@@ -248,6 +248,17 @@ a second path — because the second path is the one that stays broken. **If you
 fix a bug on one arm of a double case, grep for the sibling before closing the
 ticket.**
 
+**`devdocs/dev/root-cause-over-microfix.md`** is when to apply them. A ticket
+reports a SYMPTOM and usually names a plausible cause — and 9 times out of 10
+the real fix is deeper than the ticket says. So reproduce, **vary the shape** to
+find the boundary, count how many mechanisms serve the one concept (two is a
+smell, three is a design flaw), and only then choose microfix vs overhaul —
+deliberately, stating which in the ticket. The overhaul is often the *smaller*
+job, because it deletes cases instead of adding them and turns several tickets
+green at once; measure by tickets-closed-per-change, not lines touched. Too big
+for the session? **Bank the diagnosis in the ticket and park it** — never
+microfix as a consolation.
+
 ### Track A in one line
 Own `compiler/**` (shared internals: AST, IR, symtab, backends, ABI, ELF). Gate
 = `make test` + self-host fixedpoint (byte-identical). When a feature B/C needs
