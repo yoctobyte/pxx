@@ -3,8 +3,6 @@ track: N
 prio: 55
 type: bug
 summary: "NilPy: a class attribute overridden in a subclass reads the BASE's value through an instance — Derived().kind is 'base', while Derived.kind is correctly 'derived'. Silent wrong value on ordinary Python"
-status: working
-owner: claude-AN
 ---
 
 # An overridden class attribute reads the base's value through an instance
@@ -153,13 +151,75 @@ CPython fall-through, *"not phased, not approximated"*, with the scan surviving
 authorised to fill the matrix rather than patch a cell. See
 `devdocs/dev/root-cause-over-microfix.md`, for which this is the worked example.
 
-### Shape of the fix
+### Shape of the fix — MEASURED, and it is NOT the constructor split
 
-The prologue must be keyed on the **constructed** class and run **exactly
-once**, before any user `__init__` body. That means splitting each constructor
-into its attribute-applying entry and its body, and making `super().__init__()`
-target the **body**, not the entry — plus giving a class that inherits its
-constructor an entry of its own. It is a lowering change, not a lookup change.
+The first guess was to key the prologue on the constructed class and run it
+exactly once: split every constructor into an attribute-applying entry and a
+body, point `super().__init__()` at the body, synthesise an entry for a class
+that inherits its constructor. That is a large change to the constructor
+protocol.
+
+**It is not needed.** The correct model already works. Forcing the three
+attributes onto the SHARED-SLOT lowering (via a class-name write, which is what
+`PyClsAttrWriteScan` keys on) makes every failing row correct, with no other
+change:
+
+```python
+class Base:
+    kind = "base"
+    def __init__(self, n): self.n = n
+    def touch(self): Base.kind = Base.kind        # forces the shared-slot row
+
+class Derived(Base):
+    kind = "derived"
+    def __init__(self, n): super().__init__(n)
+    def touch2(self): Derived.kind = Derived.kind
+
+class NoCtor(Base):
+    kind = "noctor"
+    def touch3(self): NoCtor.kind = NoCtor.kind
+```
+
+| | pxx | CPython |
+| --- | --- | --- |
+| `Derived(4).kind` | derived ✓ | derived |
+| `NoCtor(5).kind` | noctor ✓ | noctor |
+| `Base(3).kind` | base ✓ | base |
+
+Because the shared slot is read by walking from the RECEIVER's class
+(`FindClassVar`), which is the right question, while copy-at-construction asks
+the constructor's. So the fix is to **stop using copy-at-construction where its
+soundness proof fails and fall back to the model that already works** — which is
+precisely what the 2026-08-03 decision says the scan is for (an optimization,
+never semantics).
+
+**The change:** extend the demotion condition. Today an attribute leaves the
+copy lowering only when `classW` (written through the class name). It must ALSO
+leave it when the attribute is **redeclared by another class in the same
+inheritance chain** — the case the soundness proof forgot.
+
+### Open risk to settle before implementing
+
+Two things need care, and neither is hand-waveable:
+
+1. **The whole chain must agree.** If `Derived.kind` becomes a slot while
+   `Base.kind` stays a field, a `Derived` instance still *inherits* Base's
+   field, `FindUField` finds it, and the class-var arm never fires. Demotion has
+   to apply to every class in the chain that declares the name, not just the
+   redeclaring one.
+2. **Variant receivers may regress.** `PyClsAttrSharedSym` resolves a slot by
+   NAME for variant receivers and deliberately returns -1 when two distinct
+   slots share a name, to avoid a silently wrong guess. Demoting more attributes
+   to slots creates exactly that collision — a redeclared name is by definition
+   two slots with one name — so a variant-receiver read that works today could
+   start raising AttributeError. That path needs the receiver's runtime class,
+   which is the genuinely harder half and may want its own ticket.
+
+Detection also needs the inheritance links at pre-pass time; classes are
+processed in declaration order, so a base is already registered when the
+subclass is seen, but the base's lowering has already been chosen by then —
+either a retroactive demotion or a cheap token pre-scan in the
+`PyClsAttrWriteScan` idiom (the established tool for exactly this).
 
 `--- superseded below ---`
 
