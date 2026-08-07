@@ -36,7 +36,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (206)
+## backlog (205)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -102,7 +102,6 @@ _none_
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
-| decide-re-pin-after-the-dynarray-aliasing-flip | U | 70 | decide | The dyn-array aliasing flip (937c51dc2) is a codegen change, so gate.sh quick reads RED on its pinned-seeded fixedpoint step for EVERY lane until `pinned` is refreshed. Re-pin now, or wait for T's full matrix? | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -316,7 +315,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (42)
+## decided (43)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -352,6 +351,7 @@ _none_
 | decide-promoint-rvalue-representation | U | 85 | decide | Promotable int: what IS an rvalue once heap bignums exist? | — |
 | decide-pxxpdf-ticket-obsolete | U | 50 | decide | Close `feature-lib-pxxpdf-reportlab-compat` as obsolete, or keep it? | — |
 | decide-pyeval-bignum-strategy | U | 40 | decide | decide: how should pyeval handle arbitrary-precision (bignum) integers? | — |
+| decide-re-pin-after-the-dynarray-aliasing-flip | U | 70 | decide | The dyn-array aliasing flip (937c51dc2) is a codegen change, so gate.sh quick reads RED on its pinned-seeded fixedpoint step for EVERY lane until `pinned` is refreshed. Re-pin now, or wait for T's full matrix? | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | decide-runtime-primitive-layering | U | 70 | decide | Where does a runtime primitive live? — DECIDED: a PAL per language | — |
 | decide-scope-hiding-vs-flat-overload-set | U | 60 | decide | One rule explains four separate symptoms: a declaration should HIDE a same-named one from an outer/earlier scope unless marked `overload`. pxx behaves as if everything were `overload` — one flat set, first-in-chain wins. Decide whether to adopt hiding, and which marker carries it: any {$mode}, --strict-overload/{$MIMIC FPC}, or the default | — |
@@ -403,7 +403,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [U] decide-re-pin-after-the-dynarray-aliasing-flip
 - [p 70] [T] regression-test-i386-test-dynarray-field
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [U] decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)

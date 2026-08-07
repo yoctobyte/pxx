@@ -3,6 +3,7 @@ summary: "The dyn-array aliasing flip (937c51dc2) is a codegen change, so gate.s
 type: decision
 track: U
 prio: 70
+status: decided
 ---
 
 # Decide: re-pin now after the dyn-array aliasing flip, or wait for the matrix?
@@ -68,3 +69,39 @@ red as a revert-the-pin trigger rather than a fix-forward.
 
 The code is already pushed and T can see it. Nothing is blocked on this except
 the gate's readability, so a slow answer costs only that.
+
+## 2026-08-07 — RESOLVED: option 1, re-pinned. v246.
+
+**User's call: "go ahead and re-pin."**
+
+Done, and the evidence was better than this ticket could assume when it was
+written. Track T's **full tier ran at exactly HEAD `398e72d2c` and came back
+GREEN**, and its recorded `compiler_sha256`
+(`85203cdaf90eb14f9df8e55851a5989664cc27741f9a10b3e43633ec7da85cd4`) is
+byte-identical to the binary `make stabilize` recorded as v246. So the pinned
+compiler is not "a build that passed something" — it is the same bytes the full
+matrix swept. The wait-for-the-matrix option (2) had effectively already happened
+by the time the answer arrived.
+
+Verified before committing, in the order that matters:
+
+| check | result |
+| --- | --- |
+| `make stabilize` 4-iteration fixedpoint | identical at every step |
+| `tools/gate.sh quick` | **GREEN** — the fixedpoint step passes again |
+| `tools/gate.sh lib` (`make lib-test`) | **GREEN** |
+| new pinned: `b := a` flat and nested | FPC-identical |
+| new pinned: `Copy(a)` detaches | `1 99 3` |
+
+`gate.sh lib` was the real risk and the reason the hedge in the recommendation
+existed: `lib/rtl` + `compiler/builtin` hold the 63 dyn-array variables and 79
+candidate whole-array assignments the original ticket scanned as an **upper
+bound** and never resolved per-scope. They are green, so that upper bound was
+what it was labelled as — collisions, not findings.
+
+The revert-the-pin trigger named in the recommendation (first `lib-test`/`demos`
+red) is therefore unused, and stands as the trigger if a later matrix run
+disagrees.
+
+## Log
+- 2026-08-07 — decided, commit PENDING-COMMIT.
