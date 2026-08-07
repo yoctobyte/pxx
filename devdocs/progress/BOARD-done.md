@@ -625,6 +625,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-range-over-a-variant-bound-loops-forever | N | 75 | bug | `for i in range(n)` LOOPS FOREVER when n is a variant | — |
 | bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs | N | 60 | bug | Redefining a `def` silently does nothing — the FIRST body still runs | — |
 | bug-nilpy-repr-and-sum-over-range-are-undefined-variables | N | 30 | bug | repr() is not a builtin at all, and sum(range(n)) fails 'undefined variable (range)' because range is only a for-header form | — |
+| bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-return-type-inference-mistypes-several-expression-shapes | N | 75 | bug | An unannotated def's inferred return type is wrong for several common expression shapes | — |
 | bug-nilpy-returning-a-construction-leaks-one-ref | N | 60 | bug | `return Node(...)` leaks one object ref per call; `x = Node(...); return x` does not | — |
 | bug-nilpy-returning-a-nested-def-yields-none | N | 70 | bug | `return inner` — a nested def returned as a value — yields None | — |

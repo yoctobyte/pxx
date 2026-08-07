@@ -484,6 +484,7 @@ function pyseq_kind_v(const v: Variant): Integer;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
+function PyCallableStr(const v: Variant): AnsiString;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
   Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
@@ -9548,10 +9549,47 @@ end;
 
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a
   container is spelled out rather than printed as its object handle. }
+{ `<function at 0x...>` for a CALLABLE VALUE. A function value used to render
+  as nothing at all: a lifted bound-fn rode as VT_EMPTY (tag 0), which every
+  str/print consumer reads as None, and a pyeval closure (tag 9) fell through to
+  VariantToStr and produced a blank. So a debug print could not tell a live
+  function from None — exactly when you are looking
+  (bug-nilpy-repr-of-a-function-value-prints-none).
+
+  CPython spells the NAME too (`<function mk.<locals>.inner at 0x...>`), and
+  that is not recoverable here: the payload is a code address or a {code,recv}
+  pair, neither of which carries a name at run time. The shape and the address
+  are, and they are what distinguishes a function from None. Naming it would
+  need the frontend to record one per callable — its own ticket if anyone wants
+  byte-parity with CPython. }
+function PyCallableStr(const v: Variant): AnsiString;
+const HEXD = '0123456789abcdef';
+var a: Int64; i: Integer; hx: AnsiString; lead: Boolean;
+begin
+  a := PPyVarRec(@v)^.Payload;
+  hx := '';
+  lead := True;
+  i := (SizeOf(Pointer) * 8) - 4;
+  while i >= 0 do
+  begin
+    if ((a shr i) and 15) <> 0 then lead := False;
+    if not lead then hx := hx + HEXD[Integer((a shr i) and 15) + 1];
+    i := i - 4;
+  end;
+  if hx = '' then hx := '0';
+  if pyvartag(v) = 8 then
+    Result := '<bound method at 0x' + hx + '>'
+  else
+    Result := '<function at 0x' + hx + '>';
+end;
+
 function pyvar_repr(const v: Variant): AnsiString;
 var o: TObject;
 begin
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;   { VT_EMPTY }
+  { a callable VALUE — see PyCallableStr }
+  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  begin Result := PyCallableStr(v); Exit; end;
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
@@ -9565,6 +9603,8 @@ end;
 function pyvar_print_of(const v: Variant): AnsiString;
 var o: TObject;
 begin
+  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  begin Result := PyCallableStr(v); Exit; end;
   { a container prints as its repr; every scalar as plain str (no quotes) }
   if pyvartag(v) = 7 then
   begin
@@ -9700,6 +9740,8 @@ function pystr_of(const v: Variant): AnsiString; overload;
 begin
   { VT_EMPTY is Python's None, not an empty string }
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;
+  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  begin Result := PyCallableStr(v); Exit; end;
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';

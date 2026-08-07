@@ -2,6 +2,8 @@
 track: N
 prio: 25
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # `print(f)` on a function value prints None (or nothing) instead of a repr
@@ -77,3 +79,51 @@ tags can never be renumbered, so the choice has to be right the first time.
 Not attempted here: adding a variant tag late in a long session is exactly the
 change whose failure mode (a leak or a wrong clear/retain) the quick gate does
 not catch.
+
+## FIXED 2026-08-07 — half of it had already landed
+
+The fix this ticket proposed — *"give a lifted bound-fn a variant tag of its own
+rather than riding VT_EMPTY; the tag block after VT_PYCLOSURE_TAG (9) is free"* —
+turned out to be exactly what
+[[bug-nilpy-bound-fn-closure-objects-are-never-freed]] did earlier the same day,
+for a completely different reason (VT_EMPTY matches nothing in the variant
+clear/retain paths, so the object leaked). `VT_BOUNDFN_TAG = 10` already exists
+and `pyvar_of_callable` already stamps it.
+
+So only the rendering half remained: `PyCallableStr` (pylib.pas) formats tags 8,
+9 and 10 as `<bound method at 0x…>` / `<function at 0x…>`, and `pyvar_repr`,
+`pyvar_print_of` and `pystr_of` all consult it. Before, `print(g)` on a lambda
+printed a blank line and `print(f)` on a lifted closure printed nothing —
+indistinguishable from None.
+
+### Not done, and why
+
+CPython spells the NAME too (`<function mk.<locals>.inner at 0x…>`). That is not
+recoverable at run time here: the payload is a code address or a {code,recv}
+pair, and neither carries a name. Naming it needs the frontend to record one per
+callable — a separate change, and the shape+address are what the bug was
+actually about.
+
+A **plain compiled def** used as a value (`print(some_def)`) still prints a
+number. That shape carries no tag at all — its value IS a bare code address,
+indistinguishable from an integer — which is the one case `PyCallKey1`'s own
+comment already calls out as "identified purely by elimination". Tagging plain
+defs is its own change; noted in the test.
+
+### Test
+
+`test/test_nilpy_function_value_repr.npy`, 8 lines byte-identical to the CPython
+oracle. It cannot compare the rendered string verbatim — neither the name nor
+the address is reproducible on either side — so it asserts the structural facts
+both implementations agree on: not `"None"`, non-empty, starts `<function`,
+contains `at 0x`, ends `>`, `repr == str`, two distinct closures render
+differently, and the values still call correctly.
+
+### Gate
+
+`make fpc-check` byte-identical, self-host fixedpoint, `tools/gate.sh quick`
+GREEN. No re-pin: pylib is frozen in the stable tree but the compiler does not
+`uses` it, only NilPy programs do.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

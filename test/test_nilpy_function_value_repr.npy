@@ -1,0 +1,55 @@
+# bug-nilpy-repr-of-a-function-value-prints-none
+#
+# `print(f)` on a function value printed NOTHING — a lifted bound-fn rode as
+# VT_EMPTY (tag 0), which every str/print consumer reads as None, and a pyeval
+# closure (tag 9) fell through to VariantToStr and produced a blank line. So a
+# function value was indistinguishable from None in a debug print, which is
+# exactly when you are looking at one.
+#
+# Half of the fix arrived with the closure-lifetime work, which gave the lifted
+# bound-fn a tag of its own (VT_BOUNDFN); this adds the rendering for tags 8, 9
+# and 10.
+#
+# The output cannot be compared to CPython VERBATIM: CPython prints
+# `<function mk.<locals>.inner at 0x7f...>`, and neither the NAME nor the
+# ADDRESS is reproducible — the name is not recorded per callable at run time,
+# and the address varies per run on both sides. So this asserts the structural
+# facts that CPython and pxx do agree on, which is what makes it a real
+# oracle-diffed test rather than a screenshot of our own output.
+#
+# NOT covered: a plain compiled def used as a value (`print(some_def)`). That
+# one carries no tag at all — its value IS a bare code address, indistinguishable
+# from an integer — so it still prints a number. Fixing it needs the frontend to
+# tag plain defs, which is a separate change.
+
+
+def mk(n):
+    def inner(x):
+        return x + n
+    return inner
+
+
+g = lambda x: x + 1
+f = mk(10)
+
+sg = str(g)
+sf = str(f)
+
+# the thing the bug was about: NOT None, NOT empty
+print(sg == "None", sf == "None")
+print(len(sg) > 0, len(sf) > 0)
+
+# the shape both implementations agree on
+print(sg.startswith("<function"), sf.startswith("<function"))
+print("at 0x" in sg, "at 0x" in sf)
+print(sg.endswith(">"), sf.endswith(">"))
+
+# repr agrees with str for a function value
+print(repr(g) == str(g), repr(f) == str(f))
+
+# two distinct closures render distinguishably
+f2 = mk(20)
+print(str(f) != str(f2))
+
+# and the values still WORK — the fix is to the string form only
+print(f(1), f2(1), g(1))
