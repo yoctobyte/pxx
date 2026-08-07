@@ -1576,7 +1576,7 @@ test-nilpy: $(COMPILER)
 	# so the program silently printed the builtin's answer. See the test's header;
 	# expectations are CPython's.
 	./$(COMPILER) test/test_nilpy_user_def_shadows_builtin.npy /tmp/test_nilpy_defshadow26
-	test "$$(/tmp/test_nilpy_defshadow26)" = "$$(printf '%b' 'mine-sorted mine-counter\nmine-len mine-len mine-len mine-len\nmine-len\nmine-abs mine-str mine-min mine-max\nmine-sum mine-int mine-list mine-round\nmine-divmod mine-hex mine-reversed mine-enumerate')"
+	test "$$(/tmp/test_nilpy_defshadow26)" = "$$(printf '%b' 'mine-sorted mine-counter\nmine-len mine-len mine-len mine-len\nmine-len\nmine-abs mine-str mine-min mine-max\nmine-sum mine-int mine-list mine-round\nmine-divmod mine-hex mine-reversed mine-enumerate\nmine-float mine-bool mine-bool')"
 	# A Python annotation is metadata, not enforcement: `-> int` returning 2.5 gave
 	# 4612811918334230528 (the double's IEEE bits). And a returned EXPRESSION was
 	# typed by the smallest operand in it. See the test's header; expectations are

@@ -13,6 +13,12 @@ summary: "NilPy: `def float(x)` / `def bool(x)` were never called — their NilP
 - **Found:** 2026-08-07, in the builtin-shadowing sweep run for
   [[bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module]].
   Pre-existing (identical on `pinned`). Fixed the same day.
+- **Family:** the third residue of
+  [[bug-nilpy-user-def-does-not-shadow-a-pylib-builtin]], whose sweep probed
+  fifteen names and did not include these two — see the 2026-08-07 addendum
+  there. Siblings:
+  [[bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin]] and
+  [[bug-nilpy-user-def-loses-to-pylibs-variant-overload-at-the-same-arity]].
 
 ## Measured
 

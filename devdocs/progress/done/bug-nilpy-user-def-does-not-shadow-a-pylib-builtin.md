@@ -162,3 +162,24 @@ exercising all of them UNSHADOWED — both diffed against CPython, identical.
 ## Log
 - 2026-08-04 — resolved.
 - 2026-08-04 — resolved, commit 37ce259f9.
+
+## 2026-08-07 — addendum: the "15 builtins" list was not the whole surface
+
+Not a correction of anything measured here — every row in the table above still
+holds. But the framing "14 of 15 builtins" reads as coverage of the builtin
+surface, and it is coverage of *the fifteen names this ticket happened to
+probe*. **`float` and `bool` are not among them**, and both were broken in a way
+this ticket's fix does not reach: their NilPy arms in `ParseFactorCore` claim the
+name before resolution ever runs, with none of the `not PyUserShadowsProc(name)`
+guard that `int` and `str` carry two arms away. A `def float(x)` was never called
+at all — on either side of the def.
+
+Found 2026-08-07 by sweeping ~50 names instead of 15, and fixed the same day:
+[[bug-nilpy-a-def-named-float-or-bool-is-never-called]]. Third residue of this
+ticket, after [[bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin]]
+and [[bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module]].
+
+The lesson is about the probe, not the fix: an intrinsic arm that claims a name
+unconditionally is invisible to a probe list assembled by reading the pylib
+routine table, because it has no pylib routine. Sweep the NAMES a Python
+programmer can write, not the ones the implementation happens to register.
