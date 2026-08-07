@@ -1,0 +1,85 @@
+# bug-nilpy-bound-method-of-a-temporary-receiver-segfaults
+#
+# `obj.method` with no following call is a BOUND-METHOD VALUE — a {code, recv}
+# pair. Exactly one site built one: the bare-identifier path (ParseLValueAST).
+# Every receiver that reaches the SELECTOR path instead — a constructor result,
+# a function result, a method-chain result — fell through to the call path and
+# produced a bare code address with no receiver, which segfaulted when called.
+#
+# `c.m` worked and `C().m` crashed, which is the tell: same construct, two
+# parsing paths, and only one of them knew about it. The second path is the one
+# that stays broken (devdocs/dev/normalise-dont-special-case.md).
+#
+# A TEMPORARY receiver is the interesting half: nothing else holds the instance,
+# so the pair has to keep it alive. pybound_new retains its receiver, which is
+# what makes `C(100).m` safe to call after the statement that built it.
+#
+# NOT covered here, and still failing identically on the pre-change binary: a
+# receiver whose class is only known at RUN time (a list element, a field typed
+# from an untyped parameter) raises AttributeError. That needs the receiver's
+# runtime class and is the same missing capability as the variant-receiver rows
+# elsewhere — a loud error, not a silent wrong value.
+
+
+class C:
+    def __init__(self, b):
+        self.b = b
+
+    def m(self, x):
+        return self.b + x
+
+    def me(self):
+        return self
+
+
+class Counter:
+    def __init__(self):
+        self.hits = 0
+
+    def hit(self, n):
+        self.hits = self.hits + n
+        return self.hits
+
+
+def mk(v):
+    return C(v)
+
+
+def ap(f, v):
+    return f(v)
+
+
+# a CONSTRUCTOR result — the receiver is a temporary and nothing else holds it
+print(ap(C(100).m, 5))
+
+# a FUNCTION result
+print(ap(mk(200).m, 5))
+
+# a METHOD-CHAIN result
+print(ap(C(300).me().m, 5))
+
+# the bare-identifier path must still work — it was the only one that did
+c = C(400)
+print(ap(c.m, 5))
+
+# and a direct call through either receiver shape is unchanged
+print(C(500).m(5), c.m(6))
+
+# the bound pair keeps its receiver alive and keeps mutating THAT instance
+k = Counter()
+g = k.hit
+print(g(1), g(2), k.hits)
+
+# two pairs over two different instances keep their own receivers.
+# NOTE the names: a global called `b` here hit an UNRELATED, pre-existing bug —
+# see bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value. The
+# names are deliberately not single letters so this file tests what it says.
+first = Counter()
+second = Counter()
+gfirst = first.hit
+gsecond = second.hit
+print(gfirst(10), gsecond(3), first.hits, second.hits)
+
+# a temporary receiver's pair, stored and called later
+h = C(700).m
+print(h(5), h(6))

@@ -656,6 +656,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_lambda_arity26 | diff -u test/test_nilpy_lambda_arity.expected -
 	./$(COMPILER) test/test_nilpy_body_scan_attribution.npy /tmp/test_nilpy_bodyscan26
 	/tmp/test_nilpy_bodyscan26 | diff -u test/test_nilpy_body_scan_attribution.expected -
+	./$(COMPILER) test/test_nilpy_bound_method_value_receiver_shapes.npy /tmp/test_nilpy_bmrecv26
+	/tmp/test_nilpy_bmrecv26 | diff -u test/test_nilpy_bound_method_value_receiver_shapes.expected -
 	./$(COMPILER) test/test_nilpy_float_repr.npy /tmp/test_nilpy_floatrepr26
 	/tmp/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_user_class_shadows_builtin.npy /tmp/test_nilpy_shadow26

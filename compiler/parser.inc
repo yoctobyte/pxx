@@ -7530,6 +7530,33 @@ begin
       begin
         EnforceMethVis(mmi, fieldName);
         mpi := UMthProc_[mmi];
+        { NilPy: `<expr>.method` with NO following call is a BOUND-METHOD VALUE,
+          exactly as ParseLValueAST treats `name.method`. That was the ONLY site
+          building one, so the value form worked only when the receiver was a
+          bare identifier: `C().m`, `objs[0].m`, `a.b.m` — every receiver that
+          reaches the selector path instead — fell through to the call path and
+          yielded a bare code address with no receiver, which SEGFAULTED when
+          called (bug-nilpy-bound-method-of-a-temporary-receiver-segfaults).
+
+          The same bare-vs-selector split that hid a class-attribute read
+          through a non-bare receiver, in this same routine. Two paths for one
+          construct, and the second one stays broken —
+          devdocs/dev/normalise-dont-special-case.md.
+
+          A TEMPORARY receiver survives because the pair RETAINS it
+          (pybound_new), so `C().m` keeps its instance alive for the pair's
+          lifetime rather than reading a freed block. }
+        if NilPyUserCode and
+           (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkLParen) and
+           (ci >= 0) and not UClsIsInterface[ci] then
+        begin
+          Next;                                  { consume the method name }
+          node := PyMakeBoundMethod(mpi, node);
+          ASTTk[node] := Ord(tyVariant);
+          outTk := tyVariant;
+          Result := node;
+          Exit;
+        end;
         if (ci >= 0) and UClsIsInterface[ci] then
         begin
           { INTERFACE receiver reached through a chained value — `IFoo(List[i]).M`,
