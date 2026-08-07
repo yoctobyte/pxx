@@ -3,6 +3,8 @@ prio: 35
 type: bug
 track: N
 summary: "PyParseClass's `only pass is supported as a one-line class body` branch is unreachable — the lexer now normalises every one-line suite, so `class C: x = 1` compiles and matches CPython. The behaviour is BETTER than documented; the comments describing the restraint and calling the def half open are false, and they are what produced a stale five-site patch plan."
+status: done
+owner: claude-AN
 ---
 
 # The one-line class body restraint is no longer enforced, and its comments now lie
@@ -92,3 +94,48 @@ produced a 200-line patch plan against already-correct code.
 byte-identical output; if the `only pass` error is removed, add a row to
 `test/test_nilpy_one_line_class_body.npy` pinning `class C: x = 1` against
 CPython so the accidental capability becomes an intended one.
+
+## 2026-08-07 — DONE
+
+Re-measured first: `class C: x = 1` / `class E: y = 5` compile and match CPython,
+so the ticket's finding still holds at HEAD.
+
+All three comment blocks rewritten to describe the world that exists:
+
+1. **`PyParseClass`'s one-line branch** — now says the lexer's synthesised
+   `NEWLINE INDENT` makes it unreachable for a body with content, that a
+   one-line body with content works and matches CPython, and that the branch is
+   KEPT because its empty member span is what keeps a class sized and its VMT
+   emitted (`a0cf42cb6`). The false claims — that only `pass` is accepted
+   "deliberately", and that the one-line DEF half is still open because
+   indent-keyed scanners would harvest a def's locals as module globals — are
+   struck, with a note that they are what cost a session a 200-line patch plan.
+2. **`PyRegisterClassFieldsPrepass`'s colon scan** — kept (it is real defence
+   against the `unresolved forward: G.create` mis-attribution) but reframed:
+   the only shape that still arrives without an INDENT is a genuinely empty
+   body, and the check is not evidence that content is unsupported.
+3. **`PyParseDefHeader`** — given the contract header it lacked, naming the
+   lexer as the reason `: NEWLINE INDENT` is always present. That is the exact
+   sentence two recon sessions needed and did not find.
+
+### The `only pass` error — decided
+
+Kept as an ASSERTION rather than deleted. It cannot fire today, but the lexer
+rule behind that guarantee is load-bearing and undocumented as such elsewhere
+(see [[bug-nilpy-def-body-scans-run-on-when-no-indent-is-found]]), so a future
+narrowing of it should report itself here rather than silently mis-attribute a
+body. Its message no longer describes a restriction users can hit — it says the
+lexer normalises this shape and reaching the parser without the INDENT is a bug
+to report.
+
+### Test
+
+`test/test_nilpy_one_line_class_body.npy` gained the rows the Gate line asked
+for — a one-line class with a field, with a `pass` body used as a real class,
+and two on one — pinning the accidental capability as an intended one. The whole
+file's output is byte-identical to CPython's; `.expected` regenerated.
+
+`tools/gate.sh quick` GREEN, self-host byte-identical.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

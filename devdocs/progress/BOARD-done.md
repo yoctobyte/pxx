@@ -584,6 +584,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf | N | 50 | bug | Numeric builtin gaps: `float("inf")`, variadic `min`/`max`, `sum(x, start)` | — |
 | bug-nilpy-object-reclamation-disabled-inside-py-modules | N | 65 | bug | NilPy object reclamation is switched off inside an imported `.py` module | — |
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
+| bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced | N | 35 | bug | PyParseClass's `only pass is supported as a one-line class body` branch is unreachable — the lexer now normalises every one-line suite, so `class C: x = 1` compiles and matches CPython. The behaviour is BETTER than documented; the comments describing the restraint and calling the def half open are false, and they are what produced a stale five-site patch plan. | — |
 | bug-nilpy-one-line-def-and-class-bodies-do-not-parse | N | 60 | bug | One-line `def` and `class` bodies do not parse | — |
 | bug-nilpy-one-line-def-suite-does-not-parse | N | 55 | bug | `def f(x): return x + 1` on ONE line fails with 'unexpected token'. The compound-statement header requires a newline + INDENT suite; the inline form Python allows on the same line is not accepted for def (or class) | — |
 | bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |

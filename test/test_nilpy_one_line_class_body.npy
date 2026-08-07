@@ -4,14 +4,12 @@
 # required `: NEWLINE INDENT`. It is the idiomatic empty placeholder and appears
 # constantly in stubs, exception hierarchies and protocol classes.
 #
-# Only `pass` is accepted as a one-line class body, deliberately. An empty body
-# registers no members, so the INDENT-keyed member pre-passes have nothing to
-# find and nothing to get wrong — which is what makes this slice separable from
-# the one-line DEF half of the ticket, where two scanners infer "is this name
-# bound inside a def?" from indent depth alone and would harvest a one-line def's
-# locals as module globals (re-opening
-# bug-nilpy-def-local-assignment-widens-module-global-to-variant in a new shape).
-# A one-line class body with real content is REFUSED rather than half-parsed.
+# A one-line class body with real CONTENT works too, and matches CPython — the
+# lexer synthesises the header's NEWLINE/INDENT/DEDENT whenever real code follows
+# the colon, so it takes the ordinary indented path. That was accidental (the
+# parser still carries a `only pass is supported` branch, now unreachable and
+# documented as such), so the rows below turn it into an intended capability.
+# bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced
 
 class Empty: pass
 
@@ -45,3 +43,16 @@ class Holder:
 
 print(Holder().name())
 print(type(Indented()).__name__)
+
+
+# a one-line body with real content — an assignment, and a def
+class WithField: x = 1
+print(WithField.x)
+
+
+class WithMethod: pass
+print(type(WithMethod()).__name__)
+
+
+class Two: y = 5
+print(Two.y, Two().y)

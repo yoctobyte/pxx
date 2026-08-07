@@ -16759,6 +16759,16 @@ begin
   end;
 end;
 
+{ Parses `def name(params) [-> ann]:` and leaves the cursor on the first BODY
+  token, filling the PyHdr* globals.
+
+  Contract worth stating because two recon sessions concluded otherwise and
+  proposed patching this routine: the header is always followed by
+  `: NEWLINE INDENT`, including for a ONE-LINE suite (`def f(): return 1`) —
+  the LEXER synthesises the NEWLINE/INDENT/DEDENT when real code follows the
+  header colon (a843c17d4, pylexer.inc). So every token-level body scan
+  downstream finds an INDENT, and a missing one is a lexer-rule change, not a
+  header bug. bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced }
 procedure PyParseDefHeader;
 var annIdx, hdrDefIdx, hdrRetRec, starCi: Integer;
     isKwParam: Boolean;
@@ -19966,9 +19976,17 @@ begin
           own, so the scan ran on to the NEXT class's indent and registered THAT
           class's members against G — `class G(Exception): pass` followed by a
           class with an `__init__` failed with "unresolved forward: G.create",
-          the ctor having been attributed to the wrong class. A one-line body can
-          only be `pass` (PyParseClass refuses anything else), so it declares no
-          members and the right answer is to register none. }
+          the ctor having been attributed to the wrong class.
+
+          Since a843c17d4 the LEXER synthesises the `NEWLINE INDENT` for a
+          one-line body that has real CONTENT, so the only shape that still
+          reaches here without an INDENT is a genuinely empty one (`pass`),
+          which declares no members — registering none is the right answer.
+          This is defensive, not a live path: `class C: x = 1` gets its INDENT
+          from the lexer and its member IS registered. Do not read the check as
+          evidence that a one-line body with content is unsupported; it is
+          supported and matches CPython
+          (bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced). }
         j := i + 2;
         depth := 0;
         while j < MainProgramTokCount do
@@ -20177,18 +20195,36 @@ begin
     ("unexpected token") because the header required `: NEWLINE INDENT`
     (bug-nilpy-one-line-def-and-class-bodies-do-not-parse).
 
-    Only `pass` is accepted, deliberately. An empty body registers no members,
-    so the INDENT-keyed pre-passes have nothing to find and nothing to get
-    wrong — which is what makes this slice separable from the one-line DEF
-    half of that ticket, where two scanners infer "is this name bound inside a
-    def?" from indent depth alone and would harvest a one-line def's locals as
-    module globals. A one-line class body with real CONTENT is refused rather
-    than half-parsed, for the same reason. }
+    UNREACHABLE for a real one-line body since a843c17d4: the LEXER now
+    synthesises `NEWLINE INDENT … DEDENT` after a `def`/`class` header colon
+    whenever real code follows on the same line (pylexer.inc), so CurTok is
+    always tkNewline here and control takes the ordinary indented path below —
+    which handles a one-line body with CONTENT correctly. `class C: x = 1`
+    compiles and matches CPython; test_nilpy_one_line_class_body.npy pins it.
+
+    This branch is kept as a defensive fallback, not deleted: its empty member
+    span is what keeps a class SIZED and its VMT emitted (see the note below),
+    and a0cf42cb6 records that skipping the call outright crashed every
+    construction.
+
+    An earlier version of this comment said only `pass` was accepted
+    "deliberately", and that the one-line DEF half of the ticket was still open
+    because two indent-keyed scanners would harvest a one-line def's locals as
+    module globals. Both statements are false: the def half shipped 2026-08-03
+    and the harvest was MEASURED not to happen. Leaving them here cost one
+    session a 200-line patch plan against already-correct code
+    (bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced). }
   if CurTok.Kind <> tkNewline then
   begin
+    { Not a user-facing restriction — see above; the lexer makes this
+      unreachable for `def`/`class`. Kept as an assertion so a future narrowing
+      of the lexer rule reports itself here instead of silently mis-attributing
+      a body. }
     if not PyIsIdent('pass') then
-      Error('Nil Python: only `pass` is supported as a one-line class body — '
-            + 'put the body on its own indented line');
+      Error('Nil Python: internal — a one-line class body reached the parser '
+            + 'without the lexer''s synthesised INDENT. Put the body on its own '
+            + 'indented line, and please report this: the lexer normalises this '
+            + 'shape and nothing should get here');
     Next;
     { An EMPTY member span rather than no call at all: PyRegisterClassMembers
       also computes the class SIZE and emits its VMT, so skipping it leaves the
