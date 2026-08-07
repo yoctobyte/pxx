@@ -99,3 +99,53 @@ merely *defaults* on? Recommendation: a master `--strict` / `--mimic-fpc` that
 sets the strict default for every guarded extension, with per-feature `{$...}`
 overrides for fine control. Decide before the second dialect feature lands so the
 switch wiring is uniform.
+
+## 2026-08-07 — `AnsiString + UCS4Char`: an EXTENSION, not an ambiguity (low prio)
+
+Logged so it is on the record, not because anything needs doing. Reached via
+NilPy ([[feature-nilpy-text-string-kind]]); the Pascal side is fine.
+
+**Measured against FPC 3.2.2:**
+
+| expression | FPC |
+| --- | --- |
+| `AnsiString + AnsiChar` | OK |
+| `UnicodeString + WideChar` | OK |
+| `AnsiString + WideChar` | OK |
+| `UCS4String + UCS4Char` | **rejected** |
+| `UnicodeString + UCS4Char` | **rejected** |
+
+`UCS4String` exists (`array of UCS4Char`) but **no FPC string type concatenates
+with a `UCS4Char`, not even its own** — in FPC the type is inert for string
+building and you go through the conversion functions. pxx converts it to the
+code point's UTF-8 encoding (`feat(A) b0cbeba60`).
+
+### Why it does NOT go behind `--strict-fpc`
+
+The classification is the point, and it is the general rule this instance
+illustrates:
+
+> **Ambiguity** — the same source compiles under both and *means something
+> different*. Dangerous, silent, and exactly what the strict flags exist for.
+>
+> **Extension** — pxx accepts source FPC *rejects*. Harmless to forward
+> compatibility: no FPC program can contain it, so no FPC program changes
+> meaning. Nothing to disambiguate, so nothing for a strict flag to do.
+
+`AnsiString + UCS4Char` is squarely the second. FPC rejects it outright, so
+there is no FPC program it can affect. Gating it under `--strict-fpc` would be
+category error — and would make the type nearly unusable in strict mode, since
+FPC offers no concat path at all, so strict code would need an explicit
+`UCS4ToUTF8(c)` spelling first.
+
+(A previous draft of this reasoning proposed a rule that *every* new laxness
+gets a strict gate. That is wrong for the same reason: only laxness that creates
+**divergent meaning** needs one.)
+
+### The one thing genuinely open
+
+**We do not know what a newer FPC does here.** 3.2.2 is what was measured; a
+nightly or the next stable may grow a `UCS4Char` concat path, and if it does,
+this stops being an extension and becomes a place where the two disagree — which
+*would* be strict-flag territory. Worth re-measuring when a new FPC stable lands
+(or refreshing a nightly if one is already pulled). No action before then.
