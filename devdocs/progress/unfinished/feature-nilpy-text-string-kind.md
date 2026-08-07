@@ -4,8 +4,6 @@ prio: 55
 type: feature
 blocked-by: feature-a-managed-block-kind-word
 summary: "Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1)"
-status: working
-owner: claude-A-N
 ---
 
 # NilPy `str` counts characters, not bytes (phase 2)
@@ -104,6 +102,13 @@ byte-identical and O(1)), a `find`→slice round-trip across a multi-byte
 character, a Pascal `AnsiString` round-tripping through a variant into NilPy, and
 `in`/`count`/`split`/`==`/`+` (which must not move). Watch for the O(n²) shape —
 `while i < len(s): s[i]` — on a non-ASCII string.
+
+## PARKED in unfinished/ — the foundation is LANDED and green, the semantics are not
+
+Not blocked and not half-applied: the compiler change is complete, gated and
+pinned (v248), so nothing here is in a broken intermediate state. What remains
+is the semantic conversion, which is scoped below and must be done as one
+commit. Re-claim it; do not re-derive the survey.
 
 ## 2026-08-07 — the FOUNDATION landed; the semantic conversion did not
 

@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:8 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1468 rejected:29`
+`unfinished:9 blocked:8 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1468 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-nilpy-text-string-kind` [N] — owner: claude-A-N
+_none — no lane is locked._
 
-## unfinished (8) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-nilpy-closure-over-a-loop-variable-captures-by-value` [N]
 - `bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error` [N]
@@ -20,6 +20,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-optional-string-param-accepts-none` [N]
 - `feature-nilpy-star-args-kwargs` [N]
+- `feature-nilpy-text-string-kind` [N] — blocked-by: feature-a-managed-block-kind-word
 - `feature-pascal-corpus-generics` [P]
 
 ## blocked (8) — has an unmet blocker; do not claim
