@@ -305,6 +305,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lamdef26)" = "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
 	# a container literal is RETURNED by a lambda, and keeps its tuple/list
 	# identity, on both lowerings — and the aliased-capture shape still works
+	# an int accumulator widens when a CONTAINER hands it a float, in both
+	# scopes — and the range-loop promoted accumulator is untouched
+	./$(COMPILER) test/test_nilpy_accumulate_float_from_container.npy /tmp/test_nilpy_accfloat26
+	test "$$(/tmp/test_nilpy_accfloat26)" = "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
 	./$(COMPILER) test/test_nilpy_lambda_container_result.npy /tmp/test_nilpy_lamctr26
 	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
@@ -4701,6 +4705,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lamdef26)" = "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
 	# a container literal is RETURNED by a lambda, and keeps its tuple/list
 	# identity, on both lowerings — and the aliased-capture shape still works
+	# an int accumulator widens when a CONTAINER hands it a float, in both
+	# scopes — and the range-loop promoted accumulator is untouched
+	./$(COMPILER) test/test_nilpy_accumulate_float_from_container.npy /tmp/test_nilpy_accfloat26
+	test "$$(/tmp/test_nilpy_accfloat26)" = "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
 	./$(COMPILER) test/test_nilpy_lambda_container_result.npy /tmp/test_nilpy_lamctr26
 	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26

@@ -15630,6 +15630,17 @@ begin
       ASTTk[node] := Ord(tyPromoInt64);
       if PyTypingPass then PyNoteLocalType(name, tyPromoInt64, REC_NONE);
     end;
+    { …and the same rule for EVERY widening, not just the promo one above and
+      `/=` further up. PyWiden already gave the NODE the right type — the gap
+      was that the target's own slot never heard about it, so `tot = 0` then
+      `tot += v` over a list holding a float kept an Int64 frame slot and
+      truncated the sum to 3 where CPython says 3.5. No crash, no diagnostic:
+      the node said variant and the slot said int, and the store split the
+      difference. (At MODULE scope the same shape hit RunError 219 instead —
+      the token-shape arm in PyCollectModuleLocalsAST carries the twin of this
+      fix.) bug-nilpy-int-local-accumulating-a-float-from-a-list-crashes-219 }
+    if PyTypingPass and (IntToTypeKind(ASTTk[node]) <> Syms[symIdx].TypeKind) then
+      PyNoteLocalType(name, IntToTypeKind(ASTTk[node]), REC_NONE);
     rhsNode := node;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);
@@ -16251,6 +16262,7 @@ var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     blockIsDef: array[0..255] of Boolean;   { blockIsDef[d] = body at depth d is a def/class, not if/for/while/with/try }
     pendingDefClass: Boolean;
     blkJ: Integer; blkTk: TTypeKind; blkName: AnsiString;
+    blkSrcVar: Boolean;   { an augmented assign whose SOURCE is a variant }
 begin
   PyLocalCount := 0;
   rnd := 0;
@@ -16547,7 +16559,44 @@ begin
         end;
         if (blkTk = tyInteger) or (blkTk = tyInt64) or (blkTk = tyBoolean) or
            TypeIsPromoInt(blkTk) then
-          PyNoteLocalType(blkName, tyPromoInt64, REC_NONE);
+        begin
+          { …unless the SOURCE is a variant, in which case the accumulator is
+            not an int at all. `vals = [1, 2.5]` then `for v in vals: tot += v`
+            promoted tot on the strength of its `= 0` initialiser alone, and the
+            first float element met PXXPromoFromVariant's "not convertible to an
+            integer" — RunError 219, at module scope, on ordinary CPython code.
+            (The def-scope twin of this fix is in the augmented-assign site in
+            PyParseStatement, where the same shape truncated silently instead.)
+
+            Widening to variant costs nothing on the fast path this arm exists
+            for: `for i in range(n): a *= i` binds i as a static tyInt64, not a
+            variant, so the promoted-accumulator benchmark never reaches here.
+            Only a container-sourced element — which was already crossing a
+            variant boundary every iteration — widens.
+            bug-nilpy-int-local-accumulating-a-float-from-a-list-crashes-219 }
+          blkSrcVar := False;
+          blkJ := i + 2;
+          while (blkJ < MainProgramTokCount) and
+                (not (Tokens[blkJ].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon])) do
+          begin
+            if Tokens[blkJ].Kind = tkIdent then
+            begin
+              si := PyFindConstraint(GetTokenStr(blkJ));
+              if si >= 0 then
+              begin
+                if PyLocals[si].TypeKind = tyVariant then blkSrcVar := True;
+              end
+              else
+              begin
+                si := PyProgSym(GetTokenStr(blkJ));
+                if (si >= 0) and (Syms[si].TypeKind = tyVariant) then blkSrcVar := True;
+              end;
+            end;
+            Inc(blkJ);
+          end;
+          if blkSrcVar then PyNoteLocalType(blkName, tyVariant, REC_NONE)
+          else PyNoteLocalType(blkName, tyPromoInt64, REC_NONE);
+        end;
         Inc(i);
       end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and

@@ -1,0 +1,55 @@
+# bug-nilpy-int-local-accumulating-a-float-from-a-list-crashes-219
+#
+# `tot = 0` then `tot += v` over a container holding a float. The initialiser
+# typed the accumulator an int and the augmented assign never widened it by its
+# SOURCE, so the float element met an int slot. The two scopes failed
+# DIFFERENTLY, which is why both are pinned here:
+#
+#   module scope: promoted to promo-int, and PXXPromoFromVariant rejected the
+#       float tag -> RunError 219
+#   inside a def: stayed Int64 and the sum TRUNCATED -> 3 where CPython says
+#       3.5, silently, which is the worse of the two
+#
+# The rest of the file guards the fast path the widening must not disturb:
+# `for i in range(n)` binds i as a static int, never a variant, so an integer
+# accumulator still promotes and still reaches arbitrary precision.
+
+# --- the two failing scopes ---
+vals = [1, 2.5]
+tot = 0
+for v in vals:
+    tot += v
+print(tot)
+
+def total(xs):
+    t = 0
+    for x in xs:
+        t += x
+    return t
+print(total([1, 2.5]), total([1, 2]), total([2.5, 1]))
+
+# --- the promoted-accumulator fast path must be untouched ---
+a = 1
+for i in range(1, 22):
+    a *= i
+print(a)
+
+# --- and a widened (variant) accumulator must STILL reach past Int64 ---
+big = [10**18] * 20
+s = 0
+for v in big:
+    s += v
+print(s)
+print(total([10**18] * 20))
+
+# --- neighbours of the same operator that must not have widened ---
+c = 2000000000
+c += 2000000000
+print(c)
+xs = [1]
+xs += [2, 3]
+print(xs)
+f = 0.0
+for v in vals:
+    f += v
+print(f)
