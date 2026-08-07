@@ -203,3 +203,35 @@ The same routine also adds `17` (16 header + nul) twice for the needed payload �
 
 ## Log
 - 2026-08-07 — resolved, commit 4ce9b3fc0.
+
+
+## 2026-08-07 — CORRECTION: the FPC seed was NOT required
+
+The "⚠ cannot be built with `make compiler/pascal26`" warning at the top of this
+ticket is **wrong**, and is left in place only because a ticket is a record of
+what a session did. Read this section instead.
+
+The claim was reasoned, then "confirmed" by a confounded experiment: the old
+pinned binary was run from a scratch directory, where it had no frozen `builtin/`
+beside it and fell back to the LIVE tree — manufacturing the very mismatch it
+appeared to prove.
+
+Re-run with the old pinned binary **and its own frozen RTL**, against this
+ticket's source:
+
+- it produced a **working** compiler B;
+- B → C → D reached a **fixedpoint** (C == D);
+- and C was **byte-identical** to the FPC-seeded binary that shipped.
+
+So the self-host path was fine all along, from `pinned`. The real rule is
+*"seed from a compiler carrying its own versioned RTL"* — which `pinned` does and
+`./compiler/pascal26` does not. That gap is filed as
+[[bug-a-self-host-seed-has-no-versioned-rtl]]; `devdocs/dev/managed-block-header.md`
+carries the corrected sequencing.
+
+The claim that `gate.sh` could not validate this change is likewise withdrawn:
+it seeds from `pinned`, which is exactly the correct seed.
+
+Nothing about the landed change is affected — the shipped binary is
+byte-identical to what the correct path produces. Only the route was needlessly
+expensive.

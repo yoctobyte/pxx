@@ -176,38 +176,40 @@ type is known exactly there. This was re-opened once during design; it is closed
 
 ## Sequencing — READ THIS BEFORE TOUCHING CODE
 
-**This cannot land through a self-host generation.** Stage A emits stage B's
-inline string code using *A's* offsets, while B's linked RTL comes from *new*
-source using the new layout. B is then internally inconsistent and dies before it
-can compile C. Same family as the `TSymbol`-field bootstrap landmine.
+**CORRECTED 2026-08-07 (this section was wrong the first time).** The original
+claim here was that a header change "cannot land through a self-host generation"
+and must be seeded from FPC. **That is false**, and it was measured wrongly: the
+first experiment ran the old pinned binary from a scratch directory, where it had
+no frozen RTL beside it and fell back to the LIVE tree — manufacturing exactly
+the mismatch it then "proved".
 
-**Measured, 2026-08-07**, because the claim was challenged and was worth
-proving rather than asserting. The pre-header pinned binary was run against the
-post-header source:
+Re-run properly, with the old pinned binary **and its own frozen
+`builtin/`**, against the post-header source:
 
-- it **compiled the new source fine** — exit 0, a plausible 6.26 MB binary;
-- the binary it produced **dumped core** on the first program it was asked to
-  compile.
+- it produced a **working** compiler (B), which compiled and ran programs;
+- B → C → D reached a **fixedpoint** (C == D);
+- and C was **byte-identical** to the FPC-seeded binary that shipped.
 
-That is the shape of this failure and why it deserves a warning: the compile
-step succeeds, so nothing looks wrong until the *product* runs. `make
-compiler/pascal26` seeds from `./compiler/pascal26` and iterates to convergence,
-so it would have crashed in round 2 and read as a codegen bug.
+**The real rule is about the RTL, not about FPC:**
 
-**Narrow criterion — do NOT generalise this to "big changes need FPC".** Most
-large changes self-host fine: new IR ops, frontend features, optimiser passes,
-even new backends. The rule is specific:
+> Seed from a compiler that carries **its own versioned RTL**.
 
-> A change needs the FPC seed when **the emitted code and the linked RTL must
-> agree on a data layout**, and the change alters that layout.
+`pinned` does: `make pin` freezes `compiler/builtin/*.pas` into
+`stable_linux_amd64/default/builtin/`, and the pinned binary resolves `uses
+builtinheap` from its own ExeDir in preference to the live tree
+(the pinned-stable builtin isolation). So a pinned seed is generation-consistent
+by construction: its inline codegen and its RTL are the same vintage, while its
+*emitter* is the new source — which is exactly what is needed.
 
-Header offsets are the clear case. `devdocs/dev/fpc-optional-workflow.md` is
-right that the daily loop — including `stabilize` and `pin` — needs no FPC; this
-is the narrow exception, not a softening of that.
+`./compiler/pascal26` does **not**. It has no frozen RTL and resolves `uses
+builtinheap` from the live tree, so it links tomorrow's RTL into today's
+emitter. `make compiler/pascal26` seeds from it, which is the one path that
+breaks — and it breaks silently: the compile succeeds and the *product* dies,
+so it reads as a codegen bug. That gap is
+[[bug-a-self-host-seed-has-no-versioned-rtl]].
 
-**Seed from FPC.** FPC compiles the new source with no old-pxx generation in the
-loop, producing a self-consistent binary to self-host from. `make
-compiler/pascal26` will fail confusingly.
+`gate.sh` seeds its fixedpoint from `pinned` and would therefore have validated
+this change all along. The earlier claim that it could not is withdrawn.
 
 The split is deliberate and was the user's call:
 

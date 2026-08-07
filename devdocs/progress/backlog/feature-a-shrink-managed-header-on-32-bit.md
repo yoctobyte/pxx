@@ -64,9 +64,11 @@ expected.
 
 ## Gate
 
-Track A, and the same shape as phase 1: **FPC seed bootstrap** (a header-layout
-change cannot pass through a self-host generation — see the design doc's
-sequencing note), `testmgr --tier full` with the 32-bit targets specifically,
+Track A, and the same shape as phase 1 — but **not** via FPC. Seed the self-host
+from `pinned` (which carries its own frozen RTL); `make compiler/pascal26` seeds
+from a binary with no versioned RTL and will silently produce a core-dumping
+compiler ([[bug-a-self-host-seed-has-no-versioned-rtl]]). Then
+`testmgr --tier full` with the 32-bit targets specifically,
 `-dPXX_HEAP_DEBUG` for free-base errors, then `stabilize` + `pin`. An ESP/xtensa
 build under `--platform=esp --esp-profile=bare` is the point of the exercise, so
 measure the arena headroom before and after.
