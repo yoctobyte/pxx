@@ -111,4 +111,4 @@ one as the known gap; the NOTE is replaced by the real coverage). Output is
 byte-identical to CPython's for the whole file. Makefile expectation updated.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 06062c8e2.
