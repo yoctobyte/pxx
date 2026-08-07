@@ -66,6 +66,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-o2-resident-param-stale-after-longjmp | A | 90 | bug | bug: -O2 (DEFAULT) resident param reads STALE after exception longjmp | — |
 | bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call | O | 80 | bug | -O3 silently returns the wrong value: the non-leaf inline slice treats a GLOBAL read as re-readable and can evaluate it on the wrong side of the retained body's inner call, which writes it. localtime loses its timezone offset | — |
 | bug-a-open-array-of-variant-silent-miscompile | A | 45 | bug | Open `array of Variant` parameter silently miscompiles (reads only first elem) | — |
+| bug-a-open-array-value-parameter-aliases-instead-of-copying | A | 50 | bug | An OPEN ARRAY value parameter (`x: array of Integer`) aliases the caller's data — the callee's `x[0] := n` is visible to the caller. FPC copies. A NAMED dynamic-array value param correctly aliases in both. | — |
 | bug-a-overload-resolution-ignores-class-identity | A | 80 | bug | Overload resolution never checks CLASS IDENTITY for a class-typed parameter — it takes the first candidate whose arity fits, so an unrelated class binds silently and the callee reads one class's fields as another's | — |
 | bug-a-parallel-for-aarch64-multi-capture | A | 40 | bug | aarch64: `parallel for` with 2+ captures → Bus error (alignment) | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |

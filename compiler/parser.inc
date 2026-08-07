@@ -8680,6 +8680,66 @@ begin
   end;
 end;
 
+{ May this argument be duplicated for a by-value OPEN ARRAY parameter?
+
+  Two source shapes carry a length header at [data-8] and so can be copied: a
+  DYNAMIC ARRAY, and an OPEN-ARRAY PARAMETER being forwarded onward. The second
+  is not optional — `procedure Outer(x: array of Integer); begin Inner(x)`
+  must give Inner its own copy too, and leaving it out left the inner write
+  visible to Outer (measured against FPC, which answers the caller's original
+  value).
+
+  Elements must own nothing: AN_DYN_COPY moves bytes, so a managed or nested
+  element would be duplicated WITHOUT a retain and released twice. The Copy
+  intrinsic refuses nesting for the same reason; the managed case is added here
+  because this copy is emitted implicitly rather than asked for, so a crash
+  would arrive unannounced. Those element types keep the old aliasing behaviour
+  until AN_DYN_COPY learns element-aware retain
+  (feature-dynarray-copy-nested-element-type). }
+function OpenArrayCopyEligible(node: Integer): Boolean;
+var si: Integer; et: TTypeKind; isDyn, isOpenParam: Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_IDENT then Exit;   { a bare name is the censused shape }
+  si := ASTIVal[node];
+  if (si < 0) or (si >= SymCount) then Exit;
+  if not Syms[si].IsArray then Exit;
+  if SymElemDynDepth[si] > 0 then Exit;     { nested — AN_DYN_COPY refuses it too }
+  isDyn := (Syms[si].ArrLen = -1) and (SymDynDepth[si] = 1);
+  { an OPEN-ARRAY parameter: AllocParam stamps the ArrLen = 1000 "length
+    unknown" placeholder and leaves the dyn depth at 0, which is exactly what
+    distinguishes it from a named dynamic-array param (depth >= 1) and from a
+    named FIXED array param (a real ArrLen) }
+  isOpenParam := (Syms[si].Kind = skParam) and (SymDynDepth[si] = 0) and
+                 (Syms[si].ArrLen = 1000);
+  if not (isDyn or isOpenParam) then Exit;
+  et := Syms[si].ElemType;
+  Result := (et = tyInteger) or (et = tyBoolean) or (et = tyChar) or
+            (et = tyInt8) or (et = tyUInt8) or (et = tyInt16) or (et = tyUInt16) or
+            (et = tyInt32) or (et = tyUInt32) or (et = tyInt64) or (et = tyUInt64) or
+            (et = tyNativeInt) or (et = tyNativeUInt) or (et = tyPointer) or
+            (et = tySingle) or (et = tyDouble);
+end;
+
+{ `Copy(node)` — the whole-array duplicate, built as the very node the Copy
+  intrinsic builds (source, index 0, count MaxInt). }
+function MakeWholeDynCopy(node: Integer): Integer;
+var idxN, cntN, argA, argB: Integer;
+begin
+  idxN := AllocNode(AN_INT_LIT);
+  ASTIVal[idxN] := 0; ASTTk[idxN] := Ord(tyInteger);
+  cntN := AllocNode(AN_INT_LIT);
+  ASTIVal[cntN] := 2147483647; ASTTk[cntN] := Ord(tyInteger);
+  Result := AllocNode(AN_DYN_COPY);
+  ASTLeft[Result] := node;
+  argA := AllocNode(AN_ARG); ASTLeft[argA] := idxN;
+  argB := AllocNode(AN_ARG); ASTLeft[argB] := cntN;
+  ASTRight[argA] := argB;
+  ASTRight[Result] := argA;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
 procedure ParseFactorCore;
 var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;

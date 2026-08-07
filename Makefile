@@ -1803,6 +1803,13 @@ test-threads: $(COMPILER)
 	# placeholder -> 1000-element overrun) + N-D whole-array assign
 	./$(COMPILER) test/test_array_var_param_assign.pas /tmp/test_avpa26
 	test "$$(/tmp/test_avpa26 | tail -1)" = "ARRAY VAR PARAM ASSIGN OK"
+	# an OPEN ARRAY value param gets its own COPY (FPC's rule): the callee's
+	# x[0] := n was visible to the caller. Every row diffed against FPC,
+	# including the ones that already agreed -- var open arrays and named
+	# dyn-array value params must keep aliasing.
+	./$(COMPILER) test/test_open_array_value_param_copies.pas /tmp/test_oavp26
+	test "$$(/tmp/test_oavp26 | tail -1)" = "OPEN ARRAY VALUE PARAM OK"
+	test "$$(/tmp/test_oavp26 | head -2 | tail -1)" = "open by value      : 1"
 	# 64-bit named constants (were declared tyInteger -> truncated on 32-bit
 	# targets). Only meaningful cross; x86-64 passed even when broken.
 	./$(COMPILER) test/test_const64.pas /tmp/test_const64_26

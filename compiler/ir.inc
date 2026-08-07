@@ -2063,6 +2063,49 @@ var argTk: TTypeKind;
   arcArg1, arcArg2, arcCall: Integer;
   pvSinkIsProcVar: Boolean;
 begin
+  { A by-VALUE OPEN ARRAY gets its OWN COPY — FPC's rule, and the one parameter
+    kind pxx got wrong. `procedure P(x: array of Integer)` then `x[0] := 666`
+    was visible to the caller, silently, because a dynamic-array argument passes
+    its handle straight through
+    (bug-a-open-array-value-parameter-aliases-instead-of-copying).
+
+    Done HERE, not at the call sites: every call funnels through this function,
+    while the parser builds argument lists in a dozen places (plain calls,
+    method calls, inherited, indexed properties) and patching each would be the
+    second path that stays broken.
+
+    Four conditions, each load-bearing, and the measurements are on the ticket:
+    - IsArray and NOT isRefArg — a `var`/`out` open array must keep aliasing,
+      and already does.
+    - DynDepth = 0 — a NAMED dynamic-array value param (`x: TIntArr`) passes the
+      reference in FPC too, and pxx already agrees. Only a true open array
+      (`array of T`) is the construct that copies.
+    - not const — `const` cannot be written, so a copy would be pure cost. This
+      is also what keeps the change free where it matters: every open-array
+      parameter in the compiler's own source is `const`, so self-host never
+      reaches this path.
+    - the ARGUMENT carries a length header — a dynamic array, or an open-array
+      PARAMETER being forwarded onward (that one is not optional: `Outer(x)`
+      calling `Inner(x)` must give Inner its own copy, and FPC says so). A
+      static-array argument already materialises a dyn temp on the way in
+      (measured: it does not alias), so it needs nothing here.
+
+    Spelled as the same AN_DYN_COPY node `Copy(a)` builds rather than a new
+    lowering, so it inherits that path's allocation and temp lifetime. Nested
+    and managed element types stay on the old path deliberately: AN_DYN_COPY
+    byte-copies, so an `array of AnsiString` would duplicate handles without
+    retaining them, and a wrong VALUE beats a double free until Copy itself
+    learns element-aware retain (feature-dynarray-copy-nested-element-type). }
+  if (not isRefArg) and (cpi >= 0) and (cpi < ProcCount) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (pathIdx < MAX_PROC_PARAMS) and
+     Procs[cpi].Params[pathIdx].IsArray and
+     (not Procs[cpi].Params[pathIdx].IsRef) and
+     (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] = 0) and
+     (not ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx]) and
+     OpenArrayCopyEligible(argAST) then
+    argAST := MakeWholeDynCopy(argAST);
+
   { {$MODE DELPHI}: a bare procvar ARGUMENT is called when the parameter wants a
     value, and passed as-is when the parameter is itself proc-typed — measured
     both ways against FPC. Computed with explicit ifs rather than a chained

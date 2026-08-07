@@ -38,11 +38,10 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (202)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-open-array-value-parameter-aliases-instead-of-copying | A | 50 | bug | An OPEN ARRAY value parameter (`x: array of Integer`) aliases the caller's data — the callee's `x[0] := n` is visible to the caller. FPC copies. A NAMED dynamic-array value param correctly aliases in both. | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
 | bug-a-riscv32-nested-dynamic-array-element-write-segfaults | A | 50 | bug | riscv32: writing an element of a NESTED dynamic array (`a[i][j] := x`) segfaults. Pre-existing on pinned; the flat case and all other targets are fine. | — |
 | bug-a-write-fixed-fraction-digits-past-16-are-invented | A | 35 | bug | SILENT: write(v:w:d) gets the INTEGER part exactly now, but the fraction is still scaled through a Double — 1/3 at :0:30 prints ...333312 where the double's exact tail is ...333314829616256247, so digits 17-18 are wrong and 19+ are zeros presented as digits | — |
@@ -362,9 +361,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1456)
+## done (1457)
 
-1456 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1457 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -444,7 +443,6 @@ _none_
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [A] bug-a-open-array-value-parameter-aliases-instead-of-copying
 - [p 50] [A] bug-a-riscv32-nested-dynamic-array-element-write-segfaults
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
