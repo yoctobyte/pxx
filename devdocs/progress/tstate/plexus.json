@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-06T21:41:38Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "398e72d2c758c16d05c24b46f3e3032a6146f029",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-06T21:51:48Z",
    "fixed": [
     "test-i386#src:test/test_dynarray_field.pas"
@@ -406,6 +398,14 @@
    "new_red": [],
    "sha": "be4556d598f7f3e03e74f66f085c48ceb0631a7a",
    "tier": "native",
+   "verdict": "INFRA"
+  },
+  {
+   "date": "2026-08-07T16:46:33Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "be4556d598f7f3e03e74f66f085c48ceb0631a7a",
+   "tier": "full",
    "verdict": "INFRA"
   }
  ],
@@ -2583,9 +2583,9 @@
   "test-opt#src:test/test_atomic64.pas": "pass"
  },
  "last": {
-  "date": "2026-08-07T16:45:52Z",
+  "date": "2026-08-07T16:46:33Z",
   "sha": "be4556d598f7f3e03e74f66f085c48ceb0631a7a",
-  "tier": "native",
+  "tier": "full",
   "verdict": "INFRA",
   "wall": 0.0
  },
@@ -2599,88 +2599,17 @@
   "sha": "b0cbeba6029d0298ddf42d14020cfd6f38ba8888"
  },
  "last_full": {
-  "date": "2026-08-07T14:46:16Z",
-  "sha": "b0cbeba6029d0298ddf42d14020cfd6f38ba8888",
+  "date": "2026-08-07T16:46:33Z",
+  "sha": "be4556d598f7f3e03e74f66f085c48ceb0631a7a",
   "tier": "full",
-  "verdict": "RED",
+  "verdict": "INFRA",
   "wall": 0.0
  },
  "last_opt": {
   "date": "2026-08-07T14:46:49Z",
   "sha": "b0cbeba6029d0298ddf42d14020cfd6f38ba8888"
  },
- "open_regressions": [
-  {
-   "bad": "330f62af78d0971ee8c39d5aa9bf6dc294aeaab7",
-   "good": "7d8929633721af6b943f2ebb33af49313351f7fb",
-   "job": "test-core#src:test/csocket_loopback_b88.c",
-   "migrated_at": "2026-08-07T16:44:07Z",
-   "migrated_from": "xeon",
-   "name": "test-core#454",
-   "opened": "2026-08-04T23:06:22Z",
-   "range": [
-    "f572e5da67cd2cce2e16ca33e30fee084b00e852",
-    "776cb75efecbac969b50813bcb9a567f0ca31b8c",
-    "d2f1c05376df5ba719b8a3d747ed7a721d28f335",
-    "cd146c63b48610e1c13240cb14a071aa24853abf",
-    "7db9c4b90520fe3044675623e0e6580f47fa9b61",
-    "6ea001b0910241a175d00da7f88d80278ccb296f",
-    "14e2d0911e49958d3a1b74430b161db48ca14114",
-    "08537c9e4bdc9e0b45ae4afaa97a2a32f64058a1",
-    "557a200bb4764b899388acceeb9a87ae3b7fad60",
-    "ef1776ea11c72c36be7aada3f863476479d237aa",
-    "8fb7d0b6a92453a915475d9e515a1a7878e66be1",
-    "7e5ea47c5d4b81958a621663fb9dd3f7dcae637c",
-    "94b81ff6382d9314ae014cb8a3cfaf8e57feebc9",
-    "c86ce42b50fddc14065c945cdd2d5f7cf1631b85",
-    "447bca7f33dbe962058fad38b7ec2127c613f868",
-    "8d0ea6d1924096b3ce7375238ea5c8978c1baa6e",
-    "c070516fd5d1b1ddf844bd88e63a9f7ba96c8243",
-    "604f30b53fd850bc4cb004b43f758edcf61af513",
-    "bd16f4b1cf905a1c8143b72a97a09bf4d0524166",
-    "3d49f48e8ec2ce6f762129d5265d591cfd5dd9fd",
-    "2bc9c909bfa074846c236290ab13d3d2d15ba705",
-    "7750c2653641f80e14f6f5b82cd2bc2cb6815bc1",
-    "e8b439e24956056349d1dcfc376927cdb1c15710",
-    "a87e8a224da09978b1266833c3ced29e9cfee07c",
-    "e1e43a5e60a1b7ec35c7cd475c8e9b311ad24713",
-    "acf63b84d1366434f725616210864a0e1c835738",
-    "f4ae06ae3b6318a28321c99331aac95e6432e734",
-    "8f26e48834229267f06eba82ab59d5bbe83195c3",
-    "0f30b27ca997b135341c2b272d96224f89c19780",
-    "b1d17ffe46054e2071b71883c130147fc44cde32",
-    "9f832af6e94bf3b88aa3bec316fda7ba684ce44a",
-    "9293312e7d2f44fa009644d8bb3fc04454ced919",
-    "0ae0a4aa7e8970adde5cabaa5df9b02f3db4dfbe",
-    "aa637cc95c8eba92b5617724e68d79ea557ef023",
-    "622a8a0556335728960acb692cb8bf981e47fa73",
-    "6f5f2ca2574bdbed264939bcc942489722d52b44",
-    "8e4b108cc48aa6cb9942d0c62d938c71d06017b4",
-    "5d5437a1d22722ae522bcea41db1c06bd158ea59",
-    "0fa0ff5f41f8c47a9587158fbbf19a0fece6e8f6",
-    "140bdf745da9daa3d5eb9150061251da426d5f06",
-    "9666719d8aa327eb3ae865340f4cd0dc0f098fe1",
-    "0f84feea37846e49b7a861affc75e4b588e125f9",
-    "0600d5458c5a0ec9237c3c29115c558409ee91e1",
-    "574e4a62610b63429add23fa0b5f516d436b044e",
-    "d10246353055b78848f12a5a23e4a11240e8ab04",
-    "b4080cce1a26b8b7ad8a802a8cf4875f17036c2a",
-    "0f7ca1b7fa516ad1c9b9343e5b6b41ff57a90e76",
-    "a49eda765c24ab6ebb26c819474e2d0ea2745815",
-    "5e76bd07e466aeba2de26ab897aa62aca0d636df",
-    "6872272de597ff419c9854295174a613a35e4dde",
-    "8d7c47f8f7d553fce66d7943eb7a102a420ce1b5",
-    "f928bd11247b320aedfb255333c3c7fd25e25e39",
-    "570e72de387eb29ddad489fe8401e712aab76d3e",
-    "f3b66f482e1fe532aefa05318a68e8da7a86d461",
-    "53911186080f9e2c8587b77699cb2de6f4a34bb4",
-    "0c1eb1a2c5224de419696d900fdc30810c63f825",
-    "0758d456ee373909ffb6845effd3224ceb2a9c55",
-    "330f62af78d0971ee8c39d5aa9bf6dc294aeaab7"
-   ],
-   "src": "test/csocket_loopback_b88.c"
-  }
- ],
+ "open_regressions": [],
  "renamed_from": [
   "xeon"
  ]

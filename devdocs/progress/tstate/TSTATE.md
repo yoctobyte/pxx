@@ -3,11 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 6d22h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `be4556d598f7` | 2026-08-07T16:45:52Z | INFRA (native) | 0.0s | `b0cbeba6029d` RED |
+| plexus | `be4556d598f7` | 2026-08-07T16:46:33Z | INFRA (full) | 0.0s | `be4556d598f7` INFRA |
 | xeon **QUIET 2d17h** | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/csocket_loopback_b88.c** — test/csocket_loopback_b88.c (plexus): bad `330f62af78d0`, last good `7d8929633721`, 58 commit(s) in range
+- none
 
 ## Held — quiet hosts (not actionable)
 
