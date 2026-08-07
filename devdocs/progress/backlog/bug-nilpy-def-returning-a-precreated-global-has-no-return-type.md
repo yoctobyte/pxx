@@ -55,3 +55,49 @@ failed identically on both, so the fix does not address it — but confirm).
 
 Per-fix loop, plus a `.npy` test covering `rd().field`, `rd().method()` and the
 bind-first form, diffed against CPython.
+
+## 2026-08-07 — narrowed: not ordering, and the fix hits a two-pass ABI constraint
+
+The guess in "Likely shape" (that the parent's class-carrying fix might have
+already supplied the information) is **wrong** — re-measured after that fix
+landed and `rd().z` still fails. Two more measurements move it on:
+
+| shape | result |
+| --- | --- |
+| `def rd(): return g` with `g = K()` **above** it | still fails |
+| `def rd2(): return K()` (a fresh construction) | **works** |
+| `r = rd(); r.z` (bind first) | works |
+
+So it is **not** declaration order, and not the pre-created global's type: a
+returned CONSTRUCTION types fine, a returned bare IDENT naming a module global
+does not. And the value is genuinely a `K` at run time — only the call node's
+STATIC type is missing, which is why binding to a local first works (the local
+is typed by the trial parse).
+
+### Where it stops
+
+`PyInferDefRetType`'s bare-ident path (pyparser.inc ~18355) chases *"the ident's
+ASSIGNMENT earlier **in the body**"*. A module-level global is assigned outside
+the body, so there is nothing to chase, and `PyInferExprType` only resolves a
+bare ident through `PyLocals`.
+
+That is the constraint, and it is recorded in the code right there: **`PyLocals`
+exists in the HEADER pass but not in the pre-pass**, and the comment warns that
+trusting it in one and not the other made *"the two passes infer different
+return types, a silent ABI mismatch."* So teaching only the header pass to
+resolve module globals reintroduces exactly that hazard.
+
+A correct fix has to make the global's type available to BOTH passes. The
+natural home is the `repeat … until not changed` fixpoint in
+`PyCollectModuleLocalsAST` — re-infer def return types inside it — but the
+ordering is genuinely circular (typing a global assigned from a call needs the
+def's return type; typing that return needs the global), which is why the loop
+exists at all.
+
+### Parked
+
+Not a small fix, and the failure mode of getting it wrong is a silent ABI
+mismatch rather than a loud error. The workaround (`r = rd()` then `r.z`) is
+correct, cheap and already used in
+`test/test_nilpy_global_read_above_its_assignment.npy` with a comment naming
+this ticket.
