@@ -727,20 +727,49 @@ function PXXSysWrite(fd, buf, count: NativeInt): Int64; forward;
 { Emit a pending report. Called with the allocator lock RELEASED — reporting
   formats a message and may itself touch the heap, and doing that under the
   spinlock would deadlock the PXX_TS_SOFTLOCK build against itself. }
+const
+  { The four report texts as CONSTANTS, indexed in place. They used to be
+    assigned into a `msg: string` local, and that local is what hung the
+    `--threadsafe -dPXX_HEAP_DEBUG` build: a managed local is finalized on the
+    way out, the finalize enters the emitted string-release blob, and that blob
+    takes the heap spinlock — which the caller is ALREADY holding, because
+    EmitHeapFreeLocked calls PXXFree from inside the locked region and PXXFree
+    ends here. One thread, one lock, taken twice: `lock xchg` spins forever.
+    The routine's own header already says it must be callable with the
+    allocator lock released; on x86-64 the lock is the hand-emitted one, which
+    PXXFree cannot see, so the only safe rule is that this routine allocates
+    NOTHING. Keep it that way — no managed local, no string temp.
+    bug-a-threadsafe-plus-heap-debug-hangs-at-runtime }
+  DBG_M1 = 'pxx-heap: DOUBLE FREE of 0x';
+  DBG_M2 = 'pxx-heap: WRITE AFTER FREE in 0x';
+  DBG_M3 = 'pxx-heap: RETAIN of a FREED object 0x';
+  DBG_M4 = 'pxx-heap: RELEASE of a FREED object 0x';
+
+procedure PXXDbgPutConst(kind: Integer);
+{ One byte at a time out of a string CONSTANT — no managed temp anywhere. }
+var i: NativeInt; b: Byte; r: Int64;
+begin
+  if kind = 1 then
+    for i := 1 to Length(DBG_M1) do
+    begin b := Byte(DBG_M1[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 2 then
+    for i := 1 to Length(DBG_M2) do
+    begin b := Byte(DBG_M2[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 3 then
+    for i := 1 to Length(DBG_M3) do
+    begin b := Byte(DBG_M3[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else
+    for i := 1 to Length(DBG_M4) do
+    begin b := Byte(DBG_M4[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
+end;
+
 procedure PXXDbgFlush;
-var i: NativeInt; b: Byte; r: Int64; v: Int64; d: Integer; msg: string;
+var i: NativeInt; b: Byte; r: Int64; v: Int64; d: Integer; kind: Integer;
 begin
   if HeapDbgPend = 0 then Exit;
-  if HeapDbgPend = 1 then msg := 'pxx-heap: DOUBLE FREE of 0x'
-  else if HeapDbgPend = 2 then msg := 'pxx-heap: WRITE AFTER FREE in 0x'
-  else if HeapDbgPend = 3 then msg := 'pxx-heap: RETAIN of a FREED object 0x'
-  else msg := 'pxx-heap: RELEASE of a FREED object 0x';
+  kind := Integer(HeapDbgPend);
   HeapDbgPend := 0;
-  for i := 1 to Length(msg) do
-  begin
-    b := Byte(msg[i]);
-    r := PXXSysWrite(2, Int64(@b), 1);
-  end;
+  PXXDbgPutConst(kind);
   { address in hex, high nibble first, no leading-zero suppression so the width
     is constant and greppable }
   i := (SizeOf(Pointer) * 8) - 4;

@@ -1790,6 +1790,16 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_tthread26)" = "$$(printf 'counter=400000 expected=400000\nTTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_event.pas /tmp/test_event26
 	test "$$(/tmp/test_event26)" = "$$(printf 'passed=4 expected=4\nEVENT OK')"
+	@# --threadsafe + -dPXX_HEAP_DEBUG together used to HANG (self-deadlock on the
+	@# heap spinlock: PXXFree runs inside the emitted locked region and its
+	@# PXXDbgFlush had a managed local whose finalize re-took the same lock).
+	@# All three builds must agree, so a fix cannot pass by disabling either mode.
+	./$(COMPILER) --threadsafe test/test_threadsafe_heap_debug_combo.pas /tmp/test_tshd_ts26
+	test "$$(/tmp/test_tshd_ts26)" = "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_threadsafe_heap_debug_combo.pas /tmp/test_tshd_hd26
+	test "$$(/tmp/test_tshd_hd26)" = "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
+	./$(COMPILER) --threadsafe -dPXX_HEAP_DEBUG test/test_threadsafe_heap_debug_combo.pas /tmp/test_tshd_both26
+	test "$$(/tmp/test_tshd_both26)" = "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
 	./$(COMPILER) --threadsafe test/test_thread_heap.pas /tmp/test_thread_heap26
 	test "$$(/tmp/test_thread_heap26)" = "$$(printf 'errors=0\nHEAP OK')"
 	# heap contract: every allocation family safe under concurrent churn (strings, dynarrays, classes, raw+realloc)

@@ -50,3 +50,66 @@ belongs to the same runtime-dispatch effort.
 
 Not attempted here — same class of problem the sibling ticket already scoped
 as "new runtime type-dispatch codegen, not a quick patch."
+
+## 2026-08-07 — the stated ROOT CAUSE is stale: runtime dispatch already works
+
+Reproduced first (still exact: `[, ]` and `{'a': }`), then measured the premise
+this ticket and its sibling rest on — *"a class instance that reaches pylib's
+runtime helpers only as a bare Variant handle has no way to call back into its
+own class's methods without new runtime type-dispatch machinery"*.
+
+**That machinery exists and works today.** On a receiver whose class is
+genuinely not known at compile time:
+
+```python
+class A:
+    def __repr__(self): return "A!"
+class B:
+    def __repr__(self): return "B!"
+
+def show(o):                 # untyped parameter -> variant
+    return o.__repr__()
+
+print(show(A()), show(B()))  # "A! B!"   correct
+
+for m in [A(), B()]:         # heterogeneous list, element is a variant
+    print(m.__repr__())      # "A!" then "B!"   correct
+```
+
+Both dispatch to the RIGHT class. So do `type(e).__name__`, `isinstance(e, Point)`
+and `e.x` on an element pulled out of a list. pylib itself already calls
+`TObject(obj).ClassName` on these pointers (pylib.pas ~2307, ~2331), so the VMT
+is reachable from inside pylib too.
+
+### So the gap is narrower than recorded
+
+Not "no runtime type dispatch". It is: **the `__str__`/`__repr__` rewrite is a
+COMPILE-TIME one**, keyed on the receiver's static class
+(`pyparser.inc` ~10900, `FindUMeth(argCi, '__str__')`), and a container element
+has no static class for it to key on. pylib's own renderer then has no route to
+the dispatch that does exist.
+
+### Design this unlocks — reuse the lowering instead of building new machinery
+
+The frontend already knows how to build "call `__repr__` on this variant" — that
+is exactly what it emits for `o.__repr__()` above. So:
+
+1. pylib declares a hook, e.g.
+   `PyUserReprHook: function(const v: Variant; wantRepr: Boolean): AnsiString`,
+   nil by default, and its element renderer calls it for a tag-7 payload that is
+   not one of pylib's own classes (`PyRecIsPylibOwnClass` is the existing
+   predicate for that half).
+2. The compiler synthesises ONE proc whose body is the AST it already builds for
+   `o.__repr__()` / `o.__str__()`, with CPython's default-object fallback, and
+   installs it into the hook — the same install-a-hook pattern
+   `PXXObjFinalizeHook` already uses.
+
+No new dispatch codegen; the missing piece is a route, not a mechanism.
+
+### Not started
+
+The change touches every container print, so it wants a session that can carry
+it and re-run the container tests. Parked with the diagnosis corrected rather
+than left resting on a premise that is no longer true — and the sibling
+[[feature-nilpy-runtime-method-dispatch-on-variant]] should be re-read in this
+light too, since it is scoped on the same stale assumption.
