@@ -165,4 +165,4 @@ another symptom elsewhere.
 GREEN.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit bd6edb9f0.
