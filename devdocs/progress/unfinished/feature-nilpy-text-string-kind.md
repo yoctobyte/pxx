@@ -149,6 +149,41 @@ string-returning entry point (`pystr_at_s`) *and* the lowering re-typed from
 `tyChar` to `tyAnsiString` — which ripples into NilPy's type inference. That is
 the structural work, not the UTF-8 arithmetic.
 
+### How CPython solves the "char" problem — and why that removes the objection
+
+Python has **no char type**. `s[i]` returns a `str` of length 1, always.
+Measured against CPython 3.12:
+
+| | result |
+| --- | --- |
+| `type(s[0]).__name__`, `len(s[0])` | `str`, `1` |
+| `t[1] is t[1]` for `é` (U+00E9) | **True** — cached |
+| `u[0] is u[0]` for `日` (U+65E5) | **False** — freshly allocated |
+| `sys.getsizeof("a")` | 42 bytes |
+
+So CPython keeps a cache of the **256 latin-1 single-character strings** and
+allocates only above U+00FF. Given a 42-byte str object, that cache is what
+makes `for c in s` and `s[i]` affordable at all.
+
+**This is the answer to the `pystr_at` obstacle above.** The objection to
+returning a string instead of a `Char` is allocation cost per subscript — and
+CPython shows the standard fix: intern the single-character strings. For pxx
+that means the ~128 ASCII ones (our substrate is UTF-8, so latin-1 above $7F is
+already two bytes and less worth caching), which is exactly the population the
+`PXX_FLAG_ASCII` fast path is already about. On that path `s[i]` becomes a
+pointer to a shared block — **cheaper than today's `Char` → `pystr_ofchar`
+promotion**, which allocates.
+
+Pleasingly, both reserved flags from the phase-2 foundation find their purpose
+here: `PXX_FLAG_INTERNED` marks a cached singleton, and `PXX_FLAG_STATIC` is
+what stops its refcount ever reaching zero. Neither was invented for this; they
+were reserved on general principle and the use arrived.
+
+So the shape of the fix is: `pystr_at_s(s, i): AnsiString` returning an interned
+singleton for an ASCII character and a fresh 1-character string otherwise, with
+the lowering re-typed from `tyChar` to `tyAnsiString`. The type ripple is real
+work; the performance worry is not.
+
 ### Why it must be all-or-nothing
 
 Converting `len()` alone makes things **worse**: `while i < len(s): s[i]` would
