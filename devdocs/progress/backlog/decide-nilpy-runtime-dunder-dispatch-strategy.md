@@ -117,3 +117,57 @@ Read out of the emitters rather than reasoned about:
 - **Whether `[VMT-24]` is genuinely free.** It widens a layout two emitters
   currently keep in step at 16 bytes. Not measured — the blast radius should be
   checked before the shape is committed to, not after.
+
+## 2026-08-07 — the one UNMEASURED thing is now measured: `[VMT-24]` is free
+
+The carry-forward above closes with *"Whether `[VMT-24]` is genuinely free. It
+widens a layout two emitters currently keep in step at 16 bytes. Not measured —
+the blast radius should be checked before the shape is committed to, not after."*
+
+Measured, by building it rather than reading it. Applied throwaway, gated,
+**reverted** — nothing of this is committed, because the decision is still yours.
+
+**The whole blast radius is three lines.**
+
+| what | where |
+| --- | --- |
+| write the prefix (NilPy classes) | `pyparser.inc` — `for i := 0 to 15` → `23` |
+| write the prefix (Pascal classes) | `parser.inc` — the same loop, kept in step |
+| the layout-backlink guard | `rtti_emit.inc` — `if UClsVMTOffset[ci] >= 16` → `24` |
+
+Everything else addresses **negatively from the VMT** and is therefore unaffected
+by prepending a word: `rtti_emit.inc` patches `UClsVMTOffset[ci] - 8` and
+`- 16`, and the only runtime reader is `builtin.pas`'s `PPxxPtr_(PtrUInt(vmt) -
+8)^`. Nothing indexes forward from the start of the prefix — `UClsVMTOffset` is
+taken *after* the prefix is written, so every virtual slot index is unchanged,
+and `is`/`as` keep comparing VMT addresses exactly as before.
+
+**Results with the prefix at 24 bytes:**
+
+- **Self-host converges.** `gate.sh quick` reports the fixedpoint RED, and that
+  reading is a false alarm worth recording: the check seeds from `$PINNED`, so
+  round A is built by a compiler that predates the layout change. A ≠ B, but
+  **B == C byte-identical** (`462a1ffe…`), which is the fixedpoint. This is the
+  ordinary one-time-reseed signature of any layout change and is what
+  `make stabilize` / `make pin` exist for — not non-convergence.
+- **`testmgr --tier quick` PASS**, FPC seed canary PASS.
+- **23 class-using `.npy` tests still diff clean against CPython.** The two that
+  do not are pre-existing: `test_nilpy_dataclass` is byte-identical to `pinned`,
+  and `test_nilpy_callable_to_str_param_fails` is a deliberate compile-failure
+  test.
+- Cost: **+8 bytes on the compiler binary**, and 8 bytes per class in `Data`.
+
+So option **C**'s cheapest shape — a dunder-table backlink at `[VMT-24]`,
+patched at emit time, no registration at construction — carries no hidden layout
+risk. That was the last open cost question; what remains is judgement, which is
+what this ticket has always been waiting on.
+
+**Also re-verified at HEAD, so the option analysis is not quoting a stale tree:**
+option A's dependency is still absent — `rtti_emit.inc` is published-only
+("every class with >=1 published member") and `parser.inc` still sets
+`UMthPub := 0` for a NilPy method, so no RTTI blob is emitted for a NilPy class
+at all.
+
+**Dunder census at HEAD** (the "~50" above): 47 Python dunders appear in the
+frontend. The ten the stalled tickets need are `__repr__ __str__ __bool__
+__eq__ __hash__ __lt__ __le__ __gt__ __ge__ __len__`.
