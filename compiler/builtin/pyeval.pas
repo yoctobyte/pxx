@@ -2363,6 +2363,13 @@ begin
         ParseExpr(elem);
         li.append(elem);
       end;
+      { …and it must SAY it is a tuple. The backing TPyList is a list by
+        default (PYSEQ_LIST is 0), so a tuple built here printed with brackets
+        and answered `list` to type(); the compiled lowering stamps the kind via
+        pylist_mark_tuple and this path simply never did, which made a tuple's
+        display depend on whether its lambda took the interpreted or the lifted
+        route (bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list). }
+      li.FKind := PYSEQ_TUPLE;
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
       PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
     end;

@@ -17140,6 +17140,34 @@ end;
   half — a lambda has no statements, no locals and no nested defs, so what is
   left is the prologue, the expression, and the epilogue.
   (feature-nilpy-lambda-compiled-closure) }
+function PyLambdaResultIsOwnedTemp(n, procIdx: Integer): Boolean;
+{ Is this lambda body's value a FRESHLY BUILT object the body itself owns, as
+  opposed to an alias of something that outlives the call?
+
+  The distinction matters because PyCompileLambdaBody refuses to return a
+  tyClass/tyRecord value at all — see the note at its exit-wrap — and that
+  blanket refusal was aimed at `lambda s: log.append(s)`, whose result is the
+  CAPTURED list itself. A container LITERAL is the opposite case: its lowering
+  hoists `__py_lit_N := <new>` and hands back a read of that temp, which OWNS
+  the construction ref (see PyParseListLiteralT), so returning it is exactly
+  what every other body path does with a `return [..]`.
+
+  Structural, not by name: an AN_IDENT of a LOCAL allocated inside this body's
+  own scope. A capture arrives as a PARAMETER and so is excluded, which is the
+  aliasing case the refusal exists for; a method-call result is an AN_CALL and
+  is excluded too. A lambda body is a single expression, so a local here can
+  only be a hoist temp. }
+var s: Integer;
+begin
+  PyLambdaResultIsOwnedTemp := False;
+  if n < 0 then Exit;
+  if ASTKind[n] <> AN_IDENT then Exit;
+  s := ASTIVal[n];
+  if (s < 0) or (s >= SymCount) then Exit;
+  if Syms[s].Kind <> skLocal then Exit;
+  PyLambdaResultIsOwnedTemp := s >= Procs[procIdx].ScopeBase;
+end;
+
 procedure PyCompileLambdaBody(procIdx, bStart, realProcIdx: Integer);
 var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode, exitNode,
     wArgSeq, wArgLast, wArgNode, wIdentNode, wCallNode: Integer;
@@ -17266,8 +17294,15 @@ begin
     the old discard-only behaviour for that shape rather than risk it; every
     scalar and managed-STRING result (checked with -dPXX_OBJTRACE too, and
     balances) is fixed.
-    bug-nilpy-lifted-lambda-discards-its-return-value }
-  if IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord] then
+    bug-nilpy-lifted-lambda-discards-its-return-value
+
+    A container LITERAL is carved back OUT of that exclusion: `lambda x: [x, 1]`
+    and `lambda x: (x, x+1)` hand back a read of a hoist temp that OWNS its
+    construction ref, so there is no second owner to unbalance — and being
+    swept up by the blanket refusal made every such lambda return None, silently
+    (bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list). }
+  if (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
+     not PyLambdaResultIsOwnedTemp(CurASTNode, procIdx) then
     node := CurASTNode
   else
   begin

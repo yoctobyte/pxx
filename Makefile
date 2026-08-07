@@ -303,6 +303,10 @@ test-nilpy: $(COMPILER)
 	# BOTH lowerings — they are reached by body shape, not by signature
 	./$(COMPILER) test/test_nilpy_lambda_default_override.npy /tmp/test_nilpy_lamdef26
 	test "$$(/tmp/test_nilpy_lamdef26)" = "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
+	# a container literal is RETURNED by a lambda, and keeps its tuple/list
+	# identity, on both lowerings — and the aliased-capture shape still works
+	./$(COMPILER) test/test_nilpy_lambda_container_result.npy /tmp/test_nilpy_lamctr26
+	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
@@ -4695,6 +4699,10 @@ test-core: $(COMPILER)
 	# BOTH lowerings — they are reached by body shape, not by signature
 	./$(COMPILER) test/test_nilpy_lambda_default_override.npy /tmp/test_nilpy_lamdef26
 	test "$$(/tmp/test_nilpy_lamdef26)" = "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
+	# a container literal is RETURNED by a lambda, and keeps its tuple/list
+	# identity, on both lowerings — and the aliased-capture shape still works
+	./$(COMPILER) test/test_nilpy_lambda_container_result.npy /tmp/test_nilpy_lamctr26
+	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26

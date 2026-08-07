@@ -1,0 +1,55 @@
+# bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list
+#
+# Two defects met here, one per lambda lowering — and the lowering is chosen by
+# body SHAPE (PyLambdaBodyIsLiftable wants a call in the body), so a test that
+# exercises only one shape passes while the other stays broken:
+#
+#   interpreted (no call in body): the tuple was built as a bare TPyList and
+#       never stamped PYSEQ_TUPLE, so it printed [3, 4] and type() said 'list'
+#   lifted (call in body): a tyClass result was refused the return-wrap
+#       wholesale, so ANY container literal came back as None
+#
+# The append case is the reason that refusal exists — its result aliases the
+# CAPTURED list — so it is pinned here to show the carve-out did not widen to it.
+
+def idn(v):
+    return v
+
+# interpreted path
+f = lambda x: (x, x + 1)
+lf = lambda x: [x, x + 1]
+print(f(3), type(f(3)).__name__)
+print(lf(3), type(lf(3)).__name__)
+
+# lifted path — same expressions, plus a call so the body lifts
+g = lambda x: (idn(x), x + 1)
+lg = lambda x: [idn(x), x + 1]
+print(g(3), type(g(3)).__name__)
+print(lg(3), type(lg(3)).__name__)
+
+# a def returning the same expression must be unchanged
+def gd(x):
+    return (x, x + 1)
+print(gd(3), type(gd(3)).__name__)
+
+# the aliased-capture shape the tyClass refusal was written for: the lambda's
+# result IS the captured list, and it must survive being called repeatedly
+def run():
+    log = []
+    add = lambda s: log.append(s)
+    for w in ["a", "b", "c"]:
+        add(w)
+    return log
+# joined rather than printed raw: quotes in an expected-output line are more
+# trouble than they are worth in the Makefile's printf
+print("-".join(run()))
+
+# a freshly built container per call, over enough iterations that a premature
+# free would show up
+def many():
+    out = []
+    mk = lambda s: [s, len(s)]
+    for w in ["xx", "yyy", "z"]:
+        out.append(mk(w))
+    return out
+print([p[1] for p in many()], len(many()))
