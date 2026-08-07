@@ -5,15 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:8 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1475 rejected:29`
+`unfinished:10 blocked:8 backlog:202 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1475 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (9) — parked mid-flight; re-claim, do not duplicate
+## unfinished (10) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-nilpy-closure-over-a-loop-variable-captures-by-value` [N]
+- `bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value` [N]
 - `bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error` [N]
 - `bug-nilpy-non-constant-parameter-defaults-silently-become-none` [N]
 - `feature-a-typeref-migrate-consumers` [A]
@@ -34,7 +35,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 184, ranked
+## Ready — top 30 of 183, ranked
 
 - `[p 70] [T]` regression-test-i386-test-dynarray-field
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-for-two-names-over-a-variant
@@ -67,4 +68,4 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 
-_154 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_153 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

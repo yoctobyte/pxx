@@ -12,11 +12,12 @@ _none_
 
 _none_
 
-## unfinished (9)
+## unfinished (10)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-closure-over-a-loop-variable-captures-by-value | N | 45 | bug | NilPy: a closure created in a loop captures the loop variable's VALUE at creation, so [f() for f in fs] gives [0, 1, 2] where CPython gives [2, 2, 2] — Python closes over the variable, not the value | — |
+| bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value | N | 45 | bug | A bound-method VALUE off a module-level global raises AttributeError as soon as ANY def in the module READS that global by name — `gb = b.hit` fails while the direct call `b.hit(3)` works. (The original title blamed a name collision; that was wrong, see the 2026-08-07 re-narrowing.) | — |
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | NESTED-DEF defaults only, as of 2026-08-05. `def inner(b=q)` inside another def still becomes None on the direct-call path; the closure-VALUE path evaluates it. Module-level (e53fa4a3f), METHOD (a87e8a224) and __init__ (e1e43a5e6) halves are all DONE — do not re-derive them from the older sections below. | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
@@ -39,7 +40,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (202)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +56,6 @@ _none_
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value | N | 40 | bug | A bound-method VALUE taken off a global whose name matches another class's ctor parameter raises AttributeError — `gb = b.hit` fails while `g = k.hit` on the same class succeeds in the same file. Name-dependent, so any test that happens to pick a colliding name reports the wrong bug | — |
 | bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
@@ -504,7 +504,6 @@ _none_
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [N] feature-nilpy-multi-arg-callback-bridges (unblocks 1)
 - [p 40] [A] bug-a-threadsafe-plus-heap-debug-hangs-at-runtime
-- [p 40] [N] bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value
 - [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed
