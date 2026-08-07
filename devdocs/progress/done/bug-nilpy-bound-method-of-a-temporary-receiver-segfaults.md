@@ -140,4 +140,4 @@ reports somebody else's bug — the lesson already recorded in
 `make fpc-check` byte-identical, self-host fixedpoint, `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 99c32f284.
