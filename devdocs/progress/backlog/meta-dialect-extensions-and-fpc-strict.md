@@ -149,3 +149,43 @@ nightly or the next stable may grow a `UCS4Char` concat path, and if it does,
 this stops being an extension and becomes a place where the two disagree — which
 *would* be strict-flag territory. Worth re-measuring when a new FPC stable lands
 (or refreshing a nightly if one is already pulled). No action before then.
+
+### Idea (NOT a ticket): a future `--ultra-strict-fpc` — the portability guarantee
+
+Recorded as a design note only, at the user's request. No work item.
+
+The strict family so far is about **meaning**. A third, different guarantee is
+about **acceptance**:
+
+> **`--ultra-strict-fpc`**: if this is set and pxx compiles it, FPC compiles it.
+
+That is not another parity switch, it is a *closed-world property* — "there
+exists no construct pxx accepts here that FPC rejects" — which is why it is a
+separate mode rather than another `--strict-*` flag.
+
+**The two guarantees compose, and both are needed for the use case:**
+
+| flag | guarantees | prevents |
+| --- | --- | --- |
+| `--strict-fpc` | same source, same **meaning** | ambiguity (silent divergence) |
+| `--ultra-strict-fpc` | FPC also **accepts** it | extensions (pxx-only syntax) |
+
+Either alone is insufficient for the real target: a program that compiles under
+FPC but *behaves* differently is worse than one FPC refuses outright. So
+ultra-strict would imply strict, not replace it.
+
+**Why it has real-world value** (the user's point, and it is the strongest
+argument for eventually building it): a **library or application meant to build
+under both compilers**. Develop against pxx — fast, self-hosting, better
+diagnostics — and retain the guarantee that FPC users can still build the
+result. That is a concrete audience, unlike parity-for-its-own-sake.
+
+**It can only be verified, never asserted.** A closed-world claim needs a
+differential: compile the corpus with the flag, feed the same sources to FPC,
+and require FPC to accept everything pxx accepted. The machinery largely exists
+(`tools/fpc_diff_probe.sh`, the FPC seed canary in `gate.sh`) — Track T-flavoured
+when it happens. Anything short of that is a promise nobody checked.
+
+Cost to note before starting: every existing pxx extension needs a decision
+(gate it, or declare the mode incompatible with it), which is an audit of the
+whole dialect surface — not a flag one afternoon.
