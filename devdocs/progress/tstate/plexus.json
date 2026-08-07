@@ -2606,8 +2606,8 @@
   "wall": 0.0
  },
  "last_opt": {
-  "date": "2026-08-07T11:40:50Z",
-  "sha": "8c112256cb547fdb2495e28df32f708c457bacec"
+  "date": "2026-08-07T12:36:02Z",
+  "sha": "6749c720a3fdc76fb48d09dd7d26cbd448c987c2"
  },
  "open_regressions": [
   {
