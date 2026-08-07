@@ -148,4 +148,4 @@ job, which is what the ticket's Gate line asked for:
   this shape, deliberately left unwired because it would have landed red here.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit abda21677.
