@@ -139,4 +139,4 @@ widened accumulator, and the `+=` neighbours (`c += 2000000000`, `xs += [2,3]`,
 a float accumulator) that must not have moved. Diffed against CPython.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit d94acb267.
