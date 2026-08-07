@@ -146,3 +146,29 @@ that can only turn working code into raising code is the wrong trade.
 
 ## Log
 - 2026-08-07 — resolved, commit 863fd9161.
+
+### Correction to "Not done", measured after the fact
+
+The follow-up ticket this section called for was written, then **disproven
+before filing and deleted**. Its claim was that a lambda WITH captures takes the
+lifted bound-fn path and is therefore still unchecked. Measured:
+
+```python
+k = 3
+f = lambda x: x * k          # module-scope capture
+def outer():
+    j = 3
+    g = lambda x: x * j      # LOCAL capture — the lifter's own condition
+```
+
+Both raise `TypeError` on `f(1, 2)` and `f()`, byte-identical to CPython, and
+neither emits a `$pylam` proc (checked in the `.map`) — so **the lifter did not
+run for either** and both took the interpreted closure path the fix covers.
+
+So the residual is not "capturing lambdas are unchecked". It is narrower and not
+yet characterised: some other condition selects the lifted path, and no lambda
+shape tried here reached it. Anyone extending this should first find a repro
+that actually emits `$pylam` before assuming the bound-fn path needs the check —
+filing the ticket as originally written would have handed the next session a
+repro that does not reproduce, which is the failure mode
+[[bug-nilpy-bound-fn-closure-objects-are-never-freed]] cost four sessions to.
