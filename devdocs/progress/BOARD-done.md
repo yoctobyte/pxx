@@ -474,6 +474,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
 | bug-nilpy-bytes-of-slice-leaks-intermediate | A | 45 | bug | NilPy: `bytes(seq[a:b])` leaks the intermediate slice object every call | — |
 | bug-nilpy-call-returning-class-loses-identity | N | 55 | bug | NilPy: a call returning a CLASS lost its class identity (silent, then SIGSEGV) | — |
+| bug-nilpy-call-through-a-dataclass-callable-field-segfaults | N | 45 | bug | Calling through a Callable FIELD segfaults when the field belongs to a @dataclass (or is typed only by a ctor parameter). The same field on a plain class with a class-level annotation works. This is what makes uforth segfault at run time. | — |
 | bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable | N | 55 | bug | A `Callable[...]`-annotated parameter segfaults when the argument is a heap callable | — |
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |

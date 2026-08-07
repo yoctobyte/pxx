@@ -2,6 +2,7 @@
 track: N
 prio: 45
 type: bug
+commit: PENDING-COMMIT
 summary: "Calling through a Callable FIELD segfaults when the field belongs to a @dataclass (or is typed only by a ctor parameter). The same field on a plain class with a class-level annotation works. This is what makes uforth segfault at run time."
 ---
 
@@ -137,3 +138,86 @@ what this narrowing already disproved twice over.
 Not fixed — the remaining step is a compiler-side print/compare that wants a
 fresh session. The narrowing above should make it short: the repro is 20 lines,
 the discriminator is one table row, and both candidate sites are named.
+
+## FIXED 2026-08-07 — an ABI lie in the `-> None` arm, not the field registration
+
+The narrowing above pointed at field registration. **It was wrong**, and the
+probe that settled it is worth recording because it inverted the conclusion:
+
+```
+FAILING (dataclass):  PROBE dataclass field native tk=17 fldSig=1209
+WORKING (plain class): (no probe line for `native` at all)
+```
+
+The dataclass registers the field **correctly, with a real signature**. The
+plain class does not register a field at all — its class-level annotation makes
+a CLASS ATTRIBUTE, so `w.native = push1` becomes a per-instance override that
+takes the dynamic path. So the "working" row was working by taking a completely
+different route, and the properly-registered static call was the broken one.
+
+### The actual cause: the call succeeds and dies RETURNING
+
+```python
+@dataclass
+class Box:
+    fn: Callable[[int], None]
+def show(n):
+    print("got", n)
+Box(show).fn(5)          # prints "got 5", THEN segfaults
+```
+
+`got 5` printing is the whole diagnosis: argument marshalling is fine.
+
+`Callable[..., None]` registered its `$proctype` as a **procedure**. That is an
+ABI lie — every unannotated NilPy def compiles to a **variant-returning
+function** whose result travels through a hidden destination POINTER the callee
+copies into unconditionally on the way out. Called through a procedure-typed
+signature, that register holds whatever the last call left in it, so the
+callee's epilogue writes 16 bytes to a garbage address.
+
+pyeval's `TPyCallFn0..3` already declare around exactly this, with the same
+reasoning: *"A `-> None` callee ignores the destination, so declaring it here is
+safe for both shapes."* The `Callable` annotation path simply did not follow its
+own rule — the comment two lines below the bug already said the declared result
+is "a HINT, not an ABI", and the `-> None` arm was the one place that treated it
+as one.
+
+Fix: a Callable signature is **always** a variant-returning function.
+
+### Measured
+
+Every dataclass shape now works and matches CPython: through the generated ctor,
+without `Optional`, without a default, assigned after construction, a
+value-returning Callable field, and two instances keeping their own callables.
+Test `test/test_nilpy_callable_field_call_returns.npy`, 7 lines oracle-diffed.
+
+### Residual — a DIFFERENT shape, still failing, pre-existing
+
+A plain (non-dataclass) class with **no class-level annotation**, whose Callable
+field is typed only by the constructor parameter, still segfaults — identically
+on the pinned binary, so it is untouched by this fix and by the
+`Callable`-parameter change of the same day. Repro `fc2`/`fld`: 
+
+```python
+class Word:
+    def __init__(self, native: Callable[[VM], None]):
+        self.native = native
+```
+
+That field is registered by the `self.x = …` scan with **fldSig = -1** (seen in
+the probe above), so the call has no signature at all. Filed as
+[[bug-nilpy-callable-field-typed-only-by-a-ctor-parameter-has-no-signature]].
+
+### uforth is NOT fixed by this
+
+Still segfaults at `uforth.py:840`, same backtrace. Four repros built from that
+line's shapes — `Optional[Word]` method call, Callable field call through a
+variant receiver, the dataclass field call — all now pass, so uforth's failure
+is something else on that line and needs bisecting the RUN rather than guessing
+from the source. [[bug-nilpy-uforth-compiles-but-segfaults-at-runtime]] stays
+open.
+
+### Gate
+
+`make fpc-check` byte-identical, self-host fixedpoint, `tools/gate.sh quick`
+GREEN.

@@ -662,6 +662,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_globread26 | diff -u test/test_nilpy_global_read_above_its_assignment.expected -
 	./$(COMPILER) test/test_nilpy_function_value_repr.npy /tmp/test_nilpy_fnrepr26
 	/tmp/test_nilpy_fnrepr26 | diff -u test/test_nilpy_function_value_repr.expected -
+	./$(COMPILER) test/test_nilpy_callable_field_call_returns.npy /tmp/test_nilpy_cbfield26
+	/tmp/test_nilpy_cbfield26 | diff -u test/test_nilpy_callable_field_call_returns.expected -
 	./$(COMPILER) test/test_nilpy_float_repr.npy /tmp/test_nilpy_floatrepr26
 	/tmp/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_user_class_shadows_builtin.npy /tmp/test_nilpy_shadow26

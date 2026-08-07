@@ -1,0 +1,83 @@
+# bug-nilpy-call-through-a-dataclass-callable-field-segfaults
+#
+# Calling through a `Callable[..., None]` field segfaulted — and the tell was
+# that the call SUCCEEDED first: `b.fn(5)` printed "got 5" and then died
+# returning. Not argument marshalling; the RETURN.
+#
+# `Callable[..., None]` registered a $proctype PROCEDURE, and that is an ABI lie.
+# Every unannotated NilPy def compiles to a VARIANT-returning function whose
+# result travels through a hidden destination POINTER that the callee copies
+# into unconditionally on the way out. Called through a procedure-typed
+# signature, that register held whatever the last call left in it, so the
+# callee's epilogue wrote 16 bytes to a garbage address.
+#
+# pyeval's TPyCallFn0..3 already declare around exactly this, for exactly this
+# reason. A Callable signature is now always a variant-returning function; a
+# `-> None` callee simply ignores the destination.
+
+
+from dataclasses import dataclass
+from typing import Callable, Optional
+
+
+class VM:
+    def __init__(self):
+        self.n = 0
+
+
+@dataclass
+class Word:
+    name: str
+    native: Optional[Callable[["VM"], None]] = None
+
+
+@dataclass
+class Box:
+    fn: Callable[[int], None]
+
+
+def bump(vm):
+    vm.n = vm.n + 1
+
+
+def show(n):
+    print("got", n)
+
+
+# the shape that crashed: a -> None callable through a dataclass field
+vm = VM()
+w = Word("inc", bump)
+print(w.native is not None)
+w.native(vm)
+w.native(vm)
+print(vm.n)
+
+# no Optional, no default — same path
+b = Box(show)
+b.fn(5)
+
+# assigned AFTER construction rather than through the generated ctor
+w2 = Word("later")
+w2.native = bump
+w2.native(vm)
+print(vm.n)
+
+# a Callable field that RETURNS something still works (the arm that was
+# already a variant-returning function)
+@dataclass
+class Mapper:
+    f: Callable[[int], int]
+
+
+def double(x):
+    return x * 2
+
+
+m = Mapper(double)
+print(m.f(21))
+
+# two instances keep their own callables
+b1 = Box(show)
+b2 = Box(show)
+b1.fn(1)
+b2.fn(2)

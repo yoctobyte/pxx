@@ -892,13 +892,30 @@ begin
         if (i < MainProgramTokCount) and (Tokens[i].Kind = tkRBrack) then Inc(i);
       end;
       if (i < MainProgramTokCount) and (Tokens[i].Kind = tkComma) then Inc(i);
-      { the RESULT — `None` for a procedure, else a type }
+      { the RESULT. `-> None` reads as a procedure and used to be registered as
+        one — and that is an ABI LIE that crashed on RETURN. Every unannotated
+        NilPy def compiles to a VARIANT-returning function, whose result travels
+        through a hidden destination POINTER the callee unconditionally copies
+        into on the way out. Called through a PROCEDURE-typed signature that
+        register holds whatever the last call left there, so the callee's
+        epilogue wrote 16 bytes to a garbage address: the call itself succeeded
+        and printed, then segfaulted returning
+        (bug-nilpy-call-through-a-dataclass-callable-field-segfaults; the same
+        failure pyeval's TPyCallFn0..3 already declare around, for the same
+        reason and with the same fix).
+
+        So a Callable signature is ALWAYS a variant-returning function. A
+        `-> None` callee simply ignores the destination, and the caller's slot
+        is a zeroed local either way, so this is safe for both shapes — which is
+        exactly what the note below says about the result being a HINT rather
+        than an ABI. }
+      sigIsFunc := True;
+      sigRet := tyVariant;
       if (i < MainProgramTokCount) and (Tokens[i].Kind = tkNil) then Inc(i)
       else
       begin
         sigRet := PyAnnTypeAt(i);
-        sigIsFunc := sigRet <> tyUnknown;
-        if not sigIsFunc then sigRet := tyInteger
+        if sigRet = tyUnknown then sigRet := tyVariant
         else
           { The declared result is a HINT, not an ABI: this signature marshals
             calls to whichever def is passed in, and that def's own inference
