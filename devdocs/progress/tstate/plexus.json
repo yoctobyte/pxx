@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-06T21:51:48Z",
-   "fixed": [
-    "test-i386#src:test/test_dynarray_field.pas"
-   ],
-   "new_red": [],
-   "sha": "398e72d2c758c16d05c24b46f3e3032a6146f029",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-06T21:55:56Z",
    "fixed": [],
    "new_red": [],
@@ -406,6 +396,14 @@
    "new_red": [],
    "sha": "be4556d598f7f3e03e74f66f085c48ceb0631a7a",
    "tier": "full",
+   "verdict": "INFRA"
+  },
+  {
+   "date": "2026-08-07T16:47:16Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "be4556d598f7f3e03e74f66f085c48ceb0631a7a",
+   "tier": "opt",
    "verdict": "INFRA"
   }
  ],
@@ -2583,9 +2581,9 @@
   "test-opt#src:test/test_atomic64.pas": "pass"
  },
  "last": {
-  "date": "2026-08-07T16:46:33Z",
+  "date": "2026-08-07T16:47:16Z",
   "sha": "be4556d598f7f3e03e74f66f085c48ceb0631a7a",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "INFRA",
   "wall": 0.0
  },
