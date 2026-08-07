@@ -2,8 +2,8 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg **QUIET 6d13h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `3c2eb55a288b` | 2026-08-07T07:48:22Z | RED (native) | 119.9s | `8259cfb22edf` RED |
+| borg **QUIET 6d14h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
+| plexus | `9aec13743214` | 2026-08-07T07:57:38Z | RED (native) | 126.0s | `8259cfb22edf` RED |
 | xeon **QUIET 2d8h** | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -13,5 +13,5 @@
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 6d13h): bad `b1976742df2c`, 1 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 6d14h): bad `b1976742df2c`, 1 commit(s) in range
 - **test-core#src:test/csocket_loopback_b88.c** (xeon, quiet 2d8h): bad `330f62af78d0`, 58 commit(s) in range
