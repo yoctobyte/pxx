@@ -126,4 +126,4 @@ GREEN. No re-pin: pylib is frozen in the stable tree but the compiler does not
 `uses` it, only NilPy programs do.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 1c84fcfc7.
