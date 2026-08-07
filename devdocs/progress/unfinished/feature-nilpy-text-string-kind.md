@@ -303,3 +303,63 @@ pylib does **not** `uses builtinheap` today. Adding it was tried and **works**
 (a NilPy program built and ran with it). The exploratory edit was reverted to
 keep this commit purposeful, but the route is known-good — do not re-litigate
 it, and do not duplicate the header offsets into pylib instead.
+
+
+## 2026-08-07 — the `--no-unicode` mode (user proposal, accepted with a sequence)
+
+NilPy ends up with two string types, and the choice is partly per-target. A
+programmer — or a platform — may opt out of Unicode entirely and get plain byte
+text.
+
+**This costs almost nothing to build, because the foundation already fits it.**
+The mode is not a second implementation: it changes which kind NilPy stamps on
+its literals, `PXX_KIND_TEXTSTR` → `PXX_KIND_BYTESTR`. Everything downstream
+dispatches on kind anyway, so the opt-out is one constant at the stamping sites.
+
+### The default must stay Unicode-on
+
+Upward compatibility decides it (see this ticket's top): if code runs on CPython
+it must run on NilPy. A byte default makes ordinary CPython programs silently
+wrong, which is the defect being fixed. So Unicode is the default and
+`--no-unicode` is the opt-out — never the reverse.
+
+**ESP flips the default, and there is precedent.** CLAUDE.md already justifies
+*"ESP is not a Unix"* — 33 PAL entry points refused even under IDF, so
+POSIX-shaped code meets a clear refusal rather than a wrong answer. *"ESP is not
+Unicode"* is the same move: a platform with an explicitly narrower contract
+rather than a silently different one. Serial I/O is bytes, and a 64 KiB static
+arena should not carry decode tables.
+
+### Contain the two-dialect risk
+
+A switch that changes `len()` makes two languages, and code built the other way
+misbehaves quietly. Two cheap containments, both worth building WITH the flag
+and not after:
+
+1. **Whole-program, not per-unit.** No mixing inside one binary.
+2. **Warn on a non-ASCII string LITERAL under `--no-unicode`.** In that mode
+   such a literal is almost certainly a mistake, so the mode polices itself at
+   compile time instead of surprising someone at runtime.
+
+### Sequence — this is the part that matters
+
+1. **The correct path first**: `tyUCS4Char` + the runtime `PXX_FLAG_ASCII` fast
+   path, so CPython-correct behaviour is what you get by default.
+2. **Then** the `--no-unicode` mode and the ESP default.
+3. **Then** the static-literal optimisation below.
+
+Building (2) before (1) ships a mode that is fast and wrong by default, and a
+wrong default is far harder to withdraw than to never set.
+
+### The hardcoded-literal optimisation, with its caveat
+
+An all-ASCII literal is statically provable, so `s[i]` on one is `tyChar` with
+no runtime check — this composes with the provability table above and is a pure
+win with no semantic change.
+
+The user's *"if they never mutate"* caveat is load-bearing: **the property
+belongs to the VALUE, not the variable.** `"hello"[i]` is provable;
+`s = "hello"; …; s[i]` requires knowing `s` was not reassigned. Keep it
+conservative — literal-derived only, killed by any assignment that is not itself
+provable — or it quietly becomes dataflow analysis wearing the costume of a
+quick win.
