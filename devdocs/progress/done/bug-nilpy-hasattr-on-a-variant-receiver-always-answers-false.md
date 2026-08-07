@@ -158,4 +158,4 @@ non-object variants (int, str, float) for the tag guard. Every existing
 `test_nilpy_missing_attribute_raises`, all MATCH. `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 5ece8cb7d.
