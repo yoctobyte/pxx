@@ -5,17 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:9 blocked:8 backlog:201 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1478 rejected:29`
+`unfinished:10 blocked:8 backlog:201 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1478 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N] — owner: claude-AN
+_none — no lane is locked._
 
-## unfinished (9) — parked mid-flight; re-claim, do not duplicate
+## unfinished (10) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-nilpy-closure-over-a-loop-variable-captures-by-value` [N]
 - `bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error` [N]
 - `bug-nilpy-non-constant-parameter-defaults-silently-become-none` [N]
+- `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-optional-string-param-accepts-none` [N]

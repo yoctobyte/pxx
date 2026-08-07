@@ -3,8 +3,6 @@ track: N
 prio: 40
 type: bug
 summary: "A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted"
-status: working
-owner: claude-AN
 ---
 
 # The shared `nonlocal` frame cell has no owner
