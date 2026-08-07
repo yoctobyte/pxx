@@ -38,7 +38,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (201)
+## backlog (203)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -176,6 +176,7 @@ _none_
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
 | feature-opt-heap-per-thread-cache | O | 55 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-open-array-value-param-copy-cost | O | 35 | feature | A non-const open-array VALUE parameter now copies on every call — correct, and 6.4x on a hot path where FPC pays 2.4x. pxx's copy is ~20x more expensive per call than FPC's (heap dyn-array alloc + refcount vs whatever FPC does). Worth a look before anything hot relies on it. | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-p-assertions-directive-and-position | P | 40 | feature | Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
@@ -234,6 +235,7 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
+| regression-test-core-test-dynarray-params | T | 70 | regression | regression: test-core#src:test/test_dynarray_params.pas red at 34670fe9b872 (auto-filed by twatch) | — |
 | regression-test-i386-test-dynarray-field | T | 70 | regression | regression: test-i386#src:test/test_dynarray_field.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-for-two-names-over-a-variant | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_for_two_names_over_a_variant.npy red at b51f4eeffbf9 (auto-filed by twatch) | — |
 | task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
@@ -401,6 +403,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-core-test-dynarray-params
 - [p 70] [T] regression-test-i386-test-dynarray-field
 - [p 70] [T] regression-test-nilpy-test-nilpy-for-two-names-over-a-variant
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
@@ -542,6 +545,7 @@ _none_
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
+- [p 35] [O] feature-opt-open-array-value-param-copy-cost
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-nilpy-augmented-subscript-evaluates-its-index-twice
