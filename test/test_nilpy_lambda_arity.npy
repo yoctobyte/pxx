@@ -1,0 +1,84 @@
+# bug-nilpy-a-lambda-call-with-the-wrong-argument-count-does-not-raise
+#
+# A lambda called with the wrong number of arguments used to answer a value
+# instead of raising: `(lambda x: x)(1, 2)` dropped the extra argument and
+# returned 1, and `(lambda x: x)()` read the missing one as None. A `def` with
+# the same signature is rejected at compile time, so the gap was specific to the
+# callable-VALUE path, where the callee is only known at run time.
+#
+# The legal arity of a lambda is a RANGE, not a count, because a defaulted
+# parameter is a real parameter: `lambda x, y=k:` accepts one argument or two.
+# Both ends of that range must stay silent — a check that can only ever turn
+# working code into raising code has to be exactly right about what is legal.
+#
+# Everything is caught and printed rather than left to escape, so the whole
+# matrix is one stdout comparison against CPython instead of an exit status.
+
+
+f = lambda x: x
+
+try:
+    print(f(1, 2))
+except TypeError:
+    print("TypeError: too many")
+
+try:
+    print(f())
+except TypeError:
+    print("TypeError: too few")
+
+# the legal call still works
+print(f(7))
+
+# a defaulted parameter widens the range to 1..2 -- NEITHER end may raise
+k = 10
+g = lambda x, y=k: x + y
+print(g(1), g(1, 2))
+
+try:
+    print(g())
+except TypeError:
+    print("TypeError: g too few")
+
+try:
+    print(g(1, 2, 3))
+except TypeError:
+    print("TypeError: g too many")
+
+# a zero-parameter lambda called with no arguments
+h = lambda: 7
+print(h())
+
+try:
+    print(h(1))
+except TypeError:
+    print("TypeError: h too many")
+
+# two parameters, to show the count is the lambda's own and not a fixed 1
+p = lambda a, b: a * b
+print(p(3, 4))
+
+try:
+    print(p(3))
+except TypeError:
+    print("TypeError: p too few")
+
+# a lambda taken as a value, passed, and called through the parameter -- the
+# same dynamic dispatcher, reached by a different route
+def apply1(fn, v):
+    return fn(v)
+
+
+print(apply1(f, 5))
+print(apply1(lambda z: z + 1, 5))
+
+# a nested def is NOT arity-declared and must stay lenient rather than start
+# raising -- the callback bridges depend on that leniency
+def outer():
+    base = 100
+    def inner(q):
+        return q + base
+    return inner
+
+
+print(outer()(1))

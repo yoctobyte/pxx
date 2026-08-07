@@ -5702,7 +5702,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     params, src, nm: AnsiString;
     pNames: array[0..7] of AnsiString;
     nParams: Integer;
-    node, argA, argB, capNode: Integer;
+    node, argA, argB, capNode, arityPi: Integer;
     dup: Boolean;
     { `lambda *args, key=key, var=var:` — a DEFAULTED parameter is Python's
       idiom for capturing a loop variable by value, not a parameter the caller
@@ -6028,6 +6028,29 @@ begin
   ASTRight[argA] := argB;
   node := AllocNode(AN_CALL);
   ASTIVal[node] := pi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+
+  { Declare the legal argument-count RANGE: the plain params are required, the
+    defaulted ones optional. Recorded here rather than counted from `params` at
+    run time because the two disagree for a nested DEF's closure, whose defaults
+    are captures and are absent from Params — see TPyClosure.ReqN. Only this
+    lowering declares a range, so every other closure builder stays unchecked
+    and the callback bridges keep their leniency
+    (bug-nilpy-a-lambda-call-with-the-wrong-argument-count-does-not-raise). }
+  arityPi := FindProc('pyclosure_setarity');
+  if arityPi >= 0 then
+  begin
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    ASTLeft[argB] := PyMakeIntLit(nParams);
+    ASTRight[argA] := argB;
+    argC := AllocNode(AN_ARG);
+    ASTLeft[argC] := PyMakeIntLit(nParams + dcCount);
+    ASTRight[argB] := argC;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := arityPi; ASTLeft[node] := argA;
+    ASTTk[node] := Ord(tyPointer);
+  end;
 
   { capture each free name that resolves to a value symbol: chained
     pyclosure_src_cap(obj, 'name', name). Idents after a '.' are members;
@@ -7825,6 +7848,7 @@ begin
   if pi < 0 then Exit;
   nm := LowerCase(Procs[pi].Name);
   if (nm <> 'pyclosure_src_new') and (nm <> 'pyclosure_src_cap') and
+     (nm <> 'pyclosure_setarity') and
      (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
      (nm <> 'pyboundfn_setown') and (nm <> 'pyboundfn_setdefaults') and
      (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') and
@@ -9815,6 +9839,7 @@ begin
   PyNodeIsCallableValue :=
     (nm = 'pybound_new') or (nm = 'pyvar_of_callable') or
     (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
+    (nm = 'pyclosure_setarity') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
     (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or

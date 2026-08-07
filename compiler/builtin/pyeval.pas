@@ -118,6 +118,7 @@ function pyfilter_call(key: Pointer; l: TPyList): TPyList;
   magic-sentinel closure object Word.native already dispatches on. }
 function pyclosure_src_new(const params, src: AnsiString): Pointer;
 function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
+function pyclosure_setarity(obj: Pointer; req, tot: Int64): Pointer;
 
 { BOUND COMPILED FUNCTION: a nested def taken as a value whose captures must
   travel with it (uforth's MARKER: `def restore(v): ...snapshot locals...;
@@ -1673,6 +1674,15 @@ type
       a FLAT statement stream at indent 0, run by a top-level loop rather than
       ExecSuite's after-a-colon suite grammar. }
     FlatSrc: Boolean;
+    { The legal argument-count RANGE, ReqN..TotN, or ReqN = -1 for "arity
+      unknown, do not check". Recorded by the builder rather than counted from
+      Params, because the two disagree: a closure built for a nested DEF binds
+      its defaults as captures and leaves them out of Params, so a count read
+      off Params under-counts and would reject a legal call. Only the lambda
+      lowering calls pyclosure_setarity, so every other builder stays lenient —
+      which is what keeps the callback bridges working. }
+    ReqN: Integer;
+    TotN: Integer;
   end;
   { A closure passed to a Callable/Pointer host param (uforth's
     `define_word(name, native=_w)`) is stored in the class's Pointer-typed field
@@ -2240,6 +2250,8 @@ begin
   SetLength(Closures[c].CapVals, 0);
   Closures[c].CapN := 0;
   Closures[c].FlatSrc := True;
+  Closures[c].ReqN := -1;          { unchecked unless pyclosure_setarity says otherwise }
+  Closures[c].TotN := -1;
   TkKind := sKinds; TkText := sTexts; TkInt := sInts; TkFloat := sFloats;
   TkN := sTkN; Cur := sCur; Src := sSrc; Pos := sPos; SLen := sSLen;
   pyclosure_src_new := PyMakeClosureObj(c);
@@ -2256,6 +2268,58 @@ begin
   Closures[c].CapVals[n] := v;
   Closures[c].CapN := n + 1;
   pyclosure_src_cap := obj;
+end;
+
+function pyclosure_setarity(obj: Pointer; req, tot: Int64): Pointer;
+{ Declare the closure's legal argument-count range. Chained after
+  pyclosure_src_new like the caps are, and emitted ONLY by the lambda lowering
+  — a builder that does not call this leaves ReqN = -1 and is never checked. }
+var c: Integer;
+begin
+  pyclosure_setarity := obj;
+  if obj = nil then Exit;
+  if not pyclosure_is(obj) then Exit;
+  c := Integer(PClosureObj(obj)^.Cidx);
+  if (c < 0) or (c >= ClosureN) then Exit;
+  Closures[c].ReqN := Integer(req);
+  Closures[c].TotN := Integer(tot);
+end;
+
+{ The argument count `n` is legal for this callable, or it is not our business.
+  False ONLY when the callee is a closure that declared a range and n is outside
+  it — an unknown or unchecked callee always answers True, so this can never
+  turn a working lenient path into a raising one. }
+function PyClosureArityBad(o: Pointer; n: Int64; var lo, hi: Int64): Boolean;
+var c: Integer;
+begin
+  PyClosureArityBad := False;
+  lo := 0; hi := 0;
+  if o = nil then Exit;
+  if not pyclosure_is(o) then Exit;
+  c := Integer(PClosureObj(o)^.Cidx);
+  if (c < 0) or (c >= ClosureN) then Exit;
+  if Closures[c].ReqN < 0 then Exit;              { unchecked }
+  lo := Closures[c].ReqN;
+  hi := Closures[c].TotN;
+  PyClosureArityBad := (n < lo) or (n > hi);
+end;
+
+procedure PyRaiseArity(n, lo, hi: Int64);
+{ CPython's wording is "takes N positional arguments but M were given"; the
+  name of the lambda is not available here, so the message names the shape
+  instead. TypeError, not a bare Exception, so `except TypeError:` catches it
+  the way it does in CPython. }
+var want: AnsiString;
+begin
+  { pystr_of, not IntToStr — a builtin unit has no sysutils. }
+  if lo <> hi then
+    want := 'from ' + pystr_of(lo) + ' to ' + pystr_of(hi) + ' positional arguments'
+  else if lo = 1 then
+    want := '1 positional argument'
+  else
+    want := pystr_of(lo) + ' positional arguments';
+  raise TypeError.Create('<lambda>() takes ' + want + ' but '
+    + pystr_of(n) + ' were given');
 end;
 
 function PyMakeClosure(fnIdx: Integer): Variant;
@@ -3947,12 +4011,13 @@ begin
 end;
 
 function pyvar_callv0(const cb: Variant): Variant;
-var o: Pointer; f0: TPyCallFn0; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f0: TPyCallFn0; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv0(cb); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -3969,12 +4034,13 @@ begin
 end;
 
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
-var o: Pointer; f1: TPyCallFn1; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f1: TPyCallFn1; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv1(cb, a0); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -3992,12 +4058,13 @@ begin
 end;
 
 function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
-var o: Pointer; f2: TPyCallFn2; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f2: TPyCallFn2; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv2(cb, a0, a1); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -4015,12 +4082,13 @@ begin
 end;
 
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
-var o: Pointer; f3: TPyCallFn3; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f3: TPyCallFn3; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv3(cb, a0, a1, a2); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
