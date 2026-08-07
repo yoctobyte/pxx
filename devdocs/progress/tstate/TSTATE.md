@@ -7,7 +7,7 @@
 | xeon **QUIET 2d12h** | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **selfhost-fixedpoint#src:compiler/compiler.pas** — compiler/compiler.pas (plexus): bad `8c112256cb54`, last good `cac9082089af`, 5 commit(s) in range
+- **selfhost-fixedpoint#src:compiler/compiler.pas** — compiler/compiler.pas (plexus): bad `8c112256cb54`, last good `d3f06e5ab269`, 3 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
