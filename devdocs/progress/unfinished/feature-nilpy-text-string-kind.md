@@ -222,6 +222,53 @@ promotion in the frontend, where it already lives, not a type-system change.
 The interned-1-char-string route is recorded above as the fallback if the
 promotion turns out not to be completable; it is no longer the recommendation.
 
+### Keep `tyChar` too — but know exactly when it is provable
+
+`tyChar` does not go away, and not only for NilPy's sake: **Pascal's `Char` is
+one byte unconditionally** (FPC's `AnsiChar`), so the kind is load-bearing
+regardless. The question is only what NilPy's `s[i]` types as.
+
+Use `tyChar` where the compiler can **prove** the source is single-byte, and
+`tyUCS4Char` otherwise. Be precise about which is which, because the obvious
+mistake is to reach for the ASCII flag:
+
+| source of `s` | provable statically? |
+| --- | --- |
+| an all-ASCII string **literal**, or a concat of them | **yes** → `tyChar` |
+| anything from a variable, a call, input, a container | **no** → `tyUCS4Char` |
+
+**`PXX_FLAG_ASCII` is a RUNTIME fact and cannot drive a static type.** It is
+still worth everything it costs — inside the `tyUCS4Char` subscript it gives an
+O(1) index and a one-byte load — but it is a runtime fast path, not a typing
+input. Do not write "we use `tyChar` when the string is ASCII"; that is only
+true for literals.
+
+### Adding the kind is small, and there is a precedent for its shape
+
+Append `tyUCS4Char` at the **tail** of `TTypeKind` — ordinals 0–6 are frozen
+since first bootstrap and everything after is append-only, so a new kind at the
+end is the cheap, safe move. Storage is 4 bytes; `TypeSize`/`TypeIsOrdinal`
+carry it with no special-casing.
+
+The precedent for making it a **distinct kind** rather than reusing `tyUInt32`
+is `_Bool`, three lines above in the same enum: *"the reason it is its own kind
+is CONVERSION, not layout"*. Same argument here — a `UCS4Char` converts to a
+string as its UTF-8 encoding, a `UInt32` converts as decimal digits, and nothing
+downstream could tell them apart if they shared a kind. Only the conversion
+sites need to ask for it by name.
+
+### `WideChar` stays contained — do NOT complete it
+
+It is a historical accident: a 16-bit *code unit* from the era when Unicode was
+16 bits, so it cannot hold a character above the BMP without a surrogate pair.
+pxx already has it in the only defensible form — a **boundary cast**
+(`__pxxWideCharToUTF8`, with a surrogate-aware pair form) that exists so
+FPC-shaped source spelling `WideChar(u)` compiles. That containment is correct.
+
+Do not promote it to a first-class type, a string element, or a subscript
+result. The ladder that matters is `AnsiChar` (byte) → `UCS4Char` (code point);
+`WideChar` is not a rung on it.
+
 ### Why it must be all-or-nothing
 
 Converting `len()` alone makes things **worse**: `while i < len(s): s[i]` would
