@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:9 blocked:8 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1468 rejected:29`
+`urgent:1 working:1 unfinished:9 blocked:8 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1468 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-nilpy-overridden-class-attribute-read-through-an-instance-gives-the-base-value` [N] — owner: claude-AN
 
 ## urgent (1) — jump the queue
 
@@ -38,7 +38,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 186, ranked
+## Ready — top 30 of 185, ranked
 
 - `[p 75] [T]` bug-t-plexus-publishes-false-reds-and-the-renamed-xeon-host-holds-a-regression-forever
 - `[p 70] [T]` regression-test-i386-test-dynarray-field
@@ -66,9 +66,9 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-bound-fn-closure-objects-are-never-freed
-- `[p 55] [N]` bug-nilpy-overridden-class-attribute-read-through-an-instance-gives-the-base-value
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-empty-range-regression-cannot-be-bisected
 - `[p 55] [T]` bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
+- `[p 55] [U]` decide-nilpy-str-is-bytes-or-codepoints
 
-_156 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_155 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
