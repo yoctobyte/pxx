@@ -143,4 +143,4 @@ bumped together.
 GREEN, plus the deliberate-bump test above.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 6b6955179.
