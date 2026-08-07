@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "NilPy: `for k, v in <variant>` is lowered as a DICT unconditionally, so iterating a variant-held list of pairs raises TypeError: expected a dict, got object — the same list unpacks fine when its type is statically known"
+status: done
+owner: claude-A-N
 ---
 
 # `for k, v in <variant>` assumes a dict, so a list of pairs raises
@@ -77,3 +79,52 @@ Per-fix loop. A `.npy` test iterating pairs both ways (a variant-held list of
 tuples, a variant-held dict via `.items()`, and a variant holding neither, which
 must raise) plus the statically-typed controls, diffed against CPython with
 `tools/pydiff.py`.
+
+## 2026-08-07 — FIXED, and the evidence was already in the parser
+
+The ticket's suggested direction was a run-time `pyiter_pairs_v` helper, on the
+reasoning that the dict-or-list question can only be answered at run time. It
+turns out it does not have to be: the parser already knows, and had thrown the
+answer away four lines earlier.
+
+**A two-name for-in header STRIPS a trailing `.items()` at token level**
+(`PyItemsSuffixAhead`, then `Tokens[itemsDot].Kind := tkColon` so the expression
+parser stops at the dict). So by the time the variant arm runs, `.items()` is
+gone from the token stream — and `itemsDot` is the one surviving witness that it
+was ever there. That witness is exactly the discriminator:
+
+- `itemsDot >= 0` — the user wrote `.items()`, the container IS a dict, keep the
+  `pydict_v` + `keylist`/`vallist` lowering unchanged. This is the case the arm
+  was written for (songformatter's dict of dicts) and it is untouched.
+- `itemsDot < 0` — bare. Python iterates the container and UNPACKS each element,
+  which is `pairMode` (already fully general — it handles three names too, which
+  the dict path never did).
+
+One condition, no new runtime helper, and the dict case keeps its exact cost —
+which was the thing the ticket said to measure before choosing. (Measured
+anyway: the dict path materialises `keylist` AND `vallist`, so a
+list-of-pairs helper would not have been free for it either.)
+
+**A second divergence fell out, and it is why the fix is not "make pairMode the
+fallback for a dict too".** `for k, v in <bare dict>` is NOT `.items()` in
+Python — it iterates the KEYS and unpacks each one, so `{"ab": 1}` yields
+`k='a', v='b'`. pxx answered `k='ab', v=1`. With the arm gated, the bare form
+now goes through `pylist_v`, which needed a `TPyDict` case: `list(d)` and
+`for x in d` are both the key sequence. That also fixes the SINGLE-name form —
+`for k in <variant-held dict>` refused with "expected a str or a list" — which
+was the same missing case seen without the two-name distraction.
+
+**Verified**, self-hosted build at this commit, diffed byte-identical against
+CPython: the new `test/test_nilpy_for_two_names_over_a_variant.npy` (static and
+field-typed controls; erased routes via a list element, an unannotated
+parameter and a dict value; three names; `.items()` on a variant-held dict two
+ways; the bare-dict key unpacking; the single-name bare dict and `list(d)`; and
+a variant holding neither, which still raises TypeError). Plus a sweep: every
+`test/*.npy` containing a two-name for-in re-diffed against CPython — 19 match;
+the two that do not (`dict_mutation_during_iteration`, `dict_comprehension`) are
+byte-identical to `pinned`, i.e. pre-existing divergences and not regressions,
+and `nested_for_target_fail` is a deliberate compile-failure test.
+`tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

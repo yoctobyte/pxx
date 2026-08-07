@@ -1,0 +1,72 @@
+# `for k, v in <container>` where the container's static type has been ERASED to
+# a variant — a list element, an unannotated parameter, a value out of a dict.
+# A two-name target over a variant used to be taken to mean a DICT
+# unconditionally and unboxed with pydict_v, which raises on anything else, so a
+# list of pairs reached that way answered "TypeError: expected a dict, got
+# object" while the identical list with a static type unpacked fine.
+# (bug-nilpy-two-name-for-over-a-variant-assumes-a-dict)
+
+# --- the statically-typed controls, which always worked ---
+pairs = [("a", 1), ("b", 2)]
+for k, v in pairs:
+    print("static", k, v)
+
+class C:
+    def __init__(self):
+        self.rows = [("a", 1), ("b", 2)]
+    def show(self):
+        for k, v in self.rows:
+            print("field", k, v)
+C().show()
+
+# --- the erased routes, which did not ---
+box = [[("a", 1), ("b", 2)]]
+for k, v in box[0]:
+    print("elem", k, v)
+
+def takes(seq):
+    for k, v in seq:
+        print("param", k, v)
+takes(pairs)
+
+holder = {"rows": [("a", 1), ("b", 2)]}
+for k, v in holder["rows"]:
+    print("dictval", k, v)
+
+# more than two names unpacks too, which only the pair path ever supported
+triples = [("x", 1, True), ("y", 2, False)]
+tbox = [triples]
+for a, b, c in tbox[0]:
+    print("three", a, b, c)
+
+# --- .items() over a variant-held dict: the case the dict arm was written for,
+# and the one piece of evidence that survives the suffix being stripped at token
+# level. Must keep working.
+outer = {"s": {"x": 1, "y": 2}}
+for k, v in outer["s"].items():
+    print("items", k, v)
+inner = outer["s"]
+for k, v in inner.items():
+    print("items2", k, v)
+
+# --- a BARE dict is not the same thing as .items(): Python iterates a dict's
+# KEYS and unpacks each one, so a two-character key gives two names. pxx used to
+# answer key/value here, which is the dict arm firing where Python does not.
+d2 = {"ab": 1, "cd": 2}
+dbox = [d2]
+for k, v in dbox[0]:
+    print("barepair", k, v)
+
+# ...and the single-name form over a variant-held dict, which refused with
+# "expected a str or a list" because pylist_v did not know dicts
+for k in dbox[0]:
+    print("barekey", k)
+print(sorted(list(dbox[0])))
+
+# --- a variant holding NEITHER still raises, naming what it wanted
+try:
+    n = [42]
+    for k, v in n[0]:
+        print("unreachable", k, v)
+except TypeError as e:
+    print("TypeError")

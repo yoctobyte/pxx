@@ -8926,8 +8926,15 @@ begin
   begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
+    { A DICT yields its KEYS — `list(d)` and `for x in d` are both the key
+      sequence in Python. Missing here, so iterating a dict that had been
+      erased to a variant (a list element, an unannotated parameter, a value
+      out of another dict) refused with "expected a str or a list", while the
+      identical dict with a static type iterated fine
+      (bug-nilpy-two-name-for-over-a-variant-assumes-a-dict). }
+    if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
   end;
-  PyTypeError(pyvartag(v), 'a str or a list');
+  PyTypeError(pyvartag(v), 'a str, a list or a dict');
   Result := TPyList.Create;
 end;
 

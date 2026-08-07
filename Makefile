@@ -1197,6 +1197,11 @@ test-nilpy: $(COMPILER)
 	@# answer the value mod 2^64, read signed, in silence.
 	./$(COMPILER) test/test_nilpy_int_of_string_is_arbitrary_precision.npy /tmp/test_nilpy_int_str_promo26
 	test "$$(/tmp/test_nilpy_int_str_promo26)" = "$$(printf '12345678901234567890\n123456789012345678901234567890\n123456789012345678901234567890123456789012345678901234567890\n-123456789012345678901234567890\n12345678901234567890\nTrue\nTrue\n123456789012345678901234567891\n246913578024691357802469135780\n0\n123456789012345\n0\nTrue\nTrue\nTrue\n42\n-8\n8\n0\n40\n6\nValueError\nValueError\nValueError\n123456789012345678901234567890')"
+	@# a two-name for-target over a VARIANT container: a list of pairs reached
+	@# through an erased type used to be unboxed as a dict and raise. .items()
+	@# is the one thing that still says 'dict' after the suffix is stripped.
+	./$(COMPILER) test/test_nilpy_for_two_names_over_a_variant.npy /tmp/test_nilpy_for2var26
+	test "$$(/tmp/test_nilpy_for2var26)" = "$$(printf 'static a 1\nstatic b 2\nfield a 1\nfield b 2\nelem a 1\nelem b 2\nparam a 1\nparam b 2\ndictval a 1\ndictval b 2\nthree x 1 True\nthree y 2 False\nitems x 1\nitems y 2\nitems2 x 1\nitems2 y 2\nbarepair a b\nbarepair c d\nbarekey ab\nbarekey cd\n['ab', 'cd']\nTypeError')"
 	./$(COMPILER) test/test_nilpy_return_nested_def.npy /tmp/test_nilpy_return_nested_def26
 	test "$$(/tmp/test_nilpy_return_nested_def26)" = "$$(printf '11 21\n2\n101\n1001 2002\n35\n45\n8 9 10')"
 	./$(COMPILER) test/test_nilpy_lambda_sibling_capture.npy /tmp/test_nilpy_lambda_sibling_capture26

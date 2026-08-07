@@ -12235,11 +12235,25 @@ begin
     `isinstance(num, list)` guard, so the value really is a list at run time;
     pylist_v raises if it is not. Without this the loop refused an untyped
     container (bug-nilpy-for-in-over-variant). }
-  { A two-name target over a VARIANT is a DICT — `for option, value in
-    options.items()` where options came out of another dict, which is exactly
-    songformatter's DEFAULT_SETTINGS (a dict of dicts). Unboxed to TPyDict
-    rather than to TPyList, and pydict_v raises if the value is not one. }
-  if (not isStr) and (contTk = tyVariant) and (name2 <> '') and (not enumMode) then
+  { A two-name target over a VARIANT is a DICT **only when the user wrote
+    `.items()`** — `for option, value in options.items()` where options came out
+    of another dict, which is exactly songformatter's DEFAULT_SETTINGS (a dict
+    of dicts). The suffix is stripped at token level a few lines up, so by here
+    `itemsDot` is the only surviving evidence that it was there, and it is
+    exactly the evidence needed: without it, the arm fired for EVERY two-name
+    loop over a variant and unboxed with pydict_v, which raises on anything
+    else — so `for k, v in box[0]` over a list of pairs answered
+    "TypeError: expected a dict, got object" while the identical list with a
+    static type unpacked fine (bug-nilpy-two-name-for-over-a-variant-assumes-
+    a-dict).
+
+    The bare form is not a dict special case at all: Python iterates the
+    container and UNPACKS each element into the names, which is pairMode below
+    for a list of pairs — and, for a dict, its keys unpacked one by one, which
+    is what pylist_v now yields. So the two readings differ, and `.items()` is
+    what tells them apart. }
+  if (not isStr) and (contTk = tyVariant) and (name2 <> '') and (not enumMode) and
+     (itemsDot >= 0) then
   begin
     vSym := FindProc('pydict_v');
     if vSym < 0 then Error('Nil Python: pylib (pydict_v) not loaded');
