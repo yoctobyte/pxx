@@ -5,16 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:8 backlog:202 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1475 rejected:29`
+`unfinished:9 blocked:8 backlog:204 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1476 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (10) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-nilpy-closure-over-a-loop-variable-captures-by-value` [N]
-- `bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value` [N]
 - `bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error` [N]
 - `bug-nilpy-non-constant-parameter-defaults-silently-become-none` [N]
 - `feature-a-typeref-migrate-consumers` [A]
@@ -35,10 +34,11 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 183, ranked
+## Ready — top 30 of 185, ranked
 
 - `[p 70] [T]` regression-test-i386-test-dynarray-field
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-for-two-names-over-a-variant
+- `[p 70] [T]` regression-test-nilpy-test-nilpy-function-values
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -66,6 +66,5 @@ _none — no lane is locked._
 - `[p 55] [T]` bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
 - `[p 55] [U]` decide-nilpy-str-is-bytes-or-codepoints
 - `[p 55] [A]` feature-a-declaration-phase
-- `[p 55] [E]` feature-demo-portable-userland
 
-_153 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_155 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

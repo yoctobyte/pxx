@@ -21330,7 +21330,7 @@ end;
 
 procedure PyAllocModuleGlobals;
 const PY_ALLOCMOD_MAXDEPTH = 255;
-var i, j, k, depth, idx, ci: Integer; nm: AnsiString;
+var i, j, k, depth, idx, ci, pci: Integer; nm: AnsiString;
     usedEarlier, pendingDef, pendingShadow: Boolean;
     inDefStack: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
     shadowStack: array[0..PY_ALLOCMOD_MAXDEPTH] of Boolean;
@@ -21426,8 +21426,37 @@ begin
         end;
         if usedEarlier then
         begin
-          ci := AllocVar(nm, tyVariant);
-          Syms[ci].RecName := REC_NONE;
+          { The pre-created symbol is what the assignment below then STORES
+            into, so whatever type it gets here is the type the global keeps.
+            A bare tyVariant with REC_NONE therefore threw away the class
+            identity `b = Counter()` would have given it, and the loss was
+            silent: `b.hit(3)` still worked (the call path re-resolves), while
+            `gb = b.hit` raised AttributeError and `x = b; x.hit(3)` SEGFAULTED.
+            Ordinary Python — define the functions, then the module-level
+            singletons they use — and the failure appears on a line that reads
+            correctly (bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-
+            method-value; same loss as bug-nilpy-global-shadowed-by-method-
+            param-name-loses-class-type, reached by the other door).
+
+            So take the class the type pre-pass already inferred, exactly as
+            PyCollectModuleLocalsAST does for its own symbols. ONLY the class
+            case is upgraded: every other kind still becomes tyVariant, which
+            keeps the "pre-creating from the pre-pass is too eager" note above
+            true — the pre-pass's guess for a scalar may disagree with the
+            assignment, but a name it has resolved to a user CLASS is exactly
+            the information being discarded here. }
+          pci := PyFindConstraint(nm);
+          if (pci >= 0) and (PyLocals[pci].TypeKind = tyClass) and
+             (PyLocals[pci].RecCi >= 0) then
+          begin
+            ci := AllocVar(nm, tyClass);
+            Syms[ci].RecName := REC_UCLASS_BASE + PyLocals[pci].RecCi;
+          end
+          else
+          begin
+            ci := AllocVar(nm, tyVariant);
+            Syms[ci].RecName := REC_NONE;
+          end;
           SymSyncTypeRef(ci);
         end;
       end;

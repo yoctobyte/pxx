@@ -1,0 +1,103 @@
+# bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value
+# (the slug is a misnomer — the name collision it was filed for was a red
+# herring; the real trigger is declaration ORDER, see below)
+#
+# Python binds a global at CALL time, so a def may read a module-level name the
+# module assigns further down the file. PyAllocModuleGlobals pre-creates such a
+# name so the def's body can compile — but it created it as a bare tyVariant
+# with REC_NONE, and since the assignment below then STORES INTO that symbol,
+# the class identity `g = Counter()` would have given it was thrown away.
+#
+# The loss was near-silent: a DIRECT call `g.hit(3)` still worked, because that
+# path re-resolves. Taking the method as a VALUE raised AttributeError, and
+# copying the global into another name and calling through THAT segfaulted.
+# Moving the def below the assignment made it all work, which is the tell —
+# ordinary Python (define the functions, then the singletons they use) on a line
+# that reads correctly.
+#
+# Fixed by pre-creating with the class the type pre-pass already inferred. ONLY
+# the class case is upgraded; every other kind still becomes tyVariant, because
+# the pre-pass's guess for a scalar may disagree with the assignment. The
+# reassignment cases at the bottom pin that restraint.
+
+
+class Counter:
+    def __init__(self):
+        self.hits = 0
+
+    def hit(self, n):
+        self.hits = self.hits + n
+        return self.hits
+
+
+# every reader shape, all ABOVE the assignment
+def plain_reader():
+    return g
+
+
+def outer_reader():
+    def inner():
+        return g
+    return inner()
+
+
+class Holder:
+    def method_reader(self):
+        return g
+
+
+g = Counter()
+
+# the direct call always worked
+print(g.hit(1))
+
+# the bound-method VALUE did not
+gh = g.hit
+print(gh(2), g.hits)
+
+# copying the global and calling through the copy used to SEGFAULT
+gc = g
+print(gc.hit(3), g.hits)
+
+# a field read through the copy
+print(gc.hits)
+
+# the readers themselves still see the right object. Bound to names first
+# because `rd().field` — a field read off a def that RETURNS a pre-created
+# global — does not parse, on the pre-change binary too:
+# bug-nilpy-def-returning-a-precreated-global-has-no-return-type.
+r1 = plain_reader()
+r2 = outer_reader()
+r3 = Holder().method_reader()
+print(r1.hits, r2.hits, r3.hits)
+
+
+# --- the restraint: a name the pre-pass cannot pin to ONE class must not be
+# --- forced into one. These reassign across kinds and must still be right.
+class A:
+    def tag(self):
+        return "A"
+
+
+class B:
+    def tag(self):
+        return "B"
+
+
+def reads_v():
+    return v
+
+
+def reads_w():
+    return w
+
+
+v = A()
+print(v.tag())
+v = B()
+print(v.tag())
+
+w = None
+print(w)
+w = A()
+print(w.tag())

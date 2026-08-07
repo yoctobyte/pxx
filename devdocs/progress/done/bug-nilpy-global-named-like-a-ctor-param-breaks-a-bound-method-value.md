@@ -3,6 +3,8 @@ track: N
 prio: 45
 type: bug
 summary: "A bound-method VALUE off a module-level global raises AttributeError as soon as ANY def in the module READS that global by name — `gb = b.hit` fails while the direct call `b.hit(3)` works. (The original title blamed a name collision; that was wrong, see the 2026-08-07 re-narrowing.)"
+status: done
+owner: claude-AN
 ---
 
 # A global named like another class's ctor parameter breaks a bound-method value
@@ -211,3 +213,67 @@ segfault or a wrong-looking `AttributeError` on a line that reads correctly.
 Handing over rather than guessing at a fix in the module-scope type pre-pass at
 the end of a long session — the A/B above is sharp enough that the next session
 should not need to re-derive anything.
+
+## FIXED 2026-08-07 — the pre-created global keeps its class
+
+`PyAllocModuleGlobals` (pyparser.inc ~21331) pre-creates a module-level name
+when a def **above** it reads it — the machinery that makes ordinary Python
+("define the functions, then the singletons they use") compile at all. It
+created the symbol as:
+
+```pascal
+ci := AllocVar(nm, tyVariant);
+Syms[ci].RecName := REC_NONE;
+```
+
+and the assignment below then **stores into that same symbol**, so the class
+identity `g = Counter()` would have given it was discarded before it existed.
+That is the whole bug: `g` ends up a bare variant with no class.
+
+Fixed by taking the class the type pre-pass has already inferred —
+`PyFindConstraint(nm)` into `PyLocals[]`, the exact idiom
+`PyCollectModuleLocalsAST` uses for its own symbols — so a name the pre-pass
+resolved to a user class is created as that class.
+
+**Only the class case is upgraded.** Every other kind still becomes tyVariant,
+which keeps the "pre-creating from the pre-pass is too eager" warning already in
+that routine true: the pre-pass's guess for a scalar may disagree with the
+assignment, but a name it has pinned to a user CLASS is precisely the
+information being thrown away.
+
+### Measured
+
+Every repro from the narrowing above, and all agree with the CPython oracle:
+
+| repro | before | after |
+| --- | --- | --- |
+| `def` above, `gb = g.hit` | AttributeError | correct |
+| `x = g; x.hit(3)` | **SIGSEGV** | correct |
+| reader is a method / nested def / plain def | AttributeError | correct |
+| `def` below the assignment | correct | correct |
+| direct call `g.hit(3)` | correct | correct |
+
+The restraint is measured too — a global reassigned across kinds must not be
+forced into one class: `v = A()` then `v = B()`, and `w = None` then `w = A()`,
+both still match CPython.
+
+### Test
+
+`test/test_nilpy_global_read_above_its_assignment.npy`, 9 lines byte-identical
+to the CPython oracle: all three reader shapes above the assignment, the direct
+call, the bound-method value, the copy-then-call that used to segfault, a field
+read through the copy, and the two reassignment-restraint cases.
+
+### Found in passing, filed not folded in
+
+`rd().field` where `rd()` returns a pre-created global does not PARSE
+("unexpected token"), on the pinned binary too —
+[[bug-nilpy-def-returning-a-precreated-global-has-no-return-type]]. The test
+binds the call result to a name first and says why.
+
+### Gate
+
+`make fpc-check` byte-identical, self-host fixedpoint, `tools/gate.sh quick`.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.
