@@ -7272,6 +7272,81 @@ begin
   Result := FindUField(ci, attr);
 end;
 
+{ `hasattr(<variant>, "name")` cannot be answered at compile time — the receiver's
+  class is a RUN-TIME fact — but the frontend still knows something decisive: the
+  set of user classes that DECLARE the name. So the answer is a run-time test of
+  the object's class against that set, which is bounded by what `hasattr` can
+  reach and needs no per-class metadata (`decide-nilpy-hasattr-per-instance-
+  semantics` step 2: an ambiguous target "falls back to tracking every class in
+  that ambiguity set").
+
+  Returns `(pyvartag(recv) = VT_OBJECT) and ((obj is C1) or (obj is C2) ...)`, or
+  -1 when no class declares the name (caller keeps the dynamic-store answer).
+
+  Only the class that INTRODUCES the field gets a test: `is` matches descendants
+  too, so testing a base covers every subclass, and FindUField already walks
+  ancestors — emitting one per declaring class would be correct but quadratic in
+  a deep hierarchy.
+
+  The tag guard is not optional: pyvarobj hands back the raw payload, so an `is`
+  test on an int-holding variant would dereference the integer. Same shape, same
+  reason, as PyParseIsinstance's variant arm.
+
+  `recvNode` must already be an evaluate-ONCE value (a hidden temp): it is read
+  once per candidate class plus once for the tag. }
+function PyHasAttrClassChain(recvNode: Integer; const attr: AnsiString): Integer;
+var ci, argN, callN, isN, chain, tagArg, tagCall, lit, guard: Integer;
+begin
+  Result := -1;
+  chain := -1;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[ci] then Continue;
+    if FindUField(ci, attr) < 0 then Continue;
+    { the INTRODUCER only — a parent that declares it already covers this class }
+    if (UClsParent[ci] >= 0) and (FindUField(UClsParent[ci], attr) >= 0) then Continue;
+    argN := AllocNode(AN_ARG);
+    ASTLeft[argN] := recvNode;
+    callN := AllocNode(AN_CALL);
+    ASTIVal[callN] := FindProc('pyvarobj');
+    if ASTIVal[callN] < 0 then Exit;      { pylib absent: leave the old path alone }
+    ASTTk[callN] := Ord(tyPointer);
+    ASTLeft[callN] := argN;
+    isN := AllocNode(AN_IS_TEST);
+    ASTLeft[isN] := callN;
+    ASTIVal[isN] := ci;
+    ASTTk[isN] := Ord(tyBoolean);
+    if chain < 0 then chain := isN
+    else
+    begin
+      lit := AllocNode(AN_BINOP);
+      ASTIVal[lit] := Ord(tkOr);
+      ASTLeft[lit] := chain; ASTRight[lit] := isN;
+      ASTTk[lit] := Ord(tyBoolean);
+      chain := lit;
+    end;
+  end;
+  if chain < 0 then Exit;
+  tagArg := AllocNode(AN_ARG);
+  ASTLeft[tagArg] := recvNode;
+  tagCall := AllocNode(AN_CALL);
+  ASTIVal[tagCall] := FindProc('pyvartag');
+  if ASTIVal[tagCall] < 0 then Exit;
+  ASTTk[tagCall] := Ord(tyInt64);
+  ASTLeft[tagCall] := tagArg;
+  lit := AllocNode(AN_INT_LIT);
+  ASTIVal[lit] := VT_OBJECT;
+  ASTTk[lit] := Ord(tyInt64);
+  guard := AllocNode(AN_BINOP);
+  ASTIVal[guard] := Ord(tkEq);
+  ASTLeft[guard] := tagCall; ASTRight[guard] := lit;
+  ASTTk[guard] := Ord(tyBoolean);
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := Ord(tkAnd);
+  ASTLeft[Result] := guard; ASTRight[Result] := chain;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
 { Reads the string-literal attribute name; CurTok is the ',' before it. }
 function PyParseAttrName: AnsiString;
 begin

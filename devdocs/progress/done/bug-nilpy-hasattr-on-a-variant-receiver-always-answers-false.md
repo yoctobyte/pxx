@@ -3,6 +3,8 @@ track: N
 prio: 50
 type: bug
 summary: "hasattr(o, \"x\") answers False whenever the receiver's static class has been erased to a variant — a list element, an untyped parameter — even though the attribute is declared and readable. Silent wrong value; implements the already-DECIDED decide-nilpy-hasattr-per-instance-semantics, which has no implementation ticket."
+status: done
+owner: claude-A-N
 ---
 
 # `hasattr` on a variant receiver always answers False
@@ -100,3 +102,60 @@ exception; a declared field, an undeclared name, and a dynamically-set one; the
 `if not hasattr(o, "x"): o.x = ...` guard idiom (uforth's first-time-init, the
 anchor case the decision names); and the zero-cost check the decision asks for —
 a class reached by no `hasattr` site compiles identically to today.
+
+## 2026-08-07 — FIXED (the declared-field half), and the trade is explicit
+
+`hasattr` over a variant receiver now answers
+`pydynattr_has(o, name) or ((pyvartag(o) = VT_OBJECT) and (o is C1 or o is C2 …))`,
+where the `Ci` are the user classes that DECLARE the name.
+
+This is the decision's step 2 — "an ambiguous target falls back to tracking every
+class in that ambiguity set" — and it needs **no per-class metadata at all**,
+which is the pleasant part: `AN_IS_TEST` already compares VMT addresses, and the
+frontend already knows which classes declare a name. So the fix does not wait on
+the RTTI blob NilPy classes do not get.
+
+Three things that had to be right:
+
+- **Only the class that INTRODUCES the field is tested.** `is` matches
+  descendants, and `FindUField` already walks ancestors, so testing a base
+  covers every subclass; emitting one test per declaring class would be correct
+  but quadratic in a deep hierarchy. Covered by the Base/Derived case.
+- **The tag guard is not optional.** `pyvarobj` hands back the raw payload, so an
+  `is` test on an int-holding variant would dereference the integer. Same shape,
+  same reason, as `PyParseIsinstance`'s variant arm — covered by the
+  `[1, "s", 2.5]` case.
+- **The receiver is bound to a hidden temp** (`PyEvalOnce`) before the chain is
+  built: it is read once per candidate class plus once for the tag.
+
+A `tyClass` receiver keeps today's answer exactly — its class WAS resolved, so
+`atFld < 0` there genuinely means undeclared. Only the variant arm changed.
+
+### The trade, stated plainly
+
+This is not a pure win and the write-up should not pretend otherwise. For a field
+assigned on only SOME path (`if flag: self.m = 1`), CPython says False; pxx's
+static receiver already said True, and its variant receiver said False — *right,
+but by coincidence*, since it said False to everything. Now both say True.
+
+So that one shape went from accidentally-right to consistently-wrong, and the
+common shape (a field assigned in `__init__`, reached through a list element or
+an untyped parameter) went from wrong to right. The important part is that a
+static and a variant receiver now agree, which turns two answers that contradicted
+each other into one defect with one cause:
+[[feature-nilpy-hasattr-per-instance-assigned-tracking]], filed with the measured
+repro and the rest of the decided design.
+
+**Verified**, self-hosted at this commit, diffed byte-identical against CPython:
+the new `test/test_nilpy_hasattr_variant_receiver.npy` — static controls; list
+element, dict value and untyped parameter; the field still READING on the same
+receiver; the `if not hasattr(o, "x")` guard idiom on a class that has it and one
+that does not; a dynamically-set attribute on both a named and an erased
+receiver (the store half must not regress); base/derived inheritance; and
+non-object variants (int, str, float) for the tag guard. Every existing
+`hasattr`/`getattr` test re-diffed against CPython too —
+`test_nilpy_attrs`, `test_nilpy_dynattr`, `test_nilpy_dynattr_class`,
+`test_nilpy_missing_attribute_raises`, all MATCH. `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

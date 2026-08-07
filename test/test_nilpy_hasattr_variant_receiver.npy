@@ -1,0 +1,71 @@
+# hasattr(o, "x") where o's static class has been ERASED to a variant — a list
+# element, a dict value, an untyped parameter. The receiver's class is a RUN-TIME
+# fact, so a compile-time field lookup cannot answer it, and answering only the
+# dynamic-attribute store reported False for a field that is declared and reads
+# fine on the same receiver. Silent, and the idiom it breaks is the guard
+# `if not hasattr(o, "x")`, so control went down the wrong branch.
+# (bug-nilpy-hasattr-on-a-variant-receiver-always-answers-false)
+
+class P:
+    def __init__(self):
+        self.x = 1
+        self.y = 2
+
+class Q:
+    def __init__(self):
+        self.z = 3
+
+p = P()
+q = Q()
+
+# the statically-typed controls, which always worked
+print(hasattr(p, "x"), hasattr(p, "zz"))
+
+# ...and every erased route
+box = [p]
+print(hasattr(box[0], "x"), hasattr(box[0], "y"), hasattr(box[0], "zz"))
+holder = {"o": p}
+print(hasattr(holder["o"], "x"), hasattr(holder["o"], "nope"))
+
+def probe(o, name_is_x):
+    if name_is_x:
+        return hasattr(o, "x")
+    return hasattr(o, "z")
+print(probe(p, True), probe(p, False))
+print(probe(q, True), probe(q, False))
+
+# the field must still READ, which is what made the False so odd
+print(box[0].x, holder["o"].y)
+
+# the guard idiom that the wrong answer silently mis-routed
+def ensure(o):
+    if not hasattr(o, "x"):
+        return "missing"
+    return "present"
+print(ensure(p), ensure(q))
+
+# a DYNAMICALLY set attribute still answers True — the store half must not
+# regress now that the class half exists
+if not hasattr(p, "vars"):
+    p.vars = {}
+print(hasattr(p, "vars"))
+bag = [q]
+if not hasattr(bag[0], "extra"):
+    bag[0].extra = 9
+print(hasattr(bag[0], "extra"))
+
+# inheritance: `is` matches descendants, so a field introduced on the BASE must
+# answer True through a subclass instance reached as a variant
+class Base:
+    def __init__(self):
+        self.b = 1
+class Derived(Base):
+    def __init__(self):
+        self.b = 1
+        self.d = 2
+dd = [Derived()]
+print(hasattr(dd[0], "b"), hasattr(dd[0], "d"), hasattr(dd[0], "nope"))
+
+# a NON-object variant must not be treated as an object — the tag guard
+vals = [1, "s", 2.5]
+print(hasattr(vals[0], "x"), hasattr(vals[1], "x"), hasattr(vals[2], "x"))

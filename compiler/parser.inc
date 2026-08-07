@@ -918,6 +918,7 @@ function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) in
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
 function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
+function PyHasAttrClassChain(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr over a VARIANT receiver: run-time class test (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
 function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }
 procedure PyParseListLiteralT(opener, closer: TTokenKind; dedup: Boolean); forward; { Nil Python list/tuple literal (pyparser.inc) }
@@ -10264,6 +10265,23 @@ begin
         if (atFld < 0) and (not (atIsGet and (atDflt >= 0))) and
            (IntToTypeKind(ASTTk[atRecv]) in [tyVariant, tyClass]) then
         begin
+          { A VARIANT receiver has no static class, so atFld < 0 here does NOT
+            mean "not declared" — it means "not knowable yet". Answering the
+            dynamic store alone reported False for a field that is declared and
+            reads fine on the same receiver: `box[0].x` worked while
+            `hasattr(box[0], "x")` said False, silently, and the idiom that
+            breaks is the guard `if not hasattr(o, "x")`, so control went down
+            the wrong branch rather than raising
+            (bug-nilpy-hasattr-on-a-variant-receiver-always-answers-false).
+            A tyCLASS receiver keeps today's answer exactly: its class WAS
+            resolved, so atFld < 0 there genuinely means undeclared. }
+          if (not atIsGet) and (IntToTypeKind(ASTTk[atRecv]) = tyVariant) then
+          begin
+            atRecv := PyEvalOnce(atRecv);   { read once per candidate + once for the tag }
+            atDflt := PyHasAttrClassChain(atRecv, atName);
+          end
+          else
+            atDflt := -1;
           if atIsGet then CurASTNode := PyMakeDynAttrGet(atRecv, atName)
           else
           begin
@@ -10277,6 +10295,15 @@ begin
             ASTRight[argSeq] := argSeq3;
             node := AllocNode(AN_CALL); ASTIVal[node] := idx;
             ASTTk[node] := Ord(tyBoolean); ASTLeft[node] := argSeq;
+            { ...or the receiver's RUN-TIME class declares it }
+            if atDflt >= 0 then
+            begin
+              argSeq2 := AllocNode(AN_BINOP);
+              ASTIVal[argSeq2] := Ord(tkOr);
+              ASTLeft[argSeq2] := node; ASTRight[argSeq2] := atDflt;
+              ASTTk[argSeq2] := Ord(tyBoolean);
+              node := argSeq2;
+            end;
             CurASTNode := node;
           end;
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);

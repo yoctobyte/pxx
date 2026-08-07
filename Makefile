@@ -1206,6 +1206,11 @@ test-nilpy: $(COMPILER)
 	@# binary form and rebind). Both used to raise 'expected a number, got object'.
 	./$(COMPILER) test/test_nilpy_truediv_pow_assign_class_dunder.npy /tmp/test_nilpy_tdivpow26
 	test "$$(/tmp/test_nilpy_tdivpow26)" = "$$(printf '5\n9\n25 32\n3\n8\n4\n16\n81\n[2, 1.0]\n2.0\n1024\n0.5\n1180591620717411303424\nTypeError')"
+	@# hasattr over a receiver whose class is a RUN-TIME fact (list element, dict
+	@# value, untyped parameter): the declared-field half is answered by testing
+	@# the object's class against the set that declares the name.
+	./$(COMPILER) test/test_nilpy_hasattr_variant_receiver.npy /tmp/test_nilpy_hasattr_var26
+	test "$$(/tmp/test_nilpy_hasattr_var26)" = "$$(printf 'True False\nTrue True False\nTrue False\nTrue False\nFalse True\n1 2\npresent missing\nTrue\nTrue\nTrue True False\nFalse False False')"
 	./$(COMPILER) test/test_nilpy_return_nested_def.npy /tmp/test_nilpy_return_nested_def26
 	test "$$(/tmp/test_nilpy_return_nested_def26)" = "$$(printf '11 21\n2\n101\n1001 2002\n35\n45\n8 9 10')"
 	./$(COMPILER) test/test_nilpy_lambda_sibling_capture.npy /tmp/test_nilpy_lambda_sibling_capture26
