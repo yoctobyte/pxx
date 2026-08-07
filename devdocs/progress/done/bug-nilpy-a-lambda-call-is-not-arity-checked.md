@@ -154,4 +154,4 @@ GREEN. `test_nilpy_lambda_default_override.npy` added, diffed against CPython;
 `test_nilpy_lambda_capture.npy` output unchanged.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 97b4cac47.
