@@ -2,9 +2,10 @@
 track: N
 prio: 55
 type: bug
+blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 summary: "`a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False."
 status: working
-owner: claude-AN
+owner: claude-A-N
 ---
 
 # `__eq__` is skipped as soon as one operand is a variant
@@ -122,3 +123,21 @@ The design recorded above still looks right; what this adds is that the
 `param-kind flag instead of a wrapper` simplification is available and removes
 the synthesized-wrapper half, IF the frontend can emit the address. Returned to
 `backlog/` with that.
+
+
+## 2026-08-07 — marked BLOCKED, not merely feature-sized
+
+Picked up as the top-ranked ready N bug and put straight back down: the 08-04
+probe above concludes the fix needs a run-time route from `PyVarEq` to a user
+`__eq__`, and *which* route — reflective RTTI lookup, a per-class dunder table,
+or compile-time guarded dispatch — is exactly the fork
+[[decide-nilpy-runtime-dunder-dispatch-strategy]] holds, which the user has
+**postponed twice** ("postpone, i need to study this", 2026-08-03) as reserved
+judgement rather than missing information.
+
+Building an `__eq__`-only hook now would answer that question by accident, in
+the one shape that is hardest to unpick later — a private path for one dunder is
+the thing the decision exists to prevent. So: `blocked-by` the decision, which
+also stops it surfacing at the head of the ready queue every session and being
+re-probed. Nothing here is stale; resume from the fix shape above the moment the
+strategy lands.
