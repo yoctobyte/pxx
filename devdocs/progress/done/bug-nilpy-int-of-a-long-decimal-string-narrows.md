@@ -141,4 +141,4 @@ built here (parse-time promo typing + a dst-first runtime helper) is what it
 wants too.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 80b2cd5af.
