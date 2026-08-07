@@ -3,9 +3,14 @@
 # bound-fn), and arities 0/1/2. The annotation makes the parameter a code
 # ADDRESS, and a callable value is a 16-byte variant — the coercion used to hand
 # over the variant's TAG word, so anything but a plain def jumped to 9.
-# A BOUND METHOD is deliberately absent: a bare pointer has no room for the
-# receiver, and that case raises a named TypeError (see the ticket).
+# A BOUND METHOD used to be deliberately absent: a bare pointer has no room for
+# the receiver, so that case raised a named TypeError. It is here now — the
+# parameter is typed as a VARIANT rather than a pointer, so it goes through the
+# same dynamic dispatcher an unannotated parameter uses and carries the receiver
+# with it. A Callable FIELD still takes the pointer path and is covered at the
+# bottom, because that is the half the change had to leave alone.
 # bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable
+# bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
 
 from typing import Callable
 
@@ -44,3 +49,59 @@ print(apply1(mk(1000), 5))
 print(apply2(two, 6, 7))
 print(apply2(lambda a, b: a - b, 6, 7))
 print(apply0(zero))
+
+# --- a BOUND METHOD through the annotated parameter, and as a value generally
+print(apply1(c.m, 5))
+# NOTE: `apply1(C().m, 5)` — a bound method of a TEMPORARY receiver — is absent
+# on purpose. It segfaults, and it does so on the pre-change binary and through
+# an UNANNOTATED parameter too, so it is a receiver-lifetime bug rather than
+# anything to do with Callable: bug-nilpy-bound-method-of-a-temporary-receiver-
+# segfaults. Adding it here would attribute a pre-existing crash to this change.
+
+# stored in a list first, then passed
+fs = [c.m, lambda x: x + 3]
+print(apply1(fs[0], 5), apply1(fs[1], 5))
+
+# bound to a name, then passed
+bm = c.m
+print(apply1(bm, 5))
+
+# a bound method of a SECOND instance keeps its own receiver
+class D:
+    def __init__(self, base: int):
+        self.base = base
+
+    def add(self, x: int) -> int:
+        return self.base + x
+
+
+d1 = D(10)
+d2 = D(20)
+print(apply1(d1.add, 1), apply1(d2.add, 1))
+
+# --- a Callable FIELD must still work: it takes the code-address path, which
+# --- this change deliberately did not touch (uforth's `native:` field)
+from typing import Optional
+
+
+class VM:
+    def __init__(self):
+        self.n = 0
+
+
+class Word:
+    name: str = ""
+    native: Optional[Callable[["VM"], None]] = None
+
+
+def bump(vm):
+    vm.n = vm.n + 1
+
+
+vm = VM()
+w = Word()
+w.name = "inc"
+w.native = bump
+w.native(vm)
+w.native(vm)
+print(w.name, vm.n)

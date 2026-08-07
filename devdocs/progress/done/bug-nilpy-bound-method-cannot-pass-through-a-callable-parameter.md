@@ -2,6 +2,8 @@
 track: N
 prio: 40
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # A bound method cannot be passed through a `Callable[...]` parameter
@@ -124,3 +126,76 @@ Retitled in spirit: the `Callable` parameter is one symptom of
 "a bound method is not a first-class value". Returned to `backlog/` with that
 correction rather than left as a parameter-ABI ticket, since fixing it there
 would have produced a change that helps nobody.
+
+## 2026-08-07 — the 2026-08-04 correction is ITSELF stale; the ORIGINAL title was right
+
+Re-measured before doing anything, and the boundary has moved. The 2026-08-04
+note concluded "a bound method cannot be used as a VALUE anywhere" and returned
+the ticket to backlog on that basis. That is no longer true — the callable-value
+work since then fixed it:
+
+| shape | 2026-08-04 | 2026-08-07 (before this fix) |
+| --- | --- | --- |
+| `C().m(5)` direct | 105 | 105 |
+| `g = c.m` then `g(5)` | crash | **105** |
+| `fs = [c.m]` then `fs[0](5)` | crash | **105** |
+| `ap(c.m, 5)` unannotated param | crash | **105** |
+| `ap(lambda x: c.m(x), 5)` | 105 | 105 |
+| `apply(c.m, 5)` **annotated** | (the original bug) | **still raised** |
+
+So the only surviving failure was the one the ticket was originally filed for,
+and the fix it originally proposed — type a `Callable[...]` PARAMETER as
+tyVariant, keep a FIELD tyPointer — became the right one, because the
+"workaround" it depends on (an unannotated parameter) now genuinely works. The
+2026-08-04 session rejected that fix for removing "an ABI limitation that was not
+the thing standing in the way"; it is now the only thing standing in the way.
+
+### The change
+
+`PyAnnParamScope`, mirroring the existing `PyAnnRetScope` exactly: set around a
+parameter's annotation read (the three sites that store a parameter type — the
+def header and both method paths, which must agree or the ABI silently
+mismatches). The `callable` branch of `PyAnnTypeAt` returns tyVariant under it,
+and drops the `$proctype` signature with it — keeping the signature would
+marshal the call against a procedural type again, which is the very thing with
+no room for a receiver. A FIELD sees the flag clear and keeps both.
+
+All six rows above now match CPython.
+
+### The named risk, checked: the Callable FIELD path is unaffected
+
+uforth's `native: Optional[Callable[["VM"], None]]` shape, exercised directly:
+
+| binary | result |
+| --- | --- |
+| PINNED (pre-change) | `inc 2` |
+| this change | `inc 2` |
+| CPython | `inc 2` |
+
+`make test-uforth` could NOT serve as the gate: it fails identically on the
+PINNED binary at `uforth.py:411` — *"no class declares a method or callable
+field .to_bytes()"* — so the corpus was already red for an unrelated reason.
+Controlled rather than assumed, and not attributed to this change.
+
+### A pre-existing crash found and filed, not folded in
+
+`ap(C().m, 5)` — a bound method of a **TEMPORARY** receiver — segfaults, on the
+pinned binary and through an UNANNOTATED parameter too. That is receiver
+lifetime, not the callable ABI, so it is
+[[bug-nilpy-bound-method-of-a-temporary-receiver-segfaults]] and the row is left
+commented out in the test naming that ticket, rather than blaming a pre-existing
+crash on this commit.
+
+### Test
+
+`test/test_nilpy_callable_param_heap_callable.npy` extended as the gate asked —
+a bound method through the annotated parameter, one via a list element, one
+bound to a name, two instances keeping their own receivers, and the Callable
+FIELD path at the bottom. 11 lines byte-identical to the CPython oracle.
+
+### Gate
+
+`make fpc-check` byte-identical, self-host fixedpoint, `tools/gate.sh quick`.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

@@ -770,6 +770,12 @@ var
     (decide-nilpy-optional-int-none-vs-zero). FIELDS and params keep the
     0-sentinel mapping, which existing consumers (fpjson) rely on. }
   PyAnnRetScope: Boolean;
+  { Set while reading a PARAMETER's annotation, exactly as PyAnnRetScope marks a
+    result's. Only the `callable` branch reads it — a Callable PARAMETER becomes
+    a variant so a bound method can travel through it; a Callable FIELD stays a
+    bare pointer, because the field-call path (PyWrapClosureFieldCall, uforth's
+    `native: Callable[[VM], None]`) reads it as a code address. }
+  PyAnnParamScope: Boolean;
 
 { Token-index annotation parser for the richer grammar dataclass fields use:
     NAME | NAME '[' ann {',' ann} ']' | "ForwardRef" | None
@@ -921,6 +927,23 @@ begin
           REC_UCLASS_BASE + sigPCis[depth];
     PyAnnLastProcSig := sigPi;
     Result := tyPointer;
+    { A PARAMETER travels as a VARIANT instead. A bare pointer has room for a
+      code address only, so a BOUND METHOD — a {code, receiver} pair — could not
+      pass through one, and `apply(C().m, 5)` raised where CPython prints 105.
+      As a variant it goes through the same dynamic dispatcher an UNANNOTATED
+      parameter already uses, which tells all four callable shapes apart,
+      receiver included; the annotation then informs arity and diagnostics
+      rather than the ABI, which is what it already does for the RESULT.
+
+      The signature is dropped with it: keeping it would marshal the call
+      against a procedural type again, which is the very thing that has no room
+      for the receiver. A FIELD keeps both — see PyAnnParamScope.
+      bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter }
+    if PyAnnParamScope then
+    begin
+      Result := tyVariant;
+      PyAnnLastProcSig := -1;
+    end;
     Exit;
   end;
   if lo = 'list' then
@@ -17124,7 +17147,9 @@ begin
       Expect(tkColon, ':');
       { same full annotation grammar as a method parameter }
       annIdx := TokPos - 1;
+      PyAnnParamScope := True;
       PyHdrPTypes[PyHdrNParams] := PyAnnTypeAt(annIdx);
+      PyAnnParamScope := False;
       PyHdrPCis[PyHdrNParams] := PyAnnLastCi;
       PyHdrPSigs[PyHdrNParams] := PyAnnLastProcSig;
       if PyHdrPTypes[PyHdrNParams] = tyUnknown then
@@ -19253,7 +19278,9 @@ begin
             single-token reader here meant a method could not accept a
             container, which is most of uforth's method signatures, and it
             reported the failure with no line of its own. }
+          PyAnnParamScope := True;
           ptypes[nparams] := PyAnnTypeAt(j);
+          PyAnnParamScope := False;
           if ptypes[nparams] = tyUnknown then
             ErrorAt(Tokens[j].Line,
                     'Nil Python: parameter ' + pnames[nparams]
@@ -19840,7 +19867,9 @@ begin
         The two must agree: the pre-pass decides the registered signature and
         this decides the frame, and a disagreement is a silent ABI mismatch. }
       annIdx := TokPos - 1;
+      PyAnnParamScope := True;
       ptypes[nparams] := PyAnnTypeAt(annIdx);
+      PyAnnParamScope := False;
       pcis[nparams] := PyAnnLastCi;
       { A `Callable[...]` parameter carries a procedural SIGNATURE, and without
         it the name is not callable inside the body — the def path has recorded

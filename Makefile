@@ -1099,7 +1099,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_is_identity.npy /tmp/test_nilpy_is_identity26
 	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'False True True False\nTrue False\nFalse True True\nTrue\nFalse True\nTrue\nTrue False False True\nFalse True\ncopied same')"
 	./$(COMPILER) test/test_nilpy_callable_param_heap_callable.npy /tmp/test_nilpy_callable_param26
-	test "$$(/tmp/test_nilpy_callable_param26)" = "$$(printf '6\n7\n1005\n42\n-1\n42')"
+	test "$$(/tmp/test_nilpy_callable_param26)" = "$$(printf '6\n7\n1005\n42\n-1\n42\n105\n105 8\n105\n11 21\ninc 2')"
 	./$(COMPILER) test/test_nilpy_return_ownership.npy /tmp/test_nilpy_return_ownership26
 	test "$$(/tmp/test_nilpy_return_ownership26)" = "$$(printf 'ctor 1\nlocal 2\nctor 3\nfield 7\nelem 8\nfield elem\n500 499')"
 	./$(COMPILER) test/test_nilpy_set_literal_dedup.npy /tmp/test_nilpy_set_literal_dedup26
