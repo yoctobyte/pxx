@@ -232,4 +232,4 @@ and `test_nilpy_selfassigned_comprehension`. `tools/gate.sh quick` GREEN
 (self-host fixedpoint + testmgr quick).
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit c29ce3031.
