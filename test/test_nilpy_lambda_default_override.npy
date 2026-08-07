@@ -1,0 +1,47 @@
+# bug-nilpy-a-lambda-call-is-not-arity-checked
+#
+# A lambda's defaulted parameter is lowered as a build-time CAPTURE — that is
+# how `lambda x=i: x` pins a loop variable by value. But it is still a
+# PARAMETER, and a caller supplying it must win. It did not: the argument had no
+# parameter to land in, so it was silently dropped and f(3, 4) returned f(3)'s
+# answer with no diagnostic.
+#
+# Both lowerings are covered on purpose, because they are reached by body SHAPE,
+# not by signature: PyLambdaBodyIsLiftable requires a call in the body, so
+# `x * y` takes the pyeval-closure path while `mul(x, y)` takes the lifted
+# bound-fn path. Fixing one and not the other would look green here.
+
+k = 2
+
+# pyeval-closure path — no call in the body
+f = lambda x, y=k: x * y
+print(f(3), f(3, 4))
+
+def mul(a, b):
+    return a * b
+
+# lifted bound-fn path — a call in the body
+g = lambda x, y=k: mul(x, y)
+print(g(3), g(3, 4))
+
+# the default is captured BY VALUE at lambda-creation time: rebinding k after
+# the fact must not change what an unsupplied argument reads
+k = 100
+print(f(3), g(3))
+
+# two defaults, and the caller overriding only the first of them.
+# Deliberately NOT returning a tuple: a tuple built in a lambda body currently
+# degrades to a list (bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list),
+# and pinning that here would couple this test to an unrelated bug.
+a = 10
+b = 20
+h = lambda p, q=a, r=b: p * 10000 + q * 100 + r
+print(h(1), h(1, 2), h(1, 2, 3))
+
+# the zero-required-parameter form: the whole point of `lambda x=i: x`, and the
+# one where the caller's argument 0 is a DEFAULTED param rather than an own one
+gs = []
+for i in range(3):
+    gs.append(lambda x=i: x)
+print([q() for q in gs])
+print(gs[0](9), gs[1]())

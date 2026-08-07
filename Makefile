@@ -299,6 +299,10 @@ test-nilpy: $(COMPILER)
 	# a lambda's DEFAULT-parameter captures (key=key) reach invoke time
 	./$(COMPILER) test/test_nilpy_lambda_capture.npy /tmp/test_nilpy_lamcap26
 	test "$$(/tmp/test_nilpy_lamcap26)" = "$$(printf '%b' '[4, 3, 2, 1]\n[1, 2, 3, 4]\n[4, 3, 2, 1]\n[1, 2, 3, 4]')"
+	# a defaulted lambda parameter the CALLER supplies overrides the default, on
+	# BOTH lowerings — they are reached by body shape, not by signature
+	./$(COMPILER) test/test_nilpy_lambda_default_override.npy /tmp/test_nilpy_lamdef26
+	test "$$(/tmp/test_nilpy_lamdef26)" = "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
@@ -4687,6 +4691,10 @@ test-core: $(COMPILER)
 	# a lambda's DEFAULT-parameter captures (key=key) reach invoke time
 	./$(COMPILER) test/test_nilpy_lambda_capture.npy /tmp/test_nilpy_lamcap26
 	test "$$(/tmp/test_nilpy_lamcap26)" = "$$(printf '%b' '[4, 3, 2, 1]\n[1, 2, 3, 4]\n[4, 3, 2, 1]\n[1, 2, 3, 4]')"
+	# a defaulted lambda parameter the CALLER supplies overrides the default, on
+	# BOTH lowerings — they are reached by body shape, not by signature
+	./$(COMPILER) test/test_nilpy_lambda_default_override.npy /tmp/test_nilpy_lamdef26
+	test "$$(/tmp/test_nilpy_lamdef26)" = "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26

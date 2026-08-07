@@ -130,6 +130,10 @@ function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
 { Declare how many OWN parameters the compiled body takes before its captures.
   Without it the bridge assumes one — see the NOwn note on TBoundFnObj. }
 function pyboundfn_setown(obj: Pointer; nown: Int64): Pointer;
+{ Declare which bound slots are a lambda's DEFAULTED parameters, so a caller
+  that supplies one overrides the default instead of having the argument
+  silently dropped — see the NDef note on TBoundFnObj. }
+function pyboundfn_setdefaults(obj: Pointer; base, count, varmask: Int64): Pointer;
 { Bind a CLASS capture, taking a reference so it outlives the enclosing call. }
 function pyboundfn_bind_obj(obj: Pointer; idx: Int64; p: Pointer): Pointer;
 function pyboundfn_is(p: Pointer): Boolean;
@@ -1768,6 +1772,23 @@ type
       — it injects a dummy own parameter for exactly this reason — so only the
       nested-def path needs to say otherwise, via pyboundfn_setown. }
     NOwn:   Int64;
+    { A lambda's DEFAULTED parameters. `lambda x, y=k: x*y` lifts y as a bound
+      slot holding k, because that is how the frontend spells a build-time
+      default — but y is still a PARAMETER, and `f(3, 4)` must see 4. Without
+      these the extra argument was clipped against NOwn and silently dropped,
+      so f(3, 4) returned f(3)'s answer with no diagnostic
+      (bug-nilpy-a-lambda-call-is-not-arity-checked).
+
+      NDef      how many trailing bound slots are defaulted params.
+      NDefBase  the CALLER-side argument index the first of them occupies.
+                Not NOwn: a zero-parameter lambda is lifted under a dummy own
+                parameter, so `lambda x=j: x` has NOwn=1 while x is the
+                caller's argument 0.
+      DefVarMask  bit d set = that param is a Variant, so an overriding
+                argument travels by ADDRESS like every other variant param. }
+    NDef:       Int64;
+    NDefBase:   Int64;
+    DefVarMask: Int64;
     Bound:  array[0..19] of Int64;
   end;
   PBoundFnObj = ^TBoundFnObj;
@@ -1815,6 +1836,7 @@ begin
   o^.NBound := n;
   o^.A0Var := a0var;
   o^.NOwn := 1;   { the historic assumption; pyboundfn_setown overrides it }
+  o^.NDef := 0; o^.NDefBase := 0; o^.DefVarMask := 0;   { no defaulted params unless told }
   for i := 0 to 19 do o^.Bound[i] := 0;
   pyboundfn_new := Pointer(o);
 end;
@@ -1829,6 +1851,21 @@ begin
   o := PBoundFnObj(obj);
   o^.NOwn := nown;
   pyboundfn_setown := obj;
+end;
+
+function pyboundfn_setdefaults(obj: Pointer; base, count, varmask: Int64): Pointer;
+{ Declare that `count` bound slots, starting at bound index 0, are DEFAULTED
+  parameters whose caller-side positions begin at `base`. Chained after
+  pyboundfn_new like setown, and only by the lambda lifter — everything else
+  leaves NDef at 0 and keeps the historic behaviour untouched, which is what
+  keeps the lenient callback bridges lenient. }
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.NDefBase := base;
+  o^.NDef := count;
+  o^.DefVarMask := varmask;
+  pyboundfn_setdefaults := obj;
 end;
 
 function pyboundfn_bind_obj(obj: Pointer; idx: Int64; p: Pointer): Pointer;
@@ -1976,6 +2013,25 @@ begin
   end;
 end;
 
+function PyBoundFnDefWord(const a: Variant; isvar: Int64; slot: PVariant): Int64;
+{ The same conversion as PyBoundFnArgWord, but for an argument overriding a
+  DEFAULTED parameter — whose variant-ness is per-slot (it follows the type of
+  the captured value the default came from) rather than the object-wide A0Var
+  the own parameters share. }
+begin
+  if isvar <> 0 then
+  begin
+    slot^ := a;
+    PyBoundFnDefWord := Int64(NativeInt(Pointer(slot)));
+    Exit;
+  end;
+  case PPyRec(@a)^.VType of
+    7: PyBoundFnDefWord := PPyRec(@a)^.Payload;
+    0: PyBoundFnDefWord := 0;
+  else PyBoundFnDefWord := pyvar_to_int(a);
+  end;
+end;
+
 procedure pyboundfn_callvn(objptr: Pointer; const a0, a1, a2: Variant;
                            nargs: Int64; var res: Variant);
 { Call code(own..., bound...). The own arguments come first because that is the
@@ -1990,6 +2046,8 @@ procedure pyboundfn_callvn(objptr: Pointer; const a0, a1, a2: Variant;
   (bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one). }
 var o: PBoundFnObj; b: PInt64; code: Pointer;
     va0, va1, va2: Variant;
+    vd0, vd1, vd2: Variant;   { by-address slots for an OVERRIDDEN variant default }
+    dv: Int64;
     p: array[0..15] of Int64;
     n, i: Integer;
     f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6;
@@ -2014,6 +2072,23 @@ begin
   b := @o^.Bound[0];
   for i := 0 to o^.NBound - 1 do
     if n + i <= 15 then p[n + i] := b[i];
+
+  { A DEFAULTED parameter is a bound slot the caller may override. Done after
+    the bind copy above, deliberately: the default is written first and the
+    supplied argument overwrites it, so "not supplied" needs no sentinel.
+    Argument NDefBase+i is the caller-side position of defaulted param i —
+    NOT NOwn+i, because a zero-parameter lambda carries a dummy own parameter
+    the caller never counts. }
+  for i := 0 to o^.NDef - 1 do
+    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 15) then
+    begin
+      dv := (o^.DefVarMask shr i) and 1;
+      case o^.NDefBase + i of
+        0: p[n + i] := PyBoundFnDefWord(a0, dv, @vd0);
+        1: p[n + i] := PyBoundFnDefWord(a1, dv, @vd1);
+        2: p[n + i] := PyBoundFnDefWord(a2, dv, @vd2);
+      end;
+    end;
   case n + o^.NBound of
     0: begin f0 := TBF0(code); rv := f0(); end;
     1: begin f1 := TBF1(code); rv := f1(p[0]); end;
@@ -3681,7 +3756,17 @@ begin
     begin
       if pname <> '' then
       begin
-        if ai < args.count then LclSet(pname, args.at(ai)) else LclSet(pname, MakeNone);
+        { A DEFAULTED parameter is bound as a CAP under its own name — that is
+          how both lambda lowerings spell a build-time default — and the caps
+          were installed just above. So an UNSUPPLIED parameter must leave that
+          value alone; overwriting it with None is what stopped a defaulted name
+          from being listed as a parameter at all, and listing it is what makes a
+          caller's argument override the default
+          (bug-nilpy-a-lambda-call-is-not-arity-checked). A supplied argument
+          still wins: f(3, 4) is 12, f(3) is 3*k. A parameter with no default and
+          no argument still reads None, exactly as before. }
+        if ai < args.count then LclSet(pname, args.at(ai))
+        else if LclFind(pname) < 0 then LclSet(pname, MakeNone);
         ai := ai + 1; pname := '';
       end;
     end

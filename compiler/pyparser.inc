@@ -5573,6 +5573,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     { the LIFTED path: this lambda's own proc and the values bound into it }
     lamProc, lamN, bindIdx, argC, vNode, capSym: Integer;
     lamCallee, k: Integer; cn2: AnsiString;
+    defPi, varMask, argD: Integer;   { pyboundfn_setdefaults for defaulted params }
     lamNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
     lamTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     lamSyms: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -5782,6 +5783,43 @@ begin
       node := AllocNode(AN_CALL);
       ASTIVal[node] := newPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
 
+      { A DEFAULTED parameter is bound below like a capture — that is how a
+        build-time default is spelled here — but it is still a PARAMETER, and a
+        caller supplying it must win. Tell the bridge which bound slots those
+        are, and where the caller counts them from: `nParams`, not the proc's
+        own-parameter count, because a zero-parameter lambda carries a dummy own
+        parameter the caller never sees. Without this the extra argument was
+        clipped against NOwn and dropped, so `f = lambda x, y=k: x*y; f(3, 4)`
+        returned f(3)'s answer silently
+        (bug-nilpy-a-lambda-call-is-not-arity-checked). }
+      defPi := FindProc('pyboundfn_setdefaults');
+      if (dcCount > 0) and (defPi >= 0) then
+      begin
+        varMask := 0;
+        for j := 0 to dcCount - 1 do
+          if (j + 1 < lamN) and (lamTypes[j + 1] = tyVariant) then
+            varMask := varMask or (1 shl j);
+        argA := AllocNode(AN_ARG);
+        ASTLeft[argA] := node;
+        argB := AllocNode(AN_ARG);
+        vNode := AllocNode(AN_INT_LIT);
+        ASTIVal[vNode] := nParams; ASTTk[vNode] := Ord(tyInt64);
+        ASTLeft[argB] := vNode;
+        ASTRight[argA] := argB;
+        argC := AllocNode(AN_ARG);
+        vNode := AllocNode(AN_INT_LIT);
+        ASTIVal[vNode] := dcCount; ASTTk[vNode] := Ord(tyInt64);
+        ASTLeft[argC] := vNode;
+        ASTRight[argB] := argC;
+        argD := AllocNode(AN_ARG);
+        vNode := AllocNode(AN_INT_LIT);
+        ASTIVal[vNode] := varMask; ASTTk[vNode] := Ord(tyInt64);
+        ASTLeft[argD] := vNode;
+        ASTRight[argC] := argD;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := defPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+      end;
+
       { bind each captured value, in parameter order }
       for j := 1 to lamN - 1 do
       begin
@@ -5821,6 +5859,19 @@ begin
   src := 'return';
   for i := bStart to bEnd - 1 do
     src := src + ' ' + PyLambdaTokText(i);
+
+  { A defaulted name is a PARAMETER as well as a default. It is bound below as a
+    cap under its own name (the default), and listing it here is what lets a
+    caller's argument override it — PyClosureInvoke binds params positionally and
+    now leaves an unsupplied one at its cap value. Without this the argument had
+    no parameter to land in and was silently dropped, so `f = lambda x, y=k: x*y`
+    answered f(3) for f(3, 4) (bug-nilpy-a-lambda-call-is-not-arity-checked).
+    Appended AFTER the plain params, which is where Python requires them. }
+  for i := 0 to dcCount - 1 do
+  begin
+    if params <> '' then params := params + ',';
+    params := params + dcNames[i];
+  end;
 
   { pyclosure_src_new(params, src) }
   argA := AllocNode(AN_ARG);
@@ -7634,7 +7685,7 @@ begin
   nm := LowerCase(Procs[pi].Name);
   if (nm <> 'pyclosure_src_new') and (nm <> 'pyclosure_src_cap') and
      (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
-     (nm <> 'pyboundfn_setown') and
+     (nm <> 'pyboundfn_setown') and (nm <> 'pyboundfn_setdefaults') and
      (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') and
      (nm <> 'pyboundfn_bind_cell') then Exit;
   boxPi := FindProc('pyvar_of_callable');
@@ -9624,7 +9675,7 @@ begin
     (nm = 'pybound_new') or (nm = 'pyvar_of_callable') or
     (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
-    (nm = 'pyboundfn_setown') or
+    (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
     (nm = 'pyboundfn_bind_cell');
 end;

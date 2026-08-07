@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:8 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1463 rejected:29`
+`unfinished:8 blocked:8 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1464 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -41,7 +41,6 @@ _none — no lane is locked._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [U]` decide-nilpy-set-as-a-distinct-type-or-a-list (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-a-lambda-call-is-not-arity-checked
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [T]` bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue
 - `[p 60] [T]` bug-t-gate-sh-fixedpoint-does-not-iterate
@@ -65,5 +64,6 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-int-local-accumulating-a-float-from-a-list-crashes-219
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-empty-range-regression-cannot-be-bisected
+- `[p 55] [T]` bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
 
 _154 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
