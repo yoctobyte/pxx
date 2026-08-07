@@ -72,4 +72,4 @@ which is how it surfaced: it blocked the pin for
 
 `make stabilize` (= `make test` + the 4-iteration fixedpoint). Verified against
 FPC directly rather than against the old expectation.
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 016b5bce4.

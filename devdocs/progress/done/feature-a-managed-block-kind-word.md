@@ -202,4 +202,4 @@ The same routine also adds `17` (16 header + nul) twice for the needed payload �
   pinned binary — controlled, not assumed).
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 4ce9b3fc0.
