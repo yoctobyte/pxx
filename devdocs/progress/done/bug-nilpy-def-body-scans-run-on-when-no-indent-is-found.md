@@ -163,4 +163,4 @@ The three one-line suite tests the ticket names (`test_nilpy_one_line_def_suite`
 hazard), self-host fixedpoint, `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 6c79ffa32.
