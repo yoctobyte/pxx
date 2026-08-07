@@ -233,3 +233,51 @@ and `test_nilpy_selfassigned_comprehension`. `tools/gate.sh quick` GREEN
 
 ## Log
 - 2026-08-07 — resolved, commit c29ce3031.
+
+
+## 2026-08-07 (later) — a LEAK this fix introduced, found and fixed the same day
+
+Caught by measuring my own change rather than by a test, and worth recording
+because the shape is instructive: the fix was correct and still cost memory in a
+case that needed nothing at all.
+
+A `nonlocal` capture reached ONLY through a direct call never needed a cell. The
+call site passes `@c` — the address of the enclosing slot — and the by-ref
+parameter writes straight through it, so the frame and the callee already shared
+one storage, for free, before any of this. The cell exists solely because a def
+taken as a VALUE outlives the frame and a stack slot cannot.
+
+Promoting on the presence of `nonlocal` alone therefore allocated a heap cell per
+**activation** of the enclosing function, never freed, in frames where no closure
+was ever created:
+
+```python
+def counter():
+    c = 0
+    def bump():
+        nonlocal c
+        c += 1
+    bump()          # direct call only — no closure escapes
+    return c
+```
+
+2,000,000 calls: **1 MB on `pinned`, 48 MB at HEAD.** A leak in a shape that
+previously did not allocate at all.
+
+Fixed by `PyBodyLiftsANestedDef`: promotion is skipped unless some def nested in
+the body is taken as a value — assigned, returned, or passed — rather than only
+called by name. Conservative in the safe direction, because the two failure modes
+are not symmetric: over-answering True costs the old leak, under-answering gives
+wrong VALUES. So a name counts as a call only when immediately followed by `(`;
+`return bump`, `f = bump` and `xs.append(bump)` all read as values, as does
+anything else.
+
+Back to **1088 kB, exactly `pinned`'s number**, and the six shared-cell cases
+plus every other closure test still diff byte-identical against CPython. Both
+shapes are now pinned by name in
+`test_nilpy_nonlocal_escaping_closure.npy` (`direct:` and `both:`).
+
+The leak that REMAINS on the escaping path is not this one: it is the pre-existing
+[[bug-nilpy-bound-fn-closure-objects-are-never-freed]], which the cell now joins
+(~23 bytes of ~227 per closure — measured and recorded there, since the two have
+one lifetime and want one ownership model).

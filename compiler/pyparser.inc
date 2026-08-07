@@ -14129,10 +14129,98 @@ end;
   Called once, from the real parse, after the locals are laid out and before the
   body is parsed — so the body, the nested defs' capture scan and the closure
   binders all see the same answer. }
+{ Is any def nested in this body taken AS A VALUE — assigned, returned, passed —
+  rather than only called by name?
+
+  This is what decides whether a frame cell is needed at all. A `nonlocal` capture
+  reached only through a DIRECT call has always been correct without one: the call
+  site passes `@c`, the address of the enclosing slot, and the by-ref parameter
+  writes straight through it, so the frame and the callee already share one
+  storage for free. The cell exists solely because a def taken as a value OUTLIVES
+  the frame, and a stack slot cannot.
+
+  Promoting regardless cost a heap cell per ACTIVATION of the enclosing function,
+  never freed — 2M calls of a direct-call-only counter went from 1 MB flat to
+  48 MB, a leak in a shape that previously did not allocate at all. Measured, and
+  it was mine: the cell fix (bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-
+  with-the-enclosing-frame) introduced it.
+
+  Conservative in the safe direction: over-answering True costs the old leak,
+  under-answering gives wrong VALUES, so anything that is not unambiguously a
+  call counts as a value. A name is a call only when it is immediately followed
+  by '(' ; `return bump`, `f = bump`, `xs.append(bump)` all read as values. }
+function PyBodyLiftsANestedDef(bodyStart: Integer): Boolean;
+var i, depth, j, n: Integer;
+    names: array[0..PY_MAX_NESTED-1] of AnsiString;
+    nm: AnsiString;
+begin
+  Result := False;
+  n := 0;
+  { pass 1 — the names this body declares as nested defs }
+  i := bodyStart;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth <= 0 then Break;
+    end
+    else if (Tokens[i].Kind = tkFunction) and (i + 1 < TokCount) and
+            (Tokens[i + 1].Kind = tkIdent) then
+    begin
+      if n < PY_MAX_NESTED then
+      begin
+        names[n] := GetTokenStr(i + 1);
+        Inc(n);
+      end
+      else
+      begin
+        { out of room to track them — assume a value, which only costs the
+          old behaviour rather than a wrong answer }
+        Result := True;
+        Exit;
+      end;
+      Inc(i);
+    end;
+    Inc(i);
+  end;
+  if n = 0 then Exit;
+  { pass 2 — is any of them mentioned other than as `def NAME` or `NAME(` ? }
+  i := bodyStart;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth <= 0 then Break;
+    end
+    else if Tokens[i].Kind = tkIdent then
+    begin
+      nm := GetTokenStr(i);
+      for j := 0 to n - 1 do
+        if names[j] = nm then
+        begin
+          if (i > 0) and (Tokens[i - 1].Kind = tkFunction) then Break;  { the header }
+          if (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then Break;  { a call }
+          Result := True;
+          Exit;
+        end;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyPromoteNonlocalCells(bodyStart: Integer): Integer;
 var i, depth: Integer;
 begin
   Result := -1;
+  { No nested def escapes this frame -> no cell is needed, and allocating one
+    per activation would leak. See PyBodyLiftsANestedDef. }
+  if not PyBodyLiftsANestedDef(bodyStart) then Exit;
   i := bodyStart;
   depth := 1;
   while i < TokCount do

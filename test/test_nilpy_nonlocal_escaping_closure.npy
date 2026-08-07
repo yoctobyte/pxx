@@ -238,3 +238,33 @@ bp, pk = sharedEscapes()
 bp()
 bp()
 print("shared f:", pk())
+
+
+# A `nonlocal` capture reached ONLY through a direct call needs no frame cell:
+# the call site passes the address of the enclosing slot and the by-ref parameter
+# writes through it, so the two already share one storage. Promoting anyway cost
+# a heap cell per ACTIVATION, never freed — 2M calls of this exact shape went
+# from 1 MB flat to 48 MB. Correctness is what this prints; the allocation
+# behaviour is what the shape is here to pin down.
+def directOnly():
+    c = 0
+    def bump():
+        nonlocal c
+        c += 1
+    bump()
+    bump()
+    return c
+print("direct:", directOnly())
+
+# ...and the same frame once the def IS taken as a value: the cell comes back,
+# because the closure now outlives the frame
+def directAndLifted():
+    c = 0
+    def bump():
+        nonlocal c
+        c += 1
+    bump()
+    f = bump
+    f()
+    return c
+print("both:", directAndLifted())

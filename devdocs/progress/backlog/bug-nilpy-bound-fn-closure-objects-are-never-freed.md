@@ -330,3 +330,33 @@ lose in their length:
   CREATION, not invocation;
 - treat any self-reported RSS/objtrace numbers here as unverified until
   reproduced from a byte-for-byte-fresh build by someone other than the author.
+
+
+## 2026-08-07 — the frame CELL is now part of this leak's family
+
+[[bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame]]
+added a `pycell_new` heap slot per promoted name, deliberately unowned for the
+same reason the bound-fn object is: the cell must outlive the frame, and nothing
+was tracking the closures that hold it. So whatever ownership model this ticket
+lands must free the cell too — they have the same lifetime, and the cell's
+address is *in* the bound-fn object's `Bound[]` slot, which is the natural place
+to hang it.
+
+Measured today at `5ece8cb7d`, 2,000,000 escaping closures each with one
+captured name:
+
+| shape | RSS |
+| --- | --- |
+| escaping closure, plain capture (no cell) | 408 MB |
+| escaping closure, `nonlocal` capture (bound-fn + cell) | 454 MB |
+
+So the cell is ~23 bytes/closure of a ~227 bytes/closure leak — it rides along
+with the object rather than dominating it, and freeing the object without
+freeing the cell would leave a tenth of the leak behind.
+
+**Not to be confused with the regression already fixed.** Promoting a cell in a
+frame whose nested defs are only ever CALLED — never taken as a value — was a
+separate defect I introduced and fixed the same day (`PyBodyLiftsANestedDef`):
+that shape leaked 24 bytes per *activation* of the enclosing function even
+though no closure existed, and it is back to a flat 1 MB. What remains here is
+only the genuine case: a closure that really does escape.
