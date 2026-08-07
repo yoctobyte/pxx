@@ -4730,14 +4730,11 @@
  "open_regressions": [
   {
    "bad": "34670fe9b872dcfeee0e4a283c44cf0742466800",
-   "good": "06786c25ffc8078e9e1f5be78f3727d549e882e1",
+   "good": "c20ab260bcb7a0550e274c9931a9ed76ef4e44e3",
    "job": "test-core#src:test/test_dynarray_params.pas",
    "name": "test-core#975",
    "opened": "2026-08-07T06:56:02Z",
    "range": [
-    "7495d782c92fd4e247b3eacae7228274b7eb7f92",
-    "65d2a169b705c3090398a4e1d1647f567dc48fe0",
-    "c20ab260bcb7a0550e274c9931a9ed76ef4e44e3",
     "34e3edcb503301e9c3f1b0be66f5cf2db78a6b4a",
     "ff90dd52cf4c798b1c2ab69450bc70fc723b61e4",
     "635b231b9ba4a4fcb57594f3445a00f76d5cc573",
