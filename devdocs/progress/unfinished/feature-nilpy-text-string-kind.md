@@ -179,10 +179,48 @@ here: `PXX_FLAG_INTERNED` marks a cached singleton, and `PXX_FLAG_STATIC` is
 what stops its refcount ever reaching zero. Neither was invented for this; they
 were reserved on general principle and the use arrived.
 
-So the shape of the fix is: `pystr_at_s(s, i): AnsiString` returning an interned
-singleton for an ASCII character and a fresh 1-character string otherwise, with
-the lowering re-typed from `tyChar` to `tyAnsiString`. The type ripple is real
-work; the performance worry is not.
+### …but do NOT copy CPython here — keep the char TYPED (user, 2026-08-07)
+
+CPython interns single-character strings *because it has no static types*:
+everything is an object, so `s[i]` must be one. We are a compiler and should not
+adopt a workaround for a constraint we do not have.
+
+**Any Unicode code point fits in 32 bits**, so a scalar holds any character.
+The name already exists — FPC's system unit declares `UCS4Char = type LongWord`
+(with `UCS4String`), which is the same thing as Go's `rune`, Rust's `char`,
+C11's `char32_t` and CPython's own `Py_UCS4`. Use `UCS4Char`: it is the
+FPC-faithful spelling and costs nothing to adopt.
+
+The ladder is **not** three sizes of one idea, and the middle rung is the trap:
+
+| type | width | holds |
+| --- | --- | --- |
+| `AnsiChar` (`tyChar` today) | 1 | a UTF-8 **code unit** |
+| `WideChar` (a value cast today, not a type) | 2 | a UTF-16 **code unit** — may be HALF a character |
+| `UCS4Char` | 4 | a **code point** — always whole |
+
+Only the last is guaranteed to hold any character; `WideChar` needs a surrogate
+pair above the BMP, which is the same defect as `Length(UnicodeString)` counting
+code units.
+
+**So the shape of the fix changes, and gets cheaper.** Widen the subscript
+result from `tyChar` to a code-point scalar rather than converting it to a
+string:
+
+- **no allocation** — a register value, not a refcounted heap object;
+- **no `tyChar` → `tyAnsiString` ripple through NilPy's inference**, which was
+  the expensive part of the previous plan;
+- it **generalises the existing architecture** instead of replacing it: `s[i]`
+  is already a `tyChar` promoted by `pystr_ofchar` where a string is wanted.
+
+The remaining work is to make that promotion **complete**. NilPy requires `s[i]`
+to behave as a `str` everywhere — `s[i] + "x"`, `len(s[i])`,
+`type(s[i]).__name__`, `s[i] in d` — and today `pystr_ofchar` is applied at
+specific sites (comparisons, `pyparser.inc` ~1971). That is contextual
+promotion in the frontend, where it already lives, not a type-system change.
+
+The interned-1-char-string route is recorded above as the fallback if the
+promotion turns out not to be completable; it is no longer the recommendation.
 
 ### Why it must be all-or-nothing
 
