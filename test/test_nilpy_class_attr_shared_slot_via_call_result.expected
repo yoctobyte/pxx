@@ -1,0 +1,7 @@
+bare ident: 1 c
+call result: 2 c
+shared: 5 5 5
+field via call: 99
+via index: 7 7
+via chained field: 8 5
+via class: 9 c

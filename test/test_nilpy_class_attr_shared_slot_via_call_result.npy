@@ -1,0 +1,43 @@
+# A class-written class attribute is lowered as ONE SHARED SLOT with no instance
+# field, so every instance read of it is a fall-through to that slot. The
+# bare-identifier receiver (`b.made`) has always taken that fall-through; a
+# receiver that is not a bare identifier — a CALL RESULT, an index, a chained
+# field — went down ParseClassRecordSelectors, which had no such arm and died as
+# `"made": no such member on this record/class`. Same object, same attribute,
+# two spellings, one of them refused: the sibling arm of a double case.
+
+class Counter:
+    made = 0
+    label = "c"
+    def __init__(self, n):
+        self.n = n
+        Counter.made += 1        # the class write is what picks the shared slot
+
+# the arm that always worked — the control
+b = Counter(10)
+print("bare ident:", b.made, b.label)
+
+# the arm this test pins: a CALL RESULT as receiver
+print("call result:", Counter(20).made, Counter(30).label)
+
+# the slot is genuinely shared, not copied per instance
+c1 = Counter(1)
+c2 = Counter(2)
+print("shared:", c1.made, c2.made, Counter.made)
+
+# an ordinary instance field through the same call-result route must still work
+print("field via call:", Counter(99).n)
+
+# a container element and a chained receiver reach the same arm
+box = [Counter(7)]
+print("via index:", box[0].made, box[0].n)
+
+
+class Holder:
+    def __init__(self):
+        self.inner = Counter(5)
+
+print("via chained field:", Holder().inner.made, Holder().inner.n)
+
+# reading through the class name stays correct alongside all of it
+print("via class:", Counter.made, Counter.label)

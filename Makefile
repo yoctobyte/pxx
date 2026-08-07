@@ -646,6 +646,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_clsattr_byname26 | diff -u test/test_nilpy_class_attribute_through_class_name.expected -
 	./$(COMPILER) test/test_nilpy_inherited_class_attribute.npy /tmp/test_nilpy_inhclsattr26
 	/tmp/test_nilpy_inhclsattr26 | diff -u test/test_nilpy_inherited_class_attribute.expected -
+	./$(COMPILER) test/test_nilpy_class_attr_shared_slot_via_call_result.npy /tmp/test_nilpy_clsattr_callres26
+	/tmp/test_nilpy_clsattr_callres26 | diff -u test/test_nilpy_class_attr_shared_slot_via_call_result.expected -
 	./$(COMPILER) test/test_nilpy_float_repr.npy /tmp/test_nilpy_floatrepr26
 	/tmp/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_user_class_shadows_builtin.npy /tmp/test_nilpy_shadow26

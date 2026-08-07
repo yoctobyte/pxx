@@ -7307,6 +7307,7 @@ var dfCi, dfPri, dfMmi, dfMpi, dfI, dfSelf, dfIdxHead, dfIdxTail: Integer;   { d
 var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
+    cvIdx: Integer;
 begin
   tk := IntToTypeKind(ASTTk[node]);
   { EVALUATE THE RECEIVER ONCE. `f(args).m()` arrives here with the CALL as the
@@ -7677,6 +7678,30 @@ begin
         outTk := tyInteger;
         Result := GenMakeFreeObjectExpr(node, recId - REC_UCLASS_BASE);
         Exit;
+      end;
+      { Class variable / class ATTRIBUTE reached through a NON-BARE receiver —
+        the same fall-through the bare-identifier path already does in
+        ParseFactor ("class variable accessed via an instance"). A class-written
+        class attribute has no instance field BY CONSTRUCTION (it is one shared
+        slot), so without this arm `Base(1).made` reaches RequireRecMember and
+        dies as "no such member" while `b.made` on the very same object works —
+        the sibling arm of a double case (normalise-dont-special-case.md). }
+      if (recId >= REC_UCLASS_BASE) and
+         (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
+      begin
+        cvIdx := FindClassVar(recId - REC_UCLASS_BASE, fieldName);
+        if cvIdx >= 0 then
+        begin
+          sub := AllocNode(AN_IDENT);
+          ASTIVal[sub] := cvIdx;
+          ASTTk[sub] := Ord(Syms[cvIdx].TypeKind);
+          tk := Syms[cvIdx].TypeKind;
+          recId := REC_NONE;
+          Next;                        { consume the field name }
+          node := sub;
+          outTk := tk;
+          Continue;
+        end;
       end;
       RequireRecMember(recId, fieldName);
       sub := AllocNode(AN_FIELD);

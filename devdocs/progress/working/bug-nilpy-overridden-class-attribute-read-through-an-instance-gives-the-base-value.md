@@ -103,24 +103,38 @@ all**, so every class takes the hoisted-temp route and the per-constructor
 prologue never enters the picture. The untested combination is *redeclared
 attribute + a constructor in the chain*.
 
-### A SECOND, separate defect found by the same sweep
+### A SECOND, separate defect found by the same sweep — FIXED 2026-08-07
 
-An **instance read of a class-WRITTEN (shared-slot) attribute is a compile
-error**, while the class-name read of the same attribute works:
+An instance read of a class-WRITTEN (shared-slot) attribute was refused **when
+the receiver was not a bare identifier**:
 
 ```python
-class Base:
+class Counter:
     made = 0
     def __init__(self, n):
-        Base.made += 1        # class write -> 'made' takes the shared-slot row
-Base(1)
-print(Base.made)              # 1        — correct
-print(Base(1).made)           # pxx: error "made": no such member on this record/class
+        Counter.made += 1     # class write -> 'made' takes the shared-slot row
+b = Counter(1)
+print(b.made)                 # 1 — always worked
+print(Counter(1).made)        # was: error "made": no such member on this record/class
 ```
 
-Loud, not silent, so it is not urgent the way the clobber is — but it is a
-different empty cell, not a variant of the bug above, and it should be filed and
-fixed with the same change rather than separately.
+Same object, same attribute, two spellings, one refused. Narrowed by bisecting
+the receiver shape: the bare-identifier path in `ParseFactor` has a "class
+variable accessed via an instance" fall-through (`parser.inc:6378`), and
+`ParseClassRecordSelectors` — the route a call result, index, or chained field
+takes — had no such arm, so it fell to `RequireRecMember` and errored. A
+class-written attribute has no instance field *by construction*, so that arm is
+not optional.
+
+**Fixed** by giving the selector path the same fall-through, mirroring the
+existing arm rather than adding a second mechanism. Test:
+`test/test_nilpy_class_attr_shared_slot_via_call_result.npy`, byte-identical to
+the CPython oracle across six receiver shapes (bare ident, call result, shared
+slot across instances, ordinary field via call result, index, chained field,
+class name).
+
+Loud rather than silent, so this was the cheap half. The clobber above is the
+expensive half and is still open.
 
 ### The real shape: a matrix with holes
 
