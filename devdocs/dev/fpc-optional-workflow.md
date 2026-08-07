@@ -26,6 +26,48 @@ valid seeds, in order of preference:
 `make selfcheck` seeds from the committed stable and proves a self-host fixedpoint
 (`g2 == g3`) plus a compiled `hello` — the fast, FPC-free sanity loop CI uses.
 
+### How stale a seed may be — measured, ~1 week
+
+A pinned binary is **not** an indefinitely valid seed. Measured 2026-08-07
+against current source, each pin extracted with its own frozen `builtin/`:
+
+| pin | date | age | result |
+|-----|------|-----|--------|
+| v246 | 08-07 | 0d | OK |
+| v242 | 08-04 | 3d | OK |
+| **v238** | **08-01** | **6d** | **OK** — product runs, C == D fixedpoint, byte-identical to the shipped HEAD binary |
+| v233 | 07-31 | 7d | **FAIL** — `case label must be constant` |
+| v228 | 07-28 | 10d | **FAIL** — same |
+
+The cause is precise, and it is a property of self-hosting rather than a bug:
+
+- **2026-08-01**, `e4995a457` *"fold Ord/Chr/Length/Succ/Pred in constant
+  expressions and case labels"* gave the compiler that capability;
+- **2026-08-03**, `abd709361` had the compiler's OWN source start using it —
+  `case ASTIVal[n] of Ord(tkEq), Ord(tkNeq), …` in `pyparser.inc`.
+
+From that moment every seed older than 08-01 was cut off, because it cannot
+parse the source it is being asked to compile.
+
+> **The seed window is set by the newest compiler feature the compiler's own
+> source depends on.** It shortens the moment the source adopts something fresh,
+> not gradually.
+
+Two consequences worth holding on to:
+
+1. **Keep the committed pin reasonably fresh.** It is the cold-start seed for
+   anyone without FPC, and it silently stops working about a week after the
+   source adopts a new feature.
+2. **This is the real justification for keeping FPC** (reason 1 at the top of
+   this page). It is not a fallback for "big changes" — layout changes self-host
+   fine from seed 2. It is the escape hatch for a checkout whose committed binary
+   has aged past the window, and for pure source with no binary at all.
+
+If a wider window were ever wanted, the lever is discipline rather than
+machinery: have the compiler's own source lag its own features by a release or
+two. That is a real cost against a benefit nobody has needed yet — recorded, not
+recommended.
+
 ### The one case where seed 1 is the wrong seed
 
 `compiler/pascal26` is the fast path and is the right default: the RTL rarely
