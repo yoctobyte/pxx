@@ -12,14 +12,13 @@ _none_
 
 _none_
 
-## unfinished (10)
+## unfinished (9)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-closure-over-a-loop-variable-captures-by-value | N | 45 | bug | NilPy: a closure created in a loop captures the loop variable's VALUE at creation, so [f() for f in fs] gives [0, 1, 2] where CPython gives [2, 2, 2] — Python closes over the variable, not the value | — |
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | NESTED-DEF defaults only, as of 2026-08-05. `def inner(b=q)` inside another def still becomes None on the direct-call path; the closure-VALUE path evaluates it. Module-level (e53fa4a3f), METHOD (a87e8a224) and __init__ (e1e43a5e6) halves are all DONE — do not re-derive them from the older sections below. | — |
-| bug-nilpy-overridden-class-attribute-read-through-an-instance-gives-the-base-value | N | 55 | bug | NilPy: a class attribute overridden in a subclass reads the BASE's value through an instance — Derived().kind is 'base', while Derived.kind is correctly 'derived'. Silent wrong value on ordinary Python | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |
@@ -40,7 +39,7 @@ _none_
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -78,6 +77,7 @@ _none_
 | bug-t-empty-range-regression-cannot-be-bisected | T | 55 | bug | When a run's parent_tested IS the tested sha, the regression's range is empty and idle bisect can never narrow it — so those tickets sit until a human bisects by hand | — |
 | bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition | T | 55 | bug | tools/gate.sh's fixedpoint seeds from PINNED and demands A==B==C, so it goes RED for every agent after any new builtin lands and stays red until re-pin — indistinguishable from the agent's own breakage | — |
 | bug-t-gate-sh-fixedpoint-does-not-iterate | T | 60 | bug | gate.sh's inline fixedpoint() demands convergence in ONE pass from pinned, so it reports RED for every change that alters the compiler's own emitted code — the exact mistake the Makefile documents as wrong | — |
+| bug-t-pydiff-cpython-arm-fails-on-a-relative-path | T | 45 | bug | pydiff.py reports a bogus DIFF for any file given as a relative path: run_cpython passes the full relative path while setting cwd to that path's dirname, so CPython exits 2 and every line reads 'cpython: <no line>' | — |
 | bug-t-three-network-tests-flake-and-cost-real-debugging-time | T | 45 | bug | lib_net_v6only, lib_sockets and lib_platform_esp each pass or fail run-to-run with the SAME compiler, so a gate.sh lib RED and two cross-sweep A/B deltas in one night were all noise that had to be disproved by hand | — |
 | bug-t-tstate-launders-skip-into-pass | T | 50 | bug | tstate records a SKIPPED job as \"pass\", so a green published state cannot be distinguished from one that actually ran — cross-host coverage differences are invisible exactly when they matter | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -365,9 +365,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1469)
+## done (1470)
 
-1469 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1470 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -469,6 +469,7 @@ _none_
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-a-lambda-call-with-the-wrong-argument-count-does-not-raise
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+- [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] docs-canonical-domain

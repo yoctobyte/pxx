@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "NilPy: a class attribute overridden in a subclass reads the BASE's value through an instance — Derived().kind is 'base', while Derived.kind is correctly 'derived'. Silent wrong value on ordinary Python"
+status: done
+owner: claude-N
 ---
 
 # An overridden class attribute reads the base's value through an instance
@@ -325,3 +327,69 @@ derived instance, a Base-typed binding holding a Derived, a heterogeneous list
 walked in a loop, an attribute the subclass does NOT override (must still find
 the base's), and a per-instance override on top — diffed against CPython with
 `tools/pydiff.py`.
+
+## FIXED 2026-08-07 — shared-slot demotion (design 2), as ranked above
+
+Implemented exactly the recommended design: an attribute leaves the
+copy-at-construction lowering when it is **redeclared by another class in the
+same inheritance chain**, joining the `classW` demotion that was already there.
+
+- `pyparser.inc` — `PyClsAttrRedeclScan` builds a whole-module table of every
+  class-level attribute declaration with its class and base, **from tokens**,
+  because the answer depends on classes declared LATER in the module than the
+  one being lowered. Same shape and same reason as `PyClsAttrWriteScan` /
+  `PyDynAttrEverAssigned`; header walk and attribute predicate copied from
+  `PyRegisterClassFieldsPrepass` so the two readers cannot disagree about what a
+  class attribute is (the double-reader bug that already cost this family a
+  segfault). `PyRdIsAncestor` / `PyClsAttrRedeclaredInChain` answer the chain
+  question in **either direction** — open risk (1) above: the base must demote
+  too, or a subclass instance still inherits the base's field via `FindUField`
+  and the class-var arm never fires. Overflow answers True (demote), so the
+  failure mode costs the optimization, never correctness.
+- `parser.inc:7689` — the selector path gets the per-instance-override
+  fall-through ahead of the plain class-var arm, mirroring the `ParseFactor`
+  site's existing precedence. Without it a demoted attribute read through a
+  non-bare receiver would ignore an override a constructor had just created.
+- `defs.inc` — the tables.
+
+### Measured, controlled against the PINNED (pre-change) binary
+
+| row | pinned | fixed | CPython |
+| --- | --- | --- | --- |
+| `Derived(4).kind` (super in ctor) | **base** | derived ✓ | derived |
+| `NoCtor(5).kind` (inherited ctor) | **base** | noctor ✓ | noctor |
+| `CtorNoSuper(6).kind` | nosuper ✓ | nosuper ✓ | nosuper |
+| `Plain(7).kind` (no redeclaration) | base ✓ | base ✓ | base |
+| `self.kind` after `super().__init__()` | **base** | derived ✓ | derived |
+| instance override on top | ✓ | ✓ | ✓ |
+| base method's `self.v` seen externally | ✓ | **✓** | set-by-base-method |
+
+That last row is the one that disqualified design 3 (shadow fields); demotion
+keeps it correct, because it never splits the attribute into two slots.
+
+### The two rows deliberately NOT fixed — both need the RUNTIME class
+
+1. `self.attr` inside a **base** method on a derived instance still reads the
+   base's value (unchanged from pinned, so not a regression).
+2. A heterogeneous list walked in a loop is now a **loud** runtime
+   `AttributeError: 'Base' object has no attribute 'kind'` where it used to
+   print `base base` **silently wrong**. Exactly the trade measured in "Open
+   risk" (2), and doctrine-aligned per
+   [[decide-nilpy-class-attribute-instance-read-model]].
+
+Both are the same missing capability — a variant-boxed instance loses its class
+identity — and belong with [[bug-nilpy-list-of-custom-objects-loses-repr-str]].
+
+### Test
+
+`test/test_nilpy_overridden_class_attribute.npy` (+ `.expected`, registered in
+the Makefile's nilpy block): 11 lines **byte-identical to the CPython oracle** —
+instance and class-name spellings, a non-redeclaring subclass, an attribute the
+subclass does not redeclare, the read inside the derived ctor after `super()`,
+a per-instance override on top, and the base-method-write row as a standing
+guard against the shadow-field design being retried.
+
+**Gate:** self-host fixedpoint + `tools/gate.sh quick`.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

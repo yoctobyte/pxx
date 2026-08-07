@@ -1,0 +1,84 @@
+# A class attribute redeclared by a subclass, read through an INSTANCE.
+#
+# The copy-at-construction lowering applies a class's attributes from a prologue
+# keyed on the CONSTRUCTOR's class, but a construction runs whichever
+# constructors the chain has -- so super().__init__() re-ran the base's prologue
+# over the derived values, and a subclass with no own ctor never ran one at all.
+# Both rows answered the BASE's value. Such an attribute is now demoted to the
+# shared-slot lowering, which resolves from the RECEIVER's class.
+#
+# Two rows are deliberately absent because they are still wrong and are tracked
+# elsewhere -- both need the receiver's RUNTIME class, which is a different
+# mechanism from a global address:
+#   * self.attr inside a BASE method on a DERIVED instance (reads the base's)
+#   * a heterogeneous list walked in a loop (now a loud AttributeError, which is
+#     the standing halt-rather-than-be-silently-wrong rule, not a fix)
+# See bug-nilpy-list-of-custom-objects-loses-repr-str.
+
+
+class Base:
+    kind = "base"
+    tag = "shared"
+    def __init__(self, n):
+        self.n = n
+
+
+class Derived(Base):
+    kind = "derived"
+    def __init__(self, n):
+        super().__init__(n)
+        # the derived value must survive the base's constructor
+        print("in ctor:", self.kind)
+
+
+class NoCtor(Base):
+    # redeclares, inherits the constructor -- no own prologue ever ran
+    kind = "noctor"
+
+
+class CtorNoSuper(Base):
+    kind = "nosuper"
+    def __init__(self, n):
+        self.n = n
+
+
+class Plain(Base):
+    # does NOT redeclare: must still find the base's value, and stays on the
+    # cheap copy lowering
+    pass
+
+
+# through an instance
+print(Base(3).kind, Derived(4).kind)
+print(NoCtor(5).kind, CtorNoSuper(6).kind)
+print(Plain(7).kind)
+
+# through the class name -- the row that always worked, kept as a guard
+print(Base.kind, Derived.kind, NoCtor.kind, Plain.kind)
+
+# an attribute the subclass does not redeclare, through both spellings
+print(Derived(8).tag, Derived.tag, NoCtor(9).tag)
+
+# a per-instance override on top of the redeclared attribute
+d = Derived(10)
+d.kind = "override"
+print(d.kind, Derived(11).kind, Derived.kind)
+
+# a BASE method writing self.attr must be visible to an external read: one
+# logical attribute, one storage slot. This is the row that disqualified the
+# shadow-field design, which split it into two.
+class B2:
+    v = "b"
+    def __init__(self):
+        self.n = 0
+    def setit(self):
+        self.v = "set-by-base-method"
+
+
+class D2(B2):
+    v = "d"
+
+
+o = D2()
+o.setit()
+print(o.v)

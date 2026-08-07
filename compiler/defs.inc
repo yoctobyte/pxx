@@ -1798,6 +1798,23 @@ var
   PyClsAttrSOff : array[0..255] of Integer;
   PyClsAttrSLen : array[0..255] of Integer;
   PyClsAttrCount: Integer;
+  { REDECLARATION table (PyClsAttrRedeclScan): which class-level attribute names
+    are declared by MORE THAN ONE class in the same inheritance chain. Such an
+    attribute cannot use the copy-at-construction lowering — that lowering's
+    soundness argument ("indistinguishable unless something writes through the
+    class name") silently assumed one declaration per chain, and a redeclaration
+    breaks it with no class write anywhere. Built from TOKENS, before any class
+    is registered, because the answer depends on classes declared LATER in the
+    module than the one being lowered. Token indices, not strings, in the idiom
+    of the other whole-module scans. }
+  PyRdClsTok  : array[0..255] of Integer;    { token idx of the class NAME }
+  PyRdBaseTok : array[0..255] of Integer;    { token idx of its base name, -1 = none }
+  PyRdCount   : Integer;
+  PyRdAtCls   : array[0..1023] of Integer;   { index into PyRdClsTok }
+  PyRdAtTok   : array[0..1023] of Integer;   { token idx of the attribute NAME }
+  PyRdAtCount : Integer;
+  PyRdScanned : Boolean;
+  PyRdOverflow: Boolean;   { table full — answer conservatively, never silently }
   PyCapName  : array[0..MAX_PROCS*PY_MAX_CAPS-1] of AnsiString;
   { Scratch for PyCollectCalleeCaps — the names a call to a sibling nested def
     must forward, computed from TOKENS so a callee defined LATER in the same

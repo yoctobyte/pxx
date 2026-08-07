@@ -3930,6 +3930,147 @@ begin
   Result := True;
 end;
 
+procedure PyClsAttrRedeclScan;
+{ Build the redeclaration table: every class-level attribute declaration in the
+  module, with its class and that class's base, from TOKENS.
+
+  Why a whole-module scan and not the class registration itself: the question
+  "does another class in this chain declare the same attribute" depends on
+  classes declared LATER in the module, and the lowering for the BASE has to be
+  chosen before those are seen. Same reason, and the same shape, as
+  PyClsAttrWriteScan and PyDynAttrEverAssigned.
+
+  The header walk and the class-level-attribute predicate are deliberately
+  copied from PyRegisterClassFieldsPrepass and PyRegisterClassMembers: if the
+  two disagree about what a class body or a class attribute IS, the demotion
+  lands on a different set of attributes than the lowering does, which is the
+  double-reader bug that already cost this family a segfault
+  (bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout). }
+var i, j, d, bs, be, ci, bodyDepth: Integer;
+begin
+  if PyRdScanned then Exit;
+  PyRdScanned := True;
+  PyRdCount := 0;
+  PyRdAtCount := 0;
+  PyRdOverflow := False;
+  { PyScanLo, not 1 — the same start PyRegisterClassFieldsPrepass uses. Starting
+    at 1 stepped over a class declared at the very top of the module, which is
+    where a BASE class usually sits, so the one declaration the chain check most
+    needed was the one always missing. }
+  i := PyScanLo;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) then
+    begin
+      if PyRdCount >= 256 then begin PyRdOverflow := True; Exit; end;
+      ci := PyRdCount;
+      PyRdClsTok[ci] := i + 1;
+      PyRdBaseTok[ci] := -1;
+      if (Tokens[i + 2].Kind = tkLParen) and (Tokens[i + 3].Kind = tkIdent) then
+        PyRdBaseTok[ci] := i + 3;
+      Inc(PyRdCount);
+      { header -> the colon that ends it, honouring a parenthesised base list }
+      j := i + 2;
+      d := 0;
+      while j < MainProgramTokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(d)
+        else if Tokens[j].Kind = tkRParen then Dec(d)
+        else if (Tokens[j].Kind = tkColon) and (d = 0) then Break
+        else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
+        Inc(j);
+      end;
+      { the indented shape is COLON NEWLINE INDENT; anything else is one-line
+        and declares nothing this scan cares about }
+      if (j + 2 < MainProgramTokCount) and (Tokens[j].Kind = tkColon) and
+         (Tokens[j + 1].Kind = tkNewline) and (Tokens[j + 2].Kind = tkIndent) then
+      begin
+        bs := j + 3;
+        be := PyFindBodyEnd(bs);
+        bodyDepth := 0;
+        j := bs;
+        while j < be do
+        begin
+          if Tokens[j].Kind = tkIndent then Inc(bodyDepth)
+          else if Tokens[j].Kind = tkDedent then Dec(bodyDepth)
+          else if (bodyDepth = 0) and (Tokens[j].Kind = tkIdent) and
+                  ((j = bs) or
+                   (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+                  (PyClsAttrEqIdx(j, be) >= 0) then
+          begin
+            if PyRdAtCount >= 1024 then begin PyRdOverflow := True; Exit; end;
+            PyRdAtCls[PyRdAtCount] := ci;
+            PyRdAtTok[PyRdAtCount] := j;
+            Inc(PyRdAtCount);
+          end;
+          Inc(j);
+        end;
+      end;
+      { deliberately NOT jumping i past the body: PyFindBodyEnd can land exactly
+        ON the next `class` token, and `i := be` plus the loop's Inc(i) then
+        stepped straight over it — three classes found where the module had
+        four, so the last redeclaration went unseen and nothing demoted. Walking
+        token by token also picks up a class nested inside another body. }
+    end;
+    Inc(i);
+  end;
+end;
+
+function PyRdIsAncestor(descIdx, ancIdx: Integer): Boolean;
+{ Does `descIdx`'s base chain reach `ancIdx`? Bounded by the table size so a
+  cyclic or self-referential base list cannot spin. }
+var cur, k, guard: Integer; baseNm: AnsiString;
+begin
+  Result := False;
+  cur := descIdx;
+  guard := 0;
+  while (cur >= 0) and (guard <= PyRdCount) do
+  begin
+    if cur = ancIdx then begin Result := True; Exit; end;
+    if PyRdBaseTok[cur] < 0 then Exit;
+    baseNm := GetTokenStr(PyRdBaseTok[cur]);
+    cur := -1;
+    for k := 0 to PyRdCount - 1 do
+      if GetTokenStr(PyRdClsTok[k]) = baseNm then begin cur := k; Break; end;
+    Inc(guard);
+  end;
+end;
+
+function PyClsAttrRedeclaredInChain(const clsName, attrName: AnsiString): Boolean;
+{ True when some OTHER class related to clsName by inheritance — in either
+  direction — also declares a class-level attribute called attrName.
+
+  Either direction on purpose: the base must leave the copy lowering just as the
+  subclass must. FindUField walks the parent chain, so if the base keeps a field
+  while the subclass takes the shared slot, a subclass instance still finds the
+  INHERITED field and the class-var arm never fires. The whole chain has to
+  agree or nothing does.
+
+  Name-keyed and case-SENSITIVE, matching Python and the rest of the NilPy
+  frontend. On table overflow answers True — demotion is the correct model and
+  merely costs the copy optimization, so failing that way is safe. }
+var a, b, ia, ib: Integer;
+begin
+  Result := False;
+  PyClsAttrRedeclScan;
+  if PyRdOverflow then begin Result := True; Exit; end;
+  for a := 0 to PyRdAtCount - 1 do
+  begin
+    if GetTokenStr(PyRdAtTok[a]) <> attrName then Continue;
+    ia := PyRdAtCls[a];
+    if GetTokenStr(PyRdClsTok[ia]) <> clsName then Continue;
+    for b := 0 to PyRdAtCount - 1 do
+    begin
+      if b = a then Continue;
+      if GetTokenStr(PyRdAtTok[b]) <> attrName then Continue;
+      ib := PyRdAtCls[b];
+      if ib = ia then Continue;
+      if PyRdIsAncestor(ib, ia) or PyRdIsAncestor(ia, ib) then
+      begin Result := True; Exit; end;
+    end;
+  end;
+end;
+
 { Evaluate one such attribute into its hidden global, at the point the class
   statement runs. CurTok is the attribute name. }
 procedure PyEmitClassAttrExpr(ci: Integer; eqAt: Integer);
@@ -18692,9 +18833,25 @@ begin
       { WHICH lowering — see PyClsAttrWriteScan. Without a write through the
         class name the copy-at-construction form below is indistinguishable from
         Python's fall-through; with one the attribute has to become the single
-        shared slot the global already is. }
+        shared slot the global already is.
+
+        ...and REDECLARATION forces the same demotion. The "indistinguishable"
+        argument above silently assumed one declaration per inheritance chain.
+        It is false when a subclass redeclares the attribute, with no class
+        write anywhere: the copy is applied by a prologue keyed on the
+        CONSTRUCTOR's class, but a construction runs whichever constructors the
+        chain has, so `super().__init__()` re-ran the base's prologue over the
+        derived values, and a subclass with no own ctor never ran its own at
+        all. The shared slot has no such problem — it is read by walking from
+        the RECEIVER's class (FindClassVar), which is the right question. So the
+        cheap lowering stays exactly where it is provably right and the correct
+        model carries the rest, which is what
+        decide-nilpy-class-attribute-instance-read-model asked for. }
       PyClsAttrWriteScan(PyRawName(UClsNOff[ci], UClsNLen[ci]), GetTokenStr(i),
                          caClassW, caInstW);
+      if PyClsAttrRedeclaredInChain(PyRawName(UClsNOff[ci], UClsNLen[ci]),
+                                    GetTokenStr(i)) then
+        caClassW := True;
       PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, REC_NONE,
                             caClassW and caInstW);
       { The attribute is a real FIELD on the instance (typed from its literal),

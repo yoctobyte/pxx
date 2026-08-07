@@ -1,0 +1,11 @@
+in ctor: derived
+base derived
+noctor nosuper
+base
+base derived noctor base
+in ctor: derived
+shared shared shared
+in ctor: derived
+in ctor: derived
+override derived derived
+set-by-base-method

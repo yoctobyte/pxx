@@ -7689,6 +7689,21 @@ begin
       if (recId >= REC_UCLASS_BASE) and
          (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
       begin
+        { An attribute that instances ALSO write needs the per-instance override
+          fall-through, not the bare slot — same precedence as the ParseFactor
+          site, where this branch sits ahead of the plain class-var one. Reading
+          the slot directly here would ignore an override that `self.attr = x`
+          in a constructor had just created. }
+        cvIdx := PyClsAttrOvrSlot(recId - REC_UCLASS_BASE, fieldName);
+        if cvIdx >= 0 then
+        begin
+          Next;                        { consume the field name }
+          node := PyClsAttrOvrGet(node, fieldName, cvIdx);
+          tk := tyVariant;
+          recId := REC_NONE;
+          outTk := tk;
+          Continue;
+        end;
         cvIdx := FindClassVar(recId - REC_UCLASS_BASE, fieldName);
         if cvIdx >= 0 then
         begin
