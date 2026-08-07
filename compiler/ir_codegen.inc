@@ -118,7 +118,10 @@ begin
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
   EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
-  EmitAsmX64(['sub rax, %', 16]);
+  { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
+    sits below the refcount (devdocs/dev/managed-block-header.md). These were
+    the same address before that word existed. }
+  EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
   Code[pNil] := Byte(CodeLen - (pNil + 1));
   Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
@@ -135,7 +138,10 @@ begin
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
   EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
-  EmitAsmX64(['sub rax, %', 16]);
+  { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
+    sits below the refcount (devdocs/dev/managed-block-header.md). These were
+    the same address before that word existed. }
+  EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
   Code[pNil] := Byte(CodeLen - (pNil + 1));
   Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
@@ -5101,7 +5107,7 @@ begin
 
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
             begin
-              { Managed strings use the allocator payload size at [data-24] as
+              { Managed strings use the allocator payload size at [data-32] as
                 capacity. Resize unique buffers in place when the request fits;
                 otherwise allocate with geometric headroom so AppendChar is
                 amortized. The visible length remains n. }
@@ -5111,8 +5117,8 @@ begin
               EmitB($48); EmitB($83); EmitB($7E); EmitB($F0); EmitB($01); { cmp qword [rsi-16], 1 }
               EmitB($0F); EmitB($85); pAnsiShared := CodeLen; EmitI32(0); { jne alloc }
               EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
-              EmitB($48); EmitB($83); EmitB($C0); EmitB($11);           { add rax, 17 = needed payload }
-              EmitB($48); EmitB($3B); EmitB($46); EmitB($E8);           { cmp rax, [rsi-24] = capacity payload }
+              EmitB($48); EmitB($83); EmitB($C0); EmitB($19);           { add rax, 25 = needed payload (24 header + nul) }
+              EmitB($48); EmitB($3B); EmitB($46); EmitB($E0);           { cmp rax, [rsi-32] = capacity payload (allocator's size word, pushed back by the kind qword) }
               EmitB($0F); EmitB($87); pAnsiTooSmall := CodeLen; EmitI32(0); { ja alloc }
 
               EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old len }
@@ -5137,10 +5143,10 @@ begin
               Patch32(pAnsiTooSmall, CodeLen - (pAnsiTooSmall + 4));
               EmitB($48); EmitB($8B); EmitB($34); EmitB($24);           { mov rsi, [rsp] = old data }
               EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
-              EmitB($48); EmitB($83); EmitB($C0); EmitB($11);           { add rax, 17 = needed payload }
+              EmitB($48); EmitB($83); EmitB($C0); EmitB($19);           { add rax, 25 = needed payload (24 header + nul) }
               EmitB($48); EmitB($85); EmitB($F6);                       { test rsi, rsi }
               EmitB($0F); EmitB($84); pAnsiUseNeededNil := CodeLen; EmitI32(0); { jz use needed }
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old length (NOT [rsi-24] block cap: a short string that reused an oversized freed block via first-fit would otherwise double the block size each grow -> 4M,8M,16M... OOM) }
+              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old length (NOT [rsi-32] block cap: a short string that reused an oversized freed block via first-fit would otherwise double the block size each grow -> 4M,8M,16M... OOM) }
               EmitB($48); EmitB($01); EmitB($C9);                       { add rcx, rcx  (geometric headroom from the LENGTH, decoupled from block size) }
               EmitB($48); EmitB($39); EmitB($C1);                       { cmp rcx, rax }
               EmitB($0F); EmitB($82); pAnsiUseNeededSmall := CodeLen; EmitI32(0); { jb use needed }
@@ -5162,12 +5168,13 @@ begin
                 EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);        { imul rax, rcx }
               end;
             if not ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) then
-              begin EmitB($48); EmitB($83); EmitB($C0); EmitB($10); end; { add rax, 16 (header) }
+              begin EmitB($48); EmitB($83); EmitB($C0); EmitB($18); end; { add rax, 24 (header: kind+rc+len) }
             EmitHeapAllocLocked;            { rax = allocator payload / array base }
             EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx, [rsp+8] = n }
-            EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
-            EmitB($48); EmitB($89); EmitB($48); EmitB($08);  { mov [rax+8], rcx (length) }
-            EmitB($48); EmitB($8D); EmitB($78); EmitB($10);  { lea rdi, [rax+16] (new data) }
+            EmitB($48); EmitB($C7); EmitB($00); EmitI32(0);  { mov qword [rax], 0 (kind: untagged, phase 1) }
+            EmitB($48); EmitB($C7); EmitB($40); EmitB($08); EmitI32(1);  { mov qword [rax+8], 1 (refcount) }
+            EmitB($48); EmitB($89); EmitB($48); EmitB($10);  { mov [rax+16], rcx (length) }
+            EmitB($48); EmitB($8D); EmitB($78); EmitB($18);  { lea rdi, [rax+24] (new data) }
             EmitB($57);                     { push new data pointer }
 
             { Zero all new slots, then copy the preserved old prefix over it. }
@@ -5712,7 +5719,7 @@ begin
         EmitB($48); EmitB($85); EmitB($C0);                    { test rax,rax }
         EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0); { jz zero }
 
-        { size = n*elemSize + 16 }
+        { size = n*elemSize + 24 }
         if slElemSize = 8 then
           begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end
         else
@@ -5720,12 +5727,13 @@ begin
             EmitB($48); EmitB($C7); EmitB($C1); EmitI32(slElemSize);
             EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);
           end;
-        EmitB($48); EmitB($83); EmitB($C0); EmitB($10);        { add rax,16 }
+        EmitB($48); EmitB($83); EmitB($C0); EmitB($18);        { add rax,24 (header: kind+rc+len) }
         EmitHeapAllocLocked;                                   { rax = block base }
         EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx,[rsp+8] = n }
-        EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);        { mov qword [rax],1 (refcount) }
-        EmitB($48); EmitB($89); EmitB($48); EmitB($08);        { mov [rax+8],rcx (length) }
-        EmitB($48); EmitB($8D); EmitB($78); EmitB($10);        { lea rdi,[rax+16] (new data) }
+        EmitB($48); EmitB($C7); EmitB($00); EmitI32(0);        { mov qword [rax],0 (kind: untagged, phase 1) }
+        EmitB($48); EmitB($C7); EmitB($40); EmitB($08); EmitI32(1); { mov qword [rax+8],1 (refcount) }
+        EmitB($48); EmitB($89); EmitB($48); EmitB($10);        { mov [rax+16],rcx (length) }
+        EmitB($48); EmitB($8D); EmitB($78); EmitB($18);        { lea rdi,[rax+24] (new data) }
         EmitB($57);                                            { push new data }
 
         { zero new data: rcx = n * elemSize bytes }

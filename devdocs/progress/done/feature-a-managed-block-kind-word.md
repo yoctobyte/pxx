@@ -3,6 +3,8 @@ track: A
 prio: 60
 type: feature
 summary: "Phase 1 of multi-type strings: add an 8-byte kind word below the refcount in the shared managed-block header (strings, dynarrays, objects), write zero, never read it. Prove nothing regressed, then pin — phase 2 depends on the pin"
+status: done
+owner: claude-A-N
 ---
 
 # Managed-block header: add the kind word (phase 1, layout only)
@@ -128,3 +130,76 @@ source change.
 A half-applied header change breaks every consumer at once. If it cannot be
 landed green, **revert the working tree** and leave the survey above for the next
 session — do not leave it in `unfinished/`.
+
+## 2026-08-07 — implementation record
+
+### The emitter sweep was x86-64 ONLY
+
+The ticket assumed six hand-written emitters each carrying the free base. They
+do not. The five cross backends (`386`, `aarch64`, `arm32`, `riscv32`,
+`xtensa`) use `EmitHeapFreeLocked*` **only for the `FreeMem` intrinsic** — a
+raw user pointer, not a managed handle — and delegate managed
+retain/release to the Pascal routines in `builtinheap.pas`. aarch64 has no
+inline refcount blob at all. So the entire emitter change is two release blobs
+and two inline allocation paths in `ir_codegen.inc`. Large de-risking, and worth
+knowing before the next header change.
+
+### A THIRD header-relative constant the survey missed
+
+The AnsiString in-place resize fast path reads the **allocator's own capacity
+word** to decide whether a buffer can grow without reallocating:
+
+```
+cmp rax, [rsi-24]     { capacity payload }
+```
+
+That word belongs to the allocator and sits 8 bytes below *our* block base — so
+it moves with our header, `[rsi-24]` → `[rsi-32]`. Missing it would have left
+`SetLength` believing every block was 8 bytes larger than it is: an in-place
+grow that overruns into the next block, silently. It is not a refcount and not a
+length, which is why it was not in either category the survey enumerated.
+
+The same routine also adds `17` (16 header + nul) twice for the needed payload →
+`25`.
+
+### What was built
+
+- **Named offsets** (`PXX_HDR_SIZE/_KIND/_RC/_LEN`, `PXX_KIND_LEGACY`) replace
+  every literal in `builtinheap.pas`, so the next layout move is one edit rather
+  than another survey.
+- **`PXXHdrBase(p)` and `PXXHdrRC(p)`** split the two meanings the old
+  `base := Int64(p) - 16` carried. Every free now goes through `PXXHdrBase`;
+  every refcount access through `PXXHdrRC`. The variable is renamed `rcAddr`
+  wherever it was really the refcount, because the misleading name is what would
+  cause the next bug.
+- **Debug witness**: `PXXHdrInit` stamps `PXX_HDR_MAGIC` under
+  `-dPXX_HEAP_DEBUG`, and `PXXHdrBase` halts (204) if a computed base does not
+  carry it. It accepts `PXX_KIND_LEGACY` as well, because the x86-64 **inline**
+  allocation paths lay the header down in emitted code and cannot see the
+  define. A wild base is still caught — freed memory is `$DD` poison and live
+  neighbours are lengths or payload.
+- Plain `GetMem` / Pascal class instantiation is **unheadered** (the instance
+  pointer IS the allocator payload, VMT at offset 0) and is correctly untouched;
+  that is the population `PXX_OBJ_MAGIC` discriminates.
+
+### Verified
+
+- **FPC seed bootstrap reached fixedpoint** — gen1 and gen2 byte-identical
+  (`cmp` passed). This is the proof that matters; `gate.sh`'s own fixedpoint
+  seeds from the PINNED (old-layout) binary and **cannot** validate this change.
+- Pascal smoke: concat, a 200-iteration growth loop (exercises the inline
+  resize + COW + capacity paths), `SetLength` regrow preserving the prefix and
+  zeroing the tail, `array of AnsiString`, empty strings.
+- NilPy: 50 refcounted objects, 100-entry dict of lists, 300-iteration string
+  growth, comprehensions — output identical to CPython.
+- RTTI-driven class finalization: 300 create/free cycles of a class with two
+  managed string fields and a dynarray field, releasing via the layout
+  descriptor. Clean.
+- All of the above **also under `-dPXX_HEAP_DEBUG`** — no false positives from
+  the magic check, which means every free base is being computed correctly.
+- All six backends compile. xtensa needs `--platform=esp --esp-profile=bare`;
+  its failure on a plain `WriteLn` program is **pre-existing** (identical on the
+  pinned binary — controlled, not assumed).
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

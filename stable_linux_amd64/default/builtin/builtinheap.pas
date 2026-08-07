@@ -114,6 +114,37 @@ procedure PXXStrDecRef(p: Pointer);
   confused, retain/release no-op on unheadered instances instead of corrupting
   a neighbour block, and PXXObjFree frees correctly either way. }
 const
+  { ---- managed-block header layout (devdocs/dev/managed-block-header.md) ----
+
+      [kind:8][refcount:8][length:8][data...]      handle = block + PXX_HDR_SIZE
+
+    From the HANDLE: length at -8, refcount at -16, **block base at -24**.
+    Strings, dynamic arrays and objects all share this protocol (an object's
+    third slot is the spare holding PXX_OBJ_MAGIC rather than a length).
+
+    The kind word sits BELOW the refcount deliberately: length and refcount keep
+    their handle-relative offsets, so the ~73 length reads and every
+    retain/release blob across six backends are untouched, and only the free
+    base moves. Use these constants rather than literals — the two `- 16`s that
+    used to mean "refcount" and "block base" are now different addresses, and
+    that is exactly the mistake this change can make silently.
+
+    PHASE 1 writes PXX_KIND_LEGACY and never reads the word. Kinds arrive in
+    phase 2 (feature-nilpy-text-string-kind), after this is pinned. }
+  PXX_HDR_SIZE    = 24;   { total header bytes before the handle }
+  PXX_HDR_KIND    = 0;    { offsets from the BLOCK BASE }
+  PXX_HDR_RC      = 8;
+  PXX_HDR_LEN     = 16;
+  PXX_KIND_LEGACY = 0;    { "untagged — behave exactly as before" }
+{$ifdef PXX_HEAP_DEBUG}
+  { Debug-only witness that a block base was computed correctly. The failure
+    mode of this layout change is a free at the WRONG base, which corrupts the
+    allocator and surfaces arbitrarily far from the cause; stamping the kind
+    word and checking it on free turns that into an immediate, located failure.
+    Costs nothing in release builds. }
+  PXX_HDR_MAGIC   = $48445221;   { 'HDR!' }
+{$endif}
+
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
     instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
@@ -249,6 +280,55 @@ const
     pointer's own fields, by contrast, ARE pointer-sized. }
   IMT_ADDREF_OFF  = 8;    { slot 1 = _AddRef }
   IMT_RELEASE_OFF = 16;   { slot 2 = _Release }
+
+{ Stamp a freshly allocated managed block's KIND word. Phase 1 writes
+  "untagged", which every consumer must treat as today's behaviour; the debug
+  build writes a witness instead so a free at the wrong base is caught at the
+  free rather than as heap corruption later. Defined here, above every
+  allocation site, because FPC requires declaration before use where pxx is lax
+  — the seed build is the only way this change can be compiled at all. }
+procedure PXXHdrInit(base: Int64);
+begin
+{$ifdef PXX_HEAP_DEBUG}
+  PWord(base + PXX_HDR_KIND)^ := PXX_HDR_MAGIC;
+{$else}
+  PWord(base + PXX_HDR_KIND)^ := PXX_KIND_LEGACY;
+{$endif}
+end;
+
+{ Block base for a managed handle, and the ONLY thing that may be passed to
+  PXXFree for one. Distinct from the refcount address at [p-16], which is a
+  different slot now — conflating them is the mistake this change can make
+  silently, so both have names. }
+function PXXHdrBase(p: Pointer): Int64;
+{$ifdef PXX_HEAP_DEBUG}
+var hdrKind: Int64;
+{$endif}
+begin
+{$ifdef PXX_HEAP_DEBUG}
+  { 204 = invalid pointer operation. A bare Halt keeps this free of any I/O
+    dependency at this depth in the heap; the halt SITE is the diagnosis —
+    whoever called PXXHdrBase computed a handle whose block never came from
+    PXXHdrInit, i.e. an offset was missed in the layout migration.
+
+    PXX_KIND_LEGACY is accepted alongside the magic because the x86-64 INLINE
+    allocation paths lay the header down themselves and write the kind word
+    directly; they cannot see this define. A wild base is still caught — freed
+    memory is $DD poison and live neighbours are lengths or payload, none of
+    which reads as 0 or the magic. }
+  if p <> nil then
+  begin
+    hdrKind := PWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_KIND)^;
+    if (hdrKind <> PXX_HDR_MAGIC) and (hdrKind <> PXX_KIND_LEGACY) then Halt(204);
+  end;
+{$endif}
+  PXXHdrBase := Int64(p) - PXX_HDR_SIZE;
+end;
+
+function PXXHdrRC(p: Pointer): Int64;
+begin
+  PXXHdrRC := Int64(p) - PXX_HDR_SIZE + PXX_HDR_RC;   { = p - 16, unchanged }
+end;
 
 const
 {$ifdef PXX_ESP}
@@ -832,13 +912,13 @@ end;
   shared runtime: [refcount:word][length:word][data], handle = data pointer,
   length read at [handle-8]. desc layout: +4 elSize. }
 procedure PXXDynArrayReleaseEsp(arrData: Pointer);
-var block, rc: Int64;
+var rcAddr, rc: Int64;
 begin
   if arrData = nil then Exit;
-  block := Int64(arrData) - 16;            { refcount word at block base }
-  rc := PWord(block)^ - 1;
-  PWord(block)^ := rc;
-  if rc <= 0 then PXXFree(Pointer(block));
+  rcAddr := PXXHdrRC(arrData);             { refcount — NOT the block base }
+  rc := PWord(rcAddr)^ - 1;
+  PWord(rcAddr)^ := rc;
+  if rc <= 0 then PXXFree(Pointer(PXXHdrBase(arrData)));
 end;
 
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
@@ -855,10 +935,11 @@ begin
     PXXDynArrayReleaseEsp(oldData);
     Exit;
   end;
-  newBlock := PXXAlloc(16 + newLen * elSize, 8);
-  PWord(newBlock)^ := 1;                          { refcount }
-  PWord(Int64(newBlock) + 8)^ := newLen;          { length }
-  newArrData := Pointer(Int64(newBlock) + 16);
+  newBlock := PXXAlloc(PXX_HDR_SIZE + newLen * elSize, 8);
+  PXXHdrInit(Int64(newBlock));
+  PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;      { refcount }
+  PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;          { length }
+  newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
   i := 0;
   while i < newLen * elSize do
   begin
@@ -897,10 +978,11 @@ begin
     Result := nil;
     Exit;
   end;
-  base := Int64(PXXAlloc(len + 17, 8));
-  PWord(base)^ := 1;            { refcount }
-  PWord(base + 8)^ := len;      { length }
-  d := base + 16;
+  base := Int64(PXXAlloc(len + PXX_HDR_SIZE + 1, 8));   { +1 = nul terminator }
+  PXXHdrInit(base);
+  PWord(base + PXX_HDR_RC)^ := 1;      { refcount }
+  PWord(base + PXX_HDR_LEN)^ := len;   { length }
+  d := base + PXX_HDR_SIZE;
   s := Int64(src);
   i := 0;
   while i < len do
@@ -939,10 +1021,11 @@ begin
     Result := nil;
     Exit;
   end;
-  base := Int64(PXXAlloc(total + 17, 8));
-  PWord(base)^ := 1;            { refcount }
-  PWord(base + 8)^ := total;    { length }
-  d := base + 16;
+  base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 1, 8));   { +1 = nul terminator }
+  PXXHdrInit(base);
+  PWord(base + PXX_HDR_RC)^ := 1;        { refcount }
+  PWord(base + PXX_HDR_LEN)^ := total;   { length }
+  d := base + PXX_HDR_SIZE;
   s := Int64(srcA);
   i := 0;
   while i < lenA do
@@ -1356,13 +1439,14 @@ begin
   if fd < 0 then Exit;
   size := PXXSysLseek(fd, 0, 2);          { SEEK_END }
   PXXSysLseek(fd, 0, 0);                   { SEEK_SET }
-  base := Int64(PXXAlloc(size + 17, 8));
-  PWord(base)^ := 1;                       { refcount }
-  PWord(base + 8)^ := size;                { length (corrected below) }
-  d := base + 16;
+  base := Int64(PXXAlloc(size + PXX_HDR_SIZE + 1, 8));
+  PXXHdrInit(base);
+  PWord(base + PXX_HDR_RC)^ := 1;          { refcount }
+  PWord(base + PXX_HDR_LEN)^ := size;      { length (corrected below) }
+  d := base + PXX_HDR_SIZE;
   n := PXXSysRead(fd, d, size);
   if n < 0 then n := 0;
-  PWord(base + 8)^ := n;                   { actual bytes read }
+  PWord(base + PXX_HDR_LEN)^ := n;         { actual bytes read }
   PByte(d + n)^ := 0;                      { nul terminator }
   PXXSysClose(fd);
   Result := Pointer(d);
@@ -1376,34 +1460,36 @@ end;
   keeps its lock-prefixed inline version. PXXStrDecRef frees the block (base =
   p-16) when the count reaches zero. nil is ignored. }
 procedure PXXStrIncRef(p: Pointer);
-var base: Int64;
+var rcAddr: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
     tsIgnore: Int64;
 {$endif}
 begin
   if p = nil then Exit;
-  base := Int64(p) - 16;
+  rcAddr := PXXHdrRC(p);
 {$ifdef PXX_TS_SOFTLOCK}
   { threadsafe: atomic increment of the low refcount word (the count never
     approaches 2^32, so the 8-byte header's high dword stays zero). }
-  tsIgnore := __pxxatomic_add(Pointer(base), 1);
+  tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
-  PWord(base)^ := PWord(base)^ + 1;
+  PWord(rcAddr)^ := PWord(rcAddr)^ + 1;
 {$endif}
 end;
 
 procedure PXXStrDecRef(p: Pointer);
-var base, rc: Int64;
+var rcAddr, rc: Int64;
 begin
   if p = nil then Exit;
-  base := Int64(p) - 16;
+  rcAddr := PXXHdrRC(p);
 {$ifdef PXX_TS_SOFTLOCK}
-  rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
+  rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
-  rc := PWord(base)^ - 1;
-  PWord(base)^ := rc;
+  rc := PWord(rcAddr)^ - 1;
+  PWord(rcAddr)^ := rc;
 {$endif}
-  if rc = 0 then PXXFree(Pointer(base));
+  { NOT Pointer(rcAddr): the refcount no longer sits at the block base — see
+    the header note. This was one address before the kind word and is two now. }
+  if rc = 0 then PXXFree(Pointer(PXXHdrBase(p)));
 end;
 
 { NilPy object-reclamation primitives. An instance allocated here lives at
@@ -1483,10 +1569,11 @@ function PXXObjAlloc(size: NativeInt): Pointer;
 var base: Int64;
 begin
   if size < 8 then size := 8;
-  base := Int64(PXXAlloc(size + 16, 8));
-  PWord(base)^ := 1;                    { refcount }
-  PWord(base + 8)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
-  Result := Pointer(base + 16);
+  base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
+  PXXHdrInit(base);
+  PWord(base + PXX_HDR_RC)^ := 1;                    { refcount }
+  PWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
+  Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1);
 {$endif}
@@ -1496,10 +1583,11 @@ function PXXObjAllocRaw(size: NativeInt): Pointer;
 var base: Int64;
 begin
   if size < 8 then size := 8;
-  base := Int64(PXXAlloc(size + 16, 8));
-  PWord(base)^ := 1;                        { refcount }
-  PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
-  Result := Pointer(base + 16);
+  base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
+  PXXHdrInit(base);
+  PWord(base + PXX_HDR_RC)^ := 1;                        { refcount }
+  PWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
+  Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1);
 {$endif}
@@ -1525,10 +1613,11 @@ function PXXObjAllocRaw2(size: NativeInt): Pointer;
 var base: Int64;
 begin
   if size < 8 then size := 8;
-  base := Int64(PXXAlloc(size + 16, 8));
-  PWord(base)^ := 1;                         { refcount }
-  PWord(base + 8)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
-  Result := Pointer(base + 16);
+  base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
+  PXXHdrInit(base);
+  PWord(base + PXX_HDR_RC)^ := 1;                         { refcount }
+  PWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
+  Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1);
 {$endif}
@@ -1542,7 +1631,7 @@ var base, t: Int64;
 begin
   if p = nil then Exit;
   if not PXXObjPlausible(p) then Exit;
-  base := Int64(p) - 16;
+  base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
   t := PWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
      (t <> PXX_OBJ_MAGIC_RAW2) then
@@ -1577,7 +1666,7 @@ var base, rc, t: Int64;
 begin
   if p = nil then Exit;
   if not PXXObjPlausible(p) then Exit;
-  base := Int64(p) - 16;
+  base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
   t := PWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
      (t <> PXX_OBJ_MAGIC_RAW2) then
@@ -1620,7 +1709,7 @@ begin
       else
         PXXObjFinalizeHook(p, 0);
     end;
-    PXXFree(Pointer(base));
+    PXXFree(Pointer(PXXHdrBase(p)));
   end;
 end;
 
@@ -1883,34 +1972,34 @@ end;
 { Managed-element dynarray + record retain/release (strings/records/nested
   arrays). Not on ESP yet -- the ESP dynarray (above) is unmanaged-element only. }
 procedure PXXDynArrayIncRef(p: Pointer);
-var base: Int64;
+var rcAddr: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
     tsIgnore: Int64;
 {$endif}
 begin
   if p = nil then Exit;
-  base := Int64(p) - 16;
+  rcAddr := PXXHdrRC(p);
 {$ifdef PXX_TS_SOFTLOCK}
-  tsIgnore := __pxxatomic_add(Pointer(base), 1);
+  tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
-  PWord(base)^ := PWord(base)^ + 1;
+  PWord(rcAddr)^ := PWord(rcAddr)^ + 1;
 {$endif}
 end;
 
 procedure PXXDynArrayReleaseDepth(arrData: Pointer; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
 var
-  base, rc, len: Int64;
+  rcAddr, rc, len: Int64;
   i: Int64;
   itemAddr: Pointer;
   elSize: Int64;
 begin
   if arrData = nil then Exit;
-  base := Int64(arrData) - 16;
+  rcAddr := PXXHdrRC(arrData);            { refcount — NOT the block base }
 {$ifdef PXX_TS_SOFTLOCK}
-  rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
+  rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
-  rc := PWord(base)^ - 1;
-  PWord(base)^ := rc;
+  rc := PWord(rcAddr)^ - 1;
+  PWord(rcAddr)^ := rc;
 {$endif}
   if rc = 0 then
   begin
@@ -1952,7 +2041,7 @@ begin
         end;
       end;
     end;
-    PXXFree(Pointer(base));
+    PXXFree(Pointer(PXXHdrBase(arrData)));
   end;
 end;
 
@@ -2255,10 +2344,11 @@ begin
   len := lenPtr^;
   elSize := PInt32(Int64(desc) + 4)^;
 
-  newBlock := PXXAlloc(16 + len * elSize, 8);
-  PWord(newBlock)^ := 1;
-  PWord(Int64(newBlock) + 8)^ := len;
-  newArrData := Pointer(Int64(newBlock) + 16);
+  newBlock := PXXAlloc(PXX_HDR_SIZE + len * elSize, 8);
+  PXXHdrInit(Int64(newBlock));
+  PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;
+  PWord(Int64(newBlock) + PXX_HDR_LEN)^ := len;
+  newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
   i := 0;
   while i < len * elSize do
@@ -2345,10 +2435,11 @@ begin
     Exit;
   end;
 
-  newBlock := PXXAlloc(16 + newLen * elSize, 8);
-  PWord(newBlock)^ := 1;
-  PWord(Int64(newBlock) + 8)^ := newLen;
-  newArrData := Pointer(Int64(newBlock) + 16);
+  newBlock := PXXAlloc(PXX_HDR_SIZE + newLen * elSize, 8);
+  PXXHdrInit(Int64(newBlock));
+  PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;
+  PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;
+  newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
   i := 0;
   while i < newLen * elSize do
@@ -2398,10 +2489,11 @@ begin
     Exit;
   end;
 
-  newBase := PXXAlloc(newLen + 17, 8);
-  PWord(newBase)^ := 1;                       { refcount }
-  PWord(Int64(newBase) + 8)^ := newLen;       { length }
-  newData := Pointer(Int64(newBase) + 16);
+  newBase := PXXAlloc(newLen + PXX_HDR_SIZE + 1, 8);
+  PXXHdrInit(Int64(newBase));
+  PWord(Int64(newBase) + PXX_HDR_RC)^ := 1;        { refcount }
+  PWord(Int64(newBase) + PXX_HDR_LEN)^ := newLen;  { length }
+  newData := Pointer(Int64(newBase) + PXX_HDR_SIZE);
 
   copyLen := 0;
   if oldData <> nil then

@@ -169,14 +169,19 @@ Workhorse moves inside `rr replay` (gdb has full Python; use it):
   instruction. (Heap addresses are stable under `set disable-randomization on`,
   which rr does by default.)
 
-Reading a managed string at a fault (block layout `[refcount:8][length:8][data]`,
-handle = data pointer; allocator size header at `handle-24`):
+Reading a managed string at a fault (block layout
+`[kind:8][refcount:8][length:8][data]`, handle = data pointer; allocator size
+header at `handle-32`). The kind word was added by
+`feature-a-managed-block-kind-word`; `length` and `refcount` kept their
+handle-relative offsets, but the block base and the allocator's size word both
+moved back 8 — see `devdocs/dev/managed-block-header.md`:
 
 ```python
 def rd(a, n=8): return int.from_bytes(gdb.selected_inferior().read_memory(a, n), 'little')
 handle = rd(slot)
 length   = rd(handle - 8)      # visible length
-capacity = rd(handle - 24)     # allocator block size  <-- length==2 but capacity==12MB was the smoking gun
+refcount = rd(handle - 16)     # unchanged by the kind word
+capacity = rd(handle - 32)     # allocator block size  <-- length==2 but capacity==12MB was the smoking gun
 ```
 
 The whole hunt turned on one read: a string of **length 2** living in a **12 MB**

@@ -896,6 +896,7 @@ should not read it to find out what to do. Grep it freely._
 | docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-reference-cli-modes-directives | D | 40 | docs | Reference docs incomplete: cli.md lists ~26 of the compiler's 37 --flags, there is no compiler-modes/strictness page (lax -> --strict -> granular -> --mimic-fpc), and no {$...} directive reference — three linked reference gaps | — |
 | docs-user-documentation-site-structure | D | 50 | docs | User documentation site structure and first content pass | — |
+| feature-a-managed-block-kind-word | A | 60 | feature | Phase 1 of multi-type strings: add an 8-byte kind word below the refcount in the shared managed-block header (strings, dynarrays, objects), write zero, never read it. Prove nothing regressed, then pin — phase 2 depends on the pin | — |
 | feature-a-nilpy-str-method-parser-hook | A | 50 | feature | Shared-parser hook for NilPy str methods (filed for traceability) | — |
 | feature-a-promoint-32bit-bringup | A | 55 | feature | Promotable int: heap tier faults on 32-bit native targets — FIXED | — |
 | feature-a-promoint-check-elision | A | 50 | feature | Promotable int: inline the fast path (check elision) | — |
@@ -1395,6 +1396,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-c-packed-aligned | T | 70 | regression | regression: test-core#src:test/test_c_packed_aligned.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-test-c-preprocess | T | 70 | regression | regression: test-core#src:test/test_c_preprocess.pas@1 red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-c-struct-fields | T | 70 | regression | regression: test-core#src:test/test_c_struct_fields.pas red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-test-dynarray-params | T | 70 | regression | regression: test-core#src:test/test_dynarray_params.pas red at 34670fe9b872 (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@1 red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-float-write | T | 70 | regression | regression: test-core#src:test/test_float_write.pas@1 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fortran-skeleton | T | 70 | regression | regression: test-core#src:test/test_fortran_skeleton.f90 red at ad8e212cf739 (auto-filed by twatch) | — |

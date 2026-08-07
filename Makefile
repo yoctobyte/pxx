@@ -4585,6 +4585,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_managed_record_threadsafe26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_params.pas /tmp/test_dynarray_params26
 	test "$$(/tmp/test_dynarray_params26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	# the shared managed-block header: strings, dynarrays and objects
+	./$(COMPILER) test/test_managed_block_header.pas /tmp/test_managed_block_header26
+	test "$$(/tmp/test_managed_block_header26)" = "managed block header ok"
 	./$(COMPILER) test/test_dynarray_result.pas /tmp/test_dynarray_result26
 	test "$$(/tmp/test_dynarray_result26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) -Fulib/rtl test/test_length_dynarray_call.pas /tmp/test_length_dynarray_call26
