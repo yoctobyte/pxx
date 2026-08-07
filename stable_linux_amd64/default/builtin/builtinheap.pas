@@ -100,6 +100,13 @@ function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
   managed-element retain/release; same signature.) }
 function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 function PXXPCharOf(p: Pointer): Pointer;
+{ The META word of a managed handle — BlockKind in the low byte, flags above.
+  PXX_KIND_LEGACY (0) for nil and for any block whose creator did not stamp one,
+  which every consumer must treat as "no information", never as an assertion.
+  PXX_FLAG_ASCII is the one that pays: set, it means no byte is >= $80, so
+  character positions equal byte positions and NilPy indexing stays O(1). Its
+  ABSENCE means "unknown", not "non-ASCII" — a consumer must scan. }
+function PXXHdrMeta(p: Pointer): Int64;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
@@ -132,18 +139,42 @@ const
     PHASE 1 writes PXX_KIND_LEGACY and never reads the word. Kinds arrive in
     phase 2 (feature-nilpy-text-string-kind), after this is pinned. }
   PXX_HDR_SIZE    = 24;   { total header bytes before the handle }
-  PXX_HDR_KIND    = 0;    { offsets from the BLOCK BASE }
+  PXX_HDR_META    = 0;    { offsets from the BLOCK BASE }
   PXX_HDR_RC      = 8;
   PXX_HDR_LEN     = 16;
-  PXX_KIND_LEGACY = 0;    { "untagged — behave exactly as before" }
-{$ifdef PXX_HEAP_DEBUG}
-  { Debug-only witness that a block base was computed correctly. The failure
-    mode of this layout change is a free at the WRONG base, which corrupts the
-    allocator and surfaces arbitrarily far from the cause; stamping the kind
-    word and checking it on free turns that into an immediate, located failure.
-    Costs nothing in release builds. }
-  PXX_HDR_MAGIC   = $48445221;   { 'HDR!' }
-{$endif}
+
+  { ---- the META word ----
+    BlockKind(8) | Flags(8) | KindData0(8) | KindData1(8), bits 32-63 RESERVED.
+
+    Everything meaningful lives in the LOW 32 BITS on purpose: a packed ILP32
+    header would make this word 32 bits wide, and spending the upper half would
+    foreclose that (feature-a-shrink-managed-header-on-32-bit). Do not widen a
+    field past bit 31. }
+
+  { BlockKind, bits 0-7. 0 = untagged: treat exactly as pre-phase-1 behaviour,
+    which is what the x86-64 INLINE allocation paths still emit. An unknown
+    kind must degrade to this, never assert. }
+  PXX_KIND_LEGACY  = 0;
+  PXX_KIND_BYTESTR = 1;   { Pascal AnsiString — Length counts BYTES (FPC-exact) }
+  PXX_KIND_TEXTSTR = 2;   { NilPy str — public positions count CHARACTERS }
+  PXX_KIND_DYNARRAY= 3;
+  PXX_KIND_OBJECT  = 4;
+  PXX_KIND_MAX     = 4;
+  PXX_KIND_MASK    = $FF;
+
+  { Flags, bits 8-15 }
+  PXX_FLAG_STATIC   = $0100;   { .rodata, never freed — reserved, unused }
+  PXX_FLAG_INTERNED = $0200;   { reserved, unused }
+  PXX_FLAG_ASCII    = $0400;   { verified: no byte >= $80 }
+  PXX_FLAG_EXTENDED = $0800;   { a side-table entry exists — the escape hatch }
+
+  { KindData0, bits 16-23: text encoding. A small enum, NOT a codepage —
+    CP_UTF8 (65001) would not fit, and this is the field pxx actually wants. }
+  PXX_ENC_BYTES = 0;
+  PXX_ENC_UTF8  = 1;
+  PXX_ENC_UCS2  = 2;
+  PXX_ENC_UCS4  = 3;
+  PXX_ENC_SHIFT = 16;
 
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
@@ -289,11 +320,35 @@ const
   — the seed build is the only way this change can be compiled at all. }
 procedure PXXHdrInit(base: Int64);
 begin
-{$ifdef PXX_HEAP_DEBUG}
-  PWord(base + PXX_HDR_KIND)^ := PXX_HDR_MAGIC;
-{$else}
-  PWord(base + PXX_HDR_KIND)^ := PXX_KIND_LEGACY;
-{$endif}
+  PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY;
+end;
+
+{ Stamp a block's meta word outright. Callers that know what they are building
+  use this instead of PXXHdrInit; everything else stays untagged and behaves
+  exactly as before. }
+procedure PXXHdrSetMeta(base: Int64; meta: Int64);
+begin
+  PWord(base + PXX_HDR_META)^ := meta;
+end;
+
+{ The meta word for a freshly built managed STRING, given the OR of all its
+  bytes. Kind stays LEGACY here: a byte string and a NilPy str are the same
+  bytes and the same block, and which one it IS depends on the frontend that
+  created it — the ASCII flag, by contrast, is a property of the bytes alone and
+  is what makes character indexing O(1) for the overwhelmingly common string.
+  Computing it costs one OR per byte in a loop that already touches every byte.
+  (feature-nilpy-text-string-kind) }
+function PXXStrMeta(orAll: Int64): Int64;
+begin
+  if (orAll and $80) = 0 then PXXStrMeta := PXX_KIND_LEGACY or PXX_FLAG_ASCII
+  else PXXStrMeta := PXX_KIND_LEGACY;
+end;
+
+{ The meta word of a live handle, or PXX_KIND_LEGACY for nil. }
+function PXXHdrMeta(p: Pointer): Int64;
+begin
+  if p = nil then PXXHdrMeta := PXX_KIND_LEGACY
+  else PXXHdrMeta := PWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_META)^;
 end;
 
 { Block base for a managed handle, and the ONLY thing that may be passed to
@@ -308,18 +363,17 @@ begin
 {$ifdef PXX_HEAP_DEBUG}
   { 204 = invalid pointer operation. A bare Halt keeps this free of any I/O
     dependency at this depth in the heap; the halt SITE is the diagnosis —
-    whoever called PXXHdrBase computed a handle whose block never came from
-    PXXHdrInit, i.e. an offset was missed in the layout migration.
+    whoever called PXXHdrBase computed a handle whose block never came from a
+    header initialiser, i.e. an offset is wrong.
 
-    PXX_KIND_LEGACY is accepted alongside the magic because the x86-64 INLINE
-    allocation paths lay the header down themselves and write the kind word
-    directly; they cannot see this define. A wild base is still caught — freed
-    memory is $DD poison and live neighbours are lengths or payload, none of
-    which reads as 0 or the magic. }
+    Phase 1 stamped a dedicated magic here; the meta word now carries real data,
+    so the check became "is the kind byte a kind we know". Weaker against a wild
+    pointer into live data, stronger where it matters: freed memory is $DD
+    poison ($DD = 221 > PXX_KIND_MAX), so use-after-free is still caught. }
   if p <> nil then
   begin
-    hdrKind := PWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_KIND)^;
-    if (hdrKind <> PXX_HDR_MAGIC) and (hdrKind <> PXX_KIND_LEGACY) then Halt(204);
+    hdrKind := PWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_META)^ and PXX_KIND_MASK;
+    if hdrKind > PXX_KIND_MAX then Halt(204);
   end;
 {$endif}
   PXXHdrBase := Int64(p) - PXX_HDR_SIZE;
@@ -971,7 +1025,7 @@ end;
   managed strings itself. }
 function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 var
-  base, s, d, i: Int64;
+  base, s, d, i, orAll, b: Int64;
 begin
   if len <= 0 then
   begin
@@ -979,18 +1033,21 @@ begin
     Exit;
   end;
   base := Int64(PXXAlloc(len + PXX_HDR_SIZE + 1, 8));   { +1 = nul terminator }
-  PXXHdrInit(base);
   PWord(base + PXX_HDR_RC)^ := 1;      { refcount }
   PWord(base + PXX_HDR_LEN)^ := len;   { length }
   d := base + PXX_HDR_SIZE;
   s := Int64(src);
   i := 0;
+  orAll := 0;
   while i < len do
   begin
-    PByte(d + i)^ := PByte(s + i)^;
+    b := PByte(s + i)^;
+    PByte(d + i)^ := b;
+    orAll := orAll or b;         { free: this loop already touches every byte }
     i := i + 1;
   end;
   PByte(d + len)^ := 0;         { nul terminator }
+  PXXHdrSetMeta(base, PXXStrMeta(orAll));
   Result := Pointer(d);
 end;
 
@@ -1013,7 +1070,7 @@ end;
   lock. Raw pointers only. }
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 var
-  total, base, d, s, i: Int64;
+  total, base, d, s, i, orAll, b: Int64;
 begin
   total := lenA + lenB;
   if total <= 0 then
@@ -1022,25 +1079,30 @@ begin
     Exit;
   end;
   base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 1, 8));   { +1 = nul terminator }
-  PXXHdrInit(base);
   PWord(base + PXX_HDR_RC)^ := 1;        { refcount }
   PWord(base + PXX_HDR_LEN)^ := total;   { length }
   d := base + PXX_HDR_SIZE;
+  orAll := 0;
   s := Int64(srcA);
   i := 0;
   while i < lenA do
   begin
-    PByte(d + i)^ := PByte(s + i)^;
+    b := PByte(s + i)^;
+    PByte(d + i)^ := b;
+    orAll := orAll or b;
     i := i + 1;
   end;
   s := Int64(srcB);
   i := 0;
   while i < lenB do
   begin
-    PByte(d + lenA + i)^ := PByte(s + i)^;
+    b := PByte(s + i)^;
+    PByte(d + lenA + i)^ := b;
+    orAll := orAll or b;
     i := i + 1;
   end;
   PByte(d + total)^ := 0;       { nul terminator }
+  PXXHdrSetMeta(base, PXXStrMeta(orAll));
   Result := Pointer(d);
 end;
 

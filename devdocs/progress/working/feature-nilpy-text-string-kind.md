@@ -4,6 +4,8 @@ prio: 55
 type: feature
 blocked-by: feature-a-managed-block-kind-word
 summary: "Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1)"
+status: working
+owner: claude-A-N
 ---
 
 # NilPy `str` counts characters, not bytes (phase 2)
@@ -102,3 +104,77 @@ byte-identical and O(1)), a `find`→slice round-trip across a multi-byte
 character, a Pascal `AnsiString` round-tripping through a variant into NilPy, and
 `in`/`count`/`split`/`==`/`+` (which must not move). Watch for the O(n²) shape —
 `while i < len(s): s[i]` — on a non-ASCII string.
+
+## 2026-08-07 — the FOUNDATION landed; the semantic conversion did not
+
+Split deliberately. What is in is complete and useful on its own; what is out
+would have been half a coordinate system, which is worse than none.
+
+### Landed
+
+- **The meta word is defined** with the low-32 budget the 32-bit shrink needs:
+  `BlockKind(8) | Flags(8) | KindData0(8) | KindData1(8)`, bits 32–63 reserved.
+  Kinds `LEGACY/BYTESTR/TEXTSTR/DYNARRAY/OBJECT`; flags `STATIC/INTERNED/ASCII/
+  EXTENDED`; `KindData0` is the encoding enum (`BYTES/UTF8/UCS2/UCS4`), not a
+  codepage.
+- `PXX_HDR_KIND` → **`PXX_HDR_META`**, as this ticket required.
+- **`PXX_FLAG_ASCII` is computed and stamped** for every string built by
+  `PXXStrFromLit` and `PXXStrConcat` — and it is **free**: both already copy
+  byte by byte, so it is one `or` per byte in a loop that exists anyway. No
+  extra pass, no cached side table.
+- `PXXHdrMeta(p)` is exported for consumers. Its absence of a flag means
+  **"unknown"**, never "non-ASCII" — a consumer must scan.
+- The phase-1 debug magic retired: the meta word now carries real data, so the
+  `-dPXX_HEAP_DEBUG` check became "is the kind byte a kind we know". Weaker
+  against a wild pointer into live data, but use-after-free is still caught
+  ($DD poison = 221 > `PXX_KIND_MAX`).
+
+Verified: `lit → ASCII`, a UTF-8 `é` string → not-ascii, `ascii + ascii →
+ASCII`. Self-host fixedpoint in one round via the **fast path** — no layout
+changed, so `make compiler/pascal26` is correct here, which is the narrow rule
+from `devdocs/dev/fpc-optional-workflow.md` working as documented.
+
+### The obstacle the next session needs to know about
+
+**`pystr_at` returns a `Char`.** A NilPy `s[i]` lowers to it
+(`pyparser.inc` ~5180) and the result is typed `tyChar`, promoted to a str via
+`pystr_ofchar` where a string is needed. A `Char` is one byte, so it **cannot
+carry a multi-byte character**. Character indexing therefore needs a new
+string-returning entry point (`pystr_at_s`) *and* the lowering re-typed from
+`tyChar` to `tyAnsiString` — which ripples into NilPy's type inference. That is
+the structural work, not the UTF-8 arithmetic.
+
+### Why it must be all-or-nothing
+
+Converting `len()` alone makes things **worse**: `while i < len(s): s[i]` would
+then mix a character count with a byte index, breaking code that works today.
+The byte model is at least internally consistent (measured: `s[s.find("w"):]` is
+correct across multi-byte characters, because UTF-8 is self-synchronising). So
+one commit must move the whole public coordinate system:
+
+`pystr_len`, `pystr_at`(→ new str form), `pystr_slice`, `pystr_slice_step`,
+`pystr_reverse`, `pystr_charlist`, `pystr_find`/`_from`/`_range`,
+`pystr_index`*, `pystr_rfind`*, and the padding widths
+(`ljust`/`rjust`/`center`/`zfill`).
+
+Not affected, because byte and character answers coincide — and this was
+**measured against CPython with non-ASCII input**, not assumed: `in`, `count`,
+`split`, `partition`, `join`, `replace`, `==`, `+`, `startswith`/`endswith`
+without offsets all already agree on `"héllo wörld"`. That is what bounds the
+conversion to the position-exposing functions above; do not re-verify it, and do
+not widen the list without a measurement.
+
+### The property that makes it safe when it happens
+
+Gate every converted function on `PXX_FLAG_ASCII`: when set, byte position ==
+character position and the function takes **exactly today's code path**. Every
+existing test uses ASCII, so the entire suite stays on the unchanged path and
+the new behaviour appears only where the old behaviour was wrong. That is the
+whole regression argument — build it that way from the start.
+
+### Access route, verified
+
+pylib does **not** `uses builtinheap` today. Adding it was tried and **works**
+(a NilPy program built and ran with it). The exploratory edit was reverted to
+keep this commit purposeful, but the route is known-good — do not re-litigate
+it, and do not duplicate the header offsets into pylib instead.

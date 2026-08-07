@@ -4588,6 +4588,9 @@ test-core: $(COMPILER)
 	# the shared managed-block header: strings, dynarrays and objects
 	./$(COMPILER) test/test_managed_block_header.pas /tmp/test_managed_block_header26
 	test "$$(/tmp/test_managed_block_header26)" = "managed block header ok"
+	# the META word: the ASCII flag, and the reserved low-32 budget
+	./$(COMPILER) test/test_managed_block_meta.pas /tmp/test_managed_block_meta26
+	test "$$(/tmp/test_managed_block_meta26)" = "managed block meta ok"
 	./$(COMPILER) test/test_dynarray_result.pas /tmp/test_dynarray_result26
 	test "$$(/tmp/test_dynarray_result26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) -Fulib/rtl test/test_length_dynarray_call.pas /tmp/test_length_dynarray_call26
