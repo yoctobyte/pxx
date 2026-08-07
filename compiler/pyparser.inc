@@ -18034,7 +18034,20 @@ begin
        (Tokens[i + 1].Kind = tkColon) then
     begin
       k := i + 2;
+      { PARAMETER scope, like the real parameter read: a `Callable[...]`
+        PARAMETER travels as a VARIANT (see PyAnnParamScope), and a FIELD typed
+        from that parameter must agree or the store puts a variant's TAG word
+        into a pointer slot and the later call jumps through it.
+
+        This was a live regression, not a hypothetical: giving Callable
+        parameters the variant ABI (so a bound method could pass through one)
+        left this site still answering tyPointer, and the mismatch was MASKED by
+        the `-> None` procedure-ABI bug — both shapes crashed, so the second one
+        looked pre-existing. Fixing the ABI unmasked it.
+        bug-nilpy-callable-field-typed-only-by-a-ctor-parameter-has-no-signature }
+      PyAnnParamScope := True;
       Result := PyAnnTypeAt(k);
+      PyAnnParamScope := False;
       Exit;
     end;
 end;

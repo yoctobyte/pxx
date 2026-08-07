@@ -81,3 +81,33 @@ b1 = Box(show)
 b2 = Box(show)
 b1.fn(1)
 b2.fn(2)
+
+# --- a Callable field on a PLAIN class with NO class-level annotation, typed
+# --- only by the constructor parameter that assigns it. This was a REGRESSION
+# --- of my own making, and it hid: giving Callable PARAMETERS the variant ABI
+# --- (so a bound method can pass through one) left the field inferred from such
+# --- a parameter still answering pointer, so the store put a variant's TAG word
+# --- into a pointer slot. It was MASKED by the `-> None` procedure-ABI bug
+# --- above — both shapes crashed, so this one read as pre-existing — and only
+# --- appeared once that was fixed. The field now follows the parameter.
+class Handler:
+    def __init__(self, fn: Callable[["VM"], None]):
+        self.fn = fn
+
+
+vm2 = VM()
+h = Handler(bump)
+h.fn(vm2)
+h.fn(vm2)
+print(vm2.n)
+
+
+class Pair:
+    def __init__(self, a: Callable[[int], None], b: Callable[[int], None]):
+        self.a = a
+        self.b = b
+
+
+p = Pair(show, show)
+p.a(7)
+p.b(8)
