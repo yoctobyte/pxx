@@ -3,6 +3,8 @@ track: N
 prio: 50
 type: bug
 summary: "SILENT: `w = f() if c else None` where f() returns None makes `w is None` answer FALSE — boxing a NIL class pointer into a variant tags it VT_OBJECT instead of VT_EMPTY, so a None guard is entered and the next line dereferences null. This is what segfaults uforth."
+status: done
+owner: claude-AN
 ---
 
 # A conditional expression loses None identity
@@ -103,3 +105,64 @@ returns None, whose taken arm returns a real object, the `else None` arm, the
 direct (non-conditional) assignment, and the same through a variable of
 `Optional[X]` type — oracle-diffed. And `make test-uforth` getting past
 `uforth.py:840`.
+
+## FIXED 2026-08-07
+
+A nil class pointer now boxes as `VT_EMPTY` — which is what Python's None IS —
+instead of `VT_OBJECT` with a 0 payload. Both boxing sites in `ir_codegen.inc`
+take the same three instructions after the tag store:
+
+```
+test rcx, rcx
+jne  +7
+mov  qword [rdi], VT_EMPTY
+```
+
+The skipped store is exactly 7 bytes, so the jump is a fixed short one and needs
+no manual patching — unlike the blobs elsewhere in that file.
+
+Both sites, not one: the same sequence appears in the variant-assignment path
+and the variant-operand-temp path, and fixing only the first would have left the
+other spelling wrong, which is the split this codebase keeps finding.
+
+### Measured
+
+`test/test_nilpy_conditional_expression_none.npy`, 9 lines byte-identical to the
+CPython oracle: the conditional expression whose taken arm returns None, whose
+taken arm returns a real object, the `else` arm, the direct assignment that was
+always correct (kept as a guard against "fixing" the ternary by breaking it),
+truthiness of the boxed None, and a None-returning call through a plain
+variable. The whole Callable-field and Optional-method family from earlier the
+same day still passes.
+
+### uforth: the fault MOVED, which is the point
+
+Before: `uforth.py:840`, `mov (%rdi),%rax` with **rdi = 0**, on token
+`"CORE.UFO"` — the null deref this bug caused.
+
+After: `uforth.py:841` (`word.native(self)`), on token **`INCLUDE`**, with
+**PC = 0x0a** — a jump through a garbage code pointer. A different failure, one
+line later, on a token that only gets reached now that the None guard behaves.
+
+So uforth is not fixed, but this was genuinely on its path. The next failure is
+a Callable FIELD call through a variant receiver where the field was bound via
+`define_word(name, native=_w)` — a KEYWORD argument through the pyeval
+fallback, i.e. the shape
+[[bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position]] describes.
+Recorded on [[bug-nilpy-uforth-compiles-but-segfaults-at-runtime]].
+
+### Not shipped
+
+Clearing the contradictory `tk=tyVariant rec=<class>` the pre-pass records for
+such a local was tried, measured to change the record but NOT to fix this bug,
+and reverted. Still worth doing as a separate normalisation — a sticky
+`PyInferLastCi` leaking into a non-class type is the kind of thing that produces
+another symptom elsewhere.
+
+### Gate
+
+`make fpc-check` byte-identical, self-host fixedpoint, `tools/gate.sh quick`
+GREEN.
+
+## Log
+- 2026-08-07 — resolved, commit PENDING-COMMIT.

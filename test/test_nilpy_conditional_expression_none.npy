@@ -1,0 +1,86 @@
+# bug-nilpy-conditional-expression-loses-none-identity
+#
+# `w = f() if c else None` where f() returns None made `w is None` answer FALSE.
+# Silent wrong value first, crash second: the None guard on the next line was
+# ENTERED and the line after it dereferenced null.
+#
+# The conditional expression widens its result to a VARIANT, so a class pointer
+# gets boxed — and the boxing stored the VT_OBJECT tag unconditionally, so a NIL
+# pointer became "an object at address 0" rather than None. The same assignment
+# WITHOUT the conditional expression stayed tyClass and was correct: one
+# construct, two spellings, different answers.
+#
+# A nil class pointer now boxes as VT_EMPTY, which is what Python's None IS.
+
+
+from typing import Optional, Any
+
+
+class Word:
+    def __init__(self, name):
+        self.name = name
+
+    def tag(self):
+        return "word:" + self.name
+
+
+class VM:
+    def __init__(self):
+        self.words = {}
+
+    def add(self, w):
+        self.words[w.name] = w
+
+    def lookup(self, name: Any) -> Optional[Word]:
+        if name in self.words:
+            return self.words[name]
+        return None
+
+
+vm = VM()
+vm.add(Word("INC"))
+
+# the shape that was wrong: conditional expression, taken arm returns None
+miss = "MISSING"
+w = vm.lookup(miss) if isinstance(miss, str) else None
+print(w is None, w is not None)
+if w is not None:
+    print("WRONG: entered the guard")
+else:
+    print("guard correctly skipped")
+
+# the same conditional expression when the lookup FINDS something
+hit = "INC"
+w2 = vm.lookup(hit) if isinstance(hit, str) else None
+print(w2 is None)
+if w2 is not None:
+    print(w2.tag())
+
+# the else arm
+n = 5
+w3 = vm.lookup(n) if isinstance(n, str) else None
+print(w3 is None)
+
+# direct assignment, which was always correct — kept as the guard against
+# "fixing" the ternary by breaking this
+w4 = vm.lookup("MISSING")
+print(w4 is None)
+w5 = vm.lookup("INC")
+print(w5 is None, w5.tag())
+
+# truthiness of the boxed None, which was wrong for the same reason
+if w:
+    print("WRONG: truthy")
+else:
+    print("correctly falsy")
+
+# and a None-returning call boxed through a plain variable
+def maybe(flag) -> Optional[Word]:
+    if flag:
+        return Word("X")
+    return None
+
+
+a = maybe(False) if True else None
+b = maybe(True) if True else None
+print(a is None, b is None, b.tag())

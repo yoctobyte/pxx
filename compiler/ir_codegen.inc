@@ -5555,6 +5555,22 @@ begin
           EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
           EmitB($59);                            { pop rcx   (payload) }
           EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
+          { A NIL class pointer is Python's None, and must box as VT_EMPTY —
+            not as VT_OBJECT with a 0 payload. The tag was stored
+            unconditionally, so `f() if c else None` where f() returns None
+            produced a variant that is not VT_EMPTY: `w is None` answered FALSE,
+            the None guard on the next line was ENTERED, and the line after
+            dereferenced null. Silent wrong value first, segfault second — and
+            it is what crashed uforth at uforth.py:840.
+            The skipped store is exactly 7 bytes, so the jump is a fixed short
+            one and needs no patching.
+            bug-nilpy-conditional-expression-loses-none-identity }
+          if tk = tyClass then
+          begin
+            EmitB($48); EmitB($85); EmitB($C9);                  { test rcx, rcx }
+            EmitB($75); EmitB($07);                              { jne +7 }
+            EmitB($48); EmitB($C7); EmitB($07); EmitI32(VT_EMPTY); { mov qword [rdi], VT_EMPTY }
+          end;
           EmitB($48); EmitB($89); EmitB($4F); EmitB($08);     { mov [rdi+8], rcx }
         end;
       end;
@@ -5596,6 +5612,22 @@ begin
         EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
         EmitB($59);                            { pop rcx }
         EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
+        { A NIL class pointer is Python's None, and must box as VT_EMPTY —
+          not as VT_OBJECT with a 0 payload. The tag was stored
+          unconditionally, so `f() if c else None` where f() returns None
+          produced a variant that is not VT_EMPTY: `w is None` answered FALSE,
+          the None guard on the next line was ENTERED, and the line after
+          dereferenced null. Silent wrong value first, segfault second — and
+          it is what crashed uforth at uforth.py:840.
+          The skipped store is exactly 7 bytes, so the jump is a fixed short
+          one and needs no patching.
+          bug-nilpy-conditional-expression-loses-none-identity }
+        if tk = tyClass then
+        begin
+          EmitB($48); EmitB($85); EmitB($C9);                { test rcx, rcx }
+          EmitB($75); EmitB($07);                            { jne +7 }
+          EmitB($48); EmitB($C7); EmitB($07); EmitI32(VT_EMPTY); { mov qword [rdi], VT_EMPTY }
+        end;
         EmitB($48); EmitB($89); EmitB($4F); EmitB($08);     { mov [rdi+8], rcx }
         EmitB($48); EmitB($89); EmitB($F8);    { mov rax, rdi  (return addr) }
       end;

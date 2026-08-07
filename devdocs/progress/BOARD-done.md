@@ -496,6 +496,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-comparison-return-type-from-operands | N | 70 | bug | An unannotated def returning a COMPARISON typed its result from the operands | — |
 | bug-nilpy-comprehension-as-for-iterable-segfaults | N | 35 | bug | NilPy: a comprehension used directly as a for-loop iterable segfaults | — |
 | bug-nilpy-comprehension-variable-leaks-and-clobbers-the-enclosing-scope | N | 60 | bug | A comprehension's loop variable leaks and OVERWRITES the enclosing binding — and can segfault | — |
+| bug-nilpy-conditional-expression-loses-none-identity | N | 50 | bug | SILENT: `w = f() if c else None` where f() returns None makes `w is None` answer FALSE — boxing a NIL class pointer into a variant tags it VT_OBJECT instead of VT_EMPTY, so a None guard is entered and the next line dereferences null. This is what segfaults uforth. | — |
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-constructor-call-in-unpack-rhs-fails-to-parse | N | 55 | bug | A constructor call in an unpacking right-hand side won't parse | — |
 | bug-nilpy-constructor-parameter-defaults-are-ignored | N | 60 | bug | SILENT: __init__ parameter defaults are ignored entirely — `def __init__(self, v=7)` then `C()` leaves v as None, for CONSTANT defaults too. Ordinary methods honour their defaults; the constructor call path does not consult ProcParamDefault* at all. | — |

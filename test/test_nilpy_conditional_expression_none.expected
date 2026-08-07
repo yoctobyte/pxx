@@ -1,0 +1,9 @@
+True False
+guard correctly skipped
+False
+word:INC
+True
+True
+False word:INC
+correctly falsy
+True False word:X
