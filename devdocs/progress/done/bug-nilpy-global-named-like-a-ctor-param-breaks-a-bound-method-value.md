@@ -276,4 +276,4 @@ binds the call result to a name first and says why.
 `make fpc-check` byte-identical, self-host fixedpoint, `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 58a328cfc.
