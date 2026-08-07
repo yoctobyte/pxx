@@ -127,4 +127,4 @@ and `nested_for_target_fail` is a deliberate compile-failure test.
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit a3f31c15e.
