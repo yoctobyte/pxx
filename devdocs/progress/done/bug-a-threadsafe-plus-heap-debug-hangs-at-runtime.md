@@ -136,4 +136,4 @@ throughout, since an integer-only program never reproduced.
 GREEN (no re-pin required, see above).
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit fe356a2bf.
