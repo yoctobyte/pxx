@@ -1942,6 +1942,7 @@ begin
     { Promotable int family — {tag, payload}, tag width matches the payload so
       the struct stays naturally aligned (feature-a-promotable-int). }
     29: Result := 1;  { tyBool8 — C99 _Bool, one unsigned byte (same storage as tyUInt8) }
+    30: Result := 4;  { tyUCS4Char — a Unicode code point (same storage as tyUInt32) }
     27: Result := 8;  { tyPromoInt32 — two 32-bit NATIVE words: tag + inline payload }
     28: Result := 16; { tyPromoInt64 — two 64-bit NATIVE words: tag + inline payload }
   end;
@@ -2136,7 +2137,9 @@ begin
     7, 8, 9, 10,     { tyInt8..tyUInt16 }
     11, 12, 13, 14,  { tyInt32..tyUInt64 }
     15, 16, 17,      { tyNativeInt, tyNativeUInt, tyPointer }
-    29:              { tyBool8 — C99 _Bool; ordinal for every purpose except conversion }
+    29,              { tyBool8 — C99 _Bool; ordinal for every purpose except conversion }
+    30:              { tyUCS4Char — a code point IS an ordinal (FPC: UCS4Char = type LongWord);
+                       like tyBool8 it differs only in how it CONVERTS }
       Result := True;
   end;
 end;

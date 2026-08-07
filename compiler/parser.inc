@@ -8060,6 +8060,25 @@ begin
   Result := wCall;
 end;
 
+{ Wrap a tyUCS4Char value in __pxxUCS4ToUTF8(node), so a CODE POINT reaching a
+  string context becomes its UTF-8 encoding rather than its ordinal. This is the
+  conversion that makes tyUCS4Char worth its own kind — storage is tyUInt32's,
+  but `s + c` must yield the character, not 104+233 truncated to a byte.
+  feature-nilpy-text-string-kind }
+function WrapUCS4ToUTF8(argNode: Integer): Integer;
+var procIdx, wArg, wCall: Integer;
+begin
+  procIdx := FindProc('__pxxUCS4ToUTF8');
+  if procIdx < 0 then Error('UCS4Char->string conversion: __pxxUCS4ToUTF8 helper not loaded');
+  wArg := AllocNode(AN_ARG);
+  ASTLeft[wArg] := argNode; ASTRight[wArg] := -1; ASTTk[wArg] := Ord(tyInteger);
+  wCall := AllocNode(AN_CALL);
+  ASTIVal[wCall] := procIdx;
+  ASTTk[wCall] := Ord(Procs[procIdx].RetType);
+  ASTLeft[wCall] := wArg; ASTRight[wCall] := -1;
+  Result := wCall;
+end;
+
 { NilPy: wrap a tyChar VALUE as pystr_ofchar(char) -> a real 1-char managed
   string. Used at call-arg marshalling to turn `s[i]` (pystr_at yields Char)
   into a tyAnsiString expression BEFORE argIsManagedTemp is decided, so a char
@@ -8482,6 +8501,11 @@ begin
   { WideChar is a 2-byte ordinal here (this RTL is byte/ASCII throughout; the type exists so
     FPC sources that name it compile). `WideChar(x)` is fpjson's \u escape decoder. }
   else if CaseEqual(nm, 'widechar') then Result := tyUInt16
+  { UCS4Char is FPC's own name for a code point (system unit: UCS4Char = type
+    LongWord) and, unlike WideChar, holds any character. Its own kind because it
+    CONVERTS to a string as UTF-8 — see the note on tyUCS4Char in defs.inc. }
+  else if CaseEqual(nm, 'ucs4char') or CaseEqual(nm, 'unicodechar')
+       then Result := tyUCS4Char
   else Result := tyUnknown;
 end;
 
@@ -21744,6 +21768,11 @@ begin
         declaration still wins — FindTypeAlias is consulted before this. TDateTime and
         Currency deliberately match what lib/rtl/sysutils already declares them as. }
       else if (not tnHasAlias) and (CaseEqual(lo, 'widechar')) then Result := tyUInt16    { 2 bytes, not 4 }
+      { UCS4Char — FPC's own name for a CODE POINT (system unit: UCS4Char = type
+        LongWord). Distinct from WideChar above it, which is a UTF-16 code UNIT
+        and cannot hold a character past the BMP without a surrogate pair. Its
+        own kind because it converts to a string as UTF-8; see defs.inc. }
+      else if (not tnHasAlias) and (CaseEqual(lo, 'ucs4char') or CaseEqual(lo, 'unicodechar')) then Result := tyUCS4Char
       else if (not tnHasAlias) and (CaseEqual(lo, 'comp')) then Result := tyInt64
       { ValReal — FPC's "widest available real". pxx's widest is Double. }
       else if (not tnHasAlias) and (CaseEqual(lo, 'valreal')) then Result := tyDouble
@@ -30914,6 +30943,14 @@ begin
       leaving the helpers unused. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'widechar') and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
+    { UCS4Char, the same shape — but pulled on ANY mention, not just a `(` cast,
+      because unlike WideChar it is a declarable TYPE: `var c: UCS4Char` needs
+      __pxxUCS4ToUTF8 just as much as `UCS4Char(x)` does, and the variable is
+      where it will usually be spelled. }
+    if (Tokens[i].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(i), 'ucs4char') or CaseEqual(GetTokenStr(i), 'unicodechar')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { `obj.MethodAddress(name)` / `obj.MethodName(addr)` lower to __pxxMethodAddress /

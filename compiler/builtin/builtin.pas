@@ -103,6 +103,12 @@ function PCharToString(p: PChar): AnsiString;
   A LONE surrogate yields the empty string, matching FPC's conversion. }
 function __pxxWideCharToUTF8(u: Integer): AnsiString;
 function __pxxWideCharPairToUTF8(u1, u2: Integer): AnsiString;
+{ UCS4Char -> UTF-8. Unlike the WideChar form above this takes a whole CODE
+  POINT, so it covers the full range including the 4-byte encodings past the
+  BMP, and it does NOT mask to $FFFF. A value that is not a code point — a lone
+  surrogate, or past U+10FFFF — yields the empty string, matching what FPC's
+  conversion does with an unpaired surrogate. }
+function __pxxUCS4ToUTF8(u: Integer): AnsiString;
 
 { Substring intrinsic backing bare `Copy(s, index[, count])` on a string with no
   user `Copy` in scope — so frozen/managed string Copy works with no `uses`
@@ -1379,6 +1385,36 @@ begin
   end
   else
     Result := __pxxWideCharToUTF8(u1) + __pxxWideCharToUTF8(u2);
+end;
+
+function __pxxUCS4ToUTF8(u: Integer): AnsiString;
+var c: Char;
+begin
+  Result := '';
+  if (u < 0) or (u > $10FFFF) then Exit;          { not a code point }
+  if (u >= $D800) and (u <= $DFFF) then Exit;     { lone surrogate — see the decl }
+  if u < $80 then
+  begin
+    c := Chr(u);                            Result := Result + c;
+  end
+  else if u < $800 then
+  begin
+    c := Chr($C0 or (u shr 6));             Result := Result + c;
+    c := Chr($80 or (u and $3F));           Result := Result + c;
+  end
+  else if u < $10000 then
+  begin
+    c := Chr($E0 or (u shr 12));            Result := Result + c;
+    c := Chr($80 or ((u shr 6) and $3F));   Result := Result + c;
+    c := Chr($80 or (u and $3F));           Result := Result + c;
+  end
+  else
+  begin
+    c := Chr($F0 or (u shr 18));            Result := Result + c;
+    c := Chr($80 or ((u shr 12) and $3F));  Result := Result + c;
+    c := Chr($80 or ((u shr 6) and $3F));   Result := Result + c;
+    c := Chr($80 or (u and $3F));           Result := Result + c;
+  end;
 end;
 
 function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;

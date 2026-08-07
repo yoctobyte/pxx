@@ -363,3 +363,86 @@ belongs to the VALUE, not the variable.** `"hello"[i]` is provable;
 conservative — literal-derived only, killed by any assignment that is not itself
 provable — or it quietly becomes dataflow analysis wearing the costume of a
 quick win.
+
+
+## 2026-08-07 (later) — `tyUCS4Char` LANDED
+
+Step 1 of the sequence above. The kind exists, is declarable, and converts.
+
+### FPC parity, verified against FPC 3.2.2 directly
+
+| | FPC | pxx |
+| --- | --- | --- |
+| `UCS4Char` accepted as a type | yes | yes |
+| `SizeOf` | 4 | 4 |
+| `Ord(c)` | the code point | the code point |
+| holds a value past the BMP | yes | yes |
+
+So the *type surface* is genuine Pascal compliance, which is the framing that
+justified doing it: pxx lacked a type FPC has.
+
+### …and one deliberate divergence, stated rather than blurred
+
+**FPC REJECTS `'h' + c`** — its `UCS4Char = type LongWord` is an integer type,
+so string-plus-integer does not compile. pxx converts it to the code point's
+UTF-8 encoding instead. That is a **pxx extension, not parity**, and it is the
+whole reason the kind is distinct rather than an alias for `tyUInt32` — same
+storage, different conversion, exactly the argument `defs.inc` already makes for
+C99 `_Bool`. Consistent with the dialect stance: lax by default, FPC-strictness
+behind `--strict-*` flags if parity is ever wanted here.
+
+### What it took
+
+- `tyUCS4Char` appended at the enum tail (ordinal 30), `TypeSize` 4,
+  `TypeIsOrdinal` true.
+- Name mapping in **both** resolvers — the expression-level one and the
+  declaration-level one. Only patching the first gives *"unknown type:
+  UCS4Char"* on `var c: UCS4Char`.
+- `__pxxUCS4ToUTF8` in `builtin.pas`: full 1/2/3/4-byte range, no `$FFFF` mask,
+  and a lone surrogate or a value past U+10FFFF encodes to nothing (matching
+  what FPC does with an unpaired surrogate).
+- The builtin pre-scan pulls the helper on **any mention** of the name, not just
+  a `(` cast as WideChar does — because unlike WideChar this is a declarable
+  type and `var c: UCS4Char` needs the helper just as much.
+
+### Two traps worth keeping
+
+1. **A one-character literal is `tyChar`.** So `'h' + c` had two ordinals and
+   took the ARITHMETIC path — `Chr(104+233)`, one wrong byte, silently. Both
+   operands must be wrapped: the code point encodes, the byte only widens.
+2. **Wrapping the operands is not enough — re-type the concat NODE.**
+   `('h' + c) + 'llo'` left the inner node still claiming `tyChar`, so the outer
+   concat read a 2-byte result as one byte and the whole expression came back 4
+   bytes instead of 6. Both are pinned in `test/test_ucs4char.pas`.
+
+### The trap that actually cost a gate run
+
+The concat re-typing (trap 2 above) was first written as *"if this is a `tkPlus`
+and either side is a string, the result is a string"* — with **no guard that a
+`tyUCS4Char` was involved at all**. It therefore fired for **every string concat
+in every frontend**, and turned LOLCODE's `SMOOSH` into an infinite loop: the
+program printed its first four lines forever until it blew the stack.
+
+Two things worth carrying from that:
+
+- **A conversion hook in the shared IR is not local, however local its motive
+  is.** The wrap arms were correctly guarded on `tyUCS4Char`; the re-typing that
+  followed them was not, and it sat inside the same `begin…end` so it read as
+  guarded. The fix is the guard on the *enclosing* `if`, so the whole block only
+  runs when a code point is really present.
+- **The failure appeared nowhere near the change.** Nothing in Pascal, C, NilPy,
+  Rust or Zig noticed; the one visible symptom was an esoteric-frontend test
+  looping. That is exactly the case the full tier exists for, and the reason a
+  shared-IR change does not get the quick loop.
+
+### One latent bug fixed on the way
+
+`IRVerify` bounded valid kinds with a hardcoded `Ord(tyBool8)` — the last kind
+at the time — so **every future kind appended to the enum would fail IR
+verification** until someone found that line. Now `Ord(High(TTypeKind))`.
+
+### Still to do (unchanged from the plan)
+
+Widen NilPy's `s[i]` from `tyChar` to `tyUCS4Char` and complete the
+`pystr_ofchar` promotion, then the character-aware `len`/slice/find as one
+commit, then `--no-unicode`, then the literal optimisation.

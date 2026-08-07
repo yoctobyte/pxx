@@ -4591,6 +4591,9 @@ test-core: $(COMPILER)
 	# the META word: the ASCII flag, and the reserved low-32 budget
 	./$(COMPILER) test/test_managed_block_meta.pas /tmp/test_managed_block_meta26
 	test "$$(/tmp/test_managed_block_meta26)" = "managed block meta ok"
+	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
+	./$(COMPILER) test/test_ucs4char.pas /tmp/test_ucs4char26
+	test "$$(/tmp/test_ucs4char26)" = "ucs4char ok"
 	./$(COMPILER) test/test_dynarray_result.pas /tmp/test_dynarray_result26
 	test "$$(/tmp/test_dynarray_result26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) -Fulib/rtl test/test_length_dynarray_call.pas /tmp/test_length_dynarray_call26

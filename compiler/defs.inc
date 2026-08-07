@@ -932,7 +932,21 @@ type
       TypeSize/TypeIsOrdinal and needs no change; only the conversion sites ask
       for this kind by name.
       bug-a-bool-conversion-does-not-normalise-to-0-or-1 }
-    tyBool8        { 29: C99 _Bool — 1 unsigned byte, but converts as 0/1 }
+    tyBool8,       { 29: C99 _Bool — 1 unsigned byte, but converts as 0/1 }
+    { A Unicode CODE POINT — FPC's own `UCS4Char` (system unit: `UCS4Char = type
+      LongWord`), the same thing as Go's rune, Rust's char, C11 char32_t and
+      CPython's Py_UCS4. Every code point fits in 32 bits, so unlike AnsiChar
+      (a UTF-8 code UNIT) and WideChar (a UTF-16 code unit, which needs a
+      surrogate PAIR above the BMP) this always holds a whole character.
+
+      Its own kind for the same reason tyBool8 is: CONVERSION, not layout.
+      Storage is identical to tyUInt32, but converting one to a string must
+      yield its UTF-8 ENCODING, where a UInt32 yields decimal digits — and
+      nothing downstream could tell them apart if they shared a kind. A node-
+      level marker (what WideChar uses) is not enough here: this type is
+      STORABLE, and the marker is lost through a variable.
+      feature-nilpy-text-string-kind }
+    tyUCS4Char     { 30: Unicode code point — 4 unsigned bytes, converts as UTF-8 }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);

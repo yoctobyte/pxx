@@ -188,7 +188,11 @@ begin
   { Pass 1: populate seen labels and verify uniqueness }
   for i := 0 to IRCount - 1 do
   begin
-    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyBool8)) then
+    { High(TTypeKind), not the last kind spelled by name: this bound was
+      hardcoded to Ord(tyBool8) and every new kind appended to the enum silently
+      failed IR verification until someone edited it here. Adding a kind should
+      not require finding this line. }
+    if (IRTk[i] < 0) or (IRTk[i] > Ord(High(TTypeKind))) then
       Error('invalid type kind in IR node');
 
     if IRKind[i] = IR_LABEL then
@@ -6136,6 +6140,53 @@ begin
         that `+` concat and the explicit cast already use, so no backend code.
         Pascal only: C compares chars as ints, and NilPy routes str ordering
         through pylib. }
+      { A UCS4Char meeting a string in `+` or a comparison converts to its UTF-8
+        ENCODING. Without this the kind is ordinal, so `'h' + c` took the
+        ARITHMETIC path and produced Chr(104+233) — one wrong byte, silently.
+        Handled before the tyChar block below because the wrap differs: a code
+        point needs encoding, a byte needs only widening.
+        feature-nilpy-text-string-kind }
+      if (TTokenKind(ASTIVal[node]) in [tkPlus, tkLt, tkLe, tkGt, tkGe, tkEq, tkNeq]) and
+         ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyUCS4Char) or
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyUCS4Char)) then
+      begin
+        if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyUCS4Char) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) in [tyString, tyAnsiString]) then
+          ASTLeft[node] := WrapUCS4ToUTF8(ASTLeft[node])
+        else if (IntToTypeKind(ASTTk[ASTRight[node]]) = tyUCS4Char) and
+                (IntToTypeKind(ASTTk[ASTLeft[node]]) in [tyString, tyAnsiString]) then
+          ASTRight[node] := WrapUCS4ToUTF8(ASTRight[node])
+        { …and the CHAR pair, which is the one that bites: a ONE-character
+          literal is spelled tyChar, so `'h' + c` has two ordinals and took the
+          arithmetic path — Chr(104+233), one wrong byte. Both sides must become
+          strings: the code point encodes, the byte only widens. }
+        else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyUCS4Char) and
+                (IntToTypeKind(ASTTk[ASTRight[node]]) = tyChar) then
+        begin
+          ASTLeft[node] := WrapUCS4ToUTF8(ASTLeft[node]);
+          ASTRight[node] := WrapCharToStringExpr(ASTRight[node]);
+        end
+        else if (IntToTypeKind(ASTTk[ASTRight[node]]) = tyUCS4Char) and
+                (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyChar) then
+        begin
+          ASTRight[node] := WrapUCS4ToUTF8(ASTRight[node]);
+          ASTLeft[node] := WrapCharToStringExpr(ASTLeft[node]);
+        end;
+        { …and re-type the CONCAT node itself. Wrapping the operands is not
+          enough: `('h' + c) + 'llo'` left the inner node still claiming tyChar,
+          so the outer concat treated a 2-byte result as one byte and the whole
+          expression came back 4 bytes instead of 6. Comparisons are excluded —
+          their result is boolean, not a string.
+
+          Reached ONLY when an operand really was a tyUCS4Char (the guard on the
+          enclosing `if`). An earlier version re-typed on any tkPlus with a
+          string operand and so fired for EVERY string concat in every frontend,
+          which turned LOLCODE's SMOOSH into an infinite loop — a whole-program
+          break from a change that looked local. }
+        if TTokenKind(ASTIVal[node]) = tkPlus then
+          ASTTk[node] := Ord(tyAnsiString);
+      end;
+
       if (TTokenKind(ASTIVal[node]) in [tkLt, tkLe, tkGt, tkGe]) and
          not CProgramMode and not NilPyUserCode then
       begin
