@@ -104,4 +104,4 @@ red) is therefore unused, and stands as the trigger if a later matrix run
 disagrees.
 
 ## Log
-- 2026-08-07 — decided, commit PENDING-COMMIT.
+- 2026-08-07 — decided, commit 758fa3936.
