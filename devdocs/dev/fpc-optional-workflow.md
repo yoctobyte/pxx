@@ -26,6 +26,32 @@ valid seeds, in order of preference:
 `make selfcheck` seeds from the committed stable and proves a self-host fixedpoint
 (`g2 == g3`) plus a compiled `hello` — the fast, FPC-free sanity loop CI uses.
 
+### The one case where seed 1 is the wrong seed
+
+`compiler/pascal26` is the fast path and is the right default: the RTL rarely
+changes in ways that matter, and when it doesn't, seed 1 is strictly the
+quickest. But it is the only seed with **no versioned RTL**. It resolves `uses
+builtinheap` from the LIVE tree, whereas the pinned binary resolves it from the
+frozen `stable_linux_amd64/default/builtin/` beside it (`make pin` puts it
+there). So:
+
+> If you change a **data layout that both the emitted code and the RTL must
+> agree on** — the managed-block header being the example — seed 1 links
+> tomorrow's RTL into today's emitter. **Use seed 2.**
+
+This fails in an unusually expensive way: the compile **succeeds**, and the
+binary it produces dumps core. `make compiler/pascal26` iterates to convergence,
+so the crash lands in round 2 and reads as a codegen bug in whatever you just
+touched.
+
+Measured 2026-08-07 with the 16→24 byte header change
+(`feature-a-managed-block-kind-word`): seed 1 produced a core-dumping compiler;
+seed 2 produced a working one that reached a fixedpoint **byte-identical** to an
+FPC-seeded build. **Seed 3 (FPC) is not required for this** — that was the
+session's wrong conclusion, from a control run in the wrong directory. See
+`devdocs/dev/managed-block-header.md` and
+`bug-a-self-host-seed-has-no-versioned-rtl`.
+
 ## The gate, decoupled
 
 ```

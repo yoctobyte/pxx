@@ -1,8 +1,8 @@
 ---
 track: A
-prio: 50
+prio: 20
 type: bug
-summary: "`make compiler/pascal26` seeds from ./compiler/pascal26, which has no frozen RTL and resolves `uses builtinheap` from the LIVE tree — so it links tomorrow's RTL into today's emitter. Any RTL layout change silently produces a compiler that builds fine and then dies"
+summary: "`make compiler/pascal26` has no versioned RTL, so an RTL LAYOUT change links tomorrow's RTL into today's emitter and yields a compiler that builds fine then dies. Rare and now documented — the wanted fix is a cheap version stamp that refuses, not a reworked seed path"
 ---
 
 # The self-host seed carries no versioned RTL
@@ -47,7 +47,19 @@ It also produced a wrong conclusion in the ticket above before it was measured
 properly: "a header change cannot self-host, seed from FPC". It can. The FPC
 detour cost a session's caution and was avoidable.
 
-## Fix — options, not yet decided
+## Scope: this is a GUARD, not a rework (user, 2026-08-07)
+
+`compiler/pascal26` is the fast path and should stay the default — the RTL
+seldom changes in ways that matter, and paying a slower seed every day to insure
+against a rare event is the wrong trade. The workflow doc
+(`devdocs/dev/fpc-optional-workflow.md`) now records when to reach for seed 2
+instead, and that recording is most of the value here.
+
+What remains worth building is only option 3 below: a stamp that turns the
+silent core dump into one line of output. Options 1 and 2 are recorded for
+completeness and are **not** the ask.
+
+## Fix — options
 
 1. **Seed the self-host rule from `pinned`** rather than from
    `./compiler/pascal26`. Simplest, and it is already what `gate.sh` does. Cost:
@@ -60,9 +72,10 @@ detour cost a session's caution and was avoidable.
    the source, and have the seed abort when they disagree. Does not fix it, but
    converts a silent core dump into a message naming the cause.
 
-(2) plus (3) is probably right — (3) alone is worth it regardless, because it
-turns this whole class of failure from "mystery crash two generations later"
-into one line of output.
+**(3) is the ask.** It is cheap, it keeps the fast path fast, and it converts
+this whole class of failure from "mystery crash two generations later" into a
+message naming the cause. (1) and (2) would both tax the daily loop to prevent
+something that happens about once a year.
 
 ## Gate
 
