@@ -2614,16 +2614,11 @@
  "open_regressions": [
   {
    "bad": "8c112256cb547fdb2495e28df32f708c457bacec",
-   "good": "71d7a326c88b9eeab2619ccae259e1df01a7527d",
+   "good": "cac9082089af118c7099111e177fdcfb5b4eaa53",
    "job": "selfhost-fixedpoint#src:compiler/compiler.pas",
    "name": "selfhost-fixedpoint#00",
    "opened": "2026-08-07T11:39:45Z",
    "range": [
-    "e101143e3533f017dca6b7096944b30d6f9e7a37",
-    "e0ffe22514f02f3f1ee94e9e22be616286d838ac",
-    "3ce511065f5f9b20c531b534fc1b2cd95728b502",
-    "0f5231e7efe80331df12bb6733572145d391fdc6",
-    "cac9082089af118c7099111e177fdcfb5b4eaa53",
     "1deb0c9c83931b133c4199acc220afdeee4dae65",
     "d3f06e5ab2693526cdaf20574e0418088b35f05a",
     "016b5bce4f53ff55e28bf58e7d58a2f7c52ab299",
