@@ -76,13 +76,33 @@ carry no header at all and are unaffected.
 Little-endian, byte 0 at `p-24`. Byte-aligned throughout, so every hot field
 extracts in one instruction on all six backends.
 
+**Naming.** The word is the **meta word** (`PXX_HDR_META`); its low byte is the
+`BlockKind`. "Kind word" undersells it — it carries flags and per-kind payload
+for strings, arrays *and* objects. Phase 1 shipped the offset constant as
+`PXX_HDR_KIND`; rename it to `PXX_HDR_META` in phase 2's first commit, which
+re-pins anyway. Nothing reads it yet, so the rename is free.
+
+**All meaningful fields live in the LOW 32 BITS.** On ILP32 the three header
+slots each use only their low half (`PWord` is a machine-word pointer), so 12 of
+the 24 header bytes are padding there and a future packing pass would make the
+meta word 32 bits wide — see
+[[feature-a-shrink-managed-header-on-32-bit]]. Designing the payload to fit in
+32 bits now costs nothing and keeps that option open; spending bits 32–63 would
+close it.
+
 | bits | field | purpose |
 | --- | --- | --- |
 | 0–7 | `BlockKind` | what this block IS |
 | 8–15 | `Flags` | common to every kind |
-| 16–31 | `KindData0` | per-kind |
-| 32–47 | `KindData1` | per-kind |
-| 48–63 | reserved | must be zero |
+| 16–23 | `KindData0` | per-kind |
+| 24–31 | `KindData1` | per-kind |
+| 32–63 | reserved | must be zero — **unavailable on a packed ILP32 header** |
+
+An 8-bit `KindData0` cannot hold a raw Windows codepage (`CP_UTF8` = 65001), so
+store a small **encoding enum** (0 = none/bytes, 1 = UTF-8, 2 = UCS-2,
+3 = UCS-4) rather than FPC's number. That is the better field anyway: pxx needs
+"how is this text represented", not a Win32 identifier, and it maps directly
+onto PEP 393's kind.
 
 **BlockKind:** `0 = Legacy/untagged`, `1 = ByteString`, `2 = TextString`,
 `3 = DynArray`, `4 = Object`. 5+ reserved.
@@ -160,6 +180,30 @@ type is known exactly there. This was re-opened once during design; it is closed
 inline string code using *A's* offsets, while B's linked RTL comes from *new*
 source using the new layout. B is then internally inconsistent and dies before it
 can compile C. Same family as the `TSymbol`-field bootstrap landmine.
+
+**Measured, 2026-08-07**, because the claim was challenged and was worth
+proving rather than asserting. The pre-header pinned binary was run against the
+post-header source:
+
+- it **compiled the new source fine** — exit 0, a plausible 6.26 MB binary;
+- the binary it produced **dumped core** on the first program it was asked to
+  compile.
+
+That is the shape of this failure and why it deserves a warning: the compile
+step succeeds, so nothing looks wrong until the *product* runs. `make
+compiler/pascal26` seeds from `./compiler/pascal26` and iterates to convergence,
+so it would have crashed in round 2 and read as a codegen bug.
+
+**Narrow criterion — do NOT generalise this to "big changes need FPC".** Most
+large changes self-host fine: new IR ops, frontend features, optimiser passes,
+even new backends. The rule is specific:
+
+> A change needs the FPC seed when **the emitted code and the linked RTL must
+> agree on a data layout**, and the change alters that layout.
+
+Header offsets are the clear case. `devdocs/dev/fpc-optional-workflow.md` is
+right that the daily loop — including `stabilize` and `pin` — needs no FPC; this
+is the narrow exception, not a softening of that.
 
 **Seed from FPC.** FPC compiles the new source with no old-pxx generation in the
 loop, producing a self-consistent binary to self-host from. `make

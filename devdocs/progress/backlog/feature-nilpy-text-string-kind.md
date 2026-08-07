@@ -48,6 +48,20 @@ Being *more* correct than FPC would be a compat bug. This is why the substrate
 could not simply be changed: the two frontends have genuinely different correct
 answers, which is what the kind word exists to express.
 
+## Layout constraint you must obey
+
+Every meaningful field lives in the **low 32 bits** of the meta word:
+`BlockKind(8) | Flags(8) | KindData0(8) | KindData1(8)`, bits 32–63 reserved.
+Spending the upper half would permanently foreclose
+[[feature-a-shrink-managed-header-on-32-bit]], because a packed ILP32 header
+makes the meta word 32 bits wide. Consequently `KindData0` holds a small
+**encoding enum** (0 = bytes, 1 = UTF-8, 2 = UCS-2, 3 = UCS-4), not a raw
+codepage — `CP_UTF8` = 65001 does not fit in 8 bits, and the enum is the better
+field regardless.
+
+Also rename the phase-1 offset constant `PXX_HDR_KIND` → `PXX_HDR_META` in this
+ticket's first commit. Nothing reads it yet, and this ticket re-pins anyway.
+
 ## The work
 
 1. **Stamp kinds at every materialisation site** — the literal→managed
