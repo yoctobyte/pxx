@@ -507,4 +507,4 @@ died, after the holding variable was reassigned in a loop, after a round trip
 through a container).
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit ace11df55.
