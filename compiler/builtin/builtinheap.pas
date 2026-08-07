@@ -184,6 +184,11 @@ const
   { second RAW flavor: a pyeval closure object — finalized through the same
     hook with rawKind=2 (pylib forwards to pyeval's registry free) }
   PXX_OBJ_MAGIC_RAW2 = $505942E1;
+  { The runtime data layout THIS RTL implements. Twin of defs.inc's
+    PXX_RTL_LAYOUT_VERSION — the compiler compares the two when it links this
+    unit and refuses a mismatch. Bump BOTH together when a layout changes.
+    bug-a-self-host-seed-has-no-versioned-rtl }
+  PXX_RTL_LAYOUT_VERSION = 1;
 type
   { Finalizer for a dying refcounted object, installed by pylib (which knows
     the container types). p = the object, raw = 1 for a RAW (VMT-less) block.

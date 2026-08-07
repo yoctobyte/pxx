@@ -3,6 +3,8 @@ track: N
 prio: 40
 type: bug
 summary: "A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted"
+status: working
+owner: claude-AN
 ---
 
 # The shared `nonlocal` frame cell has no owner
@@ -71,3 +73,29 @@ RSS slope on the repro above at 20k and 320k must go flat (the SLOPE is the
 evidence, a single run proves nothing), `test/test_nilpy_closure_lifetime.npy`
 and `test_nilpy_nonlocal_escaping_closure.npy` stay byte-identical to CPython,
 self-host fixedpoint + `tools/gate.sh quick`.
+
+## 2026-08-07 — baseline re-measured, and the blocking constraint located
+
+Baseline at HEAD (after the bound-fn object was given a lifetime): **1 476 KB
+@ 20k → 8 516 KB @ 320k**, ~23 B/closure. Every other closure shape is flat, so
+this is the whole remaining closure leak.
+
+The constraint that stops the obvious fix, found by reading `PyPromoteCell`
+(pyparser.inc ~14332): the cell is stored in a **plain `tyPointer` local**
+(`ps := AllocVar('', tyPointer)`), and a pointer local has **no finalization**.
+The frame therefore has no existing hook that could release the cell on the way
+out — the compiler's managed-local cleanup is driven by symbol TYPE, and this
+symbol is deliberately a raw pointer because `PyMakeCellPtr`/`AN_DEREF` read
+through it.
+
+So giving the cell a refcount is not the hard part; giving the FRAME's reference
+a release site is. That needs either a new "free at scope exit" list for NilPy
+frames, or making the cell slot managed (which changes what every cell read
+compiles to). Both must be correct on **every** exit path including an exception
+unwind — and a missed release merely leaks (today's behaviour) while a double
+release DANGLES, which is strictly worse than the 23 bytes.
+
+Not started for that reason. The suggested `BK_CELLREF` ownership kind from the
+original write-up is still right for the CLOSURE half — that half is easy, since
+the per-slot ownership map already exists — but it only pays off once the frame
+half has a safe release site, because until then the count never reaches zero.

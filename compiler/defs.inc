@@ -595,6 +595,27 @@ const
   VT_STRING  = 6;   { payload = managed AnsiString ref }
   VT_OBJECT  = 7;   { payload = class instance pointer (NilPy Any/list slots; isinstance) }
   VT_BOUNDMETHOD = 8; { payload = {code, recv} pair pointer (pylib pybound_new) }
+  { The RUNTIME DATA LAYOUT this compiler's inline codegen assumes — managed
+    block headers, refcount/magic offsets, variant slot shape. It is compared
+    against the SAME constant declared by the builtinheap the compile is about
+    to link (see ParseUsesUnitBody), and a mismatch is refused.
+
+    Why: a compiler binary has two things that must agree about layout — the
+    code it EMITS inline, and the RTL it LINKS. `pinned` keeps them in step by
+    freezing compiler/builtin/*.pas beside itself; `./compiler/pascal26` does
+    not, and resolves `uses builtinheap` from the LIVE tree. So the moment the
+    layout changes under it, that seed builds a compiler whose codegen assumes
+    the old layout and whose RTL implements the new one. It COMPILES CLEAN and
+    the product dumps core two generations later, which reads as a codegen bug
+    in whatever was touched (bug-a-self-host-seed-has-no-versioned-rtl).
+
+    BUMP THIS AND THE TWIN IN compiler/builtin/builtinheap.pas TOGETHER whenever
+    a runtime layout changes. A stale seed then has the old number compiled in
+    and says so instead of producing a broken compiler; reseed from `pinned`
+    (or FPC) and the number matches again. Bumping it costs one reseed; not
+    bumping it costs a day. }
+  PXX_RTL_LAYOUT_VERSION = 1;
+
   VT_PYCLOSURE_TAG = 9; { payload = pyeval closure object (refcounted RAW2 block) }
   { payload = lifted bound-fn object (pyboundfn_new; also a refcounted RAW2
     block). A SEPARATE tag from 9 rather than a reuse of it: the tag-9 consumers

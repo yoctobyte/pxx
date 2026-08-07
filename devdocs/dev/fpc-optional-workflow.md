@@ -103,6 +103,19 @@ session's wrong conclusion, from a control run in the wrong directory. See
 `devdocs/dev/managed-block-header.md` and
 `bug-a-self-host-seed-has-no-versioned-rtl`.
 
+**Since 2026-08-07 you get told instead of finding out.** `PXX_RTL_LAYOUT_VERSION`
+is declared twice — in `compiler/defs.inc` (the layout this compiler's inline
+codegen EMITS) and in `compiler/builtin/builtinheap.pas` (the layout the RTL
+IMPLEMENTS) — and the compiler compares them when it links that unit. A stale
+seed now refuses with a message naming the cause and the remedy rather than
+building a compiler that compiles clean and crashes later.
+
+So when you change such a layout: **bump BOTH constants together.** Your current
+`./compiler/pascal26` then refuses (it has the old number compiled in), which is
+the signal to use seed 2. After one reseed the numbers match and the fast path
+is back. A frozen builtin that predates the stamp has no constant at all, and
+absence is treated as unknown-and-allowed, so older pins keep working.
+
 ## The gate, decoupled
 
 ```

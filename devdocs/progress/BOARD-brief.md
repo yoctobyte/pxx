@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:8 backlog:203 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1477 rejected:29`
+`working:1 unfinished:9 blocked:8 backlog:201 experimental:20 rainy-day:31 done-followup:3 decided:43 done:1478 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N] — owner: claude-AN
 
 ## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 184, ranked
+## Ready — top 30 of 182, ranked
 
 - `[p 70] [T]` regression-test-i386-test-dynarray-field
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-for-two-names-over-a-variant
@@ -67,4 +67,4 @@ _none — no lane is locked._
 - `[p 55] [U]` decide-nilpy-str-is-bytes-or-codepoints
 - `[p 55] [A]` feature-a-declaration-phase
 
-_154 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_152 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

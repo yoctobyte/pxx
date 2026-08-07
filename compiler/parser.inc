@@ -29128,12 +29128,37 @@ end;
 procedure ParseUsesUnitBody(const name: AnsiString); forward;
 
 procedure ParseUsesUnit(const name: AnsiString);
-var savedProc, savedFrame, savedSelf: Integer;
+var savedProc, savedFrame, savedSelf, vsym: Integer;
 begin
   savedProc := CurProc; savedFrame := FrameSize; savedSelf := CurSelfClass;
   CurProc := -1;
   ParseUsesUnitBody(name);
   CurProc := savedProc; FrameSize := savedFrame; CurSelfClass := savedSelf;
+  { RTL LAYOUT GUARD. This compiler's inline codegen assumes a runtime data
+    layout (header size, refcount/magic offsets); the builtinheap it just linked
+    IMPLEMENTS one. `pinned` keeps the two in step by freezing the RTL beside
+    itself, but ./compiler/pascal26 resolves `uses builtinheap` from the LIVE
+    tree — so after a layout change that seed builds a compiler that COMPILES
+    CLEAN and whose product dumps core two generations later, reading as a
+    codegen bug in whatever was touched. One line here instead
+    (bug-a-self-host-seed-has-no-versioned-rtl).
+
+    A MISSING constant is not a mismatch: an older frozen builtin (including the
+    currently pinned one, until it is re-pinned) predates the stamp, and
+    refusing those would break every build that uses them. Absent = unknown =
+    allowed; only a present-and-different number is refused. }
+  if LowerCase(name) = 'builtinheap' then
+  begin
+    vsym := FindSym('PXX_RTL_LAYOUT_VERSION');
+    if (vsym >= 0) and (Syms[vsym].Kind = skConst) and
+       (Syms[vsym].ConstVal <> PXX_RTL_LAYOUT_VERSION) then
+      Error('RTL layout mismatch: this compiler emits code for layout version '
+        + AIntToStr(PXX_RTL_LAYOUT_VERSION) + ' but the builtinheap it is '
+        + 'linking implements version ' + AIntToStr(Syms[vsym].ConstVal)
+        + '. The seed binary predates a runtime layout change, so it would '
+        + 'build a compiler that compiles clean and then crashes. Reseed: '
+        + '`make seed-from-stable` (or build from FPC) and retry');
+  end;
 end;
 
 procedure ParseUsesUnitBody(const name: AnsiString);
