@@ -77,4 +77,4 @@ ctor's writes landed on `self` rather than on a discarded instance. Diffed
 against CPython with `tools/pydiff.py`.
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit db43ea06d.
