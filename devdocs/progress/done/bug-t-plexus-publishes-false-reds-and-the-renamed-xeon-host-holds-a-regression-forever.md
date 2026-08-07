@@ -97,7 +97,7 @@ Related: [[bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-o
 (same family: the ledger keeping a red alive past its truth).
 
 ## Log
-- 2026-08-07 — resolved, commit PENDING-COMMIT.
+- 2026-08-07 — resolved, commit 005d32342.
 
 ---
 
