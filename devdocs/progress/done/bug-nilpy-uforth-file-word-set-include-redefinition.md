@@ -66,4 +66,4 @@ between the two runs, which is what cracked the `.(` case — look for the
 identical, `make test-uforth` still PASS, plus the per-fix loop.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 383f9c2f5.
