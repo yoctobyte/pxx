@@ -4866,6 +4866,17 @@ function PyMathLn(x: Double): Double;
 const Ln2 = 0.6931471805599453;
 var e: Integer; m, t, tt, term, sum: Double; i: Integer;
 begin
+  { A DOMAIN GUARD, and it is what stops an infinite loop rather than merely
+    reporting one: the normalising loop below is `while m < 1.0 do m := m * 2.0`,
+    and for any x <= 0 that condition can never become false — 0 doubles to 0
+    and a negative doubles away from 1 forever. So `math.log(0)` and every
+    caller that reaches here with a non-positive value HUNG, producing no
+    output and no diagnostic.
+    CPython raises ValueError('math domain error') for log of a non-positive,
+    and this is the same message.
+    bug-nilpy-pow-and-log-hang-on-a-non-positive-base }
+  if x <= 0.0 then
+    raise ValueError.Create('math domain error');
   e := 0; m := x;
   while m >= 2.0 do begin m := m / 2.0; Inc(e); end;
   while m < 1.0 do begin m := m * 2.0; Dec(e); end;
@@ -4990,6 +5001,30 @@ begin
   fexp := pyvar_to_float(b);
   if (fbase = 0.0) and (fexp < 0.0) then
     raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+  { ZERO to a POSITIVE power is 0.0 — CPython's answer, and it has to be
+    settled HERE because the fractional-exponent path below goes through
+    PyMathLn, whose normalising loop never terminates for a non-positive
+    argument. `0 ** 0.5` therefore HUNG: no output, no diagnostic, and about as
+    ordinary an expression as there is.
+    bug-nilpy-pow-and-log-hang-on-a-non-positive-base }
+  if (fbase = 0.0) and (fexp > 0.0) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := 0.0;
+    Exit;
+  end;
+  { A NEGATIVE base with a FRACTIONAL exponent is a COMPLEX number in CPython
+    ((-8) ** (1/3) is 1.0000000000000002+1.7320508075688772j). NilPy has no
+    complex type, so the honest answer is a named refusal rather than a real
+    number that is not the answer — and certainly rather than the hang this
+    used to be, for the same PyMathLn reason as above. An INTEGER exponent is
+    unaffected and still goes down the repeated-squaring path below, which is
+    where every ordinary `(-2) ** 3` lands.
+    Complex support is filed as bug-nilpy-no-complex-number-type. }
+  if (fbase < 0.0) and (Frac(fexp) <> 0.0) then
+    raise ValueError.Create(
+      'a negative number raised to a fractional power is complex, '
+      + 'which NilPy does not have');
   if Frac(fexp) = 0.0 then
   begin
     negExp := fexp < 0.0;

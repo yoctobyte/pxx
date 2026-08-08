@@ -1085,6 +1085,9 @@ test-nilpy: $(COMPILER)
 	# startswith/endswith with a TUPLE of prefixes answered False silently.
 	./$(COMPILER) test/test_nilpy_startswith_tuple.npy /tmp/test_nilpy_swtuple26
 	/tmp/test_nilpy_swtuple26 | diff -u test/test_nilpy_startswith_tuple.expected -
+	# `0 ** 0.5` HUNG (PyMathLn's normalising loop never terminates for x <= 0).
+	./$(COMPILER) test/test_nilpy_pow_domain.npy /tmp/test_nilpy_powdomain26
+	/tmp/test_nilpy_powdomain26 | diff -u test/test_nilpy_pow_domain.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

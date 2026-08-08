@@ -1,0 +1,76 @@
+# bug-nilpy-pow-and-log-hang-on-a-non-positive-base
+#
+# `0 ** 0.5` HUNG — no output, no diagnostic, forever. So did `0.0 ** 2.5` and
+# any negative base with a fractional exponent.
+#
+# The cause is one loop: PyMathLn normalises its argument with
+# `while m < 1.0 do m := m * 2.0`, and for x <= 0 that condition can never
+# become false — 0 doubles to 0, and a negative doubles away from 1. Every
+# fractional-exponent power goes through it.
+#
+# A hang is the worst failure mode here precisely because the expression is so
+# ordinary: `x ** 0.5` where x happens to be 0 is not an edge case anyone writes
+# a guard for.
+#
+# Driven through a function with the base and exponent as PARAMETERS, so the
+# operands are variants at run time — which is the path the fix is in — rather
+# than constants a folder might settle at compile time.
+#
+# The negative-base case is a deliberate, NAMED refusal rather than a number:
+# CPython answers with a COMPLEX ((-8) ** (1/3) is 1.0000000000000002+1.73...j)
+# and NilPy has no complex type, so a real result would be a wrong answer.
+# Filed as bug-nilpy-no-complex-number-type. The two sides therefore disagree on
+# the answer's TYPE but agree there is no REAL answer, and that is what
+# `no-real-answer` pins: not a hang, and not a real number invented in place of
+# a complex one. `repr(v).endswith("j)")` rather than `isinstance(v, complex)`,
+# so the line compiles under a dialect with no `complex` name at all.
+#
+# Controls: integer exponents (the repeated-squaring path, untouched), negative
+# bases with integer exponents, negative exponents, 0 ** 0, and 0 ** negative
+# which is a ZeroDivisionError in CPython too.
+#
+# Expectations are CPython's own output.
+
+
+def show(label, a, b):
+    try:
+        print(label, a ** b)
+    except ValueError:
+        print(label, "ValueError")
+    except ZeroDivisionError:
+        print(label, "ZeroDivisionError")
+
+
+def show_noreal(label, a, b):
+    try:
+        v = a ** b
+        if repr(v).endswith("j)"):
+            print(label, "no-real-answer")
+        else:
+            print(label, v)
+    except ValueError:
+        print(label, "no-real-answer")
+
+
+# the hangs
+show("zero-frac  ", 0, 0.5)
+show("zerof-frac ", 0.0, 2.5)
+show_noreal("neg-frac   ", -8, 1.0 / 3.0)
+show_noreal("negf-frac  ", -8.0, 0.5)
+
+# controls: integer exponents are untouched
+show("int-pow    ", 2, 10)
+show("neg-int    ", -2, 3)
+show("neg-int-ev ", -2, 4)
+show("neg-exp    ", 2, -1)
+show("negf-int   ", -2.0, 3)
+
+# controls: zero bases with the other exponent signs
+show("zero-zero  ", 0, 0)
+show("zero-int   ", 0, 3)
+show("zero-neg   ", 0, -1)
+
+# controls: ordinary fractional powers of a positive base still work
+show("pos-frac   ", 4, 0.5)
+show("pos-frac2  ", 9, 0.5)
+show("pos-frac3  ", 16, 0.25)

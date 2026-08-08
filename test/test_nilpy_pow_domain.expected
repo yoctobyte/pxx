@@ -1,0 +1,15 @@
+zero-frac   0.0
+zerof-frac  0.0
+neg-frac    no-real-answer
+negf-frac   no-real-answer
+int-pow     1024
+neg-int     -8
+neg-int-ev  16
+neg-exp     0.5
+negf-int    -8.0
+zero-zero   1
+zero-int    0
+zero-neg    ZeroDivisionError
+pos-frac    2.0
+pos-frac2   3.0
+pos-frac3   2.0
