@@ -441,11 +441,20 @@ int PyObject_TypeCheck(PyObject *o, PyTypeObject *t);
  * 0. `PyObject_GC_New` is spelled as CPython spells it (a macro taking the C
  * struct type, so the result is already the right pointer type).
  *
- * There is no cycle collector here — the runtime is plain refcounting — so
+ * There is no cycle collector here YET — the runtime is plain refcounting — so
  * tracking is a no-op and Py_VISIT never runs. They are NOT stubs that hide a
  * problem: an uncollected cycle is a leak, and a leak in a module-level
- * function object that lives as long as the process is not observable. A real
- * cycle collector is out of scope and stays that way until something needs it.
+ * function object that lives as long as the process is not observable.
+ *
+ * "Not yet" is sequencing, not a design stance. The project's GC decision
+ * (devdocs/developer/garbage-collection-thoughts.md, point 4) reserves cycle
+ * collection as the one legitimate niche ARC cannot cover, and everything a
+ * collector would need is already in reach: each heap type Cython builds
+ * carries Py_tp_traverse and Py_tp_clear, PyType_GetSlot already returns them,
+ * and Py_VISIT already expands correctly — they are simply never called. What
+ * is missing is a tracked-object list and the trial-deletion pass. Scoped in
+ * feature-nilpy-cpyext-cycle-collector; it starts to matter at M5c, where a
+ * cdef class allocates instances in a loop.
  */
 PyObject *_PyObject_NewFromType(PyTypeObject *t);
 #define PyObject_GC_New(TYPE, typeobj) ((TYPE *)_PyObject_NewFromType(typeobj))

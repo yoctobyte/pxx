@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (188)
+## backlog (190)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -134,6 +134,8 @@ _none_
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
+| feature-nilpy-cpyext-cycle-collector | N | 40 | feature | cpyext: a cycle collector for the extension object model | — |
+| feature-nilpy-cycle-collector | A | 35 | feature | NilPy: collect reference cycles (the reserved half of the GC decision) | feature-nilpy-object-reclamation |
 | feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-hasattr-per-instance-assigned-tracking | N | 40 | feature | hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit. | — |
@@ -500,6 +502,7 @@ _none_
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [N] feature-nilpy-arithmetic-dunders-full-protocol
+- [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-dataclass-expression-field-default
 - [p 40] [N] feature-nilpy-hasattr-per-instance-assigned-tracking
 - [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda
@@ -584,6 +587,7 @@ _none_
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-nilpy-break-continue
 - **1** — feature-nilpy-multi-arg-callback-bridges
+- **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-runtime-dunder-dispatch-on-variants
 - **1** — feature-nilpy-star-args-kwargs
 - **1** — feature-nilpy-tkinter-facade
