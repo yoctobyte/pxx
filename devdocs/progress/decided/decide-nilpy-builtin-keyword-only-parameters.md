@@ -85,3 +85,67 @@ parameter does not have to re-derive the question.
 
 Related: [[bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error]],
 [[bug-nilpy-keyword-arg-vs-overload-set]], [[meta-dialect-extensions-and-fpc-strict]].
+
+## DECIDED 2026-08-08 (user): STAY LAX — a documented divergence, not a bug
+
+> not fixing it wouldn't harm anything and we can still take code as cpython
+> does? ... as long we are forward compatible we are good. i'm not worried about
+> code that works under pxx and not under cpython. not our issue. and pxx is our
+> party. as long we compile what cpython can. again - only if there is
+> ambiguity, there may be a reason for strict
+
+NilPy keeps accepting the positional spelling. This is the NilPy rule working as
+designed: **forward compatibility only** — everything CPython accepts must work
+here; accepting more is a language feature.
+
+Two corrections to the framing this ticket was filed under:
+
+- **The harm was overstated.** A pxx-only spelling fails LOUDLY on CPython with a
+  `TypeError`. The cost is deferred discovery of a portability issue, not a wrong
+  answer — a different class from the silent-wrong-value bugs that justify
+  strictness here.
+- **The Pascal/C-caller argument does not discriminate.** The enforcement would
+  have gone at the NilPy CALL SITE (the only place that still knows which
+  arguments were written positionally), so a Pascal or C caller reaching
+  `sorted()` through its ordinary defaulted-positional signature would never have
+  seen it either way.
+
+### The ambiguity clause was CHECKED, not assumed
+
+The user's qualifier — *"only if there is ambiguity, there may be a reason for
+strict"* — is the real risk for `min`/`max`, whose signature is
+`min(arg, *args, key=None)`: the second POSITIONAL slot means another VALUE, not
+`key`. If pxx bound it to `key`, `min(a, b)` on two comparable values would
+silently mean something else, and that WOULD break forward compatibility.
+
+Measured at HEAD — it does not:
+
+| | pxx | CPython |
+| --- | --- | --- |
+| `min(3, 5)` / `min(3, 5, 1)` | `3` / `1` | same |
+| `min([1,2], [1,3])`, `max(...)` | `[1, 2]` / `[1, 3]` | same |
+| `min("apple", "banana")` | `apple` | same |
+| `min(words, key=len)` | `a` | same |
+| `min(words, len)` | `a` | **TypeError** |
+
+pxx disambiguates on **callability**: a callable second argument is `key`,
+anything else is another value. Every realistic valid CPython program takes the
+value reading and agrees. The single divergent row is a spelling CPython refuses
+outright.
+
+The heuristic's limit, for the record: an object that is BOTH callable and
+orderable, passed as the second value, would take the `key` reading here and the
+value reading in CPython. No such program is worth designing against.
+
+### Future path, if portability checking is ever wanted
+
+A `--strict-python`-style per-feature flag, matching `--strict-case` /
+`--strict-overload`. **Default stays lax** — the flag is the shape any future
+request takes, so nobody re-litigates the default in order to get the check.
+
+Logged in `devdocs/dev/nilpy-semantics-divergences.md`, which is where
+"laxer than CPython" belongs rather than in a bug ticket.
+
+Does NOT block [[bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error]]:
+that ticket needs `key=`/`reverse=` to WORK, which is orthogonal to whether the
+positional spelling is also accepted.

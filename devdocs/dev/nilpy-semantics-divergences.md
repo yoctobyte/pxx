@@ -171,3 +171,47 @@ diff-based comparison look tidier. Any test that pins a set's order must sort it
 The genuinely open set questions — whether `[1] - [2]` should raise — remain in
 `../progress/backlog/decide-nilpy-set-as-a-distinct-type-or-a-list.md`. Ordering
 is not among them.
+
+## Keyword-only parameters are not enforced (decided 2026-08-08)
+
+CPython marks some builtin parameters keyword-only — the bare `*` in
+`list.sort(*, key=None, reverse=False)`, `sorted(iterable, /, *, key=None,
+reverse=False)`, `min(arg, *args, key=None)`. Those may be passed by name and
+only by name.
+
+pxx implements these as ordinary Pascal routines with defaulted parameters, and a
+Pascal parameter list has no notion of keyword-only, so the positional spelling
+is **accepted**:
+
+```python
+sorted(xs, len)        # pxx: works.  CPython: TypeError
+min(words, len)        # pxx: 'a'.    CPython: TypeError
+```
+
+**This is a divergence, not a defect.** The NilPy rule is forward compatibility
+only: everything CPython accepts must work here, and accepting more is a
+language feature. A pxx-only spelling fails loudly on CPython, so the cost is
+deferred discovery of a portability issue, never a wrong answer.
+
+### Why it does not endanger forward compatibility
+
+`min`/`max` are the case worth knowing, because their second POSITIONAL slot is
+another value (`*args`), not `key`. Binding it to `key` would silently change the
+meaning of `min(a, b)` — valid, ordinary CPython. It does not: pxx disambiguates
+on **callability**, so a callable second argument is `key` and anything else is
+another value.
+
+Verified at HEAD against the CPython oracle: `min(3, 5)`, `min(3, 5, 1)`,
+`min([1,2], [1,3])`, `max([1,2], [1,3])`, `min("apple", "banana")` and
+`min(words, key=len)` all agree. Only `min(words, len)` differs, and CPython
+refuses that outright.
+
+Limit of the heuristic, for the record: an object that is both callable and
+orderable, passed as a second value, would take the `key` reading here and the
+value reading in CPython.
+
+### If portability checking is ever wanted
+
+It becomes a `--strict-python`-style per-feature flag, like `--strict-case` and
+`--strict-overload`. The default stays lax; see
+`decide-nilpy-builtin-keyword-only-parameters`.

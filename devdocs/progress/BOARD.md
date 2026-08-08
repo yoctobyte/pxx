@@ -38,7 +38,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (196)
+## backlog (195)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -87,7 +87,6 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-thread-api-surface-differs-from-fpc | B | 35 | compat | Threaded FPC code does not compile as-is: TThread lives in palthreadobj rather than Classes, there is no cthreads shim, WaitFor is a procedure where FPC's returns LongWord, and BeginThread/TThreadID do not exist | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
-| decide-nilpy-builtin-keyword-only-parameters | U | 40 | decide | Should NilPy builtins enforce Python's KEYWORD-ONLY parameters? | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -310,7 +309,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (50)
+## decided (51)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -332,6 +331,7 @@ _none_
 | decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-arithmetic-dunder-scope | U | 60 | decide | Decide: how far does NilPy follow Python's arithmetic/ordering dunder protocol? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
+| decide-nilpy-builtin-keyword-only-parameters | U | 40 | decide | Should NilPy builtins enforce Python's KEYWORD-ONLY parameters? | — |
 | decide-nilpy-class-attribute-instance-read-model | U | 65 | decide | How should `inst.attr` read a CLASS attribute? Full Python fall-through with per-instance overrides (correct, invasive), or a whole-program static specialisation using the PyDynAttrEverAssigned-style scan already in the frontend (cheaper, correct for programs that never override per instance)? Blocks bug-nilpy-class-attribute-unreachable-through-the-class-name. | — |
 | decide-nilpy-closure-model | A | 50 | decide |  | — |
 | decide-nilpy-dict-mutation-during-iteration | U | 35 | decide | Raise on dict mutation during iteration, or keep the snapshot? | — |
@@ -508,7 +508,6 @@ _none_
 - [p 40] [N] bug-nilpy-uforth-compiles-but-segfaults-at-runtime
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
-- [p 40] [U] decide-nilpy-builtin-keyword-only-parameters
 - [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [B] feature-b-crtl-last-seven-unimplemented-declarations
 - [p 40] [A] feature-c-package-namespace-decision
