@@ -118,4 +118,4 @@ with_name_reuse,class_field_identity}` and ten session probes re-diffed against
 CPython: unchanged.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 5d9d64e1b.
