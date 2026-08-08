@@ -1,0 +1,28 @@
+# Track T auto-pin baseline allowlist        <job selector>  <ticket slug>
+#
+# Reds listed here do NOT block an automatic pin. Everything else does.
+#
+# EVERY entry must name a ticket. An entry without one is refused at load and
+# printed as ignored — that rule is the whole design. The allowlist is how "we
+# are shipping with these known breaks" becomes an explicit, reviewable
+# statement instead of a quiet dumping ground, and it only works if adding a
+# line costs you a ticket.
+#
+# Two things can never be waived here:
+#   * self-host byte-identical — a compiler that cannot reproduce itself must
+#     never become the ground other tracks build on, allowlisted or not;
+#   * a red that is not in this file — that is the point.
+#
+# Curated by humans and by Track T's face-2 agent. The daemon only ever READS
+# it. Authority: decide-track-t-autopin-criteria (option A, reopened and chosen
+# 2026-08-08 after the baseline cleared from 18 permanent reds to 2 of 2182).
+#
+# STATUS: shadow mode. Nothing moves `pinned` yet — twatch logs the decision it
+# WOULD have made to tstate/pin-shadow.log so a week of them can be compared
+# against what a human actually blessed. Empty is the correct contents today:
+# plexus is 2180/2182 with both remaining reds being harness artifacts already
+# fixed, so nothing needs waiving. If this file is still empty when shadow mode
+# ends, that is the strongest possible argument the automation is safe.
+#
+# Example of the required shape (commented out — not an active entry):
+# test-zlib#00	bug-t-zlib-oracle-breaks-on-gcc-14

@@ -927,6 +927,103 @@ def regen_index(clone):
 
 
 # ------------------------------------------------------------------ core ---
+# ------------------------------------------------------------ auto-pin ---
+# `make pin` moves `pinned`, the ground every other track builds on (B/C/D/E
+# all build with $(PXX_STABLE)), so a bad pin does not fail one job — it
+# silently rebases everyone onto a broken compiler. The cost is asymmetric
+# against pinning too eagerly, which is why decide-track-t-autopin-criteria
+# was answered "never auto-pin" on 2026-08-01 and DEFERRED until the baseline
+# justified the machinery. It now does: plexus at 450bb7f86a75 was 2180/2182,
+# and the 18-job permanently-red list that made "all green" unfireable is gone.
+#
+# Reopened 2026-08-08 by the user, who chose the ticket's own recommendation:
+# option A (baseline allowlist) with K>=2 consecutive qualifying shas and
+# auto-rollback, STARTING IN SHADOW MODE. Nothing here moves `pinned`. It
+# records the decision it WOULD have made so a week of them can be compared
+# against what a human actually blessed — evidence instead of argument.
+PIN_ALLOWLIST_REL = TSTATE_REL + "/pin-allowlist.tsv"
+PIN_SHADOW_REL = TSTATE_REL + "/pin-shadow.log"
+PIN_STREAK_K = 2          # one clean matrix can be luck; today proved phantoms
+PIN_TIER = "full"         # only the broadest nested tier may qualify a pin
+SELFHOST_SEL_PREFIX = "selfhost-fixedpoint"
+
+
+def load_pin_allowlist(clone):
+    """{job selector: ticket slug} of reds that do NOT block a pin.
+
+    Every entry MUST name a ticket. That is the whole design: it makes "we are
+    shipping with these known breaks" an explicit, reviewable statement rather
+    than a dumping ground. An entry without a ticket is refused and said out
+    loud, so the file cannot quietly grow.
+    """
+    out, bad = {}, []
+    p = os.path.join(clone.path, PIN_ALLOWLIST_REL)
+    try:
+        with open(p) as f:
+            for ln in f:
+                # A comment is a LEADING '#' only. Job selectors contain '#'
+                # (`test-zlib#00`), so stripping inline comments at '#' silently
+                # truncated every entry to its target name and the allowlist
+                # loaded empty — caught by the devtest, not by reading it.
+                ln = ln.strip()
+                if not ln or ln.startswith("#"):
+                    continue
+                parts = ln.split()
+                if len(parts) < 2:
+                    bad.append(ln)
+                    continue
+                out[parts[0]] = parts[1]
+    except OSError:
+        return {}, []                 # absent is fine: nothing is allowlisted
+    return out, bad
+
+
+def pin_shadow(clone, host, st, sha, report, authoritative):
+    """Would this sha have qualified for an automatic pin? LOG ONLY.
+
+    Deliberately never touches `pinned`, `make pin`, or `stable_linux_amd64/**`
+    — face 1's write scope is tstate/ and this stays inside it.
+    """
+    if report.get("tier") != PIN_TIER:
+        return                        # only the broadest tier may qualify one
+    allow, bad = load_pin_allowlist(clone)
+    for ln in bad:
+        print("twatch: pin-allowlist entry ignored (no ticket named): %s" % ln,
+              flush=True)
+    reds = sorted(j for j, s in authoritative.items() if s not in PASSLIKE)
+    unexpected = [j for j in reds if j not in allow]
+    # The one property that can never be waived: a compiler that cannot
+    # reproduce itself must not become anyone's ground, allowlist or not.
+    selfhost_ok = all(s in PASSLIKE for j, s in authoritative.items()
+                      if j.startswith(SELFHOST_SEL_PREFIX))
+    qualifies = not unexpected and selfhost_ok
+    prev = st.get("pin_shadow") or {}
+    streak = (int(prev.get("streak") or 0) + 1) if qualifies else 0
+    would = qualifies and streak >= PIN_STREAK_K
+    st["pin_shadow"] = {"streak": streak, "sha": sha, "at": utcnow(),
+                        "qualifies": qualifies, "would_pin": would,
+                        "unexpected": unexpected[:20], "reds": len(reds)}
+    if would:
+        why = "WOULD PIN %s — %d red(s), all allowlisted, self-host clean, " \
+              "streak %d/%d" % (sha[:12], len(reds), streak, PIN_STREAK_K)
+    elif qualifies:
+        why = "would-pin PENDING %s — qualifies, streak %d/%d" \
+              % (sha[:12], streak, PIN_STREAK_K)
+    elif not selfhost_ok:
+        why = "would NOT pin %s — self-host is not clean (never waivable)" \
+              % sha[:12]
+    else:
+        why = "would NOT pin %s — %d red(s) not in the allowlist: %s" \
+              % (sha[:12], len(unexpected), ", ".join(unexpected[:5]))
+    print("twatch: [pin shadow] %s" % why, flush=True)
+    try:
+        with open(os.path.join(clone.path, PIN_SHADOW_REL), "a") as f:
+            f.write("%s\t%s\t%s\t%s\n" % (utcnow(), host, sha, why))
+    except OSError as e:
+        print("twatch: could not record the pin-shadow line (%s)" % e,
+              flush=True)
+
+
 def no_measurement(report):
     """Did this run produce no measurement at all? Returns a reason, or "".
 
@@ -1168,6 +1265,8 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
                        "new_red": new_red, "fixed": fixed}])[-HISTORY_CAP:]
+    # Shadow only — records the pin it WOULD have made, moves nothing.
+    pin_shadow(clone, host, st, sha, report, authoritative)
     save_state(clone, host, st)
     # uncapped run archive (host.json history is capped): one ndjson line per
     # run — the web UI's history/regression-frequency source
