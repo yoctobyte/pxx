@@ -165,4 +165,4 @@ and now pylib reaches it too. That ticket should be re-read before any work is
 estimated against it.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 1f7a879c3.
