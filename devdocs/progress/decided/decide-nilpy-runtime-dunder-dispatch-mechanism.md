@@ -151,3 +151,14 @@ Recorded `blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]` and moved
 to `blocked/`. Neither ticket's content is merged away — this one keeps its three
 symptom sets and the POSTPONED carry-forward. Only the ordering is now explicit:
 answer the broad one, then apply it here.
+
+## DECIDED 2026-08-08 — answered by its blocker
+
+[[decide-nilpy-runtime-dunder-dispatch-strategy]] chose **option B**, and that
+answers this one too: when the class is known only at run time, dispatch is a
+**compile-time-generated switch on class identity**, not a lookup. The compiler
+sees every class declaring the dunder (closed world), so it emits the table; the
+runtime only takes an indirect call through it.
+
+Reserve a hard failure for "no class declares it"; several candidates is the
+normal case and is what the switch is for. Parked with its blocker.

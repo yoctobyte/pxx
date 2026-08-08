@@ -171,3 +171,61 @@ at all.
 **Dunder census at HEAD** (the "~50" above): 47 Python dunders appear in the
 frontend. The ten the stalled tickets need are `__repr__ __str__ __bool__
 __eq__ __hash__ __lt__ __le__ __gt__ __ge__ __len__`.
+
+
+## DECIDED 2026-08-08 (user): option B only, and PARKED
+
+> right now i really tend to B only - keep it fast. the A case is rare and only
+> serves weird edge cases.. we are a compiler after all, not an interpreter. if
+> we could detect it and either halt compiling or have a clear runtime error we
+> are good for now, and park this issue to postponed.
+
+**Option B — compile-time guarded dispatch.** Option A (a reflective RTTI walk
+on arithmetic and repr) is rejected: it taxes the hot path to serve rare cases,
+and reflection is an interpreter's answer.
+
+### Three refinements agreed while deciding
+
+1. **B needs no reflection at all.** The world is closed, so the COMPILER knows
+   every class declaring a given dunder. It can GENERATE one dispatcher — a
+   switch on class identity to a direct call — and install it where the runtime
+   needs it (pylib's container renderer takes it as a hook, exactly as
+   `PXXObjFinalizeHook` is installed today). Compile-time table, one indirect
+   call, no name lookup at run time.
+
+2. **"Several candidate classes" is the NORMAL case and must NOT halt.** A
+   heterogeneous list whose elements both define `__repr__` is ordinary Python.
+   Some paths already refuse it — *"ambiguous (several classes declare that
+   field) - assign to an annotated local first"* — which rejects reasonable
+   code. B handles it with a tag test. Reserve the hard failure for **no class
+   declares the dunder at all**.
+
+3. **Silence is the one outcome ruled out.** `print([a, b])` currently prints
+   `[, ]`: not slow, not loud, just wrong. Under B it is either correct or a
+   clear error — the standing HALT-rather-than-be-silently-wrong rule from
+   [[decide-nilpy-class-attribute-instance-read-model]].
+
+### Detection reuses the hasattr precedent
+
+The user's framing: *"for hasattr we did something similar - if nothing modifies
+the class, can stay compiler. but as soon a class is dirty, we have to adapt at
+the cost of slower code."* That predicate already exists —
+`PyDynAttrEverAssigned` (pyparser.inc ~8604), the program-wide "this name is
+dynamically assigned somewhere" scan. Clean class => closed-world dispatch;
+dirty => degrade. **Reuse it rather than inventing a second notion of dirty.**
+
+### Status: PARKED to rainy-day
+
+Not scheduled. If anyone picks up a piece, the narrow one comes first: pylib's
+container renderer has no ROUTE to dispatch that already works — measured
+2026-08-07, `o.__repr__()` on an untyped parameter and over a heterogeneous list
+both reach the right class today. That is a HOOK, not a dispatcher, and it is
+most of the visible pain
+([[bug-nilpy-list-of-custom-objects-loses-repr-str]]).
+
+### Its dependent decision is answered too
+
+[[decide-nilpy-runtime-dunder-dispatch-mechanism]] was `blocked-by` this one and
+asks the same question one level down (how to dispatch when the class is known
+only at run time). Option B answers it: a compile-time-generated switch on class
+identity, not a lookup. Closed with a pointer here.

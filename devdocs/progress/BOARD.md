@@ -27,7 +27,7 @@ _none_
 | feature-nilpy-text-string-kind | N | 55 | feature | Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1) | feature-a-managed-block-kind-word |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (8)
+## blocked (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -35,12 +35,10 @@ _none_
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | decide-float-fixed-output-exact-or-fpc-17-digit-cap |
-| decide-nilpy-runtime-dunder-dispatch-mechanism | U | 45 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
-| feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (202)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,7 +93,6 @@ _none_
 | decide-nilpy-builtin-keyword-only-parameters | U | 40 | decide | Should NilPy builtins enforce Python's KEYWORD-ONLY parameters? | — |
 | decide-nilpy-multiple-inheritance-c3-or-delegate | U | 40 | decide | class D(B, C) is refused with a clear diagnostic (option 3 landed 2026-08-04). The FEATURE is still open and the remaining choice is a design fork: full C3 linearisation, or second-base-as-delegate. Needs a call before anyone builds it. | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
-| decide-nilpy-runtime-dunder-dispatch-strategy | U | 45→55 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -272,7 +269,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (31)
+## rainy-day (32)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -292,6 +289,7 @@ _none_
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-kernel-matrix-bootroom | E | 50 | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
 | feature-mode-delphi-remaining | A | 50 | feature | `{$mode delphi}` — remaining @-relax edge slices | — |
+| feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-no-ansistring-profile | A | 50 | feature | No-AnsiString / bounded-string profile | — |
 | feature-os-targets-bsd-mac | A | 50 | feature | Additional OS targets (BSD / macOS via syscall mapping) | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
@@ -316,7 +314,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (44)
+## decided (46)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -345,6 +343,8 @@ _none_
 | decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
 | decide-nilpy-mixed-type-operand-policy | U | 60 | decide | Decide: what should NilPy do when an operator gets operand types Python rejects? | — |
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
+| decide-nilpy-runtime-dunder-dispatch-mechanism | U | 45 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | decide-nilpy-runtime-dunder-dispatch-strategy |
+| decide-nilpy-runtime-dunder-dispatch-strategy | U | 45→55 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-str-is-bytes-or-codepoints | U | 55 | decide | NilPy strings are BYTES where CPython's are code points: len('héllo')==6, s[1] is half a character, and s[::-1] silently produces invalid UTF-8. Decide the target — full code-point str, UTF-8-aware indexing over the byte buffer, or a documented ASCII-only limit | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
 | decide-nilpy-where-the-exact-decimal-float-core-lives | U | 60 | decide | NilPy's float repr needs exact decimal digits + a correctly-rounded strtod. Both exist, in lib/rtl/sysutils.pas — which a BUILTIN unit may not use (builtins sit below the Track B libraries, and pylib dragging sysutils in would link it into every NilPy program). Move the core down into a builtin unit, duplicate it, or relax the layering? Blocks bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip. | — |
@@ -426,7 +426,6 @@ _none_
 - [p 60] [T] feature-t-testmgr-owns-pinning-interruptible
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
-- [p 55] [U] decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 4)
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
@@ -591,7 +590,7 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **4** — decide-nilpy-runtime-dunder-dispatch-strategy
+- **3** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list

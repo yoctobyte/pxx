@@ -80,3 +80,22 @@ A `.npy` diffed against CPython covering, for one class defining
 of an element, `sorted()`, a Variant-typed global from scalar-then-class
 rebinding, and a Variant-typed parameter — all matching CPython, with the
 compile-time static paths unchanged.
+
+## 2026-08-08 — scoped to option B and PARKED to rainy-day
+
+[[decide-nilpy-runtime-dunder-dispatch-strategy]] is decided: **option B**,
+compile-time guarded dispatch. No reflective RTTI walk — the compiler generates
+a switch on class identity and installs it where the runtime needs it, the way
+`PXXObjFinalizeHook` is installed.
+
+Deliberately NOT scheduled ("park this issue to postponed", user). Two things to
+carry into whoever restarts it:
+
+- **Do not halt on several candidate classes.** That is ordinary polymorphic
+  Python and is exactly what the switch handles. Hard-fail only when NO class
+  declares the dunder.
+- **The cheapest real win is not this ticket.** pylib's container renderer has
+  no route to dispatch that already works today (measured 2026-08-07). That is a
+  hook, and it removes most of the visible symptom
+  ([[bug-nilpy-list-of-custom-objects-loses-repr-str]]) without building a
+  dispatcher at all.

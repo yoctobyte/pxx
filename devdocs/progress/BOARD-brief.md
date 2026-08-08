@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:8 backlog:202 experimental:20 rainy-day:31 done-followup:3 decided:44 done:1485 rejected:29`
+`unfinished:10 blocked:6 backlog:201 experimental:20 rainy-day:32 done-followup:3 decided:46 done:1485 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -24,18 +24,16 @@ _none — no lane is locked._
 - `feature-nilpy-text-string-kind` [N] — blocked-by: feature-a-managed-block-kind-word
 - `feature-pascal-corpus-generics` [P]
 
-## blocked (8) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-nilpy-dunders-not-dispatched-through-containers` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `bug-nilpy-in-over-objects-ignores-eq` [N]
 - `compat-pascal-write-fixed-huge-magnitude-differs-from-fpc` [A] — blocked-by: decide-float-fixed-output-exact-or-fpc-17-digit-cap
-- `decide-nilpy-runtime-dunder-dispatch-mechanism` [U] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
-- `feature-nilpy-runtime-dunder-dispatch-on-variants` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 183, ranked
+## Ready — top 30 of 182, ranked
 
 - `[p 70] [T]` regression-test-i386-test-dynarray-field
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-for-two-names-over-a-variant
@@ -58,7 +56,6 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 55] [U]` decide-nilpy-runtime-dunder-dispatch-strategy (unblocks 4)
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
@@ -67,5 +64,6 @@ _none — no lane is locked._
 - `[p 55] [T]` bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
-_153 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_152 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
