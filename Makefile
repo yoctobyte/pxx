@@ -1043,6 +1043,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_classvar_counter26)" = "$$(printf 'dup 1\nswap 2\ndrop 3')"
 	./$(COMPILER) test/test_nilpy_membership.npy /tmp/test_nilpy_membership26
 	test "$$(/tmp/test_nilpy_membership26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\n3\n7\n3\n7\n-1\n2.5')"
+	# ...and membership over OBJECTS consults __eq__ (it compared boxed handles,
+	# so an equal-but-distinct object read as absent). Covers in/not in/index/
+	# count/remove/dict keys, both __eq__ shapes, and the no-__eq__ identity control.
+	./$(COMPILER) test/test_nilpy_membership_eq_dunder.npy /tmp/test_nilpy_memeq26
+	/tmp/test_nilpy_memeq26 | diff -u test/test_nilpy_membership_eq_dunder.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

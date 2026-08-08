@@ -1,0 +1,96 @@
+# bug-nilpy-container-membership-ignores-the-eq-dunder
+#
+# `H(3) in [H(1), H(3)]` was False while the bare `H(3) == H(3)` was True. The
+# operator path dispatches at COMPILE time on the receiver's static class; a
+# container element has no static class for that to key on, so pylib's PyVarEq
+# compared boxed handles and an equal-but-DISTINCT object read as absent.
+#
+# Silent, and in the direction that hides: "not found" looks like ordinary
+# absence, so a membership guard takes the wrong branch with nothing to see.
+#
+# Every value comparison in pylib funnels through PyVarEq, which is why one fix
+# covers `in` / `not in` / .index() / .count() / .remove() / dict keys — all
+# asserted here, because a fix that only reached `in` would look complete.
+#
+# TWO __eq__ shapes have to work, and testing one hides the other: a
+# hand-written `def __eq__(self, other)` leaves `other` unannotated so it
+# arrives as a Variant, while a @dataclass-GENERATED __eq__ takes a bare class
+# pointer. The first version of the fix handled only the Variant shape and
+# every dataclass still compared by handle.
+#
+# Controls that must NOT change: a class with no __eq__ keeps IDENTITY
+# semantics, and scalars / tuples / nested lists keep comparing by value.
+#
+# Expectations are CPython's own output.
+
+from dataclasses import dataclass
+
+
+class H:
+    def __init__(self, a: int):
+        self.a = a
+
+    def __eq__(self, other) -> bool:
+        return self.a == other.a
+
+
+@dataclass
+class P:
+    a: int
+
+
+class NoEq:
+    def __init__(self, a: int):
+        self.a = a
+
+
+class Keyed:
+    # __eq__ WITHOUT __hash__ is unhashable in CPython, so a class used as a
+    # dict key must define both — and then the hash has to agree with __eq__,
+    # or equal keys land in different buckets and the lookup misses.
+    def __init__(self, a: int):
+        self.a = a
+
+    def __eq__(self, other) -> bool:
+        return self.a == other.a
+
+    def __hash__(self) -> int:
+        return self.a
+
+
+# --- hand-written __eq__ (Variant `other`) ---
+print("eq      ", H(3) == H(3))
+print("in      ", H(3) in [H(1), H(3)])
+print("not in  ", H(9) not in [H(1), H(3)])
+print("absent  ", H(9) in [H(1), H(3)])
+print("index   ", [H(1), H(3)].index(H(3)))
+print("count   ", [H(1), H(3), H(3)].count(H(3)))
+xs = [H(1), H(3)]
+xs.remove(H(1))
+print("remove  ", len(xs), xs[0].a)
+
+# --- @dataclass-generated __eq__ (class-pointer `other`) ---
+print("dc eq   ", P(3) == P(3))
+print("dc in   ", P(3) in [P(1), P(3)])
+print("dc index", [P(1), P(3)].index(P(3)))
+print("dc count", [P(1), P(3), P(3)].count(P(3)))
+
+# --- control: no __eq__ means IDENTITY, both ways round ---
+n = NoEq(3)
+print("id self ", n in [NoEq(1), n])
+print("id other", NoEq(3) in [NoEq(1), NoEq(3)])
+
+# --- dict keys: __eq__ and __hash__ must agree ---
+d = {}
+d[Keyed(1)] = "one"
+d[Keyed(2)] = "two"
+print("key get ", d.get(Keyed(1), "MISS"), d.get(Keyed(2), "MISS"))
+print("key in  ", Keyed(1) in d, Keyed(9) in d)
+d[Keyed(1)] = "one-again"
+print("key upd ", len(d), d.get(Keyed(1), "MISS"))
+
+# --- controls: value comparison for everything else is untouched ---
+print("scalar  ", 3 in [1, 2, 3], "x" in ["y", "x"], 1.0 in [1])
+print("tuple   ", (1, 2) in [(3, 4), (1, 2)])
+print("nested  ", [1, 2] in [[9], [1, 2]])
+print("str dict", {"a": 1}.get("a", 0))

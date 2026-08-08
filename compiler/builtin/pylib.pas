@@ -3016,12 +3016,26 @@ end;
   compare by CONTENT — a dict keyed by str is keyed by the TEXT, not by which
   copy of it you happen to be holding — and everything else compares tag and
   payload. }
+{ `a.__eq__(b)` on a USER class instance reached only as a boxed handle. Same
+  runtime dunder lookup PyUserObjStr uses for __repr__/__str__; implemented
+  beside it and forward-declared here because PyVarEq is the only caller and
+  sits far above it. Answers False in `handled` when the class defines no usable
+  __eq__, so PyVarEq keeps its identity result.
+  bug-nilpy-container-membership-ignores-the-eq-dunder }
+function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean; forward;
+{ `a.__hash__()` on the same boxed handle — the consistency partner of the
+  above. False when the class defines no usable __hash__, leaving the caller's
+  identity hash. }
+function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
+
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
   la, lb: Int64;
   a, b: PChar;
   pl, ql: TObject;
+  userEq: Boolean;
 begin
   Result := False;
   { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
@@ -3093,7 +3107,19 @@ begin
         was False while the list-valued `{"n": [1, 2]}` form was already True.
         Mutually recursive with pydict_eq, which is why that one is
         forward-declared. }
-      Result := pydict_eq(TPyDict(pl), TPyDict(ql));
+      Result := pydict_eq(TPyDict(pl), TPyDict(ql))
+    else
+      { Neither is one of this unit's containers, so they may be USER class
+        instances with an `__eq__`. Identity above already settled the equal
+        case; without this arm an equal-but-DISTINCT pair reported False, so
+        `H(3) in [H(1), H(3)]` was False while the bare `H(3) == H(3)` was True
+        — the operator path dispatches at COMPILE time on the static class, and
+        a container element has no static class for that to key on.
+
+        Every value comparison in this unit funnels through PyVarEq, so fixing
+        it here is what also fixes .index(), .count(), .remove() and `not in`.
+        bug-nilpy-container-membership-ignores-the-eq-dunder }
+      if PyUserObjEq(pl, ql, PVariant(q)^, userEq) then Result := userEq;
     Exit;
   end;
   if p^.VType = 8193 then
@@ -3429,6 +3455,18 @@ begin
     if Pointer(p^.Payload) = nil then h := PyStrBytesHash(nil, 0)
     else h := PyStrBytesHash(PChar(p^.Payload),
                              Integer(PInt64(NativeInt(p^.Payload) - 8)^));
+  end
+  else if (p^.VType = 7) and (p^.Payload <> 0) and
+          PyUserObjHash(TObject(Pointer(NativeInt(p^.Payload))), h) then
+  begin
+    { a USER class's own __hash__. Required for consistency the moment PyVarEq
+      started consulting __eq__: equal keys MUST hash equal, and two distinct
+      but __eq__-equal objects hashed by their HANDLES land in different
+      buckets, so `d[K(1)]` missed the key `K(1)` inserted. A class defining
+      __eq__ and NOT __hash__ is UNHASHABLE in CPython (TypeError), so the only
+      programs affected are the ones that define both — which is exactly the
+      pair this reads.
+      bug-nilpy-container-membership-ignores-the-eq-dunder }
   end
   else if (p^.VType = 7) and (p^.Payload <> 0) and
           (TObject(Pointer(NativeInt(p^.Payload))) is TPyList) then
@@ -9827,6 +9865,113 @@ begin
     end;
     curr := PClassRTTI(curr^.ParentRTTI);
   end;
+end;
+
+{ The __eq__ half of the same dispatch — see the forward declaration above
+  PyVarEq for why it lives here.
+
+  Only the shape `def __eq__(self, other) -> bool` is called, verified against
+  the RTTI rather than assumed: Arity 2, RetKind tyBoolean (2), and the second
+  ParamKind tyVariant (22). That IS what the frontend emits — measured with
+  `PXXDBG=a.ir:H.__eq__`, whose `other` arrives as a `const Variant` (an `lea`
+  of the slot). Anything else falls through to the caller's identity answer
+  rather than being called through a pointer whose ABI has not been checked.
+
+  CPython tries `a.__eq__(b)` and then the REFLECTED `b.__eq__(a)` when the
+  first returns NotImplemented. There is no NotImplemented here, so the
+  reflection is used only when `a`'s class has no __eq__ at all — which is what
+  makes `plain_obj == H(3)` still consult H's. }
+type
+  TPyEqFn = function(self: Pointer; const other: Variant): Boolean;
+  { ...and the shape a @dataclass-GENERATED __eq__ has, whose `other` is a bare
+    class pointer rather than a variant. Two shapes, measured with
+    `PXXDBG=a.ir:<Class>.__eq__`: a hand-written `def __eq__(self, other)`
+    leaves `other` unannotated, so it arrives tk=22 (Variant), while the
+    generated one is emitted class-typed, tk=6. Checking only the first shape
+    fixed hand-written classes and left every dataclass still comparing by
+    handle. }
+  TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
+  TPyHashFn  = function(self: Pointer): Int64;
+
+function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyEqFn; fnObj: TPyEqObjFn; pk: PInt64;
+    selfObj: TObject; otherV: Variant;
+begin
+  PyUserObjEq := False;
+  if (pobj = nil) or (qobj = nil) then Exit;
+  { this unit's own containers compare by CONTENTS above and must not come here
+    (PyRecIsPylibOwnClass's runtime equivalent) }
+  if (pobj is TPyList) or (pobj is TPyDict) or (pobj is TPyBytes) then Exit;
+  if (qobj is TPyList) or (qobj is TPyDict) or (qobj is TPyBytes) then Exit;
+
+  selfObj := pobj;
+  otherV := qv;
+  cls := GetInstanceRTTI(Pointer(pobj));
+  mi := nil;
+  if cls <> nil then mi := PyFindDunder(cls, '__eq__');
+  if mi = nil then
+  begin
+    { reflected: b.__eq__(a) }
+    cls := GetInstanceRTTI(Pointer(qobj));
+    if cls = nil then Exit;
+    mi := PyFindDunder(cls, '__eq__');
+    if mi = nil then Exit;
+    selfObj := qobj;
+    PPyVarRec(@otherV)^.VType := 7;
+    PPyVarRec(@otherV)^.Payload := Int64(NativeInt(Pointer(pobj)));
+  end;
+  if mi^.Arity <> 2 then Exit;
+  if mi^.RetKind <> 2 then Exit;              { Boolean }
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk[1] = 22 then                          { `other` is a Variant }
+  begin
+    fn := TPyEqFn(mi^.Code);
+    res := fn(Pointer(selfObj), otherV);
+    PyUserObjEq := True;
+    Exit;
+  end;
+  if pk[1] = 6 then                           { `other` is a class pointer }
+  begin
+    { A class-typed `other` is only safe to pass an instance of THAT class: the
+      generated body reads its fields at fixed offsets and would otherwise read
+      an unrelated layout — the same wrong-offset failure as
+      bug-nilpy-local-reassigned-across-classes-keeps-one-static-class.
+      Requiring the EXACT class is also what CPython's own dataclass __eq__
+      does (`if other.__class__ is self.__class__`), returning NotImplemented
+      otherwise — which falls back to identity, i.e. exactly the False this
+      leaves the caller with. So `P(3) == "x"` and `P(3) == Q(3)` stay False
+      instead of reading a Q as a P. }
+    if GetInstanceRTTI(Pointer(pobj)) <> GetInstanceRTTI(Pointer(qobj)) then Exit;
+    fnObj := TPyEqObjFn(mi^.Code);
+    if selfObj = pobj then res := fnObj(Pointer(pobj), Pointer(qobj))
+    else res := fnObj(Pointer(qobj), Pointer(pobj));
+    PyUserObjEq := True;
+    Exit;
+  end;
+end;
+
+{ See the forward declaration above PyVarEq. Only `def __hash__(self) -> int`
+  is called: Arity 1 and an integer RetKind (tyInt64 13, or tyInteger 1 /
+  tyNativeInt 15 should the frontend ever narrow it). CPython truncates a
+  __hash__ result to Py_hash_t, and this hash is avalanched by the caller
+  afterwards, so any int width is fine to take verbatim here. }
+function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyHashFn;
+begin
+  PyUserObjHash := False;
+  if o = nil then Exit;
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, '__hash__');
+  if mi = nil then Exit;
+  if mi^.Arity <> 1 then Exit;
+  if (mi^.RetKind <> 13) and (mi^.RetKind <> 1) and (mi^.RetKind <> 15) then Exit;
+  fn := TPyHashFn(mi^.Code);
+  h := NativeUInt(fn(Pointer(o)));
+  PyUserObjHash := True;
 end;
 
 function PyUserObjStr(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
