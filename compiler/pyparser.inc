@@ -17471,12 +17471,36 @@ begin
   if PyHdrRetType = tyString then PyHdrRetType := tyAnsiString;
   { A def that is also used as a VALUE returns through the function-object ABI
     (see PyDefUsedAsValue): variant result, so every `Callable[...]` call site
-    marshals the same way whichever def it received. A procedure stays a
-    procedure — there is no result to disagree about. }
+    marshals the same way whichever def it received.
+
+    A `-> None` PROCEDURE is normalised too, and that is not an optimisation —
+    it is the whole point. The bridges call a function value through a
+    VARIANT-RETURNING pointer type unconditionally (pyeval's TBF0..TBF13 in
+    pyboundfn_callvn, pybound_callv*, and every `Callable[...]` signature —
+    PyAnnTypeAt's callable branch says so in as many words: "a Callable
+    signature is ALWAYS a variant-returning function"). A real procedure never
+    sets the result register, so the bridge read its result from whatever was
+    left there and dereferenced it.
+
+    That is UNDEFINED, not reliably fatal, which is what made it look fixed:
+    uforth's `-> None` native words `w_include` and `w_backslash` returned with
+    a mapped address in the register and the junk read was harmless, then
+    `w_colon` returned 0 and it segfaulted — three words into loading STD.UFO,
+    with nothing wrong at the call site. Minimal repros of the shape PASSED for
+    the same reason, so a pass/fail test of this is blind; the proof is that
+    the compiled body ends `leave; ret` with no result written.
+
+    The METHOD path (PyMethodUsedAsValue, PyRegisterClassMembers) has always
+    normalised unconditionally and records the identical history — "a
+    value-returning bound method crashed, a `-> None` one worked, which is why
+    this looked like a receiver bug rather than an ABI one". Two arms of one
+    rule that disagreed; this is the sibling.
+    bug-nilpy-uforth-compiles-but-segfaults-at-runtime }
   if PyDefUsedAsValue(PyHdrName) then
   begin
-    if (not PyHdrIsProc) and (PyHdrRetType <> tyVariant) then
+    if PyHdrIsProc or (PyHdrRetType <> tyVariant) then
     begin
+      PyHdrIsProc := False;
       PyHdrRetType := tyVariant;
       PyHdrRetCi := -1;
     end;

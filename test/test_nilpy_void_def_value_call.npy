@@ -4,7 +4,27 @@ assigned to a plain name and then called through it, generic-dispatch style
 right after the callee's body finished — pybound_callv1 unconditionally cast
 the code pointer through a Variant-returning function type, which a real
 Pascal procedure (what a `-> None` def compiles to) never sets up.
+
+bug-nilpy-uforth-compiles-but-segfaults-at-runtime: the same defect on the
+OTHER bridges (pyboundfn_callvn, and every `Callable[...]` field/parameter),
+where a `-> None` def used as a value stayed a procedure. Every bridge calls a
+function value through a variant-returning pointer type, so the result was read
+out of a register the callee never wrote.
+
+PRINT THE RESULT, do not merely call. Reading an unwritten register is
+UNDEFINED, not reliably fatal: uforth's `-> None` native words w_include and
+w_backslash returned with a mapped address in it and the junk read was harmless,
+then w_colon returned 0 and it segfaulted three words into loading STD.UFO. A
+call-it-and-see-if-it-crashes test passes on the broken build — this one does
+not: it printed `0` where CPython prints `None`.
 """
+from dataclasses import dataclass
+from typing import Optional, Callable
+
+
+class VM:
+    def __init__(self):
+        self.n = 0
 
 
 def hit(vm) -> None:
@@ -12,5 +32,27 @@ def hit(vm) -> None:
 
 
 f = hit
-f(1)
+print(f(1))
 print("done")
+
+
+# ...and the same def reached through a `Callable[...]` FIELD, which is the
+# route uforth takes (a Word dataclass whose `native` is a nested `-> None`
+# def). The nested def is a LIFTED closure here, so this goes through
+# pyboundfn_callvn rather than pybound_callv1.
+@dataclass
+class W:
+    name: str
+    native: Optional[Callable[["VM"], None]] = None
+
+
+def build():
+    def w_bump(v: VM) -> None:
+        v.n = v.n + 1
+    return W("BUMP", w_bump)
+
+
+vm = VM()
+w = build()
+print(w.native(vm))
+print(vm.n)

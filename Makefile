@@ -869,7 +869,7 @@ test-nilpy: $(COMPILER)
 	# a plain name, then called through the generic dynamic-call bridge (no
 	# Callable-typed field/param signature involved)
 	./$(COMPILER) test/test_nilpy_void_def_value_call.npy /tmp/test_nilpy_voiddefval26
-	test "$$(/tmp/test_nilpy_voiddefval26)" = "$$(printf '%b' 'native ran\ndone')"
+	test "$$(/tmp/test_nilpy_voiddefval26)" = "$$(printf '%b' 'native ran\nNone\ndone\nNone\n1')"
 	./$(COMPILER) test/test_nilpy_optional_return.npy /tmp/test_nilpy_optional_return26
 	test "$$(/tmp/test_nilpy_optional_return26)" = "$$(printf '%b' 'native\nternary ok\n7')"
 	./$(COMPILER) test/test_nilpy_encode.npy /tmp/test_nilpy_encode26
