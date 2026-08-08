@@ -102,3 +102,41 @@ Same disposition and same rule as
 [[decide-abi-portable-vs-target-split]]: a deferred decision lives in
 `rainy-day/`. Nothing about the substance changes; it is waiting on events, not
 on an answer.
+
+## DECIDED 2026-08-08 (user): STRICT SEPARATION — copying is the accepted answer
+
+> builtin vs library is already decided - strict separation. even if that means
+> double code.
+
+Both constraints stand as written: a builtin unit does **not** `uses` a
+`lib/rtl` unit, and library source stays readable and steppable as a whole file.
+Neither is traded away. **Duplication is the accepted cost**, not a debt to be
+paid off later.
+
+That resolves the first of the three questions above and **rules out the other
+two as answers to THIS problem**:
+
+- a "third home" visible to both and outside NilPy's flat name scope — not
+  pursued;
+- making NilPy's unit scope non-flat — may still happen for its own reasons, but
+  it is not the fix for this, and this decision must not be cited as a driver
+  for it.
+
+### The standing mitigation is now mandatory, not optional
+
+Copying is only safe with the drift check attached, so this is policy:
+
+- **A copied core carries a differential test that pins the copies against each
+  other**, the way the float ticket does. Drift becomes a checked property
+  rather than a hope.
+- **Every copy says it is one**, naming its sibling, so the next reader knows to
+  look. `compiler/builtin/promoint.pas` already does this.
+- **Change one, change all.** The exact-decimal float core already exists in
+  three places (`lib/rtl/sysutils.pas`, `exdec.inc`, `pylib.pas`), each pinned by
+  its own test — that is the shape every future copy should take.
+
+The "revisit when a third instance appears" trigger in the Gate above is
+**withdrawn**: a third instance is now expected, not a signal. Nothing to
+revisit.
+
+Moved out of rainy-day/ — it was deferred, and now it is answered.
