@@ -3,7 +3,7 @@ track: N
 prio: 65
 type: feature
 blocked-by: []
-status: working
+status: unfinished
 owner: claude-A-uforth
 ---
 
@@ -826,3 +826,10 @@ than hard stops; `PyType_GetQualName` is real now that heap types exist.
   hypothetical.
 - No cycle collector, stated once more because a `cdef class` allocating
   instances in a loop is where the bounded leak stops being bounded.
+
+## Log (cont.)
+- 2026-08-08 — M5b landed (see above); moved working/ -> unfinished/ because
+  M5c (a `cdef class`, and a real Cython-built package from PyPI) and M6 (the
+  buffer protocol) are still open and no agent is actively on them. `working/`
+  is a LIVE lock, not a bookmark. Nothing here is half-applied: the tree is
+  green and pushed, so this is a clean pick-up point rather than a park.
