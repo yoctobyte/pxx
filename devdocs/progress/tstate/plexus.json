@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-08T10:11:49Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "35078a420a79b4a179128f3871923c4b63f20f50",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-08T10:20:41Z",
    "fixed": [
     "test-nilpy#src:test/test_nilpy_for_two_names_over_a_variant.npy",
@@ -402,6 +394,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "883a9da446db2c6766268a1b718c3c0f187b32ce",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-08T21:53:50Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6fa8d1d70c99a86843c204722191f1be39e57462",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -4779,11 +4779,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-08T21:40:51Z",
-  "sha": "883a9da446db2c6766268a1b718c3c0f187b32ce",
+  "date": "2026-08-08T21:53:50Z",
+  "sha": "6fa8d1d70c99a86843c204722191f1be39e57462",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 139.4
+  "wall": 136.0
  },
  "last_bench": {
   "conf_rows": 550,
