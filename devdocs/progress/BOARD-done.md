@@ -1496,6 +1496,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-sqlite-threads-i386-00 | T | 70 | regression | regression: test-sqlite-threads-i386#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-i386-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh red at 940b261f8678 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | task-conformance-retriage-33-newly-passing-skips | A | 40 | task | 33 skip-listed pascal-conformance tests now exit-code-pass after the 2026-07-14/15 night arcs — per-test re-triage to unskip the genuinely green ones | — |

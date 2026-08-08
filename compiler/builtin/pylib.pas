@@ -7554,10 +7554,27 @@ begin
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
-  input() does. (A prompt argument is printed by the caller, then ignored here.) }
+  input() does. (A prompt argument is printed by the caller, then ignored here.)
+
+  EOF RAISES EOFError, it does not return ''. This is what terminates the
+  canonical `while True: line = input()` REPL — CPython's loop leaves through
+  the exception, so returning '' forever turns the standard shape into an
+  infinite busy-loop. uforth's repl() is exactly that shape and SPUN (state R,
+  PC in PyPalPoll/PyPalRead) at the end of the Forth-2012 core.fr word set,
+  whose ACCEPT test eats the trailing BYE and leaves stdin at EOF:
+  regression-test-uforth-00. Output was byte-identical to CPython right up to
+  the hang, which is why it read as a timeout rather than a wrong answer.
+
+  '' and EOF are distinguishable HERE and nowhere above: pystdin_readline
+  KEEPS the newline, so a blank line is #10 and only a true EOF is ''. The
+  check therefore has to happen before the newline is stripped. }
 function pyinput: AnsiString;
+var raw: AnsiString;
 begin
-  Result := pystdin_readline;
+  raw := pystdin_readline;
+  if raw = '' then
+    raise EOFError.Create('EOF when reading a line');
+  Result := raw;
   if (Length(Result) > 0) and (Result[Length(Result)] = #10) then
     SetLength(Result, Length(Result) - 1);
   if (Length(Result) > 0) and (Result[Length(Result)] = #13) then

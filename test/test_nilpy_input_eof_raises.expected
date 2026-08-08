@@ -1,0 +1,6 @@
+line1:'one'
+blank:''
+line3:'three'
+EOFError raised
+EOFError again
+repl loop exited after 0 reads

@@ -1,0 +1,51 @@
+# regression-test-uforth-00 — input() at EOF must RAISE EOFError, not return ''.
+#
+# The canonical Python REPL is `while True: line = input()`, and what ENDS it is
+# the exception. Returning '' forever turns that standard shape into an infinite
+# busy-loop: uforth's repl() spun at state R with its PC in PyPalPoll/PyPalRead
+# after the Forth-2012 core.fr word set, whose ACCEPT test consumes the trailing
+# BYE and leaves stdin at EOF. Output was byte-identical to the CPython oracle
+# right up to the hang, so it surfaced as a test TIMEOUT and not a wrong answer —
+# the expensive shape.
+#
+# The distinction that makes this fixable lives in pystdin_readline, which KEEPS
+# the newline: a blank line is "\n" and only a true EOF is "". So the check has
+# to happen before the trailing newline is stripped, and a blank line must still
+# come back as '' WITHOUT raising. Both arms are asserted below; testing only the
+# EOF arm would pass for an implementation that raised on every empty result.
+#
+# Driven with stdin redirected from .stdin (like test_nilpy_select_stdin_ready),
+# so EOF arrives deterministically. Sibling: test_nilpy_input_builtin.npy covers
+# input()/input(prompt) returning values at all.
+
+# 1. a blank line is NOT EOF — it returns '' and must not raise
+print("line1:" + repr(input()))
+print("blank:" + repr(input()))
+print("line3:" + repr(input()))
+
+# 2. stdin is now exhausted: EOFError, and it is catchable by name
+try:
+    input()
+    print("BUG: no EOFError")
+except EOFError:
+    print("EOFError raised")
+
+# 3. it keeps raising — a loop cannot fall back into returning ''
+try:
+    input()
+    print("BUG: no EOFError on second call")
+except EOFError:
+    print("EOFError again")
+
+# 4. the shape that actually hung: a REPL loop must TERMINATE via the exception
+n = 0
+while True:
+    try:
+        input()
+    except EOFError:
+        break
+    n += 1
+    if n > 100:
+        print("BUG: loop never ended")
+        break
+print("repl loop exited after", n, "reads")

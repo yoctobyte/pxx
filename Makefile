@@ -929,6 +929,10 @@ test-nilpy: $(COMPILER)
 	@# standard Pascal identifier, so the name needs its own NilPy arm.
 	./$(COMPILER) test/test_nilpy_input_builtin.npy /tmp/test_nilpy_input26
 	test "$$(printf 'one\ntwo\n' | /tmp/test_nilpy_input26)" = "$$(printf 'first:one\nprompt> second:two\n3 3\nONE\none-two\no t\nTrue False')"
+	@# input() at EOF RAISES EOFError — it is what ends `while True: input()`.
+	@# Returning '' made uforth's repl() spin forever (regression-test-uforth-00).
+	./$(COMPILER) test/test_nilpy_input_eof_raises.npy /tmp/test_nilpy_input_eof26
+	/tmp/test_nilpy_input_eof26 < test/test_nilpy_input_eof_raises.stdin | diff -u test/test_nilpy_input_eof_raises.expected -
 	@# print(sep=) — read by a prescan, since separators are injected before
 	@# the keyword is reached; nested sep= must not be mistaken for print's
 	./$(COMPILER) test/test_nilpy_print_sep.npy /tmp/test_nilpy_print_sep26
