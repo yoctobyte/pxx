@@ -1,0 +1,44 @@
+# feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep: print(sep=)
+#
+# sep= used to be refused outright, and the reason recorded in PyParsePrint was
+# sound: separators are injected DURING the argument loop, while a keyword
+# argument is only reached after the arguments it separates. The fix is to stop
+# reading it in the loop — PyPrintSepAhead scans this call's own token range
+# first, so the value is known before the first separator is built.
+#
+# Depth-tracked, so a NESTED call's own sep= (and a list/dict/f-string/
+# subscript inside the argument list) is not mistaken for print's. That is what
+# the j(...) rows below cover.
+#
+# Diffed against CPython.
+
+
+def j(a, b, sep=" "):
+    return a + sep + b
+
+
+print("a", "b", sep="-")
+print("a", "b", "c", sep=", ")
+print(1, 2, 3, sep="|")
+
+# sep="" injects nothing at all — the arguments abut
+print("a", "b", sep="")
+
+# the default is unchanged
+print("x")
+print("a", "b")
+
+# sep= alongside end=
+print("a", "b", sep="-", end="!\n")
+
+# a nested call carrying its OWN sep= keyword
+print(j("x", "y", sep="+"), "z")
+print("a", j("m", "n"), sep="_")
+
+# brackets, braces and an f-string inside the argument list
+lst = ["q", "r"]
+print(lst[0], lst[1], sep=">")
+n = 5
+print(f"n={n}", "tail", sep="::")
+print({"a": 1}, "d", sep="#")
+print([1, 2], "l")

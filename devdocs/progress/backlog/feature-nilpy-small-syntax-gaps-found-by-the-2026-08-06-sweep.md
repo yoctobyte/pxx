@@ -2,7 +2,7 @@
 track: N
 prio: 30
 type: feature
-summary: "Five ordinary Python forms NilPy diagnoses cleanly but does not accept: str.format() with 3+ placeholders, enumerate(str), type(x) other than .__name__, a non-name lambda default, print(sep=)"
+summary: "Ordinary Python forms NilPy diagnoses cleanly but does not accept. print(sep=) and str.format() with 3+ (and 0) placeholders are DONE (2026-08-08); ten rows remain: enumerate(str), type(x) other than .__name__, a non-name lambda default, dict(x=1), .update(b=2), extended-slice assign, self.__class__.__name__, nested unpacking, bare tuple, two-for comprehension"
 ---
 
 # Small NilPy syntax gaps found by the 2026-08-06 differential sweep
@@ -59,3 +59,51 @@ it is not a new find.
 ## Gate
 
 Per-fix loop, per item. A `.npy` test per form diffed against CPython.
+
+## 2026-08-08 — two rows done: `print(sep=)` and `.format()` with 3+ (and 0)
+
+Re-measured all twelve rows first; every one still failed as recorded. Two are
+now fixed. The ticket stays open for the other ten.
+
+### `print("a", "b", sep="-")`
+
+The refusal carried its own reason — *"separators are injected DURING the
+argument loop, while a keyword argument is only seen after it"* — and that was
+true, so the fix was to stop reading it in the loop. `PyPrintSepAhead`
+(pyparser.inc) scans this call's own token range for `sep=<string literal>`
+before any argument is parsed, so the value is known when the first separator
+is built. Depth-tracked over parens, brackets and braces, so a NESTED call's
+own `sep=` keyword, a list/dict display, an f-string or a subscript inside the
+argument list cannot be mistaken for print's own.
+
+`sep=""` injects nothing (the arguments abut). A literal is required, like
+`end=` — the separator is materialised at parse time as the constant between
+two arguments, so a run-time value would need a different lowering. `print(*x)`
+with `sep=` is refused: `pyprint_star` renders a whole unpacked run into one
+string with the space hard-coded, and silently ignoring the sep on the starred
+run only would be worse than saying so.
+
+### `"{} {} {}".format(a, b, c)`
+
+The one-proc-per-arity scheme (`pystr_format`, `pystr_format2` — separate names
+because `FindProc` is not arity-aware) does not extend, so it ends here rather
+than growing a third name. `pystr_formatn` is one FIXED-arity proc taking eight
+Variants plus a real count; the frontend pads the unused slots with `pynone`.
+Past eight it refuses loudly and names f-strings, which have no limit.
+
+The substitution itself moved to ONE place — `PyFormatApply` now takes the
+argument LIST rather than `(a, b, nArgs)` — so positional indices (`{0} {2}
+{1}`, `{2}-{2}`) and format specs cannot drift between arities. Arity 1 and 2
+go through the same code via one- and two-element lists.
+
+Zero arguments (`"plain".format()`) is valid CPython and was refused by the same
+gate; it routes through `pystr_formatn` with n=0.
+
+Tests: `test/test_nilpy_print_sep.npy`, `test/test_nilpy_format_multiarg.npy`,
+both wired into `make test-nilpy` and diffed against CPython (exact match).
+
+### Still open
+
+`enumerate(str)`, `type(x) == int`, non-name lambda default, `dict(x=1)`,
+`.update(b=2)`, extended-slice assign, `self.__class__.__name__`, nested
+unpacking, bare tuple `t = 1, 2, 3`, two-`for` comprehension.

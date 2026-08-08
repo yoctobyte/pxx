@@ -1,0 +1,43 @@
+# feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep:
+# "{} {} {}".format(a, b, c) — three or more placeholders
+#
+# .format() had one proc per arity (pystr_format, pystr_format2) because
+# FindProc is not arity-aware, and three or more was refused loudly. That
+# scheme does not extend, so the third rung is a FIXED-arity pystr_formatn
+# taking eight Variants plus a real count, padded with None by the frontend.
+#
+# The substitution now lives in ONE place — PyFormatApply over the argument
+# LIST — so positional indices and format specs cannot drift between arities.
+# The rows below check exactly that: the same index and spec behaviour at
+# arity 1, 2 and 3+.
+#
+# Zero arguments (`"x".format()`) is valid CPython and was refused by the same
+# gate; it goes through pystr_formatn with n=0.
+#
+# Diffed against CPython.
+
+a = 1
+b = "two"
+c = 3.5
+
+print("{} {} {}".format(a, b, c))
+
+# explicit positional indices — reordering and repetition
+print("{0} {2} {1}".format(a, b, c))
+print("{2}-{2}".format(a, b, c))
+
+# format specs at arity 3
+print("{:>5}|{:<5}|{:.2f}".format(a, b, c))
+
+# the ceiling: eight
+print("{} {} {} {} {} {} {} {}".format(1, 2, 3, 4, 5, 6, 7, 8))
+
+# the arities that already worked must be unchanged
+print("{}".format(a))
+print("{} {}".format(a, b))
+print("{0}{0}".format(b))
+print("{:>4}".format(a))
+
+# literal braces, and no placeholders at all
+print("{{literal}} {}".format(a))
+print("plain".format())

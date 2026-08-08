@@ -159,7 +159,7 @@ _none_
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-runtime-method-dispatch-on-variant | N | 50 | feature | NilPy: dispatch a method call on a VARIANT receiver at RUNTIME | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
-| feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep | N | 30 | feature | Five ordinary Python forms NilPy diagnoses cleanly but does not accept: str.format() with 3+ placeholders, enumerate(str), type(x) other than .__name__, a non-name lambda default, print(sep=) | — |
+| feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep | N | 30 | feature | Ordinary Python forms NilPy diagnoses cleanly but does not accept. print(sep=) and str.format() with 3+ (and 0) placeholders are DONE (2026-08-08); ten rows remain: enumerate(str), type(x) other than .__name__, a non-name lambda default, dict(x=1), .update(b=2), extended-slice assign, self.__class__.__name__, nested unpacking, bare tuple, two-for comprehension | — |
 | feature-nilpy-starred-and-nested-unpacking | N | 50 | feature | Starred and NESTED unpacking targets | — |
 | feature-nilpy-staticmethod-and-classmethod | N | 35 | feature | `@staticmethod` and `@classmethod` are rejected | — |
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |

@@ -5376,6 +5376,7 @@ function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;
     procIdx, callNode, argNode, lastArg, i, k, wantArgs: Integer;
+    padNode, nFmtArgs: Integer;
 begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
@@ -5547,12 +5548,48 @@ begin
       parsed — the second Variant arrived through a 1-param ABI and the call
       segfaulted. Every other multi-arity str method already sidesteps this
       the same way (split/rjust/replace's own arity-suffixed names above)
-      (feature-nilpy-str-format-multiarg). Three or more placeholders are
-      still refused loudly rather than guessed at. }
+      (feature-nilpy-str-format-multiarg).
+
+      THREE OR MORE — and ZERO, `"x".format()`, which is valid CPython and
+      was refused by the same gate — end that per-arity scheme rather than
+      extending it: the third rung is pystr_formatn, one FIXED-arity proc
+      taking eight Variants plus a real count, and the unused slots are
+      padded with None right here. Deliberately not a proc per arity — the substitution itself now
+      lives in one place (PyFormatApply over the argument list), so the
+      index and format-spec behaviour cannot drift between arities. Past
+      eight it still refuses loudly and names f-strings, which have no
+      limit. }
     if i = 2 then pname := pname + '2'
     else if i <> 1 then
-      Error('Nil Python: str method .format() takes one or two arguments here; '
-            + 'three or more placeholders are not implemented yet — use an f-string');
+    begin
+      if i > 8 then
+        Error('Nil Python: str method .format() takes at most eight arguments; '
+              + 'use an f-string');
+      nFmtArgs := i;
+      pname := pname + 'n';
+      { pad to eight, then the real count — the ABI is fixed-arity }
+      k := FindProc('pynone');
+      if k < 0 then Error('Nil Python: pylib (pynone) not loaded');
+      while i < 8 do
+      begin
+        padNode := AllocNode(AN_CALL);
+        ASTIVal[padNode] := k;
+        ASTTk[padNode] := Ord(tyVariant);
+        ASTLeft[padNode] := -1;
+        callNode := AllocNode(AN_ARG);
+        ASTLeft[callNode] := padNode;
+        ASTRight[lastArg] := callNode;
+        lastArg := callNode;
+        Inc(i);
+      end;
+      padNode := AllocNode(AN_INT_LIT);
+      ASTIVal[padNode] := nFmtArgs;
+      ASTTk[padNode] := Ord(tyInteger);
+      callNode := AllocNode(AN_ARG);
+      ASTLeft[callNode] := padNode;
+      ASTRight[lastArg] := callNode;
+      lastArg := callNode;
+    end;
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end
@@ -11007,6 +11044,54 @@ begin
   end;
 end;
 
+{ `print(a, b, sep="-")` — the separator injected between arguments.
+
+  sep= used to be refused, for a reason recorded in the argument loop: the
+  separators are injected DURING that loop, while a keyword argument is only
+  reached after the arguments it separates. True, and the fix is to stop
+  reading it in the loop — scan this call's own token range for `sep=<string
+  literal>` BEFORE parsing any argument, so the value is known when the first
+  separator is built.
+
+  Depth-tracked so a nested `f(sep=..)`, a list/dict/f-string display or a
+  subscript inside the argument list cannot be mistaken for print's own
+  keyword. Returns False when there is no sep=, which keeps the default
+  single space on the unchanged path. }
+function PyPrintSepAhead(var sepText: AnsiString): Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  sepText := '';
+  depth := 0;
+  i := TokPos - 1;             { CurTok is Tokens[TokPos - 1] }
+  while i < TokCount do
+  begin
+    if (Tokens[i].Kind = tkLParen) or (Tokens[i].Kind = tkLBrack) or
+       (Tokens[i].Kind = tkBegin) then Inc(depth)
+    else if (Tokens[i].Kind = tkRBrack) or (Tokens[i].Kind = tkEnd) then
+      Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;  { print's own closing paren — no sep= here }
+      Dec(depth);
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkAssign) and (i >= 1) and
+            (LowerCase(GetTokenStr(i - 1)) = 'sep') then
+    begin
+      { A literal, like end= — the separator is materialised at PARSE time as
+        the constant sitting between two arguments, so a run-time value would
+        need a different lowering (one call rendering the whole run, the way
+        pyprint_star does). Refused rather than approximated. }
+      if (i + 1 >= TokCount) or (Tokens[i + 1].Kind <> tkString) then
+        Error('Nil Python: print sep= needs a literal string');
+      sepText := GetTokenStr(i + 1);
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 { `file=sys.stderr` -> the fd threaded into AN_WRITE/AN_WRITELN's ival slot,
   which is the same mechanism Pascal's `writeln(StdErr, ..)` already uses.
   Only the two standard streams are accepted; a real file object would need a
@@ -11029,8 +11114,8 @@ end;
 function PyParsePrint: Integer;
 var node, argNode, lastArg, sepLit, noneLit, endLit, writeFd: Integer;
     starProc, starArg, leadLit: Integer;
-    kw, endText: AnsiString;
-    haveEnd, isStar, sawStar: Boolean;
+    kw, endText, sepText: AnsiString;
+    haveEnd, isStar, sawStar, haveSep: Boolean;
     pargTmp, pargAsgn: Integer;
     pargTk: TTypeKind;
 begin
@@ -11042,6 +11127,7 @@ begin
   haveEnd := False;
   sawStar := False;
   endText := '';
+  haveSep := PyPrintSepAhead(sepText);
   if CurTok.Kind <> tkRParen then
     repeat
       kw := PyPrintKwargAt;
@@ -11057,10 +11143,11 @@ begin
         else if kw = 'file' then
           writeFd := PyParsePrintFile
         else if kw = 'sep' then
-          { No censused use, and it cannot be done honestly here: separators are
-            injected DURING the argument loop, while a keyword argument is only
-            seen after it. Refused rather than silently ignored. }
-          Error('Nil Python: print sep= is not supported yet')
+          { Already read by PyPrintSepAhead before the loop started — the
+            separators are injected as arguments are parsed, so it has to be
+            known ahead of them. Consumed here so it parses like any other
+            keyword; the value is taken from the prescan. }
+          PyParseBoolExpr
         else
         begin
           if CurTok.Kind <> tkString then
@@ -11086,11 +11173,31 @@ begin
         Inject a synthetic space char arg before every argument after the
         first (a tyChar AN_INT_LIT writes the byte, not a number). This is the
         .npy print path only; Pascal writeln keeps its no-separator semantics. }
-      if (lastArg >= 0) and (not isStar) then
+      { pyprint_star renders a whole unpacked run into one string, separators
+        included, and it hard-codes the single space. A custom sep would have
+        to be threaded into it — refused rather than silently ignored on the
+        starred run only. }
+      if haveSep and (isStar or sawStar) then
+        Error('Nil Python: print(*x) with sep= is not supported yet');
+      if (lastArg >= 0) and (not isStar) and
+         ((not haveSep) or (Length(sepText) > 0)) then
       begin
-        sepLit := AllocNode(AN_INT_LIT);
-        ASTIVal[sepLit] := 32;
-        ASTTk[sepLit] := Ord(tyChar);
+        { sep="" injects nothing at all — the guard above skips this block, so
+          the arguments abut, which is what CPython does. }
+        if haveSep and (Length(sepText) > 1) then
+        begin
+          sepLit := AllocNode(AN_STR_LIT);
+          ASTSOffset[sepLit] := PyStoredName(sepText);
+          ASTSLen[sepLit] := Length(sepText);
+          ASTTk[sepLit] := Ord(tyString);
+        end
+        else
+        begin
+          sepLit := AllocNode(AN_INT_LIT);
+          if haveSep then ASTIVal[sepLit] := Ord(sepText[1])
+          else ASTIVal[sepLit] := 32;
+          ASTTk[sepLit] := Ord(tyChar);
+        end;
         argNode := AllocNode(AN_ARG);
         ASTLeft[argNode] := sepLit;
         ASTRight[argNode] := -1;

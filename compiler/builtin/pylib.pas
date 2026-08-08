@@ -507,6 +507,9 @@ function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
   than being dropped, because a format spec decides what is PRINTED. }
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
 function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
+function pystr_formatn(const fmt: AnsiString;
+                       const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
+                       n: Integer): AnsiString;
 { Python's `"%s=%d" % args` — the printf-style operator, translated placeholder
   by placeholder into the {}-spec grammar below so padding, precision and base
   conversion have ONE implementation rather than two that drift. args is a single
@@ -7803,11 +7806,12 @@ end;
 { The placeholder walk. Two variants rather than an open array: an open array
   of Variant is not marshalled correctly here and crashed on the second
   argument. }
-function PyFormatApply(const fmt: AnsiString; const a: Variant; const b: Variant;
-                       nArgs: Integer): AnsiString;
-var i, j, argi, useIdx, k: Integer; spec, fld, outS: AnsiString;
+function PyFormatApply(const fmt: AnsiString; args: TPyList): AnsiString;
+var i, j, argi, useIdx, k, nArgs: Integer; spec, fld, outS: AnsiString;
 begin
   outS := '';
+  nArgs := 0;
+  if args <> nil then nArgs := args.count;
   argi := 0;
   i := 1;
   while i <= Length(fmt) do
@@ -7857,16 +7861,8 @@ begin
       end;
       if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
-      if useIdx = 0 then
-      begin
-        if spec = '' then outS := outS + pystr_of(a)
-        else outS := outS + pyformat_of(a, spec);
-      end
-      else
-      begin
-        if spec = '' then outS := outS + pystr_of(b)
-        else outS := outS + pyformat_of(b, spec);
-      end;
+      if spec = '' then outS := outS + pystr_of(args.at(useIdx))
+      else outS := outS + pyformat_of(args.at(useIdx), spec);
       i := j + 1;
       Continue;
     end;
@@ -7877,8 +7873,11 @@ begin
 end;
 
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+var args: TPyList;
 begin
-  pystr_format := PyFormatApply(fmt, a, a, 1);
+  args := TPyList.Create;
+  args.append(a);
+  pystr_format := PyFormatApply(fmt, args);
 end;
 
 { `"{} and {}".format(a, b)` — a SEPARATE proc, not a second pystr_format
@@ -7893,8 +7892,37 @@ end;
   positional args; only this entry point and the frontend's arity gate were
   missing. }
 function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
+var args: TPyList;
 begin
-  pystr_format2 := PyFormatApply(fmt, a, b, 2);
+  args := TPyList.Create;
+  args.append(a);
+  args.append(b);
+  pystr_format2 := PyFormatApply(fmt, args);
+end;
+
+{ THREE OR MORE placeholders. The arity-suffixed-name trick above does not
+  scale past two (one proc per arity, forever), so this is the last rung: a
+  FIXED-arity proc the frontend pads with None up to PYFORMAT_MAXARGS and
+  tells how many are real. The substitution itself is shared — PyFormatApply
+  takes the argument LIST, so every arity walks the same code and the
+  positional-index and format-spec behaviour cannot drift between them.
+  Beyond PYFORMAT_MAXARGS the frontend refuses loudly and names f-strings,
+  which have no such limit. }
+function pystr_formatn(const fmt: AnsiString;
+                       const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
+                       n: Integer): AnsiString;
+var args: TPyList;
+begin
+  args := TPyList.Create;
+  if n > 0 then args.append(a0);
+  if n > 1 then args.append(a1);
+  if n > 2 then args.append(a2);
+  if n > 3 then args.append(a3);
+  if n > 4 then args.append(a4);
+  if n > 5 then args.append(a5);
+  if n > 6 then args.append(a6);
+  if n > 7 then args.append(a7);
+  pystr_formatn := PyFormatApply(fmt, args);
 end;
 
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;

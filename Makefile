@@ -917,6 +917,13 @@ test-nilpy: $(COMPILER)
 	@# standard Pascal identifier, so the name needs its own NilPy arm.
 	./$(COMPILER) test/test_nilpy_input_builtin.npy /tmp/test_nilpy_input26
 	test "$$(printf 'one\ntwo\n' | /tmp/test_nilpy_input26)" = "$$(printf 'first:one\nprompt> second:two\n3 3\nONE\none-two\no t\nTrue False')"
+	@# print(sep=) — read by a prescan, since separators are injected before
+	@# the keyword is reached; nested sep= must not be mistaken for print's
+	./$(COMPILER) test/test_nilpy_print_sep.npy /tmp/test_nilpy_print_sep26
+	test "$$(/tmp/test_nilpy_print_sep26)" = "$$(printf 'a-b\na, b, c\n1|2|3\nab\nx\na b\na-b!\nx+y z\na_m n\nq>r\nn=5::tail\n{'"'"'a'"'"': 1}#d\n[1, 2] l')"
+	@# .format() with three or more placeholders (and with none)
+	./$(COMPILER) test/test_nilpy_format_multiarg.npy /tmp/test_nilpy_format_multiarg26
+	test "$$(/tmp/test_nilpy_format_multiarg26)" = "$$(printf '1 two 3.5\n1 3.5 two\n3.5-3.5\n    1|two  |3.50\n1 2 3 4 5 6 7 8\n1\n1 two\ntwotwo\n   1\n{literal} 1\nplain')"
 	@# list(<bytes>)/tuple(<bytes>) — the byte VALUES, not an empty list
 	./$(COMPILER) test/test_nilpy_list_of_bytes.npy /tmp/test_nilpy_list_of_bytes26
 	test "$$(/tmp/test_nilpy_list_of_bytes26)" = "$$(printf '[44, 1, 0, 0, 0, 0, 0, 0]\n(44, 1, 0, 0, 0, 0, 0, 0)\n8\n44\n1\n45\n[44, 1, 0, 0]\n[44, 1, 0, 0]\n[]')"
