@@ -113,4 +113,4 @@ All 13 word sets byte-identical to the CPython run, `runtests.fth` end to end
 identical, and the passing ones added to `UFORTH_CORPUS` so they stay that way.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 857a757cc.
