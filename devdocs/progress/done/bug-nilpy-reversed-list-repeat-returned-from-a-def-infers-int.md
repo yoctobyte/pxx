@@ -98,4 +98,4 @@ pinned binary, so pre-existing and unrelated.)
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 10772d418.
