@@ -1528,9 +1528,49 @@ class Manager:
                 else:
                     job.t1 = now
                     job.status = "timeout"
+                    # A job that timed out ran AT LEAST this long. Record that
+                    # as a lower bound, because otherwise a job that gets much
+                    # slower can never learn its new duration: the hang
+                    # detector caps the budget at exp_dur*10+15, learn() only
+                    # runs on PASS, and so the stale-fast expectation kills
+                    # every future run forever.
+                    #
+                    # Measured 2026-08-08: test-uforth learned 17.8s over 5
+                    # runs, then Track N enrolled 13 ANS word sets and it
+                    # became a 1416s job. Budget stayed min(1200, max(45, 192,
+                    # 300)) = 300s, so it timed out, so it never learned, so it
+                    # timed out — a permanent false RED with no way out but a
+                    # human deleting the metric.
+                    #
+                    # Safe against a genuinely hung job: the class ceiling
+                    # still bounds the next budget (min(cls_to * scale, ...)),
+                    # so the worst case is one class-length run, not unbounded
+                    # growth.
+                    self.learn_timeout(job)
                     self.running.remove(job)
                     done.append(job)
         return done
+
+    def learn_timeout(self, job):
+        """Raise the stored expectation to what we OBSERVED before killing it.
+
+        Not a pass, so nothing else about the metric is trusted — only that the
+        job demonstrably needed more time than we gave it.
+        """
+        observed = max(0.05, (job.t1 - job.t0) / self.scale)
+        key = metrics_key(job)
+        m = dict(self.metrics.get(key) or {})
+        if m.get("dur", 0) >= observed:
+            return
+        m["dur"] = observed
+        m.setdefault("cpu", 1.0)
+        m.setdefault("mem", CLASSES[job.cls]["est_mem"])
+        m["n"] = int(m.get("n") or 0)      # not a passing sample; do not count
+        self.metrics[key] = m
+        print("testmgr: %s timed out at %.0fs — raising its expected duration "
+              "from the stale value so the next run gets room (was killed by "
+              "the hang detector, not by the class ceiling)"
+              % (job.name, observed), flush=True)
 
     def sample(self):
         idle, total = cpu_times()
