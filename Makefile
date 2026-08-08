@@ -7050,14 +7050,34 @@ UFORTH_SRC ?= $(HOME)/projects/uforth
 # signal, not somebody's debug wrappers: (a) that uforth compiles and runs, and
 # (b) Gerry Jackson's Forth 2012 suite in `tests/`, which is the real corpus and
 # is measured per word set in bug-nilpy-uforth-ans-word-set-suite-4-of-13-open.
-# Enrolling that suite waits on the ANS work landing — it is 4-of-13 open today.
+# That suite is now enrolled below (UFORTH_WORDSETS), all 13 word sets green.
 UFORTH_CORPUS ?= testje.for testjefixed.for testjefix2.for testjefix3.for
+# Gerry Jackson's Forth 2012 / ANS suite, one entry per WORD SET. These files
+# are tracked in uforth, so every clone has them — unlike the old `_drv_*.fth`
+# wrappers, which existed on one box and nowhere else.
+#
+# Each needs a driver that INCLUDEs the four harness files and then the word
+# set. The driver has to live INSIDE the uforth tree: INCLUDED resolves through
+# uforth's own resolve_path, so a driver in a scratch dir cannot reach
+# prelimtest.fth. So the recipe GENERATES one per word set into
+# $(UFORTH_SRC)/tests/ and deletes it again (the EXIT trap covers an
+# interrupted run too). Nothing is left behind and uforth needs no commit.
+#
+# COST: blocktest is by far the slowest — ~240s under pxx against CPython's
+# ~80s, because it is a memory-walk and hash workload. The other twelve
+# together are seconds. Whoever tunes tier placement should know the ~6 minutes
+# is almost entirely that one file.
+UFORTH_WORDSETS ?= core.fr coreplustest.fth doubletest.fth exceptiontest.fth \
+                   facilitytest.fth localstest.fth memorytest.fth \
+                   searchordertest.fth stringtest.fth coreexttest.fth \
+                   blocktest.fth toolstest.fth filetest.fth
 test-uforth: $(COMPILER)
 	@if [ ! -f "$(UFORTH_SRC)/uforth.py" ]; then \
 	  echo "test-uforth: SKIP — no uforth tree at $(UFORTH_SRC) (git clone git@github.com:yoctobyte/uforth $(UFORTH_SRC))"; \
 	  exit 0; \
 	fi; \
-	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
+	wd="$$(mktemp -d)"; \
+	trap 'rm -rf "$$wd" "$(UFORTH_SRC)"/tests/_pxxdrv_*.fth' EXIT; \
 	root="$$(pwd)"; \
 	echo "compiling uforth.py as Nil-Python ..."; \
 	"$$root/$(COMPILER)" "$(UFORTH_SRC)/uforth.py" "$$wd/uforth" > /dev/null || \
@@ -7084,6 +7104,24 @@ test-uforth: $(COMPILER)
 	    ok=$$((ok+1)); \
 	  else \
 	    bad=$$((bad+1)); echo "  DIFF $$f"; diff -u "$$wd/c.out" "$$wd/p.out" | head -12; \
+	  fi; \
+	done; \
+	echo "running the Forth 2012 / ANS suite per WORD SET, DIFFERENTIAL against CPython ..."; \
+	for f in $(UFORTH_WORDSETS); do \
+	  want=$$((want+1)); \
+	  if [ ! -f "$(UFORTH_SRC)/tests/$$f" ]; then \
+	    miss=$$((miss+1)); missing="$$missing tests/$$f"; continue; \
+	  fi; \
+	  drv="_pxxdrv_$$f.fth"; \
+	  printf 'S" prelimtest.fth" INCLUDED\nS" tester.fr" INCLUDED\nS" utilities.fth" INCLUDED\nS" errorreport.fth" INCLUDED\nS" %s" INCLUDED\n' "$$f" > "$(UFORTH_SRC)/tests/$$drv"; \
+	  printf '"tests/%s" INCLUDE\nBYE\n' "$$drv" > "$$wd/in.txt"; \
+	  ( cd "$(UFORTH_SRC)" && timeout 900 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 || true; \
+	  ( cd "$(UFORTH_SRC)" && timeout 900 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 || true; \
+	  rm -f "$(UFORTH_SRC)/tests/$$drv"; \
+	  if diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
+	    ok=$$((ok+1)); \
+	  else \
+	    bad=$$((bad+1)); echo "  DIFF word set $$f"; diff -u "$$wd/c.out" "$$wd/p.out" | head -12; \
 	  fi; \
 	done; \
 	if [ "$$miss" != "0" ]; then \
