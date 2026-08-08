@@ -91,3 +91,14 @@ the others — which is the failure mode this ticket exists to catch and is not
 what happened here.
 
 Handoff carrying the work: `devdocs/dev/handoffs/2026-08-06-float-exactness-track-a-and-b.md`.
+
+## 2026-08-08 — moved to rainy-day/ so it stops ranking as READY
+
+The 2026-08-06 entry records the user's call as **WAIT** — the clash landed and
+the answer is deliberately deferred. It nonetheless stayed in `backlog/` and kept
+ranking in `ready --track U`.
+
+Same disposition and same rule as
+[[decide-abi-portable-vs-target-split]]: a deferred decision lives in
+`rainy-day/`. Nothing about the substance changes; it is waiting on events, not
+on an answer.

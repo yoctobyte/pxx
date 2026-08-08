@@ -66,3 +66,32 @@ corpus first.
 A `.npy` diffed against CPython: dedupe from a list/str/tuple, membership,
 `add`/`discard`, the four operators, subset comparisons, empty-set printing,
 and `type(s).__name__`.
+
+## 2026-08-08 — RE-MEASURED: the summary is STALE, and most of this is FIXED
+
+The kind tag from
+[[bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance]] landed and
+closed most of this ticket. Measured at HEAD:
+
+    set([1, 2, 2, 3])        -> {1, 2, 3}     correct, DEDUPLICATED
+    len / sorted / {1,2,2,3} -> correct
+    type(s).__name__         -> 'set'         correct
+    isinstance(s, set)       -> True          correct
+
+So *"elements are NOT deduplicated and it prints with list syntax"* — the
+summary — is no longer true and should not be trusted by whoever picks this up.
+
+**What is actually left:** the kind does not survive set OPERATORS.
+
+    {1, 2, 3} - {2}    pxx [1, 3]      CPython {1, 3}
+
+The elements are right; the RESULT row is created without the set kind, so it
+displays as a list. Look at whatever builds the difference result and have it
+mark the row with `pylist_mark_set` the way the three creation sites already do.
+Check `|`, `&` and `^` at the same time — if the result-construction path is
+shared they are all wrong together, and that is the thing to fix rather than
+`-` alone.
+
+Its sibling residue, `[1] - [2]` computing instead of raising, is
+[[bug-nilpy-same-kind-undefined-operators-still-compute]] — now decidable from
+the kinds.

@@ -104,3 +104,47 @@ maintained at every tuple-producing site and already consumed by
 option A needs for the typing half, and it fixes the set's type NAME for free.
 The repr and operator-rejection halves can then key off the same field whenever
 this decision is taken.
+
+## DECIDED — already answered, and largely IMPLEMENTED. Closed 2026-08-08
+
+The user's direction *"tag the original type"* settled this: **option A in its
+cheaper form — a kind FLAG on the shared row, not a separate `TPySet` type.**
+Recorded at the time in
+[[bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance]] (done),
+which implemented it: `FKind` set at the three creation sites (the `{...}`
+display, `set(xs)`, and the empty `set()` via `pylist_mark_set`), with `repr`
+following the kind.
+
+It stayed in `backlog/` and kept ranking in the U queue afterwards, so it was
+put back to the user as an open question. Same failure as
+[[decide-nilpy-str-is-bytes-or-codepoints]]: **the ticket that answers a
+decision has to MOVE it, not just cite it.**
+
+### Measured 2026-08-08 — three of the four consequences are already closed
+
+| | pxx | CPython |
+| --- | --- | --- |
+| `set([1, 2, 2, 3])` | `{1, 2, 3}` | `{1, 2, 3}` |
+| `len` / `sorted` / `{1, 2, 2, 3}` display | correct | correct |
+| `type(s).__name__`, `isinstance(s, set)` | `set`, `True` | same |
+| `{1, 2, 3} - {2}` | `[1, 3]` | `{1, 3}` |
+| `[1] - [2]` | `[1]` | `TypeError` |
+
+Deduplication, the set display and the identity surface all work. The ticket's
+consequence 3 (a set printing as `[1, 3]`) is closed for literals and
+constructors.
+
+### The residue is plain WORK, not a decision — re-filed per the Track U rule
+
+Two narrow items remain, and the kind tag is exactly what makes both
+implementable, as the implementing ticket predicted:
+
+1. **`-` does not propagate the set kind**: `{1,2,3} - {2}` computes the right
+   ELEMENTS but returns a list-kind row, so it prints `[1, 3]`.
+   → [[bug-nilpy-set-is-a-list-not-a-set]], whose summary is stale and is
+   corrected there.
+2. **`[1] - [2]` computes instead of raising.** Now decidable at run time from
+   the kinds. → [[bug-nilpy-same-kind-undefined-operators-still-compute]].
+
+Neither needs a human call; both are ordinary Track N work against the tag that
+now exists.

@@ -40,3 +40,20 @@ decided like the rest.
 file had no frontmatter at all, so it was defaulting to 50 and showing blank in
 `progress.sh ready`. Frontmatter added to match the decision already on record —
 not a new priority call.
+
+## 2026-08-08 — moved to rainy-day/ so it stops ranking as READY
+
+Postponed by the user twice — *"leave it open, shape it later"* (2026-07-20) and
+POSTPONED with a shaping hint (2026-08-01) — yet it stayed in `backlog/` and
+therefore ranked **first** in `ready --track U` at prio 60, every time anyone
+looked. It was surfaced to the user again on 2026-08-08 as an open question it is
+not.
+
+Nothing about the decision changes: it still needs an options table written by
+whoever next has the context for where the portable/per-target line sits in the
+IR, and the shaping hint stands. It is simply not AWAITING an answer, so it
+should not be in the queue of things awaiting one.
+
+**Rule this makes concrete: postponed is a LOCATION, not a note.** A decision the
+user has deferred belongs in `rainy-day/`; leaving it ranked turns the U queue
+into noise and costs the user the same question twice.
