@@ -111,4 +111,4 @@ does not parse, so it could not be the third case in this test. Loud, not
 silent; the workaround is the hand-written `__lt__` the test uses.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 3924ef8bc.
