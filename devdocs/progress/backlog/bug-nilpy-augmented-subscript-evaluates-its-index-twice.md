@@ -57,3 +57,31 @@ not".
 Per-fix loop. A `.npy` test counting calls to a side-effecting index function
 under `+=` on a static base, a variant base, and `del`, diffed against CPython
 with `tools/pydiff.py`.
+
+## 2026-08-09 — re-measured, still open, PARKED on the sole-A guard
+
+Confirmed current at HEAD, both paths, exactly as filed:
+
+```
+e[key()] += 1        CPython {'n': 1} 1   pxx {'n': 1} 2
+d["a"][key2()] += 1  CPython 1            pxx 2
+```
+
+Not started, and not for lack of a plan — the ticket's "shape of a fix" is
+right. Both desugars live in **`compiler/parser.inc`**: the
+default-indexed-property arm and the variant arm beside it (~4864/4892). That is
+Track A's shared file, and this session could not confirm it is sole-A (the user
+was unavailable), so CLAUDE.md's cold-start rule applies: skip the shared-file
+ticket, take a non-shared one.
+
+Worth recording for whoever does pick it up: the two arms are ~30 lines apart in
+the same function, so the ticket's "do both together or neither" is easy to obey
+here — they are visible on one screen. The variant arm's own comment already
+names the trade and points at the property arm, so both sites are self-documenting.
+
+The `del d[k]` rewrite this ticket compares itself to has since moved on:
+[[bug-nilpy-delitem-dunder-not-supported]] (2026-08-09) evaluates its key
+exactly ONCE, by rewriting the node the grammar already built instead of
+re-parsing it, and pins that with a side-effecting key. So `del` is no longer an
+example of the same trade — it is a worked example of avoiding it, and the same
+node-rewrite approach may apply here.
