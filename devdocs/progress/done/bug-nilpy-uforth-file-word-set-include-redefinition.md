@@ -3,6 +3,7 @@ track: N
 prio: 35
 type: bug
 summary: "uforth's LAST suite diff (10/11 identical): `INCLUDE <bare-name>` uses the FIRST of uforth's two same-named `w_include` nested defs, not the later redefinition — and `1+` is undefined inside an INCLUDEd helper. Isolated repros of both shapes PASS."
+status: done
 ---
 
 # uforth's FILE word set: the wrong `INCLUDE`, and a word missing in an included file
@@ -63,3 +64,6 @@ between the two runs, which is what cracked the `.(` case — look for the
 
 `tests/_drv_file.fth` byte-identical to the CPython run, the other 10 still
 identical, `make test-uforth` still PASS, plus the per-fix loop.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

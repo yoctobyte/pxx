@@ -2,10 +2,10 @@
 track: N
 prio: 45
 type: bug
-summary: "The FULL Forth 2012/ANS suite measured per word set: 12 of 13 byte-identical to CPython — coreext, block and tools all FIXED 2026-08-08 (a gapped closure-bridge arity table; a borrowed return read as owned; pop(i) leaving a live alias in the slot it vacated). Only filetest is left, on its own ticket. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
+summary: "ALL 13 Forth 2012/ANS word sets byte-identical to CPython as of 2026-08-08 — four separate causes, four fixes (a gapped closure-bridge arity table; a borrowed return read as owned; pop(i) leaving a live alias in the slot it vacated; a redefined nested def that never rebound its name). What is LEFT here is only the gating gap: none of the 13 are in UFORTH_CORPUS, so all of this passes ungated. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
 ---
 
-# uforth's ANS word-set suite: 12 of 13 identical, 1 open
+# uforth's ANS word-set suite: 13 of 13 identical — now ENROL them
 
 uforth ships the **Forth 2012 test suite** (`tests/`, from
 forth2012-test-suite 0.15.0) — the John Hayes ANS tester plus per-word-set
@@ -31,7 +31,7 @@ binary against CPython running the same `uforth.py`:
 | `coreexttest.fth` | **IDENTICAL** — was SEGFAULT, fixed 2026-08-08 |
 | `blocktest.fth` | **IDENTICAL** — was SEGFAULT, fixed 2026-08-08 |
 | `toolstest.fth` | **IDENTICAL** — was HANG, fixed 2026-08-08 |
-| `filetest.fth` | wrong output (both exit 0, same line count) |
+| `filetest.fth` | **IDENTICAL** — was wrong output, fixed 2026-08-08 |
 
 `runtests.fth` end to end: pxx dies at line 71 of CPython's 253, inside
 `coreexttest` — after correctly printing "End of Core word set tests" and "End
@@ -65,16 +65,23 @@ minimal repro:
   [[bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element]]. Also NOT the
   same as block's over-release, which was the standing hypothesis: the ARC fix
   landed first and changed nothing here.
-- **filetest** is the already-filed
-  [[bug-nilpy-uforth-file-word-set-include-redefinition]] (the ANS FILE word
-  set: two same-named `w_include` nested defs, and `1+` unresolved inside an
-  INCLUDEd helper).
+- **file — FIXED** (`fix(A): a nested def REDEFINED in one scope must rebind
+  the name`). Both `w_include` defs registered under `build_base_vm.w_include`,
+  so the second was unreachable and pxx ran the first.
+  [[bug-nilpy-uforth-file-word-set-include-redefinition]]. That ticket's SECOND
+  finding — `1+` undefined inside an INCLUDEd file — turned out not to be a
+  separate bug at all: it was downstream of running the wrong INCLUDE, and went
+  away with it. Worth remembering as a pattern — two symptoms from one wrong
+  binding read as two bugs.
 
-Swept end to end after the three fixes: **core, coreplus, double, exception,
-facility, locals, memory, searchorder, string, coreext, block and tools are all
-byte-identical; file is the only DIFF.** This ticket stays open as the
-umbrella: it closes when all 13 are identical AND enrolled, so what is left is
-filetest plus the driver work below.
+Swept end to end after all four fixes: **every one of the 13 is byte-identical.**
+So this ticket is now purely about the gating gap below — the suite passes and
+nothing stops it regressing.
+
+Four failures, four unrelated causes. The original filing guessed coreext and
+block shared one because they died at the same output line, and guessed file's
+two symptoms were two bugs. Both guesses were wrong in the same direction:
+**where the failures group is not evidence about where the causes group.**
 
 ## The gating gap this exposes
 
