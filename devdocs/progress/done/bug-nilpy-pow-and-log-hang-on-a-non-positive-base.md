@@ -65,4 +65,4 @@ negative bases with integer exponents, `0 ** 0`, `0 ** -1` (ZeroDivisionError),
 and positive fractional powers.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit ebcdfe1dc.
