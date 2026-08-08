@@ -115,4 +115,4 @@ Covered in `test/test_nilpy_set_ops.npy` (repr, `type().__name__`,
 `isinstance(x, set)`, and all three producing forms).
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 2eafd3960.

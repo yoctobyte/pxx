@@ -182,4 +182,4 @@ are untouched. Its inline expectation encoded the OLD list-repr, so it is now a
 and the other seven set/list tests in `test/` re-run clean.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 2eafd3960.
