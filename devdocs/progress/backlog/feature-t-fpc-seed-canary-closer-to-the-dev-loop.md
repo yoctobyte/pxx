@@ -98,3 +98,27 @@ worst of both worlds. The ask here is latency and visibility, not enforcement.
   costs ~3s of wall time, so a bespoke scope-rule reimplementation would be
   strictly worse.
 
+- 2026-08-08 — **option 3, front-of-queue half done in `2f8b551e7`**; the ticket
+  stays OPEN for the rest. The canary now shares the self-host job's front-group
+  slot in `Manager.__init__`'s sort, minus the abort (it stays ADVISORY).
+
+  **Measured, and smaller than the ticket assumed:** the canary was already
+  **#15 of 1187** in the native tier — the sort is longest-first and at 10.7s it
+  sorts high — so it moves to #1, and with `hard_cap = nproc*2` the first ~24
+  jobs start concurrently anyway. On an unconstrained box this is close to a
+  no-op. It earns its place on a CONSTRAINED one (`--serial`, or a watcher with
+  `max_cores`), where queue position is real wall time.
+
+  **Still open, and it is the substantive half:** publishing the canary's red
+  mid-run, so the author hears at ~11s rather than at the fast tier's end.
+  twatch publishes at end-of-run; the existing early-publish machinery
+  ([[feature-t-publish-selfhost-red-immediately]]) works by **aborting** the
+  run, which is unavailable here by design — the canary must never gate. That
+  needs genuine mid-run publish machinery in the publish path, which is
+  safety-critical (cf. the false-RED family). Left open rather than bodged.
+
+  Worth re-checking before building it: the canary has been in `native` since
+  `eb63555d9` (2026-07-12), so a red already reaches the author at the fast
+  tier's end (~2 min), not "at the next full cycle". The gap this ticket closes
+  is ~11s vs ~2 min — real, but smaller than the framing suggests, and worth
+  confirming against an actual drift before spending the publish-path work.
