@@ -564,6 +564,36 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def last_covering_sha(st, tier, exclude_sha):
+    """Newest earlier run that certainly CONTAINED this tier's jobs, or None.
+
+    The per-job range fallback. `commits_between(parent, sha)` measures "since
+    this host last tested ANYTHING", and the two-phase watcher deliberately
+    re-tests one commit at a widening tier (native for speed, then the full/opt
+    backfill when the repo goes idle) — so on the second pass parent == sha and
+    the range is empty. The information is not missing, it is in the wrong
+    place: what matters is "since this JOB last ran and passed".
+
+    A run at tier E contains every job of the tiers E nests over. This job just
+    appeared in a run at `tier`, so it belongs to some tier at or below `tier`,
+    and therefore any earlier run E with `tier in covered_tiers(E)` definitely
+    contained it. That test is deliberately CONSERVATIVE: an earlier, narrower
+    run may also have contained the job, and skipping it only widens the range.
+    A too-wide range costs bisect steps; a too-narrow one can exclude the
+    culprit, which is the failure that matters.
+
+    `opt` is disjoint (covered_tiers("opt") == {"opt"}), so only earlier opt
+    runs can answer for an opt job — which is correct, and is why the
+    optdiff#shard8-12 miscompile sat two days unattributed.
+    """
+    for h in reversed(st.get("history") or []):
+        if h.get("sha") == exclude_sha:
+            continue                  # the same commit re-tested at a wider tier
+        if tier in covered_tiers(h.get("tier") or ""):
+            return h.get("sha")
+    return None
+
+
 def job_key(j):
     """Identity of a job ACROSS commits.
 
@@ -1022,6 +1052,26 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]
+    # PER-JOB RANGE FALLBACK. The parent-based range answers "since this host
+    # last tested anything", which is empty exactly when the two-phase watcher
+    # re-tests one sha at a widening tier — and an empty range is unbisectable,
+    # so the red gets a stub ticket promising a bisect that bisect_step can
+    # never perform (three instances in one session, 2026-08-04; the
+    # optdiff#shard8-12 -O3 miscompile sat two days that way).
+    #
+    # So when it is empty, ask the narrower question the ledger actually needs:
+    # since this JOB last ran under a tier that contained it.
+    good = parent
+    if new_red and not rng:
+        y = last_covering_sha(st, report["tier"], sha)
+        if y and y != sha:
+            rng = clone.commits_between(y, sha)
+            if rng:
+                good = y
+                print("twatch: parent range empty (%s re-tested at %s) — using "
+                      "the per-job range since %s, %d commit(s)"
+                      % (sha[:12], report["tier"], y[:12], len(rng)),
+                      flush=True)
     if new_red and not had_baseline:
         # Same treatment as the empty-range case, and for the same reason: the
         # entries would name a sha that cannot have caused them. This run's
@@ -1038,7 +1088,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         print("twatch: %d new red at %s — cascade, one ledger entry"
               % (len(new_red), sha[:12]), flush=True)
         regs.append({"job": "cascade@" + sha[:12], "name": "", "src": "",
-                     "cascade": sorted(new_red), "bad": sha, "good": parent,
+                     "cascade": sorted(new_red), "bad": sha, "good": good,
                      "range": rng, "opened": utcnow()})
     else:
         for name in new_red:
@@ -1047,7 +1097,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             # commits, never as identity (see job_key).
             regs.append({"job": name, "name": namemap.get(name, ""),
                          "src": srcmap.get(name, ""), "bad": sha,
-                         "good": parent, "range": rng, "opened": utcnow()})
+                         "good": good, "range": rng, "opened": utcnow()})
     st["open_regressions"] = regs
 
     changed = bool(new_red or fixed)
@@ -1256,6 +1306,29 @@ def staleness_note(clone, sha, parent):
     return ""
 
 
+def range_note(reg):
+    """The Range section of a stub ticket — and it must not promise a bisect.
+
+    A stub used to say "the watcher narrows this by idle bisect" unconditionally.
+    With an empty range no ledger entry is opened, so `bisect_step` never sees
+    the job and the promise is one nothing can keep — which is how a real -O3
+    miscompile sat two days waiting for a bisect that was never coming. Say
+    what is true instead, so the reader knows immediately whether to bisect it
+    by hand.
+    """
+    n = len(reg.get("range") or [])
+    bad = (reg.get("bad") or "")[:12] or "unknown"
+    good = (reg.get("good") or "")[:12] or "unknown"
+    if not n:
+        return ("bad `%s`, range **unknown** (first run covering this job at "
+                "this tier, so there is no earlier passing sha to bound it) — "
+                "**no idle bisect will happen**; this one needs hand-triage."
+                % bad)
+    return ("bad `%s`, last good `%s`, %d commit(s) in range — the watcher "
+            "narrows this by idle bisect; check tstate/TSTATE.md for the "
+            "current range." % (bad, good, n))
+
+
 def already_filed(pdir, slug):
     """Does a ticket for `slug` exist in any bucket — and is it real?
 
@@ -1413,8 +1486,7 @@ prio: %d
 `tools/testmgr.py --tier %s --job '%s'` at %s
 
 ## Range
-bad `%s`, last good `%s`, %d commit(s) in range — the watcher narrows this
-by idle bisect; check tstate/TSTATE.md for the current range.
+%s
 
 ## Log tail
 ```
@@ -1429,8 +1501,7 @@ takes it from the repro line.*
                 job, sha[:12], kind, host, utcnow(),
                 j.get("src") or "unknown (see repro commands)",
                 report["tier"], job, sha,
-                (reg.get("bad") or sha)[:12], (reg.get("good") or "unknown")[:12],
-                len(reg.get("range", [])), tail))
+                range_note(reg), tail))
         write_ticket(os.path.join(clone.path, rel), body)
         filed.append(rel)
     if filed:
