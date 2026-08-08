@@ -87,4 +87,4 @@ byte-identical, and blocktest.fth byte-identical to CPython running the same
 uforth.py.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit e062155c5.
