@@ -111,3 +111,45 @@ byte-identical.
 **Ticket stays OPEN** for option 1 (full C3 with explicit dispatch) or option 2
 (second base as a delegate). Nothing about that choice is foreclosed by this;
 the diagnostic is what a reader hits either way until one of them lands.
+
+## 2026-08-08 — RE-SCOPED by decision: FLATTEN. The option list above is superseded
+
+[[decide-nilpy-multiple-inheritance-c3-or-delegate]] is decided and the answer
+is **none of the three options this ticket lists**. Do not implement 1, 2 or 3
+from the section above; they are kept only as the record of how the question was
+framed.
+
+**Build this instead — v1:**
+
+1. **Flatten.** Accept the comma; copy each extra base's methods into the
+   derived class, compiled with `self` = the DERIVED class, conflicts resolved
+   in **C3 left-to-right** order (first base wins). Class-level attributes on the
+   flattened base come along too — and that touches the class-attribute lowering
+   reworked 2026-08-07 (shared slot vs copy-at-construction), so verify that
+   interaction rather than assuming it.
+2. **Refuse the diamond.** Two bases sharing an ancestor: C3 gives ONE shared
+   ancestor, naive flattening can give two, and the state then diverges. Compile
+   error naming it, in the spirit of the diagnostic that already landed here.
+3. **Diagnose `super()` across a flattened base.** CPython routes
+   `super().__init__()` in the first base to the SECOND base via the MRO; a
+   flattened body goes to its own base instead. Silence here would be a wrong
+   call at run time, so it must be a compile-time error or warning.
+
+**Explicitly NOT in v1:** `isinstance(d, C)` will answer False where CPython says
+True. That is the known cost, it is loud rather than silent, and it is fixed
+later by synthesising an interface per flattened base — which rides the RTTI
+interface table and IMT that already exist (`PXX_RTTI_PARENT` is a single parent
+pointer, but every implemented interface already gets a 24-byte RTTI entry).
+
+**Why not delegate** — the option this ticket previously recommended: a mixin's
+`self` IS the derived object in Python, so an embedded instance cannot see the
+host's attributes and the common mixin breaks. Full reasoning in the decision.
+
+### Gate (unchanged in spirit, sharpened)
+
+A `.npy` diffed against CPython covering: a plain mixin (disjoint methods), a
+mixin whose method reads an attribute of the DERIVED class (the case delegation
+would fail), left-to-right conflict resolution where both bases define the same
+method, class attributes carried from a flattened base — plus `{%FAIL}`-style
+checks that the diamond and a `super()` chain across a flattened base are
+refused with their own messages.
