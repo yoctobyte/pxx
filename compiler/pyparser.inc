@@ -4553,6 +4553,30 @@ begin
             (not PyUserNameShadowsHere('set'));
 end;
 
+{ Stamp a TPyList-producing node as a SET (pylib's pylist_mark_set). Every form
+  that yields a Python set must go through this — `set()`, a `{a, b}` literal
+  and a `{x for x in xs}` comprehension — because a bare TPyList is a LIST by
+  default, and the FKind tag is what the repr, isinstance and the set operators
+  all read. Returns the node unchanged when pylib is not loaded. }
+function PyMarkAsSet(node: Integer): Integer;
+var mkPi, markArg, markCall, ci: Integer;
+begin
+  PyMarkAsSet := node;
+  if node < 0 then Exit;
+  mkPi := FindProc('pylist_mark_set');
+  if mkPi < 0 then Exit;
+  markArg := AllocNode(AN_ARG);
+  ASTLeft[markArg] := node;
+  ASTRight[markArg] := -1;
+  markCall := AllocNode(AN_CALL);
+  ASTIVal[markCall] := mkPi;
+  ASTTk[markCall] := Ord(tyClass);
+  ci := FindUClass('TPyList');
+  if ci >= 0 then ASTRight[markCall] := REC_UCLASS_BASE + ci;
+  ASTLeft[markCall] := markArg;
+  PyMarkAsSet := markCall;
+end;
+
 function PyIsEmptySetCall: Boolean;
 begin
   Result := PyIsSetCall and (TokPos + 1 < TokCount) and
@@ -4600,19 +4624,7 @@ begin
   { ...and stamp it a SET. A bare TPyList allocation is a LIST by default, so
     without this `set()` reprs as `[]` and answers isinstance(x, list) True.
     The non-empty arm above gets its kind inside pyset_of. }
-  mkPi := FindProc('pylist_mark_set');
-  if mkPi >= 0 then
-  begin
-    markArg := AllocNode(AN_ARG);
-    ASTLeft[markArg] := Result;
-    ASTRight[markArg] := -1;
-    markCall := AllocNode(AN_CALL);
-    ASTIVal[markCall] := mkPi;
-    ASTTk[markCall] := Ord(tyClass);
-    ASTRight[markCall] := recId;
-    ASTLeft[markCall] := markArg;
-    Result := markCall;
-  end;
+  Result := PyMarkAsSet(Result);
   CurASTNode := Result;
 end;
 
@@ -13612,7 +13624,14 @@ begin
     PyHoistStmt(ASTLeft[seq]);
     seq := ASTRight[seq];
   end;
-  Result := PyMakeIdent(tmpSym);
+  { ...and stamp the result a SET, exactly as `set()` and a `{a, b}` literal do.
+    A comprehension builds a bare TPyList, which is a LIST by default, so
+    `{x for x in xs}` reprs as `[...]`, answers isinstance(x, list) True, and —
+    once the set operators started REQUIRING set operands — could not be used
+    with `-` / `&` / `|` / `^` at all. The three set-producing forms have to
+    agree on this or the tag means nothing.
+    bug-nilpy-same-kind-undefined-operators-still-compute }
+  Result := PyMarkAsSet(PyMakeIdent(tmpSym));
 end;
 
 { The parenthesised generator expression: same build as the bracketed one, with

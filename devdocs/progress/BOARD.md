@@ -38,7 +38,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (194)
+## backlog (192)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,8 +63,6 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int | N | 30 | bug | SILENT WRONG VALUE: `def f(u): return u * [7]` returns the list HANDLE as an integer — the reversed LIST repeat is built correctly but the def's inferred return type is Integer. `u * bytes(...)` and `[7] * u` are both fine. | — |
-| bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
-| bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-uforth-file-word-set-include-redefinition | N | 35 | bug | uforth's LAST suite diff (10/11 identical): `INCLUDE <bare-name>` uses the FIRST of uforth's two same-named `w_include` nested defs, not the later redefinition — and `1+` is undefined inside an INCLUDEd helper. Isolated repros of both shapes PASS. | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
@@ -343,7 +341,7 @@ _none_
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
 | decide-nilpy-runtime-dunder-dispatch-mechanism | U | 45 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | decide-nilpy-runtime-dunder-dispatch-strategy |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45→55 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
-| decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55→60 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
+| decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
 | decide-nilpy-str-is-bytes-or-codepoints | U | 55 | decide | NilPy strings are BYTES where CPython's are code points: len('héllo')==6, s[1] is half a character, and s[::-1] silently produces invalid UTF-8. Decide the target — full code-point str, UTF-8-aware indexing over the byte buffer, or a documented ASCII-only limit | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
 | decide-nilpy-where-the-exact-decimal-float-core-lives | U | 60 | decide | NilPy's float repr needs exact decimal digits + a correctly-rounded strtod. Both exist, in lib/rtl/sysutils.pas — which a BUILTIN unit may not use (builtins sit below the Track B libraries, and pylib dragging sysutils in would link it into every NilPy program). Move the core down into a builtin unit, duplicate it, or relax the layering? Blocks bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip. | — |
@@ -364,9 +362,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1497)
+## done (1499)
 
-1497 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1499 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -407,7 +405,6 @@ _none_
 
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-same-kind-undefined-operators-still-compute
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [T] bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue
 - [p 60] [T] bug-t-gate-sh-fixedpoint-does-not-iterate
@@ -425,7 +422,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [N] bug-nilpy-set-is-a-list-not-a-set
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-empty-range-regression-cannot-be-bisected
 - [p 55] [T] bug-t-gate-quick-fixedpoint-goes-red-on-any-builtin-addition
@@ -588,7 +584,6 @@ _none_
 - **3** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
-- **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration

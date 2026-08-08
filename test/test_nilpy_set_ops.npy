@@ -1,6 +1,7 @@
 # set operators (&, |, -, ^) and PEP 584 dict union (|).
-# Sets share the list representation; two TPyList operands make these four
-# operators unambiguous (a list itself supports none of them).
+# A set is backed by TPyList but carries its own FKind tag, so it reprs as
+# {1, 3} and the four operators REQUIRE set operands — a list supports none of
+# them, and asking for one is a TypeError, as in CPython.
 # Every expectation is CPython's own output.
 
 a = {1, 2, 3}
@@ -15,3 +16,48 @@ d1 = {"x": 1, "y": 2}
 d2 = {"y": 20, "z": 3}
 d3 = d1 | d2
 print(sorted(d3.items()))
+
+
+# The set operators are DEFINED ONLY BETWEEN SETS. `-`, `&`, `|`, `^` over
+# lists are a TypeError in Python; pxx computed an answer because a set and a
+# list share the TPyList row, so `[1] - [2]` returned `[1]` — set difference
+# wearing a list's clothes. The FKind tag makes it answerable at RUN time,
+# which is what decide-nilpy-set-as-a-distinct-type-or-a-list left as work.
+# bug-nilpy-same-kind-undefined-operators-still-compute
+
+# ...and the result of a set operator is a SET, not a list — it used to repr as
+# [1, 3] where CPython prints {1, 3}.
+a = {1, 2, 3}
+b = {2, 4}
+print(a - b, a | b, a & b, a ^ b)
+print(type(a - b).__name__, isinstance(a - b, set))
+
+# an empty set is still a valid operand on either side
+e = set()
+print(a - e, e - a, a | e, a & e, a ^ e)
+
+# all THREE set-producing forms must carry the tag, or the tag means nothing:
+# a literal, set(), and a COMPREHENSION
+comp = {x for x in [1, 2, 2, 3]}
+print(comp, comp - {2}, type(comp).__name__)
+print(set([1, 2, 2, 3]) - {2})
+print(({1, 2} | {3}) - {1})
+
+# lists and dicts are untouched
+print([1, 2] + [3], [1] * 3, sorted([3, 1]))
+print({"a": 1} | {"b": 2})
+
+# the refusals, both operand orders
+for tag in ("list-list", "set-list", "list-set", "dict-dict"):
+    try:
+        if tag == "list-list":
+            r = [1] - [2]
+        elif tag == "set-list":
+            r = {1} - [2]
+        elif tag == "list-set":
+            r = [1] - {2}
+        else:
+            r = {"a": 1} - {"b": 2}
+        print(tag, "NO RAISE", r)
+    except TypeError:
+        print(tag, "TypeError")

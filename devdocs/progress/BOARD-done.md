@@ -643,8 +643,10 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits | N | 60 | bug | `round(x, n)`: negative n ignored, and ties went half-up | — |
 | bug-nilpy-rtl-exception-surface-shadowed | N | 60 | bug | nilpy: pylib's Exception shadows sysutils' identical declaration, so RTL units fail on CreateFmt/FMessage | — |
 | bug-nilpy-runtime-raised-errors-bypass-try-except | N | 65 | bug | Runtime-raised errors bypass try/except entirely (division by zero, index, key) | — |
+| bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | — |
 | bug-nilpy-same-named-nested-defs-in-two-methods-collide | N | 45 | bug | Two methods of one class cannot both declare a nested def of the same name — the second call binds the first method's def and fails on arity. Pre-existing; loud. | — |
 | bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic | N | 45 | bug | `&`/`\|`/`-`/`^` on sets, `\|` on dicts silently did raw pointer arithmetic | — |
+| bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-literal-does-not-deduplicate | N | 60 | bug | A set LITERAL keeps duplicates; `set().add()` removes them | — |
 | bug-nilpy-settings-editor-segfaults-on-bound-method-field | N | 80 | bug | SettingsEditor segfaults reading a bound method off a field | — |
 | bug-nilpy-slice-of-variant-local-returned-is-unusable | N | 75 | bug | Returning a SLICE of a variant local gives the caller an unusable value | — |

@@ -4,6 +4,8 @@ prio: 55
 type: bug
 summary: "set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong"
 blocked-by: [decide-nilpy-set-as-a-distinct-type-or-a-list]
+status: done
+owner: claude-N
 ---
 
 # `set()` is a list wearing the name
@@ -95,3 +97,22 @@ shared they are all wrong together, and that is the thing to fix rather than
 Its sibling residue, `[1] - [2]` computing instead of raising, is
 [[bug-nilpy-same-kind-undefined-operators-still-compute]] — now decidable from
 the kinds.
+
+## RESOLVED 2026-08-08 — closed with its sibling
+
+The set operators built a bare `TPyList`, which is a LIST by default, so
+`{1,2,3} - {2}` computed the right elements and printed `[1, 3]`. They now stamp
+`PYSEQ_SET`, and a set COMPREHENSION — a third producer that never carried the
+tag either — goes through the same new `PyMarkAsSet` helper as `set()` and the
+`{a, b}` literal.
+
+Done as part of [[bug-nilpy-same-kind-undefined-operators-still-compute]]: the
+same four functions are where both the missing tag and the missing operand check
+live, and fixing one without the other would have left a set that prints right
+but still accepts a list.
+
+Covered in `test/test_nilpy_set_ops.npy` (repr, `type().__name__`,
+`isinstance(x, set)`, and all three producing forms).
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

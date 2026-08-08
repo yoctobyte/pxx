@@ -2,7 +2,8 @@
 track: N
 prio: 60
 type: bug
-blocked-by: [decide-nilpy-set-as-a-distinct-type-or-a-list]
+status: done
+owner: claude-N
 ---
 
 # Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0)
@@ -131,3 +132,54 @@ that one row is all of it.
 Related and worth deciding together: pxx already diverges from CPython in `repr`
 for the same reason — a set prints `[1, 3]` where CPython prints `{1, 3}`. A
 `TPySet` row would fix both, which strengthens direction 1.
+
+## RESOLVED 2026-08-08 — the last row closed, together with its sibling
+
+The `blocked-by: decide-nilpy-set-as-a-distinct-type-or-a-list` was STALE: that
+decision is closed and largely implemented, and it explicitly re-filed the
+residue as ordinary work ("neither needs a human call"). The FKind tag it left
+behind is what makes this answerable.
+
+### Fixed
+
+`PySetRequireSets` in pylib: the four set operators now REQUIRE set operands and
+raise CPython's own `unsupported operand type(s) for -: 'list' and 'list'`
+otherwise. Checked at RUN time, not in the frontend, because the kinds are a
+runtime property — `a - b` over two variants cannot know statically which rows
+it will be handed, which is precisely why the static rule could never fire here.
+A nil operand counts as a set: that is how an empty literal arrives, and
+refusing it would break `s - set()`.
+
+| expression | before | after |
+| --- | --- | --- |
+| `[1] - [2]` | `[1]` | `TypeError` |
+| `{1} - [2]` | `[1]` | `TypeError` |
+| `[1] - {2}` | `[1]` | `TypeError` |
+
+### And its sibling, which the same change forced
+
+[[bug-nilpy-set-is-a-list-not-a-set]] is closed with it: the four operators built
+a bare `TPyList` (a LIST by default), so `{1,2,3} - {2}` printed `[1, 3]`. They
+now stamp `PYSEQ_SET`.
+
+That in turn exposed a THIRD form that never carried the tag — a set
+COMPREHENSION. `{x for x in xs}` built a plain list, which was merely a wrong
+repr before and became a hard TypeError the moment the operators started
+checking. All three set-producing forms (`set()`, a `{a, b}` literal, a
+comprehension) now go through one `PyMarkAsSet` helper, factored out of the
+`set()` path — three producers agreeing on a tag is the whole point of having
+one.
+
+### Verified
+
+`test/test_nilpy_set_ops.npy` EXTENDED — it already owned this subject. Covers
+both operand orders of every refusal, an empty set on either side, all three
+producing forms, and controls proving list concat/repeat/sorted and dict union
+are untouched. Its inline expectation encoded the OLD list-repr, so it is now a
+`.expected` diff generated from CPython.
+
+`tools/gate.sh quick` GREEN, self-host byte-identical, `make test-uforth` PASS,
+and the other seven set/list tests in `test/` re-run clean.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

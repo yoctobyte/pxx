@@ -3185,10 +3185,37 @@ end;
   unambiguously a set operation once dict is ruled out first — see
   pydict_or below for dict's own use of `|`.
   bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic }
+{ The four set operators are DEFINED ONLY BETWEEN SETS. `-`, `&`, `|` and `^`
+  over lists are a TypeError in Python, and pxx computed an answer for them
+  because a set and a list share the TPyList row — `[1] - [2]` returned
+  `[1]`, which is set difference wearing a list's clothes.
+
+  The FKind tag (decide-nilpy-set-as-a-distinct-type-or-a-list, since
+  implemented) makes the question answerable at run time, which is exactly what
+  that decision left behind as ordinary work. Checked HERE rather than in the
+  frontend because the kinds are a RUNTIME property: `a - b` over two variants
+  cannot know statically which rows it will be handed.
+
+  A nil operand counts as a set: that is how an empty literal reaches here, and
+  refusing it would break `s - set()`.
+  bug-nilpy-same-kind-undefined-operators-still-compute }
+procedure PySetRequireSets(a, b: TPyList; const op: AnsiString);
+var ka, kb: AnsiString;
+begin
+  if ((a = nil) or (a.FKind = PYSEQ_SET)) and
+     ((b = nil) or (b.FKind = PYSEQ_SET)) then Exit;
+  if a = nil then ka := 'set' else ka := PySeqKindName(a.FKind);
+  if b = nil then kb := 'set' else kb := PySeqKindName(b.FKind);
+  raise TypeError.Create('unsupported operand type(s) for ' + op + ': '''
+    + ka + ''' and ''' + kb + '''');
+end;
+
 function pyset_and(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '&');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;      { set & set is a SET, not a list }
   if (a = nil) or (b = nil) then Exit;
   for i := 0 to a.count - 1 do
     if pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -3197,7 +3224,9 @@ end;
 function pyset_or(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '|');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;
   if a <> nil then
     for i := 0 to a.count - 1 do Result.add(a.at(i));
   if b <> nil then
@@ -3207,7 +3236,9 @@ end;
 function pyset_sub(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '-');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;
   if a = nil then Exit;
   for i := 0 to a.count - 1 do
     if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -3216,7 +3247,9 @@ end;
 function pyset_xor(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '^');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;
   if a <> nil then
     for i := 0 to a.count - 1 do
       if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
