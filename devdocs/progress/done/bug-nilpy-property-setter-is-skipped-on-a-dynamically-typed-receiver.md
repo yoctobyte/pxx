@@ -181,4 +181,4 @@ executing. `make test-uforth` fails further on, in a different component:
 which [[bug-nilpy-uforth-compiles-but-segfaults-at-runtime]] now blocks on.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit bd43aef64.
