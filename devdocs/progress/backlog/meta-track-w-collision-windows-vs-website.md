@@ -75,6 +75,32 @@ first; humans write either. That is what let the collision hide, and it will
 hide the next one too. Pick one (frontmatter, since it is machine-read) and have
 `progress.sh check` flag a ticket that declares a track only in prose.
 
+## The retag also has to fix CROSS-REFERENCES
+
+Retagging the four Windows tickets is not enough — other tickets name the lane
+in prose and would keep pointing at the wrong one. Known today:
+`rainy-day/feature-os-targets-bsd-mac.md` says "[[feature-port-windows-pe]]
+(Track W)". Grep for `Track W` in live tickets as part of the change, not after.
+
+That ticket also carries NO track field at all, so it is invisible to the
+ranker for the same reason the W tickets are — worth sweeping for while in here.
+
+## Future platform campaigns take the same shape (2026-08-08)
+
+BSD and macOS will raise this again and the answer is already settled by the
+S/M precedent: **one tag per FAMILY, not per variant.** S covers ESP32/S2/S3/C3
+with the variant named in the ticket text; a BSD tag would cover
+Free/Open/Net/Dragon the same way. The apparent letter shortage (A=Apple,
+O=OpenBSD, F=FreeBSD all colliding or ambiguous) is an artifact of assuming one
+letter per OS.
+
+Deferring is FREE, and that is worth stating because it is not obvious: a lane
+cannot be deferred (exclusive file ownership must be declared before two agents
+collide), but a tag can, because it is a view over tickets that already exist.
+It can be minted later and applied retroactively by slug pattern. BSD/macOS work
+can land as A/B/T today and be grouped whenever the board has enough rows to
+want it.
+
 ## Do NOT retro-edit `done/`
 
 Several closed tickets reference "the website (Track W)". Those are historical
