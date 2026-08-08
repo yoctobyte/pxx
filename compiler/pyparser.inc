@@ -6495,9 +6495,16 @@ begin
                             ' arguments and the call bridge marshals at most 3');
     Exit;
   end;
-  if nDef + PyCapCount[procIdx] > 12 then
+  { The ceiling is the bound-fn object's slot array (PY_MAX_CAPS of them), not
+    the call bridge: the bridge now has an exact-arity entry for every arity up
+    to 32, so 3 own + 20 bound is representable. This used to read `> 12`,
+    mirroring the bridge's old highest arity, and everything past it fell out
+    here to the bare code address — which reads its captures from the dead
+    parent frame. }
+  if nDef + PyCapCount[procIdx] > PY_MAX_CAPS then
   begin
-    PyWarnUnbindableClosure(procIdx, 'it has more than 12 values to bind');
+    PyWarnUnbindableClosure(procIdx, 'it has more than ' +
+                            PyIntLiteralText(PY_MAX_CAPS) + ' values to bind');
     Exit;
   end;
 

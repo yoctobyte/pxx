@@ -1240,6 +1240,11 @@ test-nilpy: $(COMPILER)
 	@# bridge marshals the body's own arity before them, not a hardcoded one
 	./$(COMPILER) test/test_nilpy_escaping_closure.npy /tmp/test_nilpy_escaping_closure26
 	test "$$(/tmp/test_nilpy_escaping_closure26)" = "$$(printf '42\n42\n13\n16\n42\n3\n6\n42\n42\n7')"
+	@# ...at EVERY arity. The bridge's per-arity table had gaps (no 10, no 12,
+	@# nothing past 13) and rounded UP, which segfaults rather than degrading --
+	@# uforth's MARKER (1 own + 11 captures) is what found it.
+	./$(COMPILER) test/test_nilpy_escaping_closure_many_captures.npy /tmp/test_nilpy_closure_caps26
+	test "$$(/tmp/test_nilpy_closure_caps26)" = "$$(printf '843\n952\n1173\n1398\n2217\n1181\n1 2 3 108')"
 	# `nonlocal` through an ESCAPING closure: the by-ref capture used to be bound
 	# as a VALUE, so the body stored through the value-as-address and died. Now a
 	# heap CELL is bound, which also gives the escaped counter shared state.

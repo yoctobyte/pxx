@@ -1982,6 +1982,17 @@ type
     epilogue wrote 16 bytes over whatever it pointed at — a wild store on every
     lifted-bound-fn callback, which is how Tcl's own command table ended up
     corrupted ("invalid command name pxxcb") in a long-running Tk app. }
+  { ONE TYPE PER ARITY, 0..32, with no gaps. There used to be gaps (no TBF10,
+    no TBF12, nothing above 13) and the dispatch below rounded UP to the next
+    type it had — calling a 10-parameter body through TBF11. Measured: that
+    SEGFAULTS, it does not degrade to a wrong value, so every closure whose
+    own-params + captures landed on a missing arity crashed (uforth's MARKER
+    restore, 1 own + 11 captures = 12, took the ANS coreext word set with it).
+    Passing MORE arguments than the body declares is unsafe here whatever the
+    reason, so the rule is exact arity, never round up.
+    32 is the ceiling the frontend already
+    enforces on a lifted signature (MAX_PROC_PARAMS / "too many parameters
+    after capture"), so this table now covers everything that can reach it. }
   TBF0  = function: Variant;
   TBF1  = function(a0: Int64): Variant;
   TBF2  = function(a0, a1: Int64): Variant;
@@ -1992,8 +2003,29 @@ type
   TBF7  = function(a0, a1, a2, a3, a4, a5, a6: Int64): Variant;
   TBF8  = function(a0, a1, a2, a3, a4, a5, a6, a7: Int64): Variant;
   TBF9  = function(a0, a1, a2, a3, a4, a5, a6, a7, a8: Int64): Variant;
+  TBF10 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9: Int64): Variant;
   TBF11 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10: Int64): Variant;
+  TBF12 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11: Int64): Variant;
   TBF13 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12: Int64): Variant;
+  TBF14 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13: Int64): Variant;
+  TBF15 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14: Int64): Variant;
+  TBF16 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15: Int64): Variant;
+  TBF17 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16: Int64): Variant;
+  TBF18 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17: Int64): Variant;
+  TBF19 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18: Int64): Variant;
+  TBF20 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19: Int64): Variant;
+  TBF21 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20: Int64): Variant;
+  TBF22 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21: Int64): Variant;
+  TBF23 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22: Int64): Variant;
+  TBF24 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23: Int64): Variant;
+  TBF25 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24: Int64): Variant;
+  TBF26 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25: Int64): Variant;
+  TBF27 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26: Int64): Variant;
+  TBF28 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27: Int64): Variant;
+  TBF29 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28: Int64): Variant;
+  TBF30 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29: Int64): Variant;
+  TBF31 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30: Int64): Variant;
+  TBF32 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31: Int64): Variant;
 const
   { Bound[] slot ownership — see TBoundFnObj.BKindMask. }
   BK_PLAIN   = 0;
@@ -2289,10 +2321,14 @@ var o: PBoundFnObj; b: PInt64; code: Pointer;
     va0, va1, va2: Variant;
     vd0, vd1, vd2: Variant;   { by-address slots for an OVERRIDDEN variant default }
     dv: Int64;
-    p: array[0..15] of Int64;
+    p: array[0..31] of Int64;
     n, i: Integer;
-    f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6;
-    f7: TBF7; f8: TBF8; f9: TBF9; f11: TBF11; f13: TBF13;
+    f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5;
+    f6: TBF6; f7: TBF7; f8: TBF8; f9: TBF9; f10: TBF10; f11: TBF11;
+    f12: TBF12; f13: TBF13; f14: TBF14; f15: TBF15; f16: TBF16; f17: TBF17;
+    f18: TBF18; f19: TBF19; f20: TBF20; f21: TBF21; f22: TBF22; f23: TBF23;
+    f24: TBF24; f25: TBF25; f26: TBF26; f27: TBF27; f28: TBF28; f29: TBF29;
+    f30: TBF30; f31: TBF31; f32: TBF32;
     rv: Variant;
 begin
   rv := pynone;
@@ -2302,17 +2338,17 @@ begin
   n := o^.NOwn;
   if n > nargs then n := nargs;
   if n > 3 then n := 3;
-  for i := 0 to 15 do p[i] := 0;
+  for i := 0 to 31 do p[i] := 0;
   if n > 0 then p[0] := PyBoundFnArgWord(o, a0, @va0);
   if n > 1 then p[1] := PyBoundFnArgWord(o, a1, @va1);
   if n > 2 then p[2] := PyBoundFnArgWord(o, a2, @va2);
   { a body declaring MORE own params than the caller passed still gets a slot
     per parameter -- zeroed, which is what an unsupplied argument reads as }
   n := o^.NOwn;
-  if n > 12 then n := 12;
+  if n > 31 then n := 31;
   b := @o^.Bound[0];
   for i := 0 to o^.NBound - 1 do
-    if n + i <= 15 then p[n + i] := b[i];
+    if n + i <= 31 then p[n + i] := b[i];
 
   { A DEFAULTED parameter is a bound slot the caller may override. Done after
     the bind copy above, deliberately: the default is written first and the
@@ -2321,7 +2357,7 @@ begin
     NOT NOwn+i, because a zero-parameter lambda carries a dummy own parameter
     the caller never counts. }
   for i := 0 to o^.NDef - 1 do
-    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 15) then
+    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 31) then
     begin
       dv := (o^.DefVarMask shr i) and 1;
       case o^.NDefBase + i of
@@ -2330,6 +2366,8 @@ begin
         2: p[n + i] := PyBoundFnDefWord(a2, dv, @vd2);
       end;
     end;
+  { EXACT arity only — see the TBF table. Never round up: a call with more
+    arguments than the body declares crashes it. }
   case n + o^.NBound of
     0: begin f0 := TBF0(code); rv := f0(); end;
     1: begin f1 := TBF1(code); rv := f1(p[0]); end;
@@ -2341,10 +2379,35 @@ begin
     7: begin f7 := TBF7(code); rv := f7(p[0], p[1], p[2], p[3], p[4], p[5], p[6]); end;
     8: begin f8 := TBF8(code); rv := f8(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]); end;
     9: begin f9 := TBF9(code); rv := f9(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]); end;
-    10, 11:
-      begin f11 := TBF11(code); rv := f11(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10]); end;
-    else
-      begin f13 := TBF13(code); rv := f13(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12]); end;
+    10: begin f10 := TBF10(code); rv := f10(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]); end;
+    11: begin f11 := TBF11(code); rv := f11(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10]); end;
+    12: begin f12 := TBF12(code); rv := f12(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]); end;
+    13: begin f13 := TBF13(code); rv := f13(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12]); end;
+    14: begin f14 := TBF14(code); rv := f14(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13]); end;
+    15: begin f15 := TBF15(code); rv := f15(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14]); end;
+    16: begin f16 := TBF16(code); rv := f16(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]); end;
+    17: begin f17 := TBF17(code); rv := f17(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]); end;
+    18: begin f18 := TBF18(code); rv := f18(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]); end;
+    19: begin f19 := TBF19(code); rv := f19(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18]); end;
+    20: begin f20 := TBF20(code); rv := f20(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19]); end;
+    21: begin f21 := TBF21(code); rv := f21(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20]); end;
+    22: begin f22 := TBF22(code); rv := f22(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21]); end;
+    23: begin f23 := TBF23(code); rv := f23(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22]); end;
+    24: begin f24 := TBF24(code); rv := f24(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23]); end;
+    25: begin f25 := TBF25(code); rv := f25(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24]); end;
+    26: begin f26 := TBF26(code); rv := f26(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25]); end;
+    27: begin f27 := TBF27(code); rv := f27(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26]); end;
+    28: begin f28 := TBF28(code); rv := f28(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27]); end;
+    29: begin f29 := TBF29(code); rv := f29(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28]); end;
+    30: begin f30 := TBF30(code); rv := f30(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29]); end;
+    31: begin f31 := TBF31(code); rv := f31(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29], p[30]); end;
+    32: begin f32 := TBF32(code); rv := f32(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29], p[30], p[31]); end;
+  else
+    { unreachable: the frontend refuses a lifted signature past 32 parameters.
+      Say so rather than returning None — a silent wrong answer here is how the
+      rounded-up call above stayed hidden for so long. }
+    raise TypeError.Create('closure call needs ' + pystr_of(n + o^.NBound)
+      + ' argument slots, past the 32 the runtime bridge can pass');
   end;
   res := rv;
 end;
