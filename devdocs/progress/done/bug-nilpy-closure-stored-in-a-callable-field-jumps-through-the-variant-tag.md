@@ -222,4 +222,4 @@ FPC seed canary) · `test_nilpy_callable_field_call_returns` and
 `test_nilpy_callable_field_all_shapes` added to `make test-nilpy`.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit df1b6c9d6.
