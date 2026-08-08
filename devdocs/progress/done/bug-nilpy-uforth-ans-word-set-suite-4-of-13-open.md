@@ -2,10 +2,11 @@
 track: N
 prio: 45
 type: bug
-summary: "ALL 13 Forth 2012/ANS word sets byte-identical to CPython as of 2026-08-08 — four separate causes, four fixes (a gapped closure-bridge arity table; a borrowed return read as owned; pop(i) leaving a live alias in the slot it vacated; a redefined nested def that never rebound its name). What is LEFT here is only the gating gap: none of the 13 are in UFORTH_CORPUS, so all of this passes ungated. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
+summary: "ALL 13 Forth 2012/ANS word sets byte-identical to CPython and ENROLLED in test-uforth (17/17 corpora) as of 2026-08-08. Four separate causes, four fixes: a gapped closure-bridge arity table; a borrowed return read as owned; pop(i) leaving a live alias in the slot it vacated; a redefined nested def that never rebound its name. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
+status: done
 ---
 
-# uforth's ANS word-set suite: 13 of 13 identical — now ENROL them
+# uforth's ANS word-set suite: 13 of 13 identical, and gated
 
 uforth ships the **Forth 2012 test suite** (`tests/`, from
 forth2012-test-suite 0.15.0) — the John Hayes ANS tester plus per-word-set
@@ -75,8 +76,14 @@ minimal repro:
   binding read as two bugs.
 
 Swept end to end after all four fixes: **every one of the 13 is byte-identical.**
-So this ticket is now purely about the gating gap below — the suite passes and
-nothing stops it regressing.
+The gating gap below is closed too: `test-uforth` now generates a driver per
+word set into the uforth checkout, runs all 13 differentially, and cleans up —
+17/17 corpora, measured end to end. Drivers are generated rather than committed
+so the corpus can never again depend on files that exist on one box.
+
+**blocktest costs ~240s under pxx against CPython's ~80s** and is essentially
+the entire ~6 minutes this adds; that belongs to whoever places test-uforth in
+a tier.
 
 Four failures, four unrelated causes. The original filing guessed coreext and
 block shared one because they died at the same output line, and guessed file's
@@ -104,3 +111,6 @@ omits the core word set would lock in a flattering number.
 
 All 13 word sets byte-identical to the CPython run, `runtests.fth` end to end
 identical, and the passing ones added to `UFORTH_CORPUS` so they stay that way.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.
