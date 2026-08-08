@@ -247,7 +247,13 @@ def render_coverage(tdir):
             else:
                 ntot += n
             bad = v.get("fail", 0) + v.get("red", 0)
-            cls = "fail" if bad else "pass"
+            # A family that ONLY ever skipped is not green — it did not run.
+            # tstate publishes "skip" as its own status now
+            # (bug-t-tstate-launders-skip-into-pass); before that this could
+            # not be told apart from a pass, which is how 24 c-testsuite
+            # conformance jobs read as covered on a box with no corpus.
+            allskip = v.get("skip", 0) == n and n > 0
+            cls = "fail" if bad else ("skip" if allskip else "pass")
             thin = " ⚠ thin" if g in core and core_max and n < core_max / 4 else ""
             rows += ("<tr><td><code>%s</code><td>%s<td class='num %s'>%d"
                      "<td class=dim>%s%s</tr>" % (

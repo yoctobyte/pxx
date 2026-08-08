@@ -659,33 +659,56 @@ def reg_open(r, fixed, authoritative, gone=frozenset()):
     still `fail` in the persisted state keeps the cascade open even when this
     tier did not run it.
 
-    A `skip` is mapped to `pass` by diff_jobs (corpus-absent is pass-equivalent
-    for a normal verdict), but it is NOT proof a regression is fixed — so a
-    cascade whose jobs only ever SKIP would wrongly close.  That is a known
-    residual; the merged-map fix removes the common transient-flake close, which
-    is what actually happened here.
+    A `skip` is PASS-LIKE here (see PASSLIKE): it does not gate, and red -> skip
+    still closes an open regression, because a box that legitimately cannot run
+    a job must not hold a regression open forever.  It is NOT proof a
+    regression is fixed, so a cascade whose jobs only ever SKIP still closes
+    wrongly — a known residual, unchanged by publishing skip as its own status.
+    The merged-map fix removes the common transient-flake close, which is what
+    actually happened here.
     """
     if r.get("cascade"):
         # A swept job that no longer exists cannot pin the cascade open either;
         # if every job it named is gone, the entry closes with them.
-        return any(authoritative.get(j, "red") != "pass"
+        return any(authoritative.get(j, "red") not in PASSLIKE
                    for j in r["cascade"] if j not in gone)
     if r["job"] in gone:
         return False
     return r["job"] not in fixed
 
 
+        # PASS-LIKE, not pass. A skipped job did not fail, so it must not gate
+# anything — but it did not RUN either, and publishing it as "pass" destroyed
+# the only evidence of that. On xeon 33 full-tier jobs skip when the corpus
+# trees are unfetched, including all 24 c-testsuite conformance jobs, and the
+# host still published GREEN. Every consumer — cross-host comparison,
+# --status, the dashboard, the cutover decision — read that as covered.
+#
+# The old comment's reasoning was right that skip must close an open
+# regression; it was wrong to achieve that by erasing the distinction rather
+# than by treating a third state as non-gating. Green must mean "ran and
+# passed". Now made worse by test-uforth, which self-skips on any box without
+# ~/projects/uforth (feature-t-enroll-uforth-in-the-tiers).
+PASSLIKE = ("pass", "skip")
+
+
 def diff_jobs(prev_jobs, report):
-    # "skip" (corpus tree absent on this box) is pass-equivalent: the job is
-    # not applicable here, and mapping it to pass closes any open regression
-    now = {job_key(j): ("pass" if j["status"] == "skip" else j["status"])
-           for j in report["jobs"]}
+    # `now` keeps the LITERAL status, so tstate publishes "skip" as itself.
+    # Readers were taught the third state before anything started writing it
+    # (reg_open, gone_keys, the status/index summaries), which is the migration
+    # order the ticket asks for: old states carrying "pass" for former skips
+    # stay readable, they simply under-report coverage until the host publishes
+    # again.
+    now = {job_key(j): j["status"] for j in report["jobs"]}
     new_red = sorted(n for n, s in now.items()
-                     if s != "pass" and prev_jobs.get(n, "pass") == "pass")
+                     if s not in PASSLIKE
+                     and prev_jobs.get(n, "pass") in PASSLIKE)
     fixed = sorted(n for n, s in now.items()
-                   if s == "pass" and prev_jobs.get(n, "pass") != "pass")
+                   if s in PASSLIKE
+                   and prev_jobs.get(n, "pass") not in PASSLIKE)
     still_red = sorted(n for n, s in now.items()
-                       if s != "pass" and prev_jobs.get(n, "pass") != "pass")
+                       if s not in PASSLIKE
+                       and prev_jobs.get(n, "pass") not in PASSLIKE)
     return now, new_red, fixed, still_red
 
 
@@ -2703,6 +2726,16 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
                # enrollment's green is not mistaken for coverage.
                else "  [NOT BASELINED — NEW-RED not meaningful yet]"
                if not st.get("jobs") else ""))
+        # Coverage, not just verdict. A host publishing GREEN with 33 skipped
+        # jobs is not the same as one that ran them, and this line is the only
+        # place that difference is visible without diffing two json files —
+        # which matters most at cutover, when the fleet decides whose green to
+        # trust. Silent while a host skips nothing.
+        nskip = sum(1 for s in (st.get("jobs") or {}).values() if s == "skip")
+        if nskip:
+            print("tstate:   coverage — %d job(s) SKIPPED on %s (absent corpus "
+                  "or unmet precondition): green here does not cover them"
+                  % (nskip, st["host"]))
         if inf:
             # LOUD, and above the ledger dump: this host is running but cannot
             # produce a measurement, so it is publishing nothing. Saying only
