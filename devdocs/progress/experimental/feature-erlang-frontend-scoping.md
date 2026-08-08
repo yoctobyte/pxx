@@ -191,3 +191,39 @@ actual subject.
 
 Probe closed per the umbrella (acceptance (b)); scoping ticket itself
 stays open/parked as before — moved back to backlog.
+
+## Corpus / test targets (2026-08-08, user)
+
+Nothing above names a *program to compile*, which is the gap. The project's
+established pattern is a ladder — C went tcc → sqlite → lua → zlib-vs-gcc,
+Nil-Python went hand-written → MarkupSafe → Cython — so Erlang should have one
+too, and the oracle is obvious: **run the same module under `erl`/BEAM and diff
+the output**, exactly the differential-probe shape in
+`devdocs/dev/differential-probes.md`.
+
+**Wings3D** (user's suggestion) is the right *destination* and the wrong *first
+rung*. It is the best-known desktop Erlang application — a 3D subdivision
+modeller — but it is wxErlang plus OpenGL, so compiling it mostly tests
+FFI/binding surface rather than the Erlang language. Same trap as picking a GUI
+app as a first C corpus. Keep it as the "we have arrived" target.
+
+Better early rungs, ranked by what they actually exercise:
+
+1. **stdlib pure-functional modules** — `lists`, `queue`, `sets`, `ordsets`,
+   `dict`, `proplists`. No processes, no scheduler, no OTP: pattern matching,
+   recursion and immutable terms and nothing else. These are the Erlang
+   equivalent of a single-file C corpus, and BEAM ships the reference output.
+2. **A pure-Erlang parser** — e.g. `jsx` (JSON, no NIFs). Real third-party code,
+   real recursion over binaries, still no runtime dependency. This is the
+   MarkupSafe rung: small, unmodified, widely used, verifiable against an oracle.
+3. **Anything touching processes** (`spawn`, `!`, `receive`, gen_server, OTP
+   supervision) — deliberately AFTER the above, because it is gated on the
+   scheduler, which this ticket already identifies as the one genuinely novel
+   piece. A corpus that needs it is not an early corpus.
+4. **Wings3D** — needs 1-3 plus wx plus OpenGL bindings.
+
+Note the memory-model consequence, which is favourable and already argued in
+"GC gap sizing" above: rungs 1 and 2 are entirely acyclic-by-construction term
+data, so refcounting is not merely adequate for them, it is *complete*. The
+first two rungs need no collector at all, which makes them cheap in exactly the
+dimension that usually makes a functional language expensive.
