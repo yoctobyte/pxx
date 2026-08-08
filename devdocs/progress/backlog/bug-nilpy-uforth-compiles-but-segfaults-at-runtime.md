@@ -47,3 +47,38 @@ the live process rather than computing file offsets.
 
 `make test-uforth` green (uforth.py compiles, STD.UFO loads, the smoke script
 runs), plus the ordinary per-fix loop.
+
+## 2026-08-08 — the crash MOVED (still red, new location)
+
+[[bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag]]
+cleared the tag-jump. `make test-uforth` is still red, at a different place.
+
+- **was:** `uforth.py:841` `word.native(self)`, **PC = 0x0a** — literally
+  `VT_BOUNDFN_TAG`, i.e. a variant tag word read as a code address.
+- **now:** **PC = 0x4dfce7, inside `pyboundfn_callvn`** (symbolised via the
+  `.map`; `readelf` is blind on pxx binaries). A real code address.
+
+It now dies during STARTUP, **before the banner** — so it is a native word run
+while loading `STD.UFO`, not line 841's token. (stdout is empty on the crash;
+that is buffering, not evidence about where it got to.)
+
+The faulting instruction is the one right after the bridge's indirect call:
+
+```
+  lea -0x1f0(%rbp),%rax ; mov %rax,%r10 ; pop %r11 ; call *%r11 ; push %rax
+=> mov (%rax),%rcx          <-- rax = 0
+```
+
+`pyboundfn_callvn` calls the body through `TBF<n>`, a **Variant-returning**
+function type (`rv := f1(p[0])`). uforth's native words are explicitly
+`def w_plus(vm: VM) -> None:` — real PROCEDURES, which never set `rax`, so the
+result is read from a null pointer. `TBoundFnObj` carries no `IsFunc` field,
+where the `pybound_new` path carries exactly that flag for exactly this reason
+(bug-nilpy-void-def-assigned-and-called-crashes).
+
+**That hypothesis is NOT confirmed.** The obvious minimal repros of it both
+PASS: a `-> None` nested def stored in a dataclass `Callable` field, and the
+same reached through a keyword `define_word(name, native=w_plus)` that mirrors
+uforth's own shape. Whatever uforth hits needs an ingredient those do not have —
+find it before writing a fix, and diff against the CPython oracle rather than
+reasoning from the disassembly alone.

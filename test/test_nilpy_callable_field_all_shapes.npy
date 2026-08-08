@@ -1,0 +1,134 @@
+# A `Callable[...]` FIELD holds any of the four callable shapes — plain def,
+# lifted closure, bound method, lambda — set BOTH through the constructor and by
+# a later assignment, on a @dataclass and on a plain class.
+#
+# Inside NilPy a Callable is a VARIANT (all four shapes fit); only the FFI
+# boundary (pyvar_callable_ptr) is restricted to a plain def. Before that
+# unification a declared Callable field was a bare POINTER, so storing a lifted
+# closure put a 16-byte variant in an 8-byte slot and calling the field jumped
+# through the variant's TAG word — PC = 10 = VT_BOUNDFN_TAG.
+# bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag
+from dataclasses import dataclass
+from typing import Optional, Callable
+
+
+class VM:
+    def __init__(self):
+        self.n = 0
+
+    def add(self, k):
+        self.n = self.n + k
+
+
+@dataclass
+class DC:
+    name: str
+    native: Optional[Callable[["VM"], None]] = None
+
+
+class PC:
+    def __init__(self, name, native=None):
+        self.name = name
+        self.native = native
+
+
+def plain(vm):
+    vm.n = vm.n + 1
+
+
+def make_closure(k):
+    def _w(vm):
+        vm.n = vm.n + k
+    return _w
+
+
+class Holder:
+    def __init__(self, k):
+        self.k = k
+
+    def bump(self, vm):
+        vm.n = vm.n + self.k
+
+
+h = Holder(100)
+
+# ---- @dataclass field, set through the constructor
+vm = VM()
+d = DC("a", plain)
+d.native(vm)
+print("dc/ctor/def", vm.n)
+vm = VM()
+d = DC("b", make_closure(5))
+d.native(vm)
+print("dc/ctor/clos", vm.n)
+vm = VM()
+d = DC("c", h.bump)
+d.native(vm)
+print("dc/ctor/bound", vm.n)
+vm = VM()
+d = DC("d", lambda v: v.add(7))
+d.native(vm)
+print("dc/ctor/lam", vm.n)
+
+# ---- @dataclass field, set by a later assignment (the field DEFAULTS to None
+#      at construction, which is a VT_EMPTY variant and not the ordinal 0)
+vm = VM()
+d = DC("e")
+d.native = plain
+d.native(vm)
+print("dc/assign/def", vm.n)
+vm = VM()
+d = DC("f")
+d.native = make_closure(5)
+d.native(vm)
+print("dc/assign/clos", vm.n)
+vm = VM()
+d = DC("g")
+d.native = h.bump
+d.native(vm)
+print("dc/assign/bound", vm.n)
+vm = VM()
+d = DC("h")
+d.native = lambda v: v.add(7)
+d.native(vm)
+print("dc/assign/lam", vm.n)
+
+# ---- plain-class field, set through the constructor
+vm = VM()
+p = PC("a", plain)
+p.native(vm)
+print("pc/ctor/def", vm.n)
+vm = VM()
+p = PC("b", make_closure(5))
+p.native(vm)
+print("pc/ctor/clos", vm.n)
+vm = VM()
+p = PC("c", h.bump)
+p.native(vm)
+print("pc/ctor/bound", vm.n)
+vm = VM()
+p = PC("d", lambda v: v.add(7))
+p.native(vm)
+print("pc/ctor/lam", vm.n)
+
+# ---- plain-class field, set by a later assignment
+vm = VM()
+p = PC("e")
+p.native = plain
+p.native(vm)
+print("pc/assign/def", vm.n)
+vm = VM()
+p = PC("f")
+p.native = make_closure(5)
+p.native(vm)
+print("pc/assign/clos", vm.n)
+vm = VM()
+p = PC("g")
+p.native = h.bump
+p.native(vm)
+print("pc/assign/bound", vm.n)
+vm = VM()
+p = PC("h")
+p.native = lambda v: v.add(7)
+p.native(vm)
+print("pc/assign/lam", vm.n)

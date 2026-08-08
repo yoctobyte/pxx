@@ -954,13 +954,28 @@ begin
 
       The signature is dropped with it: keeping it would marshal the call
       against a procedural type again, which is the very thing that has no room
-      for the receiver. A FIELD keeps both — see PyAnnParamScope.
-      bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter }
-    if PyAnnParamScope then
-    begin
-      Result := tyVariant;
-      PyAnnLastProcSig := -1;
-    end;
+      for the receiver.
+      bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter
+
+      A FIELD is the SAME: it used to keep the pointer+signature (guarded by
+      PyAnnParamScope), which is the third representation of one concept and the
+      reason a lifted closure stored into a `Callable` field landed as a 16-byte
+      variant in an 8-byte slot — the indirect call then jumped through the
+      variant TAG word, PC = 10 = VT_BOUNDFN_TAG.
+      bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag
+
+      The FFI boundary is unaffected: crossing to Pascal/C as a raw function
+      pointer still goes through pyvar_callable_ptr, which accepts a plain def
+      and refuses a closure/bound method loudly. Variant INSIDE, plain-def-only
+      at the boundary — decided 2026-08-08. }
+    Result := tyVariant;
+    { A PARAMETER drops the signature outright (above). A FIELD keeps it — not
+      as an ABI (the slot is a variant now, so parser.inc's `tyPointer/tyRecord
+      + UFldProcSig >= 0` indirect-call marshalling deliberately no longer
+      fires) but as the MARKER that says "this field is callable": it is what
+      lets `obj.native(vm)` resolve on a dynamically-typed receiver at
+      pyparser.inc's callable-field scan. }
+    if PyAnnParamScope then PyAnnLastProcSig := -1;
     Exit;
   end;
   if lo = 'list' then
@@ -4680,9 +4695,22 @@ case PyDcKind[i] of
       tkF := IntToTypeKind(UFldTk[UClsFBase[ci] + (i - dcBase)]);
       if tkF = tyAnsiString then
         Error('Nil Python: None default for a str field is not supported yet');
-      valNode := AllocNode(AN_INT_LIT);
-      ASTIVal[valNode] := 0;
-      ASTTk[valNode] := Ord(tkF);
+      { A VARIANT field's None is the VT_EMPTY variant, not the ordinal 0 that
+        every other field kind maps it to: a variant is 16 bytes passed by
+        address, so the bare literal handed the constructor a 0 where it wanted
+        a slot and `DC("x")` — omitting a `Callable[...] = None` field — died
+        in the constructor before its first statement. Same substitution
+        ir.inc's ProcParamDefaultIsNone branch already makes for a variant
+        PARAMETER's omitted default, for the same reason.
+        bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag }
+      if tkF = tyVariant then
+        valNode := PyMakeNone
+      else
+      begin
+        valNode := AllocNode(AN_INT_LIT);
+        ASTIVal[valNode] := 0;
+        ASTTk[valNode] := Ord(tkF);
+      end;
     end;
     PYDC_FACTORY_EXPR:
     begin
@@ -8300,7 +8328,11 @@ end;
 function PyMakeVariantFieldCall(baseNode, ci: Integer; const fname: AnsiString;
                                 sigPi: Integer): Integer;
 var unboxArg, unboxCall, castNode, fieldNode, argsHead, lastArg, argNode, n: Integer;
+    fldFi, fldTk, dispPi, dispArg: Integer;
 begin
+  fldFi := FindUField(ci, fname);
+  fldTk := Ord(tyPointer);
+  if fldFi >= 0 then fldTk := UFldTk[fldFi];
   unboxArg := AllocNode(AN_ARG);
   ASTLeft[unboxArg] := baseNode;
   unboxCall := AllocNode(AN_CALL);
@@ -8316,7 +8348,7 @@ begin
   ASTLeft[fieldNode] := castNode;
   ASTSOffset[fieldNode] := PyStoredName(fname);
   ASTSLen[fieldNode] := Length(fname);
-  ASTTk[fieldNode] := Ord(tyPointer);
+  ASTTk[fieldNode] := fldTk;
   Expect(tkLParen, '(');
   argsHead := -1; lastArg := -1; n := 0;
   while CurTok.Kind <> tkRParen do
@@ -8333,6 +8365,38 @@ begin
   if n <> Procs[sigPi].ParamCount then
     Error('Nil Python: .' + fname + '() takes ' +
           PyIntLiteralText(Procs[sigPi].ParamCount) + ' argument(s)');
+
+  { A `Callable[...]` FIELD is a VARIANT now (PyAnnTypeAt), so the slot may hold
+    any of the four callable shapes and the ONE thing that tells them apart is
+    pyvar_callv<n> — the same universal dispatcher a variant callee already
+    uses. Reading the slot as a bare code address is what jumped through the
+    variant's TAG word (PC = 10 = VT_BOUNDFN_TAG) the moment the field held a
+    lifted closure instead of a plain def.
+    bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag
+
+    The typed-indirect lowering below stays for a genuinely POINTER-typed
+    procedural field (a Pascal/C record's function pointer reached through a
+    variant receiver), which really does hold a bare address. }
+  if IntToTypeKind(fldTk) = tyVariant then
+  begin
+    dispPi := -1;
+    if n = 0 then dispPi := FindProc('pyvar_callv0')
+    else if n = 1 then dispPi := FindProc('pyvar_callv1')
+    else if n = 2 then dispPi := FindProc('pyvar_callv2')
+    else if n = 3 then dispPi := FindProc('pyvar_callv3');
+    if dispPi >= 0 then
+    begin
+      dispArg := AllocNode(AN_ARG);
+      ASTLeft[dispArg] := fieldNode;
+      ASTRight[dispArg] := argsHead;
+      Result := AllocNode(AN_CALL);
+      ASTIVal[Result] := dispPi;
+      ASTLeft[Result] := dispArg;
+      ASTTk[Result] := Ord(tyVariant);
+      Exit;
+    end;
+  end;
+
   Result := AllocNode(AN_CALL_IND);
   ASTLeft[Result]  := argsHead;
   ASTRight[Result] := fieldNode;

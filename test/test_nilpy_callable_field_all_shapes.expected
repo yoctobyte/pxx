@@ -1,0 +1,16 @@
+dc/ctor/def 1
+dc/ctor/clos 5
+dc/ctor/bound 100
+dc/ctor/lam 7
+dc/assign/def 1
+dc/assign/clos 5
+dc/assign/bound 100
+dc/assign/lam 7
+pc/ctor/def 1
+pc/ctor/clos 5
+pc/ctor/bound 100
+pc/ctor/lam 7
+pc/assign/def 1
+pc/assign/clos 5
+pc/assign/bound 100
+pc/assign/lam 7
