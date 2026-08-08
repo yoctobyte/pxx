@@ -102,4 +102,4 @@ two `input` arms and the `isNilPy` one at ~10745 parses the prompt and throws it
 away. Every shape probed hits the other (correct) arm, so it is latent, not
 live; filed rather than fixed because the right fix is deleting a path, not
 guarding it.
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 3054cf0d8.
