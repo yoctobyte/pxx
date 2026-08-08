@@ -101,3 +101,66 @@ mismatch rather than a loud error. The workaround (`r = rd()` then `r.z`) is
 correct, cheap and already used in
 `test/test_nilpy_global_read_above_its_assignment.npy` with a comment naming
 this ticket.
+
+## 2026-08-09 — DIAGNOSED and parked (claude-AN). The "likely shape" above is wrong.
+
+Attempted, measured, reverted. Nothing landed; what follows is the finding, so
+the next session does not re-derive it.
+
+### The boundary, mapped
+
+| shape | result |
+| --- | --- |
+| `def rd(): return g` … `g = K()` after, `rd().z` | **error** |
+| same but `g = K()` BEFORE the def | **error** (different message) |
+| `r = rd(); r.z` | works |
+| `def rd() -> K: return g` (annotated) | works |
+| `def mk(): return K()`, `mk().z` | works |
+| `def mk(): w = K(); return w`, `mk().z` | works |
+
+So it is **not** the call-result selector path (`mk().z` is fine), and **not**
+about the global being pre-created or about ordering — the annotated form proves
+the selector path works the moment the return type is known. It is exactly:
+*a bare-ident return naming a MODULE GLOBAL has no inferred type*.
+
+### Why the obvious fix does not work — measured, not reasoned
+
+The bare-ident chase in `PyInferDefRetType` (~19200) scans only the DEF BODY for
+an assignment to that name and finds nothing for a global. The obvious extension
+is to fall back to the module tables. Implemented, and it **never fired**. A
+probe printed at that point:
+
+```
+PROBE ret bare=g cur=0 chain=0 constraint=-1 progsym=-1
+```
+
+`cur` and `chain` are `tyUnknown`, and **both `PyFindConstraint` and
+`PyProgSym` answer −1**: at the moment a def's return type is decided, the
+module global does not exist in either table yet. `PXXDBG=n.locals` reports
+`g tk=6 rec=0` for that same program, so the information does exist — just
+later. The probe printed **once**, so the header inference is a single decision
+at def-parse time and is not revisited by the pre-pass fixpoint.
+
+That makes this a PASS-ORDERING problem, not a missing lookup, which is why it
+was parked rather than microfixed: the fallback compiles, looks like a fix, and
+is dead code.
+
+### The two honest routes
+
+1. **Revisit the return type in a later round.** The module pre-pass is already
+   a fixpoint over rounds (`PyTypingChanged`); a def whose return type came back
+   `tyUnknown` from a bare ident could be re-inferred once module globals are
+   typed, at which point the fallback above starts working unchanged. Check
+   `PyHdrRetType := PyInferDefRetType(...)` at ~17998 and ~18015 — there are two
+   call sites and one may already be a second chance.
+2. **Type module globals before defs are parsed**, at least for the safe shapes
+   (a constructor call of a declared class is one — the same recognition added
+   for [[bug-nilpy-block-nested-scalar-then-class-rebind-loses-widening]]).
+
+Route 1 looks smaller and cannot regress a def whose return type is already
+known, since it would only re-ask when the answer was `tyUnknown`.
+
+### Workaround, unchanged
+Annotate the def (`-> K`) or bind the call result to a name first. Both are
+verified working above, and the annotation is the documented escape hatch for
+anything this pre-pass cannot resolve.
