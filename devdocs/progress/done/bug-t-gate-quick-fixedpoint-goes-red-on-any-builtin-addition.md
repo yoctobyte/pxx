@@ -3,6 +3,8 @@ summary: "tools/gate.sh's fixedpoint seeds from PINNED and demands A==B==C, so i
 type: bug
 track: T
 prio: 55
+status: done
+owner: claude-T@plexus
 ---
 
 # `gate.sh quick` reports RED for a stale pin, not a real fixedpoint failure
@@ -112,3 +114,44 @@ The ticket stands: this **will** recur on the next builtin addition, and the
 next agent will again see a RED that is indistinguishable from having broken
 the self-host gate. The empty `fixedpoint.log` remains the largest part of the
 cost.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.
+
+
+---
+
+## Resolution (Track T, 2026-08-08) — commit `5d224133b`
+
+Both tickets, one change: `gate.sh` had **re-implemented** a check that already
+existed and reintroduced the bug that implementation had already been fixed
+for. So the fix is not "iterate here too" — it is to stop having a second
+implementation. `fixedpoint()` now calls `tools/selfhost_fixedpoint.sh`.
+
+- It **iterates** to MAX_ROUNDS, so a legitimate one-generation lag (pinned
+  does not yet emit what HEAD emits) converges instead of false-reding.
+- It enforces the **anti-Thompson** property the inline version never checked
+  (the hermetic fixedpoint must equal `compiler/pascal26`) — strictly stronger.
+- It **prints its reason**. The old function sent every round to `/dev/null`,
+  so a `FAIL` line sat above a 0-byte `fixedpoint.log` naming no cause. That
+  empty log is what turned each occurrence into a manual bisect. Now 140 bytes
+  with the verdict.
+
+Exit 77 (no pinned stable) maps to a gate SKIP, not a failure.
+
+### Honest limit on verification
+
+**The false red is not reproducible at this HEAD.** pinned currently emits what
+HEAD emits, so convergence takes 1 round and the old and new predicates both
+pass. Seeding from the older v248 stable extracted out of git did not reproduce
+it either — that generation agrees with HEAD too.
+
+So the predicate difference is demonstrated on a **model** of the documented
+shape (pinned one generation behind → A=gen1, B=gen2, C=gen2): the old
+predicate fails on `A!=B` while `B==C` proves convergence; the new one passes
+after 2 rounds. The field evidence stays the measurement in these tickets —
+Track A saw `gate.sh` FAIL while `selfhost_fixedpoint.sh` reported "converged
+after 2 round(s)" on the identical tree.
+
+Gate: `gate.sh quick` GREEN (fixedpoint 28s, testmgr --tier quick 7s),
+`fixedpoint.log` non-empty.
