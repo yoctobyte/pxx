@@ -57,3 +57,37 @@ diagnostic dead-end this ticket exists to prevent.
 
 `tools/testmgr.py --tier limited --list` shows one job per word set; a forced
 failure in one word set reds only that shard.
+
+## Update 2026-08-08 — the timeout half is fixed elsewhere; this is now about attribution
+
+Measured after filing. Two corrections to the reasoning above:
+
+**The cost is one file, not the suite.** The Makefile already records it:
+`blocktest` is ~240s under pxx against CPython's ~80s (a memory-walk and hash
+workload); *"the other twelve together are seconds"*. The 23m36s I measured was
+on a box at load 15+ with a peer testmgr — idle it is ~6 minutes.
+
+**`corpus` was never the binding constraint.** The budget is
+`min(cls_to*scale, max(45, exp_dur*10+15, cls_to*scale/4))` — the hang detector,
+not the class ceiling. test-uforth had learned `dur=17.75s` from five runs as a
+four-corpus job, so its budget was **300s** regardless of class. Reclassifying
+it `corpus` changed nothing.
+
+That is fixed generally in `82585920b`: a timed-out job now raises its stored
+expectation to the duration observed before the kill, so it converges to the
+class ceiling in one cycle instead of being killed by a stale value forever.
+**No sharding is needed to stop the false red.**
+
+**What is still worth doing here**, in order:
+
+1. **Attribution.** `test-uforth#00 (timeout)` names no word set, and the
+   report's log tail stops at "running the Forth 2012 / ANS suite per WORD
+   SET". A per-word-set shard gives a stable selector that can be bisected and
+   ticketed like any other job.
+2. **Parallelism**, on a box sized for 24 concurrent jobs — though note the win
+   is bounded by blocktest, which is most of the wall time on its own.
+3. **Partial credit** — twelve green word sets stay green when the thirteenth
+   breaks.
+
+Prio unchanged, urgency lower: this is now a diagnosability improvement, not a
+fix for a recurring red.
