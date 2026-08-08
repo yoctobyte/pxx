@@ -116,7 +116,7 @@ the self-host gate. The empty `fixedpoint.log` remains the largest part of the
 cost.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 487515c2f.
 
 
 ---

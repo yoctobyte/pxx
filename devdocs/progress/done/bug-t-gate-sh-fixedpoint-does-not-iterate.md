@@ -73,7 +73,7 @@ red for the normal case trains agents to ignore it, which is worse than not
 having it.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 487515c2f.
 
 
 ---
