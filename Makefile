@@ -836,6 +836,9 @@ test-nilpy: $(COMPILER)
 	@# exec()'s expression grammar had no rule for ** at all
 	./$(COMPILER) test/test_nilpy_pyeval_power_operator.npy /tmp/test_nilpy_pyevalpow26
 	test "$$(/tmp/test_nilpy_pyevalpow26)" = "[1024, 512, -4, 0.5]"
+	@# a host method whose params MIX a variant with register-sized kinds
+	./$(COMPILER) test/test_nilpy_pyeval_host_mixed_params.npy /tmp/test_nilpy_pyevalmix26
+	/tmp/test_nilpy_pyevalmix26 | diff -u test/test_nilpy_pyeval_host_mixed_params.expected -
 	@# a comprehension's loop variable is scoped to itself, not the enclosing
 	@# scope: an outer binding of the same name must survive untouched
 	./$(COMPILER) test/test_nilpy_comprehension_scope.npy /tmp/test_nilpy_compscope26

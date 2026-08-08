@@ -274,17 +274,44 @@ type
   TIFn0 = function(self: Pointer): Int64;
   TIFn1 = function(self: Pointer; const a: Variant): Int64;
   TIFn2 = function(self: Pointer; const a, b: Variant): Int64;
-  { Pointer-family shape: every param is a pointer-sized register value
-    (int/int64/bool/char/pointer/class/AnsiString-by-value), passed as an Int64 in
-    an integer register, result an Int64 (a class/pointer return, or an ordinal).
-    Covers annotated host methods like `define_word(name: str, native: Callable,
-    forth_body, immediate: bool) -> Word` that the all-Variant path cannot call. }
+  { Register-family shape: every param travels as ONE pointer-sized value in an
+    integer register, so one set of thunk types calls them all —
+    int/int64/bool/char/pointer/class directly, AnsiString as its data pointer,
+    and a VARIANT as the ADDRESS of its 16-byte slot, which is precisely how pxx
+    passes `const a: Variant` (see TVFn1 above: same ABI, spelled differently).
+
+    That last one is why this is not "the pointer family" any more. It used to
+    refuse a signature that MIXED a variant with scalars, and uforth's
+    `define_word(name: str, native: Optional[Callable], forth_body,
+    immediate: bool) -> Word` is exactly that: `native` became a variant when a
+    `Callable` parameter did (bug-nilpy-bound-method-cannot-pass-through-a-
+    callable-parameter), leaving the signature in neither family and every call
+    dead with "unsupported param shape".
+    bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape
+
+    Three RESULT flavours, because a result — unlike an argument — does not fit
+    one register for every kind: an Int64 (ordinal / class / pointer), a Variant
+    (hidden destination), an AnsiString (managed). The Int64 one used to be the
+    only thunk here, so an AnsiString-returning method in this family had its
+    string handle boxed by pyvar_of_int and came back as an INTEGER. }
   TPFn0 = function(self: Pointer): Int64;
   TPFn1 = function(self: Pointer; a: Int64): Int64;
   TPFn2 = function(self: Pointer; a, b: Int64): Int64;
   TPFn3 = function(self: Pointer; a, b, c: Int64): Int64;
   TPFn4 = function(self: Pointer; a, b, c, d: Int64): Int64;
   TPFn5 = function(self: Pointer; a, b, c, d, e: Int64): Int64;
+  TPVFn0 = function(self: Pointer): Variant;
+  TPVFn1 = function(self: Pointer; a: Int64): Variant;
+  TPVFn2 = function(self: Pointer; a, b: Int64): Variant;
+  TPVFn3 = function(self: Pointer; a, b, c: Int64): Variant;
+  TPVFn4 = function(self: Pointer; a, b, c, d: Int64): Variant;
+  TPVFn5 = function(self: Pointer; a, b, c, d, e: Int64): Variant;
+  TPSFn0 = function(self: Pointer): AnsiString;
+  TPSFn1 = function(self: Pointer; a: Int64): AnsiString;
+  TPSFn2 = function(self: Pointer; a, b: Int64): AnsiString;
+  TPSFn3 = function(self: Pointer; a, b, c: Int64): AnsiString;
+  TPSFn4 = function(self: Pointer; a, b, c, d: Int64): AnsiString;
+  TPSFn5 = function(self: Pointer; a, b, c, d, e: Int64): AnsiString;
 
 { ---- variant makers (build via pointer writes -> safe as functions) ---- }
 
@@ -658,9 +685,18 @@ var
   sf0: TSFn0; sf1: TSFn1; sf2: TSFn2;
   if0: TIFn0; if1: TIFn1; if2: TIFn2;
   pf0: TPFn0; pf1: TPFn1; pf2: TPFn2; pf3: TPFn3; pf4: TPFn4; pf5: TPFn5;
+  pvf0: TPVFn0; pvf1: TPVFn1; pvf2: TPVFn2; pvf3: TPVFn3; pvf4: TPVFn4; pvf5: TPVFn5;
+  psf0: TPSFn0; psf1: TPSFn1; psf2: TPSFn2; psf3: TPSFn3; psf4: TPSFn4; psf5: TPSFn5;
   ptrFamily: Boolean;
   pa: array[0..4] of Int64;
   psHold: array[0..4] of AnsiString;   { keep AnsiString-by-value args alive across the call }
+  { VARIANT args, whose ADDRESS is what travels. A raw TPyRec, deliberately NOT
+    a Variant: this is a marshalling BUFFER, not an owner. The value is owned by
+    `args` for the whole call, and a managed Variant local here would release it
+    a second time on the way out — the callee's own copy then dangled and the
+    block came back as some list's element storage, so calling through it jumped
+    into a variant array. `-dPXX_HEAP_DEBUG` says WRITE AFTER FREE. }
+  pvHold: array[0..4] of TPyRec;
   pret: Int64;
 begin
   cls := GetInstanceRTTI(vmobj);
@@ -709,16 +745,48 @@ begin
     if ptrFamily then
       for i := 1 to n do
         if not ((pk[i] = 1) or (pk[i] = 2) or (pk[i] = 3) or (pk[i] = 13) or
-                (pk[i] = 17) or (pk[i] = 6) or (pk[i] = 23)) then ptrFamily := False;
+                (pk[i] = 17) or (pk[i] = 6) or (pk[i] = 23) or
+                (pk[i] = TK_VARIANT)) then ptrFamily := False;
     if not ptrFamily then
     begin
-      writeln('pyeval: host method ', name, ' has an unsupported param shape');
+      { Name the offending parameter. "unsupported param shape" on its own cost
+        a bisect to turn into a sentence, and the shape is the whole question. }
+      writeln('pyeval: host method ', name, ' has an unsupported param shape',
+              ' (arity ', n, '), kinds:');
+      if pk <> nil then
+        for i := 1 to n do
+          writeln('  param ', i, ' kind ', pk[i]);
       Halt(1);
     end;
     for i := 0 to 4 do pa[i] := 0;
     for i := 1 to n do
     begin
-      if (i - 1) >= nargs then
+      { A VARIANT param takes the ADDRESS of a 16-byte slot, which is what a
+        `const Variant` parameter means at the ABI. pvHold owns the slot for the
+        duration of the call — an `args.at()` temporary would not outlive the
+        expression, and the callee reads through the pointer. Same reason
+        psHold exists for an AnsiString.
+
+        An OMITTED variant param is a real None (VT_EMPTY), NOT the zero the
+        other kinds default to: zero would be a NULL address and the callee
+        dereferences it unconditionally. `define_word("X", native=w)` omitting
+        `forth_body` and `wid` is the everyday case. }
+      if pk[i] = TK_VARIANT then
+      begin
+        if (i - 1) >= nargs then
+        begin
+          pvHold[i-1].VType := 0;          { VT_EMPTY — a real None, see below }
+          pvHold[i-1].Payload := 0;
+        end
+        else
+        begin
+          a0 := args.at(i-1);
+          pvHold[i-1].VType := PPyRec(@a0)^.VType;      { RAW copy: no retain, }
+          pvHold[i-1].Payload := PPyRec(@a0)^.Payload;  { and so no release }
+        end;
+        pa[i-1] := Int64(NativeInt(@pvHold[i-1]));
+      end
+      else if (i - 1) >= nargs then
         pa[i-1] := 0            { omitted -> per-kind zero default }
       else if pk[i] = 23 then
       begin
@@ -741,6 +809,35 @@ begin
         pa[i-1] := pyvar_to_int(args.at(i-1));   { int/int64/bool/char }
     end;
     code := mi^.Code;
+    { The RESULT decides the thunk, the arguments never do — they are all one
+      register wide by now. A Variant result comes back through the hidden
+      destination and an AnsiString is managed, so neither can be read out of
+      the Int64 thunk: `pyvar_of_int` on a string handle used to hand the caller
+      an INTEGER, silently. }
+    if rk = TK_VARIANT then
+    begin
+      case n of
+        0: begin pvf0 := TPVFn0(code); res := pvf0(vmobj); end;
+        1: begin pvf1 := TPVFn1(code); res := pvf1(vmobj, pa[0]); end;
+        2: begin pvf2 := TPVFn2(code); res := pvf2(vmobj, pa[0], pa[1]); end;
+        3: begin pvf3 := TPVFn3(code); res := pvf3(vmobj, pa[0], pa[1], pa[2]); end;
+        4: begin pvf4 := TPVFn4(code); res := pvf4(vmobj, pa[0], pa[1], pa[2], pa[3]); end;
+        5: begin pvf5 := TPVFn5(code); res := pvf5(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4]); end;
+      end;
+      Exit;
+    end;
+    if rk = 23 then
+    begin
+      case n of
+        0: begin psf0 := TPSFn0(code); res := MakeStr(psf0(vmobj)); end;
+        1: begin psf1 := TPSFn1(code); res := MakeStr(psf1(vmobj, pa[0])); end;
+        2: begin psf2 := TPSFn2(code); res := MakeStr(psf2(vmobj, pa[0], pa[1])); end;
+        3: begin psf3 := TPSFn3(code); res := MakeStr(psf3(vmobj, pa[0], pa[1], pa[2])); end;
+        4: begin psf4 := TPSFn4(code); res := MakeStr(psf4(vmobj, pa[0], pa[1], pa[2], pa[3])); end;
+        5: begin psf5 := TPSFn5(code); res := MakeStr(psf5(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4])); end;
+      end;
+      Exit;
+    end;
     case n of
       0: begin pf0 := TPFn0(code); pret := pf0(vmobj); end;
       1: begin pf1 := TPFn1(code); pret := pf1(vmobj, pa[0]); end;

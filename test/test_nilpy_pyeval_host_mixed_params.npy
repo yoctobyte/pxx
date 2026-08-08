@@ -1,0 +1,85 @@
+# pyeval's host-call bridge and a host method whose parameters MIX a variant
+# with register-sized kinds.
+#
+# The bridge knew two shapes: all-variant, or all-pointer-sized. uforth's
+# `define_word(name: str, native: Optional[Callable], forth_body, immediate:
+# bool) -> Word` is neither — `native` became a VARIANT when a `Callable`
+# parameter did (bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter)
+# — so every call through it died with "unsupported param shape".
+# bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape
+#
+# A variant argument is really just another pointer-sized register value: what
+# travels is the ADDRESS of its 16-byte slot, exactly what `const a: Variant`
+# means at the ABI. So there is one register family, not two, plus one detail
+# the old code got wrong in the same place: an AnsiString RESULT was boxed with
+# pyvar_of_int and came back to the caller as an INTEGER (`tag()` below is the
+# probe; `pinned` prints a raw string handle there).
+#
+# Covers: a variant argument supplied, a variant argument OMITTED (it must
+# default to a real None, not the zero the other kinds use — zero is a null
+# address and the callee dereferences it), a class-typed argument omitted, an
+# AnsiString result, a class result, and the supplied callable actually being
+# STORED and CALLED afterwards.
+from dataclasses import dataclass
+from typing import Optional, Callable, List
+
+
+@dataclass
+class Word:
+    name: str
+    native: Optional[Callable[["VM"], None]] = None
+    immediate: bool = False
+
+
+class VM:
+    def __init__(self):
+        self.n = 0
+        self.words = []
+        self.log = []
+
+    # str[23] + Callable[variant] + class[6] + bool[2] — the mixed shape
+    def define_word(self, name: str,
+                    native: Optional[Callable[["VM"], None]] = None,
+                    forth_body: Optional[List[str]] = None,
+                    immediate: bool = False) -> Word:
+        w = Word(name, native, immediate)
+        self.words.append(w)
+        if native is None:
+            self.log.append(name + ":none")
+        else:
+            self.log.append(name + ":fn")
+        return w
+
+    # AnsiString RESULT out of the same family
+    def tag(self, n: int, extra: Optional[Callable[["VM"], None]] = None) -> str:
+        if extra is None:
+            return "tag" + str(n) + "-none"
+        return "tag" + str(n) + "-fn"
+
+    def run(self, i):
+        w = self.words[i]
+        if w.native is not None:
+            w.native(self)
+
+
+def make(k):
+    def _w(v):
+        v.n = v.n + k
+    return _w
+
+
+plain = make(5)
+vm = VM()
+env = {"vm": vm, "plain": plain}
+
+exec('vm.define_word("A", plain, None, True)', env)   # every argument supplied
+exec('vm.define_word("B")', env)                      # variant AND class omitted
+exec('vm.define_word("C", plain)', env)               # trailing two omitted
+exec('vm.log.append(vm.tag(7))', env)                 # AnsiString result
+exec('vm.log.append(vm.tag(8, plain))', env)
+
+vm.run(0)      # the callable that travelled through the bridge must still work
+vm.run(2)
+print(vm.log)
+print(vm.n)
+print(vm.words[0].immediate, vm.words[1].immediate)

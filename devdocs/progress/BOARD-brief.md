@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:7 backlog:196 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1487 rejected:29`
+`unfinished:10 blocked:7 backlog:196 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1488 rejected:29`
 
 ## Held now (working/ — do not touch these files)
 
@@ -29,7 +29,7 @@ _none — no lane is locked._
 - `bug-nilpy-dunders-not-dispatched-through-containers` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `bug-nilpy-in-over-objects-ignores-eq` [N]
-- `bug-nilpy-uforth-compiles-but-segfaults-at-runtime` [N] — blocked-by: bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape
+- `bug-nilpy-uforth-compiles-but-segfaults-at-runtime` [N] — blocked-by: bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field
 - `compat-pascal-write-fixed-huge-magnitude-differs-from-fpc` [A] — blocked-by: decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker

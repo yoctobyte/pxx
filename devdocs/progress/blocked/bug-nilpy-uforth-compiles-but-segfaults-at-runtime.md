@@ -2,8 +2,8 @@
 track: N
 prio: 40
 type: bug
-blocked-by: bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape
-summary: "uforth.py compiles, BOOTS, and now compiles colon definitions correctly (segfault + property-setter fixes, 2026-08-08). Still red: blocked on bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape, hit by the first PYTHON-bodied word that calls back into define_word"
+blocked-by: bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field
+summary: "uforth.py compiles, BOOTS, and now compiles colon definitions correctly (segfault + property-setter fixes, 2026-08-08). Still red: blocked on bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field — it now loads far enough to compile IO.UFO and dies dispatching an IMMEDIATE word"
 ---
 
 # uforth compiles, boots, and stalls loading STD.UFO
@@ -167,3 +167,25 @@ parameter list, and `define_word(name: str, native: Callable, immediate: bool)`
 mixes the two. Filed as
 [[bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape]];
 `blocked-by:` moved there. Nothing left in this ticket again.
+
+
+## 2026-08-08 (fourth pass) — loads STD.UFO's includes, dies in IO.UFO
+
+[[bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape]]
+fixed, so PYTHON-bodied words can call back into `define_word` again. uforth
+now gets as far as compiling `IO.UFO` and segfaults dispatching an IMMEDIATE
+word (`compile_token`'s `word.native(self)`, uforth.py:906) — BEGIN, WHILE, IF
+and THEN dispatch fine, REPEAT does not, and nothing distinguishes them in the
+source.
+
+`-dPXX_HEAP_DEBUG` names it: **WRITE AFTER FREE**. The callable's block was
+freed and reissued as a TPyList's element storage, so `pyvar_callv1` finds
+neither closure nor bound-fn magic, falls to its plain-code-address arm and
+jumps into a variant array. Filed as
+[[bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field]];
+`blocked-by:` moved there.
+
+Four blockers cleared in a row on this ticket now (tag-jump ABI, `-> None`
+value ABI, property setter, pyeval param shape), each one uncovering the next.
+The pattern is worth naming: uforth is not hitting ONE bug, it is walking a
+queue of them, and each fix buys a few more lines of STD.UFO.
