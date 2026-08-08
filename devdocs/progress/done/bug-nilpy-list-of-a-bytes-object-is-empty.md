@@ -42,7 +42,7 @@ Per-fix loop, plus a `.npy` covering `list(b)`, `tuple(b)`, `for x in b` and
 `b[i]`/`len(b)` (which already work), diffed against CPython.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit c22e43e6b.
 
 ## Fixed 2026-08-08
 
