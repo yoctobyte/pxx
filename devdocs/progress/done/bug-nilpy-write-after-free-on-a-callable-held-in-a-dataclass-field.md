@@ -166,4 +166,4 @@ Deeper uforth corpora are NOT green yet — `tests/*.for` hit a separate
 / `TO` / `create` / `allot`. Filed separately; it is beyond this ticket's gate.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 7090e6818.

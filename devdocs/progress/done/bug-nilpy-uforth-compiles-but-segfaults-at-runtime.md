@@ -231,4 +231,4 @@ but 1 were given` from pyeval. Filed as
 [[bug-nilpy-pyeval-lambda-host-word-arity-mismatch]].
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 7090e6818.
