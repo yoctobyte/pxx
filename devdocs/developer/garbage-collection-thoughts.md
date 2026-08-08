@@ -123,3 +123,9 @@ which is separate and much smaller).
   (move-on-return, exception-unwind finalization) that softens ARC without GC.
 - [`plan-async-coroutines.md`](plan-async-coroutines.md) — shares the allocator
   groundwork.
+- [`../lore/the-pascal-lineage.md`](../lore/the-pascal-lineage.md) — where this
+  model came from. ARC here is not a fresh design choice: it is Delphi's managed
+  types (refcount in the block header, released by the compiler at scope exit,
+  no runtime required), inherited and extended to NilPy objects. Worth reading
+  before reopening the question, because the same architect later designed C#
+  onto a collector — one person, both answers, and neither of them careless.

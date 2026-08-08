@@ -73,6 +73,41 @@ That is the trade the two halves of the family made. Delphi optimized for the
 enterprise and got enterprise virtues. FPC optimized for openness and reach and got
 those. Both are honest choices. They just serve different people.
 
+## The inheritance that is actually load-bearing
+
+The history above is affection. This part is engineering, and it is the reason the
+lineage is not merely sentimental.
+
+Delphi's managed types — `AnsiString`, dynamic arrays, refcounted interfaces —
+answered a question the industry is still arguing about: **how do you reclaim memory
+without a garbage collector?** Its answer was refcounting with deterministic
+lifetime, emitted by the compiler at scope exit. No collector, no pauses, no runtime
+that has to exist before your program can start. That was 1995.
+
+pxx runs on that exact protocol. The refcount lives in the heap-block header word
+below the payload, the same place Delphi's string header put it, and
+`compiler/builtin/builtinheap.pas` is where it lives now. The Nil-Python work
+extended it to Python objects rather than replacing it: a NilPy class instance is
+reclaimed by the same mechanism as an `AnsiString`. When the project weighed
+replacing all of it with a tracing collector, the decision
+([`../developer/garbage-collection-thoughts.md`](../developer/garbage-collection-thoughts.md))
+went the other way and for a reason Delphi would have recognised — a compiler can
+*elide* what it emits, and no amount of codegen removes a collector's interval cost.
+
+Which puts a small irony in the record. The memory-safety problem that has large
+vendors rewriting C in Rust today is the same problem Object Pascal was quietly
+addressing thirty years ago from the other side: not by proving safety statically,
+but by making lifetime deterministic and letting the compiler carry it. The
+guarantees are genuinely different — Rust's are stronger and cover aliasing and
+bounds, which refcounting does not touch — so this is not a claim that Delphi solved
+it first. But the half it did solve, it solved without a runtime, and that half is
+the one this compiler inherited and is still building on.
+
+Hejlsberg designed Object Pascal and then, at Microsoft, C# — a language whose
+memory model went the other way entirely, onto a collector. One architect, both
+answers, thirty years apart. It is worth knowing that when the temptation arises to
+treat this as a settled question.
+
 ---
 
 With gratitude to all of them — Wirth and Pascal, Hejlsberg and the Borland and
