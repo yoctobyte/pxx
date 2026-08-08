@@ -3151,6 +3151,45 @@ begin
       PyInferLastCi := FindUClass('TPyList');
     Exit;
   end;
+  { A sequence REPEAT written COUNT-FIRST: `u * [7]`, `n * bytes(...)`.
+
+    The literal checks above all key on what the expression STARTS with, so
+    `[7] * u` was typed a list and the reversed `u * [7]` fell through to
+    arithmetic and inferred Integer — and a def returning it handed back the
+    list HANDLE as a number, silently (`f(2)` printed 130251386519784 instead of
+    `[7, 7]`). Python's `*` on a sequence is commutative, so the inference has
+    to be too; the repeat LOWERING already accepts both orders
+    (PyIsListRepeatPair tests each side), which is exactly why the value was
+    built correctly and only its declared type was wrong.
+
+    Only the FIRST top-level `*` is examined, and `**` is excluded — its two
+    tkStar tokens would otherwise make `2 ** 3` recurse on `* 3`.
+    bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int }
+  if startIdx < endIdx then
+  begin
+    depth := 0;
+    for k2 := startIdx to endIdx - 1 do
+    begin
+      if Tokens[k2].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+      else if Tokens[k2].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
+      else if (depth = 0) and (Tokens[k2].Kind = tkStar) and (k2 > startIdx) then
+      begin
+        if ((k2 + 1 < endIdx) and (Tokens[k2 + 1].Kind = tkStar)) or
+           (Tokens[k2 - 1].Kind = tkStar) then Break;    { `**`, not a repeat }
+        tk := PyInferExprType(k2 + 1, endIdx);
+        if (tk = tyClass) and (PyInferLastCi >= 0) and
+           ((PyInferLastCi = FindUClass('TPyList')) or
+            (PyInferLastCi = FindUClass('TPyBytes'))) then
+        begin
+          { PyInferLastCi is already the right class from the recursive call }
+          Result := tyClass;
+          Exit;
+        end;
+        PyInferLastCi := -1;
+        Break;
+      end;
+    end;
+  end;
   { A QUALIFIED construction — `tk.Canvas(root)`, the form every tkinter
     application writes. Unqualified `Canvas(root)` was typed below; this one was
     not, so `self.canvas = tk.Canvas(root)` recorded a field with no class

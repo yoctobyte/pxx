@@ -650,6 +650,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-return-type-inference-mistypes-several-expression-shapes | N | 75 | bug | An unannotated def's inferred return type is wrong for several common expression shapes | — |
 | bug-nilpy-returning-a-construction-leaks-one-ref | N | 60 | bug | `return Node(...)` leaks one object ref per call; `x = Node(...); return x` does not | — |
 | bug-nilpy-returning-a-nested-def-yields-none | N | 70 | bug | `return inner` — a nested def returned as a value — yields None | — |
+| bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int | N | 30 | bug | SILENT WRONG VALUE: `def f(u): return u * [7]` returns the list HANDLE as an integer — the reversed LIST repeat is built correctly but the def's inferred return type is Integer. `u * bytes(...)` and `[7] * u` are both fine. | — |
 | bug-nilpy-round-ndigits-half-up-and-ignores-negative-ndigits | N | 60 | bug | `round(x, n)`: negative n ignored, and ties went half-up | — |
 | bug-nilpy-rtl-exception-surface-shadowed | N | 60 | bug | nilpy: pylib's Exception shadows sysutils' identical declaration, so RTL units fail on CreateFmt/FMessage | — |
 | bug-nilpy-runtime-raised-errors-bypass-try-except | N | 65 | bug | Runtime-raised errors bypass try/except entirely (division by zero, index, key) | — |

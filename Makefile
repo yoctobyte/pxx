@@ -1073,6 +1073,10 @@ test-nilpy: $(COMPILER)
 	# so the operands were added as handles). if/try/for/while + scalar controls.
 	./$(COMPILER) test/test_nilpy_block_nested_rebind_widens.npy /tmp/test_nilpy_blkrebind26
 	/tmp/test_nilpy_blkrebind26 | diff -u test/test_nilpy_block_nested_rebind_widens.expected -
+	# a COUNT-FIRST sequence repeat returned from a def (`return u * [7]`) infers
+	# as the sequence, not Integer. Controls pin ordinary `*` and `**`.
+	./$(COMPILER) test/test_nilpy_reversed_sequence_repeat_return.npy /tmp/test_nilpy_revrepeat26
+	/tmp/test_nilpy_revrepeat26 | diff -u test/test_nilpy_reversed_sequence_repeat_return.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

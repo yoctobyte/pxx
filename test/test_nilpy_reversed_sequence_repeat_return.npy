@@ -1,0 +1,56 @@
+# bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int
+#
+# `def f(u): return u * [7]` returned the list HANDLE as an integer
+# (130251897959656 instead of [7, 7]) — no error, a plausible number.
+#
+# PyInferExprType's literal checks all key on what the expression STARTS with,
+# so `[7] * u` typed as a list and the reversed `u * [7]` fell through to
+# arithmetic. Python's `*` on a sequence is commutative, so the inference has to
+# be too. The repeat LOWERING already accepted both orders, which is exactly why
+# the value was built correctly and only the def's declared return type was
+# wrong — the failure needed a def to be visible at all.
+#
+# Both orders of list AND bytes are asserted: `u * bytes(...)` happened to work
+# before, so testing only the list would not have shown whether the fix covers
+# the family or just the reported case.
+#
+# The controls are the point of this test. `*` is the shared token, so the new
+# check has to leave ordinary multiplication alone — ints, floats, str repeat
+# both ways, a tuple repeat, an expression on the left (`(u * 2) * [7]`), a `*`
+# INSIDE a list literal (`[u * 2, 3]`), and a call on the right
+# (`u * len([1,2])`). `**` matters most: it is two tkStar tokens, and without
+# the guard `2 ** u` recurses on `* u` and mistypes.
+#
+# Expectations are CPython's own output.
+
+def a(u):
+    return u * [7]
+def b(u):
+    return [7] * u
+def c(u):
+    return u * bytes([1])
+def d(u):
+    return bytes([1]) * u
+def e(u):
+    return u * "ab"
+def f(u):
+    return "ab" * u
+def g(u):
+    return u * 3
+def h(u):
+    return u ** 3
+def i(u):
+    return 2 ** u
+def j(u):
+    return u * 2.5
+def k(u):
+    return u * (1, 2)
+def m(u):
+    return (u * 2) * [7]
+def n(u):
+    return [u * 2, 3]
+def o(u):
+    return u * len([1, 2])
+print(a(2), b(2), c(2), d(2))
+print(e(2), f(2), g(2), h(3), i(3), j(2))
+print(k(2), m(1), n(2), o(2))
