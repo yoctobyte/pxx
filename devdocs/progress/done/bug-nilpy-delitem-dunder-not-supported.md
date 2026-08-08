@@ -100,4 +100,4 @@ A subscript READ on a class declaring `__setitem__`/`__delitem__` but NOT
 wrong value — filed as [[bug-nilpy-subscript-read-without-getitem-yields-garbage]].
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 58256d364.
