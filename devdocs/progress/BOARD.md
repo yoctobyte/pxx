@@ -38,7 +38,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (197)
+## backlog (198)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,6 +66,7 @@ _none_
 | bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int | N | 30 | bug | SILENT WRONG VALUE: `def f(u): return u * [7]` returns the list HANDLE as an integer — the reversed LIST repeat is built correctly but the def's inferred return type is Integer. `u * bytes(...)` and `[7] * u` are both fine. | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
+| bug-nilpy-uforth-file-word-set-include-redefinition | N | 35 | bug | uforth's LAST suite diff (10/11 identical): `INCLUDE <bare-name>` uses the FIRST of uforth's two same-named `w_include` nested defs, not the later redefinition — and `1+` is undefined inside an INCLUDEd helper. Isolated repros of both shapes PASS. | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
@@ -534,6 +535,7 @@ _none_
 - [p 35] [N] bug-nilpy-list-sort-method-missing
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [N] bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver
+- [p 35] [N] bug-nilpy-uforth-file-word-set-include-redefinition
 - [p 35] [N] bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
