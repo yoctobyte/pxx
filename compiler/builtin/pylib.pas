@@ -3044,10 +3044,20 @@ function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
   bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
 function PyUserObjGt(pobj, qobj: TObject; const qv: Variant;
                      var res: Boolean): Boolean; forward;
+{ `a < b` for two user objects: __lt__, or the reflected __gt__. }
+function PyUserObjLt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean; forward;
 { `divmod(a, b)` via __divmod__ / the reflected __rdivmod__, answering the
   2-tuple. False when neither exists. }
 function PyUserObjDivmod(pobj, qobj: TObject; const pv, qv: Variant;
                          var res: TObject): Boolean; forward;
+{ `a <op> b` for two user objects via an arithmetic dunder and its reflected
+  form — what a VARIANT-typed operand needs, since the compile-time dispatch
+  keys on a static class the operand does not have.
+  bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+function PyUserObjArith(pobj, qobj: TObject; const pv, qv: Variant;
+                        const dunder, rdunder: AnsiString;
+                        var res: Variant): Boolean; forward;
 
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
@@ -4700,6 +4710,17 @@ var
   src, rep: TPyList;
   k, cnt, li: Integer;
 begin
+  { A USER class operand: its own __mul__, or the reflected __rmul__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__mul__', '__rmul__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A SEQUENCE repeats too — `[0] * n` is how Python allocates a fixed-size
@@ -4856,6 +4877,17 @@ var pa, pb, r: PPyVarRec;
     it: Int64; ovf: Boolean;   { overflow watch on the machine-word loop }
     fr, fbase, fexp: Double; negExp: Boolean;
 begin
+  { A USER class operand: its own __pow__, or the reflected __rpow__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__pow__', '__rpow__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   if (not PyVarIsFloat(pa)) and (not PyVarIsFloat(pb)) and
      (pyvar_to_int(b) >= 0) then
@@ -4970,6 +5002,17 @@ var
   pa, pb, r: PPyVarRec;
   dv: Double;
 begin
+  { A USER class operand: its own __floordiv__, or the reflected __rfloordiv__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__floordiv__', '__rfloordiv__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -5001,6 +5044,17 @@ var
   pa, pb, r: PPyVarRec;
   dv: Double;
 begin
+  { A USER class operand: its own __mod__, or the reflected __rmod__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__mod__', '__rmod__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A str LEFT operand makes `%` printf-style FORMATTING, not modulo — the
@@ -5135,6 +5189,17 @@ var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  { A USER class operand: its own __add__, or the reflected __radd__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__add__', '__radd__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { list + list -> a NEW list holding both, like Python. `xs += ys` is separate
@@ -5227,6 +5292,17 @@ function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  { A USER class operand: its own __sub__, or the reflected __rsub__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__sub__', '__rsub__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -5255,6 +5331,17 @@ end;
 
 function pymod_v(const a: Variant; const b: Variant): Variant;
 begin
+  { A USER class operand: its own __mod__, or the reflected __rmod__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__mod__', '__rmod__', Result) then Exit;
   Result := pyfloormod_v(a, b);
 end;
 
@@ -5340,7 +5427,7 @@ end;
 
 function pycmp_v(const a: Variant; const b: Variant): Int64;
 var pa, pb: PPyVarRec; sa, sb: AnsiString; fa, fb: Double; ia, ib: Int64;
-    oa, ob: TObject; pc: Integer;
+    oa, ob: TObject; pc: Integer; cmpB: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   if (pa^.VType = 7) and (pb^.VType = 7) then
@@ -5349,6 +5436,28 @@ begin
     if (oa is TPyList) and (ob is TPyList) then
     begin
       Result := pylist_cmp(TPyList(oa), TPyList(ob));
+      Exit;
+    end;
+    { a USER class's own ordering. pycmp_v owes -1/0/1, so BOTH directions are
+      asked: `__lt__` (or the reflected `__gt__`) decides less-than, and only if
+      that is False is greater-than asked. A class declaring just one of the two
+      still answers correctly, because each helper falls back to the other
+      operand's mirror dunder — which is the common case, since Python's
+      ordering protocol only requires __lt__.
+      Without this, `lhs < p` on two VARIANT-typed operands raised while the
+      statically-typed spelling worked.
+      bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+    if PyUserObjLt(oa, ob, b, cmpB) then
+    begin
+      if cmpB then begin Result := -1; Exit; end;
+      if PyUserObjGt(oa, ob, b, cmpB) then
+        if cmpB then begin Result := 1; Exit; end;
+      Result := 0;
+      Exit;
+    end;
+    if PyUserObjGt(oa, ob, b, cmpB) then
+    begin
+      if cmpB then Result := 1 else Result := 0;
       Exit;
     end;
     { any other object pair: no ordering defined, and reading the handles as
@@ -5398,6 +5507,17 @@ end;
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
 var r: PPyVarRec; da, db: Double;
 begin
+  { A USER class operand: its own __truediv__, or the reflected __rtruediv__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__truediv__', '__rtruediv__', Result) then Exit;
   { pyvar_to_float RAISES TypeError for a str/list/dict/None tag, so the
     coercion is the type check — there is no arm that reads a handle as a
     number. Divisor first is deliberate only in that both must be numbers
@@ -9986,6 +10106,18 @@ type
   TPyHashFn  = function(self: Pointer): Int64;
   TPyObjDunderFn    = function(self: Pointer; const other: Variant): Pointer;
   TPyObjDunderObjFn = function(self: Pointer; other: Pointer): Pointer;
+  { An ARITHMETIC dunder returns whatever the body returns, so the call has to
+    be typed by the method's RetKind rather than assumed. Only the
+    Variant-`other` shape is declared: a hand-written `def __add__(self, q)`
+    leaves `q` unannotated, which is tk=22, and unlike __eq__ there is no
+    dataclass-GENERATED arithmetic dunder to produce the class-pointer shape.
+    Any other parameter shape falls through to the caller's existing path. }
+  TPyArithV = function(self: Pointer; const other: Variant): Variant;
+  TPyArithS = function(self: Pointer; const other: Variant): AnsiString;
+  TPyArithI = function(self: Pointer; const other: Variant): Int64;
+  TPyArithD = function(self: Pointer; const other: Variant): Double;
+  TPyArithB = function(self: Pointer; const other: Variant): Boolean;
+  TPyArithO = function(self: Pointer; const other: Variant): Pointer;
 
 { ONE dunder call, shared by every boolean binary dunder this unit dispatches
   at run time. Looks `dunder` up on selfObj's class and calls it with otherObj,
@@ -10080,6 +10212,69 @@ begin
   end;
 end;
 
+{ Call ONE arithmetic dunder, converting its result to a Variant by the RetKind
+  the RTTI declares. Every kind the frontend actually emits for a `return` is
+  covered — measured with `PXXDBG=a.ir:<Class>.__add__` over bodies returning a
+  str, an int, a float, a bool, a list and a mixed pair — and an unrecognised
+  kind answers False so the caller keeps its existing behaviour rather than
+  calling through a pointer whose ABI has not been checked. }
+function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
+                          const dunder: AnsiString; var res: Variant): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
+    fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
+    fb: TPyArithB; fo: TPyArithO;
+    sres: AnsiString; ores: Pointer; r: PPyVarRec;
+begin
+  PyUserArithCall1 := False;
+  if (selfObj = nil) or (otherObj = nil) then Exit;
+  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(selfObj));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, dunder);
+  if mi = nil then Exit;
+  if mi^.Arity <> 2 then Exit;
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk[1] <> 22 then Exit;               { `other` must be a Variant }
+  rk := mi^.RetKind;
+  r := PPyVarRec(@res);
+  if rk = 22 then
+  begin
+    fv := TPyArithV(mi^.Code); res := fv(Pointer(selfObj), otherV);
+  end
+  else if (rk = 23) or (rk = 4) then
+  begin
+    fs := TPyArithS(mi^.Code); sres := fs(Pointer(selfObj), otherV);
+    r^.VType := 6; PPyAnsiString(@r^.Payload)^ := sres;
+  end
+  else if (rk = 13) or (rk = 1) or (rk = 11) or (rk = 15) then
+  begin
+    fi := TPyArithI(mi^.Code);
+    r^.VType := 2; r^.Payload := fi(Pointer(selfObj), otherV);
+  end
+  else if (rk = 19) or (rk = 18) then
+  begin
+    fd := TPyArithD(mi^.Code);
+    r^.VType := 3; PPyDouble(@r^.Payload)^ := fd(Pointer(selfObj), otherV);
+  end
+  else if rk = 2 then
+  begin
+    fb := TPyArithB(mi^.Code);
+    r^.VType := 4;
+    if fb(Pointer(selfObj), otherV) then r^.Payload := 1 else r^.Payload := 0;
+  end
+  else if rk = 6 then
+  begin
+    fo := TPyArithO(mi^.Code); ores := fo(Pointer(selfObj), otherV);
+    if ores = nil then Exit;
+    r^.VType := 7; r^.Payload := Int64(NativeInt(ores));
+    PXXObjRetain(ores);
+  end
+  else
+    Exit;
+  PyUserArithCall1 := True;
+end;
+
 { Box an object handle as a VT_OBJECT variant, for handing the REFLECTED operand
   to a Variant-shaped dunder.
 
@@ -10124,6 +10319,36 @@ begin
   if PyUserObjGt then Exit;
   PyObjAsVar(pobj, pv);
   PyUserObjGt := PyUserObjBoolDunder(qobj, pobj, pv, '__lt__', res);
+end;
+
+{ `a <op> b` on two user objects: the direct dunder, then the REFLECTED one on
+  the other operand — CPython's own order. This is the runtime twin of the
+  compile-time dispatch in the parser, which cannot fire when an operand's
+  static type is a variant: a module global bound to a scalar BEFORE the class
+  instance is one ordinary way to get one (`other = 0` then `other = V(1)`),
+  and the symptom was a bare `TypeError: expected a number, got object` on an
+  `__add__` the program plainly declares.
+  bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+function PyUserObjArith(pobj, qobj: TObject; const pv, qv: Variant;
+                        const dunder, rdunder: AnsiString;
+                        var res: Variant): Boolean;
+begin
+  PyUserObjArith := PyUserArithCall1(pobj, qobj, qv, dunder, res);
+  if PyUserObjArith then Exit;
+  PyUserObjArith := PyUserArithCall1(qobj, pobj, pv, rdunder, res);
+end;
+
+{ `a < b`, the mirror of PyUserObjGt: __lt__ direct, then the reflected __gt__.
+  Needed on its own because pycmp_v owes a THREE-way answer, so "not greater"
+  is not the same question as "less". }
+function PyUserObjLt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean;
+var pv: Variant;
+begin
+  PyUserObjLt := PyUserObjBoolDunder(pobj, qobj, qv, '__lt__', res);
+  if PyUserObjLt then Exit;
+  PyObjAsVar(pobj, pv);
+  PyUserObjLt := PyUserObjBoolDunder(qobj, pobj, pv, '__gt__', res);
 end;
 
 { `divmod(a, b)`: a.__divmod__(b), then the reflected b.__rdivmod__(a). The

@@ -1,0 +1,13 @@
+add   ADD2
+sub   5
+mul   21.0
+div   3.5
+fdiv  3
+mod   1
+pow   49
+lt    False
+radd  ('radd', 3, 4)
+bare  TypeError
+nums  7 3 10 2.5 2 1 25
+strs  xy
+lists [1, 2] [1, 1]

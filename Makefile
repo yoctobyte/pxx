@@ -1064,6 +1064,11 @@ test-nilpy: $(COMPILER)
 	# __getitem__ too, and one with only __delitem__), key evaluated once.
 	./$(COMPILER) test/test_nilpy_delitem_dunder.npy /tmp/test_nilpy_delitem26
 	/tmp/test_nilpy_delitem26 | diff -u test/test_nilpy_delitem_dunder.expected -
+	# arithmetic/ordering dunders dispatch on a VARIANT operand too (compile-time
+	# dispatch keys on a static class a variant does not have). All 8 arith entry
+	# points plus pycmp_v's three-way ordering.
+	./$(COMPILER) test/test_nilpy_variant_operand_arith_dunders.npy /tmp/test_nilpy_vararith26
+	/tmp/test_nilpy_vararith26 | diff -u test/test_nilpy_variant_operand_arith_dunders.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

@@ -4,6 +4,8 @@ type: bug
 track: N
 prio: 45
 blocked-by: [feature-nilpy-runtime-dunder-dispatch-on-variants]
+status: done
+owner: claude-AN
 ---
 
 # Rebinding a module global from a scalar to a class kills dunder dispatch
@@ -150,3 +152,61 @@ Left at 70 it propagated 70 back up the whole chain (blocked-by
 so `progress.sh next` kept offering the postponed decision as the global top
 pick — which is how it reached an agent today and two days ago. Restore to 70
 together with the cluster when the decision is made.
+
+## Fixed (2026-08-09, claude-AN)
+
+The repro matches CPython. The ticket's own summary framed it correctly —
+*"dispatch is compile-time only; scalar-then-class rebinding is just one way to
+get a variant"* — so the fix is a runtime arm in pylib's variant arithmetic, not
+a rule about rebinding.
+
+### Unblocked, not blocked
+
+`blocked-by: feature-nilpy-runtime-dunder-dispatch-on-variants` no longer holds:
+that mechanism now exists in `pylib.pas` (`PyFindDunder` over the class RTTI,
+added 2026-08-08/09 for `__eq__`, `__hash__`, `__lt__`/`__gt__` and
+`__divmod__`). This ticket is the fifth user of it.
+
+### All EIGHT arithmetic entry points, plus ordering
+
+`pyadd_v`, `pysub_v`, `pymul_v`, `pytruediv_v`, `pyfloordiv_v`, `pyfloormod_v`,
+`pymod_v`, `pypow_v` each get a user-object arm ahead of their list/str/numeric
+arms (so a user class can override even those, matching Python's precedence),
+trying the direct dunder then the reflected one.
+
+**Ordering is a separate function and would have been missed by a per-operator
+sweep.** `<` goes through `pycmp_v`, which owes a three-way −1/0/1 answer rather
+than a boolean, so it asks `__lt__` (or the reflected `__gt__`) first and only
+then greater-than. A class declaring just one of the pair still answers, which
+matters because Python's ordering protocol only requires `__lt__`. The test's
+`lt` line is what catches a fix that stops at the arithmetic ones — it was
+failing after the eight arms were wired.
+
+### Typed by RetKind, measured not assumed
+
+Unlike `__eq__`, an arithmetic dunder returns whatever the body returns, so the
+call is typed from `mi^.RetKind`. Measured with `PXXDBG=a.ir:<Class>.__add__`
+over bodies returning a str, an int, a float, a bool, a list and a mixed pair;
+arms exist for each, and an unrecognised kind answers False so the caller keeps
+its old behaviour rather than calling through an unchecked ABI. Only the
+Variant-`other` parameter shape is accepted — there is no dataclass-GENERATED
+arithmetic dunder to produce the class-pointer shape that `__eq__` needed.
+
+### Verification
+
+`test/test_nilpy_variant_operand_arith_dunders.{npy,expected}` (`.expected` from
+CPython): all seven operators through a variant operand each with a different
+return kind, `<`, the reflected form, the no-dunder TypeError, and controls that
+variant scalars/strings/lists are untouched. `gate.sh quick` GREEN. Thirteen
+earlier probes from this session (arith, divmod, eq, sort, repr, delitem,
+pathlib, class-rebinding) re-diffed against CPython: unchanged.
+
+### Found while gating, filed separately
+[[bug-nilpy-block-nested-scalar-then-class-rebind-loses-widening]] — the same
+rebinding INSIDE a nested block (`if True:` or `try:`) loses the widening
+altogether and adds handles silently. Verified pre-existing against the pinned
+binary, so not a regression from this change; it is why this test binds its
+no-dunder control at module level.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

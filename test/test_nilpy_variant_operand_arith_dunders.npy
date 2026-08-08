@@ -1,0 +1,98 @@
+# bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch
+#
+# Operator dunders were dispatched at COMPILE time on the operands' static
+# class, so an operand whose static type is a VARIANT never reached them:
+#
+#     other = 0        # first binding: a scalar -> the name widens to a variant
+#     other = V(1)
+#     other + p        # CPython ADD2 / pxx TypeError: expected a number, got object
+#
+# Delete the `other = 0` line and it worked. Rebinding is only ONE way to get a
+# variant operand — an unannotated parameter or an element pulled out of a list
+# is another — so the fix is a runtime arm in pylib's variant arithmetic, not a
+# rule about rebinding.
+#
+# ALL EIGHT variant entry points are wired (add/sub/mul/truediv/floordiv/mod x2/
+# pow) plus the ORDERING path, which is a separate function (pycmp_v) and owes a
+# three-way answer rather than a boolean — `lt` below is what catches a fix that
+# stops at the arithmetic ones.
+#
+# The return kind varies per body (str, int, float, bool, list, mixed), and the
+# call has to be typed by the method's declared RetKind — hence one operator per
+# return shape here rather than seven copies of the same int case.
+#
+# Controls that must NOT change: the reflected form when the LEFT operand's
+# class has no dunder; a class with no arithmetic dunder still raising
+# TypeError; and variant scalars, strings and lists keeping their own arms.
+#
+# Expectations are CPython's own output.
+
+lhs = 0        # forces `lhs` to a VARIANT, which is what kills static dispatch
+
+class V:
+    def __init__(self, n):
+        self.n = n
+    def __add__(self, q):
+        return "ADD" + str(q.n)
+    def __sub__(self, q):
+        return self.n - q.n
+    def __mul__(self, q):
+        return self.n * q.n * 1.5
+    def __truediv__(self, q):
+        return self.n / q.n
+    def __floordiv__(self, q):
+        return self.n // q.n
+    def __mod__(self, q):
+        return self.n % q.n
+    def __pow__(self, q):
+        return self.n ** q.n
+    def __lt__(self, q):
+        return self.n < q.n
+
+class R:
+    def __init__(self, n):
+        self.n = n
+    def __radd__(self, q):
+        return ("radd", q.n, self.n)
+
+class Bare:
+    def __init__(self, n):
+        self.n = n
+
+lhs = V(7)
+p = V(2)
+print("add  ", lhs + p)
+print("sub  ", lhs - p)
+print("mul  ", lhs * p)
+print("div  ", lhs / p)
+print("fdiv ", lhs // p)
+print("mod  ", lhs % p)
+print("pow  ", lhs ** p)
+print("lt   ", lhs < p)
+
+# reflected: left operand's class has no __add__
+rl = 0
+rl = Bare(3)
+print("radd ", rl + R(4))
+
+# a class with NO arithmetic dunder must still raise. Bound at MODULE level, not
+# inside the try: a scalar-then-class rebinding inside a nested block loses the
+# widening entirely and adds handles -- a different bug, filed separately as
+# bug-nilpy-block-nested-scalar-then-class-rebind-loses-widening.
+bb = 0
+bb = Bare(1)
+try:
+    print("bare ", bb + Bare(2))
+except TypeError:
+    print("bare ", "TypeError")
+
+# controls: variant scalars, strings and lists are untouched
+a = 0
+a = 5
+print("nums ", a + 2, a - 2, a * 2, a / 2, a // 2, a % 2, a ** 2)
+t = 0
+t = "x"
+print("strs ", t + "y")
+u = 0
+u = [1]
+print("lists", u + [2], u * 2)
