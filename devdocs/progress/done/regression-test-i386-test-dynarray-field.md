@@ -46,4 +46,4 @@ is being held open for it.
 
 No code change needed. Closed as an already-fixed watcher stub rather than
 rejected: the regression was real when filed.
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit ed6e77bbf.

@@ -95,4 +95,4 @@ this file and so cannot serve as the control.
 `testmgr --tier full` GREEN for both this job and
 test_nilpy_for_two_names_over_a_variant. `make test-uforth` PASS, self-host
 byte-identical, `tools/gate.sh quick` GREEN.
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit ed6e77bbf.

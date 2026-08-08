@@ -52,4 +52,4 @@ whole Makefile found this was the ONLY line with the bug — every other
 expectation containing a quote escapes it as `'"'"'`.
 
 `tools/testmgr.py --tier full --job 'test-nilpy#src:test/test_nilpy_for_two_names_over_a_variant.npy'` GREEN.
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit ed6e77bbf.

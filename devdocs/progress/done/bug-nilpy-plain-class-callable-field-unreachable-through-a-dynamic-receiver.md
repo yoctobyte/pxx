@@ -76,4 +76,4 @@ The repro above oracle-diffed with `tools/pydiff.py`, the existing
 `test_nilpy_callable_field_all_shapes.npy` still green, plus the per-fix loop.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit ed6e77bbf.
