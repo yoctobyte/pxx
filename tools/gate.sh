@@ -57,12 +57,36 @@ step() {           # step <name> <logfile> <command...>
   return 1
 }
 
-fixedpoint() {     # self-host from the PINNED seed: A == B == C, byte for byte
-  local a="$LOGDIR/sh-A" b="$LOGDIR/sh-B" c="$LOGDIR/sh-C"
-  "$PINNED" compiler/compiler.pas "$a" >/dev/null 2>&1 || return 1
-  "$a" compiler/compiler.pas "$b" >/dev/null 2>&1 || return 1
-  "$b" compiler/compiler.pas "$c" >/dev/null 2>&1 || return 1
-  cmp -s "$a" "$b" && cmp -s "$b" "$c"
+fixedpoint() {     # self-host from the PINNED seed — DELEGATED, not re-implemented
+  # This used to open-code three rounds and assert A == B == C, where A is built
+  # by pinned and B by A. That demands that PINNED ALREADY EMITS WHAT HEAD EMITS,
+  # which is false by construction for any change to the compiler's own codegen —
+  # add a builtin and B legitimately gains symbols A lacks. So the gate went RED
+  # on the normal case, one generation early, and could not go green again until
+  # `make pin` ran.
+  #
+  # It is the exact mistake the Makefile's $(COMPILER) rule documents as wrong
+  # (chore-makefile-selfhost-iterate-to-convergence): "a stale seed legitimately
+  # needs an extra round ... demanding one pass is what made a normal bootstrap
+  # look like a failure." gate.sh reimplemented the check inline and reintroduced
+  # the bug it had already been fixed for elsewhere — so the fix is to stop having
+  # a second implementation at all.
+  #
+  # tools/selfhost_fixedpoint.sh is authoritative: it iterates to MAX_ROUNDS and
+  # additionally enforces the anti-Thompson property (the hermetic fixedpoint must
+  # equal compiler/pascal26), which the inline version never checked. It also
+  # PRINTS ITS REASON — the old function sent every round to /dev/null, so a FAIL
+  # line sat above a 0-byte fixedpoint.log and named no cause, which is what turned
+  # each occurrence into a manual bisect.
+  #
+  # Exit 77 is its "no pinned stable" skip and must not read as a gate failure.
+  tools/selfhost_fixedpoint.sh
+  local rc=$?
+  if [ "$rc" = 77 ]; then
+    echo "SKIP: no pinned stable to seed from — self-host gate not run"
+    return 0
+  fi
+  return "$rc"
 }
 
 echo "gate: mode=$MODE  logs=$LOGDIR"
