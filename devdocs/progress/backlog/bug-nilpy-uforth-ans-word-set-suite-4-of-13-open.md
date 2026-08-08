@@ -2,10 +2,10 @@
 track: N
 prio: 45
 type: bug
-summary: "The FULL Forth 2012/ANS suite measured per word set: 10 of 13 byte-identical to CPython (coreext FIXED 2026-08-08 — the closure bridge's arity table had gaps). 3 open, each with its own ticket and a minimal repro: block, tools, file. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
+summary: "The FULL Forth 2012/ANS suite measured per word set: 11 of 13 byte-identical to CPython (coreext and block both FIXED 2026-08-08 — a gapped closure-bridge arity table, and a borrowed return read as owned). 2 open, each with its own ticket and a minimal repro: tools, file. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
 ---
 
-# uforth's ANS word-set suite: 10 of 13 identical, 3 open
+# uforth's ANS word-set suite: 11 of 13 identical, 2 open
 
 uforth ships the **Forth 2012 test suite** (`tests/`, from
 forth2012-test-suite 0.15.0) — the John Hayes ANS tester plus per-word-set
@@ -29,7 +29,7 @@ binary against CPython running the same `uforth.py`:
 | `searchordertest.fth` | **IDENTICAL** |
 | `stringtest.fth` | **IDENTICAL** |
 | `coreexttest.fth` | **IDENTICAL** — was SEGFAULT, fixed 2026-08-08 |
-| `blocktest.fth` | **SEGFAULT** (rc 139, 43 of 124 lines) |
+| `blocktest.fth` | **IDENTICAL** — was SEGFAULT, fixed 2026-08-08 |
 | `toolstest.fth` | **HANG** (rc 124 = timeout, 43 of 47 lines) |
 | `filetest.fth` | wrong output (both exit 0, same line count) |
 
@@ -49,12 +49,14 @@ minimal repro:
   function types had GAPS (no 10, no 12, nothing above 13) and rounded UP to the
   next type it had. That segfaults rather than degrading. Regression test:
   `test/test_nilpy_escaping_closure_many_captures.npy`, captures 8..20.
-- **block** — `1 BLOCK DROP UPDATE` then `FLUSH` segfaults.
-  `flush_blocks` writes through `self._ensure_block(blk) -> bytearray`, and a
-  borrowed object returned out of an annotated function is over-released:
-  [[bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released]]
-  (root cause measured — `IRNodeYieldsOwnedRef` reads a container index, which
-  is an AN_CALL, as an owned +1).
+- **block — FIXED** (`fix(A): a variant-returning call is not an owned object
+  reference`). `flush_blocks` writes through
+  `self._ensure_block(blk) -> bytearray`, and that borrowed return was read as
+  owned, so the block store's buffer was freed the moment the helper returned:
+  [[bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released]].
+  **Timing note for whoever re-measures this:** blocktest is the slow one —
+  244s under pxx against CPython's 82s. A 180s timeout reads as a HANG and cost
+  this session one wrong "still broken" call. Give it 600s.
 - **toolstest HANGS** rather than crashing, and rightly was not assumed to share
   a cause: `CS-ROLL`'s `pop(index)` leaves the surviving tuple as `()`.
   [[bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element]].

@@ -38,7 +38,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (191)
+## backlog (190)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,7 +48,6 @@ _none_
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
-| bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released | A | 55 | bug | A NilPy function that returns a container element (`return store[k]`) hands the caller a BORROW the ARC model treats as owned: the caller's local releases it at scope exit and the container's own reference dies. Root cause measured — the dict/list index lowers to an AN_CALL, and IRNodeYieldsOwnedRef reads any AN_CALL as +1, so the return-retain is skipped. | — |
 | bug-nilpy-augmented-subscript-evaluates-its-index-twice | N | 30 | bug | NilPy: `d[key()] += 1` calls key() TWICE — the augmented-subscript desugar re-evaluates the base and index. CPython evaluates each once. The stored value is correct; only a side-effecting index is observable. | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
 | bug-nilpy-def-returning-a-precreated-global-has-no-return-type | N | 35 | bug | `rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails | — |
@@ -64,7 +63,7 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int | N | 30 | bug | SILENT WRONG VALUE: `def f(u): return u * [7]` returns the list HANDLE as an integer — the reversed LIST repeat is built correctly but the def's inferred return type is Integer. `u * bytes(...)` and `[7] * u` are both fine. | — |
-| bug-nilpy-uforth-ans-word-set-suite-4-of-13-open | N | 45 | bug | The FULL Forth 2012/ANS suite measured per word set: 10 of 13 byte-identical to CPython (coreext FIXED 2026-08-08 — the closure bridge's arity table had gaps). 3 open, each with its own ticket and a minimal repro: block, tools, file. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated. | — |
+| bug-nilpy-uforth-ans-word-set-suite-4-of-13-open | N | 45 | bug | The FULL Forth 2012/ANS suite measured per word set: 11 of 13 byte-identical to CPython (coreext and block both FIXED 2026-08-08 — a gapped closure-bridge arity table, and a borrowed return read as owned). 2 open, each with its own ticket and a minimal repro: tools, file. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated. | — |
 | bug-nilpy-uforth-file-word-set-include-redefinition | N | 35 | bug | uforth's LAST suite diff (10/11 identical): `INCLUDE <bare-name>` uses the FIRST of uforth's two same-named `w_include` nested defs, not the later redefinition — and `1+` is undefined inside an INCLUDEd helper. Isolated repros of both shapes PASS. | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
@@ -361,9 +360,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1506)
+## done (1507)
 
-1506 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1507 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -419,7 +418,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland

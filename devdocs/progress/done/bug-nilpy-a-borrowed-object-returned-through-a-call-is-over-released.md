@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: bug
 summary: "A NilPy function that returns a container element (`return store[k]`) hands the caller a BORROW the ARC model treats as owned: the caller's local releases it at scope exit and the container's own reference dies. Root cause measured — the dict/list index lowers to an AN_CALL, and IRNodeYieldsOwnedRef reads any AN_CALL as +1, so the return-retain is skipped."
-status: working
+status: done
 owner: claude-A-uforth
 ---
 
@@ -85,3 +85,6 @@ word set dies at `1 BLOCK DROP UPDATE` + `FLUSH`, five TESTING groups in.
 The repro above matches CPython, `make test-nilpy` green, self-host
 byte-identical, and blocktest.fth byte-identical to CPython running the same
 uforth.py.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.
