@@ -212,6 +212,7 @@ FPC_CANARY_TIERS = ("native", "limited", "full")
 SELFHOST_GATE_TIERS = ("native", "limited", "full")
 # The job whose red aborts the tier and publishes immediately (see Manager.run).
 SELFHOST_GATE_TARGET = "selfhost-fixedpoint"
+FPC_CANARY_TARGET = "fpc-bootstrap"
 MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
 SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this...
 SWAP_FLOOR_FRAC = 0.10          # ...but never demand more than this much of SwapTotal
@@ -1287,8 +1288,22 @@ class Manager:
         # ground, and since dev tracks stopped running suites locally, T's
         # report latency IS the dev loop's latency — a late self-host red now
         # costs commits to unwind, not minutes.
+        # The FPC seed canary joins the front group for the same reason, minus
+        # the abort. It broke four times in three days (2026-08-01..03), always
+        # a one-line missing forward, and always found hours later once the
+        # author's context was gone — because pxx's frontend resolves a call to
+        # a function defined later in the same include and FPC, being
+        # single-pass, does not. So the property is invisible to every check a
+        # dev runs, and the whole ask of
+        # feature-t-fpc-seed-canary-closer-to-the-dev-loop is latency.
+        #
+        # It is 10.7s and appended LAST by generate(), so among ~1200 jobs its
+        # verdict landed late in the run for no reason. First means it is known
+        # at ~11s. It stays ADVISORY — it must never abort the run the way a
+        # self-host red does; making it a gate is explicitly out of scope.
+        front = (SELFHOST_GATE_TARGET, FPC_CANARY_TARGET)
         self.queue = sorted(jobs, key=lambda j: (
-            0 if j.target == SELFHOST_GATE_TARGET else 1,
+            0 if j.target in front else 1,
             -(j.exp_dur if j.exp_dur else CLASSES[j.cls]["timeout"])))
         # cores/mem-aware admission does the real throttling; the cap is just
         # a runaway guard, and >nproc lets io/qemu-idle jobs keep cores busy
