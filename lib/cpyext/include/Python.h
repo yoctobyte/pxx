@@ -107,10 +107,12 @@ typedef unsigned long Py_uhash_t;
  * to detect a build/runtime mismatch, which for us can never differ. */
 #define Py_Version ((unsigned long)PY_VERSION_HEX)
 
-/* Vectorcall: NOT implemented by this runtime. The flag bit is declared
- * because generated call helpers mask it off an argument count before doing
- * anything else; with no vectorcall protocol here it is never set, so the
- * mask is a no-op and the ordinary tp_call/PyObject_Call path is taken. */
+/* Vectorcall. Since M5b this runtime DOES honour the protocol, but only the
+ * limited-API half of it: a heap type declares where its vectorcall pointer
+ * lives by putting a `__vectorcalloffset__` entry in its Py_tp_members table
+ * (see PyType_FromMetaclass), and PyVectorcall_Call reads the slot from there.
+ * The flag bit below is still never SET by this runtime — nothing here hands
+ * out a borrowable argument-vector prefix — so the mask stays a no-op. */
 #define PY_VECTORCALL_ARGUMENTS_OFFSET \
     ((size_t)1 << (8 * sizeof(size_t) - 1))
 
@@ -166,17 +168,44 @@ typedef unsigned long Py_uhash_t;
  * normally supplies). Both keep their attributes in ob_attrs. */
 #define PYOBJ_CFUNC  9
 #define PYOBJ_NS    10
+/* M5b: a type object (PyTypeObject, whose own first member is this header)
+ * and an INSTANCE of one. An instance's storage is tp_basicsize bytes that the
+ * EXTENSION lays out — this header sits at offset 0 and everything past it
+ * belongs to the extension's own struct, which is exactly the contract
+ * `PyObject_HEAD` promises and what offsetof() in a member table measures. */
+#define PYOBJ_TYPE  11
+#define PYOBJ_INST  12
 
 typedef struct _object {
     long   ob_refcnt;
     int    ob_kind;   /* PYOBJ_* above */
-    long   ob_ival;   /* PYOBJ_LONG payload */
+    long   ob_ival;   /* PYOBJ_LONG payload;
+                          PYOBJ_CFUNC: the `self` this builtin method is bound
+                          to, held as an OWNED reference and released with the
+                          method object. PyCFunction_GetSelf hands it back
+                          BORROWED, exactly as CPython's does.
+                          Owning it is deliberate and it costs something:
+                          Cython's function object owns its PyCFunction and
+                          passes ITSELF as self, so the pair is a cycle that
+                          this runtime — having no cycle collector — never
+                          reclaims. Real CPython has the identical cycle and
+                          pays for it with its GC (which is why CyFunction
+                          carries Py_TPFLAGS_HAVE_GC and a traverse slot). The
+                          alternative, a borrowed self, trades a bounded leak
+                          for a dangling pointer the moment any bound method
+                          outlives its receiver — a silent wrong answer, which
+                          is the one thing this runtime will not do. */
     double ob_fval;   /* PYOBJ_FLOAT payload */
     void  *ob_ptr;    /* PYOBJ_TUPLE/PYOBJ_LIST: PyObject** items;
                           PYOBJ_MODULE: PyMethodDef*;
                           PYOBJ_CFUNC: PyMethodDef* (the one entry);
                           PYOBJ_STR/PYOBJ_BYTES: char* bytes (NUL-terminated);
-                          PYOBJ_DICT: PyDictEntry* pairs */
+                          PYOBJ_DICT: PyDictEntry* pairs;
+                          PYOBJ_TYPE/PYOBJ_INST: this object's PyTypeObject*
+                          (for a type that is its METAtype). This is where the
+                          `ob_type` of real CPython lives — reusing the field
+                          rather than adding one keeps every other kind the
+                          same size, and Py_TYPE is the only reader. */
     long   ob_size;   /* PYOBJ_TUPLE/PYOBJ_LIST: item count;
                           PYOBJ_MODULE: method count;
                           PYOBJ_STR/PYOBJ_BYTES: byte length (excl. the NUL);
@@ -231,16 +260,148 @@ typedef enum {
 #define Py_GT 4
 #define Py_GE 5
 
-/* A stub type object: part of the real API's shape, unused by M1's own
- * extension but declared so a `PyTypeObject *` field/parameter compiles. */
+/* --- M5b: type objects with real slots -----------------------------------
+ *
+ * Through M5a a PyTypeObject was a tp_name and nothing else: identity only,
+ * enough for `Py_TYPE(o) == &PyDict_Type`. Cython's CyFunction (what
+ * `-X binding=False` used to suppress) needs the real thing — a HEAP type
+ * built from a PyType_Spec, carrying tp_call, tp_descr_get, a member table
+ * and a getset table, with instances whose storage the extension lays out.
+ *
+ * So a type object is now itself a PyObject (`ob_base`, kind PYOBJ_TYPE),
+ * which is what makes `PyTuple_Pack(1, &PyType_Type)`, `Py_DECREF(cached_type)`
+ * and `PyObject_GetAttrString(t, "__basicsize__")` mean something. Types in
+ * this runtime are IMMORTAL: the static ones are process-global, and heap
+ * types are cached in Cython's shared-ABI module for the life of the program,
+ * so nothing ever frees one and Py_DecRef leaves them alone.
+ *
+ * What this deliberately does NOT bring: inheritance. `tp_base` is recorded
+ * and walked by PyObject_TypeCheck, but no slot is INHERITED from a base and
+ * there is no MRO, no metaclass dispatch, and no user subclassing. Every type
+ * that exists here is either a builtin or built whole from one spec, and that
+ * is exactly what the limited API's own contract asks of an extension. */
+
+/* The callable shapes a slot table is built out of. Plain C typedefs, named
+ * as CPython names them because the generated code casts through them. */
+typedef PyObject *(*unaryfunc)(PyObject *o);
+typedef PyObject *(*binaryfunc)(PyObject *a, PyObject *b);
+typedef PyObject *(*ternaryfunc)(PyObject *a, PyObject *b, PyObject *c);
+typedef int (*inquiry)(PyObject *o);
+typedef Py_ssize_t (*lenfunc)(PyObject *o);
+typedef int (*visitproc)(PyObject *o, void *arg);
+typedef int (*traverseproc)(PyObject *o, visitproc visit, void *arg);
+typedef void (*destructor)(PyObject *o);
+typedef void (*freefunc)(void *p);
+typedef PyObject *(*reprfunc)(PyObject *o);
+typedef Py_hash_t (*hashfunc)(PyObject *o);
+typedef PyObject *(*getattrofunc)(PyObject *o, PyObject *name);
+typedef int (*setattrofunc)(PyObject *o, PyObject *name, PyObject *v);
+typedef PyObject *(*richcmpfunc)(PyObject *a, PyObject *b, int op);
+typedef PyObject *(*getiterfunc)(PyObject *o);
+typedef PyObject *(*iternextfunc)(PyObject *o);
+typedef PyObject *(*descrgetfunc)(PyObject *o, PyObject *obj, PyObject *type);
+typedef int (*descrsetfunc)(PyObject *o, PyObject *obj, PyObject *v);
+typedef int (*initproc)(PyObject *o, PyObject *args, PyObject *kwargs);
+typedef PyObject *(*getter)(PyObject *o, void *closure);
+typedef int (*setter)(PyObject *o, PyObject *v, void *closure);
+/* The vectorcall entry point. An object does not carry a POINTER to its
+ * vectorcall function in any fixed place — its type says where, via the
+ * `__vectorcalloffset__` member entry (limited-API rule). */
+typedef PyObject *(*vectorcallfunc)(PyObject *callable, PyObject *const *args,
+                                    size_t nargsf, PyObject *kwnames);
+
+typedef struct PyGetSetDef {
+    const char *name;
+    getter      get;
+    setter      set;
+    const char *doc;
+    void       *closure;
+} PyGetSetDef;
+
+/* Slot ids: CPython's own numbering (Include/typeslots.h), not a private
+ * scheme. Only the ids this runtime actually consults are listed — an id we do
+ * not name cannot appear in a spec, because the spec is written against THIS
+ * header, so an unnamed one is a compile error rather than a silent no-op. */
+#define Py_tp_base       48
+#define Py_tp_call       50
+#define Py_tp_clear      51
+#define Py_tp_dealloc    52
+#define Py_tp_descr_get  54
+#define Py_tp_descr_set  55
+#define Py_tp_getattro   58
+#define Py_tp_hash       59
+#define Py_tp_init       60
+#define Py_tp_iter       62
+#define Py_tp_iternext   63
+#define Py_tp_methods    64
+#define Py_tp_new        65
+#define Py_tp_repr       66
+#define Py_tp_richcompare 67
+#define Py_tp_setattro   69
+#define Py_tp_str        70
+#define Py_tp_traverse   71
+#define Py_tp_members    72
+#define Py_tp_getset     73
+
+/* Type flags. Same bit positions as CPython so a value that crosses the
+ * boundary (a spec's flags word, PyType_GetFlags' result) means the same
+ * thing on both sides. Py_TPFLAGS_DEFAULT is 3.12's value. */
+#define Py_TPFLAGS_HEAPTYPE          (1UL << 9)
+#define Py_TPFLAGS_BASETYPE          (1UL << 10)
+#define Py_TPFLAGS_HAVE_GC           (1UL << 14)
+#define Py_TPFLAGS_DEFAULT           (1UL << 18)
+#define Py_TPFLAGS_UNICODE_SUBCLASS  (1UL << 28)
+
+typedef struct PyType_Slot {
+    int   slot;
+    void *pfunc;
+} PyType_Slot;
+
+typedef struct PyType_Spec {
+    const char   *name;
+    int           basicsize;
+    int           itemsize;
+    unsigned int  flags;
+    PyType_Slot  *slots;       /* terminated by slot == 0 */
+} PyType_Spec;
+
 typedef struct _typeobject {
-    const char *tp_name;
+    PyObject      ob_base;     /* kind PYOBJ_TYPE; ob_ptr is the METAtype */
+    const char   *tp_name;     /* dotted, as the spec gives it */
+    Py_ssize_t    tp_basicsize;
+    Py_ssize_t    tp_itemsize;
+    unsigned long tp_flags;
+    PyType_Slot  *tp_slots;    /* BORROWED from the spec, which is static */
+    struct _typeobject *tp_base;
+    /* Where an instance keeps these, in bytes from the object's start. 0 means
+     * "this type has none". Filled in from the type's own Py_tp_members table:
+     * __dictoffset__, __weaklistoffset__, __vectorcalloffset__ — the limited
+     * API's way of declaring them, and the only way available to a spec. */
+    Py_ssize_t    tp_dictoffset;
+    Py_ssize_t    tp_weaklistoffset;
+    Py_ssize_t    tp_vectorcall_offset;
 } PyTypeObject;
+
+/* Declared after PyTypeObject because they name it. */
+typedef PyObject *(*newfunc)(PyTypeObject *t, PyObject *args, PyObject *kwargs);
+typedef PyObject *(*allocfunc)(PyTypeObject *t, Py_ssize_t nitems);
+/* METH_METHOD's calling convention: like fastcall-with-keywords, plus the
+ * class the method was defined on. */
+typedef PyObject *(*PyCMethod)(PyObject *self, PyTypeObject *defining_class,
+                               PyObject *const *args, size_t nargs,
+                               PyObject *kwnames);
+
+/* `PyObject_HEAD` is what an extension writes at the top of its own instance
+ * struct, and it must be the WHOLE header — offsetof() past it is what the
+ * member table publishes, so anything less would misplace every field. */
+#define PyObject_HEAD PyObject ob_base;
+#define PyObject_VAR_HEAD PyObject ob_base;
 
 /* M5a: the built-in type objects generated code compares against
  * (`Py_TYPE(o) == &PyDict_Type`). One PyTypeObject per PYOBJ_* kind lives in
- * the runtime; these are those entries by name. Identity is all they carry —
- * there are no slots behind them, and `tp_name` is for diagnostics only. */
+ * the runtime; these are those entries by name. They carry no slots — a
+ * builtin's behaviour is in the PyLong_* / PyDict_* functions, not behind a
+ * slot table — so `tp_name` and identity remain all they mean. */
 extern PyTypeObject PyLong_Type;
 extern PyTypeObject PyFloat_Type;
 extern PyTypeObject PyUnicode_Type;
@@ -248,7 +409,72 @@ extern PyTypeObject PyBytes_Type;
 extern PyTypeObject PyTuple_Type;
 extern PyTypeObject PyList_Type;
 extern PyTypeObject PyDict_Type;
+/* `type` itself: generated code passes `&PyType_Type` as the base of a
+ * metaclass built from a spec. */
+extern PyTypeObject PyType_Type;
 PyTypeObject *Py_TYPE(PyObject *o);
+
+/* Building a heap type. PyType_FromMetaclass is the 3.12 entry point and the
+ * one Cython uses under Py_LIMITED_API >= 0x030C0000; the older spellings are
+ * the same call with fewer arguments. `metaclass` and `bases` are honoured
+ * only as far as this model goes: the metaclass becomes the new type's
+ * Py_TYPE, and the first base becomes tp_base — no slot is inherited through
+ * either, per the "no inheritance" note above. */
+PyObject *PyType_FromMetaclass(PyTypeObject *metaclass, PyObject *module,
+                               PyType_Spec *spec, PyObject *bases);
+PyObject *PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec,
+                                   PyObject *bases);
+PyObject *PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases);
+PyObject *PyType_FromSpec(PyType_Spec *spec);
+
+void *PyType_GetSlot(PyTypeObject *t, int slot);
+unsigned long PyType_GetFlags(PyTypeObject *t);
+int PyType_HasFeature(PyTypeObject *t, unsigned long feature);
+void PyType_Modified(PyTypeObject *t);
+int PyType_Check(PyObject *o);
+int PyType_CheckExact(PyObject *o);
+int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
+int PyObject_TypeCheck(PyObject *o, PyTypeObject *t);
+
+/* --- M5b: instances, and the GC that is not there -------------------------
+ * Allocation is by TYPE: tp_basicsize zeroed bytes with this header at offset
+ * 0. `PyObject_GC_New` is spelled as CPython spells it (a macro taking the C
+ * struct type, so the result is already the right pointer type).
+ *
+ * There is no cycle collector here — the runtime is plain refcounting — so
+ * tracking is a no-op and Py_VISIT never runs. They are NOT stubs that hide a
+ * problem: an uncollected cycle is a leak, and a leak in a module-level
+ * function object that lives as long as the process is not observable. A real
+ * cycle collector is out of scope and stays that way until something needs it.
+ */
+PyObject *_PyObject_NewFromType(PyTypeObject *t);
+#define PyObject_GC_New(TYPE, typeobj) ((TYPE *)_PyObject_NewFromType(typeobj))
+#define PyObject_New(TYPE, typeobj)    ((TYPE *)_PyObject_NewFromType(typeobj))
+void PyObject_GC_Del(void *op);
+void PyObject_GC_Track(void *op);
+void PyObject_GC_UnTrack(void *op);
+void PyObject_ClearWeakRefs(PyObject *o);
+/* CPython's own definition, verbatim in effect: it expands inside a
+ * traverseproc where `visit` and `arg` are in scope. Never executed here
+ * because nothing calls a traverse slot, but it must compile and it must not
+ * walk a null. */
+#define Py_VISIT(o) \
+    do { \
+        if ((o) != 0) { \
+            int _pxx_vret = visit((PyObject *)(o), arg); \
+            if (_pxx_vret != 0) return _pxx_vret; \
+        } \
+    } while (0)
+
+/* Vectorcall over a type that published a `__vectorcalloffset__`. This is the
+ * whole reason the member table is parsed: it is the only channel the limited
+ * API gives a spec for saying where the function pointer lives. */
+PyObject *PyVectorcall_Call(PyObject *callable, PyObject *args, PyObject *kwargs);
+
+/* Instance __dict__, at tp_dictoffset. Used directly as the func_dict/__dict__
+ * getset pair in Cython's CyFunction, which is why they are public. */
+PyObject *PyObject_GenericGetDict(PyObject *o, void *context);
+int PyObject_GenericSetDict(PyObject *o, PyObject *v, void *context);
 
 /* --- int / float / string conversion -------------------------------------- */
 PyObject *PyLong_FromLong(long v);
@@ -354,6 +580,8 @@ extern PyObject *PyExc_OverflowError;
 extern PyObject *PyExc_DeprecationWarning;
 extern PyObject *PyExc_RuntimeWarning;
 extern PyObject *PyExc_SystemError;
+extern PyObject *PyExc_MemoryError;
+extern PyObject *PyExc_StopIteration;
 
 void PyErr_SetString(PyObject *type, const char *message);
 PyObject *PyErr_Occurred(void);
@@ -503,6 +731,9 @@ PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...);
 /* PyErr_Format / PyErr_WarnFormat's shared formatter: printf plus CPython's
    object specifiers %U %S %R %A. Exposed so both can share one implementation. */
 void __pxx_cpyext_vformat(char *buf, size_t cap, const char *format, va_list ap);
+/* Py_BuildValue's format language over a va_list — the single parser both
+   Py_BuildValue and PyObject_CallFunction go through. */
+PyObject *__pxx_cpyext_vbuildvalue(const char *format, va_list ap);
 
 /* unicode / bytes / bytearray */
 Py_ssize_t PyTuple_Size(PyObject *t);
@@ -558,6 +789,30 @@ PyObject *PySys_GetObject(const char *name);                    /* borrowed */
 /* formatting */
 int PyOS_snprintf(char *str, size_t size, const char *format, ...);
 
+/* --- M5b leaf surface -----------------------------------------------------
+ * The mechanical remainder of what a `binding=True` Cython module names: ways
+ * to call, to ask, and to slice, none of which need a decision. */
+int PyCallable_Check(PyObject *o);
+int PyDict_Check(PyObject *o);
+int PyDict_CheckExact(PyObject *o);
+PyObject *PyErr_NoMemory(void);
+PyObject *PyObject_CallObject(PyObject *callable, PyObject *args);
+PyObject *PyObject_CallFunction(PyObject *callable, const char *format, ...);
+PyObject *PyObject_CallMethodObjArgs(PyObject *o, PyObject *name, ...);
+int PyObject_HasAttr(PyObject *o, PyObject *name);
+int PyObject_HasAttrString(PyObject *o, const char *name);
+PyObject *PySequence_GetItem(PyObject *o, Py_ssize_t i);
+PyObject *PyTuple_Pack(Py_ssize_t n, ...);
+PyObject *PyTuple_GetSlice(PyObject *t, Py_ssize_t lo, Py_ssize_t hi);
+int PyCFunction_GetFlags(PyObject *op);
+PyObject *PyCFunction_GetSelf(PyObject *op);              /* borrowed */
+/* There is no importer, so this cannot import; it is declared because Cython's
+ * `__Pyx_Import` names it, and it reports ImportError rather than inventing a
+ * module — same rule as PyImport_ImportModule. */
+PyObject *PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
+                                           PyObject *locals, PyObject *fromlist,
+                                           int level);
+
 /* --- declared but deliberately NOT implemented ----------------------------
  * Each is referenced from Cython utility code that a compiled-ahead-of-time
  * extension does not execute. They are declared so the module compiles, and
@@ -568,12 +823,14 @@ int PyOS_snprintf(char *str, size_t size, const char *format, ...);
  *   Py_CompileString / PyEval_EvalCode  — no Python compiler here
  *   PyTraceBack_Here                    — no PyFrameObject to record
  *   PyInterpreterState_Get / _GetID     — single, implicit interpreter
- *   PyType_GetQualName                  — no heap types until M5b
- *   PyObject_Vectorcall / _VectorcallMethod / PyVectorcall_NARGS
- *                                       — no vectorcall protocol
- *   PyCFunction_New / _NewEx / _GetFunction
- *                                       — builtin-function objects are M5b
  *   PyMemoryView_FromMemory             — buffer protocol is M6
+ *
+ * Four names left this list at M5b and are now real: PyType_GetQualName (heap
+ * types exist), PyObject_Vectorcall (the protocol is honoured through
+ * tp_vectorcall_offset), and PyCFunction_New/_NewEx/_GetFunction (builtin
+ * function objects landed at M5a). PyObject_VectorcallMethod stays a stop —
+ * it needs attribute lookup that yields an unbound callable plus the
+ * arguments-offset convention, and nothing generated has reached it.
  */
 struct _object *Py_CompileString(const char *str, const char *filename, int start);
 PyObject *PyEval_EvalCode(PyObject *co, PyObject *globals, PyObject *locals);

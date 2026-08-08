@@ -44,3 +44,28 @@ try:
     print("NOT REACHED")
 except Exception:
     print("badkw raised")
+
+
+# --- M5b: the CyFunction heap type ----------------------------------------
+# The vendored C is now generated WITHOUT `-X binding=False`, which is the
+# milestone: a module-level `def` is no longer a plain builtin function, it is
+# an instance of Cython's own CyFunction — a heap type built from a
+# PyType_Spec through PyType_FromMetaclass, with tp_call, tp_descr_get, a
+# member table declaring __vectorcalloffset__, and a getset table.
+#
+# Every number printed above would be identical either way, so those lines
+# cannot tell the two apart. These can. Each answer is the SAME generated C
+# running under real CPython 3.12:
+#
+#   >>> type(cyadd.cyadd).__name__      'cython_function_or_method'
+#   >>> cyadd.cyadd.__name__            'cyadd'
+#   >>> cyadd.cyadd.__qualname__        'cyadd'
+#   >>> cyadd.cyadd.__code__.co_varnames  ('a', 'b')
+#   >>> cyadd.cyfact.__code__.co_varnames ('n', 'i', 'r')
+print(cyadd_ext.fnTypeName("cyadd"))
+print(cyadd_ext.fnName("cyadd"))
+print(cyadd_ext.fnQualName("cysub"))
+print(cyadd_ext.fnVarNames("cyadd"))
+# cyfact has three locals, only one of which is a parameter — a code object
+# built from the wrong field would very likely still show ('a','b') for cyadd.
+print(cyadd_ext.fnVarNames("cyfact"))

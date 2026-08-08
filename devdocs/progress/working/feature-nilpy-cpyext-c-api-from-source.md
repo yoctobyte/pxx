@@ -696,3 +696,133 @@ oracle. Anyone picking this up should build group 1 first, because it is the
 one that can fail on design rather than on typing.
 
 `PyInit_cyadd` in the raw diff is a false positive: the extension defines it.
+
+## 2026-08-08 — M5b LANDED. `-X binding=False` is gone; heap types are real.
+
+Cython 3.2.9's **default** output — no `-X` flag at all, 8224 lines from an
+11-line `.pyx` — compiles under cfront, initialises, and its module-level
+`def`s are genuine `cython_function_or_method` objects: instances of a heap
+type built from a `PyType_Spec` through `PyType_FromMetaclass`, with `tp_call`,
+`tp_descr_get`, a getset table and a member table declaring
+`__vectorcalloffset__`.
+
+Verified against the oracle the milestone asks for — the SAME generated C built
+with gcc against `/usr/include/python3.12` and imported by real CPython 3.12.
+All eighteen behaviours match, including the five that are the actual proof:
+
+```
+type(cyadd).__name__          cython_function_or_method
+cyadd.__name__                cyadd
+cysub.__qualname__            cysub
+cyadd.__code__.co_varnames    a,b
+cyfact.__code__.co_varnames   n,i,r
+```
+
+Those five exist because **every arithmetic result reads the same with the flag
+or without it**. M5a's thirteen assertions cannot tell a CyFunction from a
+plain builtin function, so re-adding `binding=False` by accident would have
+failed nothing. Introspection is the only observable that distinguishes them,
+which is why the test now reaches for `__code__` at all.
+
+### The object-model change
+
+`PyTypeObject` was a `tp_name` and nothing else. It is now a real `PyObject`
+(kind `PYOBJ_TYPE`) carrying basicsize, flags, a borrowed slot array, `tp_base`
+and the three instance offsets — because generated code puts type objects in
+tuples, decrefs them, and reads `__basicsize__` off them. Instances are kind
+`PYOBJ_INST`: `tp_basicsize` zeroed bytes with our header at offset 0, which is
+exactly what `PyObject_HEAD` promises and what `offsetof()` in a member table
+measures. `ob_ptr` doubles as `ob_type` for both kinds, so no other kind grew.
+
+Three properties are deliberate and written into the header rather than left to
+be discovered:
+
+- **Slots are not inherited.** `tp_base` is recorded and `PyObject_TypeCheck`
+  walks it, but no lookup falls through to a base; there is no MRO and no
+  metaclass dispatch. Every type here is built whole from one spec, which is
+  what the limited API asks of an extension anyway.
+- **Types are immortal.** Static ones are process-global; a heap type is cached
+  in Cython's shared-ABI module for the life of the program and borrows its
+  slot array from a static spec. `Py_DecRef` refuses them outright rather than
+  relying on a large refcount, so a stray decref cannot reach one.
+- **There is no cycle collector**, so `PyObject_GC_Track`/`Py_VISIT` are
+  genuine no-ops rather than stubs standing in for something missing.
+
+**The limited API's one channel for instance offsets is the member table.** A
+spec cannot state `tp_dictoffset` / `tp_weaklistoffset` /
+`tp_vectorcall_offset` directly — CPython's documented route is a
+`Py_tp_members` entry named `__dictoffset__` / `__weaklistoffset__` /
+`__vectorcalloffset__`, which `PyType_FromMetaclass` now absorbs. Miss that and
+`PyVectorcall_Call` has nowhere to find a CyFunction's `func_vectorcall`, so
+every call to a Cython function goes looking for a slot that is nowhere. This
+is the one piece where "read the spec" and "guess" diverge completely.
+
+### Four walls, and what each one taught
+
+- **`inspect` again, now FATAL rather than latent.** M5b part 1 fixed a *stale*
+  ImportError from Cython's unconditional `PyImport_ImportModule("inspect")` by
+  clearing it once init succeeded. With `binding=True` the generated code grows
+  an **unguarded** `if (PyErr_Occurred()) goto error` a few lines later, so the
+  same abandoned error now stops the module from initialising at all — the
+  third time this one import has cost real time.
+  The repair went to the actual source: that dead call exists **because of our
+  own divergence** (this header defines the `CO_*` flags, so every read of
+  `inspect` is preprocessed out and `result` is assigned 1 unconditionally).
+  `inspect` is therefore registered as an EMPTY built-in module — observationally
+  identical to CPython for the code that remains, an honest AttributeError for
+  anything that really reads an attribute, and never a wrong value.
+- **`types` is not optional either.** Cython caches `types.MethodType` at init
+  and does not defend against the import failing. Registered, along with
+  `types.CodeType` — and CodeType is genuinely CONSTRUCTED, because under the
+  limited API `PyCode_New` is hidden and Cython builds code objects by CALLING
+  the type with the 18-argument 3.11+ signature. That forced `type_call`
+  (Py_tp_new → Py_tp_init, as CPython's `type_call` does) and a real code
+  object storing each argument under its CPython name. With `binding=True`
+  code objects are not decoration: `__Pyx_CreateCodeObjects` runs at module
+  exec and a NULL aborts init.
+- **`Py_BuildValue` silently truncated past eight values.** The item buffer was
+  a fixed 8 with `n < 8` in the LOOP CONDITION, so a longer format quietly
+  dropped the tail. Nothing had ever passed more than eight; the 18-argument
+  code-object constructor is the first caller, and it would have built a wrong
+  object rather than failing. Now sized from the format, with an unsupported
+  letter reported instead of ignored.
+- **`PyBytes_FromStringAndSize(NULL, n)` segfaulted.** CPython documents a NULL
+  pointer as "allocate n bytes, contents are the caller's problem", and that is
+  how generated code gets a writable bytecode buffer. Same for
+  `PyUnicode_FromStringAndSize`. Both now allocate and zero.
+
+### One decision worth stating: `self` is OWNED
+
+`PyCFunction_NewEx` ignored its `self` argument entirely (M5a had no bound
+builtins). CyFunction needs it — it passes ITSELF as self and reads it back in
+every vectorcall wrapper — so it is now stored, and stored **owned**.
+
+That closes a cycle this runtime cannot collect: the function object owns its
+PyCFunction, whose self points back. Real CPython has the identical cycle and
+pays for it with its GC, which is precisely why `CyFunction` carries
+`Py_TPFLAGS_HAVE_GC` and a traverse slot. The alternative — a borrowed self —
+has no leak but dangles the moment any bound method outlives its receiver, and
+a dangling pointer is a silent wrong answer. A bounded leak of module-level
+function objects is the cheaper failure and the honest one to take.
+
+### Also new
+
+`dict` gained real METHOD dispatch (`setdefault` today). Under the limited API
+Cython cannot touch dict internals, so it emits an actual method call through
+`PyObject_VectorcallMethod` — and that call is load-bearing: the shared-ABI
+type cache publishes every heap type through it, so a dict with no methods
+means no Cython type is ever registered. The mechanism is the ordinary
+`PyCFunction_NewEx` one, so the next method is one table entry.
+`PyObject_Vectorcall` and `PyObject_VectorcallMethod` are implemented rather
+than hard stops; `PyType_GetQualName` is real now that heap types exist.
+
+### Still remaining (M5c)
+
+- A `cdef class`, and a real Cython-built package from PyPI.
+- `tp_descr_get` is INSTALLED but never fires: nothing here reaches a function
+  through a type, so no bound method is ever built and `types.MethodType` is an
+  identity only. A `cdef class` with methods is what will first need it, and
+  that is the point where bound methods (and the `self` cycle above) stop being
+  hypothetical.
+- No cycle collector, stated once more because a `cdef class` allocating
+  instances in a loop is where the bounded leak stops being bounded.

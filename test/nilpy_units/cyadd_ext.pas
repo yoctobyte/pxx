@@ -25,6 +25,14 @@ function cysubKwRev(a, b: Integer): Integer;
 function cysubMixed(a, b: Integer): Integer;
 function cysubBadKw(a: Integer): Integer;
 function cyaddObjArgs(a, b: Integer): Integer;
+{ M5b: the CyFunction HEAP TYPE, made observable. Every number above reads the
+  same whether the module was generated with `-X binding=False` or without it;
+  these four are what actually distinguish a heap-type function object from a
+  plain builtin one. See cyadd_ext_host.c. }
+function fnTypeName(name: string): string;
+function fnName(name: string): string;
+function fnQualName(name: string): string;
+function fnVarNames(name: string): string;
 
 implementation
 
@@ -70,6 +78,34 @@ end;
 function cyaddObjArgs(a, b: Integer): Integer;
 begin
   cyaddObjArgs := cyadd_ext_add_objargs(a, b);
+end;
+
+function fnTypeName(name: string): string;
+var buf: array[0..255] of Char;
+begin
+  cyadd_ext_fn_typename(PChar(name), @buf[0], 256);
+  fnTypeName := PCharToString(@buf[0]);
+end;
+
+function fnName(name: string): string;
+var buf: array[0..255] of Char;
+begin
+  cyadd_ext_fn_attr(PChar(name), PChar('__name__'), @buf[0], 256);
+  fnName := PCharToString(@buf[0]);
+end;
+
+function fnQualName(name: string): string;
+var buf: array[0..255] of Char;
+begin
+  cyadd_ext_fn_attr(PChar(name), PChar('__qualname__'), @buf[0], 256);
+  fnQualName := PCharToString(@buf[0]);
+end;
+
+function fnVarNames(name: string): string;
+var buf: array[0..255] of Char;
+begin
+  cyadd_ext_fn_varnames(PChar(name), @buf[0], 256);
+  fnVarNames := PCharToString(@buf[0]);
 end;
 
 end.

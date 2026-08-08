@@ -12,6 +12,7 @@
  * PyDict_* (+ PyDict_Next iteration), and 'y'/'y#' bytes format letters. */
 
 #include <Python.h>
+#include <structmember.h>   /* M5b: PyMemberDef, for a heap type's member table */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>   /* M5a: warnings + the unsupported-API stop go to stderr */
@@ -50,6 +51,8 @@ static PyObject g_exc_overflowerror     = { 1, PYOBJ_NONE, 0, 0.0, 0, 0 };
 static PyObject g_exc_deprecationwarn   = { 1, PYOBJ_NONE, 0, 0.0, 0, 0 };
 static PyObject g_exc_runtimewarn       = { 1, PYOBJ_NONE, 0, 0.0, 0, 0 };
 static PyObject g_exc_systemerror       = { 1, PYOBJ_NONE, 0, 0.0, 0, 0 };
+static PyObject g_exc_memoryerror       = { 1, PYOBJ_NONE, 0, 0.0, 0, 0 };
+static PyObject g_exc_stopiteration     = { 1, PYOBJ_NONE, 0, 0.0, 0, 0 };
 /* True/False: the long objects 1 and 0 — this runtime has no bool kind, and
    the header says so rather than implying more. */
 PyObject _Py_TrueStruct  = { 1, PYOBJ_LONG, 1, 0.0, 0, 0 };
@@ -62,6 +65,8 @@ PyObject *PyExc_OverflowError      = &g_exc_overflowerror;
 PyObject *PyExc_DeprecationWarning = &g_exc_deprecationwarn;
 PyObject *PyExc_RuntimeWarning     = &g_exc_runtimewarn;
 PyObject *PyExc_SystemError        = &g_exc_systemerror;
+PyObject *PyExc_MemoryError        = &g_exc_memoryerror;
+PyObject *PyExc_StopIteration      = &g_exc_stopiteration;
 
 /* Process-global objects are never allocated by py_alloc and must never be
    freed by Py_DecRef. Py_None predates the range and is checked separately. */
@@ -96,15 +101,39 @@ void Py_DecRef(PyObject *o) {
     if (o == 0) return;
     if (o == &_Py_NoneStruct) return;
     if (py_is_static(o)) return;
+    /* Types are IMMORTAL in this runtime. The static ones are process-global;
+       a heap type is cached in Cython's shared-ABI module for the life of the
+       program and its slot table is borrowed from a static spec, so there is
+       no point at which freeing one would be right. Refusing here rather than
+       relying on a large refcount means a stray decref cannot ever reach it. */
+    if (o->ob_kind == PYOBJ_TYPE) return;
     o->ob_refcnt = o->ob_refcnt - 1;
     if (o->ob_refcnt <= 0) {
+        /* An instance is freed by ITS TYPE. tp_dealloc owns the whole
+           teardown, including the free — Cython's CyFunction dealloc drops its
+           own fields and then calls PyObject_GC_Del. A type with no dealloc
+           slot has no owned fields this runtime knows of, so a plain free is
+           the complete answer. */
+        if (o->ob_kind == PYOBJ_INST) {
+            PyTypeObject *t;
+            destructor dealloc;
+            t = (PyTypeObject *)o->ob_ptr;
+            dealloc = (destructor)(t != 0 ? PyType_GetSlot(t, Py_tp_dealloc) : 0);
+            if (dealloc != 0) { dealloc(o); return; }
+            if (o->ob_attrs != 0) Py_DecRef(o->ob_attrs);
+            free(o);
+            return;
+        }
         if ((o->ob_kind == PYOBJ_TUPLE || o->ob_kind == PYOBJ_STR ||
              o->ob_kind == PYOBJ_BYTES || o->ob_kind == PYOBJ_LIST ||
              o->ob_kind == PYOBJ_DICT) && o->ob_ptr != 0)
             free(o->ob_ptr);
         /* PYOBJ_CFUNC's ob_ptr is a PyMethodDef the extension OWNS (a static
            table); PYOBJ_MODULE's likewise. Neither is freed here — only the
-           attribute dict this object allocated for itself. */
+           attribute dict this object allocated for itself, and (M5b) the
+           bound `self` a builtin method holds a reference to. */
+        if (o->ob_kind == PYOBJ_CFUNC && o->ob_ival != 0)
+            Py_DecRef((PyObject *)(size_t)o->ob_ival);
         if (o->ob_attrs != 0) Py_DecRef(o->ob_attrs);
         free(o);
     }
@@ -136,13 +165,19 @@ double PyFloat_AsDouble(PyObject *o) {
     return o->ob_fval;
 }
 
+/* A NULL `s` is not an error: CPython documents it as "allocate n bytes and
+   leave the contents to the caller", and generated code uses exactly that to
+   get a writable buffer it then fills through PyBytes_AsString. Zero-filling
+   instead of leaving it uninitialised costs nothing and makes the result
+   deterministic. */
 PyObject *PyUnicode_FromStringAndSize(const char *s, Py_ssize_t n) {
     PyObject *o;
     char *buf;
     Py_ssize_t i;
     o = py_alloc(PYOBJ_STR);
+    if (n < 0) n = 0;
     buf = (char *)malloc((size_t)(n + 1));
-    for (i = 0; i < n; i++) buf[i] = s[i];
+    for (i = 0; i < n; i++) buf[i] = (s != 0) ? s[i] : 0;
     buf[n] = 0;
     o->ob_ptr = (void *)buf;
     o->ob_size = n;
@@ -208,13 +243,16 @@ PyObject *PyUnicode_New(Py_ssize_t size, Py_UCS4 maxchar) {
     return o;
 }
 
+/* NULL `s` allocates without copying — see PyUnicode_FromStringAndSize. This
+   is the form Cython uses to build a code object's bytecode buffer. */
 PyObject *PyBytes_FromStringAndSize(const char *s, Py_ssize_t n) {
     PyObject *o;
     char *buf;
     Py_ssize_t i;
     o = py_alloc(PYOBJ_BYTES);
+    if (n < 0) n = 0;
     buf = (char *)malloc((size_t)(n + 1));
-    for (i = 0; i < n; i++) buf[i] = s[i];
+    for (i = 0; i < n; i++) buf[i] = (s != 0) ? s[i] : 0;
     buf[n] = 0;
     o->ob_ptr = (void *)buf;
     o->ob_size = n;
@@ -442,11 +480,13 @@ int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
     return ok;
 }
 
-PyObject *Py_BuildValue(const char *format, ...) {
-    va_list ap;
-    int fi, n, i;
+/* The va_list form is the real implementation; Py_BuildValue and
+   PyObject_CallFunction both go through it so the format language has exactly
+   one parser and the two can never disagree about a letter. */
+PyObject *__pxx_cpyext_vbuildvalue(const char *format, va_list ap) {
+    int fi, n, i, cap;
     char c;
-    PyObject *items[8];
+    PyObject **items;
     PyObject *tup;
     int ival;
     long lval;
@@ -455,10 +495,21 @@ PyObject *Py_BuildValue(const char *format, ...) {
     Py_ssize_t slen;
     PyObject *oval;
 
+    /* One slot per format character is always enough — '#' is the only letter
+       that consumes a second argument and it never adds an item. The buffer
+       used to be a fixed 8 with `n < 8` in the loop condition, which SILENTLY
+       DROPPED every value past the eighth; Cython's 18-argument code-object
+       constructor is the first caller to go past it, and truncating there
+       would have built a wrong object rather than failing. */
+    cap = 0;
+    while (format[cap] != 0) cap = cap + 1;
+    if (cap == 0) return Py_None;
+    items = (PyObject **)malloc((size_t)cap * sizeof(PyObject *));
+    if (items == 0) return PyErr_NoMemory();
+
     fi = 0;
     n = 0;
-    va_start(ap, format);
-    while (format[fi] != 0 && n < 8) {
+    while (format[fi] != 0) {
         c = format[fi];
         if (c == 'i') {
             ival = va_arg(ap, int);
@@ -494,17 +545,29 @@ PyObject *Py_BuildValue(const char *format, ...) {
             items[n] = oval;
             n = n + 1;
         } else {
-            va_end(ap);
+            for (i = 0; i < n; i++) Py_DecRef(items[i]);
+            free(items);
+            PyErr_SetString(PyExc_TypeError,
+                            "Py_BuildValue: unsupported format letter");
             return 0;
         }
         fi = fi + 1;
     }
-    va_end(ap);
-    if (n == 0) return Py_None;
-    if (n == 1) return items[0];
+    if (n == 0) { free(items); return Py_None; }
+    if (n == 1) { tup = items[0]; free(items); return tup; }
     tup = PyTuple_New(n);
     for (i = 0; i < n; i++) PyTuple_SetItem(tup, i, items[i]);
+    free(items);
     return tup;
+}
+
+PyObject *Py_BuildValue(const char *format, ...) {
+    va_list ap;
+    PyObject *r;
+    va_start(ap, format);
+    r = __pxx_cpyext_vbuildvalue(format, ap);
+    va_end(ap);
+    return r;
 }
 
 void PyErr_SetString(PyObject *type, const char *message) {
@@ -570,21 +633,149 @@ void __pxx_cpyext_unsupported(const char *name) {
 }
 
 /* --- type objects --------------------------------------------------------
-   Identity only: `Py_TYPE(o) == &PyDict_Type` is the entire contract this
-   runtime honours, and tp_name is for diagnostics. No slots hang off them —
-   heap types with real slots are M5b. */
-PyTypeObject PyLong_Type    = { "int" };
-PyTypeObject PyFloat_Type   = { "float" };
-PyTypeObject PyUnicode_Type = { "str" };
-PyTypeObject PyBytes_Type   = { "bytes" };
-PyTypeObject PyTuple_Type   = { "tuple" };
-PyTypeObject PyList_Type    = { "list" };
-PyTypeObject PyDict_Type    = { "dict" };
-static PyTypeObject g_type_none   = { "NoneType" };
-static PyTypeObject g_type_module = { "module" };
+   A builtin type is identity plus a name: `Py_TYPE(o) == &PyDict_Type` is the
+   whole contract, and a builtin's behaviour lives in the PyDict_* / PyLong_*
+   functions rather than behind a slot table. Since M5b they are real PyObjects
+   (kind PYOBJ_TYPE) because generated code puts them in tuples and decrefs
+   them; the refcount below is the immortality marker described at Py_DecRef.
+
+   The header's ob_ptr is the METAtype. Every builtin's is `type` — including
+   PyType_Type's own, which is itself, and which is why it is filled in by
+   py_types_ready() rather than in the initialiser (a static initialiser cannot
+   name its own address as a member of itself in portable C). */
+#define PY_IMMORTAL 1073741824L
+#define PY_TYPE_HEAD { PY_IMMORTAL, PYOBJ_TYPE, 0, 0.0, 0, 0, 0 }
+
+PyTypeObject PyType_Type    = { PY_TYPE_HEAD, "type",  0, 0, 0, 0, 0, 0, 0, 0 };
+PyTypeObject PyLong_Type    = { PY_TYPE_HEAD, "int",   0, 0, 0, 0, 0, 0, 0, 0 };
+PyTypeObject PyFloat_Type   = { PY_TYPE_HEAD, "float", 0, 0, 0, 0, 0, 0, 0, 0 };
+PyTypeObject PyUnicode_Type = { PY_TYPE_HEAD, "str",   0, 0, 0, 0, 0, 0, 0, 0 };
+PyTypeObject PyBytes_Type   = { PY_TYPE_HEAD, "bytes", 0, 0, 0, 0, 0, 0, 0, 0 };
+PyTypeObject PyTuple_Type   = { PY_TYPE_HEAD, "tuple", 0, 0, 0, 0, 0, 0, 0, 0 };
+PyTypeObject PyList_Type    = { PY_TYPE_HEAD, "list",  0, 0, 0, 0, 0, 0, 0, 0 };
+PyTypeObject PyDict_Type    = { PY_TYPE_HEAD, "dict",  0, 0, 0, 0, 0, 0, 0, 0 };
+static PyTypeObject g_type_none    = { PY_TYPE_HEAD, "NoneType", 0,0,0,0,0,0,0,0 };
+static PyTypeObject g_type_module  = { PY_TYPE_HEAD, "module",   0,0,0,0,0,0,0,0 };
+static PyTypeObject g_type_cfunc   = { PY_TYPE_HEAD, "builtin_function_or_method",
+                                       0,0,0,0,0,0,0,0 };
+/* `types.MethodType`. Cython caches it at init to recognise bound methods and
+   to BUILD one from tp_descr_get. Nothing here constructs one (module-level
+   functions are never accessed through a type), so it is a name and an
+   identity — calling it is a TypeError, which is honest, not a stub. */
+static PyTypeObject g_type_method  = { PY_TYPE_HEAD, "method", 0,0,0,0,0,0,0,0 };
+/* `types.CodeType`, and this one really is constructed — see py_code_new. */
+static PyTypeObject g_type_code    = { PY_TYPE_HEAD, "code", 0,0,0,0,0,0,0,0 };
+
+static PyTypeObject *g_builtin_types[] = {
+    &PyType_Type, &PyLong_Type, &PyFloat_Type, &PyUnicode_Type, &PyBytes_Type,
+    &PyTuple_Type, &PyList_Type, &PyDict_Type, &g_type_none, &g_type_module,
+    &g_type_cfunc, &g_type_method, &g_type_code, 0
+};
+
+/* Calling a TYPE goes through the metatype's tp_call, exactly as CPython's
+   `type_call` does: allocate via the type's Py_tp_new, then run its Py_tp_init
+   if it has one. A type with no Py_tp_new cannot be instantiated and says so —
+   which is the answer for every builtin here except `code`. */
+static PyObject *py_type_call(PyObject *self, PyObject *args, PyObject *kwargs) {
+    PyTypeObject *t;
+    newfunc nf;
+    initproc init;
+    PyObject *o;
+
+    if (!PyType_Check(self)) {
+        PyErr_SetString(PyExc_TypeError, "not a type");
+        return 0;
+    }
+    t = (PyTypeObject *)self;
+    nf = (newfunc)PyType_GetSlot(t, Py_tp_new);
+    if (nf == 0) {
+        PyErr_SetString(PyExc_TypeError, t->tp_name != 0 ? t->tp_name : "type");
+        return 0;
+    }
+    o = nf(t, args, kwargs);
+    if (o == 0) return 0;
+    init = (initproc)PyType_GetSlot(t, Py_tp_init);
+    if (init != 0 && init(o, args, kwargs) < 0) { Py_DecRef(o); return 0; }
+    return o;
+}
+
+static PyType_Slot g_type_type_slots[] = {
+    { Py_tp_call, (void *)py_type_call },
+    { 0, 0 }
+};
+
+/* A code object. Under Py_LIMITED_API a Cython module cannot call PyCode_New,
+   so it builds one by CALLING types.CodeType with the 3.11+ positional
+   signature — and with `binding=True` that call is not optional: every
+   module-level def gets a code object at exec time and a failure aborts init.
+
+   Each argument is stored under the attribute name CPython gives it, so this
+   is a real code object for everything the constructor was handed. What it is
+   not is executable — there is no interpreter here to run co_code, and nothing
+   in this runtime pretends otherwise; the object exists to be a function's
+   __code__ and to name a frame in a traceback, which is exactly what generated
+   code does with it. */
+static const char *g_code_fields[] = {
+    "co_argcount", "co_posonlyargcount", "co_kwonlyargcount", "co_nlocals",
+    "co_stacksize", "co_flags", "co_code", "co_consts", "co_names",
+    "co_varnames", "co_filename", "co_name", "co_qualname", "co_firstlineno",
+    "co_linetable", "co_exceptiontable", "co_freevars", "co_cellvars", 0
+};
+
+static PyObject *py_code_new(PyTypeObject *t, PyObject *args, PyObject *kwargs) {
+    PyObject *o;
+    Py_ssize_t n;
+    Py_ssize_t i;
+
+    (void)kwargs;
+    n = (args != 0) ? PyTuple_Size(args) : -1;
+    /* 18 is the 3.11+ arity, and this header claims 3.12, so it is the only
+       shape generated code can produce. A different count means the caller
+       thinks it is talking to another Python; say so instead of guessing which
+       argument is which. */
+    if (n != 18) {
+        PyErr_SetString(PyExc_TypeError,
+                        "code() expects the 18-argument 3.11+ signature");
+        return 0;
+    }
+    o = _PyObject_NewFromType(t);
+    if (o == 0) return 0;
+    /* An instance of a type with no tp_dictoffset has nowhere of its own to
+       put attributes, so a code object is a namespace instead — the same kind
+       a module spec is. */
+    o->ob_kind = PYOBJ_NS;
+    o->ob_ptr  = 0;
+    for (i = 0; i < 18; i++)
+        PyObject_SetAttrString(o, g_code_fields[i], PyTuple_GetItem(args, i));
+    return o;
+}
+
+static PyType_Slot g_code_slots[] = {
+    { Py_tp_new, (void *)py_code_new },
+    { 0, 0 }
+};
+
+/* Give every static type its metatype. Idempotent and cheap; called from the
+   two places a type can first be observed (Py_TYPE and heap-type creation),
+   because there is no init hook a linked-in extension is guaranteed to pass
+   through before touching one. */
+static void py_types_ready(void) {
+    int i;
+    if (PyType_Type.ob_base.ob_ptr != 0) return;
+    for (i = 0; g_builtin_types[i] != 0; i++)
+        g_builtin_types[i]->ob_base.ob_ptr = (void *)&PyType_Type;
+    PyType_Type.tp_slots = g_type_type_slots;
+    g_type_code.tp_slots = g_code_slots;
+}
 
 PyTypeObject *Py_TYPE(PyObject *o) {
+    py_types_ready();
     if (o == 0) return &g_type_none;
+    /* A type object and an instance of a heap type carry their own answer. */
+    if (o->ob_kind == PYOBJ_TYPE || o->ob_kind == PYOBJ_INST) {
+        if (o->ob_ptr != 0) return (PyTypeObject *)o->ob_ptr;
+        return &PyType_Type;
+    }
     if (o->ob_kind == PYOBJ_LONG)   return &PyLong_Type;
     if (o->ob_kind == PYOBJ_FLOAT)  return &PyFloat_Type;
     if (o->ob_kind == PYOBJ_STR)    return &PyUnicode_Type;
@@ -593,7 +784,249 @@ PyTypeObject *Py_TYPE(PyObject *o) {
     if (o->ob_kind == PYOBJ_LIST)   return &PyList_Type;
     if (o->ob_kind == PYOBJ_DICT)   return &PyDict_Type;
     if (o->ob_kind == PYOBJ_MODULE) return &g_type_module;
+    if (o->ob_kind == PYOBJ_CFUNC)  return &g_type_cfunc;
     return &g_type_none;
+}
+
+/* --- heap types (M5b) ----------------------------------------------------
+   A spec in, a type out. Everything the spec says that this model can mean is
+   copied across; what it cannot is recorded here rather than implied:
+
+     - SLOTS ARE NOT INHERITED. tp_base is remembered so PyObject_TypeCheck can
+       walk it, but a lookup never falls through to a base. Every type built
+       here is built whole from one spec, which is what a limited-API extension
+       does anyway.
+     - THE METACLASS IS AN IDENTITY, not a dispatcher. It becomes the new
+       type's Py_TYPE — which is what `Py_TYPE(t) == SomeMeta` tests read — and
+       nothing is looked up through it.
+     - tp_itemsize is stored and unused: no variable-length instances exist.
+
+   The member table is the interesting part. Under the limited API a spec has
+   no way to state tp_dictoffset / tp_weaklistoffset / tp_vectorcall_offset
+   directly; CPython's documented channel is a Py_tp_members entry named
+   __dictoffset__ / __weaklistoffset__ / __vectorcalloffset__, and reading
+   those is what makes PyVectorcall_Call able to find a CyFunction's
+   func_vectorcall field at all. Miss it and every call to a Cython function
+   object would go looking for a slot that is nowhere. */
+static PyObject *py_attrs(PyObject *o);
+
+void *PyType_GetSlot(PyTypeObject *t, int slot) {
+    PyType_Slot *s;
+    if (t == 0) return 0;
+    /* Py_tp_base does not live in the slot ARRAY once the type is built —
+       CPython answers it from the type, and so does this. */
+    if (slot == Py_tp_base) return (void *)t->tp_base;
+    if (t->tp_slots == 0) return 0;
+    for (s = t->tp_slots; s->slot != 0; s++)
+        if (s->slot == slot) return s->pfunc;
+    return 0;
+}
+
+unsigned long PyType_GetFlags(PyTypeObject *t) {
+    if (t == 0) return 0;
+    return t->tp_flags;
+}
+
+int PyType_HasFeature(PyTypeObject *t, unsigned long feature) {
+    return t != 0 && (t->tp_flags & feature) != 0;
+}
+
+/* No attribute caches here, so there is nothing to invalidate. */
+void PyType_Modified(PyTypeObject *t) { (void)t; }
+
+int PyType_Check(PyObject *o) {
+    return o != 0 && o->ob_kind == PYOBJ_TYPE;
+}
+
+int PyType_CheckExact(PyObject *o) { return PyType_Check(o); }
+
+int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b) {
+    PyTypeObject *t;
+    if (a == 0 || b == 0) return 0;
+    for (t = a; t != 0; t = t->tp_base)
+        if (t == b) return 1;
+    return 0;
+}
+
+int PyObject_TypeCheck(PyObject *o, PyTypeObject *t) {
+    if (o == 0 || t == 0) return 0;
+    return PyType_IsSubtype(Py_TYPE(o), t);
+}
+
+PyObject *PyType_GetQualName(PyTypeObject *t) {
+    const char *dot;
+    if (t == 0 || t->tp_name == 0) { Py_IncRef(Py_None); return Py_None; }
+    dot = strrchr(t->tp_name, '.');
+    return PyUnicode_FromString(dot != 0 ? dot + 1 : t->tp_name);
+}
+
+/* The three member names that are really type fields in disguise. */
+static void py_type_absorb_members(PyTypeObject *t, PyMemberDef *members) {
+    PyMemberDef *m;
+    if (members == 0) return;
+    for (m = members; m->name != 0; m++) {
+        if (strcmp(m->name, "__dictoffset__") == 0)
+            t->tp_dictoffset = m->offset;
+        else if (strcmp(m->name, "__weaklistoffset__") == 0)
+            t->tp_weaklistoffset = m->offset;
+        else if (strcmp(m->name, "__vectorcalloffset__") == 0)
+            t->tp_vectorcall_offset = m->offset;
+    }
+}
+
+PyObject *PyType_FromMetaclass(PyTypeObject *metaclass, PyObject *module,
+                               PyType_Spec *spec, PyObject *bases) {
+    PyTypeObject *t;
+    PyObject *v;
+    const char *dot;
+    PyObject *attrs;
+
+    py_types_ready();
+    if (spec == 0) {
+        PyErr_SetString(PyExc_SystemError, "PyType_FromMetaclass: no spec");
+        return 0;
+    }
+    t = (PyTypeObject *)malloc(sizeof(PyTypeObject));
+    if (t == 0) return PyErr_NoMemory();
+    t->ob_base.ob_refcnt = PY_IMMORTAL;      /* types are never freed here */
+    t->ob_base.ob_kind   = PYOBJ_TYPE;
+    t->ob_base.ob_ival   = 0;
+    t->ob_base.ob_fval   = 0.0;
+    t->ob_base.ob_ptr    = (void *)(metaclass != 0 ? metaclass : &PyType_Type);
+    t->ob_base.ob_size   = 0;
+    t->ob_base.ob_attrs  = 0;
+    t->tp_name        = spec->name;          /* the spec is static; borrow it */
+    t->tp_basicsize   = (Py_ssize_t)spec->basicsize;
+    t->tp_itemsize    = (Py_ssize_t)spec->itemsize;
+    t->tp_flags       = (unsigned long)spec->flags | Py_TPFLAGS_HEAPTYPE;
+    t->tp_slots       = spec->slots;         /* likewise static */
+    t->tp_dictoffset       = 0;
+    t->tp_weaklistoffset   = 0;
+    t->tp_vectorcall_offset = 0;
+    /* PyType_GetSlot answers Py_tp_base from tp_base, which does not exist
+       yet — so the spec's own array is what has to be read here. */
+    t->tp_base = 0;
+    if (spec->slots != 0) {
+        PyType_Slot *s;
+        for (s = spec->slots; s->slot != 0; s++)
+            if (s->slot == Py_tp_base) t->tp_base = (PyTypeObject *)s->pfunc;
+    }
+    if (t->tp_base == 0 && bases != 0 && PyTuple_Check(bases) &&
+        PyTuple_Size(bases) > 0) {
+        PyObject *b0 = PyTuple_GetItem(bases, 0);   /* borrowed */
+        if (PyType_Check(b0)) t->tp_base = (PyTypeObject *)b0;
+    }
+    py_type_absorb_members(t, (PyMemberDef *)PyType_GetSlot(t, Py_tp_members));
+
+    /* The attribute dict a type answers from. Real CPython computes these
+       lazily off the type struct; here they are ordinary entries, which is
+       what makes __basicsize__ readable through PyObject_GetAttrString — the
+       check Cython's shared-ABI type cache performs on every import. */
+    attrs = py_attrs((PyObject *)t);
+    dot = strrchr(t->tp_name, '.');
+    v = PyUnicode_FromString(dot != 0 ? dot + 1 : t->tp_name);
+    PyDict_SetItemString(attrs, "__name__", v);
+    PyDict_SetItemString(attrs, "__qualname__", v);
+    Py_DecRef(v);
+    v = PyUnicode_FromStringAndSize(t->tp_name,
+            dot != 0 ? (Py_ssize_t)(dot - t->tp_name) : 0);
+    PyDict_SetItemString(attrs, "__module__", v);
+    Py_DecRef(v);
+    v = PyLong_FromLong((long)t->tp_basicsize);
+    PyDict_SetItemString(attrs, "__basicsize__", v);
+    Py_DecRef(v);
+    (void)module;   /* per-type module state is not modelled */
+    return (PyObject *)t;
+}
+
+PyObject *PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec,
+                                   PyObject *bases) {
+    return PyType_FromMetaclass(0, module, spec, bases);
+}
+
+PyObject *PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases) {
+    return PyType_FromMetaclass(0, 0, spec, bases);
+}
+
+PyObject *PyType_FromSpec(PyType_Spec *spec) {
+    return PyType_FromMetaclass(0, 0, spec, 0);
+}
+
+/* --- instances -----------------------------------------------------------
+   tp_basicsize zeroed bytes with our header at offset 0. Everything past the
+   header belongs to the extension's own struct, and zeroing is not a
+   convenience: Cython's CyFunction_Init assigns most of its fields but reads
+   func_vectorcall and func_dict before assigning them. */
+PyObject *_PyObject_NewFromType(PyTypeObject *t) {
+    PyObject *o;
+    Py_ssize_t size;
+    char *raw;
+    Py_ssize_t i;
+
+    py_types_ready();
+    if (t == 0) {
+        PyErr_SetString(PyExc_SystemError, "allocation with no type");
+        return 0;
+    }
+    size = t->tp_basicsize;
+    if (size < (Py_ssize_t)sizeof(PyObject)) size = (Py_ssize_t)sizeof(PyObject);
+    raw = (char *)malloc((size_t)size);
+    if (raw == 0) return PyErr_NoMemory();
+    for (i = 0; i < size; i++) raw[i] = 0;
+    o = (PyObject *)raw;
+    o->ob_refcnt = 1;
+    o->ob_kind   = PYOBJ_INST;
+    o->ob_ptr    = (void *)t;
+    return o;
+}
+
+/* No cycle collector: tracking is genuinely nothing to do, not a stub for
+   something missing. GC_Del is the free that a tp_dealloc ends with. */
+void PyObject_GC_Del(void *op)     { if (op != 0) free(op); }
+void PyObject_GC_Track(void *op)   { (void)op; }
+void PyObject_GC_UnTrack(void *op) { (void)op; }
+/* Nothing here ever creates a weak reference, so there is never a list to
+   clear. tp_weaklistoffset is still absorbed above, because an extension may
+   read __weaklistoffset__ back off its own type. */
+void PyObject_ClearWeakRefs(PyObject *o) { (void)o; }
+
+/* --- instance __dict__ ---------------------------------------------------
+   At tp_dictoffset, created on demand — the same lazy dict CPython gives an
+   instance, and the getter Cython installs directly as its func_dict/__dict__
+   getset pair. */
+static PyObject **py_inst_dictptr(PyObject *o) {
+    PyTypeObject *t;
+    if (o == 0 || o->ob_kind != PYOBJ_INST) return 0;
+    t = (PyTypeObject *)o->ob_ptr;
+    if (t == 0 || t->tp_dictoffset <= 0) return 0;
+    return (PyObject **)((char *)o + t->tp_dictoffset);
+}
+
+PyObject *PyObject_GenericGetDict(PyObject *o, void *context) {
+    PyObject **dp;
+    (void)context;
+    dp = py_inst_dictptr(o);
+    if (dp == 0) {
+        PyErr_SetString(PyExc_AttributeError, "__dict__");
+        return 0;
+    }
+    if (*dp == 0) *dp = PyDict_New();
+    Py_IncRef(*dp);
+    return *dp;
+}
+
+int PyObject_GenericSetDict(PyObject *o, PyObject *v, void *context) {
+    PyObject **dp;
+    (void)context;
+    dp = py_inst_dictptr(o);
+    if (dp == 0) {
+        PyErr_SetString(PyExc_AttributeError, "__dict__");
+        return -1;
+    }
+    Py_IncRef(v);
+    Py_XDECREF(*dp);
+    *dp = v;
+    return 0;
 }
 
 /* --- predicates ----------------------------------------------------------
@@ -737,7 +1170,7 @@ int PyObject_RichCompareBool(PyObject *a, PyObject *b, int op) {
    own optional-feature probe expects to see. */
 static int py_has_attrs(PyObject *o) {
     return o != 0 && (o->ob_kind == PYOBJ_MODULE || o->ob_kind == PYOBJ_NS ||
-                      o->ob_kind == PYOBJ_CFUNC);
+                      o->ob_kind == PYOBJ_CFUNC || o->ob_kind == PYOBJ_TYPE);
 }
 
 static PyObject *py_attrs(PyObject *o) {
@@ -746,9 +1179,136 @@ static PyObject *py_attrs(PyObject *o) {
     return o->ob_attrs;
 }
 
+/* M5b: an INSTANCE of a heap type keeps nothing in ob_attrs. Its attributes
+   come from its TYPE's tables — a getset descriptor's getter, or a member
+   entry — plus whatever the instance dict at tp_dictoffset holds. That order
+   is CPython's: a data descriptor on the type beats the instance dict.
+
+   Only the member types a real table uses here are read. An unknown code is
+   NOT decoded to zero: reading the wrong bytes as an int is the silent-wrong
+   -answer failure this runtime refuses everywhere, so it reports its absence.
+   Returns 1 on a hit (result in *out), 0 for "no such attribute", -1 with an
+   error set. */
+static int py_type_lookup_attr(PyObject *o, const char *name, PyObject **out) {
+    PyTypeObject *t;
+    PyGetSetDef *gs;
+    PyMemberDef *m;
+    PyObject **dp;
+    PyObject *v;
+    char *field;
+
+    *out = 0;
+    t = Py_TYPE(o);
+    if (t == 0) return 0;
+
+    for (gs = (PyGetSetDef *)PyType_GetSlot(t, Py_tp_getset);
+         gs != 0 && gs->name != 0; gs++) {
+        if (strcmp(gs->name, name) != 0) continue;
+        if (gs->get == 0) {
+            PyErr_SetString(PyExc_AttributeError, name);
+            return -1;
+        }
+        v = gs->get(o, gs->closure);
+        if (v == 0) return -1;
+        *out = v;
+        return 1;
+    }
+
+    for (m = (PyMemberDef *)PyType_GetSlot(t, Py_tp_members);
+         m != 0 && m->name != 0; m++) {
+        if (strcmp(m->name, name) != 0) continue;
+        field = (char *)o + m->offset;
+        if (m->type == T_PYSSIZET) {
+            *out = PyLong_FromLong((long)*(Py_ssize_t *)field);
+        } else if (m->type == T_INT) {
+            *out = PyLong_FromLong((long)*(int *)field);
+        } else if (m->type == T_LONG) {
+            *out = PyLong_FromLong(*(long *)field);
+        } else if (m->type == T_OBJECT || m->type == T_OBJECT_EX) {
+            v = *(PyObject **)field;
+            if (v == 0) {
+                if (m->type == T_OBJECT) { Py_IncRef(Py_None); *out = Py_None; return 1; }
+                PyErr_SetString(PyExc_AttributeError, name);
+                return -1;
+            }
+            Py_IncRef(v);
+            *out = v;
+        } else {
+            PyErr_SetString(PyExc_SystemError,
+                            "cpyext: unsupported PyMemberDef type code");
+            return -1;
+        }
+        return 1;
+    }
+
+    dp = py_inst_dictptr(o);
+    if (dp != 0 && *dp != 0) {
+        v = PyDict_GetItemString(*dp, name);   /* borrowed */
+        if (v != 0) { Py_IncRef(v); *out = v; return 1; }
+    }
+    return 0;
+}
+
+/* --- methods on a builtin container --------------------------------------
+   Under Py_LIMITED_API a Cython module cannot reach dict internals, so where
+   it wants `d.setdefault(k, v)` it emits a real METHOD CALL — attribute lookup
+   through PyObject_VectorcallMethod, then a call. That is load-bearing, not
+   incidental: the shared-ABI type cache publishes every heap type with it, so
+   a dict with no methods means no Cython type ever gets registered.
+
+   The mechanism is the ordinary one — a PyMethodDef bound to the receiver via
+   PyCFunction_NewEx — so adding a method here is one table entry and one
+   function, and it behaves like any other builtin method (including holding a
+   reference to its receiver). Only what generated code actually calls is
+   present; everything else is an honest AttributeError. */
+static PyObject *py_dict_setdefault(PyObject *self, PyObject *const *args,
+                                    Py_ssize_t nargs) {
+    PyObject *v;
+    PyObject *dflt;
+    if (nargs < 1 || nargs > 2) {
+        PyErr_SetString(PyExc_TypeError,
+                        "setdefault expected 1 or 2 arguments");
+        return 0;
+    }
+    v = PyDict_GetItem(self, args[0]);          /* borrowed */
+    if (v != 0) { Py_IncRef(v); return v; }
+    dflt = (nargs == 2) ? args[1] : Py_None;
+    if (PyDict_SetItem(self, args[0], dflt) < 0) return 0;
+    Py_IncRef(dflt);
+    return dflt;
+}
+
+static PyMethodDef g_dict_methods[] = {
+    { "setdefault", (PyCFunction)py_dict_setdefault, METH_FASTCALL, 0 },
+    { 0, 0, 0, 0 }
+};
+
+static PyObject *py_builtin_method(PyObject *o, const char *name) {
+    PyMethodDef *tbl;
+    PyMethodDef *e;
+    tbl = 0;
+    if (o->ob_kind == PYOBJ_DICT) tbl = g_dict_methods;
+    if (tbl == 0) return 0;
+    for (e = tbl; e->ml_name != 0; e++)
+        if (strcmp(e->ml_name, name) == 0) return PyCFunction_NewEx(e, o, 0);
+    return 0;
+}
+
 PyObject *PyObject_GetAttrString(PyObject *o, const char *name) {
     PyObject *d;
     PyObject *v;
+    if (o != 0 && (o->ob_kind == PYOBJ_DICT)) {
+        v = py_builtin_method(o, name);
+        if (v != 0) return v;
+    }
+    if (o != 0 && o->ob_kind == PYOBJ_INST) {
+        int r;
+        r = py_type_lookup_attr(o, name, &v);
+        if (r > 0) return v;
+        if (r < 0) return 0;
+        PyErr_SetString(PyExc_AttributeError, name);
+        return 0;
+    }
     d = py_attrs(o);
     if (d != 0) {
         v = PyDict_GetItemString(d, name);   /* borrowed */
@@ -764,6 +1324,28 @@ PyObject *PyObject_GetAttr(PyObject *o, PyObject *name) {
 
 int PyObject_SetAttrString(PyObject *o, const char *name, PyObject *v) {
     PyObject *d;
+    if (o != 0 && o->ob_kind == PYOBJ_INST) {
+        PyTypeObject *t;
+        PyGetSetDef *gs;
+        PyObject **dp;
+        t = Py_TYPE(o);
+        for (gs = (PyGetSetDef *)PyType_GetSlot(t, Py_tp_getset);
+             gs != 0 && gs->name != 0; gs++) {
+            if (strcmp(gs->name, name) != 0) continue;
+            if (gs->set == 0) {
+                PyErr_SetString(PyExc_AttributeError, name);
+                return -1;
+            }
+            return gs->set(o, v, gs->closure);
+        }
+        dp = py_inst_dictptr(o);
+        if (dp == 0) {
+            PyErr_SetString(PyExc_AttributeError, name);
+            return -1;
+        }
+        if (*dp == 0) *dp = PyDict_New();
+        return PyDict_SetItemString(*dp, name, v);
+    }
     d = py_attrs(o);
     if (d == 0) {
         PyErr_SetString(PyExc_AttributeError, name);
@@ -777,98 +1359,225 @@ int PyObject_SetAttr(PyObject *o, PyObject *name, PyObject *v) {
 }
 
 /* --- calling -------------------------------------------------------------
-   Only a builtin-function object is callable. That covers what an extension
-   actually needs (its own module-level functions, reached after Py_mod_exec
-   registered them); calling back into arbitrary NilPy objects from C is a
-   later milestone, and TypeError is what CPython says for a non-callable. */
+   Two kinds of callable exist: a builtin-function object (a PyMethodDef with a
+   `self`), and — since M5b — an instance of a heap type carrying a Py_tp_call
+   slot, which is what a Cython function object is. Anything else is a
+   TypeError, exactly as CPython says for a non-callable. */
+
+/* The vectorcall argument layout, built once and shared by every caller that
+   needs it: ONE array holding the positional arguments followed by the keyword
+   VALUES, with `kwnames` a tuple of the matching keyword names. Keywords need
+   no separate channel — they ride the same array past the positional count,
+   which is why nargs and the array length differ once keywords are present.
+
+   The names tuple must agree index-for-index with the values written past
+   nargs; ONE PyDict_Next walk fills both, so the two cannot drift apart. That
+   pairing is the whole correctness question here, and it is why the test suite
+   calls a NON-commutative function by keyword.
+
+   On success the caller owns *arr (free) and *kwnames (decref). */
+static int py_build_vectorcall_args(PyObject *args, PyObject *kwargs,
+                                    PyObject ***arr, Py_ssize_t *nargs,
+                                    PyObject **kwnames) {
+    Py_ssize_t n;
+    Py_ssize_t nkw;
+    Py_ssize_t i;
+    Py_ssize_t kwi;
+    Py_ssize_t pos;
+    PyObject *kwkey;
+    PyObject *kwval;
+    PyObject **v;
+
+    *arr = 0;
+    *kwnames = 0;
+    n = (args != 0) ? PyTuple_Size(args) : 0;
+    if (n < 0) n = 0;
+    nkw = (kwargs != 0) ? PyDict_Size(kwargs) : 0;
+    if (nkw < 0) nkw = 0;
+    *nargs = n;
+
+    if (nkw > 0) {
+        *kwnames = PyTuple_New(nkw);
+        if (*kwnames == 0) return -1;
+    }
+    v = (PyObject **)malloc((size_t)(n + nkw > 0 ? n + nkw : 1) *
+                            sizeof(PyObject *));
+    if (v == 0) { Py_XDECREF(*kwnames); *kwnames = 0; PyErr_NoMemory(); return -1; }
+    for (i = 0; i < n; i++) v[i] = PyTuple_GetItem(args, i);   /* borrowed */
+    if (nkw > 0) {
+        pos = 0;
+        kwi = 0;
+        while (PyDict_Next(kwargs, &pos, &kwkey, &kwval) && kwi < nkw) {
+            Py_INCREF(kwkey);
+            PyTuple_SetItem(*kwnames, kwi, kwkey);   /* steals the reference */
+            v[n + kwi] = kwval;                      /* borrowed, like above */
+            kwi++;
+        }
+    }
+    *arr = v;
+    return 0;
+}
+
+/* Call an object through its type's vectorcall slot. The limited API gives a
+   spec exactly one way to say where that slot lives — a `__vectorcalloffset__`
+   entry in the Py_tp_members table, absorbed into tp_vectorcall_offset when the
+   type was built — so this is the reader for that channel. */
+PyObject *PyVectorcall_Call(PyObject *callable, PyObject *args, PyObject *kwargs) {
+    PyTypeObject *t;
+    vectorcallfunc vc;
+    PyObject **v;
+    PyObject *kwnames;
+    PyObject *r;
+    Py_ssize_t nargs;
+
+    if (callable == 0) {
+        PyErr_SetString(PyExc_TypeError, "vectorcall of nothing");
+        return 0;
+    }
+    t = Py_TYPE(callable);
+    if (t == 0 || t->tp_vectorcall_offset <= 0) {
+        PyErr_SetString(PyExc_TypeError,
+                        "object does not support the vectorcall protocol");
+        return 0;
+    }
+    vc = *(vectorcallfunc *)((char *)callable + t->tp_vectorcall_offset);
+    if (vc == 0) {
+        PyErr_SetString(PyExc_TypeError, "object has no vectorcall function");
+        return 0;
+    }
+    if (py_build_vectorcall_args(args, kwargs, &v, &nargs, &kwnames) < 0) return 0;
+    r = vc(callable, v, (size_t)nargs, kwnames);
+    free(v);
+    Py_XDECREF(kwnames);
+    return r;
+}
+
+PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
+                              size_t nargsf, PyObject *kwnames) {
+    PyTypeObject *t;
+    vectorcallfunc vc;
+
+    if (callable == 0) {
+        PyErr_SetString(PyExc_TypeError, "vectorcall of nothing");
+        return 0;
+    }
+    t = Py_TYPE(callable);
+    if (t != 0 && t->tp_vectorcall_offset > 0) {
+        vc = *(vectorcallfunc *)((char *)callable + t->tp_vectorcall_offset);
+        if (vc != 0) return vc(callable, args, nargsf, kwnames);
+    }
+    /* No vectorcall slot: fall back to the tuple/dict form rather than
+       refusing, which is what CPython's own _PyObject_MakeTpCall does. */
+    {
+        PyObject *tup;
+        PyObject *kw;
+        PyObject *r;
+        Py_ssize_t n;
+        Py_ssize_t i;
+        Py_ssize_t nkw;
+
+        n = PyVectorcall_NARGS(nargsf);
+        nkw = (kwnames != 0) ? PyTuple_Size(kwnames) : 0;
+        if (nkw < 0) nkw = 0;
+        tup = PyTuple_New(n);
+        if (tup == 0) return 0;
+        for (i = 0; i < n; i++) {
+            Py_INCREF(args[i]);
+            PyTuple_SetItem(tup, i, args[i]);   /* steals */
+        }
+        kw = 0;
+        if (nkw > 0) {
+            kw = PyDict_New();
+            for (i = 0; i < nkw; i++)
+                PyDict_SetItem(kw, PyTuple_GetItem(kwnames, i), args[n + i]);
+        }
+        r = PyObject_Call(callable, tup, kw);
+        Py_XDECREF(kw);
+        Py_DECREF(tup);
+        return r;
+    }
+}
+
 PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs) {
     PyMethodDef *md;
     PyObject **fastargs;
     Py_ssize_t n;
-    Py_ssize_t i;
     Py_ssize_t nkw;
-    Py_ssize_t kwi;
-    Py_ssize_t pos;
     PyObject *kwnames;
-    PyObject *kwkey;
-    PyObject *kwval;
+    PyObject *self;
     PyObject *r;
     int flags;
 
-    if (callable == 0 || callable->ob_kind != PYOBJ_CFUNC) {
+    if (callable == 0) {
+        PyErr_SetString(PyExc_TypeError, "object is not callable in this runtime");
+        return 0;
+    }
+    /* A heap-type instance (or a type, through its metaclass) calls through
+       its Py_tp_call slot. tp_call is always handed a real tuple — Cython's
+       own implementation calls PyTuple_Size on it unconditionally, and a NULL
+       there would read as -1 rather than as "no arguments". */
+    if (callable->ob_kind == PYOBJ_INST || callable->ob_kind == PYOBJ_TYPE) {
+        ternaryfunc call;
+        PyObject *empty;
+        call = (ternaryfunc)PyType_GetSlot(Py_TYPE(callable), Py_tp_call);
+        if (call == 0) {
+            PyErr_SetString(PyExc_TypeError, "object is not callable");
+            return 0;
+        }
+        if (args != 0) return call(callable, args, kwargs);
+        empty = PyTuple_New(0);
+        if (empty == 0) return 0;
+        r = call(callable, empty, kwargs);
+        Py_DECREF(empty);
+        return r;
+    }
+    if (callable->ob_kind != PYOBJ_CFUNC) {
         PyErr_SetString(PyExc_TypeError, "object is not callable in this runtime");
         return 0;
     }
     md = (PyMethodDef *)callable->ob_ptr;
     flags = md->ml_flags;
+    /* Borrowed, and possibly NULL for a plain module-level function — the same
+       `self` PyCFunction_GetSelf hands back. Cython binds its inner
+       PyCFunction to the function OBJECT, and its vectorcall wrappers read it
+       back to find their own state. */
+    self = (PyObject *)(size_t)callable->ob_ival;
     n = (args != 0) ? PyTuple_Size(args) : 0;
     if (n < 0) n = 0;
+    nkw = (kwargs != 0) ? PyDict_Size(kwargs) : 0;
+    if (nkw < 0) nkw = 0;
 
     /* METH_FASTCALL: the callee wants a C ARRAY of borrowed argument pointers
        plus a count, not a tuple. Generated code uses this for every function
        when the claimed version is 3.12+, so it is the common path, not an
-       optimisation. kwnames NULL = no keyword arguments; passing keywords
-       through the fast path needs the names tuple and is not wired up. */
+       optimisation. */
     if ((flags & METH_FASTCALL) != 0) {
-        /* The vectorcall layout: ONE array holding the positional arguments
-           followed by the keyword VALUES, with `kwnames` a tuple of the matching
-           keyword names. So keywords need no separate channel — they ride the
-           same array past the positional count, which is why nargs and the array
-           length differ once keywords are present.
-
-           This used to refuse keywords outright. Refusing was the right call
-           while the names tuple did not exist (mis-passing them would have been
-           silent), but a Cython module's `f(a, b=2)` is ordinary code. */
-        nkw = 0;
-        kwnames = 0;
-        if (kwargs != 0) {
-            nkw = PyDict_Size(kwargs);
-            if (nkw < 0) nkw = 0;
+        if (nkw > 0 && (flags & METH_KEYWORDS) == 0) {
+            PyErr_SetString(PyExc_TypeError,
+                            "function takes no keyword arguments");
+            return 0;
         }
-        if (nkw > 0) {
-            if ((flags & METH_KEYWORDS) == 0) {
-                PyErr_SetString(PyExc_TypeError,
-                                "function takes no keyword arguments");
-                return 0;
-            }
-            kwnames = PyTuple_New(nkw);
-            if (kwnames == 0) return 0;
-        }
-        fastargs = (PyObject **)malloc(
-            (size_t)((n + nkw > 0 ? n + nkw : 1)) * sizeof(PyObject *));
-        for (i = 0; i < n; i++) fastargs[i] = PyTuple_GetItem(args, i);  /* borrowed */
-        if (nkw > 0) {
-            /* PyDict_Next walks in insertion order here, and the names tuple must
-               agree index-for-index with the values written past nargs — one walk
-               fills both, so they cannot drift. */
-            pos = 0;
-            kwi = 0;
-            while (PyDict_Next(kwargs, &pos, &kwkey, &kwval) && kwi < nkw) {
-                Py_INCREF(kwkey);
-                PyTuple_SetItem(kwnames, kwi, kwkey);   /* steals the reference */
-                fastargs[n + kwi] = kwval;              /* borrowed, like above */
-                kwi++;
-            }
-        }
+        if (py_build_vectorcall_args(args, kwargs, &fastargs, &n, &kwnames) < 0)
+            return 0;
         if ((flags & METH_KEYWORDS) != 0)
-            r = ((PyCFunctionFastWithKeywords)md->ml_meth)(0, fastargs, n, kwnames);
+            r = ((PyCFunctionFastWithKeywords)md->ml_meth)(self, fastargs, n, kwnames);
         else
-            r = ((PyCFunctionFast)md->ml_meth)(0, fastargs, n);
+            r = ((PyCFunctionFast)md->ml_meth)(self, fastargs, n);
         free(fastargs);
         Py_XDECREF(kwnames);
         return r;
     }
     if ((flags & METH_KEYWORDS) != 0)
-        return ((PyCFunctionWithKeywords)md->ml_meth)(0, args, kwargs);
-    if (kwargs != 0 && PyDict_Size(kwargs) > 0) {
+        return ((PyCFunctionWithKeywords)md->ml_meth)(self, args, kwargs);
+    if (nkw > 0) {
         PyErr_SetString(PyExc_TypeError, "function takes no keyword arguments");
         return 0;
     }
     if ((flags & METH_O) != 0)
-        return md->ml_meth(0, PyTuple_GetItem(args, 0));
+        return md->ml_meth(self, PyTuple_GetItem(args, 0));
     if ((flags & METH_NOARGS) != 0)
-        return md->ml_meth(0, 0);
-    return md->ml_meth(0, args);
+        return md->ml_meth(self, 0);
+    return md->ml_meth(self, args);
 }
 
 PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...) {
@@ -1269,8 +1978,59 @@ PyObject *PyModule_NewObject(PyObject *name) {
 /* The module registry — CPython's sys.modules, minus the importer. */
 static PyObject *g_modules = 0;
 
+/* Register an empty module under `name` and hand it back (borrowed). */
+static PyObject *py_add_builtin_module(const char *name) {
+    PyObject *m;
+    PyObject *nm;
+    nm = PyUnicode_FromString(name);
+    m = PyModule_NewObject(nm);
+    Py_DecRef(nm);
+    PyDict_SetItemString(g_modules, name, m);
+    Py_DecRef(m);                      /* the registry holds the reference */
+    return PyDict_GetItemString(g_modules, name);
+}
+
+/* --- the built-in modules -------------------------------------------------
+   There is no importer, so `import X` from C can only find what is already in
+   the registry. This is the whole of it, and each entry is here for a reason
+   that is written down rather than assumed:
+
+   `types` — Cython's InitGlobals imports it UNCONDITIONALLY and caches
+   types.MethodType, used to recognise a bound method and to build one from
+   tp_descr_get. Under real CPython that import cannot fail, so the generated
+   code does not defend against it; here a failure would abort module init on
+   an error the extension never expected. The module therefore exists and
+   carries MethodType. What it does not carry is a way to CONSTRUCT one —
+   nothing in this runtime reaches a function through a type, so no bound
+   method is ever made, and calling MethodType is a TypeError rather than a
+   fabricated object.
+
+   `inspect` — empty, and the emptiness is the point. Cython imports it only to
+   read the CO_* code flags when the limited API hides them; this header
+   DELIBERATELY defines those flags instead (see the CO_ block in Python.h), so
+   the preprocessor deletes every read and the import's result becomes dead
+   code — `result` is assigned 1 unconditionally and the module is immediately
+   decref'd. That dead call is a consequence of OUR divergence, not of the
+   extension, and leaving it to raise ImportError is what made it a bug twice:
+   first as a stale pending error surfacing in an unrelated keyword call (M5b
+   part 1), then, once CyFunction added an UNGUARDED `if (PyErr_Occurred())` a
+   few lines later, as a module that would not initialise at all.
+
+   So: an import this runtime's own choices orphaned succeeds and yields
+   nothing, which is observationally identical to CPython for the code that
+   remains. An extension that really reads an attribute off `inspect` gets an
+   AttributeError — less capable, loudly, which is the standing rule; it never
+   gets a wrong value. Any OTHER module name is still an honest ImportError. */
 static PyObject *py_modules(void) {
-    if (g_modules == 0) g_modules = PyDict_New();
+    if (g_modules == 0) {
+        PyObject *m;
+        g_modules = PyDict_New();
+        py_types_ready();
+        m = py_add_builtin_module("types");
+        PyObject_SetAttrString(m, "MethodType", (PyObject *)&g_type_method);
+        PyObject_SetAttrString(m, "CodeType", (PyObject *)&g_type_code);
+        py_add_builtin_module("inspect");
+    }
     return g_modules;
 }
 
@@ -1327,9 +2087,12 @@ PyObject *PyCFunction_New(PyMethodDef *ml, PyObject *self) {
 
 PyObject *PyCFunction_NewEx(PyMethodDef *ml, PyObject *self, PyObject *module) {
     PyObject *f;
-    (void)self;   /* no bound builtins in this model */
     f = py_alloc(PYOBJ_CFUNC);
     f->ob_ptr = (void *)ml;
+    /* OWNED — see the ob_ival note in Python.h for why, and for what it costs
+       when self points back at the object that owns this method. */
+    Py_IncRef(self);
+    f->ob_ival = (long)(size_t)self;
     if (ml != 0 && ml->ml_name != 0) {
         PyObject *nm;
         nm = PyUnicode_FromString(ml->ml_name);
@@ -1346,6 +2109,189 @@ PyCFunction PyCFunction_GetFunction(PyObject *op) {
         return 0;
     }
     return ((PyMethodDef *)op->ob_ptr)->ml_meth;
+}
+
+int PyCFunction_GetFlags(PyObject *op) {
+    if (op == 0 || op->ob_kind != PYOBJ_CFUNC) {
+        PyErr_SetString(PyExc_TypeError, "expected a builtin function");
+        return -1;
+    }
+    return ((PyMethodDef *)op->ob_ptr)->ml_flags;
+}
+
+/* Borrowed, as CPython's is. A NULL result with no error set means "an unbound
+   builtin", which is a legitimate answer — every caller in generated code
+   checks PyErr_Occurred() to tell that apart from a failure. */
+PyObject *PyCFunction_GetSelf(PyObject *op) {
+    if (op == 0 || op->ob_kind != PYOBJ_CFUNC) {
+        PyErr_SetString(PyExc_TypeError, "expected a builtin function");
+        return 0;
+    }
+    return (PyObject *)(size_t)op->ob_ival;
+}
+
+/* --- M5b leaf surface ---------------------------------------------------- */
+int PyCallable_Check(PyObject *o) {
+    if (o == 0) return 0;
+    if (o->ob_kind == PYOBJ_CFUNC) return 1;
+    if (o->ob_kind == PYOBJ_INST || o->ob_kind == PYOBJ_TYPE)
+        return PyType_GetSlot(Py_TYPE(o), Py_tp_call) != 0;
+    return 0;
+}
+
+int PyDict_Check(PyObject *o)      { return o != 0 && o->ob_kind == PYOBJ_DICT; }
+int PyDict_CheckExact(PyObject *o) { return PyDict_Check(o); }
+
+PyObject *PyErr_NoMemory(void) {
+    PyErr_SetString(PyExc_MemoryError, "out of memory");
+    return 0;
+}
+
+PyObject *PyObject_CallObject(PyObject *callable, PyObject *args) {
+    PyObject *empty;
+    PyObject *r;
+    if (args != 0) return PyObject_Call(callable, args, 0);
+    empty = PyTuple_New(0);
+    if (empty == 0) return 0;
+    r = PyObject_Call(callable, empty, 0);
+    Py_DECREF(empty);
+    return r;
+}
+
+/* Py_BuildValue's format language over a va_list, so the two share one
+   implementation rather than growing a second parser that can disagree. */
+PyObject *PyObject_CallFunction(PyObject *callable, const char *format, ...) {
+    va_list ap;
+    PyObject *args;
+    PyObject *tup;
+    PyObject *r;
+
+    if (format == 0 || format[0] == 0) return PyObject_CallObject(callable, 0);
+    va_start(ap, format);
+    args = __pxx_cpyext_vbuildvalue(format, ap);
+    va_end(ap);
+    if (args == 0) return 0;
+    /* A single-value format yields that value, not a 1-tuple — CPython wraps
+       it here, and a call that forgot to would pass the wrong shape. */
+    if (PyTuple_Check(args)) {
+        tup = args;
+    } else {
+        tup = PyTuple_New(1);
+        if (tup == 0) { Py_DECREF(args); return 0; }
+        PyTuple_SetItem(tup, 0, args);   /* steals */
+    }
+    r = PyObject_Call(callable, tup, 0);
+    Py_DECREF(tup);
+    return r;
+}
+
+PyObject *PyObject_CallMethodObjArgs(PyObject *o, PyObject *name, ...) {
+    va_list ap;
+    va_list ap2;
+    PyObject *meth;
+    PyObject *a;
+    PyObject *tup;
+    PyObject *r;
+    Py_ssize_t n;
+    Py_ssize_t i;
+
+    meth = PyObject_GetAttr(o, name);
+    if (meth == 0) return 0;
+    n = 0;
+    va_start(ap, name);
+    for (;;) { a = va_arg(ap, PyObject *); if (a == 0) break; n++; }
+    va_end(ap);
+    tup = PyTuple_New(n);
+    if (tup == 0) { Py_DECREF(meth); return 0; }
+    va_start(ap2, name);
+    for (i = 0; i < n; i++) {
+        a = va_arg(ap2, PyObject *);
+        Py_INCREF(a);
+        PyTuple_SetItem(tup, i, a);   /* steals */
+    }
+    va_end(ap2);
+    r = PyObject_Call(meth, tup, 0);
+    Py_DECREF(tup);
+    Py_DECREF(meth);
+    return r;
+}
+
+int PyObject_HasAttrString(PyObject *o, const char *name) {
+    PyObject *v;
+    v = PyObject_GetAttrString(o, name);
+    if (v == 0) { PyErr_Clear(); return 0; }
+    Py_DECREF(v);
+    return 1;
+}
+
+int PyObject_HasAttr(PyObject *o, PyObject *name) {
+    return PyObject_HasAttrString(o,
+        PyUnicode_Check(name) ? (const char *)name->ob_ptr : "?");
+}
+
+PyObject *PySequence_GetItem(PyObject *o, Py_ssize_t i) {
+    PyObject *v;
+    if (o != 0 && o->ob_kind == PYOBJ_TUPLE) v = PyTuple_GetItem(o, i);
+    else if (o != 0 && o->ob_kind == PYOBJ_LIST) v = PyList_GetItem(o, i);
+    else {
+        PyErr_SetString(PyExc_TypeError, "object is not a sequence");
+        return 0;
+    }
+    if (v == 0) return 0;   /* the accessor set IndexError */
+    Py_IncRef(v);
+    return v;
+}
+
+PyObject *PyTuple_Pack(Py_ssize_t n, ...) {
+    va_list ap;
+    PyObject *t;
+    PyObject *a;
+    Py_ssize_t i;
+
+    t = PyTuple_New(n);
+    if (t == 0) return 0;
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        a = va_arg(ap, PyObject *);
+        Py_IncRef(a);
+        PyTuple_SetItem(t, i, a);   /* steals */
+    }
+    va_end(ap);
+    return t;
+}
+
+/* CPython clamps rather than raising, and generated code relies on that when
+   it slices off a bound method's `self`. */
+PyObject *PyTuple_GetSlice(PyObject *t, Py_ssize_t lo, Py_ssize_t hi) {
+    PyObject *r;
+    PyObject *v;
+    Py_ssize_t n;
+    Py_ssize_t i;
+
+    if (t == 0 || t->ob_kind != PYOBJ_TUPLE) {
+        PyErr_SetString(PyExc_TypeError, "expected a tuple");
+        return 0;
+    }
+    n = t->ob_size;
+    if (lo < 0) lo = 0;
+    if (hi > n) hi = n;
+    if (hi < lo) hi = lo;
+    r = PyTuple_New(hi - lo);
+    if (r == 0) return 0;
+    for (i = lo; i < hi; i++) {
+        v = PyTuple_GetItem(t, i);   /* borrowed */
+        Py_IncRef(v);
+        PyTuple_SetItem(r, i - lo, v);
+    }
+    return r;
+}
+
+PyObject *PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
+                                           PyObject *locals, PyObject *fromlist,
+                                           int level) {
+    (void)globals; (void)locals; (void)fromlist; (void)level;
+    return PyImport_ImportModule(
+        PyUnicode_Check(name) ? (const char *)name->ob_ptr : "?");
 }
 
 /* --- interpreter identity -------------------------------------------------
@@ -1401,18 +2347,26 @@ int PyTraceBack_Here(void *frame) {
     (void)frame;
     return -1;
 }
-PyObject *PyType_GetQualName(PyTypeObject *t) {
-    (void)t; __pxx_cpyext_unsupported("PyType_GetQualName"); return 0;
-}
-PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
-                              size_t nargsf, PyObject *kwnames) {
-    (void)callable; (void)args; (void)nargsf; (void)kwnames;
-    __pxx_cpyext_unsupported("PyObject_Vectorcall"); return 0;
-}
+/* args[0] is the RECEIVER and is not one of the arguments — that offset is the
+   whole convention. CPython fuses the lookup and the call to avoid building a
+   bound method; with no bound methods here, doing it in two honest steps is
+   the same answer. */
 PyObject *PyObject_VectorcallMethod(PyObject *name, PyObject *const *args,
                                     size_t nargsf, PyObject *kwnames) {
-    (void)name; (void)args; (void)nargsf; (void)kwnames;
-    __pxx_cpyext_unsupported("PyObject_VectorcallMethod"); return 0;
+    PyObject *meth;
+    PyObject *r;
+    Py_ssize_t nargs;
+
+    nargs = PyVectorcall_NARGS(nargsf);
+    if (nargs < 1) {
+        PyErr_SetString(PyExc_TypeError, "method call with no receiver");
+        return 0;
+    }
+    meth = PyObject_GetAttr(args[0], name);
+    if (meth == 0) return 0;
+    r = PyObject_Vectorcall(meth, args + 1, (size_t)(nargs - 1), kwnames);
+    Py_DECREF(meth);
+    return r;
 }
 Py_ssize_t PyVectorcall_NARGS(size_t nargsf) {
     return (Py_ssize_t)(nargsf & ~PY_VECTORCALL_ARGUMENTS_OFFSET);

@@ -183,3 +183,120 @@ int cyadd_ext_add_objargs(int a, int b) {
     Py_DECREF(fn);
     return (int)rv;
 }
+
+/* --- M5b: the CyFunction heap type, made observable ------------------------
+ *
+ * Everything above would produce the same numbers whether the module was
+ * generated with `-X binding=False` (module-level defs are plain builtin
+ * functions) or without it (they are instances of Cython's own CyFunction heap
+ * type). Dropping that flag is the whole milestone, so the test has to be able
+ * to TELL, and only introspection can tell:
+ *
+ *   type name  — `cython_function_or_method`, a heap type built from a
+ *                PyType_Spec through PyType_FromMetaclass, versus a plain
+ *                builtin function object
+ *   __name__ / __qualname__ — served by the type's Py_tp_getset table
+ *   __code__.co_varnames    — a code object, built by CALLING types.CodeType
+ *                             because the limited API hides PyCode_New
+ *
+ * Each answer is compared against the same generated C running under real
+ * CPython 3.12; see the .npy test for the recipe.
+ *
+ * The buffer contract is the one argerr_ext already uses: copy out, NUL
+ * terminate, empty string on failure with the error left for the caller.
+ */
+static void cyadd_copy_str(PyObject *s, char *buf, int cap) {
+    const char *p;
+    int i;
+
+    if (cap <= 0) return;
+    buf[0] = 0;
+    if (s == 0 || !PyUnicode_Check(s)) return;
+    p = PyUnicode_AsUTF8(s);
+    i = 0;
+    while (p[i] != 0 && i < cap - 1) { buf[i] = p[i]; i++; }
+    buf[i] = 0;
+}
+
+static PyObject *cyadd_fn(const char *name) {
+    PyObject *module;
+    module = cyadd_module();
+    if (module == 0) return 0;
+    return PyObject_GetAttrString(module, name);
+}
+
+/* The type's name as its spec declared it. Cython builds it dotted
+   (`<abi module>.cython_function_or_method`); CPython reports the last
+   component as the type's __name__, so the last component is what is
+   compared. */
+void cyadd_ext_fn_typename(const char *name, char *buf, int cap) {
+    PyObject *fn;
+    const char *tn;
+    const char *last;
+    int i;
+
+    if (cap > 0) buf[0] = 0;
+    fn = cyadd_fn(name);
+    if (fn == 0) return;
+    tn = Py_TYPE(fn)->tp_name;
+    last = tn;
+    i = 0;
+    while (tn[i] != 0) { if (tn[i] == '.') last = tn + i + 1; i++; }
+    i = 0;
+    while (last[i] != 0 && i < cap - 1) { buf[i] = last[i]; i++; }
+    if (cap > 0) buf[i] = 0;
+    Py_DECREF(fn);
+}
+
+/* A getset descriptor on the heap type: __name__ or __qualname__. */
+void cyadd_ext_fn_attr(const char *name, const char *attr, char *buf, int cap) {
+    PyObject *fn;
+    PyObject *v;
+
+    if (cap > 0) buf[0] = 0;
+    fn = cyadd_fn(name);
+    if (fn == 0) return;
+    v = PyObject_GetAttrString(fn, attr);
+    cyadd_copy_str(v, buf, cap);
+    Py_XDECREF(v);
+    Py_DECREF(fn);
+}
+
+/* __code__.co_varnames, comma-joined. Reaches the code object built through
+   types.CodeType and reads a tuple back out of it. */
+void cyadd_ext_fn_varnames(const char *name, char *buf, int cap) {
+    PyObject *fn;
+    PyObject *code;
+    PyObject *vn;
+    PyObject *item;
+    const char *p;
+    Py_ssize_t i;
+    Py_ssize_t n;
+    int o;
+    int j;
+
+    if (cap > 0) buf[0] = 0;
+    fn = cyadd_fn(name);
+    if (fn == 0) return;
+    code = PyObject_GetAttrString(fn, "__code__");
+    Py_DECREF(fn);
+    if (code == 0) return;
+    vn = PyObject_GetAttrString(code, "co_varnames");
+    Py_DECREF(code);
+    if (vn == 0) return;
+    o = 0;
+    if (PyTuple_Check(vn)) {
+        n = PyTuple_Size(vn);
+        for (i = 0; i < n; i++) {
+            if (i > 0 && o < cap - 1) buf[o++] = ',';
+            item = PyTuple_GetItem(vn, i);   /* borrowed */
+            if (item != 0 && PyUnicode_Check(item)) {
+                p = PyUnicode_AsUTF8(item);
+                j = 0;
+                while (p[j] != 0 && o < cap - 1) buf[o++] = p[j++];
+            }
+        }
+    }
+    if (cap > 0) buf[o] = 0;
+    Py_DECREF(vn);
+}
