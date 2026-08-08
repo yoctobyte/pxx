@@ -15773,6 +15773,7 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     asrtCond, asrtMsg, asrtProc, asrtA0, asrtA1: Integer;   { assert statement }
     chainN, chainI, chainTmp, chainSeq: Integer;   { chained assignment a = b = v }
     chainNames: array[0..7] of AnsiString;
+    delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -15978,13 +15979,81 @@ begin
       Result := delBase;
       Exit;
     end;
+    { `del c[k]` on a USER class -> its `__delitem__`, the last member of the
+      subscript protocol (`__getitem__`/`__setitem__` were already dispatched).
+
+      TWO node shapes reach here, because the subscript arm in parser.inc only
+      claims a class that declares `__getitem__`:
+        * declares `__getitem__` too -> the read lowered to a CALL of it, and
+          the receiver and key are its two arguments;
+        * declares only `__delitem__` -> the read fell through to the generic
+          AN_INDEX, whose base and index are ASTLeft/ASTRight.
+      Both are read back off the node the grammar already built rather than
+      re-parsed — re-implementing the postfix grammar is the duplication this
+      frontend keeps getting bitten by, and `del vm.handles[fid]` has a field
+      base. The delitem-only shape is not exotic: it is what a class that
+      supports removal but not reading looks like, and CPython allows it.
+
+      A class reaching here with NO `__delitem__` gets a RUNTIME TypeError, not
+      a compile error, so a `try/except TypeError` around it still builds —
+      same reasoning as PyNoSetitemError on the assignment arm.
+      bug-nilpy-delitem-dunder-not-supported }
+    delCi := -1; delRecv := -1; delKey := -1;
+    if (ASTKind[delBase] = AN_CALL) and (ASTLeft[delBase] >= 0) and
+       (ASTRight[ASTLeft[delBase]] >= 0) then
+    begin
+      delRecv := ASTLeft[ASTLeft[delBase]];
+      delKey := ASTLeft[ASTRight[ASTLeft[delBase]]];
+      if delRecv >= 0 then
+      begin
+        j := ResolveNodeRec(delRecv);
+        if j >= REC_UCLASS_BASE then
+        begin
+          k := FindUMeth(j - REC_UCLASS_BASE, '__getitem__');
+          { it must really be THAT class's __getitem__ call, not any call whose
+            first argument happens to be an instance }
+          if (k >= 0) and (ASTIVal[delBase] = UMthProc_[k]) then
+            delCi := j - REC_UCLASS_BASE;
+        end;
+      end;
+    end
+    else if ASTKind[delBase] = AN_INDEX then
+    begin
+      delRecv := ASTLeft[delBase];
+      delKey := ASTRight[delBase];
+      if delRecv >= 0 then
+      begin
+        j := ResolveNodeRec(delRecv);
+        if (j >= REC_UCLASS_BASE) and
+           (FindUMeth(j - REC_UCLASS_BASE, '__delitem__') >= 0) then
+          delCi := j - REC_UCLASS_BASE;
+      end;
+    end;
+    if (delCi >= 0) and (delRecv >= 0) and (delKey >= 0) then
+    begin
+      if FindUMeth(delCi, '__delitem__') >= 0 then
+      begin
+        Result := PyCallMeth1(delCi, '__delitem__', delRecv, delKey);
+        if Result < 0 then
+          Error('Nil Python: __delitem__ could not be called');
+        Exit;
+      end;
+      symIdx := FindProc('PyNoDelitemError');
+      if symIdx < 0 then Error('Nil Python: pylib (PyNoDelitemError) not loaded');
+      Result := AllocNode(AN_CALL);
+      ASTIVal[Result] := symIdx;
+      ASTTk[Result] := Ord(tyInteger);
+      ASTLeft[Result] := -1;
+      Exit;
+    end;
     ci := FindUClass('TPyDict');
     symIdx := -1;
     if ci >= 0 then symIdx := FindUMeth(ci, 'fetch');
     if (symIdx < 0) or (ASTKind[delBase] <> AN_CALL) or
        (ASTIVal[delBase] <> UMthProc_[symIdx]) then
-      Error('Nil Python: del is supported on a dict subscript, a list index or '
-            + 'a list slice (del d[k], del l[i], del l[a:b])');
+      Error('Nil Python: del is supported on a dict subscript, a list index, '
+            + 'a list slice, or a class with __delitem__ '
+            + '(del d[k], del l[i], del l[a:b], del c[k])');
     symIdx := FindUMeth(ci, 'remove');
     if symIdx < 0 then Error('Nil Python: TPyDict.remove not found');
     ASTIVal[delBase] := UMthProc_[symIdx];

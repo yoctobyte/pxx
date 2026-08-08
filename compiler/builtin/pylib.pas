@@ -4499,6 +4499,15 @@ begin
   raise TypeError.Create('object does not support item assignment (no __setitem__)');
 end;
 
+{ `del obj[i]` where obj's class defines no `__delitem__` -- CPython's own error
+  shape. A raise rather than a compile error, so a try/except around it builds,
+  same reasoning as PyNoSetitemError above.
+  bug-nilpy-delitem-dunder-not-supported }
+procedure PyNoDelitemError;
+begin
+  raise TypeError.Create('object does not support item deletion (no __delitem__)');
+end;
+
 function pyvar_to_int(const v: Variant): Int64;
 var
   p: PPyVarRec;

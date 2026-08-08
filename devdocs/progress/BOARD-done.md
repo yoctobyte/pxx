@@ -511,6 +511,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result | N | 55 | bug | A def whose result type was inferred (or annotated) as int TRUNCATES a float it returns: `def g() -> int: v = 1; v = 2.5; return v` gives 2 where CPython gives 2.5. Python annotations are not enforcement. Pinned returned the raw IEEE BITS (4612811918334230528) for the same program — improved to truncation by the widen-binding fix, not resolved by it. | — |
 | bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
 | bug-nilpy-defaulted-param-before-star-args-rejects-short-call | N | 60 | bug | `def f(a, b=2, *rest)` cannot be called as `f(1)` | — |
+| bug-nilpy-delitem-dunder-not-supported | N | 30 | bug | `del obj[k]` does not dispatch `__delitem__` | — |
 | bug-nilpy-derived-tuple-loses-tupleness | N | 60 | bug | A derived tuple decayed into a list | — |
 | bug-nilpy-dict-equality-compares-identity | N | 70 | bug | `{"k": 1} == {"k": 1}` is False — dict equality compares identity, not value | — |
 | bug-nilpy-dict-from-pairs-and-bytes-decode-segfault | N | 70 | bug | NilPy: `dict([(\"a\",1)])[\"a\"]` and `\"abc\".encode().decode()` both SEGFAULT (exit 139, core dumped) on ordinary one-liners | bug-a-overload-resolution-ignores-class-identity |

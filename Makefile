@@ -1060,6 +1060,10 @@ test-nilpy: $(COMPILER)
 	# a string and answered ''. Covers direct-vs-boxed and the retain hazard.
 	./$(COMPILER) test/test_nilpy_repr_of_user_object.npy /tmp/test_nilpy_reprobj26
 	/tmp/test_nilpy_reprobj26 | diff -u test/test_nilpy_repr_of_user_object.expected -
+	# `del c[k]` dispatches __delitem__ -- both node shapes (a class with
+	# __getitem__ too, and one with only __delitem__), key evaluated once.
+	./$(COMPILER) test/test_nilpy_delitem_dunder.npy /tmp/test_nilpy_delitem26
+	/tmp/test_nilpy_delitem26 | diff -u test/test_nilpy_delitem_dunder.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26
