@@ -83,3 +83,21 @@ truthful about the limit, but under 1 or 2 it is simply the bug.
 Related: [[bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list]] and
 [[bug-nilpy-a-lambda-call-is-not-arity-checked]] came from the same sweep and
 are independent of this one.
+
+## RESOLVED 2026-08-07 — superseded, and the answer is recorded elsewhere
+
+This fork is **decided** and the decision lives in
+[[feature-nilpy-text-string-kind]], whose header states it:
+
+> a NilPy `str` is a sequence of CODE POINTS; a Pascal `AnsiString` stays
+> BYTES; they are two kinds of one representation, not one type.
+
+with the implementation plan (kind word in the managed-block header, character
+counting for len/index/slice/find/reverse over the shared byte substrate, ASCII
+flag keeping the common case O(1)), and refinements committed the same day —
+`s[i]` stays TYPED as UCS4Char rather than becoming an interned 1-char string.
+
+Moved out of the ready queue because it was still being surfaced to the user as
+an open question after it had been answered — the ticket that supersedes it did
+not close it. **If a decision is superseded by a feature ticket, move it here at
+the same time**, or the U queue keeps asking.
