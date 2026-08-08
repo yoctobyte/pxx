@@ -3,6 +3,8 @@ track: N
 prio: 65
 type: feature
 blocked-by: []
+status: working
+owner: claude-A-uforth
 ---
 
 # cpyext: compile a CPython C extension's SOURCE against our own `Python.h`
@@ -636,3 +638,61 @@ assumption has cost real time — the first was `zlib.decompress` at init
 - `-X binding=False` is still required. Dropping it needs CyFunction: a heap type
   via `PyType_FromSpec`, `tp_descr_get`, GC traverse/clear, vectorcall.
 - A `cdef class`, and a real Cython-built package from PyPI (M5c).
+
+## 2026-08-08 — M5b/M5c SCOPING: the CyFunction surface, measured
+
+`-X binding=False` is the last generation-time flag. Dropping it was estimated
+before as "a heap type via PyType_FromSpec, tp_descr_get, GC traverse/clear,
+vectorcall"; here is the actual list, taken the same way the M5 scoping pass
+was — regenerate WITHOUT the flag, preprocess with the two required `-D`s so
+only LIVE code counts, and diff the `Py*` identifiers against what
+`lib/cpyext/include/**` declares.
+
+```sh
+v/bin/cython -3 -o cyadd_binding.c cyadd.pyx          # note: no -X binding=False
+gcc -E -DPy_LIMITED_API=0x030c0000 -DCYTHON_COMPRESS_STRINGS=0 \
+    -Ilib/cpyext/include -Ilib/crtl/include cyadd_binding.c -o cyadd_binding.i
+grep -oE '\b(Py|_Py)[A-Za-z0-9_]*' cyadd_binding.i | sort -u > used.txt
+grep -oE '\b(Py|_Py)[A-Za-z0-9_]*' lib/cpyext/include/*.h | sed 's/^[^:]*://' | sort -u > have.txt
+comm -23 used.txt have.txt
+```
+
+8224 generated lines against 6212 with the flag, and **50 missing identifiers**.
+`structmember.h` is a 51st gap of its own kind: Cython includes it
+unconditionally (IncludeStructmemberH.proto) even under the limited API where
+every consumer of it is preprocessed away, so the header must EXIST but only
+`PyMemberDef`'s layout and the `T_*`/`READONLY` codes have to be right. Added
+in this pass; it is the only part of M5b that is already done.
+
+The 50 split into three groups, and the ordering between them is forced:
+
+**1. Heap types — the real work.** `PyType_Spec`, `PyType_Slot`,
+`PyType_FromMetaclass`, `PyType_GetSlot`, `PyType_GetFlags`, `PyType_Modified`,
+`PyType_HasFeature`, `PyType_Type`, `PyType_Check`, `PyObject_TypeCheck`,
+`PyObject_HEAD`, `PyGetSetDef`, the `Py_tp_*` slot ids (base, call, clear,
+dealloc, descr_get, getset, methods, repr, traverse) and the `Py_TPFLAGS_*`
+bits. Today `PyTypeObject` is a stub carrying `tp_name` and nothing else —
+identity only, no slots — so this is an object-model change, not a set of
+functions. It also brings instances whose layout the EXTENSION owns:
+`tp_basicsize` bytes with our header at offset 0, which is what
+`offsetof(PyCFunctionObject, m_module)` in the member table is reading.
+
+**2. GC.** `PyObject_GC_New/Del/Track/UnTrack`, `Py_VISIT` (12 uses, the most
+of anything here), `PyObject_ClearWeakRefs`. Our runtime is refcounted with no
+cycle collector, so these can be honest no-ops around the allocation — but they
+must exist and `Py_VISIT` must expand to something that compiles and does not
+walk a null.
+
+**3. Leaf functions — mechanical.** `PyCallable_Check`, `PyDict_Check`,
+`PyErr_NoMemory`, `PyObject_CallFunction`, `PyObject_CallObject`,
+`PyObject_CallMethodObjArgs`, `PyObject_HasAttr`, `PySequence_GetItem`,
+`PyTuple_Pack`, `PyTuple_GetSlice`, `PyObject_GenericGetDict/SetDict`,
+`PyCFunction_GetFlags/GetSelf`, `PyCMethod`, `PyImport_ImportModuleLevelObject`,
+`PyVectorcall_Call`.
+
+**There is no partial credit here** — the module does not compile until all 50
+resolve, so group 3 cannot be landed and verified on its own against this
+oracle. Anyone picking this up should build group 1 first, because it is the
+one that can fail on design rather than on typing.
+
+`PyInit_cyadd` in the raw diff is a false positive: the extension defines it.
