@@ -7027,9 +7027,15 @@ UFORTH_SRC ?= $(HOME)/projects/uforth
 # defs, and `1+` unresolved inside an INCLUDEd helper). Listed by name in
 # bug-nilpy-uforth-file-word-set-include-redefinition rather than silently
 # skipped, so adding it back is the gate for that ticket.
-UFORTH_CORPUS ?= testje.for testjefixed.for testjefix2.for testjefix3.for \
-                 tests/_drv_c.fth tests/_drv_file0.fth tests/_drv_locals.fth \
-                 tests/_drv_string.fth tests/_drv_t.fth tests/_drv_x.fth
+# The `tests/_drv_*.fth` drivers are DELIBERATELY not here. They were local
+# debugging scratch on one box — never committed to uforth, absent from its git
+# history entirely — so every clone reported "6 of 10 corpora absent" for files
+# that were never going to arrive (user, 2026-08-08). Track T wants regression
+# signal, not somebody's debug wrappers: (a) that uforth compiles and runs, and
+# (b) Gerry Jackson's Forth 2012 suite in `tests/`, which is the real corpus and
+# is measured per word set in bug-nilpy-uforth-ans-word-set-suite-4-of-13-open.
+# Enrolling that suite waits on the ANS work landing — it is 4-of-13 open today.
+UFORTH_CORPUS ?= testje.for testjefixed.for testjefix2.for testjefix3.for
 test-uforth: $(COMPILER)
 	@if [ ! -f "$(UFORTH_SRC)/uforth.py" ]; then \
 	  echo "test-uforth: SKIP — no uforth tree at $(UFORTH_SRC) (git clone git@github.com:yoctobyte/uforth $(UFORTH_SRC))"; \
