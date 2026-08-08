@@ -991,12 +991,24 @@ function max(a: Double; b: Double): Double; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
+{ `list(b)` on a BYTES/bytearray yields its byte VALUES, as Python's does. It
+  used to resolve to the TPyList arm — a TPyBytes handed to a list-typed
+  parameter, whose `count` read the wrong field and answered 0, so the
+  idiomatic way to look at a bytes value printed [] with no diagnostic
+  (bug-nilpy-list-of-a-bytes-object-is-empty). `for x in b`, `len(b)` and
+  `b[i]` were already right, so this is the constructor alone, not the
+  iteration protocol. }
+function list(b: TPyBytes): TPyList; overload;
 { tuple(iterable) — the same sequence with the TUPLE flag set. The tuple TYPE
   existed (literals work, and FKind distinguishes it) but the CONSTRUCTOR did
   not, so `tuple([1, 2])` failed with 'undefined variable (tuple)'.
   (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice) }
 function tuple(l: TPyList): TPyList;
 function tuple(const s: AnsiString): TPyList; overload;
+{ tuple(b) — same as list(b) with the tuple flag; without it `tuple(<bytes>)`
+  was a compile error ("no overload of tuple matches"), the loud sibling of
+  the silent list(b). }
+function tuple(b: TPyBytes): TPyList; overload;
 { pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
 { pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
@@ -8949,6 +8961,8 @@ begin
       identical dict with a static type iterated fine
       (bug-nilpy-two-name-for-over-a-variant-assumes-a-dict). }
     if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
+    { bytes erased to a variant — the byte values, same as the static arm. }
+    if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
   end;
   PyTypeError(pyvartag(v), 'a str, a list or a dict');
   Result := TPyList.Create;
@@ -9037,6 +9051,23 @@ begin
   r := TPyList.Create;
   r.FKind := PYSEQ_TUPLE;
   for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
+  Result := r;
+end;
+
+function list(b: TPyBytes): TPyList; overload;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if b <> nil then
+    for i := 0 to b.count - 1 do r.append(b.at(i));
+  Result := r;
+end;
+
+function tuple(b: TPyBytes): TPyList; overload;
+var r: TPyList;
+begin
+  r := list(b);
+  r.FKind := PYSEQ_TUPLE;
   Result := r;
 end;
 
@@ -9129,6 +9160,7 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
+    if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := list(pystr_of(v)); Exit; end;
   Result := TPyList.Create;   { None / empty }

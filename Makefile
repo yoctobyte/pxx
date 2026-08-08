@@ -917,6 +917,9 @@ test-nilpy: $(COMPILER)
 	@# standard Pascal identifier, so the name needs its own NilPy arm.
 	./$(COMPILER) test/test_nilpy_input_builtin.npy /tmp/test_nilpy_input26
 	test "$$(printf 'one\ntwo\n' | /tmp/test_nilpy_input26)" = "$$(printf 'first:one\nprompt> second:two\n3 3\nONE\none-two\no t\nTrue False')"
+	@# list(<bytes>)/tuple(<bytes>) — the byte VALUES, not an empty list
+	./$(COMPILER) test/test_nilpy_list_of_bytes.npy /tmp/test_nilpy_list_of_bytes26
+	test "$$(/tmp/test_nilpy_list_of_bytes26)" = "$$(printf '[44, 1, 0, 0, 0, 0, 0, 0]\n(44, 1, 0, 0, 0, 0, 0, 0)\n8\n44\n1\n45\n[44, 1, 0, 0]\n[44, 1, 0, 0]\n[]')"
 	@# the guard: a user class declaring to_bytes must win over the intrinsic
 	./$(COMPILER) test/test_nilpy_to_bytes_user_class_wins.npy /tmp/test_nilpy_tb_userwins26
 	test "$$(/tmp/test_nilpy_tb_userwins26)" = "$$(printf 'packet:7\npacket:1\nframe:2')"

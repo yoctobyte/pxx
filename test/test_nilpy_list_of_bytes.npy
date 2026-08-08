@@ -1,0 +1,43 @@
+# bug-nilpy-list-of-a-bytes-object-is-empty
+#
+# `list(b)` on a bytes/bytearray answered [] — silently, because an empty list
+# is a plausible answer and `list(x)` is how you look at a bytes value. The
+# object itself was always right: `len(b)`, `b[i]` and `for x in b` all agreed
+# with CPython, so only the CONSTRUCTOR was missing an arm and the argument
+# resolved to the TPyList overload, whose `count` read the wrong field.
+#
+# `tuple(b)` failed LOUDLY at compile time ("no overload of tuple matches") —
+# the same gap on the sibling constructor, fixed together so the two spellings
+# cannot drift apart.
+#
+# Diffed against CPython.
+
+v = 300
+b = v.to_bytes(8, "little", signed=True)
+
+print(list(b))
+print(tuple(b))
+
+# these already worked and must stay working
+print(len(b))
+print(b[0])
+print(b[1])
+s = 0
+for x in b:
+    s = s + x
+print(s)
+
+
+# the VARIANT arms: bytes erased into an untyped parameter and into a
+# container element both reach pylist_v / list(Variant), not the static arm.
+def dump(x):
+    return list(x)
+
+
+c = v.to_bytes(4, "little", signed=True)
+print(dump(c))
+box = [c]
+print(list(box[0]))
+
+# an empty bytes stays empty
+print(list((0).to_bytes(0, "little", signed=False)))

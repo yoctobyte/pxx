@@ -3,6 +3,8 @@ track: N
 prio: 35
 type: bug
 summary: "`list(b)` on a bytes object answers [] instead of the byte values — silent, and it makes the idiomatic way to inspect to_bytes output show nothing"
+status: done
+owner: claude-AN
 ---
 
 # `list(<bytes>)` is empty
@@ -38,3 +40,28 @@ is the thing to fix, not `list` alone.
 
 Per-fix loop, plus a `.npy` covering `list(b)`, `tuple(b)`, `for x in b` and
 `b[i]`/`len(b)` (which already work), diffed against CPython.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.
+
+## Fixed 2026-08-08
+
+`list(b)`/`tuple(b)` now have TPyBytes arms in `compiler/builtin/pylib.pas`,
+and the two variant renderers (`pylist_v`, `list(const v: Variant)`) route a
+tag-7 TPyBytes payload to the same one — so bytes erased into an untyped
+parameter or a container element behave like the static form.
+
+The "where to look" guess was right about the shape and wrong about the
+cause: `list(b)` was not falling through to an empty result, it was
+RESOLVING to `list(l: TPyList)` — a TPyBytes handle in a list-typed
+parameter, whose `count` read the wrong field and answered 0. Which is why
+it was silent rather than an error.
+
+The iteration protocol was NOT the missing piece: `for x in b`, `len(b)` and
+`b[i]` all already agreed with CPython and still do. `tuple(b)` was the loud
+sibling — a compile-time "no overload of tuple matches" — fixed in the same
+pass so the two spellings cannot drift apart.
+
+Test: `test/test_nilpy_list_of_bytes.npy`, wired into `make test-nilpy`,
+diffed against CPython (exact match, including the empty-bytes case and both
+variant paths).
