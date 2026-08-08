@@ -1,0 +1,78 @@
+# A PLAIN (non-@dataclass) class's `Callable` field, reached through a
+# DYNAMICALLY typed receiver — a for-in variable, a dict value.
+#
+# A procedural signature is recorded only for a @dataclass field; a plain
+# class's field takes its type from the `__init__` parameter it is assigned
+# from and records none. The dynamic-receiver scan REQUIRED one, so
+# `for x in table: x.native(vm)` failed to COMPILE ("no class declares a method
+# or callable field") while the identical program written with @dataclass
+# compiled and ran. A signature-less VARIANT field is now a second-pass
+# candidate: the call goes out through pyvar_callv<n>, which tells the callable
+# shapes apart at run time and needs no signature.
+# bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver
+#
+# Also covered: an ANNOTATED `Callable` local assigned a bare def. That
+# spelling missed the function-value boxing its unannotated twin (`g = f`) gets
+# AND kept a proc signature, so the call site marshalled a 16-byte variant slot
+# as a procedural value and SEGFAULTED — where `g = f` was fine.
+# bug-nilpy-annotated-callable-local-assigned-a-bare-def-segfaults
+from typing import Callable
+
+
+class VM:
+    def __init__(self) -> None:
+        self.acc = 0
+
+    def push(self, n: int) -> None:
+        self.acc = self.acc + n
+
+
+class Plain:
+    def __init__(self, name: str, native: Callable[[VM], None]) -> None:
+        self.name = name
+        self.native = native
+
+
+def w_one(vm: VM) -> None:
+    vm.push(1)
+
+
+def w_two(vm: VM) -> None:
+    vm.push(2)
+
+
+vm = VM()
+
+# for-in variable: no static class
+table = [Plain("ONE", w_one), Plain("TWO", w_two)]
+for x in table:
+    x.native(vm)
+    print("elem", x.name, vm.acc)
+
+# dict value: likewise
+d = {"k": Plain("ONE", w_one)}
+d["k"].native(vm)
+print("dictval", vm.acc)
+
+# an untyped parameter
+def run(p, m):
+    p.native(m)
+
+
+run(table[1], vm)
+print("param", vm.acc)
+
+# statically typed receiver still works
+w = Plain("TWO", w_two)
+w.native(vm)
+print("static", vm.acc)
+
+# an ANNOTATED Callable local assigned a bare def, then called
+h: Callable[[VM], None] = w_two
+h(vm)
+print("annotated", vm.acc)
+
+# ...and the unannotated twin, which always worked
+k = w_one
+k(vm)
+print("plainlocal", vm.acc)

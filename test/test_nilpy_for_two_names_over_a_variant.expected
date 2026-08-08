@@ -1,0 +1,22 @@
+static a 1
+static b 2
+field a 1
+field b 2
+elem a 1
+elem b 2
+param a 1
+param b 2
+dictval a 1
+dictval b 2
+three x 1 True
+three y 2 False
+items x 1
+items y 2
+items2 x 1
+items2 y 2
+barepair a b
+barepair c d
+barekey ab
+barekey cd
+['ab', 'cd']
+TypeError

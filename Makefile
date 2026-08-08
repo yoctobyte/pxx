@@ -1269,7 +1269,11 @@ test-nilpy: $(COMPILER)
 	@# through an erased type used to be unboxed as a dict and raise. .items()
 	@# is the one thing that still says 'dict' after the suffix is stripped.
 	./$(COMPILER) test/test_nilpy_for_two_names_over_a_variant.npy /tmp/test_nilpy_for2var26
-	test "$$(/tmp/test_nilpy_for2var26)" = "$$(printf 'static a 1\nstatic b 2\nfield a 1\nfield b 2\nelem a 1\nelem b 2\nparam a 1\nparam b 2\ndictval a 1\ndictval b 2\nthree x 1 True\nthree y 2 False\nitems x 1\nitems y 2\nitems2 x 1\nitems2 y 2\nbarepair a b\nbarepair c d\nbarekey ab\nbarekey cd\n['ab', 'cd']\nTypeError')"
+	@# .expected, not an inline printf: the expectation contains Python's repr of
+	@# a list of STRINGS (['ab', 'cd']), and a single quote inside a
+	@# single-quoted printf ENDS the quote — so the inline form silently encoded
+	@# [ab, cd] and could never match, no matter what the compiler did.
+	/tmp/test_nilpy_for2var26 | diff -u test/test_nilpy_for_two_names_over_a_variant.expected -
 	@# /= and **= on a class instance dispatch __itruediv__ / __ipow__ (then the
 	@# binary form and rebind). Both used to raise 'expected a number, got object'.
 	./$(COMPILER) test/test_nilpy_truediv_pow_assign_class_dunder.npy /tmp/test_nilpy_tdivpow26

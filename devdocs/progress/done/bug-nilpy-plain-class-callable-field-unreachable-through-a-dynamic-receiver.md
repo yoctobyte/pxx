@@ -3,6 +3,7 @@ track: N
 prio: 35
 type: bug
 summary: "A plain class's `Callable` field records no signature, so `def run(o): o.native(x)` on a dynamically-typed receiver is a COMPILE ERROR (\"no class declares a method or callable field\") — only a @dataclass field is reachable that way"
+status: done
 ---
 
 # A plain-class Callable field is unreachable through a dynamic receiver
@@ -38,11 +39,21 @@ nothing and errors.
 
 Moving the annotation ABOVE `__init__` does not help — measured.
 
-## PRE-EXISTING, not a regression
+## PARTLY PRE-EXISTING — corrected 2026-08-08
 
-Reproduced identically under `stable_linux_amd64/default/pinned`, before
+Reproduced identically under `stable_linux_amd64/default/pinned` — but ONLY for
+the shape written above, where the class carries a class-level
+`native: Optional[Callable[...]] = None` annotation ALONGSIDE the ctor
+parameter.
+
+**CORRECTION:** the commoner shape — a field typed purely from an annotated
+`__init__` parameter, with no class-level annotation — runs FINE under `pinned`.
+For that one the compile failure was a regression from
 [[bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag]]
-made Callable fields variants. That ticket's 16-cell matrix passes because it
+(mine, same day), not a pre-existing gap. Both are fixed by the second scan pass
+described in
+[[regression-test-nilpy-test-nilpy-function-values]]; this ticket is closed with
+it. That ticket's 16-cell matrix passes because it
 calls through a STATICALLY typed local; this is the dynamic-receiver arm.
 
 ## Shape of the fix
@@ -63,3 +74,6 @@ the same scan already has and which more candidates would make worse.
 
 The repro above oracle-diffed with `tools/pydiff.py`, the existing
 `test_nilpy_callable_field_all_shapes.npy` still green, plus the per-fix loop.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

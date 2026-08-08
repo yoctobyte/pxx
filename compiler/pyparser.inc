@@ -8433,7 +8433,10 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
-  if n <> Procs[sigPi].ParamCount then
+  { sigPi < 0 = a variant field with no recorded signature (a plain class's
+    Callable field — see the second scan pass in the caller). There is nothing
+    to arity-check against, and the dispatcher below does not want one. }
+  if (sigPi >= 0) and (n <> Procs[sigPi].ParamCount) then
     Error('Nil Python: .' + fname + '() takes ' +
           PyIntLiteralText(Procs[sigPi].ParamCount) + ' argument(s)');
 
@@ -8468,6 +8471,9 @@ begin
     end;
   end;
 
+  if sigPi < 0 then
+    Error('Nil Python: .' + fname + '() — a callable field with no signature '
+          + 'must be variant-typed to be called on a dynamically-typed value');
   Result := AllocNode(AN_CALL_IND);
   ASTLeft[Result]  := argsHead;
   ASTRight[Result] := fieldNode;
@@ -9562,6 +9568,34 @@ begin
           + 'ambiguous (several classes declare that field) — assign to an '
           + 'annotated local first');
     end;
+    { A signature is recorded only for a @dataclass field. A PLAIN class's
+      `Callable` field gets its type from the `__init__` parameter it is
+      assigned from, which records none — so `for x in words: x.native(vm)`
+      over a plain-class dispatch table found nothing here and failed to
+      COMPILE ("no class declares a method or callable field"), while the
+      identical program with @dataclass compiled.
+
+      Second pass rather than a relaxed first one: a field WITH a signature
+      still wins, so every program that resolves today resolves the same way.
+      A VARIANT field is the right fallback because that is what a `Callable`
+      field now is, and the call goes out through pyvar_callv<n>, which tells
+      all four callable shapes apart at run time and needs no signature. The
+      unique-class requirement is what keeps this from claiming a name that
+      merely happens to be a variant field somewhere.
+      bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver }
+    if hitCi < 0 then
+      for ci := 0 to UClsCount - 1 do
+      begin
+        if UClsIsRecord[ci] then Continue;
+        mmi := FindUField(ci, mname);
+        if mmi < 0 then Continue;
+        if IntToTypeKind(UFldTk[mmi]) <> tyVariant then Continue;
+        if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; end
+        else
+          Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
+            + 'ambiguous (several classes declare that field) — assign to an '
+            + 'annotated local first');
+      end;
     if hitCi >= 0 then
     begin
       Result := PyMakeVariantFieldCall(baseNode, hitCi, mname, UFldProcSig[hitMmi]);
@@ -16210,7 +16244,30 @@ begin
       TokPos := annIdx;
       Next;                      { CurTok = '=' }
       Expect(tkAssign, '=');
-      PyParseBoolExpr;
+      { The right-hand side gets EXACTLY the treatment the unannotated path
+        gives it (see `cb = handler` further down): a bare def NAME becomes a
+        function VALUE, and a lambda's closure/bound-fn pointer is boxed. This
+        path did neither — it went straight to PyParseBoolExpr — so an
+        ANNOTATED local was the one spelling that missed both.
+
+        Invisible until a `Callable` annotation became a VARIANT: before that
+        `g: Callable[[VM], None] = w_ten` made g a POINTER holding a bare code
+        address and the typed indirect call worked. As a variant it holds an
+        unboxed address the dynamic dispatcher then misreads — a SEGFAULT on
+        `g(vm)`, where the identical `g = w_ten` (no annotation) was fine.
+        Sibling branches: one rule, two statement spellings, and only one of
+        them had it.
+        bug-nilpy-annotated-callable-local-assigned-a-bare-def-segfaults }
+      rhsNode := -1;
+      if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF]) then
+        rhsNode := PyMakeFuncValue;
+      if rhsNode < 0 then
+      begin
+        PyParseBoolExpr;
+        rhsNode := PyBoxCallableValue(CurASTNode);
+      end;
+      CurASTNode := rhsNode;
       symIdx := PyAssignTargetSym(name);
       if symIdx < 0 then
       begin
@@ -16222,7 +16279,13 @@ begin
         symIdx := AllocVar(name, tk);
         if (tk = tyClass) and (ci >= 0) then
           Syms[symIdx].RecName := REC_UCLASS_BASE + ci;
-        if annSig >= 0 then SymProcSig[symIdx] := annSig;
+        { ...but NOT for a variant. A `Callable` annotation yields a VARIANT
+          now, and a recorded signature makes the call site marshal the name as
+          a procedural value — a typed indirect call straight through the
+          16-byte slot. The FIELD case keeps its signature deliberately (it is
+          the marker that says "this field is callable"); a LOCAL has no such
+          need and only the ABI reads it here. }
+        if (annSig >= 0) and (tk <> tyVariant) then SymProcSig[symIdx] := annSig;
         SymSyncTypeRef(symIdx);
       end;
       lhsNode := PyMakeIdent(symIdx);
