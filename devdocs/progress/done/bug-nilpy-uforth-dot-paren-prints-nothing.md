@@ -2,8 +2,8 @@
 track: N
 prio: 40
 type: bug
-blocked-by: bug-nilpy-non-ascii-string-surface-measured
-summary: "ROOT CAUSE FOUND: `.(` prints nothing because NilPy strings are BYTE strings — uforth slices a str by a byte offset and the em-dashes in .UFO sources push it past the end. Not a new bug: it is the known, deliberate model (bug-nilpy-non-ascii-string-surface-measured). 8/11 of the suite is identical."
+summary: "RESOLVED — `.(` printed nothing because next_token()'s None came back as the TEXT 'None', so its `if tok is None: break` could never fire. uforth's driver suite is now 10/11 identical to CPython; only the FILE word set differs."
+status: done
 ---
 
 # `.(` prints nothing — uforth's driver suite, 8 of 11 identical
@@ -99,32 +99,55 @@ the per-fix loop. Worth splitting once the last-line cause is known: it is
 plainly one bug, and the FILE word set is plainly another.
 
 
-## ROOT CAUSE 2026-08-08: the byte-string model, not a new defect
 
-`.(` reads `>IN` — a BYTE offset into uforth's memory-mapped TIB — and uses it
-to slice `vm.input_line`, a Python str indexed by CHARACTER. CPython's str is
-character-indexed, so the two disagree on non-ASCII text and uforth compensates;
-NilPy's str is a BYTE string, so `len` and slicing count bytes, `pos` lands past
-the end of a line containing em-dashes, and the slice comes back empty. `.(`
-faithfully prints nothing.
+## ROOT CAUSE 2026-08-08 — and a RETRACTION
 
-Visible in uforth's own `--trace` without instrumenting anything (which is what
-sidesteps the instrumented-build hang noted above): the same source line reports
-`len=53` under CPython and `len=67` under pxx.
+**Retracted first:** I recorded a root cause of "NilPy strings are byte strings,
+so uforth's byte offset into a str lands past the end". That was WRONG. The
+disproof was already in my own measurements before I wrote it: `.( abc)` is pure
+ASCII on every path and failed identically. I had taken a real but unrelated
+`len=53` vs `len=67` divergence, seen on a COMMENT line during startup, and
+attached it to a failure it does not explain.
 
-Five-line reduction:
+### The actual cause
+
+`.(` is not the `w_dot_paren` native at all — EXTRA.UFO REDEFINES it as a Forth
+word with a PYTHON body:
 
 ```python
-print(len("———"))      # CPython 3   pxx 9
-t = "abc—def"
-print(len(t), t[4:])   # CPython 7 def      pxx 9 <invalid UTF-8 on stdout>
+while True:
+    tok = vm.next_token()
+    if tok is None:
+        break
+    ...
 ```
 
-**This is NOT a new bug.** NilPy strings are byte strings knowingly and
-deliberately — see [[bug-nilpy-non-ascii-string-surface-measured]], which
-already records `len("héllo") == 6`, and [[bug-nilpy-encode-ignores-the-codec]]
-for the decision. This ticket is now `blocked-by` that one; the measured uforth
-cost has been added there, since that ticket explicitly collects what the model
-costs. Nothing to fix HERE — do not "fix" `.(` by special-casing it.
+`next_token()` is `-> Optional[str]`, and `return None` from a str-returning def
+handed back the TEXT 'None'. So `tok is None` was always False and the loop's
+only exit could never fire: it ran to the end of the line and then appended the
+string 'None' forever. Hence "prints nothing" for `.(` and a HANG for an
+isolated copy of the same body — the same bug, two faces.
 
-The FILE-word-set difference in `_drv_file.fth` is unrelated and still open.
+Fixed in [[bug-nilpy-return-none-from-a-str-returning-def-yields-the-text-None]].
+
+### How it was actually found
+
+uforth's OWN `--trace`, diffed between the two runs, which sidestepped the
+instrumented-build hang noted above:
+
+```
+cpython: [00027] .(:0 PyInline(src="... while True: tok = vm.next_token() ...")
+pxx    : [00027] .(:0
+```
+
+— the trace named the word's body, which is what revealed `.(` was a PYTHON
+word rather than the native I had been reading.
+
+### Result
+
+uforth's driver suite: **10 of 11 byte-identical** to CPython (2/11 at the start
+of this arc, 8/11 before this fix). Only `tests/_drv_file.fth` differs, on the
+FILE word set — described above and still open.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

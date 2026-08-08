@@ -15747,6 +15747,40 @@ begin
         Next;
         ASTLeft[node] := PyMakeNone;
       end
+      else if (CurTok.Kind = tkNil) and (CurProc >= 0) and
+              (Procs[CurProc].RetSymIdx >= 0) and
+              (Syms[Procs[CurProc].RetSymIdx].TypeKind in [tyAnsiString, tyString]) and
+              ((TokPos >= TokCount) or
+               (Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon])) then
+      begin
+        { `return None` from a STR-returning def — `-> Optional[str]`, which is
+          how every "no more tokens" accessor is spelled. The None sentinel for
+          a str is a NIL HANDLE (pystr_none), exactly as it is for a str-typed
+          ASSIGNMENT target twenty lines down; without this arm the nil literal
+          coerced through variant->string and returned the TEXT 'None', so
+          `tok is None` was FALSE and `str(tok)` was "None".
+
+          Sibling branches: the assignment path
+          (bug-nilpy-none-into-str-field-stores-text) and this one are the same
+          rule about the same sentinel, and only one of them had it.
+
+          The cost was uforth's `.(`, whose body is
+
+              while True:
+                  tok = vm.next_token()
+                  if tok is None: break
+
+          — a loop whose ONLY exit could never fire. It ran to the end of the
+          line and then appended the string 'None' forever, so `.( abc)` printed
+          nothing and an isolated copy of the same body HUNG.
+          bug-nilpy-return-none-from-a-str-returning-def-yields-the-text-None }
+        Next;
+        ASTLeft[node] := AllocNode(AN_CALL);
+        ASTIVal[ASTLeft[node]] := FindProc('pystr_none');
+        if ASTIVal[ASTLeft[node]] < 0 then
+          Error('Nil Python: pylib (pystr_none) not loaded');
+        ASTTk[ASTLeft[node]] := Ord(tyAnsiString);
+      end
       else
       begin
         PyParseBoolExpr;

@@ -19,3 +19,58 @@ print(a.check("swap"))
 a.f = None
 print(a.f is None)
 print(a.check("swap"))
+
+
+# The RETURN path is the sibling of the assignment above, and only the
+# assignment had the rule. `return None` from a str-returning def lowered the
+# nil literal through variant->string and handed back the TEXT 'None', so
+# `tok is None` was FALSE and the value was truthy — the exact failure the
+# field case was fixed for, one statement kind over.
+#
+# `-> Optional[str]` is how every "no more input" accessor is spelled, so the
+# shape that breaks is a loop whose only exit is `if x is None: break`. uforth's
+# `.(` is that loop: it ran past the end of the line and appended the string
+# 'None' forever, which is why `.( abc)` printed nothing and an isolated copy of
+# the same body hung.
+# bug-nilpy-return-none-from-a-str-returning-def-yields-the-text-None
+
+
+class Src:
+    def __init__(self) -> None:
+        self.k = 0
+
+    def next_token(self) -> Optional[str]:
+        self.k = self.k + 1
+        if self.k > 2:
+            return None
+        return "t" + str(self.k)
+
+    def always(self) -> Optional[str]:
+        return None
+
+    def never(self) -> Optional[str]:
+        return "x"
+
+
+s = Src()
+print(s.always() is None, s.never() is None)
+
+# the loop shape, with a runaway guard so a broken build FAILS rather than hangs
+got = []
+n = 0
+while True:
+    tok = s.next_token()
+    n = n + 1
+    if n > 6:
+        got.append("RUNAWAY")
+        break
+    if tok is None:
+        break
+    got.append(tok)
+print(got, n)
+
+# NOT asserted here: `return ""` currently reads as None too, because Pascal's
+# empty AnsiString IS a nil handle — so "" and None are the SAME value for a
+# NilPy str, contrary to what pylib's pystr_none comment claims. Pre-existing
+# (identical under `pinned`), orthogonal to the return-path rule above, and
+# filed as bug-nilpy-empty-str-and-none-are-the-same-value.

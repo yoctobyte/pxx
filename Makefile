@@ -1011,7 +1011,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_return_none_variant.npy /tmp/test_nilpy_return_none_variant26
 	test "$$(/tmp/test_nilpy_return_none_variant26)" = "$$(printf 'a NONE\nb NONE\nc 9')"
 	./$(COMPILER) test/test_nilpy_none_str_field.npy /tmp/test_nilpy_none_str_field26
-	test "$$(/tmp/test_nilpy_none_str_field26)" = "$$(printf 'True\nshow\nFalse\nshow\nskip\nTrue\nshow')"
+	/tmp/test_nilpy_none_str_field26 | diff -u test/test_nilpy_none_str_field.expected -
 	./$(COMPILER) test/test_nilpy_bytes_repr.npy /tmp/test_nilpy_bytes_repr26
 	test "$$(/tmp/test_nilpy_bytes_repr26)" = "$$(printf "b'abc\\\\n'\nb'abc'\nb'held'\nb'tab\\\\there'\nb\"q'q\"\nb'dq\"dq'")"
 	./$(COMPILER) test/test_nilpy_slices.npy /tmp/test_nilpy_slices26
