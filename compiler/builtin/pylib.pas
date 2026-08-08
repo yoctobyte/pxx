@@ -7517,13 +7517,52 @@ begin
   Result := ParamStr(0);
 end;
 
-function pyselect_select(const r: Variant; const w: Variant; const x: Variant; const t: Variant): TPyList;
-var res: TPyList;
+function PySelectReady(const lst: Variant; events: Int64; timeoutMs: Int64): TPyList;
+{ The ready subset of one select() list. A NilPy `sys.stdin` IS its file
+  descriptor (the integer 0), so an entry polls as itself and the value that
+  comes back is the value that went in — which is what makes CPython's
+  `if sys.stdin in select.select([sys.stdin], [], [], 0)[0]` answer the same
+  here. A non-integer entry (an object with no fd meaning) is skipped rather
+  than guessed at. }
+var res: TPyList; src: TPyList; i: Integer; v: Variant; fd: Int64;
 begin
   res := TPyList.Create;
-  res.append(TPyList.Create);        { rlist — nothing ready }
-  res.append(TPyList.Create);        { wlist }
-  res.append(TPyList.Create);        { xlist }
+  if not pyvar_is_objtag(lst) then begin Result := res; Exit; end;
+  src := TPyList(pyvarobj(lst));
+  if src = nil then begin Result := res; Exit; end;
+  for i := 0 to src.count - 1 do
+  begin
+    v := src.at(i);
+    { tags 1/2 are the machine-int flavours; anything else has no fd meaning }
+    if (pyvartag(v) <> 1) and (pyvartag(v) <> 2) then Continue;
+    fd := pyvar_to_int(v);
+    if PyPalPoll(fd, events, timeoutMs) = 1 then res.append(v);
+  end;
+  Result := res;
+end;
+
+function pyselect_select(const r: Variant; const w: Variant; const x: Variant; const t: Variant): TPyList;
+{ `select.select(rlist, wlist, xlist, timeout)`.
+
+  Was a STUB that always answered "nothing ready" — which is not a degraded
+  answer, it is the WRONG one: a program that polls stdin to decide whether it
+  is being fed a script or typed at got the interactive answer either way.
+  uforth prints its `UF> ` prompt for every piped line because of exactly that
+  test, so its output could never match CPython's.
+
+  Timeout: CPython takes SECONDS as a float, and None means block. The common
+  `0` (poll, do not wait) and a small float both round through here; a negative
+  or missing timeout blocks, matching poll(2). The xlist has no meaning for the
+  descriptors NilPy can produce, so it comes back empty. }
+var res: TPyList; timeoutMs: Int64;
+begin
+  timeoutMs := 0;
+  if pyvartag(t) = 0 then timeoutMs := -1                     { None -> block }
+  else timeoutMs := Round(pyvar_to_float(t) * 1000.0);
+  res := TPyList.Create;
+  res.append(PySelectReady(r, 1, timeoutMs));    { POLLIN  }
+  res.append(PySelectReady(w, 4, timeoutMs));    { POLLOUT }
+  res.append(TPyList.Create);        { xlist — no exceptional set to report }
   Result := res;
 end;
 

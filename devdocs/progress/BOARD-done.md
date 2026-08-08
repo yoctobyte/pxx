@@ -678,6 +678,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-tuple-of-a-field-from-an-omitted-default-segfaults | N | 70 | bug | SEGFAULT, and a COMPILER crash under -g: a class whose method parameter name matches the CLASS name still mis-resolves on the FIELD path. `class A` + `def __init__(self, a): self.a = a` + a tuple return crashes. Same family as the fixed return-inference bug; that fix did not cover this route. | — |
 | bug-nilpy-two-name-for-over-a-variant-assumes-a-dict | N | 55 | bug | NilPy: `for k, v in <variant>` is lowered as a DICT unconditionally, so iterating a variant-held list of pairs raises TypeError: expected a dict, got object — the same list unpacks fine when its type is statically known | — |
 | bug-nilpy-typed-const-import-reads-zero | N | 75 | bug | Typed-constant initializers are not applied in a Nil Python build | — |
+| bug-nilpy-uforth-compiles-but-segfaults-at-runtime | N | 40 | bug | GREEN 2026-08-08 — make test-uforth PASSES. uforth.py compiles, boots, loads STD.UFO and evaluates both smoke words. Five blockers cleared in a chain; deeper .for corpora are a separate ticket. | — |
 | bug-nilpy-uforth-exceptiontest-source-unlink | N | 40 | bug | NilPy: uforth exceptiontest source-unlink test fails under the full driver | — |
 | bug-nilpy-unannotated-return-infers-number-for-string-concat | N | 70 | bug | nilpy: an unannotated def returning `variant + str` infers a NUMERIC return and prints garbage | — |
 | bug-nilpy-unary-neg-dunder-not-dispatched | N | 40 | bug | `-n` on a user class silently computed garbage — `__neg__` never dispatched | — |
@@ -692,6 +693,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
 | bug-nilpy-wide-int-literal-and-unsigned-mask-not-promoted | A | 55 | bug | NilPy: wide int literals + the `& 0xFFFF...` unsigned-mask idiom don't promote to bignum | — |
 | bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |
+| bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field | N | 50 | bug | SILENT->CRASH: a callable stored in a `Callable` field outlives its object — `-dPXX_HEAP_DEBUG` reports WRITE AFTER FREE and the recycled block comes back as a list's element storage, so calling the field jumps into a variant array. This is what blocks uforth now. | — |
 | bug-nilpy-zero-param-lambda-cannot-call-a-def | N | 70 | bug | `lambda: f()` — a zero-parameter lambda cannot call a compiled def | — |
 | bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults | N | 70 | bug | `zip(list, str)` yields nothing — and segfaults if any loop ran before it | — |
 | bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |

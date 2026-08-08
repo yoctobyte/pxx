@@ -1,0 +1,72 @@
+# A promotable-int LOCAL must start zeroed, because the scope-exit cleanup
+# clears every one of them unconditionally.
+#
+# PXXPromoClear releases the slot's payload as a managed string whenever the tag
+# word reads PROMO_TAG_HEAP (1) — and its own header says it must not be run on
+# uninitialised memory. Promo TEMPS got a prologue zero via SymIsHiddenArgTemp;
+# named promo LOCALS got nothing, so a local left unwritten on the executed path
+# (an early `return`) was cleared with stale stack bytes. Bytes reading
+# {1, <a live pointer>} freed a block nobody had freed: PXXAlloc handed it out
+# again, and the next use of the original object read someone else's data.
+#
+# This is what made uforth die three layers away — a bound-fn object, still
+# refcount-alive, whose block had been reissued as string storage, so
+# `word.native(vm)` jumped into text.
+# bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field
+#
+# The shape is deliberate, not decoration: leave_pattern seeds the frame with
+# alternating {1, <object>} words, early_out returns before touching its promo
+# local at that depth, and the churn afterwards forces any wrongly-freed block
+# to be reissued. Verified to DISCRIMINATE: with the prologue zero removed the
+# binary segfaults; with it, output matches CPython.
+from dataclasses import dataclass
+from typing import Optional, Callable
+
+
+@dataclass
+class W:
+    name: str
+    native: Optional[Callable[["VM"], None]] = None
+
+
+class VM:
+    def __init__(self):
+        self.n = 0
+        self.words = []
+
+
+def leave_pattern(vm, obj):
+    a = 1
+    b = obj
+    c = 1
+    d = obj
+    e = 1
+    f = obj
+    return a + c + e
+
+
+def early_out(vm):
+    if vm.n == 0:
+        return
+    total = 0
+    for i in range(10):
+        total = total + i * i
+    vm.n = total
+
+
+def build(vm):
+    def w_a(v):
+        v.n = v.n + 1
+    vm.words.append(W("A", w_a))
+
+
+vm = VM()
+build(vm)
+leave_pattern(vm, vm.words[0])
+for k in range(50):
+    early_out(vm)
+junk = []
+for i in range(3000):
+    junk.append("x" * 40)
+vm.words[0].native(vm)
+print(vm.n)

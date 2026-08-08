@@ -27,14 +27,13 @@ _none_
 | feature-nilpy-text-string-kind | N | 55 | feature | Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1) | feature-a-managed-block-kind-word |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (7)
+## blocked (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-dunders-not-dispatched-through-containers | N | 45 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
-| bug-nilpy-uforth-compiles-but-segfaults-at-runtime | N | 40 | bug | uforth.py compiles, BOOTS, and now compiles colon definitions correctly (segfault + property-setter fixes, 2026-08-08). Still red: blocked on bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field — it now loads far enough to compile IO.UFO and dies dispatching an IMMEDIATE word | bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | decide-float-fixed-output-exact-or-fpc-17-digit-cap |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
@@ -63,10 +62,10 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver | N | 35 | bug | A plain class's `Callable` field records no signature, so `def run(o): o.native(x)` on a dynamically-typed receiver is a COMPILE ERROR (\"no class declares a method or callable field\") — only a @dataclass field is reachable that way | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
+| bug-nilpy-pyeval-lambda-host-word-arity-mismatch | N | 45 | bug | pyeval raises `<lambda>() takes 0 positional arguments but 1 were given` for uforth's `value` / `TO` / `create` / `allot` — the PYTHON-bodied word is invoked with the VM argument its lowered lambda does not declare. Blocks the deeper uforth .for corpora. | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
-| bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field | N | 50 | bug | SILENT->CRASH: a callable stored in a `Callable` field outlives its object — `-dPXX_HEAP_DEBUG` reports WRITE AFTER FREE and the recycled block comes back as a list's element storage, so calling the field jumps into a variant array. This is what blocks uforth now. | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -367,9 +366,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1488)
+## done (1490)
 
-1488 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1490 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -447,7 +446,6 @@ _none_
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 50] [N] bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
@@ -468,6 +466,7 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+- [p 45] [N] bug-nilpy-pyeval-lambda-host-word-arity-mismatch
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
@@ -594,7 +593,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-parallel-capture-semantics

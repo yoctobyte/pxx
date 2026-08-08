@@ -8835,7 +8835,30 @@ begin
         { NilPy-user class local: refcounted binding — must start nil so the
           rebind release and the scope-exit release see an empty slot
           (feature-nilpy-object-reclamation slice 4). }
-        zeroBytes := TARGET_PTR_SIZE;
+        zeroBytes := TARGET_PTR_SIZE
+      else if TypeIsPromoInt(Syms[i].TypeKind) and (not Syms[i].IsArray) then
+        { Promotable int: a {tag, payload} pair whose tag MUST start
+          PROMO_TAG_INLINE (0). The scope-exit cleanup calls PXXPromoClear on
+          every promo local unconditionally (EmitManagedLocalCleanup), and that
+          routine RELEASES the payload as a managed string whenever the tag
+          reads PROMO_TAG_HEAP (1) — so a local left unwritten on the executed
+          path was cleared with stale stack bytes, and bytes that happened to
+          read {1, <a live pointer>} freed a block nobody had freed.
+
+          PXXPromoClear's own header says it cannot be used on uninitialised
+          memory; the temps satisfy that through SymIsHiddenArgTemp's prologue
+          zero, and named locals had NOTHING. Cleanup without init: this list
+          is where the init half belongs, beside every other managed kind.
+
+          Found via uforth: `w_repeat` returns early, leaving a promo local
+          untouched, and the frame garbage under it read as a heap-tier slot
+          pointing at a live bound-fn object. Freeing it put a live block on the
+          free bin, PXXAlloc handed it out again for a string, and the next
+          `word.native(vm)` through that object jumped into the string data —
+          three layers and thousands of lines from the cause, with the object
+          still refcount-alive the whole time.
+          bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field }
+        zeroBytes := TypeSize(Syms[i].TypeKind);
       { One owner for the guarantee, every target, every size. }
       EmitZeroFrameSlot(Syms[i].Offset, zeroBytes);
     end;

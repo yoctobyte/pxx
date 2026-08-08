@@ -836,6 +836,13 @@ test-nilpy: $(COMPILER)
 	@# exec()'s expression grammar had no rule for ** at all
 	./$(COMPILER) test/test_nilpy_pyeval_power_operator.npy /tmp/test_nilpy_pyevalpow26
 	test "$$(/tmp/test_nilpy_pyevalpow26)" = "[1024, 512, -4, 0.5]"
+	@# a promo LOCAL must start zeroed: the scope-exit PXXPromoClear releases a
+	@# tag==1 payload as a string, so stale frame bytes freed a live block
+	./$(COMPILER) test/test_nilpy_promo_local_zero_init.npy /tmp/test_nilpy_promozero26
+	test "$$(/tmp/test_nilpy_promozero26)" = "1"
+	@# select.select() actually polls (it was a stub answering "nothing ready")
+	./$(COMPILER) test/test_nilpy_select_stdin_ready.npy /tmp/test_nilpy_selready26
+	/tmp/test_nilpy_selready26 < test/test_nilpy_select_stdin_ready.stdin | diff -u test/test_nilpy_select_stdin_ready.expected -
 	@# a host method whose params MIX a variant with register-sized kinds
 	./$(COMPILER) test/test_nilpy_pyeval_host_mixed_params.npy /tmp/test_nilpy_pyevalmix26
 	/tmp/test_nilpy_pyevalmix26 | diff -u test/test_nilpy_pyeval_host_mixed_params.expected -

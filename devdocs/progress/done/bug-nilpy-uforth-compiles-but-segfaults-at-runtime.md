@@ -2,8 +2,8 @@
 track: N
 prio: 40
 type: bug
-blocked-by: bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field
-summary: "uforth.py compiles, BOOTS, and now compiles colon definitions correctly (segfault + property-setter fixes, 2026-08-08). Still red: blocked on bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field — it now loads far enough to compile IO.UFO and dies dispatching an IMMEDIATE word"
+summary: "GREEN 2026-08-08 — make test-uforth PASSES. uforth.py compiles, boots, loads STD.UFO and evaluates both smoke words. Five blockers cleared in a chain; deeper .for corpora are a separate ticket."
+status: done
 ---
 
 # uforth compiles, boots, and stalls loading STD.UFO
@@ -189,3 +189,46 @@ Four blockers cleared in a row on this ticket now (tag-jump ABI, `-> None`
 value ABI, property setter, pyeval param shape), each one uncovering the next.
 The pattern is worth naming: uforth is not hitting ONE bug, it is walking a
 queue of them, and each fix buys a few more lines of STD.UFO.
+
+
+## 2026-08-08 — GREEN. `make test-uforth: PASS`
+
+```
+test-uforth: PASS — compiles, STD.UFO loads, native + PYTHON-bodied words
+evaluate (1 2 + . = 3, 10 3 / . = 3)
+```
+
+Five blockers, each hidden behind the last, all found by measuring rather than
+reasoning:
+
+1. [[bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag]]
+   — a `Callable` FIELD was a pointer while a `Callable` PARAMETER was a
+   variant; the tag word was jumped through as code (PC = 0x0a).
+2. [[bug-nilpy-uforth-compiles-but-segfaults-at-runtime]] (this ticket's own ABI
+   half) — a `-> None` def used as a VALUE stayed a procedure while every
+   bridge called it through a variant-returning pointer type.
+3. [[bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver]] —
+   three silent property-write losses; the STATE flag never took effect, so
+   every colon definition executed instead of compiling.
+4. [[bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape]]
+   — the host bridge refused `define_word`'s mixed signature outright.
+5. [[bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field]] — a
+   promo LOCAL was cleared at scope exit without ever being zero-initialised,
+   freeing a live block; plus `select.select` being a stub, which is what kept
+   the `UF> ` prompt in the piped output.
+
+**The pattern worth keeping**: four of the five were UNDEFINED behaviour, not
+deterministic failure — a register never written, a block not yet reissued, a
+tag that happened to read 1. Every one of them had a minimal repro that PASSED
+on the broken build. Pass/fail testing could not have found any of them; the
+`.map`, `-dPXX_HEAP_DEBUG`, objtrace and a gdb watchpoint did.
+
+## Still open beyond this gate
+
+uforth's deeper corpora (`tests/*.for`, `testje.for`) are NOT green: `value`,
+`TO`, `create` and `allot` fail with `<lambda>() takes 0 positional arguments
+but 1 were given` from pyeval. Filed as
+[[bug-nilpy-pyeval-lambda-host-word-arity-mismatch]].
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

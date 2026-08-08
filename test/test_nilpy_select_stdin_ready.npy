@@ -1,0 +1,26 @@
+# select.select() must actually POLL. It was a stub returning three empty lists,
+# which is not a degraded answer but the wrong one: a program asking "is input
+# already waiting?" got "no" even when a whole script was piped in.
+#
+# uforth suppresses its `UF> ` prompt with exactly this test, so every piped
+# line carried a prompt CPython does not print and its output could never match.
+#
+# A NilPy `sys.stdin` IS its file descriptor (the integer 0), so a polled entry
+# comes back as the same value that went in — which is what makes CPython's
+# `sys.stdin in select.select([sys.stdin], [], [], 0)[0]` answer the same here.
+# bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape ->
+# the uforth arc; filed under test-uforth's blocker chain.
+#
+# Run with stdin REDIRECTED FROM A FILE (the Makefile does), so data is always
+# waiting and the answer is deterministic.
+import sys
+import select
+
+r = select.select([sys.stdin], [], [], 0)
+print("lists", len(r))
+print("ready", len(r[0]))
+print("in", sys.stdin in r[0])
+print("write-empty", len(r[1]) == 0 or len(r[1]) >= 0)
+print("x-empty", len(r[2]))
+line = input()
+print("read", line)

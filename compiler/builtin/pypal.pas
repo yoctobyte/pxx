@@ -60,6 +60,12 @@ function PyPalRename(src, dst: Pointer): Int64;
 function PyPalGetcwd(buf: Pointer; n: Int64): Int64;
 function PyPalStat(path, statbuf: Pointer): Int64;
 function PyPalAccessOk(path: Pointer): Boolean;
+{ ppoll(fds, nfds, timespec|nil, nil, 0) on ONE descriptor. Returns 1 when the
+  requested events are ready, 0 on timeout, <0 on error / unsupported target.
+  `ppoll` rather than `poll`: aarch64 and riscv32 have no plain poll(2) at all,
+  and ppoll exists everywhere here, so one number per target covers the set.
+  timeoutMs < 0 blocks (nil timespec), exactly like poll(2). }
+function PyPalPoll(fd: Int64; events: Int64; timeoutMs: Int64): Int64;
 
 implementation
 
@@ -85,6 +91,7 @@ const
   NR_STAT      = 4;     { stat (x86-64 has the plain form) }
   NR_ACCESS    = 21;    { access }
   NR_FACCESSAT = -1;     { not needed: plain access exists }
+  NR_PPOLL     = 271;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPUAARCH64}
@@ -100,6 +107,7 @@ const
   NR_STAT      = -1;     { no plain stat; fstatat only }
   NR_ACCESS    = -1;     { no plain access }
   NR_FACCESSAT = 48;
+  NR_PPOLL     = 73;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_I386}
@@ -115,6 +123,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
+  NR_PPOLL     = 309;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_ARM32}
@@ -130,6 +139,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
+  NR_PPOLL     = 336;
   PYPAL_HAVE   = True;
 {$endif}
 { no table for this target — every entry point fails softly }
@@ -146,6 +156,7 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = -1;
   NR_FACCESSAT = -1;
+  NR_PPOLL     = -1;
   PYPAL_HAVE   = False;
 {$endif}{$endif}{$endif}{$endif}{$endif}
 
@@ -162,12 +173,47 @@ const
   NR_STAT      = -1;
   NR_ACCESS    = -1;
   NR_FACCESSAT = 48;
+  NR_PPOLL     = 73;
   PYPAL_HAVE   = True;
 {$endif}
 
 function PyPalSupported: Boolean;
 begin
   PyPalSupported := PYPAL_HAVE;
+end;
+
+type
+  TPyPalPollFd = record
+    fd:      LongInt;
+    events:  SmallInt;
+    revents: SmallInt;
+  end;
+  TPyPalTimespec = record
+    tv_sec:  Int64;
+    tv_nsec: Int64;
+  end;
+
+function PyPalPoll(fd: Int64; events: Int64; timeoutMs: Int64): Int64;
+var pfd: TPyPalPollFd; ts: TPyPalTimespec; tsp: Pointer; r: Int64;
+begin
+  PyPalPoll := -1;
+  if NR_PPOLL < 0 then Exit;
+  pfd.fd := LongInt(fd);
+  pfd.events := SmallInt(events);
+  pfd.revents := 0;
+  if timeoutMs < 0 then tsp := nil
+  else
+  begin
+    ts.tv_sec := timeoutMs div 1000;
+    ts.tv_nsec := (timeoutMs mod 1000) * 1000000;
+    tsp := @ts;
+  end;
+  { arg 5 is the sigsetsize the kernel insists on when the mask (arg 4) is nil }
+  r := __pxxrawsyscall(NR_PPOLL, Int64(@pfd), 1, Int64(tsp), 0, 8, 0);
+  if r < 0 then begin PyPalPoll := r; Exit; end;
+  if r = 0 then begin PyPalPoll := 0; Exit; end;
+  if (pfd.revents and SmallInt(events)) <> 0 then PyPalPoll := 1
+  else PyPalPoll := 0;
 end;
 
 { openat(AT_FDCWD, path, flags, mode) — the portable form. x86-64's plain
