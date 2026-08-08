@@ -623,6 +623,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
 | bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape | N | 50 | bug | pyeval's host-method bridge accepts only ALL-variant or ALL-pointer-sized parameter lists, so a method mixing them — `define_word(name: str, native: Callable, immediate: bool)`, where Callable is a variant and the rest are registers — is refused outright: \"unsupported param shape\". This is what blocks uforth now. | — |
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
+| bug-nilpy-pyeval-lambda-host-word-arity-mismatch | N | 45 | bug | pyeval raises `<lambda>() takes 0 positional arguments but 1 were given` for uforth's `value` / `TO` / `create` / `allot` — the PYTHON-bodied word is invoked with the VM argument its lowered lambda does not declare. Blocks the deeper uforth .for corpora. | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |
 | bug-nilpy-pypow-integer-overflow-does-not-promote | N | 35 | bug | `pypow_v`'s integer path silently wraps past 64 bits instead of promoting | — |
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |

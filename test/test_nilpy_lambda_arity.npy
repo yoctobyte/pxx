@@ -82,3 +82,43 @@ def outer():
 
 
 print(outer()(1))
+
+
+# --- a RECYCLED closure row must not inherit the previous closure's arity.
+#
+# pyeval keeps freed closure rows on a free stack. The free path cleared five of
+# the nine fields and the builders set four; BodyPos/FlatSrc/ReqN/TotN fell
+# between them, so a row released by a LAMBDA (the only builder that declares an
+# arity) handed that arity to whatever was built next. A nested `def` captured as
+# a value then claimed the lambda's shape: uforth's `0 VALUE ii` raised
+# "<lambda>() takes 0 positional arguments but 1 were given" about a `def _w(vm2)`
+# that plainly takes one.
+#
+# Churn zero-arg lambdas first so their rows are on the free stack, THEN build
+# the def and call it. Leniency is the contract for every builder except the
+# lambda lowering (see the range comment at the top).
+# bug-nilpy-pyeval-lambda-host-word-arity-mismatch
+
+
+class Holder:
+    def __init__(self):
+        self.slot = []
+        self.seen = []
+
+    def keep(self, fn):
+        self.slot.append(fn)
+
+    def note(self, v):
+        self.seen.append(v)
+
+
+for _i in range(8):
+    _z = lambda: 0
+    print(_z())
+
+h = Holder()
+env = {"h": h}
+exec("def _w(arg):\n    h.note(arg)\nh.keep(_w)", env)
+h.slot[0](5)
+h.slot[0](6)
+print(h.seen)

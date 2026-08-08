@@ -62,9 +62,9 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver | N | 35 | bug | A plain class's `Callable` field records no signature, so `def run(o): o.native(x)` on a dynamically-typed receiver is a COMPILE ERROR (\"no class declares a method or callable field\") — only a @dataclass field is reachable that way | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
-| bug-nilpy-pyeval-lambda-host-word-arity-mismatch | N | 45 | bug | pyeval raises `<lambda>() takes 0 positional arguments but 1 were given` for uforth's `value` / `TO` / `create` / `allot` — the PYTHON-bodied word is invoked with the VM argument its lowered lambda does not declare. Blocks the deeper uforth .for corpora. | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
+| bug-nilpy-uforth-rc4-corpus-stack-underflow | N | 45 | bug | uforth's four RC4 corpora all end in `ERROR: Stack underflow` where CPython prints the cipher output. The smoke gate (make test-uforth) is GREEN, so this is the next layer: a real Forth program, not a one-liner. | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
@@ -366,9 +366,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1490)
+## done (1491)
 
-1490 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1491 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -466,7 +466,7 @@ _none_
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
-- [p 45] [N] bug-nilpy-pyeval-lambda-host-word-arity-mismatch
+- [p 45] [N] bug-nilpy-uforth-rc4-corpus-stack-underflow
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize

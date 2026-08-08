@@ -1849,20 +1849,56 @@ end;
 
 { Pop a recycled registry row, or mint a fresh one. }
 function PyClosureAllocRow: Integer;
+{ Hand back a row in a DEFINED state. A recycled row used to arrive holding its
+  predecessor's BodyPos / FlatSrc / ReqN / TotN — precisely the four fields
+  PyEvalClosureFree does not clear AND PyMakeClosure does not set, so a nested
+  `def` captured as a value inherited them wholesale:
+
+    * ReqN/TotN — a recycled row from a LAMBDA (the only builder that calls
+      pyclosure_setarity) made the new closure claim the lambda's arity, so
+      uforth's `0 VALUE ii` died with "<lambda>() takes 0 positional arguments
+      but 1 were given" while its `def _w(vm2)` plainly takes one. Every builder
+      except the lambda lowering is meant to be LENIENT (ReqN = -1); this is
+      what silently made one of them strict, and strict about the wrong number.
+    * FlatSrc — a recycled row from pyclosure_src_new would run a nested def's
+      INDENTED body under the flat top-level grammar. Not observed in the wild,
+      same root, closed here rather than left to be found the hard way.
+
+  Resetting HERE rather than in each builder: the free path and the builders
+  between them covered five of the nine fields, and the four that fell through
+  are the ones no one owned. One owner, every field.
+  bug-nilpy-pyeval-lambda-host-word-arity-mismatch }
+var c: Integer;
 begin
   if ClosureFreeN > 0 then
   begin
     ClosureFreeN := ClosureFreeN - 1;
-    PyClosureAllocRow := ClosureFreeStk[ClosureFreeN];
-    Exit;
-  end;
-  if ClosureN >= Length(Closures) then
+    c := ClosureFreeStk[ClosureFreeN];
+  end
+  else
   begin
-    if Length(Closures) = 0 then SetLength(Closures, 8)
-    else SetLength(Closures, Length(Closures) * 2);
+    if ClosureN >= Length(Closures) then
+    begin
+      if Length(Closures) = 0 then SetLength(Closures, 8)
+      else SetLength(Closures, Length(Closures) * 2);
+    end;
+    c := ClosureN;
+    ClosureN := ClosureN + 1;
   end;
-  PyClosureAllocRow := ClosureN;
-  ClosureN := ClosureN + 1;
+  Closures[c].Kinds := nil;
+  Closures[c].Texts := nil;
+  Closures[c].Ints := nil;
+  Closures[c].Floats := nil;
+  Closures[c].NTok := 0;
+  Closures[c].BodyPos := 0;
+  Closures[c].Params := '';
+  SetLength(Closures[c].CapNames, 0);
+  SetLength(Closures[c].CapVals, 0);
+  Closures[c].CapN := 0;
+  Closures[c].FlatSrc := False;
+  Closures[c].ReqN := -1;      { lenient unless the builder says otherwise }
+  Closures[c].TotN := -1;
+  PyClosureAllocRow := c;
 end;
 
 function PyMakeClosureObj(cidx: Int64): Pointer;
