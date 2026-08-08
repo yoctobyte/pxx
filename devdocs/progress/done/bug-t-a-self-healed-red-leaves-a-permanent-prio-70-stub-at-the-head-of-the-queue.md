@@ -3,6 +3,8 @@ track: T
 prio: 60
 type: bug
 summary: "twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely."
+status: done
+owner: claude-T@plexus
 ---
 
 # A self-healed red leaves a permanent prio-70 stub at the head of the ranked queue
@@ -70,3 +72,59 @@ gate rather than by an agent noticing it manually.
 `tools/testmgr.py --tier full` green (T's own gate), plus a scratch bare repo
 exercising the file→heal→close cycle end to end. Test the tooling with QUICK
 tiers, never long runs.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.
+
+---
+
+## Resolution (Track T, 2026-08-08) — commit `16720bb5f`
+
+**The main half was already done.** `close_stub_tickets()` landed 2026-08-02 in
+`1dd53a8ec` and is wired to the FIXED pass, and the backlog held **zero**
+stub-marked tickets when this was picked up — the nine-stale-stubs symptom is
+gone. What remained was the ticket's "second, smaller finding".
+
+### Dedupe by test source
+
+One source can be reached by several jobs (`test/x.npy` runs under both
+`test-core` and `test-nilpy`) while the slug is the JOB selector — so one
+broken file filed two tickets. `stub_sources()` indexes
+`{test source -> slug}` across every bucket, once per filing pass, skipping
+zero-byte debris and anything without `STUB_MARKER` (an enriched body is
+somebody's analysis, not a stub). Filing keys on the source and says so when it
+declines; closing still keys on the job, exactly as specified.
+
+### The consequence the ticket did not mention
+
+With one stub covering N jobs, closing it because the job it was *named after*
+went green strands a still-broken source with **no ticket and no way to get
+one** — the sibling job is STILL-RED, not NEW-RED, and nothing files on
+still-red. The dedupe alone would have traded two tickets for zero. So
+`close_stub_tickets()` now keeps a stub open while its source is red in any job
+of the report.
+
+### Gate
+
+As specified — the file→heal→close cycle end to end in a scratch dir, quick
+tier, no repo needed: **`tools/devtest_stub_lifecycle.py`** (new). It covers
+one-source-one-stub, a repeat pass adding nothing, the stub staying open while
+a sibling job is red, and the close landing in `done/` with its sha and
+attribution. All pass; `gate.sh quick` GREEN.
+
+### Deliberately not done
+
+The "worth considering" `progress.sh check` assertion that no open stub's job
+is currently green. The auto-close plus the guard above handles this drift at
+source; an assertion inside a tool every track runs is a wider blast radius
+than the remaining gap justifies. Recorded rather than silently skipped — if
+the drift reappears with `autoticket` off or the watcher down, that assertion
+is the answer.
+
+### Related
+
+The empty-range half of this cluster is fixed in `315029d55`
+([[bug-t-empty-range-regression-cannot-be-bisected]]). It mattered here:
+`closed_regs` derives from `open_regressions`, so a red with an empty range
+opened no entry and its stub was **structurally** unclosable. That precondition
+is gone now.

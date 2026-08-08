@@ -839,6 +839,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-subclass-field-offset-calculation | A | 50 | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-subprocess-spawns-child-with-empty-environment | B | 45 | bug | Every spawned child process gets a completely empty environment | — |
 | bug-sysutils-unit-hard-skipped | A | 50 | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
+| bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
 | bug-t-autoticket-files-emergencies-for-already-fixed-shas | T | 75 | bug | a cascade is auto-filed as a live emergency for a sha whose breakage was already reverted minutes earlier; ancestry alone cannot detect it | — |
 | bug-t-bench-sub-second-timings-quantized-to-50ms | T | 65 | bug | Benchmark timings under 1s are quantized to a 50 ms grid | — |
 | bug-t-bench-timings-recorded-under-co-tenancy | T | 60 | bug | bench records timings with no check that the box is quiet, so an agent's builds inflate the series up to +24% — and it is logged as SLOW, which reads as a performance regression | — |

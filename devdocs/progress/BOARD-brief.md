@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:6 backlog:192 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1505 rejected:30`
+`unfinished:10 blocked:6 backlog:191 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1506 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,12 +33,11 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 175, ranked
+## Ready — top 30 of 174, ranked
 
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
-- `[p 60] [T]` bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
@@ -65,5 +64,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-est-mem-from-measurement
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
+- `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 
-_145 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_144 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
