@@ -74,7 +74,7 @@ sha in a covering tier -> that range; neither -> no entry and no bisect promise
 in the stub text.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 9b3d288d1.
 
 ---
 
