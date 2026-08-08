@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:10 blocked:6 backlog:186 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1510 rejected:30`
+`working:1 unfinished:10 blocked:6 backlog:188 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1510 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,8 +33,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 169, ranked
+## Ready — top 30 of 171, ranked
 
+- `[p 70] [T]` regression-test-uforth-00
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [A]` feature-a-abi-oracle
@@ -63,7 +64,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-t-est-mem-from-measurement
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
-- `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 55] [T]` feature-t-shard-the-uforth-ans-suite-per-word-set
 
-_139 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_141 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

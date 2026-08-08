@@ -4,10 +4,63 @@ type: decide
 track: U
 prio: 55
 status: resolved
-resolved: 2026-08-01
+resolved: 2026-08-08
 ---
 
-## DECIDED 2026-08-01 — option D (never auto-pin) for now
+## REOPENED AND DECIDED 2026-08-08 — option A, starting in SHADOW MODE
+
+**User's call, superseding the 2026-08-01 answer below.** The deferral
+condition set then has been met, so the question was re-put and answered:
+**option A (baseline allowlist) with K >= 2 consecutive qualifying shas and
+auto-rollback, beginning in shadow mode.**
+
+**What changed — the ground cleared, exactly as the deferral anticipated.**
+The 2026-08-01 blocker was that "all green" could never fire against 18 red
+jobs on xeon and 16 on borg. Measured on plexus at `450bb7f86a75`:
+**2180 of 2182 jobs pass.** The 15-job cross-target cascade, `test-asm` and
+`test-zlib` are all gone from the red list. The only live red was
+`test-uforth#00 = timeout`, a Track T harness bug (the job was classed `unit`,
+a 90s budget, and Track N's 13 ANS word sets took it past ten minutes) fixed in
+`394c4f217`.
+
+**Shadow mode landed in `6a4502611`** — `pin_shadow()` in `tools/twatch.py`.
+It moves nothing: no `pinned`, no `make pin`, no `stable_linux_amd64/**`. It
+records the decision it WOULD have made to `tstate/pin-shadow.log` so a week of
+them can be compared against what a human actually blessed.
+
+Criteria as implemented:
+
+- red set ⊆ `tstate/pin-allowlist.tsv`, and **every entry must name a ticket**
+  or it is refused at load and printed as ignored — the anti-dumping-ground
+  rule that makes option A worth having;
+- **self-host byte-identical is never waivable**, by allowlist or by streak;
+- K >= 2 consecutive qualifying shas;
+- only the `full` tier may qualify a pin.
+
+The allowlist **ships empty**, which is the honest state — nothing currently
+needs waiving. If it is still empty when shadow mode ends, that is the
+strongest available argument that the automation is safe.
+
+**Still to settle before the live cutover** (the 2026-08-01 "also to settle"
+list is still open, plus one):
+
+- **auto-rollback**, the second guard — belongs with the cutover, since there
+  is nothing to roll back in shadow mode;
+- does a pin require the `opt` tier green too, or only `native` + `full`?
+  (implemented today as `full` only);
+- who may pin when the allowlist itself changed in the same window?
+- should pinning pause while any `urgent/` Track A ticket is open?
+
+**Note on the motivation.** The user's stated reason was that "stabilizing and
+pinning takes many minutes" of other tracks' downtime. That is largely a
+*scheduling* problem, addressed by
+[[feature-t-testmgr-owns-pinning-interruptible]] — moving the pin gate into
+testmgr as an interruptible background job removes the wait whether or not
+pinning is ever unattended. Worth doing regardless of how the cutover lands.
+
+---
+
+## Superseded: DECIDED 2026-08-01 — option D (never auto-pin) for now
 
 **User's call.** No auto-pin machinery yet — a human runs `make pin`,
 matching current practice. Reasoning: the fact that a naive "all green"
