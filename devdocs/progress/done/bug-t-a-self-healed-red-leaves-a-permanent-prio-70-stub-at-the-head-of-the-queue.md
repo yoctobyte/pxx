@@ -74,7 +74,7 @@ exercising the file→heal→close cycle end to end. Test the tooling with QUICK
 tiers, never long runs.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit f1f389586.
 
 ---
 
