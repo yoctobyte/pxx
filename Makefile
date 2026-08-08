@@ -7013,6 +7013,18 @@ test-fpjson:
 # env) — expecting "3" then "3", clean exit. Skips if the tree is absent:
 #   git clone git@github.com:yoctobyte/uforth ~/projects/uforth
 UFORTH_SRC ?= $(HOME)/projects/uforth
+# uforth's OWN corpora, run DIFFERENTIALLY: the same uforth.py under CPython is
+# the oracle, so there is nothing recorded here to go stale when uforth moves.
+# The smoke above proves it boots; these prove it computes.
+#
+# tests/_drv_file.fth is deliberately ABSENT — it is the one file still
+# differing (the ANS FILE word set: uforth's two same-named w_include nested
+# defs, and `1+` unresolved inside an INCLUDEd helper). Listed by name in
+# bug-nilpy-uforth-file-word-set-include-redefinition rather than silently
+# skipped, so adding it back is the gate for that ticket.
+UFORTH_CORPUS ?= testje.for testjefixed.for testjefix2.for testjefix3.for \
+                 tests/_drv_c.fth tests/_drv_file0.fth tests/_drv_locals.fth \
+                 tests/_drv_string.fth tests/_drv_t.fth tests/_drv_x.fth
 test-uforth: $(COMPILER)
 	@if [ ! -f "$(UFORTH_SRC)/uforth.py" ]; then \
 	  echo "test-uforth: SKIP — no uforth tree at $(UFORTH_SRC) (git clone git@github.com:yoctobyte/uforth $(UFORTH_SRC))"; \
@@ -7024,11 +7036,30 @@ test-uforth: $(COMPILER)
 	"$$root/$(COMPILER)" "$(UFORTH_SRC)/uforth.py" "$$wd/uforth" > /dev/null || \
 	  { echo "test-uforth: FAIL — uforth.py did not compile"; exit 1; }; \
 	printf '1 2 + .\n10 3 / .\nBYE\n' | ( cd "$(UFORTH_SRC)" && timeout 60 "$$wd/uforth" ) > "$$wd/out.txt" 2>&1; rc=$$?; \
-	if [ "$$rc" = "0" ] && grep -q "^3 3 " "$$wd/out.txt"; then \
-	  echo "test-uforth: PASS — compiles, STD.UFO loads, native + PYTHON-bodied words evaluate (1 2 + . = 3, 10 3 / . = 3)"; \
-	else \
+	if [ "$$rc" != "0" ] || ! grep -q "^3 3 " "$$wd/out.txt"; then \
 	  echo "test-uforth: FAIL (exit $$rc)"; tail -8 "$$wd/out.txt"; exit 1; \
-	fi
+	fi; \
+	echo "test-uforth: smoke PASS — compiles, STD.UFO loads, native + PYTHON-bodied words evaluate"; \
+	if ! command -v python3 > /dev/null 2>&1; then \
+	  echo "test-uforth: corpus SKIP — no python3 to be the oracle"; exit 0; \
+	fi; \
+	echo "running uforth's own corpora, DIFFERENTIAL against CPython ..."; \
+	bad=0; ok=0; \
+	for f in $(UFORTH_CORPUS); do \
+	  [ -f "$(UFORTH_SRC)/$$f" ] || continue; \
+	  printf '"%s" INCLUDE\nBYE\n' "$$f" > "$$wd/in.txt"; \
+	  ( cd "$(UFORTH_SRC)" && timeout 180 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 || true; \
+	  ( cd "$(UFORTH_SRC)" && timeout 180 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 || true; \
+	  if diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
+	    ok=$$((ok+1)); \
+	  else \
+	    bad=$$((bad+1)); echo "  DIFF $$f"; diff -u "$$wd/c.out" "$$wd/p.out" | head -12; \
+	  fi; \
+	done; \
+	if [ "$$bad" != "0" ]; then \
+	  echo "test-uforth: FAIL — $$bad of $$((ok+bad)) corpora differ from CPython"; exit 1; \
+	fi; \
+	echo "test-uforth: PASS — smoke + $$ok/$$ok corpora byte-identical to CPython"
 
 # uforth cross-runtime speed oracle (feature-t-uforth-benchmark-harness):
 # the SAME uforth.py under CPython vs pxx-compiled-native, wall + max-RSS +

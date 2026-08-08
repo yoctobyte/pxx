@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:6 backlog:191 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1501 rejected:30`
+`unfinished:10 blocked:6 backlog:192 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1501 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,7 +33,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 174, ranked
+## Ready — top 30 of 175, ranked
 
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -66,4 +66,4 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 
-_144 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_145 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
