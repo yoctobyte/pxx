@@ -137,4 +137,4 @@ needs the same `PyFindDunder` treatment at that site. This fix is the worked
 example for it.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit b8b81046a.
