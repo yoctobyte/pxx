@@ -43,6 +43,19 @@ visible campaign, file-owned per ticket by A/B/T and gated by that lane. Windows
 should be the same. If it wants a visible letter, it needs a free one and a
 recorded rationale — not W.
 
+**Concrete proposal (user, 2026-08-08): `M` = MSWindows, as a TAG.** M is
+genuinely free — verified against BOTH declaration conventions, which is the
+check that would have caught this collision in the first place. Claimed today:
+A B C D E N O P S T U W Z. Free: F G H I K L M Q V Y. (`R` is declared in
+CLAUDE.md but carried by no ticket; the Rust work sits in `experimental/`,
+which is unranked by design.)
+
+The tag rule applies exactly as it does to O and S: an M ticket ALSO carries
+its Track A / B / T file-ownership for collision purposes and obeys that lane's
+gate. `*-windows-*` / `*-win32-*` / `*-wine-*` slugs would auto-tag M, same as
+`*-esp-*` does for S. Retagging the four is then a frontmatter edit plus a
+CLAUDE.md entry, not a reorganisation.
+
 ## Second finding: `progress.sh` knows NEITHER
 
 ```
