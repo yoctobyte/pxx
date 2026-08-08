@@ -78,23 +78,41 @@ no per-call special case: `sorted` declares `key: Pointer = nil; reverse:
 Boolean = False`. The parse error above is not a kwarg-parsing gap at all — it
 is simply that `TPyList.sort` declares no such parameters.
 
-So the remaining work is smaller than recorded:
+### Correction: `reverse=` is ALREADY DONE
 
-1. `reverse=` needs **nothing but pylib**: declare `reverse: Boolean = False` on
-   `TPyList.sort` and honour it. No callable, no cross-unit call. This half can
-   land on its own.
-2. `key=` needs the callable, and the two honest routes are (a) a function-
-   pointer hook variable in `pylib` that `pyeval` installs — sound because a
-   `key=` argument IS a callable and therefore already pulls `pyeval` in — or
-   (b) a free `pylist_sort_inplace(l, key, reverse)` in `pyeval` that the
-   frontend rewrites `.sort(...)` to, which then gets kwarg binding for free by
-   the same rule. Check whether `pyeval` has an initialisation section that
-   always runs before choosing (a).
+Filed wrong an hour earlier in this same note and corrected by measuring it on
+its own. `TPyList.sort` already declares `reverse: Boolean = False` and honours
+it; the parse error in the repro above comes from the `key=` line, which aborts
+the compile before the `reverse=` line is reached. Measured separately:
 
-Not started this session: route (b) touches the pylib-container method-call site,
-which is in `parser.inc` (Track A shared ground), and sole-A could not be
-confirmed. Route (a) and the `reverse=`-only half both stay inside `pylib.pas`
-and are pickable without that guard.
+```
+xs.sort(reverse=True)     -> [3, 2, 1]        matches CPython
+ys.sort(reverse=False)    -> ['a', 'b', 'c']  matches CPython
+```
+
+(`zs.sort(True)` positionally is accepted here and rejected by CPython —
+ordinary NilPy laxity, not a defect: no working CPython program can observe it.)
+
+**So the entire remaining gap on this ticket is `key=`.**
+
+### What `key=` actually costs
+
+`PyCallKey1` cannot simply move down into `pylib`: it depends on
+`pyclosure_is`/`pyclosure_call1` and `pyboundfn_is`/`pyboundfn_callv`, all of
+which live in `pyeval.pas` because they are the closure machinery itself.
+
+The function-pointer-hook idea (pylib holds a `PyKeyCall1Hook` that pyeval
+installs) does not work as stated either: **no builtin unit has an
+`initialization` section** — `grep '^initialization' compiler/builtin/*.pas` is
+empty — so there is nowhere for pyeval to install it from without adding that
+machinery first.
+
+That leaves the frontend rewrite: a free `pylist_sort_inplace(l, key, reverse)`
+in `pyeval.pas` (which may call both `sorted` and `TPyList`), with
+`xs.sort(...)` lowered to it. Kwarg binding then comes free by the rule above.
+The rewrite site is the pylib-container method call in **`parser.inc`** — Track
+A shared ground — which is why it was not started this session (sole-A could not
+be confirmed).
 
 Cross-reference: [[feature-nilpy-list-sort-inplace-key-reverse]] covers the same
 ground; these two should be merged or one closed as a duplicate.
