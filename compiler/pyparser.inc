@@ -17196,6 +17196,7 @@ var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     blockIsDef: array[0..255] of Boolean;   { blockIsDef[d] = body at depth d is a def/class, not if/for/while/with/try }
     pendingDefClass: Boolean;
     blkJ: Integer; blkTk: TTypeKind; blkName: AnsiString;
+    blkRec: Integer;   { class rec for a `name = Cls(...)` inside a block }
     blkSrcVar: Boolean;   { an augmented assign whose SOURCE is a variant }
 begin
   PyLocalCount := 0;
@@ -17318,9 +17319,39 @@ begin
             else blkTk := tyVariant;
           end;
         end;
+        { ...and a CONSTRUCTOR CALL of an already-declared class, `name =
+          Cls(...)`. It belongs in this safe list for the same reason the
+          literals do: recognising it needs no PARSE, only that the identifier
+          resolves to a known class and is followed by '(' — so it cannot hit
+          the Error()-and-Halt landmine the branch header warns about.
+
+          Without it a module global bound to a SCALAR and then rebound to an
+          instance INSIDE a block kept the scalar's type: `b = 0` then, under
+          `if True:`, `b = Bare(1)` left b as tyInt64 (measured,
+          PXXDBG=n.locals), so `b + Bare(2)` added the two instance HANDLES and
+          printed a plausible integer where CPython raises TypeError. The
+          module-level spelling of the same three lines was already correct,
+          which is what made this hide — and the nested one is the shape real
+          files have.
+
+          Noting it as tyClass is enough on its own: PyWiden(tyInt64, tyClass)
+          yields a VARIANT, which is the honest answer for a name holding both,
+          and the runtime dunder dispatch then handles it
+          (bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch).
+          bug-nilpy-block-nested-scalar-then-class-rebind-loses-widening }
+        blkRec := REC_NONE;
+        if (blkTk = tyUnknown) and (blkJ < MainProgramTokCount) and
+           (Tokens[blkJ].Kind = tkIdent) and
+           (blkJ + 1 < MainProgramTokCount) and
+           (Tokens[blkJ + 1].Kind = tkLParen) and
+           (FindUClass(GetTokenStr(blkJ)) >= 0) then
+        begin
+          blkTk := tyClass;
+          blkRec := REC_UCLASS_BASE + FindUClass(GetTokenStr(blkJ));
+        end;
         if blkTk <> tyUnknown then
         begin
-          PyNoteLocalType(blkName, blkTk, REC_NONE);
+          PyNoteLocalType(blkName, blkTk, blkRec);
           { Noting it only records it for the NEXT round's seeding loop (see
             the annotated-assignment branch's own note just below) -- a
             LATER statement in THIS SAME round's linear scan (`documents =

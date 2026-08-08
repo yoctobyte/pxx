@@ -1069,6 +1069,10 @@ test-nilpy: $(COMPILER)
 	# points plus pycmp_v's three-way ordering.
 	./$(COMPILER) test/test_nilpy_variant_operand_arith_dunders.npy /tmp/test_nilpy_vararith26
 	/tmp/test_nilpy_vararith26 | diff -u test/test_nilpy_variant_operand_arith_dunders.expected -
+	# a scalar-then-class rebind INSIDE a block widens (it kept the scalar's type,
+	# so the operands were added as handles). if/try/for/while + scalar controls.
+	./$(COMPILER) test/test_nilpy_block_nested_rebind_widens.npy /tmp/test_nilpy_blkrebind26
+	/tmp/test_nilpy_blkrebind26 | diff -u test/test_nilpy_block_nested_rebind_widens.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

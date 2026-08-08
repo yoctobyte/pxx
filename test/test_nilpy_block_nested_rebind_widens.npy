@@ -1,0 +1,97 @@
+# bug-nilpy-block-nested-scalar-then-class-rebind-loses-widening
+#
+# A module global bound to a SCALAR and then rebound to a class instance INSIDE
+# a nested block kept the scalar's type — measured, `PXXDBG=n.locals` reported
+# `b tk=13` (tyInt64), not the class and not a variant. So `b + Bare(2)` added
+# the two instance HANDLES and printed a plausible integer where CPython raises.
+# Silent, arithmetic, and a different number every run.
+#
+# The module-level spelling of the same three lines was already correct, which is
+# exactly what made this hide — and the NESTED one is the shape real files have
+# (bindings inside an `if`, a `try`, a loop).
+#
+# Cause: the module pre-pass only recognises a few RHS shapes inside a block,
+# because trial-parsing an arbitrary RHS there can Error() and halt the compile
+# on a name the pre-pass cannot yet see. A constructor call of an ALREADY
+# DECLARED class is safe to recognise without parsing, so it joined that list.
+#
+# All four block kinds are asserted: `if`, `try`, `for` and `while` share the
+# depth tracking but are separate statement shapes, and the original repro was
+# found under `try` and only later shown to be nesting rather than exceptions.
+#
+# Controls: the module-level form that already worked; a nested rebind between
+# two SCALARS, which must keep widening to a variant and must NOT be captured by
+# the new constructor arm; and a nested binding with NO prior scalar, which must
+# still be usable as its class (the new arm must not break it).
+#
+# Expectations are CPython's own output. The uncaught-TypeError MESSAGE differs
+# from CPython's wording, so every case catches it and prints a fixed token
+# instead of comparing tracebacks.
+
+
+class Bare:
+    def __init__(self, n):
+        self.n = n
+
+
+class Adder:
+    def __init__(self, n):
+        self.n = n
+
+    def __add__(self, o):
+        return "ADD" + str(o.n)
+
+
+def check(label, fn):
+    try:
+        print(label, fn())
+    except TypeError:
+        print(label, "TypeError")
+
+
+# --- the repro, under each block kind ---
+a = 0
+if True:
+    a = Bare(1)
+check("if    ", lambda: a + Bare(2))
+
+b = 0
+try:
+    b = Bare(1)
+except TypeError:
+    pass
+check("try   ", lambda: b + Bare(2))
+
+c = 0
+for _ in range(1):
+    c = Bare(1)
+check("for   ", lambda: c + Bare(2))
+
+d = 0
+n = 0
+while n < 1:
+    d = Bare(1)
+    n += 1
+check("while ", lambda: d + Bare(2))
+
+# --- the same shape but the class DOES define __add__: must dispatch, not raise
+e = 0
+if True:
+    e = Adder(1)
+check("dunder", lambda: e + Adder(7))
+
+# --- control: module level, which already worked
+f = 0
+f = Bare(1)
+check("module", lambda: f + Bare(2))
+
+# --- control: a nested rebind between two SCALARS still widens
+g = 0
+if True:
+    g = "text"
+print("scalar", g, len(g))
+
+# --- control: a nested binding with NO prior scalar is still its class
+if True:
+    h = Adder(3)
+print("nopre ", h.n, h + Adder(9))
