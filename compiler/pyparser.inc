@@ -7191,6 +7191,10 @@ begin
   { a LIST slice read (`l[lo:hi]`) is also a valid slice-assign target }
   procIdx := FindProc('pylist_slice');
   if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
+  { ...and a VARIANT slice, which is what a base with no static class produces
+    (PyMakeSlice's tyVariant arm). bug-nilpy-slice-assign-through-a-dynamically-typed-receiver }
+  procIdx := FindProc('pyvar_slice');
+  if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
   { An EXTENDED slice (`l[::2] = ...`) is a valid target in Python but is not
     implemented here. Recognise it anyway, so PyRewriteSliceAssign can refuse it
     BY NAME — otherwise the statement falls through to a bare "expected
@@ -7214,7 +7218,10 @@ begin
      (ASTIVal[sliceNode] = FindProc('pybytes_slice_step')) then
     Error('Nil Python: assigning to an extended slice (with a step) is not '
           + 'implemented; only x[lo:hi] = src is');
-  if ASTIVal[sliceNode] = FindProc('pylist_slice') then
+  if ASTIVal[sliceNode] = FindProc('pyvar_slice') then
+    { target has no static class: unbox and dispatch on its runtime type }
+    procIdx := FindProc('pyvar_setslice')
+  else if ASTIVal[sliceNode] = FindProc('pylist_slice') then
     procIdx := FindProc('pylist_setslice')
   else if IntToTypeKind(ASTTk[rhsNode]) = tyVariant then
     { `bytes[a:b] = <variant>` (e.g. a dict-fetched bytes value) — unbox at run
@@ -10946,10 +10953,22 @@ end;
   pylib routine whose parameter is an Int64, and IRLowerCallArg's promo arm
   narrows it there. Do NOT instead teach IRPyOperandKind that promo is numeric —
   that was tried and turned the TypeError into a garbage number, because it also
-  made `promo * list` look like a provable arithmetic pair. }
+  made `promo * list` look like a provable arithmetic pair.
+
+  A VARIANT counts too — an untyped parameter, a container element, anything
+  without a static type. `bytes([ch]) * u` inside a plain `def f(u)` is uforth's
+  FILL, and it raised "expected a number, got object" from the RTL: unrecognised
+  as a repeat, the pair fell through to arithmetic and the BYTES object was the
+  thing being coerced to a number. `[7] * u` happened to survive by another
+  route while `u * [7]` did not, which is the tell that this predicate — not the
+  operand order — was the gap.
+
+  This is safe in the way the promo note above is not: the pair tests require
+  one side to be a KNOWN list/bytes node (tyClass with that record), so a
+  variant*variant pair of numbers is untouched and never looks like a repeat. }
 function PyIsRepeatCountTk(tk: TTypeKind): Boolean;
 begin
-  PyIsRepeatCountTk := TypeIsOrdinal(tk) or TypeIsPromoInt(tk);
+  PyIsRepeatCountTk := TypeIsOrdinal(tk) or TypeIsPromoInt(tk) or (tk = tyVariant);
 end;
 
 function PyListRepeatPair(a, b: Integer): Boolean;

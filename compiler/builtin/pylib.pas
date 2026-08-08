@@ -598,6 +598,11 @@ procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:h
   every address above the write and corrupt the data space. }
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
 procedure pybytes_setslice_v(b: TPyBytes; lo, hi: Integer; const src: Variant);   { RHS is a variant holding bytes }
+{ TARGET is a variant: `vm.memory[a:b] = src` where the receiver has no static
+  class (a dynamically-typed parameter, a container element). Unboxes the target
+  and dispatches to the bytes or list setter by its runtime type — the mirror of
+  pybytes_setslice_v, which handles a variant on the other side. }
+procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant);
 { `v.to_bytes(n, "little", signed=s)` and `int.from_bytes(b, "little",
   signed=s)`. Recognised by the frontend as INTRINSICS with a fixed argument
   shape rather than real methods, because their Python spelling carries a
@@ -5847,6 +5852,32 @@ begin
     if o is TPyBytes then begin pybytes_setslice(b, lo, hi, TPyBytes(o)); Exit; end;
   end;
   raise TypeError.Create('byte slice assignment requires bytes');
+end;
+
+
+procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant);
+var d, o: TObject;
+begin
+  if pyvartag(dst) <> 7 then
+    raise TypeError.Create('object does not support slice assignment');
+  d := TObject(pyvarobj(dst));
+  if d is TPyBytes then
+  begin
+    { the RHS may be a bytes OBJECT or a variant carrying one — pybytes_setslice_v
+      already answers that question, so ask it rather than repeating the test }
+    pybytes_setslice_v(TPyBytes(d), lo, hi, src);
+    Exit;
+  end;
+  if d is TPyList then
+  begin
+    if pyvartag(src) = 7 then
+    begin
+      o := TObject(pyvarobj(src));
+      if o is TPyList then begin pylist_setslice(TPyList(d), lo, hi, TPyList(o)); Exit; end;
+    end;
+    raise TypeError.Create('can only assign an iterable to a list slice');
+  end;
+  raise TypeError.Create('object does not support slice assignment');
 end;
 
 { Little-endian, two's complement — the same layout the machine already uses,

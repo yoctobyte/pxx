@@ -908,7 +908,7 @@ function PyRawName(off, len: Integer): AnsiString; forward;           { name tex
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
-function PyIsSliceBase(n: Integer): Boolean; forward; { Nil Python: may this value be sliced? (pyparser.inc) }
+function PyIsSliceBase(n: Integer): Boolean; forward;
 function PySliceBracketAt(i: Integer): Boolean; forward; { Nil Python: is the bracket group at i a SLICE? (pyparser.inc) }
 function PyParseSliceTail(baseNode, loNode: Integer): Integer; forward; { Nil Python x[a:b], from the ':' (pyparser.inc) }
 function PyIterArgAsList(n: Integer): Integer; forward; { Nil Python: explode a str arg to an iterable builtin (pyparser.inc) }
@@ -14932,6 +14932,36 @@ begin
     if opci >= 0 then
       { Overloaded operator on a record/class operand returns its result type. }
       ASTTk[node] := Ord(Procs[opci].RetType)
+    { `xs * n` on a LIST repeats it, and `bytes([ch]) * u` on BYTES. Built as
+      direct calls rather than tagged like the string case, because the RESULT's
+      class identity has to survive into a local: an AN_BINOP carries no record
+      id, so an inferred local would hold a tyClass with no identity and len()
+      would mis-pick its overload (feature-nilpy-list-repeat).
+
+      BEFORE the variant arm below, not after. A repeat is decided by the
+      SEQUENCE operand, which is statically known here — one side IS a list or
+      bytes node — while the COUNT may be anything, including a variant. Sitting
+      after the variant arm, the whole pair was tagged tyVariant the moment the
+      count had no static type and the repeat builders were never reached: the
+      statement stayed an arithmetic multiply and coerced the SEQUENCE to a
+      number, so uforth's `bytes([ch]) * u` inside `def w_fill(vm2)` raised
+      "expected a number, got object" — pointing at a coercion rather than at a
+      missed repeat. `[7] * u` survived only because the runtime variant
+      multiply happens to handle a list on the LEFT, which is why `u * [7]`
+      failed while `[7] * u` passed.
+      bug-nilpy-sequence-repeat-with-a-variant-count-falls-through-to-arithmetic }
+    else if PyExprMode and (op = tkStar) and PyListRepeatPair(left, right) then
+    begin
+      node := PyMakeListRepeat(left, right);
+      CurASTNode := node;
+      continue;
+    end
+    else if PyExprMode and (op = tkStar) and PyBytesRepeatPair(left, right) then
+    begin
+      node := PyMakeBytesRepeat(left, right);
+      CurASTNode := node;
+      continue;
+    end
     else if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
       ASTTk[node] := Ord(tyVariant)
     { Python's `s * n` REPEATS the text (either operand order), and the IR
@@ -14949,19 +14979,6 @@ begin
       into a local: an AN_BINOP carries no record id, so an inferred local would
       hold a tyClass with no identity and len() would mis-pick its overload
       (feature-nilpy-list-repeat). }
-    else if PyExprMode and (op = tkStar) and PyListRepeatPair(left, right) then
-    begin
-      node := PyMakeListRepeat(left, right);
-      CurASTNode := node;
-      continue;
-    end
-    else if PyExprMode and (op = tkStar) and PyBytesRepeatPair(left, right) then
-    begin
-      { `bytes([ch]) * u` — bytes repetition (uforth FILL) }
-      node := PyMakeBytesRepeat(left, right);
-      CurASTNode := node;
-      continue;
-    end
     else if PyExprMode and (op in [tkStar, tkSlash, tkDiv, tkMod]) and (opci < 0) and
             (IntToTypeKind(ASTTk[left]) <> tyClass) and
             (PyReflectedDunder(PyReflName(op), left, right) >= 0) then

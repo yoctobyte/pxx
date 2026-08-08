@@ -11,3 +11,25 @@ def go() -> int:
     print(int(mem[17]))
     return 0
 go()
+
+
+# The TARGET may be a variant too, not just the source: a bytearray reached
+# through a dict value, a dynamically-typed parameter, a container element. Such
+# a base slices via pyvar_slice, which PyIsBytesSliceCall did not recognise, so
+# the statement was not seen as a slice target at all and refused to compile
+# ("this value cannot be sliced" / a bare index store). pyvar_setslice unboxes
+# the target and dispatches on its runtime type, mirroring pybytes_setslice_v on
+# the source side.
+# bug-nilpy-slice-assign-through-a-dynamically-typed-receiver
+d = {"m": bytearray(8)}
+d["m"][2:5] = bytes([9]) * 3
+print(list(d["m"]))
+
+lst = [bytearray(6)]
+lst[0][1:3] = bytes([4, 5])
+print(list(lst[0]))
+
+# a LIST slice through a variant target takes the same route
+dl = {"l": [0, 0, 0, 0]}
+dl["l"][1:3] = [8, 9]
+print(dl["l"])

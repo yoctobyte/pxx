@@ -1,0 +1,57 @@
+# `seq * n` where n has NO STATIC TYPE — an untyped parameter, a container
+# element, anything reaching the operator as a variant.
+#
+# The binop chain tagged the node tyVariant as soon as EITHER operand was one,
+# and that arm sat BEFORE the list/bytes repeat arms — so the repeat builders
+# were never reached and the pair stayed an arithmetic multiply, which coerced
+# the SEQUENCE to a number: "expected a number, got object", pointing at a
+# coercion rather than at a missed repeat.
+#
+# `[7] * u` survived only because the runtime variant multiply happens to handle
+# a list on the LEFT; `u * [7]` did not. That asymmetry is the tell, so both
+# operand orders are checked here for BYTES. The reversed LIST form
+# (`u * [7]` returned from a def) is NOT covered: it is a separate, pre-existing
+# defect in the def's RETURN-type inference, filed as
+# bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int.
+#
+# uforth's FILL is `bytes([ch]) * u` inside a plain `def w_fill(vm2)`, so this
+# blocked every Forth program that clears a buffer.
+# bug-nilpy-sequence-repeat-with-a-variant-count-falls-through-to-arithmetic
+
+
+def rep_bytes(u):
+    return bytes([32]) * u
+
+
+def rep_bytes_rev(u):
+    return u * bytes([32])
+
+
+def rep_list(u):
+    return [7] * u
+
+
+def rep_str(u):
+    return "ab" * u
+
+
+print(list(rep_bytes(5)))
+print(list(rep_bytes_rev(3)))
+print(rep_list(3))
+print(rep_str(2))
+
+# the count as a container element, not a parameter
+counts = [4]
+print(list(bytes([1]) * counts[0]))
+print([0] * counts[0])
+
+# a static count must be unchanged
+print(list(bytes([2]) * 3))
+print([1] * 3)
+
+# len() on the result still resolves — the repeat builders exist so the result
+# keeps its class identity, which an AN_BINOP would have dropped
+b = bytes([3]) * counts[0]
+print(len(b))
+l = [5] * counts[0]
+print(len(l))

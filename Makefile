@@ -1320,7 +1320,10 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_is_none_typed.npy /tmp/test_nilpy_is_none_typed26
 	test "$$(/tmp/test_nilpy_is_none_typed26)" = "$$(printf '%b' '11\nobj-live')"
 	./$(COMPILER) test/test_nilpy_bytes_setslice_variant.npy /tmp/test_nilpy_bytes_setslice_variant26
-	test "$$(/tmp/test_nilpy_bytes_setslice_variant26)" = "$$(printf '%b' '42\n7')"
+	/tmp/test_nilpy_bytes_setslice_variant26 | diff -u test/test_nilpy_bytes_setslice_variant.expected -
+	@# `seq * n` where the COUNT has no static type (uforth's FILL)
+	./$(COMPILER) test/test_nilpy_sequence_repeat_variant_count.npy /tmp/test_nilpy_seqrep26
+	/tmp/test_nilpy_seqrep26 | diff -u test/test_nilpy_sequence_repeat_variant_count.expected -
 	./$(COMPILER) test/test_nilpy_unnamed_managed_temp_init.npy /tmp/test_nilpy_unnamed_managed_temp_init26
 	test "$$(/tmp/test_nilpy_unnamed_managed_temp_init26)" = "75"
 	./$(COMPILER) test/test_nilpy_not_container.npy /tmp/test_nilpy_not_container26
