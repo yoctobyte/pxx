@@ -78,3 +78,22 @@ Why it was not taken:
 
 Left claim-free at prio 45. Route 1 remains the right answer; it wants a session
 that can hold the RTTI change and a display.
+
+## 2026-08-08 — one of the 08-07 blockers is now STALE
+
+Re-checked before picking this up, and putting it back down for the same
+reasons. One item above no longer holds:
+
+- **uforth compiles on the PINNED binary again.** The 2026-08-07 note says it
+  died at `uforth.py:411` ("no class declares a method or callable field
+  .to_bytes()"), which made "uforth still green" an unreadable gate. Measured
+  today at `stable_linux_amd64/default/pinned`: it compiles clean
+  (`code=4142630B procs=1543`). A repin has landed since. So the corpus check in
+  the Gate section IS usable now and the gate does not need rewording.
+
+Everything else stands unchanged: route 1 is still a Track A change to the
+method RTTI with the three-stride-consumer landmine, the effect assertion still
+wants a live Tk widget and the xvfb lock, and uforth still DEPENDS on the
+positional binding, so a fix must bind correctly rather than refuse.
+
+Left claim-free at prio 45. Not started.
