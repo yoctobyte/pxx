@@ -1048,6 +1048,10 @@ test-nilpy: $(COMPILER)
 	# count/remove/dict keys, both __eq__ shapes, and the no-__eq__ identity control.
 	./$(COMPILER) test/test_nilpy_membership_eq_dunder.npy /tmp/test_nilpy_memeq26
 	/tmp/test_nilpy_memeq26 | diff -u test/test_nilpy_membership_eq_dunder.expected -
+	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
+	# it fell through to a numeric compare and raised "expected a number".
+	./$(COMPILER) test/test_nilpy_sort_lt_dunder.npy /tmp/test_nilpy_sortlt26
+	/tmp/test_nilpy_sortlt26 | diff -u test/test_nilpy_sort_lt_dunder.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

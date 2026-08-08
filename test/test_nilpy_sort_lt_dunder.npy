@@ -1,0 +1,91 @@
+# bug-nilpy-list-sort-ignores-lt-dunder-on-objects
+#
+# `pts.sort()` over a class defining __lt__ died with
+#   TypeError: expected a number, got object
+# — pylib's pyvar_gt handled sequences and scalars and then fell through to
+# pyvar_to_int, never consulting a user class's comparison dunder. That is the
+# single most idiomatic way to make a Python class sortable, so the whole idiom
+# was unavailable.
+#
+# The bare `Point(1,1) < Point(1,2)` EXPRESSION already worked, which is what
+# made this easy to miss: that path keys on the operands' STATIC class at
+# compile time, while a sort compares two boxed variants with no static class to
+# key on. Asserted both ways below.
+#
+# The REFLECTED arm is the one that carries this: Python's sort needs only
+# __lt__, so the idiomatic class defines __lt__ and no __gt__ at all, and
+# `a > b` has to become `b.__lt__(a)`. A class with only __gt__ exercises the
+# direct arm, and testing just one of the two would leave the other broken.
+#
+# Control that must NOT change: a class with no comparison dunder still raises
+# TypeError rather than silently ordering by handle — sorting a list into a
+# meaningless-but-plausible order is the failure mode worth keeping loud.
+#
+# Expectations are CPython's own output.
+
+
+class L:
+    # only __lt__ — the reflected arm
+    def __init__(self, v: int):
+        self.v = v
+
+    def __lt__(self, other):
+        return self.v < other.v
+
+    def __repr__(self) -> str:
+        return "L" + str(self.v)
+
+
+class G:
+    # only __gt__ — the direct arm
+    def __init__(self, v: int):
+        self.v = v
+
+    def __gt__(self, other):
+        return self.v > other.v
+
+    def __repr__(self) -> str:
+        return "G" + str(self.v)
+
+
+class Pair:
+    # __lt__ over a tuple, the sort-by-several-fields idiom
+    def __init__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+
+    def __lt__(self, other):
+        return (self.x, self.y) < (other.x, other.y)
+
+    def __repr__(self) -> str:
+        return "P(" + str(self.x) + "," + str(self.y) + ")"
+
+
+class Bare:
+    def __init__(self, v: int):
+        self.v = v
+
+
+# in-place .sort() — the shape the ticket was filed on
+pts = [Pair(2, 1), Pair(1, 2), Pair(1, 1)]
+pts.sort()
+print("sort     ", pts)
+
+print("sorted   ", sorted([L(3), L(1), L(2)]))
+print("reverse  ", sorted([L(3), L(1), L(2)], reverse=True))
+print("max/min  ", max([L(3), L(1), L(2)]), min([L(3), L(1), L(2)]))
+print("gt only  ", sorted([G(3), G(1), G(2)]))
+print("key=     ", sorted([L(3), L(1)], key=lambda o: -o.v))
+
+# the expression path, which already worked and must keep working
+print("expr     ", Pair(1, 1) < Pair(1, 2), L(2) < L(1), G(2) > G(1))
+
+# controls: scalars and sequences are untouched
+print("scalars  ", sorted([3, 1, 2]), sorted(["b", "a"]), sorted([(2, 1), (1, 9)]))
+
+# control: no comparison dunder still raises
+try:
+    sorted([Bare(2), Bare(1)])
+    print("bare     ", "NO ERROR")
+except TypeError:
+    print("bare     ", "TypeError")

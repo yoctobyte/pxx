@@ -3028,6 +3028,12 @@ function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
   above. False when the class defines no usable __hash__, leaving the caller's
   identity hash. }
 function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
+{ `a > b` for two user objects, via __gt__ or the reflected __lt__ — what
+  .sort()/sorted() need. False when neither exists, leaving pyvar_gt's existing
+  numeric path (and its TypeError) alone.
+  bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
+function PyUserObjGt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean; forward;
 
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
@@ -3788,6 +3794,7 @@ var pa, pb: PPyVarRec;
     ea, eb: Variant;
     oa, ob: TObject;
     pg: Integer;
+    pg2: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   { Two SEQUENCES compare LEXICOGRAPHICALLY: the first index where the elements
@@ -3818,6 +3825,19 @@ begin
         end;
       end;
       pyvar_gt := la > lb;
+      Exit;
+    end;
+    { Two USER objects: their own __gt__, or the reflected __lt__. Without this
+      both fell through to pyvar_to_int and `pts.sort()` over a class defining
+      __lt__ died with "expected a number, got object" — a runtime TypeError for
+      the single most idiomatic way to make a class sortable.
+      The bare `Point(1,1) < Point(1,2)` EXPRESSION already dispatched, because
+      that path keys on the operands' static class at compile time; a sort
+      compares two boxed variants with no static class to key on.
+      bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
+    if PyUserObjGt(oa, ob, b, pg2) then
+    begin
+      pyvar_gt := pg2;
       Exit;
     end;
   end;
@@ -9893,34 +9913,31 @@ type
   TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
   TPyHashFn  = function(self: Pointer): Int64;
 
-function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
-                     var res: Boolean): Boolean;
-var cls: PClassRTTI; mi: PMethInfo; fn: TPyEqFn; fnObj: TPyEqObjFn; pk: PInt64;
-    selfObj: TObject; otherV: Variant;
-begin
-  PyUserObjEq := False;
-  if (pobj = nil) or (qobj = nil) then Exit;
-  { this unit's own containers compare by CONTENTS above and must not come here
-    (PyRecIsPylibOwnClass's runtime equivalent) }
-  if (pobj is TPyList) or (pobj is TPyDict) or (pobj is TPyBytes) then Exit;
-  if (qobj is TPyList) or (qobj is TPyDict) or (qobj is TPyBytes) then Exit;
+{ ONE dunder call, shared by every boolean binary dunder this unit dispatches
+  at run time. Looks `dunder` up on selfObj's class and calls it with otherObj,
+  answering False when the class has no method of that name in a shape whose ABI
+  has been checked. The reflection rules differ per operator, so they live in
+  the callers; this only does the lookup and the call.
 
-  selfObj := pobj;
-  otherV := qv;
-  cls := GetInstanceRTTI(Pointer(pobj));
-  mi := nil;
-  if cls <> nil then mi := PyFindDunder(cls, '__eq__');
-  if mi = nil then
-  begin
-    { reflected: b.__eq__(a) }
-    cls := GetInstanceRTTI(Pointer(qobj));
-    if cls = nil then Exit;
-    mi := PyFindDunder(cls, '__eq__');
-    if mi = nil then Exit;
-    selfObj := qobj;
-    PPyVarRec(@otherV)^.VType := 7;
-    PPyVarRec(@otherV)^.Payload := Int64(NativeInt(Pointer(pobj)));
-  end;
+  Written as one routine deliberately: the __eq__ version was the third copy of
+  "find a dunder in the RTTI and call it" in this file, and adding __gt__/__lt__
+  would have made a fourth. See
+  refactor-nilpy-three-places-decide-a-locals-class-identity for the same
+  lesson one level up. }
+function PyUserObjBoolDunder(selfObj, otherObj: TObject; const otherV: Variant;
+                             const dunder: AnsiString; var res: Boolean): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyEqFn; fnObj: TPyEqObjFn; pk: PInt64;
+begin
+  PyUserObjBoolDunder := False;
+  if (selfObj = nil) or (otherObj = nil) then Exit;
+  { this unit's own containers have their own value rules and must not come here
+    (PyRecIsPylibOwnClass's runtime equivalent) }
+  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if (otherObj is TPyList) or (otherObj is TPyDict) or (otherObj is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(selfObj));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, dunder);
+  if mi = nil then Exit;
   if mi^.Arity <> 2 then Exit;
   if mi^.RetKind <> 2 then Exit;              { Boolean }
   if mi^.ParamKinds = nil then Exit;
@@ -9929,27 +9946,64 @@ begin
   begin
     fn := TPyEqFn(mi^.Code);
     res := fn(Pointer(selfObj), otherV);
-    PyUserObjEq := True;
+    PyUserObjBoolDunder := True;
     Exit;
   end;
   if pk[1] = 6 then                           { `other` is a class pointer }
   begin
     { A class-typed `other` is only safe to pass an instance of THAT class: the
-      generated body reads its fields at fixed offsets and would otherwise read
-      an unrelated layout — the same wrong-offset failure as
+      body reads its fields at fixed offsets and would otherwise read an
+      unrelated layout — the same wrong-offset failure as
       bug-nilpy-local-reassigned-across-classes-keeps-one-static-class.
       Requiring the EXACT class is also what CPython's own dataclass __eq__
       does (`if other.__class__ is self.__class__`), returning NotImplemented
-      otherwise — which falls back to identity, i.e. exactly the False this
-      leaves the caller with. So `P(3) == "x"` and `P(3) == Q(3)` stay False
+      otherwise — which falls back to identity, i.e. exactly the False the
+      caller is left with. So `P(3) == "x"` and `P(3) == Q(3)` stay False
       instead of reading a Q as a P. }
-    if GetInstanceRTTI(Pointer(pobj)) <> GetInstanceRTTI(Pointer(qobj)) then Exit;
+    if GetInstanceRTTI(Pointer(selfObj)) <> GetInstanceRTTI(Pointer(otherObj)) then Exit;
     fnObj := TPyEqObjFn(mi^.Code);
-    if selfObj = pobj then res := fnObj(Pointer(pobj), Pointer(qobj))
-    else res := fnObj(Pointer(qobj), Pointer(pobj));
-    PyUserObjEq := True;
+    res := fnObj(Pointer(selfObj), Pointer(otherObj));
+    PyUserObjBoolDunder := True;
     Exit;
   end;
+end;
+
+{ Box an object handle as a VT_OBJECT variant, for handing the REFLECTED operand
+  to a Variant-shaped dunder. No retain: the variant is a borrowed view that
+  lives only for the duration of the call below it. }
+procedure PyObjAsVarBorrowed(o: TObject; var v: Variant);
+begin
+  PPyVarRec(@v)^.VType := 7;
+  PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(o)));
+end;
+
+function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean;
+var pv: Variant;
+begin
+  { a.__eq__(b), then the REFLECTED b.__eq__(a). There is no NotImplemented
+    here, so the reflection fires only when a's class has no __eq__ at all —
+    which is what makes `plain_obj == H(3)` still consult H's. }
+  PyUserObjEq := PyUserObjBoolDunder(pobj, qobj, qv, '__eq__', res);
+  if PyUserObjEq then Exit;
+  PyObjAsVarBorrowed(pobj, pv);
+  PyUserObjEq := PyUserObjBoolDunder(qobj, pobj, pv, '__eq__', res);
+end;
+
+{ `a > b` for two user objects, which is what `.sort()` / `sorted()` ask for
+  through pyvar_gt. CPython tries `a.__gt__(b)` and then the reflected
+  `b.__lt__(a)` — and the reflected arm is the one that matters in practice,
+  because the idiomatic class defines ONLY __lt__ (that is all Python's sort
+  requires) and so has no __gt__ to find.
+  bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
+function PyUserObjGt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean;
+var pv: Variant;
+begin
+  PyUserObjGt := PyUserObjBoolDunder(pobj, qobj, qv, '__gt__', res);
+  if PyUserObjGt then Exit;
+  PyObjAsVarBorrowed(pobj, pv);
+  PyUserObjGt := PyUserObjBoolDunder(qobj, pobj, pv, '__lt__', res);
 end;
 
 { See the forward declaration above PyVarEq. Only `def __hash__(self) -> int`
