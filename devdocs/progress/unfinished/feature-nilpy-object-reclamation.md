@@ -15,6 +15,13 @@ the uforth repo itself, not here. The compiler must not leak on Python code:
 work item, and it must land either way.
 
 ## Current state
+**STALE — this section describes 2026-07-22, BEFORE the work. Slices 1-4
+landed that same night; see "Progress" below for what is actually true.** Kept
+because the ranked remainder is written against it, but read the Progress and
+NEXT sections first: a reader who stops here concludes NilPy objects are not
+refcounted at all, which has been wrong since 2026-07-23 (noted 2026-08-08,
+after exactly that misreading produced a wrong claim in a filed ticket).
+
 - Variant SLOT lifetime is handled: scope-exit release, ARC-correct
   var_store/copy, promo-tier clears, aggregate-dest release, call-result
   boxing ownership (the five fixed layers of
