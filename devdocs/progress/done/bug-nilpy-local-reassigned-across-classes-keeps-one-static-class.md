@@ -143,4 +143,4 @@ second class read empty) — the expensive failure mode, not the cheap one.
 [[refactor-nilpy-three-places-decide-a-locals-class-identity]]
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit a91158709.
