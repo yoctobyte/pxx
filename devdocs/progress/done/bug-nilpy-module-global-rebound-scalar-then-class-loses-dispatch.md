@@ -209,4 +209,4 @@ binary, so not a regression from this change; it is why this test binds its
 no-dunder control at module level.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit a92b41bdd.
