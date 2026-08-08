@@ -29,7 +29,7 @@ interface
   arithmetic below must not narrow it — pyvar_to_int's mod-2^64 reading turns
   2**70 into 0, so `v + 1` answered 1 for a 22-digit number. promocore has no
   uses clause of its own, so this adds no cycle. }
-uses pypal, promocore;
+uses pypal, promocore, typinfo;
 
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
@@ -9758,8 +9758,87 @@ begin
     Result := '<function at 0x' + hx + '>';
 end;
 
+{ `__repr__` / `__str__` on a USER class instance that arrives only as a bare
+  Variant handle — an element of a list, a dict value, a tuple slot.
+
+  `print(p)` on a statically class-typed local renders correctly, because the
+  frontend rewrites it to a direct call at COMPILE time keyed on the receiver's
+  class. A container element has no static class for that rewrite to key on, so
+  the element fell through to pyrepr_of, which knows nothing about user classes
+  and produced the EMPTY string: `[p1, p2]` printed `[, ]`.
+
+  The dispatch itself is not new machinery — the class RTTI carries the method
+  table, and pyeval already finds a method by NAME in it and calls it through a
+  typed pointer (PyFindMethCI/PyHostCall). This is the same lookup, made from
+  the renderer that needed it. Only the ZERO-ARGUMENT, AnsiString-returning
+  shape is accepted, which is what `def __repr__(self) -> str` compiles to; any
+  other shape is left to the existing fallback rather than called through a
+  pointer whose ABI has not been checked.
+
+  Returns False when the class defines no such dunder, so the caller keeps its
+  old behaviour — CPython prints `<module.Class object at 0x...>` there, which
+  carries an address and so is not reproducible anyway.
+  bug-nilpy-list-of-custom-objects-loses-repr-str }
+type
+  TPyDunderFn = function(self: Pointer): AnsiString;
+
+function PyFindDunder(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
+begin
+  PyFindDunder := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+    begin
+      meths := curr^.MethsPtr;
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+        if meths[i].NamePtr^ = nm then
+        begin
+          PyFindDunder := @meths[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyUserObjStr(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyDunderFn;
+begin
+  PyUserObjStr := False;
+  if o = nil then Exit;
+  { pylib's OWN containers have their own renderers and must not come here }
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  mi := nil;
+  { CPython: str() prefers __str__ and falls back to __repr__; repr() uses
+    __repr__ only. Inside a CONTAINER both render with repr, which is why the
+    callers below pass wantRepr = True. }
+  if not wantRepr then mi := PyFindDunder(cls, '__str__');
+  if mi = nil then mi := PyFindDunder(cls, '__repr__');
+  if mi = nil then
+  begin
+    { No dunder: CPython's DEFAULT object repr, `<__main__.Cls object at 0x..>`.
+      Not matchable line-for-line by a test (it carries an address), but it is
+      the right shape and strictly better than the EMPTY string this used to
+      render — an object silently vanishing out of a printed container is the
+      failure this ticket is about. }
+    outS := '<__main__.' + TObject(o).ClassName
+             + ' object at ' + hex(Int64(NativeInt(Pointer(o)))) + '>';
+    PyUserObjStr := True;
+    Exit;
+  end;
+  if mi^.Arity <> 1 then Exit;          { Self only }
+  if mi^.RetKind <> 23 then Exit;       { AnsiString }
+  fn := TPyDunderFn(mi^.Code);
+  outS := fn(Pointer(o));
+  PyUserObjStr := True;
+end;
+
 function pyvar_repr(const v: Variant): AnsiString;
-var o: TObject;
+var o: TObject; us: AnsiString;
 begin
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;   { VT_EMPTY }
   { a callable VALUE — see PyCallableStr }
@@ -9771,12 +9850,13 @@ begin
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
+    if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
   Result := pyrepr_of(v);
 end;
 
 function pyvar_print_of(const v: Variant): AnsiString;
-var o: TObject;
+var o: TObject; us: AnsiString;
 begin
   if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
   begin Result := PyCallableStr(v); Exit; end;
@@ -9787,6 +9867,8 @@ begin
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
+    { a bare print() of an instance prefers __str__, like CPython's str() }
+    if PyUserObjStr(o, False, us) then begin Result := us; Exit; end;
   end;
   Result := pystr_of(v);
 end;

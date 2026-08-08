@@ -3,6 +3,8 @@ track: N
 prio: 40
 type: bug
 blocked-by: []
+status: done
+owner: claude-N
 ---
 
 # A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__`
@@ -113,3 +115,54 @@ it and re-run the container tests. Parked with the diagnosis corrected rather
 than left resting on a premise that is no longer true — and the sibling
 [[feature-nilpy-runtime-method-dispatch-on-variant]] should be re-read in this
 light too, since it is scoped on the same stale assumption.
+
+## RESOLVED 2026-08-08 — the route existed; it just was not taken
+
+The 2026-08-07 correction was right: this needed a route, not a mechanism. The
+class RTTI carries the method table and pyeval already looks a method up by NAME
+in it (`PyFindMethCI`) and calls it through a typed pointer. pylib's renderer now
+makes the same lookup.
+
+Simpler than the design sketched above, which proposed a hook installed by a
+compiler-synthesised proc. No hook and no synthesis: pylib gained `uses typinfo`
+(no cycle — typinfo has no uses clause of its own) and does the lookup directly
+in `PyUserObjStr`, called from `pyvar_repr` and `pyvar_print_of` for a tag-7
+payload that is not one of pylib's own containers.
+
+| expression | before | after |
+| --- | --- | --- |
+| `print([p1, p2])` | `[, ]` | `[Point(1, 2), Point(1, 2)]` |
+| `print({"a": p})` | `{'a': }` | `{'a': Point(1, 2)}` |
+| `print((p, p))` | `(, )` | `(Point(1, 2), Point(1, 2))` |
+| `print([Plain(9)])` | `[]` | `[<__main__.Plain object at 0x...>]` |
+
+`__str__` vs `__repr__` follows CPython: a bare `print(obj)` prefers `__str__`,
+a CONTAINER renders its elements with `__repr__` — the test asserts the same
+object answering differently in the two positions.
+
+Only the zero-argument, AnsiString-returning shape is called — what
+`def __repr__(self) -> str` compiles to. Any other shape falls through to the
+old path rather than being invoked through a proc pointer whose ABI has not
+been checked.
+
+The no-dunder case now renders CPython's default `<__main__.Cls object at
+0x...>` instead of the empty string. Not assertable line-for-line (it carries an
+address), so the test checks its SHAPE — but an object silently vanishing out of
+a printed container is the failure this ticket is about, and a shape with an
+address in it is strictly better than nothing.
+
+`test/test_nilpy_container_element_repr.npy` (new), oracle-diffed: list, dict,
+tuple, nested list, a value that lost its static type through an untyped
+parameter, both dunders on one class, and the no-dunder shape.
+
+`tools/gate.sh quick` GREEN, self-host byte-identical, `make test-uforth` PASS.
+
+### Note for the sibling ticket
+
+[[feature-nilpy-runtime-method-dispatch-on-variant]] is scoped on the same stale
+premise this ticket carried ("no runtime type dispatch exists"). It does exist,
+and now pylib reaches it too. That ticket should be re-read before any work is
+estimated against it.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

@@ -1339,6 +1339,9 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 	# set operators (&, |, -, ^) and PEP 584 dict union (|); expectation is CPython's own output
+	@# __repr__/__str__ on a user instance reached only as a container ELEMENT
+	./$(COMPILER) test/test_nilpy_container_element_repr.npy /tmp/test_nilpy_celemrepr26
+	/tmp/test_nilpy_celemrepr26 | diff -u test/test_nilpy_container_element_repr.expected -
 	./$(COMPILER) test/test_nilpy_set_ops.npy /tmp/test_nilpy_setops26
 	@# .expected: a set operator now RETURNS a set, so these repr as {2, 3} —
 	@# the old inline expectation encoded the list-repr this ticket removed.

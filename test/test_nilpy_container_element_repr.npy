@@ -1,0 +1,67 @@
+# `__repr__` / `__str__` on a user class instance that reaches the renderer only
+# as a bare Variant — a list element, a dict value, a tuple slot.
+#
+# `print(p)` on a statically class-typed local always worked: the frontend
+# rewrites it to a direct call at COMPILE time, keyed on the receiver's class.
+# A container element has no static class for that rewrite to key on, so it fell
+# through to pyrepr_of — which knows nothing about user classes — and rendered
+# the EMPTY string: `[p1, p2]` printed `[, ]`. An object silently vanishing out
+# of a printed container.
+#
+# The dispatch was NOT missing machinery: the class RTTI carries the method
+# table and pyeval already finds a method by name in it. pylib's renderer now
+# makes the same lookup.
+# bug-nilpy-list-of-custom-objects-loses-repr-str
+
+
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return "Point(" + str(self.x) + ", " + str(self.y) + ")"
+
+
+class Named:
+    def __init__(self, n):
+        self.n = n
+
+    def __str__(self):
+        return "S:" + self.n
+
+    def __repr__(self):
+        return "R:" + self.n
+
+
+class Plain:
+    def __init__(self, v):
+        self.v = v
+
+
+p = Point(1, 2)
+print(p)
+print([p, Point(3, 4)])
+print({"a": p})
+print((p, p))
+print([[p]])
+
+# a CONTAINER renders its elements with repr, a bare print() prefers __str__ —
+# the same object must answer differently in the two positions, as in CPython
+n = Named("x")
+print(n)
+print([n])
+print({"k": n})
+
+# nested through a variable that lost its static type
+def show(o):
+    return [o]
+
+
+print(show(p))
+
+# no dunder at all: CPython prints <__main__.Cls object at 0xADDR>. The address
+# cannot be asserted, so only the SHAPE is checked here.
+q = [Plain(9)]
+s = str(q)
+print(s.startswith("[<__main__.Plain object at 0x"), s.endswith(">]"))

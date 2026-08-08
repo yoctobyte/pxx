@@ -38,7 +38,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (192)
+## backlog (191)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +55,6 @@ _none_
 | bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class | N | 40 | bug | SILENT->CRASH: with two classes declaring the same field name, a call through a dynamically-typed receiver hard-casts to whichever class the scan found FIRST — the field offset is read from the wrong layout, no diagnostic | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-list-of-custom-objects-loses-repr-str | N | 40 | bug | A user class instance boxed in a list/dict prints as empty, losing `__repr__`/`__str__` | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
@@ -362,9 +361,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1499)
+## done (1500)
 
-1499 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1500 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -497,7 +496,6 @@ _none_
 - [p 40] [N] feature-nilpy-multi-arg-callback-bridges (unblocks 1)
 - [p 40] [N] bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
-- [p 40] [N] bug-nilpy-list-of-custom-objects-loses-repr-str
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
