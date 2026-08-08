@@ -1329,6 +1329,47 @@ def range_note(reg):
             "current range." % (bad, good, n))
 
 
+SRC_RE = re.compile(r"^- \*\*Test source:\*\* (.+)$", re.M)
+
+
+def stub_sources(pdir):
+    """{test source -> slug} over every auto-filed stub in every bucket.
+
+    One test SOURCE can be exercised by several jobs — `test/x.npy` runs under
+    both `test-core` and `test-nilpy` — and the stub slug is the job selector,
+    so one broken file filed two tickets
+    (`test_nilpy_augmented_assign_class_dunder`, 2026-08-06). Two tickets for
+    one fix is queue noise of the same kind this ticket is about.
+
+    Scanned once per filing pass, not once per job: `new_red` is capped by
+    CASCADE_THRESHOLD, but the bucket holds ~200 files.
+    """
+    out = {}
+    for b in PROGRESS_BUCKETS:
+        d = os.path.join(pdir, b)
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for fn in names:
+            if not fn.endswith(".md"):
+                continue
+            p = os.path.join(d, fn)
+            try:
+                if os.path.getsize(p) == 0:      # debris, see already_filed
+                    continue
+                with open(p, errors="replace") as f:
+                    body = f.read(4096)          # the header is all we need
+            except OSError:
+                continue
+            if STUB_MARKER not in body:
+                continue                         # somebody's analysis, not a stub
+            m = SRC_RE.search(body)
+            if m:
+                out.setdefault(m.group(1).strip(), fn[:-3])
+    return out
+
+
 def already_filed(pdir, slug):
     """Does a ticket for `slug` exist in any bucket — and is it real?
 
@@ -1438,12 +1479,24 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         return
     filed = []
     advisory = {job_key(j) for j in report["jobs"] if j.get("advisory")}
+    pdir = os.path.join(clone.path, "devdocs/progress")
+    by_src = stub_sources(pdir)      # one scan, then updated as we file
     for job in new_red:
         slug = reg_slug(job)
-        pdir = os.path.join(clone.path, "devdocs/progress")
         if already_filed(pdir, slug):
             continue
         j = next((x for x in report["jobs"] if job_key(x) == job), {})
+        # DEDUPE BY TEST SOURCE. The slug is the job selector, so the same
+        # broken file reached through two jobs files two tickets — one fix,
+        # two things to close. Key the filing on the source; closing still
+        # keys on the job, which is what close_stub_tickets already does.
+        src = (j.get("src") or "").strip()
+        owner = by_src.get(src) if src else None
+        if owner and owner != slug:
+            print("twatch: %s is red too, but %s already covers %s — not "
+                  "filing a second stub for one source" % (job, owner, src),
+                  flush=True)
+            continue
         tail = ""
         if j.get("log") and os.path.exists(j["log"]):
             with open(j["log"], errors="replace") as f:
@@ -1504,6 +1557,9 @@ takes it from the repro line.*
                 range_note(reg), tail))
         write_ticket(os.path.join(clone.path, rel), body)
         filed.append(rel)
+        if src:
+            # so a sibling job on the same source, later in THIS batch, sees it
+            by_src[src] = slug
     if filed:
         clone.publish("tstate-ticket(%s): %s" %
                       (host, ", ".join(os.path.basename(p) for p in filed)),
@@ -1542,6 +1598,15 @@ def close_stub_tickets(clone, host, closed, sha, report):
     does not regenerate it either.  An agent regenerates.
     """
     pdir = os.path.join(clone.path, "devdocs/progress")
+    # Filing now dedupes by test SOURCE, so one stub can be the only ticket for
+    # a source that several jobs exercise. Closing it because the job it was
+    # named after went green would then leave a still-broken source with no
+    # ticket at all — and no way to get one, since the other job is STILL-RED
+    # rather than NEW-RED and nothing files on still-red. So: a stub whose
+    # source is red in ANY job of this report stays open.
+    red_srcs = {(j.get("src") or "").strip() for j in report["jobs"]
+                if j.get("status") in ("fail", "timeout")}
+    red_srcs.discard("")
     paths, slugs = [], []
     for r in closed:
         slug = ("regression-cascade-" + (r.get("bad") or "")[:12]
@@ -1561,6 +1626,12 @@ def close_stub_tickets(clone, host, closed, sha, report):
         if STUB_MARKER not in body:
             print("twatch: %s has been triaged (no stub marker) — leaving it"
                   % slug, flush=True)
+            continue
+        m = SRC_RE.search(body)
+        if m and m.group(1).strip() in red_srcs:
+            print("twatch: %s's job is green, but %s is still red in another "
+                  "job — keeping the stub open (it is that source's only "
+                  "ticket)" % (slug, m.group(1).strip()), flush=True)
             continue
         if "\n## Log\n" not in body:
             body = body.rstrip("\n") + "\n\n## Log\n"
