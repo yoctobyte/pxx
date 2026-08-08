@@ -125,3 +125,36 @@ exist. So:
 
 Blocked on the bug. Deciding a display policy while the digits are wrong would
 be choosing between two things neither of which we currently do.
+
+## DECIDED 2026-08-08 (user): option 1 — KEEP EXACT
+
+> the float issue is obvious. we are not cripling something we do correct and
+> fpc doesn't.
+
+**pxx prints the exact decimal expansion of the double in the fixed form.** It
+does not adopt FPC's 17-significant-digit cap.
+
+Reinforcing what the 2026-08-05 measurements had already shown: "match FPC" was
+never merely "print fewer digits". FPC computes in **Extended**, so at 1e30 it
+prints neither the exact value nor a 17-digit rounding of it, and at 1e300 it
+**abandons the fixed form** for ` 1.0E+0300` despite `:0:5` asking for decimals.
+Option 2 was therefore "emulate FPC's Extended-based formatter", a far larger
+promise than its title, and one that would make pxx less correct to get there.
+
+### Consequences
+
+- The natural form `writeln(d)` is already FPC-exact and does **not** change.
+  Only `:w:d` was ever in question.
+- A diff-based comparison against FPC output will differ past ~2^53 forever.
+  That is expected and correct; a `compat` corpus must special-case it rather
+  than treat it as a defect. Note the claims-discipline rule in CLAUDE.md while
+  writing any of that up.
+- **Unblocks [[bug-a-write-fixed-fraction-digits-past-16-are-invented]]**, whose
+  target is now unambiguous: the fraction must be the value's real digits, all
+  of them, expanded exactly — not the current approximation, and not a cap. The
+  machinery is already in the same unit (`PxxSciDigits17` expands a double
+  exactly in base-10^9 limbs; the fixed path simply does not use it).
+- The mirroring constraint stands: `PXXWriteFloatFixed` must keep matching the
+  hand-emitted x86-64 `EmitWriteFloatFixed`, so the fix lands in both or the
+  backends print different text. Routing both to one shared helper is the
+  honest shape.
