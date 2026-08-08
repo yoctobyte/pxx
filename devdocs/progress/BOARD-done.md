@@ -1318,6 +1318,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-t-bench-hardware-provenance | T | 60 | feature | bench.tsv records a hostname but no hardware — the series silently changed machines today | — |
 | feature-t-bench-idle-must-be-preemptible | T | 55 | feature | Every idle phase yields to a new push except bench — so worst-case time-to-verdict is ~2-3 min of benchmarking, an order of magnitude above the poll interval anyone would tune | — |
 | feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
+| feature-t-enroll-uforth-in-the-tiers | T | 55 | feature | `test-uforth` is in NO tier — the watcher has never run it, so the whole uforth corpus can rot silently between hand-runs. Enrol it in limited+full (NOT native: it is 46s and native is the tier dev boxes gate pushes on). | — |
 | feature-t-fuzz-findings-ledger | T | 70 | feature | Fuzz findings ledger: dedupe by signature, throttle fuzzing until the finding is fixed | — |
 | feature-t-publish-selfhost-red-immediately | T | 75 | feature | twatch publishes only when a whole tier finishes, so a self-host fixedpoint break — the one red that blocks every track — waits behind the entire native tier before anyone hears about it | — |
 | feature-t-quick-canary-for-nilpy-and-c | T | 70 | feature | The 2-14s quick canary covers Pascal only; a NilPy change and a C change can both go out with no fast check at all. Add one dense .npy and one dense .c canary. | — |

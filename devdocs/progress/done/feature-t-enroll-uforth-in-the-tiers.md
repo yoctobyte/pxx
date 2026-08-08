@@ -3,6 +3,8 @@ track: T
 prio: 55
 type: feature
 summary: "`test-uforth` is in NO tier — the watcher has never run it, so the whole uforth corpus can rot silently between hand-runs. Enrol it in limited+full (NOT native: it is 46s and native is the tier dev boxes gate pushes on)."
+status: done
+owner: claude-T@plexus
 ---
 
 # Enrol `test-uforth` in the tiers — it is currently gated by nobody
@@ -77,3 +79,68 @@ stale when uforth moves. 10/10 byte-identical today.
 
 `tools/testmgr.py --tier limited` and `--tier full` both run and report the
 uforth job; `--tier native` unchanged in composition and wall time.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.
+
+---
+
+## Resolution (Track T, 2026-08-08) — commit `d6f83cebe`
+
+Enrolled in **limited + full**, native untouched. Verified with `--list`:
+native 1200 jobs / 0 uforth (unchanged), limited 1656 / 1, full 2178 / 1.
+`test-uforth` PASSes in-tier in ~33 s.
+
+**Cloned `yoctobyte/uforth` to `~/projects/uforth` on plexus** — the ticket
+flagged this as the thing to check before closing, and it was absent, so the
+enrolment would have been a silent SKIP.
+
+### The ticket's own warning was the real work
+
+"A SKIP that nobody notices is the failure mode to avoid here" — there were
+**two** such holes, and enrolling without closing them buys a green that
+tested nothing.
+
+1. **A self-skipping target read as a pass.** `test-uforth` exits 0 when the
+   tree is absent, so testmgr scored it PASS. It now detects a target that
+   guarded its own precondition (anchored `^<target>: SKIP` in its log) and
+   marks it `skip`, reported as SKIP.
+
+   The first attempt used `skipped` and **turned a box lacking the checkout
+   RED** — the exact false red this ticket forbids, because the run loop
+   treats `skipped` as a dependency failure. `skip` is the pre-existing
+   pass-equivalent did-not-run status and is now pass-equivalent for the gate
+   too. Both paths verified: absent → SKIP + GREEN + exit 0; present → PASS.
+
+2. **The corpus denominator concealed itself.** The Makefile loop `continue`d
+   past absent corpora and reported `$ok/$ok` — always complete-looking.
+
+### `UFORTH_CORPUS` cannot be satisfied by a clean clone — for the user
+
+The ticket records 10/10 byte-identical. A fresh clone of `yoctobyte/uforth`
+yields **4**. The six `tests/_drv_{c,file0,locals,string,t,x}.fth` files have
+**never existed in uforth's git history** (`git log --all --diff-filter=A`
+finds no `_drv_`), and are not in pxx either — they are local scratch on
+whichever box did that work. Nothing here invented or regenerated them.
+
+`make test-uforth` now says so out loud:
+
+```
+test-uforth: INCOMPLETE — 6 of 10 corpora absent from /home/neo/projects/uforth: ...
+test-uforth: PASS — smoke + 4/10 corpora byte-identical to CPython (6 ABSENT)
+```
+
+**Committing those six to uforth upstream would take the enrolled signal from
+4 corpora to 10 with no further pxx change.** That is the highest-value
+follow-up here and it needs the box that has them.
+
+### Known limitation, deliberately not widened
+
+twatch maps `skip` → pass into tstate, so an absent-uforth box still reads
+green at the tstate level. That is
+[[bug-t-tstate-launders-skip-into-pass]], already filed; this ticket makes the
+skip visible in the testmgr report, which is where its own gate lives.
+
+`tests/_drv_file.fth` remains excluded by name pending
+[[bug-nilpy-uforth-file-word-set-include-redefinition]] (the ANS FILE word
+set) — unchanged by this ticket, and its own gate.
