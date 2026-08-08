@@ -1413,6 +1413,11 @@ test-nilpy: $(COMPILER)
 	# del l[i] — a plain list index was a compile error; only del d[k] and
 	# del l[a:b] worked. Out of range RAISES (a slice clamps), and the index
 	# expression must be evaluated exactly once.
+	# pop(i) shifted the tail with a RAW slot copy, leaving the vacated tail slot
+	# aliasing a LIVE element -- the next append released it. Refcounted elements
+	# only; a list of ints hides it entirely.
+	./$(COMPILER) test/test_nilpy_list_pop_at_index_keeps_the_rest.npy /tmp/test_nilpy_popat26
+	test "$$(/tmp/test_nilpy_popat26)" = "$$(printf '%b' '(\047tag\047, 0) [(\047tag\047, 1), (\047z\047, 9)]\n[(\047tag\047, 1), (\047tag\047, 2), (\047z\047, 9)]\n[(\047tag\047, 0), (\047tag\047, 2), (\047tag\047, 3), (\047z\047, 9)]\n[(\047tag\047, 0), (\047tag\047, 1), (\047z\047, 9)]\n[(\047tag\047, 1), (\047tag\047, 0)]\n[(\047tag\047, 0), (\047tag\047, 2), (\047z\047, 9)]\n[[3, 4], [5, 6]]\n[\047bb\047, \047cc\047]\n[(\047tag\047, 0), (\047z\047, 9)]\n(\047tag\047, 0) [(\047tag\047, 1), (\047z\047, 9)]\n[(\047tag\047, 0), (\047tag\047, 1), (\047tag\047, 2), (\047tag\047, 3), (\047tag\047, 4)]')"
 	./$(COMPILER) test/test_nilpy_del_list_index.npy /tmp/test_nilpy_delidx26
 	test "$$(/tmp/test_nilpy_delidx26)" = "$$(printf '%b' '[0, 2, 3, 4]\n[0, 2, 3]\n[2, 3]\nIndexError\n[2, 3]\nIndexError neg\n[2, 3]\n[1, 2, 3]\n[8, 9]\n1\n{\047b\047: 2}\n[1, 4, 5]\n[]\n0')"
 	# a str is an iterable: sorted/zip/enumerate over one passed the string HANDLE

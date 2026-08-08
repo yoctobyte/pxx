@@ -2822,9 +2822,19 @@ begin
   PyVarSlotSet(dst, src);
 end;
 
+{ Both pops CLEAR the slot they vacate. Lowering FLen over a slot that still
+  holds a reference leaves an alias nothing counts, and the next append writes
+  exactly there — PyVarSlotSet releases whatever the slot held on its way in.
+  For pop() that was merely a leak the next append happened to collect; for
+  pop_at() it was CORRUPTION, because the raw shift below moved a LIVE element
+  into the list while leaving its unbacked duplicate at the tail. The next
+  append then released a live element: `[A, B]` -> `pop(0)` -> `append(x)` gave
+  `[(), x]`, and uforth's CS-ROLL turned a control-flow entry into an empty
+  tuple mid-compile (bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element). }
 function TPyList.pop: Variant;
 begin
-  Result := at(FLen - 1);
+  Result := at(FLen - 1);                  { the caller's +1 }
+  PyVarSlotClear(PPyVarRec(NativeInt(FItems) + (FLen - 1) * 16));
   FLen := FLen - 1;
 end;
 
@@ -2836,17 +2846,16 @@ end;
 function TPyList.pop_at(i: Integer): Variant;
 var
   k: Integer;
-  src, dst: PPyVarRec;
 begin
   i := PyListFix(Self, i);
-  Result := at(i);
+  Result := at(i);                         { the caller's +1 }
+  { A COUNTED shift, the same idiom pylist_del_slice uses: put/at retain the
+    value into its new slot and release the old occupant, so no slot is ever
+    an alias the refcount does not know about. The raw VType/Payload copy this
+    replaced was the whole bug. }
   for k := i to FLen - 2 do
-  begin
-    src := PPyVarRec(NativeInt(FItems) + (k + 1) * 16);
-    dst := PPyVarRec(NativeInt(FItems) + k * 16);
-    dst^.VType := src^.VType;
-    dst^.Payload := src^.Payload;
-  end;
+    put(k, at(k + 1));
+  PyVarSlotClear(PPyVarRec(NativeInt(FItems) + (FLen - 1) * 16));
   FLen := FLen - 1;
 end;
 

@@ -1,0 +1,91 @@
+# `pop(i)` shifted the tail down with a RAW slot copy and then just lowered the
+# length, leaving the vacated tail slot aliasing a live element with nothing
+# counting that alias. The next `append` writes exactly there, and the slot
+# setter releases whatever the slot held on its way in — so appending after a
+# pop(i) destroyed a still-live element. It only shows with REFCOUNTED elements
+# (tuples, lists, strings); a list of ints hides it completely.
+# bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element
+# Every expectation here is CPython's own output.
+
+# The elements must be built inside a function: a module-level literal list
+# takes a different construction path and never showed the bug.
+def build(n: int) -> list:
+    out = []
+    i = 0
+    while i < n:
+        out.append(("tag", i))
+        i = i + 1
+    return out
+
+# pop the FIRST of two, then append — the original failure
+a = build(2)
+x = a.pop(0)
+a.append(("z", 9))
+print(x, a)
+
+# pop the first of three: the element that ends up LAST after the shift is the
+# one the stale alias pointed at
+b = build(3)
+b.pop(0)
+b.append(("z", 9))
+print(b)
+
+# pop from the MIDDLE
+c = build(4)
+c.pop(1)
+c.append(("z", 9))
+print(c)
+
+# pop the LAST by index — no shift runs, so this exercises the vacated slot on
+# its own
+d = build(3)
+d.pop(2)
+d.append(("z", 9))
+print(d)
+
+# re-appending the popped item itself, which is what CS-ROLL does
+e = build(2)
+e.append(e.pop(0))
+print(e)
+
+# negative index
+f = build(3)
+f.pop(-2)
+f.append(("z", 9))
+print(f)
+
+# lists as elements, not tuples
+g = []
+g.append([1, 2])
+g.append([3, 4])
+g.pop(0)
+g.append([5, 6])
+print(g)
+
+# strings as elements (managed payload rather than an object payload)
+h = []
+h.append("aa")
+h.append("bb")
+h.pop(0)
+h.append("cc")
+print(h)
+
+# bare pop() then append must still be right — same vacated-slot rule
+k = build(2)
+k.pop()
+k.append(("z", 9))
+print(k)
+
+# the popped value must OUTLIVE the append that reuses its slot
+m = build(2)
+p = m.pop(0)
+m.append(("z", 9))
+print(p, m)
+
+# repeated pop/append churn: every survivor must stay intact
+q = build(5)
+i = 0
+while i < 5:
+    q.append(q.pop(0))
+    i = i + 1
+print(q)
