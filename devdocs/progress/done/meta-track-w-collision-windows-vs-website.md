@@ -159,4 +159,4 @@ norm here, not an anomaly, so a 130-ticket backfill was NOT done as part of this
 change. What genuinely was invisible was the unrecognised LETTER, which is
 fixed. The third finding (make `check` flag prose-only track declarations) is
 left open and split out: [[chore-progress-flag-prose-only-track-decl]].
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 2f007a819.
