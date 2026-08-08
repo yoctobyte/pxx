@@ -71,7 +71,7 @@ _none_
 | bug-t-a-self-healed-red-leaves-a-permanent-prio-70-stub-at-the-head-of-the-queue | T | 60 | bug | twatch files a prio-70 stub on NEW-RED but never closes or annotates it when a later report moves the same job to FIXED, so a self-healing red outranks all real work indefinitely. | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
-| bug-t-empty-range-regression-cannot-be-bisected | T | 55 | bug | When a run's parent_tested IS the tested sha, the regression's range is empty and idle bisect can never narrow it — so those tickets sit until a human bisects by hand | — |
+| bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler | T | 45 | bug | gate.sh's self-host check compares the hermetic fixedpoint against the LIVE compiler/pascal26, so a concurrent build in the same clone flips it red transiently — testmgr snapshots the binary per run for exactly this reason | — |
 | bug-t-pydiff-cpython-arm-fails-on-a-relative-path | T | 45 | bug | pydiff.py reports a bogus DIFF for any file given as a relative path: run_cpython passes the full relative path while setting cwd to that path's dirname, so CPython exits 2 and every line reads 'cpython: <no line>' | — |
 | bug-t-three-network-tests-flake-and-cost-real-debugging-time | T | 45 | bug | lib_net_v6only, lib_sockets and lib_platform_esp each pass or fail run-to-run with the SAME compiler, so a gate.sh lib RED and two cross-sweep A/B deltas in one night were all noise that had to be disproved by hand | — |
 | bug-t-tstate-launders-skip-into-pass | T | 50 | bug | tstate records a SKIPPED job as \"pass\", so a green published state cannot be distinguished from one that actually ran — cross-host coverage differences are invisible exactly when they matter | — |
@@ -362,9 +362,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1504)
+## done (1505)
 
-1504 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1505 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -423,7 +423,6 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- [p 55] [T] bug-t-empty-range-regression-cannot-be-bisected
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
@@ -460,6 +459,7 @@ _none_
 - [p 45] [N] bug-nilpy-local-reassigned-across-classes-keeps-one-static-class
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [N] bug-nilpy-uforth-ans-word-set-suite-4-of-13-open
+- [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:6 backlog:192 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1504 rejected:30`
+`unfinished:10 blocked:6 backlog:192 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1505 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -55,7 +55,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- `[p 55] [T]` bug-t-empty-range-regression-cannot-be-bisected
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
@@ -65,5 +64,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-est-mem-from-measurement
+- `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 
 _145 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

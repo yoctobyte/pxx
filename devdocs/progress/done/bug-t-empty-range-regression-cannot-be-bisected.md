@@ -3,6 +3,8 @@ summary: "When a run's parent_tested IS the tested sha, the regression's range i
 type: bug
 track: T
 prio: 55
+status: done
+owner: claude-T@plexus
 ---
 
 # An empty range is unbisectable, and the two-phase watcher produces them
@@ -70,3 +72,53 @@ host last tested anything".
 non-empty -> unchanged; parent range empty but the job passed at an earlier
 sha in a covering tier -> that range; neither -> no entry and no bisect promise
 in the stub text.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.
+
+---
+
+## Resolution (Track T, 2026-08-08) — commit `315029d55`
+
+All three parts of the fix shape, as specified.
+
+1. **`last_covering_sha()`** — when the parent range is empty, fall back to the
+   newest earlier run whose tier certainly *contained* this job. A run at tier
+   E holds every job of the tiers E nests over, and the job just appeared at
+   `tier`, so any earlier run with `tier in covered_tiers(E)` had it.
+
+   Deliberately **conservative**: an earlier, narrower run may also have held
+   the job, and skipping it only widens the range. A too-wide range costs
+   bisect steps; a too-narrow one can exclude the culprit, which is the failure
+   that matters. `opt` being disjoint means only an earlier `opt` run answers
+   for an `opt` job — exactly why `optdiff#shard8-12` went unattributed.
+
+2. **Ledger entries record the derived sha as `good`**, not the host's
+   last-tested sha, so the entry and its range agree.
+
+3. **`range_note()`** — the stub says what is true. With no range it reads
+   "range **unknown** ... **no idle bisect will happen**; this one needs
+   hand-triage" instead of promising a bisect nobody will run.
+
+### Gate
+
+`gate.sh quick` GREEN. Unit tests over the range derivation — parent range
+empty → last covering run; the same-sha re-test skipped; `opt` isolated to
+`opt`; no history → None — and over both stub texts.
+
+**Coverage limit, stated plainly:** the two new pure functions are unit-tested,
+but the call site inside `test_sha()` is not — exercising it needs a live clone
+with a multi-run history, which the ticket's gate did not ask for and which no
+existing devtest harness covers. The guard itself is two lines
+(`if new_red and not rng:`), and the non-empty-parent-range path is unchanged
+by construction: the fallback cannot run when `rng` is truthy.
+
+### Surfaced while gating, filed separately
+
+Routing `gate.sh` through `selfhost_fixedpoint.sh` (previous commit) means it
+now also asserts the hermetic fixedpoint equals `compiler/pascal26` — strictly
+stronger, and correct. But it reads the **live mutable path**, so a concurrent
+build in the same clone flips it red transiently. Seen once here with 17 other
+build processes on the box; GREEN on re-run with `make` reporting "up to date".
+Filed as [[bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler]] — testmgr
+already snapshots the compiler per run for exactly this reason.
