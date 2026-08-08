@@ -1,0 +1,48 @@
+# feature-nilpy-arithmetic-dunders-full-protocol — the __divmod__ arm.
+#
+# `divmod(M(7), M(3))` reached pyfloordiv_v with two object handles and died
+# with `Runtime error 219` (a bad cast) — it neither called __divmod__ nor
+# raised. Both arms are covered here because they fail differently: a class
+# WITH the dunder was a crash, and a class WITHOUT one should be a catchable
+# TypeError (CPython's answer), which is also what the crash was hiding.
+#
+# The reflected arm needs the left operand to have NO __divmod__, or the direct
+# one shadows it — hence `Bare` on the left rather than another R.
+#
+# The numeric control matters: divmod() over ints and floats already worked and
+# goes down a different path, so a fix that captured every operand pair would
+# pass the object cases and silently break the ordinary ones.
+#
+# Expectations are CPython's own output.
+
+
+class D:
+    def __init__(self, v):
+        self.v = v
+
+    def __divmod__(self, o):
+        return (self.v // o.v, self.v % o.v)
+
+
+class R:
+    def __init__(self, v):
+        self.v = v
+
+    def __rdivmod__(self, o):
+        return ("rdivmod", o.v, self.v)
+
+
+class Bare:
+    def __init__(self, v):
+        self.v = v
+
+
+print("direct   ", divmod(D(7), D(3)))
+print("reflected", divmod(Bare(7), R(3)))
+print("numbers  ", divmod(7, 3), divmod(-7, 3), divmod(7.5, 2))
+
+try:
+    divmod(Bare(7), Bare(3))
+    print("bare     ", "NO ERROR")
+except TypeError:
+    print("bare     ", "TypeError")

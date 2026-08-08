@@ -3034,6 +3034,10 @@ function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
   bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
 function PyUserObjGt(pobj, qobj: TObject; const qv: Variant;
                      var res: Boolean): Boolean; forward;
+{ `divmod(a, b)` via __divmod__ / the reflected __rdivmod__, answering the
+  2-tuple. False when neither exists. }
+function PyUserObjDivmod(pobj, qobj: TObject; const pv, qv: Variant;
+                         var res: TObject): Boolean; forward;
 
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
@@ -4893,7 +4897,33 @@ begin
 end;
 
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
+var pa, pb: PPyVarRec; oa, ob, r: TObject;
 begin
+  { A USER class first: `divmod(M(7), M(3))` used to reach pyfloordiv_v with two
+    object handles and die with runtime error 219 (a bad cast) rather than
+    calling __divmod__ or raising. Both operands must be objects for the dunder
+    to be the right answer; a mixed pair falls through to the numeric path, and
+    CPython's own reflected rule is covered by trying __rdivmod__ on b.
+    feature-nilpy-arithmetic-dunders-full-protocol }
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if (pa^.VType = 7) and (pb^.VType = 7) and
+     (pa^.Payload <> 0) and (pb^.Payload <> 0) then
+  begin
+    oa := TObject(Pointer(NativeInt(pa^.Payload)));
+    ob := TObject(Pointer(NativeInt(pb^.Payload)));
+    if not ((oa is TPyList) or (oa is TPyDict) or (oa is TPyBytes)) then
+    begin
+      if PyUserObjDivmod(oa, ob, a, b, r) then
+      begin
+        pydivmod_v := TPyList(r);
+        Exit;
+      end;
+      { an object with no __divmod__ is a TypeError in CPython, and used to be
+        a runtime-219 crash here }
+      raise TypeError.Create(
+        'unsupported operand type(s) for divmod() (no __divmod__/__rdivmod__)');
+    end;
+  end;
   Result := TPyList.Create;
   Result.FKind := PYSEQ_TUPLE;
   Result.append(pyfloordiv_v(a, b));
@@ -9912,6 +9942,8 @@ type
     handle. }
   TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
   TPyHashFn  = function(self: Pointer): Int64;
+  TPyObjDunderFn    = function(self: Pointer; const other: Variant): Pointer;
+  TPyObjDunderObjFn = function(self: Pointer; other: Pointer): Pointer;
 
 { ONE dunder call, shared by every boolean binary dunder this unit dispatches
   at run time. Looks `dunder` up on selfObj's class and calls it with otherObj,
@@ -9968,6 +10000,44 @@ begin
   end;
 end;
 
+{ The object-RETURNING sibling of PyUserObjBoolDunder, for a dunder whose result
+  is a value rather than a flag (`__divmod__` returns a 2-tuple, i.e. a TPyList).
+  Same two `other` shapes and the same exact-class guard on the class-pointer
+  one; the return must be a class (RetKind 6), and the caller checks what class
+  it actually got. }
+function PyUserObjObjDunder(selfObj, otherObj: TObject; const otherV: Variant;
+                            const dunder: AnsiString; var res: TObject): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyObjDunderFn; fnObj: TPyObjDunderObjFn;
+    pk: PInt64;
+begin
+  PyUserObjObjDunder := False;
+  if (selfObj = nil) or (otherObj = nil) then Exit;
+  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(selfObj));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, dunder);
+  if mi = nil then Exit;
+  if mi^.Arity <> 2 then Exit;
+  if mi^.RetKind <> 6 then Exit;              { returns a class (the tuple) }
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk[1] = 22 then
+  begin
+    fn := TPyObjDunderFn(mi^.Code);
+    res := TObject(fn(Pointer(selfObj), otherV));
+    PyUserObjObjDunder := True;
+    Exit;
+  end;
+  if pk[1] = 6 then
+  begin
+    if GetInstanceRTTI(Pointer(selfObj)) <> GetInstanceRTTI(Pointer(otherObj)) then Exit;
+    fnObj := TPyObjDunderObjFn(mi^.Code);
+    res := TObject(fnObj(Pointer(selfObj), Pointer(otherObj)));
+    PyUserObjObjDunder := True;
+    Exit;
+  end;
+end;
+
 { Box an object handle as a VT_OBJECT variant, for handing the REFLECTED operand
   to a Variant-shaped dunder. No retain: the variant is a borrowed view that
   lives only for the duration of the call below it. }
@@ -10004,6 +10074,18 @@ begin
   if PyUserObjGt then Exit;
   PyObjAsVarBorrowed(pobj, pv);
   PyUserObjGt := PyUserObjBoolDunder(qobj, pobj, pv, '__lt__', res);
+end;
+
+{ `divmod(a, b)`: a.__divmod__(b), then the reflected b.__rdivmod__(a). The
+  result must be a TPyList (Python's contract is "a pair"); anything else is
+  left to the caller's fallback rather than cast to a tuple it is not. }
+function PyUserObjDivmod(pobj, qobj: TObject; const pv, qv: Variant;
+                         var res: TObject): Boolean;
+begin
+  PyUserObjDivmod := PyUserObjObjDunder(pobj, qobj, qv, '__divmod__', res);
+  if not PyUserObjDivmod then
+    PyUserObjDivmod := PyUserObjObjDunder(qobj, pobj, pv, '__rdivmod__', res);
+  if PyUserObjDivmod and not (res is TPyList) then PyUserObjDivmod := False;
 end;
 
 { See the forward declaration above PyVarEq. Only `def __hash__(self) -> int`

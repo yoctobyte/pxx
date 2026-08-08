@@ -2,7 +2,7 @@
 track: N
 prio: 40
 type: feature
-status: working
+status: done
 ---
 
 # Arithmetic dunders (`__add__`, `__sub__`, …) — full protocol
@@ -249,3 +249,61 @@ dunder plumbing.
 
 Still genuinely open here, and still not swept: `__divmod__` / `__matmul__`-
 shaped members, and the composition-with-existing-special-cases concerns above.
+
+## 2026-08-09 — last named scope swept; __divmod__ LANDED, __matmul__ split out
+
+The two items left as "still genuinely open and not swept" above are now
+measured, and the ticket's scope is complete.
+
+### `__divmod__` — was a CRASH, now matches CPython
+
+`divmod(M(7), M(3))` reached `pyfloordiv_v` with two object handles and died
+with **`Runtime error 219`** (a bad cast). It neither called `__divmod__` nor
+raised — the worst of both.
+
+`pydivmod_v` now dispatches `__divmod__`, then the reflected `__rdivmod__`, and
+raises a catchable `TypeError` when a class declares neither (CPython's answer,
+and what the crash was standing in for). All four arms verified against CPython:
+
+| expression | was | now |
+| --- | --- | --- |
+| `divmod(D(7), D(3))` (`__divmod__`) | `Runtime error 219` | `(2, 1)` |
+| `divmod(Bare(7), R(3))` (`__rdivmod__`) | `Runtime error 219` | `('rdivmod', 7, 3)` |
+| `divmod(Bare(7), Bare(3))` (neither) | `Runtime error 219` | `TypeError` |
+| `divmod(7, 3)` / `(-7, 3)` / `(7.5, 2)` | correct | unchanged |
+
+Only an object-vs-object pair takes the new path; a mixed pair falls through to
+the numeric one, which is why the numeric control is in the test. The result
+must come back a `TPyList` (Python's contract is "a pair") — any other class is
+left to the fallback rather than cast to a tuple it is not.
+
+Mechanically it reuses the runtime dunder dispatch added the same night for
+`__eq__`/`__lt__`, via a new object-RETURNING sibling of
+`PyUserObjBoolDunder`. Pinned by `test/test_nilpy_divmod_dunder.{npy,expected}`
+(`.expected` from CPython), wired into `test-nilpy`.
+
+### `__matmul__` — split out, NOT done
+
+`M(2) @ M(5)` is a parse error: `@` is only a decorator prefix today, never a
+binary operator. Filed as [[bug-nilpy-matmul-operator-does-not-parse]] at prio
+20, because it is the same shape as
+[[bug-nilpy-power-augmented-assign-does-not-parse]] — an operator with no usable
+token, so the fix is a `TTokenKind` in Track A's shared `defs.inc` and a
+decorator-vs-infix disambiguation, not more dunder plumbing.
+
+### The composition concern is answered
+
+The ticket's standing worry was that a class-operand dunder rule would capture
+`Path("a") / "b"`. Measured at HEAD: `Path("a") / "b"` still gives `a/b`, and
+scalar/string/list `+ - * /` are unaffected (asserted in the sibling tests).
+
+### Closing
+
+Direct, reflected and in-place forms of `+ - * / // % **` were already done
+(2026-08-01/03 notes above); `__divmod__` is done here; `__matmul__` and `**=`
+are separately filed. Resolved. Verification for this pass: `tools/gate.sh
+quick` GREEN, plus `ar1`/`dm3`/pathlib/`eq`/`lt` probes re-diffed against
+CPython.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

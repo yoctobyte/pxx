@@ -1052,6 +1052,10 @@ test-nilpy: $(COMPILER)
 	# it fell through to a numeric compare and raised "expected a number".
 	./$(COMPILER) test/test_nilpy_sort_lt_dunder.npy /tmp/test_nilpy_sortlt26
 	/tmp/test_nilpy_sortlt26 | diff -u test/test_nilpy_sort_lt_dunder.expected -
+	# divmod() over objects: __divmod__ / reflected __rdivmod__, and a TypeError
+	# (not a runtime-219 crash) for a class declaring neither.
+	./$(COMPILER) test/test_nilpy_divmod_dunder.npy /tmp/test_nilpy_divmod26
+	/tmp/test_nilpy_divmod26 | diff -u test/test_nilpy_divmod_dunder.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

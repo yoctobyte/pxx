@@ -1172,6 +1172,8 @@ should not read it to find out what to do. Grep it freely._
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
 | feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: map/filter over an arbitrary callable value | — |
+| feature-nilpy-arithmetic-dunders-full-protocol | N | 40 | feature | Arithmetic dunders (`__add__`, `__sub__`, …) — full protocol | — |
+| feature-nilpy-arithmetic-ordering-dunders | N | 60 | feature | NilPy arithmetic/ordering dunders — umbrella | — |
 | feature-nilpy-augmented-subscript-assign | N | 55 | feature | nilpy: augmented assignment to a subscript — d[k] += 1, xs[i] += 5 — does not parse | — |
 | feature-nilpy-bin-oct-and-enumerate-start-offset | N | 35 | feature | bin()/oct() missing; enumerate(xs, start) had no offset form | — |
 | feature-nilpy-bound-method-value | N | 65 | feature | NilPy: a BOUND METHOD as a value (`self.push` carries self) | — |

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:192 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1515 rejected:30`
+`unfinished:11 blocked:6 backlog:191 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1517 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 173, ranked
+## Ready — top 30 of 172, ranked
 
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
@@ -42,7 +42,6 @@ _none — no lane is locked._
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
 - `[p 60] [A]` feature-inline-asm-xtensa
-- `[p 60] [N]` feature-nilpy-arithmetic-ordering-dunders
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 - `[p 55] [T]` feature-t-shard-the-uforth-ans-suite-per-word-set
 - `[p 53] [S]` feature-esp-peripheral-callback-api
+- `[p 53] [A]` feature-threadsafe-heap-optimize
 
-_143 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_142 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
