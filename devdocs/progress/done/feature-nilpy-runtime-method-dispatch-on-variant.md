@@ -139,4 +139,4 @@ runtime test when the argument types can only match one candidate — not a
 correctness need.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 4ad8c2745.
