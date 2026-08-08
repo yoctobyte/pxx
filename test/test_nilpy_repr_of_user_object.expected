@@ -1,0 +1,10 @@
+direct   C(1)
+boxed    [C(1)]
+again    C(1)
+nested   [C(1), C(1)]
+str      C(1)
+print    C(1)
+scalars  3 'ab' 1.5 True
+conts    [1, 2] (1, 2) {'a': 1}
+str-only S2
+default  True True True

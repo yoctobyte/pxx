@@ -1056,6 +1056,10 @@ test-nilpy: $(COMPILER)
 	# (not a runtime-219 crash) for a class declaring neither.
 	./$(COMPILER) test/test_nilpy_divmod_dunder.npy /tmp/test_nilpy_divmod26
 	/tmp/test_nilpy_divmod26 | diff -u test/test_nilpy_divmod_dunder.expected -
+	# repr() of a USER object: it had no overload, so a class handle was read as
+	# a string and answered ''. Covers direct-vs-boxed and the retain hazard.
+	./$(COMPILER) test/test_nilpy_repr_of_user_object.npy /tmp/test_nilpy_reprobj26
+	/tmp/test_nilpy_reprobj26 | diff -u test/test_nilpy_repr_of_user_object.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

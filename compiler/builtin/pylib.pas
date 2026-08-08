@@ -464,6 +464,16 @@ function repr(c: Char): AnsiString; overload;
 function repr(const v: Variant): AnsiString; overload;
 function repr(l: TPyList): AnsiString; overload;
 function repr(dc: TPyDict): AnsiString; overload;
+{ ...and a USER class instance, which had NO overload at all: a class handle
+  matched the AnsiString one and was read as a managed string, so `repr(c)`
+  answered the EMPTY string — silently, and only for a STATICALLY class-typed
+  argument. `repr([c])` was already right, because a boxed element reaches
+  pyvar_repr, and `str(c)` / `print(c)` were right because those have their own
+  class arm in the frontend. An overload rather than a frontend intrinsic, per
+  the note above: the ordinary resolution machinery does the dispatch, and
+  TPyList/TPyDict keep their exact-match overloads.
+  bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash }
+function repr(o: TObject): AnsiString; overload;
 { Python's repr() of a CONTAINER. print(xs) is the most natural debugging line
   in Python, and it used to print the TPyList instance POINTER — the container
   fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
@@ -9103,6 +9113,29 @@ begin
   Result := pydict_repr(dc);
 end;
 
+function repr(o: TObject): AnsiString; overload;
+var v: Variant;
+begin
+  { straight to pyvar_repr, the same renderer a boxed element already used —
+    so `repr(c)` and `repr([c])[1:-1]` cannot disagree, and a class with no
+    __repr__ gets CPython's `<__main__.C object at 0x..>` shape for free
+    instead of a second, divergent default.
+
+    The boxing is INLINE, not a call to PyObjAsVar: that helper is defined ~900
+    lines below with no entry in this unit's top declaration block, so calling
+    it from here is a forward use — which does not fail to compile, it links to
+    a plausible-looking wrong address and crashes far away. pyvar_repr itself
+    IS declared up top, so that call is fine.
+
+    The RETAIN matters for the same reason it does there: `v` is a local, so
+    its scope exit releases the object-tagged slot, and without the retain
+    `repr(c)` would hand back a net release of the caller's `c`. }
+  PPyVarRec(@v)^.VType := 7;
+  PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(o)));
+  PXXObjRetain(Pointer(o));
+  Result := pyvar_repr(v);
+end;
+
 function pyabs_v(const v: Variant): Variant;
 var t: Int64; d: Double; i: Int64;
     ds: AnsiString; pa: array[0..1] of NativeInt;
@@ -10039,12 +10072,20 @@ begin
 end;
 
 { Box an object handle as a VT_OBJECT variant, for handing the REFLECTED operand
-  to a Variant-shaped dunder. No retain: the variant is a borrowed view that
-  lives only for the duration of the call below it. }
-procedure PyObjAsVarBorrowed(o: TObject; var v: Variant);
+  to a Variant-shaped dunder.
+
+  It RETAINS. The first version did not — "the variant is only a borrowed view
+  for the call below it" — and that is wrong, because the variant is a LOCAL:
+  its scope exit runs PXXVarClear, which releases an object-tagged slot. So
+  boxing without a retain hands back a net release of the CALLER's object.
+  Measured as `repr(c)` followed by `repr([c])` on the same variable —
+  the first call freed `c` and the second read freed memory (SIGSEGV). Each on
+  its own was fine, which is what makes this shape easy to ship. }
+procedure PyObjAsVar(o: TObject; var v: Variant);
 begin
   PPyVarRec(@v)^.VType := 7;
   PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(o)));
+  PXXObjRetain(Pointer(o));
 end;
 
 function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
@@ -10056,7 +10097,7 @@ begin
     which is what makes `plain_obj == H(3)` still consult H's. }
   PyUserObjEq := PyUserObjBoolDunder(pobj, qobj, qv, '__eq__', res);
   if PyUserObjEq then Exit;
-  PyObjAsVarBorrowed(pobj, pv);
+  PyObjAsVar(pobj, pv);
   PyUserObjEq := PyUserObjBoolDunder(qobj, pobj, pv, '__eq__', res);
 end;
 
@@ -10072,7 +10113,7 @@ var pv: Variant;
 begin
   PyUserObjGt := PyUserObjBoolDunder(pobj, qobj, qv, '__gt__', res);
   if PyUserObjGt then Exit;
-  PyObjAsVarBorrowed(pobj, pv);
+  PyObjAsVar(pobj, pv);
   PyUserObjGt := PyUserObjBoolDunder(qobj, pobj, pv, '__lt__', res);
 end;
 

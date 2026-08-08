@@ -1,0 +1,68 @@
+# bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash — the repr() row.
+#
+# `repr(c)` on a STATICALLY class-typed value answered the EMPTY string. repr()
+# is a set of thin per-type overloads and there was none for a user class, so a
+# class handle matched the AnsiString one and was read as a managed string.
+# Silent, and only on that one path: `repr([c])` was already right (a boxed
+# element reaches pyvar_repr) and `str(c)` / `print(c)` were right (those have
+# their own class arm in the frontend). Three spellings, one of them wrong, is
+# what makes the direct-vs-boxed pair below the point of this test.
+#
+# The survey ticket recorded this as a COMPILE error ("undefined variable
+# (repr)"); by 2026-08-09 it had become a silent empty string, i.e. it got
+# worse while nobody was looking. Hence the assertion on the value.
+#
+# Also pins two hazards the fix walked into:
+#   * repr() of a class with NO __repr__ must not crash — CPython prints
+#     `<__main__.C object at 0x..>`, which carries an address and so is checked
+#     only for its shape (prefix/suffix), not compared literally.
+#   * `repr(c)` then `repr([c])` on the SAME variable. The first version boxed
+#     the object into a local variant without retaining it, so the scope exit
+#     released the CALLER's object and the second line read freed memory
+#     (SIGSEGV). Each line alone was fine — the sequence is the test.
+#
+# Expectations are CPython's own output.
+
+
+class C:
+    def __init__(self, v: int):
+        self.v = v
+
+    def __repr__(self) -> str:
+        return "C(" + str(self.v) + ")"
+
+
+class S:
+    # __str__ only: repr() must NOT use it (CPython falls back to the default
+    # object repr), while str() must.
+    def __init__(self, v: int):
+        self.v = v
+
+    def __str__(self) -> str:
+        return "S" + str(self.v)
+
+
+class Bare:
+    pass
+
+
+c = C(1)
+
+# the direct path that was empty, and the boxed one that already worked
+print("direct  ", repr(c))
+print("boxed   ", repr([c]))
+print("again   ", repr(c))          # same variable after a boxing call: no use-after-free
+print("nested  ", repr([c, c]))
+print("str     ", str(c))
+print("print   ", c)
+
+# scalars and containers keep their own overloads
+print("scalars ", repr(3), repr("ab"), repr(1.5), repr(True))
+print("conts   ", repr([1, 2]), repr((1, 2)), repr({"a": 1}))
+
+# a class with __str__ but no __repr__: str() uses it, repr() does not
+print("str-only", str(S(2)))
+
+# no __repr__ at all — shape only, the address is not reproducible
+r = repr(Bare())
+print("default ", r.startswith("<"), r.endswith(">"), "Bare" in r)
