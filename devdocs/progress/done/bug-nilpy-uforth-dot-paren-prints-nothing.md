@@ -150,4 +150,4 @@ of this arc, 8/11 before this fix). Only `tests/_drv_file.fth` differs, on the
 FILE word set — described above and still open.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 8220f5cb3.
