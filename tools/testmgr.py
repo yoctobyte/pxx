@@ -987,7 +987,16 @@ def classify(lines):
     if "run_c_conformance" in text:
         return "conformance"
     if ("library_candidates" in text or "lua_runner" in text
-            or "sqlite" in text or "zlib" in text or "/lua/" in text):
+            or "sqlite" in text or "zlib" in text or "/lua/" in text
+            # uforth is a corpus like the others, it just lives outside
+            # library_candidates (it is its own repo at $(UFORTH_SRC)), so the
+            # path heuristic missed it and it fell through to `unit` — a 90s
+            # timeout. That was survivable at 46s; enrolling Gerry Jackson's 13
+            # ANS word sets took the job past TEN MINUTES, so testmgr killed it
+            # and published a RED that was purely the harness misjudging the
+            # class. Same false-red family as the rest of today: a job that did
+            # not finish is not a job that failed.
+            or "uforth" in text):
         return "corpus"
     if "run_target.sh" in text or "qemu" in text:
         return "qemu"
