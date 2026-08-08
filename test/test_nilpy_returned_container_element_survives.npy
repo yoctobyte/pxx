@@ -1,0 +1,99 @@
+# A function that returns a CONTAINER ELEMENT hands the caller a borrow. The ARC
+# model read any AN_CALL as an already-owned +1 — and a Python subscript IS an
+# AN_CALL, so `return store[k]` skipped its return-retain. The caller's local
+# then released at scope exit and the container's own reference died: correct
+# right up until the calling function RETURNED, then the element was gone.
+# Nothing crashed; the container just quietly emptied.
+# bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released
+# Every expectation here is CPython's own output.
+
+# --- the shape that found it: annotated return of a dict element ---
+store = {}
+
+def ensure_list(k: int) -> list:
+    if k not in store:
+        store[k] = [1, 2, 3]
+    return store[k]
+
+def use_list():
+    t = ensure_list(1)
+    t[1] = 5
+
+use_list()
+print(len(store[1]), store[1])
+
+# --- same, bytearray (uforth's block buffers are bytearrays) ---
+bstore = {}
+
+def ensure_bytes(k: int) -> bytearray:
+    if k not in bstore:
+        bstore[k] = bytearray(4)
+    return bstore[k]
+
+def use_bytes():
+    t = ensure_bytes(1)
+    t[0] = 9
+
+use_bytes()
+print(len(bstore[1]), bstore[1][0])
+
+# --- element of a LIST rather than a dict ---
+rows = []
+
+def ensure_row() -> bytearray:
+    if len(rows) == 0:
+        rows.append(bytearray(4))
+    return rows[0]
+
+def use_row():
+    t = ensure_row()
+    t[3] = 7
+
+use_row()
+print(len(rows[0]), rows[0][3])
+
+# --- through a METHOD, and the slice-assign form uforth actually uses ---
+class Store:
+    def __init__(self):
+        self.blocks = {}
+        self.mem = bytearray(16)
+
+    def block(self, k: int) -> bytearray:
+        if k not in self.blocks:
+            self.blocks[k] = bytearray(8)
+        return self.blocks[k]
+
+    def flush(self, k: int):
+        self.block(k)[:] = self.mem[8:16]
+
+s = Store()
+for i in range(16):
+    s.mem[i] = i
+s.flush(1)
+print(len(s.blocks[1]), s.blocks[1][0], s.blocks[1][7])
+
+# --- the OTHER side of the same predicate must not regress: a returned
+# construction is already owned and must NOT be retained again, or every call
+# leaks one ref. These are value checks; the leak itself is a scaling test and
+# lives in the ticket, not here.
+def fresh() -> list:
+    return [4, 5, 6]
+
+def fresh_via_helper() -> list:
+    return make_one()
+
+def make_one():
+    return [7, 8]
+
+print(fresh(), fresh_via_helper())
+
+# a returned element must survive being handed on through a SECOND function too
+def passthrough(k: int) -> list:
+    return ensure_list(k)
+
+def use_passthrough():
+    t = passthrough(1)
+    t[2] = 11
+
+use_passthrough()
+print(store[1])

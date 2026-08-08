@@ -3,6 +3,8 @@ track: A
 prio: 55
 type: bug
 summary: "A NilPy function that returns a container element (`return store[k]`) hands the caller a BORROW the ARC model treats as owned: the caller's local releases it at scope exit and the container's own reference dies. Root cause measured — the dict/list index lowers to an AN_CALL, and IRNodeYieldsOwnedRef reads any AN_CALL as +1, so the return-retain is skipped."
+status: working
+owner: claude-A-uforth
 ---
 
 # A borrowed object returned out of a function is over-released

@@ -1245,6 +1245,11 @@ test-nilpy: $(COMPILER)
 	@# uforth's MARKER (1 own + 11 captures) is what found it.
 	./$(COMPILER) test/test_nilpy_escaping_closure_many_captures.npy /tmp/test_nilpy_closure_caps26
 	test "$$(/tmp/test_nilpy_closure_caps26)" = "$$(printf '843\n952\n1173\n1398\n2217\n1181\n1 2 3 108')"
+	@# a function returning a CONTAINER ELEMENT hands back a borrow, not a +1 --
+	@# the container's own reference must survive the caller's scope exit, and a
+	@# returned CONSTRUCTION must still not be retained twice
+	./$(COMPILER) test/test_nilpy_returned_container_element_survives.npy /tmp/test_nilpy_borrowret26
+	test "$$(/tmp/test_nilpy_borrowret26)" = "$$(printf '3 [1, 5, 3]\n4 9\n4 7\n8 8 15\n[4, 5, 6] [7, 8]\n[1, 5, 11]')"
 	# `nonlocal` through an ESCAPING closure: the by-ref capture used to be bound
 	# as a VALUE, so the body stored through the value-as-address and died. Now a
 	# heap CELL is bound, which also gives the escaped counter shared state.

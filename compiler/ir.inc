@@ -4024,12 +4024,24 @@ end;
   exclusion, the return arm took an unconditional +1, so `return Node(...)`
   leaked ~78 bytes an iteration while `x = Node(...); return x` was flat
   (bug-nilpy-returning-a-construction-leaks-one-ref). }
+{ The call must also YIELD A CLASS REFERENCE for its +1 to be the thing being
+  asked about. A Python subscript is an AN_CALL too — `store[k]` lowers to a
+  pylib accessor — but it returns a VARIANT, and the object pointer only appears
+  when lowering unboxes that variant. Unboxing does not retain: the container
+  still owns the reference, so the value is a BORROW wearing a call's clothes.
+  Reading it as owned meant `return store[k]` skipped its return-retain, the
+  caller's local released at scope exit, and the container's own reference died
+  — uforth's block word set segfaulted on the first FLUSH after an UPDATE
+  (bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released).
+  The two assignment arms already tested the RHS type before consulting this, so
+  the check only ever bites on the return arm, which did not. }
 function IRNodeYieldsOwnedRef(n: Integer): Boolean;
 begin
   IRNodeYieldsOwnedRef := (n >= 0) and
     ((ASTKind[n] = AN_CALL) or (ASTKind[n] = AN_VIRTUAL_CALL) or
      (ASTKind[n] = AN_INTF_CALL) or (ASTKind[n] = AN_CALL_IND) or
-     (ASTKind[n] = AN_METACLASS_NEW));
+     (ASTKind[n] = AN_METACLASS_NEW)) and
+    (IntToTypeKind(ASTTk[n]) = tyClass);
 end;
 
 function IRNodeIsPyStr(n: Integer): Boolean;
