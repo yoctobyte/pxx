@@ -81,7 +81,7 @@ stale when uforth moves. 10/10 byte-identical today.
 uforth job; `--tier native` unchanged in composition and wall time.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 44ba3b1d8.
 
 ---
 
