@@ -1339,6 +1339,10 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 	# set operators (&, |, -, ^) and PEP 584 dict union (|); expectation is CPython's own output
+	@# several classes declare a callable field of one name, with DIFFERENT
+	@# offsets: the class must be decided at RUN time, not hard-cast
+	./$(COMPILER) test/test_nilpy_variant_field_call_runtime_dispatch.npy /tmp/test_nilpy_vfcalldisp26
+	/tmp/test_nilpy_vfcalldisp26 | diff -u test/test_nilpy_variant_field_call_runtime_dispatch.expected -
 	@# __repr__/__str__ on a user instance reached only as a container ELEMENT
 	./$(COMPILER) test/test_nilpy_container_element_repr.npy /tmp/test_nilpy_celemrepr26
 	/tmp/test_nilpy_celemrepr26 | diff -u test/test_nilpy_container_element_repr.expected -

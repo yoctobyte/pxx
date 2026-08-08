@@ -8408,9 +8408,13 @@ end;
 
 { `v.field(args)` where `v` is a VARIANT and `field` holds a function value:
   unbox to the owning class, read the field, call through it. }
-function PyMakeVariantFieldCall(baseNode, ci: Integer; const fname: AnsiString;
-                                sigPi: Integer): Integer;
-var unboxArg, unboxCall, castNode, fieldNode, argsHead, lastArg, argNode, n: Integer;
+{ ONE arm of a variant field CALL: unbox the receiver, hard-cast it to `ci`,
+  read the field and call through it with the ALREADY-PARSED argument list.
+  Split out of PyMakeVariantFieldCall so several candidate classes can each get
+  an arm over the same arguments — see there. }
+function PyVariantFieldCallArm(baseNode, ci: Integer; const fname: AnsiString;
+                               sigPi, argsHead, n: Integer): Integer;
+var unboxArg, unboxCall, castNode, fieldNode: Integer;
     fldFi, fldTk, dispPi, dispArg: Integer;
 begin
   fldFi := FindUField(ci, fname);
@@ -8432,25 +8436,6 @@ begin
   ASTSOffset[fieldNode] := PyStoredName(fname);
   ASTSLen[fieldNode] := Length(fname);
   ASTTk[fieldNode] := fldTk;
-  Expect(tkLParen, '(');
-  argsHead := -1; lastArg := -1; n := 0;
-  while CurTok.Kind <> tkRParen do
-  begin
-    ParseArgExpr;
-    argNode := AllocNode(AN_ARG);
-    ASTLeft[argNode] := CurASTNode;
-    if argsHead = -1 then argsHead := argNode else ASTRight[lastArg] := argNode;
-    lastArg := argNode;
-    Inc(n);
-    if CurTok.Kind = tkComma then Next else Break;
-  end;
-  Expect(tkRParen, ')');
-  { sigPi < 0 = a variant field with no recorded signature (a plain class's
-    Callable field — see the second scan pass in the caller). There is nothing
-    to arity-check against, and the dispatcher below does not want one. }
-  if (sigPi >= 0) and (n <> Procs[sigPi].ParamCount) then
-    Error('Nil Python: .' + fname + '() takes ' +
-          PyIntLiteralText(Procs[sigPi].ParamCount) + ' argument(s)');
 
   { A `Callable[...]` FIELD is a VARIANT now (PyAnnTypeAt), so the slot may hold
     any of the four callable shapes and the ONE thing that tells them apart is
@@ -8498,6 +8483,112 @@ begin
     1-arg `-> None` shape (every uforth native word: `native(vm)`) is wrapped. }
   if (n = 1) and (Procs[sigPi].RetType = tyInteger) then
     Result := PyWrapClosureFieldCall(fieldNode, ASTLeft[argsHead], Result);
+end;
+
+{ `v.field(args)` where `v` is a VARIANT and `field` holds a function value.
+
+  Several classes may declare a field of that name, and they do NOT have to
+  agree on its OFFSET — a signature never was a statement about layout. The old
+  code hard-cast the receiver to whichever class the caller's scan settled on,
+  so a dispatch table holding instances of two classes read the field at the
+  wrong offset for one of them and jumped through whatever was there. The
+  ambiguity check could not catch it either: it compared the candidates'
+  SIGNATURES, and two classes can share a signature and still lay the field out
+  differently.
+
+  So the class is decided at RUN TIME — one `pyvarobj(v) is C ? <call as C> : ...`
+  arm per candidate, which is exactly how the sibling METHOD path already
+  dispatches (`dualCis` in the member scan) and how PyMakeVariantField reads a
+  field whose candidates disagree. The LAST candidate is the fallback arm, so a
+  receiver of none of these classes behaves as it did before rather than
+  becoming a new error.
+
+  The arguments are parsed ONCE and shared by every arm. Only one arm runs, so
+  the duplication is code size and not repeated evaluation — the same shape
+  PyWrapClosureFieldCall already builds around this call.
+  bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class }
+function PyMakeVariantFieldCall(baseNode, ci: Integer; const fname: AnsiString;
+                                sigPi: Integer): Integer;
+const MAX_FCALL_CANDS = 16;
+var argsHead, lastArg, argNode, n, i, nc: Integer;
+    armN, condN, pairN, tern, unboxArg, unboxCall: Integer;
+    cands: array[0..MAX_FCALL_CANDS - 1] of Integer;
+    sigs: array[0..MAX_FCALL_CANDS - 1] of Integer;
+    c, fi: Integer;
+begin
+  { every class that declares this name as a CALLABLE field — a recorded
+    procedural signature, or a variant slot (a plain class's Callable field) }
+  nc := 0;
+  for c := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[c] then Continue;
+    fi := FindUField(c, fname);
+    if fi < 0 then Continue;
+    if (UFldProcSig[fi] < 0) and (IntToTypeKind(UFldTk[fi]) <> tyVariant) then Continue;
+    { the INTRODUCER only: a parent that declares it already covers the subclass,
+      and its cast reaches the same slot }
+    if (UClsParent[c] >= 0) and (FindUField(UClsParent[c], fname) >= 0) then Continue;
+    if nc < MAX_FCALL_CANDS then
+    begin
+      cands[nc] := c; sigs[nc] := UFldProcSig[fi]; Inc(nc);
+    end;
+  end;
+  { the caller's pick stays the fallback, and is the only candidate when the
+    scan finds nothing it recognises }
+  if nc = 0 then begin cands[0] := ci; sigs[0] := sigPi; nc := 1; end;
+
+  Expect(tkLParen, '(');
+  argsHead := -1; lastArg := -1; n := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseArgExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    if argsHead = -1 then argsHead := argNode else ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    Inc(n);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  Expect(tkRParen, ')');
+  { arity is checkable only against a recorded signature; a variant field has
+    none and the runtime dispatcher does not want one }
+  if (sigPi >= 0) and (n <> Procs[sigPi].ParamCount) then
+    Error('Nil Python: .' + fname + '() takes ' +
+          PyIntLiteralText(Procs[sigPi].ParamCount) + ' argument(s)');
+
+  { one layout, one class: emit exactly what this used to emit }
+  if nc = 1 then
+  begin
+    Result := PyVariantFieldCallArm(baseNode, cands[0], fname, sigs[0], argsHead, n);
+    Exit;
+  end;
+
+  Result := PyForceVariant(PyVariantFieldCallArm(baseNode, cands[nc - 1], fname,
+                                                 sigs[nc - 1], argsHead, n));
+  for i := nc - 2 downto 0 do
+  begin
+    armN := PyForceVariant(PyVariantFieldCallArm(baseNode, cands[i], fname,
+                                                 sigs[i], argsHead, n));
+    unboxArg := AllocNode(AN_ARG);
+    ASTLeft[unboxArg] := baseNode;
+    unboxCall := AllocNode(AN_CALL);
+    ASTIVal[unboxCall] := FindProc('pyvarobj');
+    if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+    ASTTk[unboxCall] := Ord(tyPointer);
+    ASTLeft[unboxCall] := unboxArg;
+    condN := AllocNode(AN_IS_TEST);
+    ASTLeft[condN] := unboxCall;
+    ASTIVal[condN] := cands[i];
+    ASTTk[condN] := Ord(tyBoolean);
+    pairN := AllocNode(AN_PAIR);
+    ASTLeft[pairN] := armN;
+    ASTRight[pairN] := Result;
+    tern := AllocNode(AN_TERNARY);
+    ASTLeft[tern] := condN;
+    ASTRight[tern] := pairN;
+    ASTTk[tern] := Ord(tyVariant);
+    Result := tern;
+  end;
 end;
 
 { `w.meth(args)` where `w` is a VARIANT — a for-in loop variable, a list/dict

@@ -1,0 +1,44 @@
+# `v.field(args)` where `v` is a VARIANT and several classes declare a callable
+# field of that name — and they do NOT agree on its OFFSET.
+#
+# The old code hard-cast the receiver to whichever class the caller's scan
+# settled on, so a dispatch table holding instances of two classes read the
+# field at the wrong offset for one of them and jumped through whatever was
+# there. The ambiguity check could not catch it: it compared the candidates'
+# SIGNATURES, and a signature never was a statement about layout.
+#
+# The class is now decided at RUN TIME — one `pyvarobj(v) is C ? <call as C>`
+# arm per candidate, which is how the sibling METHOD path already dispatches and
+# how PyMakeVariantField already reads a field whose candidates disagree.
+#
+# The layouts here are deliberately different (DC has one field before `native`,
+# PC has two) — with matching layouts the bug hides, which is why it survived.
+# bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class
+
+from dataclasses import dataclass
+from typing import Optional, Callable
+
+
+@dataclass
+class DC:
+    name: str
+    native: Optional[Callable[[int], None]] = None
+
+
+class PC:
+    def __init__(self, tag, extra, native=None):
+        self.tag = tag
+        self.extra = extra
+        self.native = native
+
+
+def one(k):
+    print("one", k)
+
+
+def two(k):
+    print("two", k)
+
+
+for x in [DC("a", one), PC("b", "z", two)]:
+    x.native(7)
