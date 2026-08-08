@@ -1,0 +1,86 @@
+# bug-nilpy-local-reassigned-across-classes-keeps-one-static-class
+#
+# A name assigned instances of two UNRELATED classes kept ONE static class
+# identity (PXXDBG=n.locals reported `o tk=6 rec=1`, tyClass — not a variant),
+# so BOTH member accesses compiled against that one class's layout. The access
+# on the instance of the other class then read a field at the wrong offset and
+# jumped through whatever was there: SIGSEGV before printing anything.
+#
+# It only bites when the layouts DIFFER, which is why same-offset shapes hid it.
+# The classes below are deliberately mismatched in field order and count.
+#
+# The fix widens such a name to a variant (the dynamic path) instead of picking
+# a winner. The CONTROL matters as much as the repro: a name refined to a
+# SUBCLASS must KEEP its static class, since that is the case the "take the
+# latest resolved class" rule was added for (a `with open(...) as f` reused for
+# a later `f = open(...)`; test_nilpy_with_name_reuse pins that one directly).
+#
+# Expectations are CPython's own output.
+
+
+def plain(x):
+    print("plain", x)
+
+
+class Alpha:
+    def __init__(self, name, native=None):
+        self.name = name
+        self.native = native
+
+    def who(self):
+        return "Alpha:" + self.name
+
+
+class Beta:
+    # different field COUNT and ORDER, so `native` cannot land on Alpha's offset
+    def __init__(self, name, native=None):
+        self.pad_a = 111
+        self.pad_b = 222
+        self.native = native
+        self.name = name
+
+    def who(self):
+        return "Beta:" + self.name
+
+
+class Base:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def label(self):
+        return "base:" + self.tag
+
+
+class Derived(Base):
+    def label(self):
+        return "derived:" + self.tag
+
+
+# --- the repro: one name, two unrelated classes ---
+o = Alpha("a", plain)
+o.native(1)
+print(o.who())
+print(o.name)
+
+o = Beta("b", plain)
+o.native(2)
+print(o.who())
+print(o.name)
+
+# back again, and the field that is NOT the callable
+o = Alpha("c", plain)
+print(o.who(), o.name)
+
+# --- control: refinement to a SUBCLASS keeps working ---
+r = Base("x")
+print(r.label())
+r = Derived("y")
+print(r.label())
+
+# --- control: a plain non-class rebind still widens (test_nilpy_rebind_type) ---
+s = "str"
+print(s)
+s = Alpha("z", plain)
+print(s.who())
+s = 42
+print(s + 1)

@@ -25,6 +25,14 @@ type
     Name: AnsiString;
     TypeKind: TTypeKind;
     RecCi: Integer;   { class index when TypeKind = tyClass, else -1 }
+    { Sticky: this name was assigned instances of two UNRELATED classes, so it
+      has no single static layout and must stay on the dynamic path. It has to
+      be its own flag rather than `RecCi = -1`, because the harvest loop runs to
+      a FIXPOINT: clearing RecCi alone lets the next round see "no class yet",
+      re-adopt the newest one, and report `changed` forever — the loop never
+      converges. Once True it is never cleared.
+      bug-nilpy-local-reassigned-across-classes-keeps-one-static-class }
+    Poly: Boolean;
   end;
 
 const
@@ -2838,20 +2846,45 @@ begin
     PyLocals[PyLocalCount].TypeKind := tk;
     if rec >= REC_UCLASS_BASE then PyLocals[PyLocalCount].RecCi := rec - REC_UCLASS_BASE
     else PyLocals[PyLocalCount].RecCi := -1;
+    PyLocals[PyLocalCount].Poly := False;
     Inc(PyLocalCount);
     PyTypingChanged := True;
     Exit;
   end;
   w := PyWiden(PyLocals[ci].TypeKind, tk);
+  { A name already known to hold UNRELATED classes never narrows back out of the
+    dynamic representation, whatever this one assignment says. }
+  if PyLocals[ci].Poly then w := tyVariant;
   if w <> PyLocals[ci].TypeKind then
   begin
     PyLocals[ci].TypeKind := w;
     PyTypingChanged := True;
   end;
-  if (PyLocals[ci].RecCi < 0) and (rec >= REC_UCLASS_BASE) then
+  { THIS is the third place that decides a local's class identity (the other two
+    are the harvest loops in PyCollectLocalsAST / PyCollectModuleLocalsAST), and
+    three mechanisms for one concept is why the first fix here did not hold: the
+    harvest set Poly and cleared RecCi, and then this site's old `RecCi < 0` test
+    read that as "no class known yet" and re-adopted the next one. A third
+    assignment back to the FIRST class was enough to undo the widening —
+    measured, `PXXDBG=n.locals` went from `o tk=22` (variant) back to
+    `o tk=6 rec=0`. So the rule lives in all three, and Poly is what they agree
+    on. bug-nilpy-local-reassigned-across-classes-keeps-one-static-class }
+  if (rec >= REC_UCLASS_BASE) and (not PyLocals[ci].Poly) then
   begin
-    PyLocals[ci].RecCi := rec - REC_UCLASS_BASE;
-    PyTypingChanged := True;
+    if PyLocals[ci].RecCi < 0 then
+    begin
+      PyLocals[ci].RecCi := rec - REC_UCLASS_BASE;
+      PyTypingChanged := True;
+    end
+    else if (PyLocals[ci].RecCi <> rec - REC_UCLASS_BASE) and
+            (not IsSubclassOf(rec - REC_UCLASS_BASE, PyLocals[ci].RecCi)) and
+            (not IsSubclassOf(PyLocals[ci].RecCi, rec - REC_UCLASS_BASE)) then
+    begin
+      PyLocals[ci].Poly := True;
+      PyLocals[ci].RecCi := -1;
+      PyLocals[ci].TypeKind := tyVariant;
+      PyTypingChanged := True;
+    end;
   end;
 end;
 
@@ -9678,11 +9711,17 @@ begin
       mmi := FindUField(ci, mname);
       if mmi < 0 then Continue;
       if UFldProcSig[mmi] < 0 then Continue;
-      if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; end
-      else if UFldProcSig[mmi] <> UFldProcSig[hitMmi] then
-        Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
-          + 'ambiguous (several classes declare that field) — assign to an '
-          + 'annotated local first');
+      { A second class declaring the name is NOT ambiguous any more:
+        PyMakeVariantFieldCall re-scans every candidate and emits one
+        `pyvarobj(v) is C ? <call as C> : ...` arm each, carrying that
+        candidate's own signature. This guard predates that dispatch and was
+        rejecting programs the callee can now compile — it is what turned the
+        segfault in
+        bug-nilpy-local-reassigned-across-classes-keeps-one-static-class into a
+        hard error once the receiver was correctly widened to a variant.
+        The first hit stays as the FALLBACK class for a receiver that is none of
+        the candidates. }
+      if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; end;
     end;
     { A signature is recorded only for a @dataclass field. A PLAIN class's
       `Callable` field gets its type from the `__init__` parameter it is
@@ -9706,11 +9745,11 @@ begin
         mmi := FindUField(ci, mname);
         if mmi < 0 then Continue;
         if IntToTypeKind(UFldTk[mmi]) <> tyVariant then Continue;
-        if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; end
-        else
-          Error('Nil Python: .' + mname + '() on a dynamically-typed value is '
-            + 'ambiguous (several classes declare that field) — assign to an '
-            + 'annotated local first');
+        { same as the signature pass above: several classes declaring a
+          variant Callable field of this name is exactly the shape
+          PyMakeVariantFieldCall dispatches at run time. Keep the first as the
+          fallback arm. }
+        if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; end;
       end;
     if hitCi >= 0 then
     begin
@@ -16795,6 +16834,7 @@ end;
 procedure PyCollectLocalsAST(bodyStart: Integer);
 var rnd, i, si, savedTok, savedAST, savedSC, savedCur, savedFS: Integer;
     savedDefInit: Integer;
+    newCi, oldCi: Integer;
     changed: Boolean;
     tk, w: TTypeKind;
     nm: AnsiString;
@@ -16853,6 +16893,7 @@ begin
           PyLocals[PyLocalCount].RecCi := Syms[i].RecName - REC_UCLASS_BASE
         else
           PyLocals[PyLocalCount].RecCi := -1;
+        PyLocals[PyLocalCount].Poly := False;
         Inc(PyLocalCount);
         changed := True;
       end
@@ -16874,11 +16915,38 @@ begin
           bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory,
           via a different trigger than that ticket's write() overload). Take
           the latest resolved class whenever it differs. }
-        if (Syms[i].RecName >= REC_UCLASS_BASE) and
-           (PyLocals[si].RecCi <> Syms[i].RecName - REC_UCLASS_BASE) then
+        { ...but "the latest" is only right when the two classes are RELATED,
+          i.e. one refines the other. A name that genuinely holds instances of
+          two UNRELATED classes has no single static layout, and picking either
+          one makes every member access on the other read a field at the wrong
+          offset -- `o = DC(...); o.native(1); o = PC(...); o.native(2)`
+          segfaulted before printing anything, because it JUMPED through
+          whatever sat at DC's `native` offset inside a PC.
+          (It only bites when the layouts differ, which is why it hid for so
+          long behind same-offset shapes.) The honest answer there is the one
+          the method and field scans already reach: no single answer, so go
+          dynamic. Poly is sticky -- see TPyLocalConstraint.
+          bug-nilpy-local-reassigned-across-classes-keeps-one-static-class }
+        if (Syms[i].RecName >= REC_UCLASS_BASE) and (not PyLocals[si].Poly) then
         begin
-          PyLocals[si].RecCi := Syms[i].RecName - REC_UCLASS_BASE;
-          changed := True;
+          newCi := Syms[i].RecName - REC_UCLASS_BASE;
+          oldCi := PyLocals[si].RecCi;
+          if oldCi <> newCi then
+          begin
+            if (oldCi >= 0) and (not IsSubclassOf(newCi, oldCi))
+                            and (not IsSubclassOf(oldCi, newCi)) then
+            begin
+              PyLocals[si].Poly := True;
+              PyLocals[si].RecCi := -1;
+              PyLocals[si].TypeKind := tyVariant;
+              changed := True;
+            end
+            else
+            begin
+              PyLocals[si].RecCi := newCi;
+              changed := True;
+            end;
+          end;
         end;
       end;
     end;
@@ -17051,6 +17119,7 @@ end;
 
 procedure PyCollectModuleLocalsAST;
 var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
+    newCi, oldCi: Integer;
     savedTok, savedAST, savedSC, savedCur, savedFS, savedBSS: Integer;
     changed, savedExprMode: Boolean;
     tk, w, forElemTk: TTypeKind;
@@ -17533,6 +17602,7 @@ begin
           PyLocals[PyLocalCount].RecCi := Syms[i].RecName - REC_UCLASS_BASE
         else
           PyLocals[PyLocalCount].RecCi := -1;
+        PyLocals[PyLocalCount].Poly := False;
         Inc(PyLocalCount);
         changed := True;
       end
@@ -17554,11 +17624,38 @@ begin
           bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory,
           via a different trigger than that ticket's write() overload). Take
           the latest resolved class whenever it differs. }
-        if (Syms[i].RecName >= REC_UCLASS_BASE) and
-           (PyLocals[si].RecCi <> Syms[i].RecName - REC_UCLASS_BASE) then
+        { ...but "the latest" is only right when the two classes are RELATED,
+          i.e. one refines the other. A name that genuinely holds instances of
+          two UNRELATED classes has no single static layout, and picking either
+          one makes every member access on the other read a field at the wrong
+          offset -- `o = DC(...); o.native(1); o = PC(...); o.native(2)`
+          segfaulted before printing anything, because it JUMPED through
+          whatever sat at DC's `native` offset inside a PC.
+          (It only bites when the layouts differ, which is why it hid for so
+          long behind same-offset shapes.) The honest answer there is the one
+          the method and field scans already reach: no single answer, so go
+          dynamic. Poly is sticky -- see TPyLocalConstraint.
+          bug-nilpy-local-reassigned-across-classes-keeps-one-static-class }
+        if (Syms[i].RecName >= REC_UCLASS_BASE) and (not PyLocals[si].Poly) then
         begin
-          PyLocals[si].RecCi := Syms[i].RecName - REC_UCLASS_BASE;
-          changed := True;
+          newCi := Syms[i].RecName - REC_UCLASS_BASE;
+          oldCi := PyLocals[si].RecCi;
+          if oldCi <> newCi then
+          begin
+            if (oldCi >= 0) and (not IsSubclassOf(newCi, oldCi))
+                            and (not IsSubclassOf(oldCi, newCi)) then
+            begin
+              PyLocals[si].Poly := True;
+              PyLocals[si].RecCi := -1;
+              PyLocals[si].TypeKind := tyVariant;
+              changed := True;
+            end
+            else
+            begin
+              PyLocals[si].RecCi := newCi;
+              changed := True;
+            end;
+          end;
         end;
       end;
     end;

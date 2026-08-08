@@ -560,6 +560,11 @@ test-nilpy: $(COMPILER)
 	# rebinding a name across types widens to a variant, as Python allows
 	./$(COMPILER) test/test_nilpy_rebind_type.npy /tmp/test_nilpy_rebind_type26
 	test "$$(/tmp/test_nilpy_rebind_type26)" = "$$(printf 'plain string\nholder:one\n43\nback to a string')"
+	# ...and rebinding across two UNRELATED CLASSES widens too: keeping one
+	# static class read the other's fields at the wrong offset (SIGSEGV).
+	# Includes the subclass-refinement control that must NOT widen.
+	./$(COMPILER) test/test_nilpy_rebind_across_unrelated_classes.npy /tmp/test_nilpy_rebind_cls26
+	/tmp/test_nilpy_rebind_cls26 | diff -u test/test_nilpy_rebind_across_unrelated_classes.expected -
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
@@ -5065,6 +5070,11 @@ test-core: $(COMPILER)
 	# rebinding a name across types widens to a variant, as Python allows
 	./$(COMPILER) test/test_nilpy_rebind_type.npy /tmp/test_nilpy_rebind_type26
 	test "$$(/tmp/test_nilpy_rebind_type26)" = "$$(printf 'plain string\nholder:one\n43\nback to a string')"
+	# ...and rebinding across two UNRELATED CLASSES widens too: keeping one
+	# static class read the other's fields at the wrong offset (SIGSEGV).
+	# Includes the subclass-refinement control that must NOT widen.
+	./$(COMPILER) test/test_nilpy_rebind_across_unrelated_classes.npy /tmp/test_nilpy_rebind_cls26
+	/tmp/test_nilpy_rebind_cls26 | diff -u test/test_nilpy_rebind_across_unrelated_classes.expected -
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26

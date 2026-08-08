@@ -58,7 +58,6 @@ _none_
 | bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
-| bug-nilpy-local-reassigned-across-classes-keeps-one-static-class | N | 45 | bug | SILENT->CRASH: a local assigned instances of two unrelated classes keeps ONE static class identity, so every member access uses that layout. `o = DC(...)` then `o = PC(...)` reads o.native at DC's offset for both — a segfault when the layouts differ. | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
@@ -229,6 +228,7 @@ _none_
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
+| refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -364,9 +364,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1512)
+## done (1513)
 
-1512 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1513 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -455,7 +455,6 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 3)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
-- [p 45] [N] bug-nilpy-local-reassigned-across-classes-keeps-one-static-class
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
@@ -537,6 +536,7 @@ _none_
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
+- [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-nilpy-augmented-subscript-evaluates-its-index-twice
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
