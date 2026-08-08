@@ -118,6 +118,7 @@ function pyfilter_call(key: Pointer; l: TPyList): TPyList;
   magic-sentinel closure object Word.native already dispatches on. }
 function pyclosure_src_new(const params, src: AnsiString): Pointer;
 function pyclosure_src_cap(obj: Pointer; const name: AnsiString; const v: Variant): Pointer;
+function pyclosure_setarity(obj: Pointer; req, tot: Int64): Pointer;
 
 { BOUND COMPILED FUNCTION: a nested def taken as a value whose captures must
   travel with it (uforth's MARKER: `def restore(v): ...snapshot locals...;
@@ -273,17 +274,44 @@ type
   TIFn0 = function(self: Pointer): Int64;
   TIFn1 = function(self: Pointer; const a: Variant): Int64;
   TIFn2 = function(self: Pointer; const a, b: Variant): Int64;
-  { Pointer-family shape: every param is a pointer-sized register value
-    (int/int64/bool/char/pointer/class/AnsiString-by-value), passed as an Int64 in
-    an integer register, result an Int64 (a class/pointer return, or an ordinal).
-    Covers annotated host methods like `define_word(name: str, native: Callable,
-    forth_body, immediate: bool) -> Word` that the all-Variant path cannot call. }
+  { Register-family shape: every param travels as ONE pointer-sized value in an
+    integer register, so one set of thunk types calls them all —
+    int/int64/bool/char/pointer/class directly, AnsiString as its data pointer,
+    and a VARIANT as the ADDRESS of its 16-byte slot, which is precisely how pxx
+    passes `const a: Variant` (see TVFn1 above: same ABI, spelled differently).
+
+    That last one is why this is not "the pointer family" any more. It used to
+    refuse a signature that MIXED a variant with scalars, and uforth's
+    `define_word(name: str, native: Optional[Callable], forth_body,
+    immediate: bool) -> Word` is exactly that: `native` became a variant when a
+    `Callable` parameter did (bug-nilpy-bound-method-cannot-pass-through-a-
+    callable-parameter), leaving the signature in neither family and every call
+    dead with "unsupported param shape".
+    bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape
+
+    Three RESULT flavours, because a result — unlike an argument — does not fit
+    one register for every kind: an Int64 (ordinal / class / pointer), a Variant
+    (hidden destination), an AnsiString (managed). The Int64 one used to be the
+    only thunk here, so an AnsiString-returning method in this family had its
+    string handle boxed by pyvar_of_int and came back as an INTEGER. }
   TPFn0 = function(self: Pointer): Int64;
   TPFn1 = function(self: Pointer; a: Int64): Int64;
   TPFn2 = function(self: Pointer; a, b: Int64): Int64;
   TPFn3 = function(self: Pointer; a, b, c: Int64): Int64;
   TPFn4 = function(self: Pointer; a, b, c, d: Int64): Int64;
   TPFn5 = function(self: Pointer; a, b, c, d, e: Int64): Int64;
+  TPVFn0 = function(self: Pointer): Variant;
+  TPVFn1 = function(self: Pointer; a: Int64): Variant;
+  TPVFn2 = function(self: Pointer; a, b: Int64): Variant;
+  TPVFn3 = function(self: Pointer; a, b, c: Int64): Variant;
+  TPVFn4 = function(self: Pointer; a, b, c, d: Int64): Variant;
+  TPVFn5 = function(self: Pointer; a, b, c, d, e: Int64): Variant;
+  TPSFn0 = function(self: Pointer): AnsiString;
+  TPSFn1 = function(self: Pointer; a: Int64): AnsiString;
+  TPSFn2 = function(self: Pointer; a, b: Int64): AnsiString;
+  TPSFn3 = function(self: Pointer; a, b, c: Int64): AnsiString;
+  TPSFn4 = function(self: Pointer; a, b, c, d: Int64): AnsiString;
+  TPSFn5 = function(self: Pointer; a, b, c, d, e: Int64): AnsiString;
 
 { ---- variant makers (build via pointer writes -> safe as functions) ---- }
 
@@ -657,9 +685,18 @@ var
   sf0: TSFn0; sf1: TSFn1; sf2: TSFn2;
   if0: TIFn0; if1: TIFn1; if2: TIFn2;
   pf0: TPFn0; pf1: TPFn1; pf2: TPFn2; pf3: TPFn3; pf4: TPFn4; pf5: TPFn5;
+  pvf0: TPVFn0; pvf1: TPVFn1; pvf2: TPVFn2; pvf3: TPVFn3; pvf4: TPVFn4; pvf5: TPVFn5;
+  psf0: TPSFn0; psf1: TPSFn1; psf2: TPSFn2; psf3: TPSFn3; psf4: TPSFn4; psf5: TPSFn5;
   ptrFamily: Boolean;
   pa: array[0..4] of Int64;
   psHold: array[0..4] of AnsiString;   { keep AnsiString-by-value args alive across the call }
+  { VARIANT args, whose ADDRESS is what travels. A raw TPyRec, deliberately NOT
+    a Variant: this is a marshalling BUFFER, not an owner. The value is owned by
+    `args` for the whole call, and a managed Variant local here would release it
+    a second time on the way out — the callee's own copy then dangled and the
+    block came back as some list's element storage, so calling through it jumped
+    into a variant array. `-dPXX_HEAP_DEBUG` says WRITE AFTER FREE. }
+  pvHold: array[0..4] of TPyRec;
   pret: Int64;
 begin
   cls := GetInstanceRTTI(vmobj);
@@ -708,16 +745,48 @@ begin
     if ptrFamily then
       for i := 1 to n do
         if not ((pk[i] = 1) or (pk[i] = 2) or (pk[i] = 3) or (pk[i] = 13) or
-                (pk[i] = 17) or (pk[i] = 6) or (pk[i] = 23)) then ptrFamily := False;
+                (pk[i] = 17) or (pk[i] = 6) or (pk[i] = 23) or
+                (pk[i] = TK_VARIANT)) then ptrFamily := False;
     if not ptrFamily then
     begin
-      writeln('pyeval: host method ', name, ' has an unsupported param shape');
+      { Name the offending parameter. "unsupported param shape" on its own cost
+        a bisect to turn into a sentence, and the shape is the whole question. }
+      writeln('pyeval: host method ', name, ' has an unsupported param shape',
+              ' (arity ', n, '), kinds:');
+      if pk <> nil then
+        for i := 1 to n do
+          writeln('  param ', i, ' kind ', pk[i]);
       Halt(1);
     end;
     for i := 0 to 4 do pa[i] := 0;
     for i := 1 to n do
     begin
-      if (i - 1) >= nargs then
+      { A VARIANT param takes the ADDRESS of a 16-byte slot, which is what a
+        `const Variant` parameter means at the ABI. pvHold owns the slot for the
+        duration of the call — an `args.at()` temporary would not outlive the
+        expression, and the callee reads through the pointer. Same reason
+        psHold exists for an AnsiString.
+
+        An OMITTED variant param is a real None (VT_EMPTY), NOT the zero the
+        other kinds default to: zero would be a NULL address and the callee
+        dereferences it unconditionally. `define_word("X", native=w)` omitting
+        `forth_body` and `wid` is the everyday case. }
+      if pk[i] = TK_VARIANT then
+      begin
+        if (i - 1) >= nargs then
+        begin
+          pvHold[i-1].VType := 0;          { VT_EMPTY — a real None, see below }
+          pvHold[i-1].Payload := 0;
+        end
+        else
+        begin
+          a0 := args.at(i-1);
+          pvHold[i-1].VType := PPyRec(@a0)^.VType;      { RAW copy: no retain, }
+          pvHold[i-1].Payload := PPyRec(@a0)^.Payload;  { and so no release }
+        end;
+        pa[i-1] := Int64(NativeInt(@pvHold[i-1]));
+      end
+      else if (i - 1) >= nargs then
         pa[i-1] := 0            { omitted -> per-kind zero default }
       else if pk[i] = 23 then
       begin
@@ -740,6 +809,35 @@ begin
         pa[i-1] := pyvar_to_int(args.at(i-1));   { int/int64/bool/char }
     end;
     code := mi^.Code;
+    { The RESULT decides the thunk, the arguments never do — they are all one
+      register wide by now. A Variant result comes back through the hidden
+      destination and an AnsiString is managed, so neither can be read out of
+      the Int64 thunk: `pyvar_of_int` on a string handle used to hand the caller
+      an INTEGER, silently. }
+    if rk = TK_VARIANT then
+    begin
+      case n of
+        0: begin pvf0 := TPVFn0(code); res := pvf0(vmobj); end;
+        1: begin pvf1 := TPVFn1(code); res := pvf1(vmobj, pa[0]); end;
+        2: begin pvf2 := TPVFn2(code); res := pvf2(vmobj, pa[0], pa[1]); end;
+        3: begin pvf3 := TPVFn3(code); res := pvf3(vmobj, pa[0], pa[1], pa[2]); end;
+        4: begin pvf4 := TPVFn4(code); res := pvf4(vmobj, pa[0], pa[1], pa[2], pa[3]); end;
+        5: begin pvf5 := TPVFn5(code); res := pvf5(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4]); end;
+      end;
+      Exit;
+    end;
+    if rk = 23 then
+    begin
+      case n of
+        0: begin psf0 := TPSFn0(code); res := MakeStr(psf0(vmobj)); end;
+        1: begin psf1 := TPSFn1(code); res := MakeStr(psf1(vmobj, pa[0])); end;
+        2: begin psf2 := TPSFn2(code); res := MakeStr(psf2(vmobj, pa[0], pa[1])); end;
+        3: begin psf3 := TPSFn3(code); res := MakeStr(psf3(vmobj, pa[0], pa[1], pa[2])); end;
+        4: begin psf4 := TPSFn4(code); res := MakeStr(psf4(vmobj, pa[0], pa[1], pa[2], pa[3])); end;
+        5: begin psf5 := TPSFn5(code); res := MakeStr(psf5(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4])); end;
+      end;
+      Exit;
+    end;
     case n of
       0: begin pf0 := TPFn0(code); pret := pf0(vmobj); end;
       1: begin pf1 := TPFn1(code); pret := pf1(vmobj, pa[0]); end;
@@ -1673,6 +1771,15 @@ type
       a FLAT statement stream at indent 0, run by a top-level loop rather than
       ExecSuite's after-a-colon suite grammar. }
     FlatSrc: Boolean;
+    { The legal argument-count RANGE, ReqN..TotN, or ReqN = -1 for "arity
+      unknown, do not check". Recorded by the builder rather than counted from
+      Params, because the two disagree: a closure built for a nested DEF binds
+      its defaults as captures and leaves them out of Params, so a count read
+      off Params under-counts and would reject a legal call. Only the lambda
+      lowering calls pyclosure_setarity, so every other builder stays lenient —
+      which is what keeps the callback bridges working. }
+    ReqN: Integer;
+    TotN: Integer;
   end;
   { A closure passed to a Callable/Pointer host param (uforth's
     `define_word(name, native=_w)`) is stored in the class's Pointer-typed field
@@ -1742,20 +1849,56 @@ end;
 
 { Pop a recycled registry row, or mint a fresh one. }
 function PyClosureAllocRow: Integer;
+{ Hand back a row in a DEFINED state. A recycled row used to arrive holding its
+  predecessor's BodyPos / FlatSrc / ReqN / TotN — precisely the four fields
+  PyEvalClosureFree does not clear AND PyMakeClosure does not set, so a nested
+  `def` captured as a value inherited them wholesale:
+
+    * ReqN/TotN — a recycled row from a LAMBDA (the only builder that calls
+      pyclosure_setarity) made the new closure claim the lambda's arity, so
+      uforth's `0 VALUE ii` died with "<lambda>() takes 0 positional arguments
+      but 1 were given" while its `def _w(vm2)` plainly takes one. Every builder
+      except the lambda lowering is meant to be LENIENT (ReqN = -1); this is
+      what silently made one of them strict, and strict about the wrong number.
+    * FlatSrc — a recycled row from pyclosure_src_new would run a nested def's
+      INDENTED body under the flat top-level grammar. Not observed in the wild,
+      same root, closed here rather than left to be found the hard way.
+
+  Resetting HERE rather than in each builder: the free path and the builders
+  between them covered five of the nine fields, and the four that fell through
+  are the ones no one owned. One owner, every field.
+  bug-nilpy-pyeval-lambda-host-word-arity-mismatch }
+var c: Integer;
 begin
   if ClosureFreeN > 0 then
   begin
     ClosureFreeN := ClosureFreeN - 1;
-    PyClosureAllocRow := ClosureFreeStk[ClosureFreeN];
-    Exit;
-  end;
-  if ClosureN >= Length(Closures) then
+    c := ClosureFreeStk[ClosureFreeN];
+  end
+  else
   begin
-    if Length(Closures) = 0 then SetLength(Closures, 8)
-    else SetLength(Closures, Length(Closures) * 2);
+    if ClosureN >= Length(Closures) then
+    begin
+      if Length(Closures) = 0 then SetLength(Closures, 8)
+      else SetLength(Closures, Length(Closures) * 2);
+    end;
+    c := ClosureN;
+    ClosureN := ClosureN + 1;
   end;
-  PyClosureAllocRow := ClosureN;
-  ClosureN := ClosureN + 1;
+  Closures[c].Kinds := nil;
+  Closures[c].Texts := nil;
+  Closures[c].Ints := nil;
+  Closures[c].Floats := nil;
+  Closures[c].NTok := 0;
+  Closures[c].BodyPos := 0;
+  Closures[c].Params := '';
+  SetLength(Closures[c].CapNames, 0);
+  SetLength(Closures[c].CapVals, 0);
+  Closures[c].CapN := 0;
+  Closures[c].FlatSrc := False;
+  Closures[c].ReqN := -1;      { lenient unless the builder says otherwise }
+  Closures[c].TotN := -1;
+  PyClosureAllocRow := c;
 end;
 
 function PyMakeClosureObj(cidx: Int64): Pointer;
@@ -1839,6 +1982,17 @@ type
     epilogue wrote 16 bytes over whatever it pointed at — a wild store on every
     lifted-bound-fn callback, which is how Tcl's own command table ended up
     corrupted ("invalid command name pxxcb") in a long-running Tk app. }
+  { ONE TYPE PER ARITY, 0..32, with no gaps. There used to be gaps (no TBF10,
+    no TBF12, nothing above 13) and the dispatch below rounded UP to the next
+    type it had — calling a 10-parameter body through TBF11. Measured: that
+    SEGFAULTS, it does not degrade to a wrong value, so every closure whose
+    own-params + captures landed on a missing arity crashed (uforth's MARKER
+    restore, 1 own + 11 captures = 12, took the ANS coreext word set with it).
+    Passing MORE arguments than the body declares is unsafe here whatever the
+    reason, so the rule is exact arity, never round up.
+    32 is the ceiling the frontend already
+    enforces on a lifted signature (MAX_PROC_PARAMS / "too many parameters
+    after capture"), so this table now covers everything that can reach it. }
   TBF0  = function: Variant;
   TBF1  = function(a0: Int64): Variant;
   TBF2  = function(a0, a1: Int64): Variant;
@@ -1849,8 +2003,29 @@ type
   TBF7  = function(a0, a1, a2, a3, a4, a5, a6: Int64): Variant;
   TBF8  = function(a0, a1, a2, a3, a4, a5, a6, a7: Int64): Variant;
   TBF9  = function(a0, a1, a2, a3, a4, a5, a6, a7, a8: Int64): Variant;
+  TBF10 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9: Int64): Variant;
   TBF11 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10: Int64): Variant;
+  TBF12 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11: Int64): Variant;
   TBF13 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12: Int64): Variant;
+  TBF14 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13: Int64): Variant;
+  TBF15 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14: Int64): Variant;
+  TBF16 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15: Int64): Variant;
+  TBF17 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16: Int64): Variant;
+  TBF18 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17: Int64): Variant;
+  TBF19 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18: Int64): Variant;
+  TBF20 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19: Int64): Variant;
+  TBF21 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20: Int64): Variant;
+  TBF22 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21: Int64): Variant;
+  TBF23 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22: Int64): Variant;
+  TBF24 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23: Int64): Variant;
+  TBF25 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24: Int64): Variant;
+  TBF26 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25: Int64): Variant;
+  TBF27 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26: Int64): Variant;
+  TBF28 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27: Int64): Variant;
+  TBF29 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28: Int64): Variant;
+  TBF30 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29: Int64): Variant;
+  TBF31 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30: Int64): Variant;
+  TBF32 = function(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31: Int64): Variant;
 const
   { Bound[] slot ownership — see TBoundFnObj.BKindMask. }
   BK_PLAIN   = 0;
@@ -2146,10 +2321,14 @@ var o: PBoundFnObj; b: PInt64; code: Pointer;
     va0, va1, va2: Variant;
     vd0, vd1, vd2: Variant;   { by-address slots for an OVERRIDDEN variant default }
     dv: Int64;
-    p: array[0..15] of Int64;
+    p: array[0..31] of Int64;
     n, i: Integer;
-    f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5; f6: TBF6;
-    f7: TBF7; f8: TBF8; f9: TBF9; f11: TBF11; f13: TBF13;
+    f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5;
+    f6: TBF6; f7: TBF7; f8: TBF8; f9: TBF9; f10: TBF10; f11: TBF11;
+    f12: TBF12; f13: TBF13; f14: TBF14; f15: TBF15; f16: TBF16; f17: TBF17;
+    f18: TBF18; f19: TBF19; f20: TBF20; f21: TBF21; f22: TBF22; f23: TBF23;
+    f24: TBF24; f25: TBF25; f26: TBF26; f27: TBF27; f28: TBF28; f29: TBF29;
+    f30: TBF30; f31: TBF31; f32: TBF32;
     rv: Variant;
 begin
   rv := pynone;
@@ -2159,17 +2338,17 @@ begin
   n := o^.NOwn;
   if n > nargs then n := nargs;
   if n > 3 then n := 3;
-  for i := 0 to 15 do p[i] := 0;
+  for i := 0 to 31 do p[i] := 0;
   if n > 0 then p[0] := PyBoundFnArgWord(o, a0, @va0);
   if n > 1 then p[1] := PyBoundFnArgWord(o, a1, @va1);
   if n > 2 then p[2] := PyBoundFnArgWord(o, a2, @va2);
   { a body declaring MORE own params than the caller passed still gets a slot
     per parameter -- zeroed, which is what an unsupplied argument reads as }
   n := o^.NOwn;
-  if n > 12 then n := 12;
+  if n > 31 then n := 31;
   b := @o^.Bound[0];
   for i := 0 to o^.NBound - 1 do
-    if n + i <= 15 then p[n + i] := b[i];
+    if n + i <= 31 then p[n + i] := b[i];
 
   { A DEFAULTED parameter is a bound slot the caller may override. Done after
     the bind copy above, deliberately: the default is written first and the
@@ -2178,7 +2357,7 @@ begin
     NOT NOwn+i, because a zero-parameter lambda carries a dummy own parameter
     the caller never counts. }
   for i := 0 to o^.NDef - 1 do
-    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 15) then
+    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 31) then
     begin
       dv := (o^.DefVarMask shr i) and 1;
       case o^.NDefBase + i of
@@ -2187,6 +2366,8 @@ begin
         2: p[n + i] := PyBoundFnDefWord(a2, dv, @vd2);
       end;
     end;
+  { EXACT arity only — see the TBF table. Never round up: a call with more
+    arguments than the body declares crashes it. }
   case n + o^.NBound of
     0: begin f0 := TBF0(code); rv := f0(); end;
     1: begin f1 := TBF1(code); rv := f1(p[0]); end;
@@ -2198,10 +2379,35 @@ begin
     7: begin f7 := TBF7(code); rv := f7(p[0], p[1], p[2], p[3], p[4], p[5], p[6]); end;
     8: begin f8 := TBF8(code); rv := f8(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]); end;
     9: begin f9 := TBF9(code); rv := f9(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]); end;
-    10, 11:
-      begin f11 := TBF11(code); rv := f11(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10]); end;
-    else
-      begin f13 := TBF13(code); rv := f13(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12]); end;
+    10: begin f10 := TBF10(code); rv := f10(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]); end;
+    11: begin f11 := TBF11(code); rv := f11(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10]); end;
+    12: begin f12 := TBF12(code); rv := f12(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]); end;
+    13: begin f13 := TBF13(code); rv := f13(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12]); end;
+    14: begin f14 := TBF14(code); rv := f14(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13]); end;
+    15: begin f15 := TBF15(code); rv := f15(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14]); end;
+    16: begin f16 := TBF16(code); rv := f16(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]); end;
+    17: begin f17 := TBF17(code); rv := f17(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]); end;
+    18: begin f18 := TBF18(code); rv := f18(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]); end;
+    19: begin f19 := TBF19(code); rv := f19(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18]); end;
+    20: begin f20 := TBF20(code); rv := f20(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19]); end;
+    21: begin f21 := TBF21(code); rv := f21(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20]); end;
+    22: begin f22 := TBF22(code); rv := f22(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21]); end;
+    23: begin f23 := TBF23(code); rv := f23(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22]); end;
+    24: begin f24 := TBF24(code); rv := f24(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23]); end;
+    25: begin f25 := TBF25(code); rv := f25(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24]); end;
+    26: begin f26 := TBF26(code); rv := f26(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25]); end;
+    27: begin f27 := TBF27(code); rv := f27(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26]); end;
+    28: begin f28 := TBF28(code); rv := f28(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27]); end;
+    29: begin f29 := TBF29(code); rv := f29(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28]); end;
+    30: begin f30 := TBF30(code); rv := f30(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29]); end;
+    31: begin f31 := TBF31(code); rv := f31(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29], p[30]); end;
+    32: begin f32 := TBF32(code); rv := f32(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29], p[30], p[31]); end;
+  else
+    { unreachable: the frontend refuses a lifted signature past 32 parameters.
+      Say so rather than returning None — a silent wrong answer here is how the
+      rounded-up call above stayed hidden for so long. }
+    raise TypeError.Create('closure call needs ' + pystr_of(n + o^.NBound)
+      + ' argument slots, past the 32 the runtime bridge can pass');
   end;
   res := rv;
 end;
@@ -2240,6 +2446,8 @@ begin
   SetLength(Closures[c].CapVals, 0);
   Closures[c].CapN := 0;
   Closures[c].FlatSrc := True;
+  Closures[c].ReqN := -1;          { unchecked unless pyclosure_setarity says otherwise }
+  Closures[c].TotN := -1;
   TkKind := sKinds; TkText := sTexts; TkInt := sInts; TkFloat := sFloats;
   TkN := sTkN; Cur := sCur; Src := sSrc; Pos := sPos; SLen := sSLen;
   pyclosure_src_new := PyMakeClosureObj(c);
@@ -2256,6 +2464,58 @@ begin
   Closures[c].CapVals[n] := v;
   Closures[c].CapN := n + 1;
   pyclosure_src_cap := obj;
+end;
+
+function pyclosure_setarity(obj: Pointer; req, tot: Int64): Pointer;
+{ Declare the closure's legal argument-count range. Chained after
+  pyclosure_src_new like the caps are, and emitted ONLY by the lambda lowering
+  — a builder that does not call this leaves ReqN = -1 and is never checked. }
+var c: Integer;
+begin
+  pyclosure_setarity := obj;
+  if obj = nil then Exit;
+  if not pyclosure_is(obj) then Exit;
+  c := Integer(PClosureObj(obj)^.Cidx);
+  if (c < 0) or (c >= ClosureN) then Exit;
+  Closures[c].ReqN := Integer(req);
+  Closures[c].TotN := Integer(tot);
+end;
+
+{ The argument count `n` is legal for this callable, or it is not our business.
+  False ONLY when the callee is a closure that declared a range and n is outside
+  it — an unknown or unchecked callee always answers True, so this can never
+  turn a working lenient path into a raising one. }
+function PyClosureArityBad(o: Pointer; n: Int64; var lo, hi: Int64): Boolean;
+var c: Integer;
+begin
+  PyClosureArityBad := False;
+  lo := 0; hi := 0;
+  if o = nil then Exit;
+  if not pyclosure_is(o) then Exit;
+  c := Integer(PClosureObj(o)^.Cidx);
+  if (c < 0) or (c >= ClosureN) then Exit;
+  if Closures[c].ReqN < 0 then Exit;              { unchecked }
+  lo := Closures[c].ReqN;
+  hi := Closures[c].TotN;
+  PyClosureArityBad := (n < lo) or (n > hi);
+end;
+
+procedure PyRaiseArity(n, lo, hi: Int64);
+{ CPython's wording is "takes N positional arguments but M were given"; the
+  name of the lambda is not available here, so the message names the shape
+  instead. TypeError, not a bare Exception, so `except TypeError:` catches it
+  the way it does in CPython. }
+var want: AnsiString;
+begin
+  { pystr_of, not IntToStr — a builtin unit has no sysutils. }
+  if lo <> hi then
+    want := 'from ' + pystr_of(lo) + ' to ' + pystr_of(hi) + ' positional arguments'
+  else if lo = 1 then
+    want := '1 positional argument'
+  else
+    want := pystr_of(lo) + ' positional arguments';
+  raise TypeError.Create('<lambda>() takes ' + want + ' but '
+    + pystr_of(n) + ' were given');
 end;
 
 function PyMakeClosure(fnIdx: Integer): Variant;
@@ -3947,12 +4207,13 @@ begin
 end;
 
 function pyvar_callv0(const cb: Variant): Variant;
-var o: Pointer; f0: TPyCallFn0; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f0: TPyCallFn0; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv0(cb); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -3969,12 +4230,13 @@ begin
 end;
 
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
-var o: Pointer; f1: TPyCallFn1; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f1: TPyCallFn1; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv1(cb, a0); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -3992,12 +4254,13 @@ begin
 end;
 
 function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
-var o: Pointer; f2: TPyCallFn2; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f2: TPyCallFn2; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv2(cb, a0, a1); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -4015,12 +4278,13 @@ begin
 end;
 
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
-var o: Pointer; f3: TPyCallFn3; args: TPyList;
+var o: Pointer; aLo, aHi: Int64; f3: TPyCallFn3; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv3(cb, a0, a1, a2); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then

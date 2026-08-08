@@ -29,7 +29,7 @@ interface
   arithmetic below must not narrow it — pyvar_to_int's mod-2^64 reading turns
   2**70 into 0, so `v + 1` answered 1 for a 22-digit number. promocore has no
   uses clause of its own, so this adds no cycle. }
-uses pypal, promocore;
+uses pypal, promocore, typinfo;
 
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
@@ -484,6 +484,7 @@ function pyseq_kind_v(const v: Variant): Integer;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
+function PyCallableStr(const v: Variant): AnsiString;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
   Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
@@ -506,6 +507,9 @@ function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
   than being dropped, because a format spec decides what is PRINTED. }
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
 function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
+function pystr_formatn(const fmt: AnsiString;
+                       const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
+                       n: Integer): AnsiString;
 { Python's `"%s=%d" % args` — the printf-style operator, translated placeholder
   by placeholder into the {}-spec grammar below so padding, precision and base
   conversion have ONE implementation rather than two that drift. args is a single
@@ -594,6 +598,11 @@ procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:h
   every address above the write and corrupt the data space. }
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
 procedure pybytes_setslice_v(b: TPyBytes; lo, hi: Integer; const src: Variant);   { RHS is a variant holding bytes }
+{ TARGET is a variant: `vm.memory[a:b] = src` where the receiver has no static
+  class (a dynamically-typed parameter, a container element). Unboxes the target
+  and dispatches to the bytes or list setter by its runtime type — the mirror of
+  pybytes_setslice_v, which handles a variant on the other side. }
+procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant);
 { `v.to_bytes(n, "little", signed=s)` and `int.from_bytes(b, "little",
   signed=s)`. Recognised by the frontend as INTRINSICS with a fixed argument
   shape rather than real methods, because their Python spelling carries a
@@ -753,6 +762,7 @@ function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
   {code,recv} bound pair. }
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 { input([prompt]): a line from stdin without its trailing newline. }
+function pyinput_p(const prompt: AnsiString): AnsiString;
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
 function pysys_argv: TPyList;
@@ -989,12 +999,24 @@ function max(a: Double; b: Double): Double; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
+{ `list(b)` on a BYTES/bytearray yields its byte VALUES, as Python's does. It
+  used to resolve to the TPyList arm — a TPyBytes handed to a list-typed
+  parameter, whose `count` read the wrong field and answered 0, so the
+  idiomatic way to look at a bytes value printed [] with no diagnostic
+  (bug-nilpy-list-of-a-bytes-object-is-empty). `for x in b`, `len(b)` and
+  `b[i]` were already right, so this is the constructor alone, not the
+  iteration protocol. }
+function list(b: TPyBytes): TPyList; overload;
 { tuple(iterable) — the same sequence with the TUPLE flag set. The tuple TYPE
   existed (literals work, and FKind distinguishes it) but the CONSTRUCTOR did
   not, so `tuple([1, 2])` failed with 'undefined variable (tuple)'.
   (bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice) }
 function tuple(l: TPyList): TPyList;
 function tuple(const s: AnsiString): TPyList; overload;
+{ tuple(b) — same as list(b) with the tuple flag; without it `tuple(<bytes>)`
+  was a compile error ("no overload of tuple matches"), the loud sibling of
+  the silent list(b). }
+function tuple(b: TPyBytes): TPyList; overload;
 { pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
 { pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
@@ -3163,10 +3185,37 @@ end;
   unambiguously a set operation once dict is ruled out first — see
   pydict_or below for dict's own use of `|`.
   bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic }
+{ The four set operators are DEFINED ONLY BETWEEN SETS. `-`, `&`, `|` and `^`
+  over lists are a TypeError in Python, and pxx computed an answer for them
+  because a set and a list share the TPyList row — `[1] - [2]` returned
+  `[1]`, which is set difference wearing a list's clothes.
+
+  The FKind tag (decide-nilpy-set-as-a-distinct-type-or-a-list, since
+  implemented) makes the question answerable at run time, which is exactly what
+  that decision left behind as ordinary work. Checked HERE rather than in the
+  frontend because the kinds are a RUNTIME property: `a - b` over two variants
+  cannot know statically which rows it will be handed.
+
+  A nil operand counts as a set: that is how an empty literal reaches here, and
+  refusing it would break `s - set()`.
+  bug-nilpy-same-kind-undefined-operators-still-compute }
+procedure PySetRequireSets(a, b: TPyList; const op: AnsiString);
+var ka, kb: AnsiString;
+begin
+  if ((a = nil) or (a.FKind = PYSEQ_SET)) and
+     ((b = nil) or (b.FKind = PYSEQ_SET)) then Exit;
+  if a = nil then ka := 'set' else ka := PySeqKindName(a.FKind);
+  if b = nil then kb := 'set' else kb := PySeqKindName(b.FKind);
+  raise TypeError.Create('unsupported operand type(s) for ' + op + ': '''
+    + ka + ''' and ''' + kb + '''');
+end;
+
 function pyset_and(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '&');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;      { set & set is a SET, not a list }
   if (a = nil) or (b = nil) then Exit;
   for i := 0 to a.count - 1 do
     if pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -3175,7 +3224,9 @@ end;
 function pyset_or(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '|');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;
   if a <> nil then
     for i := 0 to a.count - 1 do Result.add(a.at(i));
   if b <> nil then
@@ -3185,7 +3236,9 @@ end;
 function pyset_sub(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '-');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;
   if a = nil then Exit;
   for i := 0 to a.count - 1 do
     if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -3194,7 +3247,9 @@ end;
 function pyset_xor(a: TPyList; b: TPyList): TPyList;
 var i: Integer;
 begin
+  PySetRequireSets(a, b, '^');
   Result := TPyList.Create;
+  Result.FKind := PYSEQ_SET;
   if a <> nil then
     for i := 0 to a.count - 1 do
       if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -5832,6 +5887,32 @@ begin
   raise TypeError.Create('byte slice assignment requires bytes');
 end;
 
+
+procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant);
+var d, o: TObject;
+begin
+  if pyvartag(dst) <> 7 then
+    raise TypeError.Create('object does not support slice assignment');
+  d := TObject(pyvarobj(dst));
+  if d is TPyBytes then
+  begin
+    { the RHS may be a bytes OBJECT or a variant carrying one — pybytes_setslice_v
+      already answers that question, so ask it rather than repeating the test }
+    pybytes_setslice_v(TPyBytes(d), lo, hi, src);
+    Exit;
+  end;
+  if d is TPyList then
+  begin
+    if pyvartag(src) = 7 then
+    begin
+      o := TObject(pyvarobj(src));
+      if o is TPyList then begin pylist_setslice(TPyList(d), lo, hi, TPyList(o)); Exit; end;
+    end;
+    raise TypeError.Create('can only assign an iterable to a list slice');
+  end;
+  raise TypeError.Create('object does not support slice assignment');
+end;
+
 { Little-endian, two's complement — the same layout the machine already uses,
   so the loop is a plain byte peel rather than anything arithmetic. Python
   raises OverflowError when the value does not fit in n bytes; that check is
@@ -7474,6 +7555,17 @@ begin
     SetLength(Result, Length(Result) - 1);
 end;
 
+function pyinput_p(const prompt: AnsiString): AnsiString;
+{ `input(prompt)` — CPython writes the prompt to stdout WITHOUT a newline, so
+  Write, not WriteLn. No explicit flush: this RTL has no Flush and its Write
+  goes straight out, which is the property this relies on — if stdout ever
+  becomes buffered, an interactive prompt would appear only after the user has
+  typed, and this is the line to fix. }
+begin
+  Write(prompt);
+  pyinput_p := pyinput;
+end;
+
 function pysys_argv: TPyList;
 var r: TPyList; i: Integer;
 begin
@@ -7489,13 +7581,52 @@ begin
   Result := ParamStr(0);
 end;
 
-function pyselect_select(const r: Variant; const w: Variant; const x: Variant; const t: Variant): TPyList;
-var res: TPyList;
+function PySelectReady(const lst: Variant; events: Int64; timeoutMs: Int64): TPyList;
+{ The ready subset of one select() list. A NilPy `sys.stdin` IS its file
+  descriptor (the integer 0), so an entry polls as itself and the value that
+  comes back is the value that went in — which is what makes CPython's
+  `if sys.stdin in select.select([sys.stdin], [], [], 0)[0]` answer the same
+  here. A non-integer entry (an object with no fd meaning) is skipped rather
+  than guessed at. }
+var res: TPyList; src: TPyList; i: Integer; v: Variant; fd: Int64;
 begin
   res := TPyList.Create;
-  res.append(TPyList.Create);        { rlist — nothing ready }
-  res.append(TPyList.Create);        { wlist }
-  res.append(TPyList.Create);        { xlist }
+  if not pyvar_is_objtag(lst) then begin Result := res; Exit; end;
+  src := TPyList(pyvarobj(lst));
+  if src = nil then begin Result := res; Exit; end;
+  for i := 0 to src.count - 1 do
+  begin
+    v := src.at(i);
+    { tags 1/2 are the machine-int flavours; anything else has no fd meaning }
+    if (pyvartag(v) <> 1) and (pyvartag(v) <> 2) then Continue;
+    fd := pyvar_to_int(v);
+    if PyPalPoll(fd, events, timeoutMs) = 1 then res.append(v);
+  end;
+  Result := res;
+end;
+
+function pyselect_select(const r: Variant; const w: Variant; const x: Variant; const t: Variant): TPyList;
+{ `select.select(rlist, wlist, xlist, timeout)`.
+
+  Was a STUB that always answered "nothing ready" — which is not a degraded
+  answer, it is the WRONG one: a program that polls stdin to decide whether it
+  is being fed a script or typed at got the interactive answer either way.
+  uforth prints its `UF> ` prompt for every piped line because of exactly that
+  test, so its output could never match CPython's.
+
+  Timeout: CPython takes SECONDS as a float, and None means block. The common
+  `0` (poll, do not wait) and a small float both round through here; a negative
+  or missing timeout blocks, matching poll(2). The xlist has no meaning for the
+  descriptors NilPy can produce, so it comes back empty. }
+var res: TPyList; timeoutMs: Int64;
+begin
+  timeoutMs := 0;
+  if pyvartag(t) = 0 then timeoutMs := -1                     { None -> block }
+  else timeoutMs := Round(pyvar_to_float(t) * 1000.0);
+  res := TPyList.Create;
+  res.append(PySelectReady(r, 1, timeoutMs));    { POLLIN  }
+  res.append(PySelectReady(w, 4, timeoutMs));    { POLLOUT }
+  res.append(TPyList.Create);        { xlist — no exceptional set to report }
   Result := res;
 end;
 
@@ -7778,11 +7909,12 @@ end;
 { The placeholder walk. Two variants rather than an open array: an open array
   of Variant is not marshalled correctly here and crashed on the second
   argument. }
-function PyFormatApply(const fmt: AnsiString; const a: Variant; const b: Variant;
-                       nArgs: Integer): AnsiString;
-var i, j, argi, useIdx, k: Integer; spec, fld, outS: AnsiString;
+function PyFormatApply(const fmt: AnsiString; args: TPyList): AnsiString;
+var i, j, argi, useIdx, k, nArgs: Integer; spec, fld, outS: AnsiString;
 begin
   outS := '';
+  nArgs := 0;
+  if args <> nil then nArgs := args.count;
   argi := 0;
   i := 1;
   while i <= Length(fmt) do
@@ -7832,16 +7964,8 @@ begin
       end;
       if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
-      if useIdx = 0 then
-      begin
-        if spec = '' then outS := outS + pystr_of(a)
-        else outS := outS + pyformat_of(a, spec);
-      end
-      else
-      begin
-        if spec = '' then outS := outS + pystr_of(b)
-        else outS := outS + pyformat_of(b, spec);
-      end;
+      if spec = '' then outS := outS + pystr_of(args.at(useIdx))
+      else outS := outS + pyformat_of(args.at(useIdx), spec);
       i := j + 1;
       Continue;
     end;
@@ -7852,8 +7976,11 @@ begin
 end;
 
 function pystr_format(const fmt: AnsiString; const a: Variant): AnsiString;
+var args: TPyList;
 begin
-  pystr_format := PyFormatApply(fmt, a, a, 1);
+  args := TPyList.Create;
+  args.append(a);
+  pystr_format := PyFormatApply(fmt, args);
 end;
 
 { `"{} and {}".format(a, b)` — a SEPARATE proc, not a second pystr_format
@@ -7868,8 +7995,37 @@ end;
   positional args; only this entry point and the frontend's arity gate were
   missing. }
 function pystr_format2(const fmt: AnsiString; const a: Variant; const b: Variant): AnsiString;
+var args: TPyList;
 begin
-  pystr_format2 := PyFormatApply(fmt, a, b, 2);
+  args := TPyList.Create;
+  args.append(a);
+  args.append(b);
+  pystr_format2 := PyFormatApply(fmt, args);
+end;
+
+{ THREE OR MORE placeholders. The arity-suffixed-name trick above does not
+  scale past two (one proc per arity, forever), so this is the last rung: a
+  FIXED-arity proc the frontend pads with None up to PYFORMAT_MAXARGS and
+  tells how many are real. The substitution itself is shared — PyFormatApply
+  takes the argument LIST, so every arity walks the same code and the
+  positional-index and format-spec behaviour cannot drift between them.
+  Beyond PYFORMAT_MAXARGS the frontend refuses loudly and names f-strings,
+  which have no such limit. }
+function pystr_formatn(const fmt: AnsiString;
+                       const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
+                       n: Integer): AnsiString;
+var args: TPyList;
+begin
+  args := TPyList.Create;
+  if n > 0 then args.append(a0);
+  if n > 1 then args.append(a1);
+  if n > 2 then args.append(a2);
+  if n > 3 then args.append(a3);
+  if n > 4 then args.append(a4);
+  if n > 5 then args.append(a5);
+  if n > 6 then args.append(a6);
+  if n > 7 then args.append(a7);
+  pystr_formatn := PyFormatApply(fmt, args);
 end;
 
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
@@ -8936,6 +9092,8 @@ begin
       identical dict with a static type iterated fine
       (bug-nilpy-two-name-for-over-a-variant-assumes-a-dict). }
     if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
+    { bytes erased to a variant — the byte values, same as the static arm. }
+    if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
   end;
   PyTypeError(pyvartag(v), 'a str, a list or a dict');
   Result := TPyList.Create;
@@ -9024,6 +9182,23 @@ begin
   r := TPyList.Create;
   r.FKind := PYSEQ_TUPLE;
   for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
+  Result := r;
+end;
+
+function list(b: TPyBytes): TPyList; overload;
+var r: TPyList; i: Integer;
+begin
+  r := TPyList.Create;
+  if b <> nil then
+    for i := 0 to b.count - 1 do r.append(b.at(i));
+  Result := r;
+end;
+
+function tuple(b: TPyBytes): TPyList; overload;
+var r: TPyList;
+begin
+  r := list(b);
+  r.FKind := PYSEQ_TUPLE;
   Result := r;
 end;
 
@@ -9116,6 +9291,7 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
+    if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := list(pystr_of(v)); Exit; end;
   Result := TPyList.Create;   { None / empty }
@@ -9548,23 +9724,142 @@ end;
 
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a
   container is spelled out rather than printed as its object handle. }
+{ `<function at 0x...>` for a CALLABLE VALUE. A function value used to render
+  as nothing at all: a lifted bound-fn rode as VT_EMPTY (tag 0), which every
+  str/print consumer reads as None, and a pyeval closure (tag 9) fell through to
+  VariantToStr and produced a blank. So a debug print could not tell a live
+  function from None — exactly when you are looking
+  (bug-nilpy-repr-of-a-function-value-prints-none).
+
+  CPython spells the NAME too (`<function mk.<locals>.inner at 0x...>`), and
+  that is not recoverable here: the payload is a code address or a {code,recv}
+  pair, neither of which carries a name at run time. The shape and the address
+  are, and they are what distinguishes a function from None. Naming it would
+  need the frontend to record one per callable — its own ticket if anyone wants
+  byte-parity with CPython. }
+function PyCallableStr(const v: Variant): AnsiString;
+const HEXD = '0123456789abcdef';
+var a: Int64; i: Integer; hx: AnsiString; lead: Boolean;
+begin
+  a := PPyVarRec(@v)^.Payload;
+  hx := '';
+  lead := True;
+  i := (SizeOf(Pointer) * 8) - 4;
+  while i >= 0 do
+  begin
+    if ((a shr i) and 15) <> 0 then lead := False;
+    if not lead then hx := hx + HEXD[Integer((a shr i) and 15) + 1];
+    i := i - 4;
+  end;
+  if hx = '' then hx := '0';
+  if pyvartag(v) = 8 then
+    Result := '<bound method at 0x' + hx + '>'
+  else
+    Result := '<function at 0x' + hx + '>';
+end;
+
+{ `__repr__` / `__str__` on a USER class instance that arrives only as a bare
+  Variant handle — an element of a list, a dict value, a tuple slot.
+
+  `print(p)` on a statically class-typed local renders correctly, because the
+  frontend rewrites it to a direct call at COMPILE time keyed on the receiver's
+  class. A container element has no static class for that rewrite to key on, so
+  the element fell through to pyrepr_of, which knows nothing about user classes
+  and produced the EMPTY string: `[p1, p2]` printed `[, ]`.
+
+  The dispatch itself is not new machinery — the class RTTI carries the method
+  table, and pyeval already finds a method by NAME in it and calls it through a
+  typed pointer (PyFindMethCI/PyHostCall). This is the same lookup, made from
+  the renderer that needed it. Only the ZERO-ARGUMENT, AnsiString-returning
+  shape is accepted, which is what `def __repr__(self) -> str` compiles to; any
+  other shape is left to the existing fallback rather than called through a
+  pointer whose ABI has not been checked.
+
+  Returns False when the class defines no such dunder, so the caller keeps its
+  old behaviour — CPython prints `<module.Class object at 0x...>` there, which
+  carries an address and so is not reproducible anyway.
+  bug-nilpy-list-of-custom-objects-loses-repr-str }
+type
+  TPyDunderFn = function(self: Pointer): AnsiString;
+
+function PyFindDunder(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
+begin
+  PyFindDunder := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+    begin
+      meths := curr^.MethsPtr;
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+        if meths[i].NamePtr^ = nm then
+        begin
+          PyFindDunder := @meths[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyUserObjStr(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyDunderFn;
+begin
+  PyUserObjStr := False;
+  if o = nil then Exit;
+  { pylib's OWN containers have their own renderers and must not come here }
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  mi := nil;
+  { CPython: str() prefers __str__ and falls back to __repr__; repr() uses
+    __repr__ only. Inside a CONTAINER both render with repr, which is why the
+    callers below pass wantRepr = True. }
+  if not wantRepr then mi := PyFindDunder(cls, '__str__');
+  if mi = nil then mi := PyFindDunder(cls, '__repr__');
+  if mi = nil then
+  begin
+    { No dunder: CPython's DEFAULT object repr, `<__main__.Cls object at 0x..>`.
+      Not matchable line-for-line by a test (it carries an address), but it is
+      the right shape and strictly better than the EMPTY string this used to
+      render — an object silently vanishing out of a printed container is the
+      failure this ticket is about. }
+    outS := '<__main__.' + TObject(o).ClassName
+             + ' object at ' + hex(Int64(NativeInt(Pointer(o)))) + '>';
+    PyUserObjStr := True;
+    Exit;
+  end;
+  if mi^.Arity <> 1 then Exit;          { Self only }
+  if mi^.RetKind <> 23 then Exit;       { AnsiString }
+  fn := TPyDunderFn(mi^.Code);
+  outS := fn(Pointer(o));
+  PyUserObjStr := True;
+end;
+
 function pyvar_repr(const v: Variant): AnsiString;
-var o: TObject;
+var o: TObject; us: AnsiString;
 begin
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;   { VT_EMPTY }
+  { a callable VALUE — see PyCallableStr }
+  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  begin Result := PyCallableStr(v); Exit; end;
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
+    if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
   Result := pyrepr_of(v);
 end;
 
 function pyvar_print_of(const v: Variant): AnsiString;
-var o: TObject;
+var o: TObject; us: AnsiString;
 begin
+  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  begin Result := PyCallableStr(v); Exit; end;
   { a container prints as its repr; every scalar as plain str (no quotes) }
   if pyvartag(v) = 7 then
   begin
@@ -9572,6 +9867,8 @@ begin
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
+    { a bare print() of an instance prefers __str__, like CPython's str() }
+    if PyUserObjStr(o, False, us) then begin Result := us; Exit; end;
   end;
   Result := pystr_of(v);
 end;
@@ -9700,6 +9997,8 @@ function pystr_of(const v: Variant): AnsiString; overload;
 begin
   { VT_EMPTY is Python's None, not an empty string }
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;
+  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  begin Result := PyCallableStr(v); Exit; end;
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';
