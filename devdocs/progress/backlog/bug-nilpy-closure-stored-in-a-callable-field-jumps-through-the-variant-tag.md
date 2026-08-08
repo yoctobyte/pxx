@@ -74,3 +74,45 @@ Per-fix loop, plus a `.npy` covering all four combinations — {plain def, lifte
 closure, bound method, lambda} x {dataclass field, plain-class field}, set both
 through the constructor and by later assignment, oracle-diffed. And
 `make test-uforth` getting past `uforth.py:841`.
+
+## DECIDED 2026-08-08 (user): the FFI boundary takes PLAIN FUNCTIONS ONLY
+
+Asked whether `Callable[...]` should mean "any Python callable" (variant,
+closures allowed, needing a trampoline to reach C) or "a C-compatible function
+pointer". Answer:
+
+> not 'any python callable'. we can assume externally called functions do have
+> limitations. as any proper library would — we don't need voodoo code where
+> pascal calls python lambda's via a function variable or so.
+
+So there are **two regimes and one conversion point**, and no trampoline
+machinery is wanted:
+
+- **INSIDE NilPy** a `Callable` value is a variant and may be any of the four
+  shapes — plain def, pyeval closure, lifted bound-fn, bound method. This is
+  what lets a closure live in a field at all, and it is the half this bug is
+  about.
+- **CROSSING to Pascal/C** as a raw function pointer, only a **plain def**
+  qualifies — its value genuinely IS a code address. A closure or a bound method
+  carries state that does not fit in 8 bytes and is **refused, loudly**. That is
+  a library limitation, not a defect, exactly as any FFI has.
+
+`pyvar_callable_ptr` (pylib) already implements precisely this and its
+diagnostic already says so, so **the boundary needs no change** — it was right
+before this ticket and stays right. The tkinter registry/trampoline pattern is
+NOT to be generalised; it is Tk's own business.
+
+### Consequence for the fix
+
+Only the internal half is in scope:
+
+1. Unify the internal representation — a `Callable` PARAMETER and a `Callable`
+   FIELD are both variants, removing the third representation that causes this
+   crash.
+2. Close the one gap the measured experiment exposed: a **plain def** assigned
+   into a now-variant field must be BOXED (`pyvar_of_callable`) instead of
+   stored as a bare code address.
+3. Leave `pyvar_callable_ptr` alone.
+
+Nothing here needs a Track U ticket any more — the fork above was the only open
+question and it is answered.
