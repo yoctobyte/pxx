@@ -106,4 +106,4 @@ not green — all four now end in `ERROR: Stack underflow` where CPython prints
 the cipher output. Filed as [[bug-nilpy-uforth-rc4-corpus-stack-underflow]].
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit d019ddb9f.
