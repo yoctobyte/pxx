@@ -117,4 +117,4 @@ the bug hides, which is how it survived.
 and the four sibling callable-field tests re-run clean.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 0a39daee0.
