@@ -73,17 +73,24 @@ TIERS = {
         "test-core", "test-threads", "test-asm", "test-debug-g",   # backfill
         "lib-fpc-clean",
     ],
+    # test-uforth: same hole test-nilpy was in, found 2026-08-08 —
+    # `grep -c uforth tools/testmgr.py` was 0, so the densest NilPy regression
+    # signal in the tree (~4300 lines of unmodified Python + a layered .UFO
+    # stdlib, differential against CPython) was protected only by somebody
+    # remembering to type `make test-uforth`. limited+full, NOT native: it is
+    # ~46 s and native is the tier dev boxes gate their pushes on. Placement
+    # matches test-nilpy for the same reason.
     "limited": [
         "test-smoke",          # test-quick + self-host byte-identity chain
         "test-core", "test-threads", "test-asm", "test-debug-g",
-        "test-nilpy",
+        "test-nilpy", "test-uforth",
         "lib-fpc-clean",
         "test-c-conformance",
     ],
     "full": [
         "test-smoke",
         "test-core", "test-threads", "test-asm", "test-debug-g",
-        "test-nilpy",
+        "test-nilpy", "test-uforth",
         "lib-fpc-clean",
         "test-c-conformance",
         "test-float-determinism", "test-emit-obj",
@@ -1416,6 +1423,36 @@ class Manager:
         job.status = "queued"
         self.queue.append(job)
 
+    # A target that guards its own precondition exits 0 when the precondition
+    # is absent, so it lands as a PASS — indistinguishable from having run.
+    # `test-uforth` on a box without ~/projects/uforth is the case that forced
+    # this: enrolling it in a tier would otherwise have bought a green that
+    # tested nothing, which is the exact failure
+    # feature-t-enroll-uforth-in-the-tiers warns about ("a SKIP that nobody
+    # notices is the failure mode to avoid here").
+    #
+    # Deliberately anchored: the marker must be `<target>: SKIP` at the start
+    # of a line. The looser match is what bug-t-corpus-regex-invents-phantom-
+    # tree was about — a regex that matched the PROSE of a skip message and
+    # skipped things forever. A bundled job whose *individual recipe line*
+    # self-skips is unaffected, because that line does not print this shape
+    # with the job's own target name.
+    _SKIP_RE_CACHE = {}
+
+    def _self_skipped(self, job):
+        if not job.logpath or not os.path.exists(job.logpath):
+            return False
+        pat = self._SKIP_RE_CACHE.get(job.target)
+        if pat is None:
+            pat = re.compile(rb"(?m)^%s: (?:corpus )?SKIP\b"
+                             % re.escape(job.target.encode()))
+            self._SKIP_RE_CACHE[job.target] = pat
+        try:
+            with open(job.logpath, "rb") as f:
+                return bool(pat.search(f.read()))
+        except OSError:
+            return False
+
     def reap(self):
         done = []
         now = time.monotonic()
@@ -1424,7 +1461,13 @@ class Manager:
             if rc is not None:
                 if rc == 0:
                     job.t1 = now
-                    job.status = "pass"
+                    # "skip", NOT "skipped": the two are different outcomes and
+                    # the run loop treats "skipped" as a dependency failure, so
+                    # using it here turned a box that merely lacks the uforth
+                    # checkout RED — the exact false red the enrolment ticket
+                    # forbids. "skip" is the pass-equivalent did-not-run status
+                    # (corpus-absent uses it), which is what this is.
+                    job.status = "skip" if self._self_skipped(job) else "pass"
                     if job.attempts > 1:
                         job.flaky = True   # failed earlier, recovered on retry
                     self.running.remove(job)
@@ -1732,7 +1775,11 @@ class Manager:
             for job in self.reap():
                 self._last_progress = time.monotonic()   # a finished job IS progress
                 dur = job.t1 - job.t0
-                mark = {"pass": "ok", "fail": "FAIL", "timeout": "TIMEOUT"}[job.status]
+                # SKIP is its own mark, never "ok": a target that guarded its
+                # own precondition and exited 0 tested nothing, and the whole
+                # point of detecting it is that it must not read as a pass.
+                mark = {"pass": "ok", "fail": "FAIL", "timeout": "TIMEOUT",
+                        "skip": "SKIP"}.get(job.status, job.status.upper())
                 if job.advisory and job.status != "pass":
                     mark = "NOTICE"
                 elif job.flaky:
@@ -1742,7 +1789,14 @@ class Manager:
                        "  (flaked, recovered on attempt %d)" % job.attempts
                        if job.flaky else ""),
                       flush=True)
-                if job.status != "pass" and not job.advisory:
+                # "skip" is pass-equivalent for the GATE: the target guarded
+                # its own precondition and exited 0, so there is no evidence of
+                # breakage — only of absence. Counting it as a failure is how
+                # enrolling test-uforth would have turned every box lacking
+                # ~/projects/uforth red, which the enrolment ticket explicitly
+                # forbids. It stays visible as SKIP in the report and the
+                # job list; visibility is the goal, not a red.
+                if job.status not in ("pass", "skip") and not job.advisory:
                     failed = True
                     # A broken self-host fixedpoint makes every other verdict at
                     # this sha suspect — the binary under test cannot reproduce

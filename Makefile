@@ -7044,9 +7044,12 @@ test-uforth: $(COMPILER)
 	  echo "test-uforth: corpus SKIP — no python3 to be the oracle"; exit 0; \
 	fi; \
 	echo "running uforth's own corpora, DIFFERENTIAL against CPython ..."; \
-	bad=0; ok=0; \
+	bad=0; ok=0; miss=0; missing=""; want=0; \
 	for f in $(UFORTH_CORPUS); do \
-	  [ -f "$(UFORTH_SRC)/$$f" ] || continue; \
+	  want=$$((want+1)); \
+	  if [ ! -f "$(UFORTH_SRC)/$$f" ]; then \
+	    miss=$$((miss+1)); missing="$$missing $$f"; continue; \
+	  fi; \
 	  printf '"%s" INCLUDE\nBYE\n' "$$f" > "$$wd/in.txt"; \
 	  ( cd "$(UFORTH_SRC)" && timeout 180 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 || true; \
 	  ( cd "$(UFORTH_SRC)" && timeout 180 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 || true; \
@@ -7056,10 +7059,14 @@ test-uforth: $(COMPILER)
 	    bad=$$((bad+1)); echo "  DIFF $$f"; diff -u "$$wd/c.out" "$$wd/p.out" | head -12; \
 	  fi; \
 	done; \
+	if [ "$$miss" != "0" ]; then \
+	  echo "test-uforth: INCOMPLETE — $$miss of $$want corpora absent from $(UFORTH_SRC):$$missing"; \
+	  echo "test-uforth:   (present-but-unrun corpora are invisible in the count below — see UFORTH_CORPUS)"; \
+	fi; \
 	if [ "$$bad" != "0" ]; then \
 	  echo "test-uforth: FAIL — $$bad of $$((ok+bad)) corpora differ from CPython"; exit 1; \
 	fi; \
-	echo "test-uforth: PASS — smoke + $$ok/$$ok corpora byte-identical to CPython"
+	echo "test-uforth: PASS — smoke + $$ok/$$want corpora byte-identical to CPython$${missing:+ ($$miss ABSENT)}"
 
 # uforth cross-runtime speed oracle (feature-t-uforth-benchmark-harness):
 # the SAME uforth.py under CPython vs pxx-compiled-native, wall + max-RSS +
