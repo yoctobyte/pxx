@@ -130,4 +130,4 @@ half-done: [[bug-nilpy-iterator-protocol-on-a-user-class]],
 survey it was.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 0581525a3.
