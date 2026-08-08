@@ -8860,9 +8860,15 @@ begin
     so an unqualified FindProc lands on the bodyless shell the pre-pass made —
     and its address is a plausible-looking pointer one byte below the entry
     point, which crashes the first time the callback fires. Look up the
-    qualified name first. }
+    qualified name first.
+
+    Through PyQualifyNested, not a hand-built `prefix + '.' + name`: that is
+    also where a REDEFINED nested def resolves to the binding in scope at this
+    point, and deriving the name here instead meant `native=w_include` after a
+    second `def w_include` still handed over the FIRST body — uforth's whole
+    ANS FILE word set. }
   pi := -1;
-  if PyNestPrefix <> '' then pi := FindProc(PyNestPrefix + '.' + CurTok.SVal);
+  if PyNestPrefix <> '' then pi := FindProc(PyQualifyNested(CurTok.SVal));
   if pi < 0 then pi := FindProc(CurTok.SVal);
   if pi < 0 then Exit;
   Result := PyMakeFuncValueFor(pi, CurTok.SVal);
@@ -14697,6 +14703,70 @@ end;
   idempotent — a shell already carrying a BodyAddr means the real parse already
   compiled it, and re-registering would give the enclosing calls a second,
   bodyless Proc. }
+{ Which registered proc a bare reference to `qname` means AT token position
+  `at`. With no redefinition — every ordinary program — the table is empty and
+  this is the plain qualified name. Otherwise it is the last binding whose
+  `def` statement PRECEDES the reference, so code between two same-named nested
+  defs still sees the earlier one, and everything after the second sees the
+  second. A def's own BODY resolves to the last binding, which is also what
+  CPython does: a nested body looks the name up in the enclosing frame when it
+  RUNS, not when it is defined. }
+function PyRedefBindingAt(const qname: AnsiString; at: Integer): AnsiString;
+var i, bestTok: Integer;
+begin
+  Result := qname;
+  bestTok := -1;
+  for i := 0 to PyRedefN - 1 do
+    if (PyRedefQName[i] = qname) and (PyRedefTok[i] < at) and
+       (PyRedefTok[i] > bestTok) then
+    begin
+      bestTok := PyRedefTok[i];
+      Result := PyRedefProc[i];
+    end;
+end;
+
+{ Record that the def at `defTok` binds `qname` to the proc named `procName`.
+  Idempotent by (qname, defTok): the enclosing body is parsed more than once
+  (the local-typing trial pass, then for real) and must reach the same answer
+  every time. }
+procedure PyRedefNote(const qname: AnsiString; defTok: Integer;
+                      const procName: AnsiString);
+var i: Integer;
+begin
+  for i := 0 to PyRedefN - 1 do
+    if (PyRedefQName[i] = qname) and (PyRedefTok[i] = defTok) then Exit;
+  if PyRedefN > 127 then Exit;   { past the table: keep the old first-wins }
+  PyRedefQName[PyRedefN] := qname;
+  PyRedefTok[PyRedefN] := defTok;
+  PyRedefProc[PyRedefN] := procName;
+  Inc(PyRedefN);
+end;
+
+{ The name a NESTED def registers under. Plain `outer.name` for the first one
+  in its scope; a REDEFINITION gets its own proc keyed by its `def` token, and
+  is recorded so PyQualifyNested can resolve bare references by position.
+
+  ONE helper, because two places derive this name — the queueing pass that
+  registers the shell and collects captures, and PyParseDef which compiles the
+  body into it. They must agree exactly: when they did not, the second def's
+  body was compiled into a proc no name resolved to and the link failed with
+  "unresolved forward". The existing proc is THIS def revisited (the trial pass,
+  or the deferred body parse) rather than a redefinition exactly when it carries
+  this def's token. }
+function PyNestedDefQName(defTok: Integer; const baseName: AnsiString): AnsiString;
+var j: Integer; plain: AnsiString;
+begin
+  Result := baseName;
+  if PyNestPrefix = '' then Exit;
+  plain := PyNestPrefix + '.' + baseName;
+  Result := plain;
+  j := FindProc(plain);
+  if (j < 0) or (PyDefTokOf[j] = defTok + 1) then Exit;
+  PyRedefNote(plain, PyDefTokOf[j] - 1, plain);        { the first binding }
+  Result := plain + '$' + PyIntLiteralText(defTok);
+  PyRedefNote(plain, defTok, Result);
+end;
+
 { The name a call inside a nested def should actually look up. A def nested in
   another def registers as `outer.inner`; inside the enclosing body it is called
   unqualified. Walks the qualifier outwards — `a.b.c` then `a.b` then `a` — so an
@@ -14717,7 +14787,15 @@ begin
       a call of ITSELF with no arguments. }
     if (FindProc(pfx + '.' + name) >= 0) and (FindUClass(pfx) < 0) then
     begin
-      Result := pfx + '.' + name;
+      { Position matters only for a reference in the SAME scope as the defs:
+        `w()` written between two `def w`s means the first. From an INNER def's
+        body (pfx is an ancestor of the current prefix, not the current one)
+        Python looks the name up in the enclosing frame when the body RUNS, so
+        the last binding is the right answer there, whatever the token order. }
+      if pfx = PyNestPrefix then
+        Result := PyRedefBindingAt(pfx + '.' + name, TokPos)
+      else
+        Result := PyRedefBindingAt(pfx + '.' + name, TokCount + 1);
       Exit;
     end;
     cut := 0;
@@ -15185,8 +15263,7 @@ var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capC
 begin
   defTok := TokPos - 1;
   PyParseDefHeader;
-  qname := PyHdrName;
-  if PyNestPrefix <> '' then qname := PyNestPrefix + '.' + qname;
+  qname := PyNestedDefQName(defTok, PyHdrName);
   bodyStart := TokPos - 1;
   bodyEnd := PyFindBodyEnd(bodyStart);
   { CAPTURE: every enclosing local/parameter the body mentions becomes a
@@ -18160,10 +18237,16 @@ procedure PyParseDef;
 var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
     savedNest, savedTok, savedLam, savedHoist, savedSelf2: Integer;
+    defTok0: Integer;   { this def's `def` token — the redefinition key }
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
     savedDefGlobalCount, dgI, cellInit: Integer;
     retType: TTypeKind; isProc, capByRef: Boolean;
 begin
+  { Captured BEFORE the header parse moves TokPos: PyParseDef is entered with
+    the cursor just past the `def` keyword (the queue driver does
+    `TokPos := <def token>; Next`), which is the same token the queueing pass
+    keyed the redefinition on. }
+  defTok0 := TokPos - 1;
   savedHoist := PyHoistHead;
   { PARK the queue on a fresh chain rather than merely remembering its head.
     `PyHoistHead := savedHoist` at the end cannot UNLINK anything: PySeqAppend
@@ -18215,8 +18298,10 @@ begin
     already resolves correctly today, by whatever call-site arity matching
     picks it out from the chain, and must keep working. }
   { A NESTED def registers under its enclosing def's qualifier, which is what
-    PyParseStatement already put in the queue entry — see PyNestPrefix. }
-  if PyNestPrefix <> '' then name := PyNestPrefix + '.' + name;
+    PyParseStatement already put in the queue entry — see PyNestPrefix. The
+    same helper the queueing pass used, so a REDEFINITION's body lands in the
+    proc its own name resolves to. }
+  name := PyNestedDefQName(defTok0, name);
   { Look in the MAIN PROGRAM first. FindProc walks the whole table and returns
     the OLDEST registration of a name, so for a def that shadows a builtin —
     `def len(x)` against pylib's `len` — it answered the UNIT's proc, this

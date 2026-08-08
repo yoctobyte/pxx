@@ -1238,6 +1238,12 @@ test-nilpy: $(COMPILER)
 	test "$$(timeout 60 /tmp/test_nilpy_str_repeat26)" = "$$(printf 'xxxxx ababab abcabc\nababab\n[] [] []\n1 1000\n80000\n200000\n1000000\n300000 a b c c')"
 	@# a nested def that CAPTURES and then ESCAPES must carry its captures: the
 	@# bridge marshals the body's own arity before them, not a hardcoded one
+	# `def w` TWICE in one enclosing def: Python rebinds the name, so the later
+	# body wins from its def statement on and the statements BETWEEN see the
+	# earlier one. Both used to register under `outer.w` and the second was
+	# unreachable -- uforth's two w_include defs, and its whole ANS FILE word set.
+	./$(COMPILER) test/test_nilpy_nested_def_redefined_in_one_scope.npy /tmp/test_nilpy_redef26
+	test "$$(/tmp/test_nilpy_redef26)" = "$$(printf '%b' 'between: 11\nafter: 110\n11 110\n1 2 3 3\n[5, 7]\n42\n2')"
 	./$(COMPILER) test/test_nilpy_escaping_closure.npy /tmp/test_nilpy_escaping_closure26
 	test "$$(/tmp/test_nilpy_escaping_closure26)" = "$$(printf '42\n42\n13\n16\n42\n3\n6\n42\n42\n7')"
 	@# ...at EVERY arity. The bridge's per-arity table had gaps (no 10, no 12,

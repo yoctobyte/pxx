@@ -1809,6 +1809,29 @@ var
     a pyeval closure binding its default-arg/captured values at that point
     (uforth's DOES>). }
   PyDefTokOf : array[0..MAX_PROCS-1] of Integer;
+  { A nested def REDEFINED in the same scope. Python rebinds the name, so the
+    later body wins from its `def` statement onward; pxx registered the first
+    under `outer.name` and every later one collided with it, so the second body
+    was compiled and then unreachable — silently, with no diagnostic. uforth
+    defines `w_include` twice inside build_base_vm and registers each into its
+    word table; pxx ran the FIRST one and the whole ANS FILE word set failed
+    (bug-nilpy-uforth-file-word-set-include-redefinition).
+
+    The first binding keeps the plain qualified name, so nothing changes for a
+    program that never redefines. Each later one registers under
+    `outer.name$<defTok>` and lands here; PyQualifyNested then resolves a bare
+    reference to the LAST binding whose `def` precedes the reference — which is
+    what makes the statements BETWEEN two defs still see the earlier body.
+    Keyed by the def token rather than a sequence counter so the answer is
+    identical on the trial/typing pass and the real one.
+
+    128 entries, spelled as a literal bound like its neighbours here; past that
+    the extra redefinitions keep the old first-wins behaviour rather than
+    misresolving. }
+  PyRedefN : Integer;
+  PyRedefQName : array[0..127] of AnsiString;   { 'outer.name' — the plain qualified name }
+  PyRedefTok   : array[0..127] of Integer;      { the `def` token of this binding }
+  PyRedefProc  : array[0..127] of AnsiString;   { the name it actually registered under }
   { `*args` / `**kwargs`: the parameter INDEX of the def's star-list and
     star-dict parameter, or -1 when it has none. The callee side is ordinary —
     one TPyList and one TPyDict parameter — and these say which, so each CALL

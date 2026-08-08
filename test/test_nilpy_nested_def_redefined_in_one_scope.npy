@@ -1,0 +1,102 @@
+# `def w` twice inside ONE enclosing def. Python rebinds the name: the later
+# body wins from its `def` statement onward, and statements BETWEEN the two
+# still see the earlier one. pxx registered both under the same qualified name
+# `outer.w`, so the second collided with the first and was compiled into a proc
+# nothing could reach — the first body ran forever, silently, with no
+# diagnostic. uforth defines w_include twice inside build_base_vm and registers
+# each into its word table; pxx ran the first and the ANS FILE word set failed
+# at the first bare-name INCLUDE.
+# bug-nilpy-uforth-file-word-set-include-redefinition
+# Every expectation here is CPython's own output.
+
+# --- called directly, before and after the redefinition ---
+def two_bodies():
+    def w(n: int) -> int:
+        return n + 1
+    print("between:", w(10))
+
+    def w(n: int) -> int:
+        return n + 100
+    print("after:", w(10))
+
+two_bodies()
+
+# --- taken as a VALUE at each point, which is uforth's shape: each `def` is
+# followed by a registration that must capture THAT body ---
+def build_table() -> dict:
+    tbl = {}
+
+    def w(n: int) -> int:
+        return n + 1
+    tbl["first"] = w
+
+    def w(n: int) -> int:
+        return n + 100
+    tbl["second"] = w
+
+    return tbl
+
+t = build_table()
+print(t["first"](10), t["second"](10))
+
+# --- three bodies, to be sure it is "the last one before this point" and not
+# merely "the last one" ---
+def three():
+    def w() -> int:
+        return 1
+    a = w()
+
+    def w() -> int:
+        return 2
+    b = w()
+
+    def w() -> int:
+        return 3
+    c = w()
+    print(a, b, c, w())
+
+three()
+
+# --- a redefinition that CAPTURES a different enclosing local than the first ---
+def captures():
+    x = 5
+    y = 7
+
+    def w() -> int:
+        return x
+    first = w
+
+    def w() -> int:
+        return y
+    second = w
+
+    return [first(), second()]
+
+print(captures())
+
+# --- redefinition in one scope must not disturb a same-named nested def in a
+# DIFFERENT scope (this always worked; it is here so the mangling cannot
+# regress it) ---
+def other():
+    def w() -> int:
+        return 42
+    return w()
+
+print(other())
+
+# --- a name redefined in the enclosing scope while an inner def refers to it.
+# CPython looks the name up when the inner body RUNS, so it sees the last
+# binding, not the one in scope at the point the inner def was written.
+def late_lookup():
+    def w() -> int:
+        return 1
+
+    def calls_w() -> int:
+        return w()
+
+    def w() -> int:
+        return 2
+
+    return calls_w()
+
+print(late_lookup())
