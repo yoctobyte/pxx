@@ -38,7 +38,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (190)
+## backlog (189)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -54,7 +54,6 @@ _none_
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element | N | 45 | bug | In uforth, `lst.pop(idx)` on a list of tuples leaves the SURVIVING element as an empty tuple `()` — the popped item is returned intact, its neighbour is destroyed. Kills the ANS tools word set (CS-ROLL) with a 12-line Forth repro; the equivalent standalone NilPy shapes all pass, so the trigger is still unisolated. | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
 | bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-local-reassigned-across-classes-keeps-one-static-class | N | 45 | bug | SILENT->CRASH: a local assigned instances of two unrelated classes keeps ONE static class identity, so every member access uses that layout. `o = DC(...)` then `o = PC(...)` reads o.native at DC's offset for both — a segfault when the layouts differ. | — |
@@ -63,7 +62,7 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-reversed-list-repeat-returned-from-a-def-infers-int | N | 30 | bug | SILENT WRONG VALUE: `def f(u): return u * [7]` returns the list HANDLE as an integer — the reversed LIST repeat is built correctly but the def's inferred return type is Integer. `u * bytes(...)` and `[7] * u` are both fine. | — |
-| bug-nilpy-uforth-ans-word-set-suite-4-of-13-open | N | 45 | bug | The FULL Forth 2012/ANS suite measured per word set: 11 of 13 byte-identical to CPython (coreext and block both FIXED 2026-08-08 — a gapped closure-bridge arity table, and a borrowed return read as owned). 2 open, each with its own ticket and a minimal repro: tools, file. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated. | — |
+| bug-nilpy-uforth-ans-word-set-suite-4-of-13-open | N | 45 | bug | The FULL Forth 2012/ANS suite measured per word set: 12 of 13 byte-identical to CPython — coreext, block and tools all FIXED 2026-08-08 (a gapped closure-bridge arity table; a borrowed return read as owned; pop(i) leaving a live alias in the slot it vacated). Only filetest is left, on its own ticket. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated. | — |
 | bug-nilpy-uforth-file-word-set-include-redefinition | N | 35 | bug | uforth's LAST suite diff (10/11 identical): `INCLUDE <bare-name>` uses the FIRST of uforth's two same-named `w_include` nested defs, not the later redefinition — and `1+` is undefined inside an INCLUDEd helper. Isolated repros of both shapes PASS. | — |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
@@ -360,9 +359,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1507)
+## done (1508)
 
-1507 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1508 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -451,7 +450,6 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
-- [p 45] [N] bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element
 - [p 45] [N] bug-nilpy-local-reassigned-across-classes-keeps-one-static-class
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [N] bug-nilpy-uforth-ans-word-set-suite-4-of-13-open

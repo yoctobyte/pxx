@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 summary: "In uforth, `lst.pop(idx)` on a list of tuples leaves the SURVIVING element as an empty tuple `()` — the popped item is returned intact, its neighbour is destroyed. Kills the ANS tools word set (CS-ROLL) with a 12-line Forth repro; the equivalent standalone NilPy shapes all pass, so the trigger is still unisolated."
-status: working
+status: done
 owner: claude-A-uforth
 ---
 
@@ -85,3 +85,6 @@ its 10 TESTING groups in, then hangs (rc 124).
 
 `toolstest.fth` byte-identical to CPython running the same uforth.py, plus a
 `.npy` regression test for whatever the isolated shape turns out to be.
+
+## Log
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

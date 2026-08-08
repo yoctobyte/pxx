@@ -2,10 +2,10 @@
 track: N
 prio: 45
 type: bug
-summary: "The FULL Forth 2012/ANS suite measured per word set: 11 of 13 byte-identical to CPython (coreext and block both FIXED 2026-08-08 — a gapped closure-bridge arity table, and a borrowed return read as owned). 2 open, each with its own ticket and a minimal repro: tools, file. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
+summary: "The FULL Forth 2012/ANS suite measured per word set: 12 of 13 byte-identical to CPython — coreext, block and tools all FIXED 2026-08-08 (a gapped closure-bridge arity table; a borrowed return read as owned; pop(i) leaving a live alias in the slot it vacated). Only filetest is left, on its own ticket. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
 ---
 
-# uforth's ANS word-set suite: 11 of 13 identical, 2 open
+# uforth's ANS word-set suite: 12 of 13 identical, 1 open
 
 uforth ships the **Forth 2012 test suite** (`tests/`, from
 forth2012-test-suite 0.15.0) — the John Hayes ANS tester plus per-word-set
@@ -30,7 +30,7 @@ binary against CPython running the same `uforth.py`:
 | `stringtest.fth` | **IDENTICAL** |
 | `coreexttest.fth` | **IDENTICAL** — was SEGFAULT, fixed 2026-08-08 |
 | `blocktest.fth` | **IDENTICAL** — was SEGFAULT, fixed 2026-08-08 |
-| `toolstest.fth` | **HANG** (rc 124 = timeout, 43 of 47 lines) |
+| `toolstest.fth` | **IDENTICAL** — was HANG, fixed 2026-08-08 |
 | `filetest.fth` | wrong output (both exit 0, same line count) |
 
 `runtests.fth` end to end: pxx dies at line 71 of CPython's 253, inside
@@ -57,16 +57,24 @@ minimal repro:
   **Timing note for whoever re-measures this:** blocktest is the slow one —
   244s under pxx against CPython's 82s. A 180s timeout reads as a HANG and cost
   this session one wrong "still broken" call. Give it 600s.
-- **toolstest HANGS** rather than crashing, and rightly was not assumed to share
-  a cause: `CS-ROLL`'s `pop(index)` leaves the surviving tuple as `()`.
-  [[bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element]].
+- **tools — FIXED** (`fix(N): pop(i) must clear the slot it vacates, not leave
+  a live alias`). It hung rather than crashing and was rightly not assumed to
+  share a cause — it did not: `CS-ROLL`'s `pop(index)` shifted the tail with a
+  raw slot copy, so the next `append` released a live element and a
+  control-flow entry became an empty tuple mid-compile.
+  [[bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element]]. Also NOT the
+  same as block's over-release, which was the standing hypothesis: the ARC fix
+  landed first and changed nothing here.
 - **filetest** is the already-filed
   [[bug-nilpy-uforth-file-word-set-include-redefinition]] (the ANS FILE word
   set: two same-named `w_include` nested defs, and `1+` unresolved inside an
   INCLUDEd helper).
 
-This ticket stays open as the umbrella: it closes when all 13 word sets are
-identical AND enrolled, which needs the three above plus the driver work below.
+Swept end to end after the three fixes: **core, coreplus, double, exception,
+facility, locals, memory, searchorder, string, coreext, block and tools are all
+byte-identical; file is the only DIFF.** This ticket stays open as the
+umbrella: it closes when all 13 are identical AND enrolled, so what is left is
+filetest plus the driver work below.
 
 ## The gating gap this exposes
 
