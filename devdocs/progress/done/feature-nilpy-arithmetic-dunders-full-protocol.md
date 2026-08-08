@@ -306,4 +306,4 @@ quick` GREEN, plus `ar1`/`dm3`/pathlib/`eq`/`lt` probes re-diffed against
 CPython.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit dc2e5b46f.

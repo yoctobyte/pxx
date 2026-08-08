@@ -64,4 +64,4 @@ Explicitly NOT covered, tracked separately and deliberately left open:
   pairs computing instead of raising.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit dc2e5b46f.
