@@ -1,0 +1,8 @@
+var tuple  True True
+variant    True False
+empty      False False
+plain      True True
+window     True True
+winmiss    False
+param      True False
+platform   False True

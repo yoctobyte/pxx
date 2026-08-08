@@ -41,7 +41,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (191)
+## backlog (193)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,6 +66,7 @@ _none_
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
+| bug-nilpy-startswith-endswith-ignore-a-tuple-argument | N | 40 | bug | `startswith`/`endswith` with a TUPLE of prefixes silently answered False | — |
 | bug-nilpy-subscript-read-without-getitem-yields-garbage | N | 35 | bug | A subscript READ on a class with no `__getitem__` yields a silent wrong value | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -157,6 +158,7 @@ _none_
 | feature-nilpy-staticmethod-and-classmethod | N | 35 | feature | `@staticmethod` and `@classmethod` are rejected | — |
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-named-keyword-fields | N | 25 | feature | `"{name} is {age}".format(name=..., age=...)` — named fields not supported | — |
+| feature-nilpy-str-surface-gaps-2026-08-09 | N | 25 | feature | str/bytes surface gaps found by the 2026-08-09 differential sweep | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
@@ -495,6 +497,7 @@ _none_
 - [p 40] [N] feature-nilpy-multi-arg-callback-bridges (unblocks 1)
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
+- [p 40] [N] bug-nilpy-startswith-endswith-ignore-a-tuple-argument
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [S] feature-a-promoint-variant-esp-targets
@@ -561,6 +564,7 @@ _none_
 - [p 25] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 25] [N] feature-nilpy-for-loop-getitem-protocol-fallback
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields
+- [p 25] [N] feature-nilpy-str-surface-gaps-2026-08-09
 - [p 25] [O] feature-opt-alloc-intent-hint
 - [p 25] [W] feature-promo-launch-plan
 - [p 25] [M] feature-t-windows-wine-harness

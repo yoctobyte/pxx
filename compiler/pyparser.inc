@@ -5655,6 +5655,25 @@ begin
     else if i = 3 then pname := pname + '_range'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes one to three arguments');
+    { `s.startswith(("a", "b"))` — Python's TUPLE-of-prefixes form, which
+      answers True if ANY matches. The single AnsiString parameter turned a
+      tuple argument into text that matches nothing, so it silently answered
+      FALSE — a guard taking the wrong branch with no diagnostic, and the
+      failure direction that hides (`if s.startswith((..)):` just never fires).
+      Routed to a Variant-taking entry point ONLY when the argument is not
+      statically a string, so the hot `sys.platform.startswith("win")` path
+      keeps the plain call, while a tuple literal, a tuple-typed local and a
+      variant that only turns out to hold one at run time all reach the same
+      one place. bug-nilpy-startswith-endswith-ignore-a-tuple-argument }
+    if (i = 1) and ((pname = 'pystr_startswith') or (pname = 'pystr_endswith'))
+       and (ASTRight[argNode] >= 0) then
+    begin
+      k := ASTLeft[ASTRight[argNode]];
+      if (k >= 0) and (IntToTypeKind(ASTTk[k]) <> tyAnsiString) and
+         (IntToTypeKind(ASTTk[k]) <> tyString) and
+         (IntToTypeKind(ASTTk[k]) <> tyChar) then
+        pname := pname + '_any';
+    end;
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end

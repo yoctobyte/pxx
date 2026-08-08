@@ -1334,6 +1334,15 @@ function pystr_rfind_from(const s, sub: AnsiString; a: Integer): Integer;
 function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
 function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
 function pystr_startswith_range(const s, pre: AnsiString; a, b: Integer): Boolean;
+{ `s.startswith(("a", "b"))` — Python accepts a TUPLE of prefixes and answers
+  True if ANY matches. The argument arrives as a Variant so one entry point
+  covers a tuple literal, a tuple-typed local and a variant that only turns out
+  to hold one at run time; a plain string still answers as the ordinary form
+  does. Used only when the argument is NOT statically a string, so the common
+  `sys.platform.startswith("win")` path is unchanged.
+  bug-nilpy-startswith-endswith-ignore-a-tuple-argument }
+function pystr_startswith_any(const s: AnsiString; const v: Variant): Boolean;
+function pystr_endswith_any(const s: AnsiString; const v: Variant): Boolean;
 function pystr_endswith_from(const s, suf: AnsiString; a: Integer): Boolean;
 function pystr_endswith_range(const s, suf: AnsiString; a, b: Integer): Boolean;
 { str.rfind(sub) — last occurrence, -1 when absent. }
@@ -2002,6 +2011,59 @@ function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
 begin
   Result := pystr_rfind(pystr_slice(s, a, b), sub);
   if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+end;
+
+function pystr_startswith_any(const s: AnsiString; const v: Variant): Boolean;
+var p: PPyVarRec; o: TObject; k: Integer; e: Variant;
+begin
+  Result := False;
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    if o is TPyList then
+    begin
+      for k := 0 to TPyList(o).count - 1 do
+      begin
+        e := TPyList(o).at(k);
+        if pystr_startswith(s, PyVarText(PPyVarRec(@e))) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+      Exit;
+    end;
+    Exit;
+  end;
+  { not a sequence: an ordinary single prefix }
+  Result := pystr_startswith(s, PyVarText(p));
+end;
+
+function pystr_endswith_any(const s: AnsiString; const v: Variant): Boolean;
+var p: PPyVarRec; o: TObject; k: Integer; e: Variant;
+begin
+  Result := False;
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    if o is TPyList then
+    begin
+      for k := 0 to TPyList(o).count - 1 do
+      begin
+        e := TPyList(o).at(k);
+        if pystr_endswith(s, PyVarText(PPyVarRec(@e))) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+      Exit;
+    end;
+    Exit;
+  end;
+  Result := pystr_endswith(s, PyVarText(p));
 end;
 
 function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;

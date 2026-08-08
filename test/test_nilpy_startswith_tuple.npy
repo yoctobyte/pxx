@@ -1,0 +1,47 @@
+# bug-nilpy-startswith-endswith-ignore-a-tuple-argument
+#
+# `s.startswith(("X", "He"))` — Python's tuple-of-prefixes form, True if ANY
+# matches — silently answered FALSE. The pylib entry took a single AnsiString,
+# so a tuple argument became text that matches nothing.
+#
+# The failure direction is the one that hides: a `if s.startswith((..)):` guard
+# simply never fires, so the code takes the other branch with no diagnostic and
+# no wrong-looking value anywhere. Found by a differential sweep of the str
+# surface against CPython, not by a report.
+#
+# The argument is now routed to a Variant-taking entry ONLY when it is not
+# statically a string, so the hot `sys.platform.startswith("win")` path keeps
+# its plain call while a tuple literal, a tuple in a VARIABLE, and a tuple that
+# only turns out to be one at RUN time (returned from a def) all reach one
+# place. All three are asserted — a fix keyed on the literal alone would pass
+# the first and leave the others wrong.
+#
+# Controls: the plain single-string form both ways, the optional start/end
+# window (a separate pylib entry that must not be rerouted), a miss inside a
+# window, and an empty tuple (False, never True).
+#
+# NOT asserted: `s.startswith(["X", "He"])` with a LIST. CPython raises
+# TypeError there; NilPy accepts it and answers True. That is ordinary NilPy
+# laxity under the upward-compatibility rule — no working CPython program can
+# observe it — so pinning it either way would freeze a non-decision.
+#
+# Expectations are CPython's own output.
+
+s = "Hello, World"
+pre = ("X", "He")
+print("var tuple ", s.startswith(pre), s.endswith(("d", "Z")))
+
+
+def which(flag):
+    return ("He",) if flag else ("Zz",)
+print("variant   ", s.startswith(which(True)), s.startswith(which(False)))
+
+print("empty     ", s.startswith(()), s.endswith(()))
+print("plain     ", s.startswith("He"), s.endswith("ld"))
+print("window    ", s.startswith("lo", 3), s.endswith("lo", 0, 5))
+print("winmiss   ", s.startswith("He", 3))
+
+def f(x):
+    return x.startswith(("a", "b"))
+print("param     ", f("abc"), f("zzz"))
+print("platform  ", "linux".startswith("win"), "linux".startswith(("win", "lin")))
