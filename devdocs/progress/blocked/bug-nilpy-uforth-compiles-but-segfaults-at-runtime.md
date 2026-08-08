@@ -2,8 +2,8 @@
 track: N
 prio: 40
 type: bug
-blocked-by: bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver
-summary: "uforth.py compiles and now BOOTS — the segfault is fixed (2026-08-08). Still red: blocked on bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver, which drops w_colon's STATE write so every colon definition executes instead of compiling"
+blocked-by: bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape
+summary: "uforth.py compiles, BOOTS, and now compiles colon definitions correctly (segfault + property-setter fixes, 2026-08-08). Still red: blocked on bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape, hit by the first PYTHON-bodied word that calls back into define_word"
 ---
 
 # uforth compiles, boots, and stalls loading STD.UFO
@@ -147,3 +147,23 @@ typed parameter. Every colon definition therefore stays in interpret mode and
 its body executes instead of compiling. Filed, with a 25-line repro, as
 [[bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver]] —
 PRE-EXISTING (reproduced under `pinned`), just unreachable until now.
+
+
+## 2026-08-08 (third pass) — past STD.UFO's colon definitions, new blocker
+
+[[bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver]] fixed
+(three separate silent property-write losses, see that ticket). `vm.compiling =
+True` in `w_colon` now takes effect, so colon definitions COMPILE instead of
+executing and the junk that was landing on the data stack is gone.
+
+`make test-uforth` now fails in a different component:
+
+```
+pyeval: host method define_word has an unsupported param shape
+```
+
+pyeval's host-call bridge accepts only an ALL-variant or an ALL-pointer-sized
+parameter list, and `define_word(name: str, native: Callable, immediate: bool)`
+mixes the two. Filed as
+[[bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape]];
+`blocked-by:` moved there. Nothing left in this ticket again.

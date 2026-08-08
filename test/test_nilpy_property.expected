@@ -1,0 +1,8 @@
+False 10 3 interpret
+True 16 compile
+2
+static aug 22
+param compile True 31 True [True]
+variantlocal compile 8 [True]
+listelem 7 7 compile compile
+dictval 5 5

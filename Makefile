@@ -895,7 +895,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_variant_bitwise.npy /tmp/test_nilpy_variant_bitwise26
 	test "$$(/tmp/test_nilpy_variant_bitwise26)" = "$$(printf '%b' '44\n255\n240\n256\n16\n-4\n255\n1\n3\ncaught RuntimeError\ncaught via Exception base')"
 	./$(COMPILER) test/test_nilpy_property.npy /tmp/test_nilpy_property26
-	test "$$(/tmp/test_nilpy_property26)" = "$$(printf '%b' 'False\n10\nTrue\n16\n2')"
+	/tmp/test_nilpy_property26 | diff -u test/test_nilpy_property.expected -
 	./$(COMPILER) test/test_nilpy_float_conv.npy /tmp/test_nilpy_float_conv26
 	test "$$(/tmp/test_nilpy_float_conv26)" = "$$(printf '%b' '3.5\n-2.25\n10.0\n1000.0\n0.025\n7.0\n3.5\ncaught float ValueError\ncaught empty float\ndone')"
 	./$(COMPILER) test/test_nilpy_none_local.npy /tmp/test_nilpy_none_local26

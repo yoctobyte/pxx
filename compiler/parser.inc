@@ -947,6 +947,7 @@ function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): I
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
 function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python: is tk a genuine scalar/string result worth wrapping (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
+function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString; var ci: Integer): Integer; forward; { Nil Python obj.PROPERTY on a VARIANT receiver: the unboxed class-cast receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
 function PyKwNamesTokPos: Integer; forward; { Nil Python: '(' token index of the call at the current parse position, or -1 (pyparser.inc) }
 function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer; forward; { Nil Python: pick the UMeth overload a keyword argument names (pyparser.inc) }
@@ -3833,6 +3834,7 @@ var
   cvIdx: Integer;
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
+  propRecvNode, propRecvCi: Integer;   { NilPy @property on a VARIANT receiver }
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
@@ -5593,6 +5595,39 @@ begin
         Continue;
       end;
 
+      { Same receiver, a PROPERTY — a Python @property with its @prop.setter.
+        A property has no FIELD, so the variant branch below found nothing and
+        the access fell all the way through to the DYNAMIC-ATTRIBUTE store:
+        `v.compiling = True` wrote into pydynattr's side table while the getter
+        went on reading `self._compiling`. The setter never ran and the write
+        was silently dropped — the getter still worked, which is what made it
+        look like a stale read rather than a lost write. uforth's Forth STATE
+        flag is this shape, so every colon definition stayed in interpret mode
+        and its body EXECUTED instead of compiling
+        (bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver).
+
+        Deliberately NOT another member path: the receiver is rewritten to the
+        unboxed, class-cast object and control FALLS THROUGH to the class-typed
+        property handling below, which already routes a read to the getter and a
+        write to the setter (indexed properties, virtual accessors and all).
+        Teaching a second path to do that is how the two would drift apart —
+        the very split this bug is. The field name is NOT consumed here for the
+        same reason: that path expects CurTok still on it.
+
+        Ordered after the variant METHOD branch (so `v.m()` stays a method) and
+        before the variant FIELD branch (so a real field of that name still
+        wins, matching the field-then-dynattr precedence everywhere else). }
+      if PyExprMode and (tk = tyVariant) then
+      begin
+        propRecvNode := PyMakeVariantPropRecv(node, fieldName, propRecvCi);
+        if propRecvNode >= 0 then
+        begin
+          node := propRecvNode;
+          tk := tyClass;
+          recName := REC_UCLASS_BASE + propRecvCi;
+        end;
+      end;
+
       { Same receiver, no call: a plain FIELD READ off a variant — `x.name`
         where x is a for-in variable. Without it the access fell through and
         read the slot as though it were the object, printing an integer where
@@ -5845,6 +5880,89 @@ begin
             Inc(i);
           end;
           if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+        end;
+        { AUGMENTED assignment through a method-backed property — `s.state += 1`.
+          `isAssign` only ever tested for `:=`, so this fell into the READ arm
+          below: the getter was called, its RESULT was handed to the assignment
+          machinery as an lvalue, and the store went nowhere. Silently — the
+          value simply never changed, on a STATICALLY typed receiver as much as a
+          dynamic one, which is why it outlived the dropped-store bug it shares a
+          concept with (bug-nilpy-property-setter-is-skipped-on-a-dynamically-
+          typed-receiver: there the write vanished on the way IN, here on the way
+          back OUT).
+
+          Desugared the way Python defines it — `set(get() OP rhs)` — reusing
+          this property's own accessors, so an override still dispatches through
+          the VMT. The RECEIVER is evaluated twice (once per accessor); it is a
+          variable, field or unboxed-cast read at every site that reaches here,
+          so that is side-effect free — the same licence PyMakeTruthy and the
+          dynamic-attribute augmented path already take, and the identical
+          desugaring they use.
+
+          Field-backed properties are untouched: they rewrite to their backing
+          field above and the ordinary field lvalue handles `+=` correctly.
+          Indexed properties keep the old path — the index expression would be
+          evaluated twice too, and that is not always safe. }
+        if (not isAssign) and (not UPropIsIndexed[pri]) and
+           (UPropReadMLen[pri] > 0) and (UPropWriteMLen[pri] > 0) and
+           (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+           (PyAugBinTok(Tokens[TokPos].Kind) <> tkEOF) then
+        begin
+          methName := '';
+          for i := 0 to UPropReadMLen[pri] - 1 do
+            AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
+          mmi := FindUMeth(mci, methName);
+          if mmi < 0 then Error('getter method not found: ' + methName);
+          mpi := UMthProc_[mmi];
+          if UMthVirSlot[mmi] >= 0 then
+          begin
+            augRead := AllocNode(AN_VIRTUAL_CALL);
+            ASTRight[augRead] := UMthVirSlot[mmi];
+          end
+          else
+            augRead := AllocNode(AN_CALL);
+          ASTIVal[augRead] := mpi;
+          ASTTk[augRead] := Ord(Procs[mpi].RetType);
+          mselfArg := AllocNode(AN_ARG);
+          ASTLeft[mselfArg] := node;
+          ASTRight[mselfArg] := -1;
+          ASTLeft[augRead] := mselfArg;
+
+          Next;                       { the property name }
+          augBin := PyAugBinTok(CurTok.Kind);
+          Next;                       { the augmented operator }
+          ParseExpr;
+          augNode := AllocNode(AN_BINOP);
+          ASTIVal[augNode] := Ord(augBin);
+          ASTLeft[augNode] := augRead;
+          ASTRight[augNode] := CurASTNode;
+          ASTTk[augNode] := Ord(Procs[mpi].RetType);
+
+          methName := '';
+          for i := 0 to UPropWriteMLen[pri] - 1 do
+            AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
+          mmi := FindUMeth(mci, methName);
+          if mmi < 0 then Error('setter method not found: ' + methName);
+          mpi := UMthProc_[mmi];
+          if UMthVirSlot[mmi] >= 0 then
+          begin
+            mcallNode := AllocNode(AN_VIRTUAL_CALL);
+            ASTRight[mcallNode] := UMthVirSlot[mmi];
+          end
+          else
+            mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := mpi;
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          mselfArg := AllocNode(AN_ARG);
+          ASTLeft[mselfArg] := node;
+          margSeq := AllocNode(AN_ARG);
+          ASTLeft[margSeq] := augNode;
+          ASTRight[margSeq] := -1;
+          ASTRight[mselfArg] := margSeq;
+          ASTLeft[mcallNode] := mselfArg;
+
+          node := mcallNode;
+          Result := node; Exit;
         end;
         if isAssign then
         begin

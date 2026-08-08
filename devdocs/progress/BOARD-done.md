@@ -619,6 +619,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-print-stringifies-container-args-eagerly | N | 45 | bug | print() converts a container argument to text as it evaluates it, not after all arguments are evaluated — so `print(xs, xs.pop(), xs)` shows the list before AND after the pop. A user function with the identical shape is correct | — |
 | bug-nilpy-print-variant-holding-list-shows-object | N | 30 | bug | NilPy: print() of a variant holding a list/dict shows `<object>` not its repr | — |
 | bug-nilpy-printing-the-loop-var-of-a-str-local-in-a-function-segfaults | N | 75 | bug | `def f(): s = "ab"; for ch in s: print(ch)` SEGFAULTS | — |
+| bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver | N | 55 | bug | SILENT DATA LOSS: `v.prop = x` where `v` is a dynamically-typed parameter DROPS THE STORE ENTIRELY — the @property setter is never called and nothing is written, with no diagnostic. The identical store on a statically-typed local works. This is what stops uforth loading STD.UFO. | — |
 | bug-nilpy-pydict-v-borrowed-reference | N | 70 | bug | `pydict_v` handed back a BORROWED dict — use-after-free, heap corruption | — |
 | bug-nilpy-pyeval-host-kwargs-positional | N | 60 | bug | pyeval passes a host method's KEYWORD arguments POSITIONALLY (silent wrong option) | — |
 | bug-nilpy-pyeval-prints-bool-as-number | N | 30 | bug | pyeval prints a Boolean as 1/0 where CPython prints True/False | — |

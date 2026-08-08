@@ -1,7 +1,34 @@
+# @property / @x.setter.
+#
+# The RECEIVER SHAPE is the axis that matters here, not the property: a
+# statically-typed receiver worked all along, while every DYNAMICALLY typed one
+# (an untyped parameter, a variant local, a container element) missed the
+# property machinery entirely — no class declares a FIELD of that name, so the
+# access fell through to the dynamic-attribute store. `v.compiling = True` wrote
+# into pydynattr's side table while the getter went on reading `self._compiling`:
+# the setter never ran and the write was SILENTLY DROPPED, with the getter still
+# working, so it read as a stale value rather than a lost store. uforth's Forth
+# STATE flag is this shape, so every colon definition stayed in interpret mode
+# and its body executed instead of compiling.
+#
+# Two further holes in the same concept, both silent, both covered below:
+#   * `if not self.prop:` — the colon of a compound-statement HEADER matched the
+#     `self.x: ann` annotated-declaration scan and declared a phantom field
+#     SHADOWING the property, so afterwards nothing resolved to it at all.
+#   * `obj.prop += 1` — the property path only ever tested for `:=`, so this took
+#     the READ arm and the store went nowhere, on a static receiver too.
+# bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver
+from typing import Optional
+
+
 class VM:
     def __init__(self) -> None:
         self._compiling = False
         self._base = 10
+        self.log = []
+        # a genuine annotated field declaration must still register — it is what
+        # the `self.x: ann` scan is FOR, and the fix above narrows that scan
+        self.depth: int = 3
 
     @property
     def compiling(self) -> bool:
@@ -10,6 +37,7 @@ class VM:
     @compiling.setter
     def compiling(self, value: bool) -> None:
         self._compiling = value
+        self.log.append(value)
 
     @property
     def base(self) -> int:
@@ -21,12 +49,56 @@ class VM:
             value = 2
         self._base = value
 
+    def mode(self) -> str:
+        # the phantom-field trigger: `self.<property>` followed by the colon
+        # that ends an `if` header
+        if not self.compiling:
+            return "interpret"
+        return "compile"
+
+
+class SubVM(VM):
+    def __init__(self) -> None:
+        VM.__init__(self)
+
+
+# ---- statically-typed receiver
 v = VM()
-print(v.compiling)
-print(v.base)
+print(v.compiling, v.base, v.depth, v.mode())
 v.compiling = True
 v.base = 16
-print(v.compiling)
-print(v.base)
+print(v.compiling, v.base, v.mode())
 v.base = 1
 print(v.base)
+v.base += 20
+print("static aug", v.base)
+
+
+# ---- dynamically-typed receiver: an untyped parameter
+def poke(o, n):
+    o.compiling = True
+    o.base = n
+    o.base += 1
+    return o.mode()
+
+
+a = VM()
+print("param", poke(a, 30), a.compiling, a.base, a._compiling, a.log)
+
+# ---- variant local: reassigned across two classes, so it has no static type
+x = VM()
+x = SubVM()
+x.compiling = True
+x.base = 8
+print("variantlocal", x.mode(), x.base, x.log)
+
+# ---- container elements
+lst = [VM(), SubVM()]
+for e in lst:
+    e.base = 7
+    e.compiling = True
+print("listelem", lst[0].base, lst[1].base, lst[0].mode(), lst[1].mode())
+
+d = {"k": VM()}
+d["k"].base = 5
+print("dictval", d["k"].base, d["k"]._base)

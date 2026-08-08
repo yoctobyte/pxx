@@ -7762,6 +7762,70 @@ begin
   ASTTk[Result] := UFldTk[fi];
 end;
 
+{ `v.prop` where `v` is a VARIANT and `prop` is a PROPERTY (a Python @property
+  with its @prop.setter) rather than a field: unbox the slot and hard-cast it to
+  the class that declares the property, so the CLASS-TYPED member path — which
+  is the only one that knows how to route a read to the getter and a write to
+  the setter — takes it from there. Returns the cast receiver node, or -1 when
+  no class declares such a property. `ci` reports the class chosen.
+
+  Without this the name reached no property machinery at all: no class declares
+  a FIELD of that name (a property has no field), so the access fell through to
+  the DYNAMIC-ATTRIBUTE store, and `v.compiling = True` wrote into pydynattr's
+  side table while the getter went on reading `self._compiling`. The write was
+  silently DROPPED — no setter call, no diagnostic, and the getter still worked,
+  which is what made it read as a stale-read bug rather than a lost write.
+  uforth's Forth STATE flag is exactly this shape, so every colon definition
+  stayed in interpret mode and its body EXECUTED instead of compiling.
+  bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver
+
+  Candidate choice mirrors the METHOD scan: a base and its subclasses are not
+  ambiguous — they share the property, and a virtual accessor still dispatches
+  to the override at run time — so the ROOT-most candidate is cast to. Two
+  UNRELATED classes declaring the same property name cannot be told apart from
+  the slot here, and guessing one is how a wrong layout gets read silently, so
+  that is a diagnostic. }
+function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString;
+                               var ci: Integer): Integer;
+var c, root, unboxArg, unboxCall: Integer;
+begin
+  Result := -1;
+  ci := -1;
+  root := -1;
+  { A real FIELD of that name anywhere wins: the caller's field branch resolves
+    it (with runtime dispatch across differing layouts), and that is the
+    field-before-dynattr precedence every other member path follows. Checked
+    here rather than at the call site so ONE place decides which of the two
+    claims the name. }
+  for c := 0 to UClsCount - 1 do
+    if (not UClsIsRecord[c]) and (FindUField(c, pname) >= 0) then Exit;
+  for c := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[c] then Continue;
+    if FindUProp(c, pname) < 0 then Continue;
+    if root < 0 then root := c
+    else if IsSubclassOf(root, c) then root := c        { c is the more basic }
+    else if not IsSubclassOf(c, root) then
+      Error('Nil Python: .' + pname + ' on a dynamically-typed value is '
+            + 'ambiguous (several unrelated classes declare that property) — '
+            + 'assign to an annotated local first');
+  end;
+  if root < 0 then Exit;
+
+  unboxArg := AllocNode(AN_ARG);
+  ASTLeft[unboxArg] := baseNode;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+  Result := AllocNode(AN_CLASS_CAST);
+  ASTLeft[Result] := unboxCall;
+  ASTIVal[Result] := root;
+  ASTTk[Result]   := Ord(tyClass);
+  ci := root;
+end;
+
 { Force a node to Variant. A scalar goes through pyvar_id, whose parameter is a
   const Variant, so the ordinary call-argument boxing does the work. }
 function PyForceVariant(node: Integer): Integer;
@@ -19790,7 +19854,22 @@ begin
              (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
           begin
             if Tokens[j + 3].Kind = tkAssign then fldAnn := 0
-            else if Tokens[j + 3].Kind = tkColon then fldAnn := j + 4;
+            { `self.x: int = 5` — an ANNOTATED declaration, which is a STATEMENT
+              and therefore always starts one. Without that requirement the
+              colon of a compound-statement HEADER matched: `if not
+              self.compiling:` reads as `self` `.` `compiling` `:` and declared a
+              phantom variant field named after whatever the condition tested.
+              Harmless for a name that is a real field (it is already
+              registered, and the guard below skips a duplicate) — but for a
+              @property it declared a FIELD SHADOWING THE PROPERTY, so every
+              access resolved to a slot nobody writes. `if self.x:`, `while
+              self.x:`, `{self.x: 1}` and `a[self.x:]` are all this shape.
+              bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver }
+            else if (Tokens[j + 3].Kind = tkColon) and
+                    ((j = 0) or
+                     (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent,
+                                             tkSemicolon])) then
+              fldAnn := j + 4;
           end;
           if fldAnn >= 0 then
           begin

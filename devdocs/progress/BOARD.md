@@ -34,7 +34,7 @@ _none_
 | bug-nilpy-dunders-not-dispatched-through-containers | N | 45 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
-| bug-nilpy-uforth-compiles-but-segfaults-at-runtime | N | 40 | bug | uforth.py compiles and now BOOTS — the segfault is fixed (2026-08-08). Still red: blocked on bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver, which drops w_colon's STATE write so every colon definition executes instead of compiling | bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver |
+| bug-nilpy-uforth-compiles-but-segfaults-at-runtime | N | 40 | bug | uforth.py compiles, BOOTS, and now compiles colon definitions correctly (segfault + property-setter fixes, 2026-08-08). Still red: blocked on bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape, hit by the first PYTHON-bodied word that calls back into define_word | bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | decide-float-fixed-output-exact-or-fpc-17-digit-cap |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
@@ -62,8 +62,8 @@ _none_
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver | N | 35 | bug | A plain class's `Callable` field records no signature, so `def run(o): o.native(x)` on a dynamically-typed receiver is a COMPILE ERROR (\"no class declares a method or callable field\") — only a @dataclass field is reachable that way | — |
-| bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver | N | 55 | bug | SILENT DATA LOSS: `v.prop = x` where `v` is a dynamically-typed parameter DROPS THE STORE ENTIRELY — the @property setter is never called and nothing is written, with no diagnostic. The identical store on a statically-typed local works. This is what stops uforth loading STD.UFO. | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
+| bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape | N | 50 | bug | pyeval's host-method bridge accepts only ALL-variant or ALL-pointer-sized parameter lists, so a method mixing them — `define_word(name: str, native: Callable, immediate: bool)`, where Callable is a variant and the rest are registers — is refused outright: \"unsupported param shape\". This is what blocks uforth now. | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash | N | 35 | bug | NilPy survey: repr(), __iter__/__next__, __getattr__, __delitem__ and a custom __hash__ are unsupported — all fail LOUDLY (compile error or raise), measured vs CPython | — |
@@ -367,9 +367,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1486)
+## done (1487)
 
-1486 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1487 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (29)
 
@@ -428,7 +428,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
-- [p 55] [N] bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver (unblocks 1)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-set-is-a-list-not-a-set
@@ -448,6 +447,7 @@ _none_
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
+- [p 50] [N] bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
@@ -594,7 +594,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-set-as-a-distinct-type-or-a-list
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver
+- **1** — bug-nilpy-pyeval-host-call-refuses-a-mixed-variant-and-scalar-param-shape
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-parallel-capture-semantics
