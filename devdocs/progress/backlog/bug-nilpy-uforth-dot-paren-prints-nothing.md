@@ -2,7 +2,8 @@
 track: N
 prio: 40
 type: bug
-summary: "uforth's own driver suite is 8/11 identical to CPython. Two of the last three are ONE word: `.(` prints NOTHING under pxx. The third is the FILE word set. `make test-uforth` is GREEN; this is the layer past it."
+blocked-by: bug-nilpy-non-ascii-string-surface-measured
+summary: "ROOT CAUSE FOUND: `.(` prints nothing because NilPy strings are BYTE strings — uforth slices a str by a byte offset and the em-dashes in .UFO sources push it past the end. Not a new bug: it is the known, deliberate model (bug-nilpy-non-ascii-string-surface-measured). 8/11 of the suite is identical."
 ---
 
 # `.(` prints nothing — uforth's driver suite, 8 of 11 identical
@@ -96,3 +97,34 @@ what produced a withdrawn ticket already.
 All 11 byte-identical to the CPython run, `make test-uforth` still PASS, plus
 the per-fix loop. Worth splitting once the last-line cause is known: it is
 plainly one bug, and the FILE word set is plainly another.
+
+
+## ROOT CAUSE 2026-08-08: the byte-string model, not a new defect
+
+`.(` reads `>IN` — a BYTE offset into uforth's memory-mapped TIB — and uses it
+to slice `vm.input_line`, a Python str indexed by CHARACTER. CPython's str is
+character-indexed, so the two disagree on non-ASCII text and uforth compensates;
+NilPy's str is a BYTE string, so `len` and slicing count bytes, `pos` lands past
+the end of a line containing em-dashes, and the slice comes back empty. `.(`
+faithfully prints nothing.
+
+Visible in uforth's own `--trace` without instrumenting anything (which is what
+sidesteps the instrumented-build hang noted above): the same source line reports
+`len=53` under CPython and `len=67` under pxx.
+
+Five-line reduction:
+
+```python
+print(len("———"))      # CPython 3   pxx 9
+t = "abc—def"
+print(len(t), t[4:])   # CPython 7 def      pxx 9 <invalid UTF-8 on stdout>
+```
+
+**This is NOT a new bug.** NilPy strings are byte strings knowingly and
+deliberately — see [[bug-nilpy-non-ascii-string-surface-measured]], which
+already records `len("héllo") == 6`, and [[bug-nilpy-encode-ignores-the-codec]]
+for the decision. This ticket is now `blocked-by` that one; the measured uforth
+cost has been added there, since that ticket explicitly collects what the model
+costs. Nothing to fix HERE — do not "fix" `.(` by special-casing it.
+
+The FILE-word-set difference in `_drv_file.fth` is unrelated and still open.

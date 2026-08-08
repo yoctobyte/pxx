@@ -33,7 +33,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 180, ranked
+## Ready — top 30 of 179, ranked
 
 - `[p 70] [T]` regression-test-i386-test-dynarray-field
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-for-two-names-over-a-variant
@@ -66,4 +66,4 @@ _none — no lane is locked._
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
-_150 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_149 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

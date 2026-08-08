@@ -72,3 +72,58 @@ byte-vs-codepoint mismatch with actual UTF-8 source text.
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus the table above.
+
+## 2026-08-08 — a measured COST of the model: it breaks uforth's own test suite
+
+The ticket asks for the cost to be recorded rather than assumed. Here is a
+concrete one, found while clearing uforth's blocker chain.
+
+`.( hello)` — the ANS Forth "print until `)`" word — prints **nothing at all**
+under pxx, with no diagnostic. It is why `tests/_drv_string.fth` and
+`tests/_drv_x.fth` are 2 of the 3 files in uforth's driver suite that still
+differ from CPython (the other 8 are byte-identical).
+
+The mechanism is `len`-as-bytes reaching an INDEX, exactly the silent-corruption
+case the table above calls out:
+
+```python
+def w_dot_paren(vm):
+    pos = int.from_bytes(vm.memory[SYS_IN_ADDR:SYS_IN_ADDR+8], 'little', signed=True)
+    line = vm.input_line[pos:]        # pos is a BYTE offset into the TIB
+    ...                               # input_line is indexed by CHARACTER
+```
+
+uforth writes `>IN` as a byte offset into its memory-mapped TIB and then uses it
+to slice a Python str. Under CPython the two disagree only for non-ASCII text;
+under pxx they agree — but `.UFO` sources are full of em-dashes, so the same
+line measures 53 under CPython and 67 under pxx, `pos` lands past the end, and
+the slice is empty. Visible directly in uforth's own trace:
+
+```
+cpython: [trace:source] ... len=53 text="\ ——— .( — print tokens ... ———"
+pxx    : [trace:source] ... len=67 text="\ ——— .( — print tokens ... ———"
+```
+
+Reduced to five lines:
+
+```python
+print(len("———"))      # CPython 3   pxx 9
+print("\\ ———"[0:5])    # CPython "\ ———"   pxx "\ —"
+t = "abc—def"
+print(len(t), t[4:])   # CPython 7 def      pxx 9 <invalid UTF-8>
+```
+
+Note the last one also puts a MID-CHARACTER byte sequence on stdout, i.e. the
+`chr` output-corruption row of the table reached through slicing rather than
+through `chr`.
+
+### What this does and does not argue
+
+It is not an argument to reverse the model — the ticket's own framing stands.
+It is an argument that the cost is no longer hypothetical: a real program in the
+corpus that motivated the byte-string choice is itself broken by it, silently,
+and the failure surfaces four layers from the cause (empty output from one Forth
+word). Whoever picks up the string model should weigh that; whoever does not
+should expect `.(`-shaped mysteries in any corpus with non-ASCII source.
+
+Cross-referenced from [[bug-nilpy-uforth-dot-paren-prints-nothing]].
