@@ -81,6 +81,40 @@ never on bare metal. Capture this when the allocator profiles are implemented;
 do not bolt a timer-driven tracing collector onto the current managed-value
 path.
 
+## Reaffirmed 2026-08-08 — and the argument this doc was missing
+
+Re-derived from scratch during cpyext M5b (which hit an uncollectable cycle in
+Cython's function objects) and settled the same way. Nothing above changes.
+Recorded because it has now been re-litigated twice, and because the decisive
+argument was NOT written down here:
+
+**We are a compiler, so ARC's overhead is elidable and a collector's is not.**
+The two look symmetric on paper — cost at function exit versus cost at
+intervals — but they are not symmetric for us. Per-exit cost is something the
+compiler can *delete*: liveness-gated emission (a function with no managed
+temps emits nothing), move-on-return, one cleanup block instead of per-exit
+copies. A collector's interval cost is paid at runtime and no amount of
+codegen removes it. That asymmetry is why CPython needs a collector to make
+refcounting bearable and pxx does not — it is an interpreter and cannot elide
+anything. Pascal's model is the performant one, and NilPy gets the same model
+rather than a policy of its own.
+
+**Deferred release was considered and set aside.** Batching the finalizer walk
+off the exit path keeps refcount precision and needs no roots, so it is
+admissible where tracing GC is not — but it buys throughput by giving up
+determinism, and what it buys back is exactly the cost the compiler can remove
+outright. Paying a semantic price for an eliminable cost is the wrong trade.
+Do not revive it as a NilPy-only profile.
+
+**A cycle collector is not a way out of per-exit ARC** — a point that keeps
+getting lost. It only sees what refcounting structurally cannot: cycles. Remove
+refcounting and lean on the collector alone and you need roots again, i.e. the
+stack maps this doc rejected. So it is strictly additive, a leak fix rather
+than a speed fix, and it stays scoped to point 4 above:
+`feature-nilpy-cycle-collector` (NilPy, blocked on the reclamation ladder) and
+`feature-nilpy-cpyext-cycle-collector` (the cpyext extension object model,
+which is separate and much smaller).
+
 ## Related
 
 - [`allocator-platform-design.md`](allocator-platform-design.md) — the
