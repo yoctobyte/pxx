@@ -7067,6 +7067,21 @@ UFORTH_CORPUS ?= testje.for testjefixed.for testjefix2.for testjefix3.for
 # $(UFORTH_SRC)/tests/ and deletes it again (the EXIT trap covers an
 # interrupted run too). Nothing is left behind and uforth needs no commit.
 #
+# THE NAME CARRIES THE PID, and the trap's glob is scoped to that pid. It used
+# to be `_pxxdrv_<wordset>.fth` with a trap of `rm -rf .../_pxxdrv_*.fth`, and
+# $(UFORTH_SRC) is ONE tree shared by every clone on the box — the dev checkout
+# and the watcher's. So two concurrent `make test-uforth` runs wrote the same
+# filenames, and whichever finished first deleted the other's in-flight drivers
+# with that glob. Observed 2026-08-08: a manual run and the watcher's full tier
+# overlapped, and the watcher published test-uforth#00 as a RED that was purely
+# the collision.
+#
+# The trap also catches INT/TERM/HUP, not just EXIT. A bare `trap ... EXIT` does
+# NOT run when the shell is killed by an untrapped signal, so every timed-out or
+# Ctrl-C'd run leaked its drivers into somebody else's tree — there was a
+# `_pxxdrv_blocktest.fth.fth` sitting in $(UFORTH_SRC)/tests from an earlier
+# kill when this was found.
+#
 # COST: blocktest is by far the slowest — ~240s under pxx against CPython's
 # ~80s, because it is a memory-walk and hash workload. The other twelve
 # together are seconds. Whoever tunes tier placement should know the ~6 minutes
@@ -7081,7 +7096,7 @@ test-uforth: $(COMPILER)
 	  exit 0; \
 	fi; \
 	wd="$$(mktemp -d)"; \
-	trap 'rm -rf "$$wd" "$(UFORTH_SRC)"/tests/_pxxdrv_*.fth' EXIT; \
+	trap 'rm -rf "$$wd" "$(UFORTH_SRC)"/tests/_pxxdrv_$$$$_*.fth' EXIT INT TERM HUP; \
 	root="$$(pwd)"; \
 	echo "compiling uforth.py as Nil-Python ..."; \
 	"$$root/$(COMPILER)" "$(UFORTH_SRC)/uforth.py" "$$wd/uforth" > /dev/null || \
@@ -7116,7 +7131,7 @@ test-uforth: $(COMPILER)
 	  if [ ! -f "$(UFORTH_SRC)/tests/$$f" ]; then \
 	    miss=$$((miss+1)); missing="$$missing tests/$$f"; continue; \
 	  fi; \
-	  drv="_pxxdrv_$$f.fth"; \
+	  drv="_pxxdrv_$$$$_$$f.fth"; \
 	  printf 'S" prelimtest.fth" INCLUDED\nS" tester.fr" INCLUDED\nS" utilities.fth" INCLUDED\nS" errorreport.fth" INCLUDED\nS" %s" INCLUDED\n' "$$f" > "$(UFORTH_SRC)/tests/$$drv"; \
 	  printf '"tests/%s" INCLUDE\nBYE\n' "$$drv" > "$$wd/in.txt"; \
 	  ( cd "$(UFORTH_SRC)" && timeout 900 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 || true; \
