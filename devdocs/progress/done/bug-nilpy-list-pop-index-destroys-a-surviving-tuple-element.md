@@ -87,4 +87,4 @@ its 10 TESTING groups in, then hangs (rc 124).
 `.npy` regression test for whatever the isolated shape turns out to be.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit d4823aae4.
