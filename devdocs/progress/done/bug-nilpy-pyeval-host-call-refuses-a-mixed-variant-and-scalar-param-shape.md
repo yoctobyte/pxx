@@ -152,4 +152,4 @@ of the objects that later pass through it. Filed as
 [[bug-nilpy-uforth-compiles-but-segfaults-at-runtime]] now blocks on that.
 
 ## Log
-- 2026-08-08 — resolved, commit PENDING-COMMIT.
+- 2026-08-08 — resolved, commit 250b3becf.
