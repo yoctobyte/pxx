@@ -2,10 +2,10 @@
 track: N
 prio: 45
 type: bug
-summary: "The FULL Forth 2012/ANS suite measured per word set: 9 of 13 byte-identical to CPython, 4 open — coreext SEGFAULTS, block SEGFAULTS, tools HANGS, file differs. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
+summary: "The FULL Forth 2012/ANS suite measured per word set: 10 of 13 byte-identical to CPython (coreext FIXED 2026-08-08 — the closure bridge's arity table had gaps). 3 open, each with its own ticket and a minimal repro: block, tools, file. `make test-uforth`'s 10 corpora do NOT include core.fr or any of these, so none of it is gated."
 ---
 
-# uforth's ANS word-set suite: 9 of 13 identical, 4 open
+# uforth's ANS word-set suite: 10 of 13 identical, 3 open
 
 uforth ships the **Forth 2012 test suite** (`tests/`, from
 forth2012-test-suite 0.15.0) — the John Hayes ANS tester plus per-word-set
@@ -28,7 +28,7 @@ binary against CPython running the same `uforth.py`:
 | `memorytest.fth` | **IDENTICAL** |
 | `searchordertest.fth` | **IDENTICAL** |
 | `stringtest.fth` | **IDENTICAL** |
-| `coreexttest.fth` | **SEGFAULT** (rc 139, 43 of 93 lines) |
+| `coreexttest.fth` | **IDENTICAL** — was SEGFAULT, fixed 2026-08-08 |
 | `blocktest.fth` | **SEGFAULT** (rc 139, 43 of 124 lines) |
 | `toolstest.fth` | **HANG** (rc 124 = timeout, 43 of 47 lines) |
 | `filetest.fth` | wrong output (both exit 0, same line count) |
@@ -37,20 +37,34 @@ binary against CPython running the same `uforth.py`:
 `coreexttest` — after correctly printing "End of Core word set tests" and "End
 of additional Core tests". The core word set really does pass.
 
-## Three distinct failures, not one
+## Three distinct failures, not one — confirmed, and they really were three
 
-- **coreext / block segfault** at the same place in the output (43 lines), which
-  is right after "Test utilities loaded". The first missing CPython content in
-  coreext is its `.(`, `.R` and `U.R` output block — worth checking whether this
-  is the `.(`-family again now that
-  [[bug-nilpy-uforth-dot-paren-prints-nothing]] is fixed, or a second cause
-  wearing the same coat.
-- **toolstest HANGS** rather than crashing. A hang is a different bug class from
-  a segfault and should not be assumed to share a cause.
+The guess in the original filing was that coreext and block shared a cause
+because both died at output line 43. They did not. Each was bisected to its own
+minimal repro:
+
+- **coreext — FIXED** (`fix(N): give the closure call bridge an exact type per
+  arity, 0..32`). Not the `.(` family at all: `MARKER` builds a `restore`
+  closure with 1 own parameter + 11 captures, and `pyboundfn_callvn`'s table of
+  function types had GAPS (no 10, no 12, nothing above 13) and rounded UP to the
+  next type it had. That segfaults rather than degrading. Regression test:
+  `test/test_nilpy_escaping_closure_many_captures.npy`, captures 8..20.
+- **block** — `1 BLOCK DROP UPDATE` then `FLUSH` segfaults.
+  `flush_blocks` writes through `self._ensure_block(blk) -> bytearray`, and a
+  borrowed object returned out of an annotated function is over-released:
+  [[bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released]]
+  (root cause measured — `IRNodeYieldsOwnedRef` reads a container index, which
+  is an AN_CALL, as an owned +1).
+- **toolstest HANGS** rather than crashing, and rightly was not assumed to share
+  a cause: `CS-ROLL`'s `pop(index)` leaves the surviving tuple as `()`.
+  [[bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element]].
 - **filetest** is the already-filed
   [[bug-nilpy-uforth-file-word-set-include-redefinition]] (the ANS FILE word
   set: two same-named `w_include` nested defs, and `1+` unresolved inside an
   INCLUDEd helper).
+
+This ticket stays open as the umbrella: it closes when all 13 word sets are
+identical AND enrolled, which needs the three above plus the driver work below.
 
 ## The gating gap this exposes
 
