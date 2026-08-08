@@ -40,4 +40,4 @@ to a single opt-in `.inc` — smaller, incremental, and it doesn't block anythin
 - **(B) real Tcl/Tk embed everywhere** — rejected for Windows only (DLL swarm); kept for
   Linux.
 
-Re-filed as the low-prio Track W follow-up [[feature-pcl-tk-windows-compat]].
+Re-filed as the low-prio Track M follow-up [[feature-pcl-tk-windows-compat]].

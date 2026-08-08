@@ -1,7 +1,7 @@
 ---
 summary: "PCL: native Win32 widgetset — a 2nd TWidgetSet subclass over user32/gdi32, zero-dep (no GTK bundle). Best-effort, UN-GATED (no Windows box, Wine-smoke only)"
 type: feature
-track: W
+track: M
 prio: 25
 blocked-by: [feature-pcl-seam-seal, feature-port-windows-pe]
 ---

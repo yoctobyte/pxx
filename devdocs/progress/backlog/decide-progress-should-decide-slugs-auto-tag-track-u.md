@@ -1,0 +1,52 @@
+---
+prio: 30
+track: U
+blocked-by: []
+---
+
+# Should `decide-*` slugs auto-tag Track U in the ranker?
+
+- **Type:** decide (Track U — a convention call, not code)
+- **Status:** backlog — filed 2026-08-08 while wiring the W/M letters
+- **Owner:** —
+
+## The fork
+
+CLAUDE.md says plainly: *"The `decide-*` tickets already in the backlog ARE
+Track U."* The ranker does not know that. `decide-*` tickets that carry
+`track: U` in frontmatter resolve to U; the ones that don't fall through to the
+prose/slug heuristics and land wherever those point — e.g.
+`decide-nilpy-parallel-capture-semantics` currently resolves to **A**.
+
+So today the escalation lane is split: some open questions sit in U, others are
+mixed into A's ready queue, where an agent may pick one up and *guess* — which
+is the exact failure Track U exists to prevent.
+
+## Options
+
+1. **Auto-tag `decide-*` -> U in `Ticket.track`** (a 3-line rule beside the
+   S/O/E arms, with the same explicit-declaration tie-break the M rule needed).
+   Matches the documented rule; instantly correct for every future `decide-`.
+   Cost: it moves an unknown number of tickets out of A's/N's ready queue in one
+   step, changing what `next` hands out.
+2. **Backfill `track: U` frontmatter** on the existing `decide-*` tickets and
+   leave the tool alone. Explicit, auditable, no behaviour change for anything
+   else — but the next hand-written `decide-` without frontmatter re-opens the
+   gap.
+3. **Both** — the rule for correctness, the backfill so the files agree with it.
+4. **Neither** — accept that a `decide-` in another lane's queue is fine because
+   the agent that hits it will recognise the slug.
+
+## Recommendation
+
+**Option 3.** The rule is what makes it durable and the documented convention
+already asserts it; the backfill just makes the files honest. Option 4 relies on
+an agent noticing a naming convention mid-queue, which is precisely the kind of
+"it'll be obvious" assumption the W/M collision showed does not hold.
+
+Deliberately NOT done unilaterally: it changes which tickets `next` hands out
+across several lanes, and that is a steering decision, not a bug fix.
+
+## Related
+[[meta-track-w-collision-windows-vs-website]],
+[[chore-progress-flag-prose-only-track-decl]]

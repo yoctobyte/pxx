@@ -1379,6 +1379,7 @@ should not read it to find out what to do. Grep it freely._
 | lib-text-file-io-assign-rewrite | B | 50 | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | meta-track-b-compiler-wishlist | B | 50 | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
+| meta-track-w-collision-windows-vs-website | A | 45 | meta | Track letter W is claimed by TWO lanes — Windows and Website | — |
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-cascade-25678cbdd57c | T | 90 | regression | regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch) | — |

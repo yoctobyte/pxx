@@ -21,7 +21,7 @@ numbers + ABI**, not a userland/libc port.
   object writer alongside `elfwriter.inc`). The codegen/backends are unchanged;
   it's an OS-ABI + container-format port.
 - **Windows: a real future target, tracked separately** —
-  [[feature-port-windows-pe]] (Track W). Different shape from BSD/macOS: not
+  [[feature-port-windows-pe]] (Track M). Different shape from BSD/macOS: not
   a static syscall-only binary (PE + Win32/NT syscalls aren't a stable public
   contract), but a CRT-free thin binding against kernel32/ntdll — Windows'
   own stable standard library, the same role libc.so plays for OpenBSD. This

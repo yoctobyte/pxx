@@ -7,7 +7,7 @@ blocked-by: []
 
 - **Type:** meta (board hygiene / coordination hazard)
 - **Track:** A (the board belongs to A/B)
-- **Status:** backlog — found 2026-08-08
+- **Status:** done
 - **Owner:** —
 
 `W` currently means two different things, and the two halves hid from each
@@ -114,3 +114,49 @@ alone.
   the website lane. The user pushed back from memory and was right. Filed rather
   than fixed on the spot because it overturns a considered decision and touches
   ~8 tickets.
+
+## Resolution (2026-08-08)
+
+Done as specified. W = website (file-lane, keeps the letter), M = MSWindows
+(work-tag, A/B/T file ownership per ticket).
+
+1. Frontmatter `track: W` -> `track: M` on the four Windows tickets
+   (`feature-port-windows-pe`, `feature-t-windows-wine-harness`,
+   `feature-pcl-tk-windows-compat`, `feature-pcl-win32-widgetset`).
+2. Live cross-references fixed: `rainy-day/feature-os-targets-bsd-mac`,
+   `decided/decide-nilpy-gui-tk-vs-pcl`, and the Type line of
+   `feature-pcl-tk-windows-compat`. The remaining live "Track W" mentions
+   (`docs-canonical-domain`, `feature-release-checksums-repro`, the three
+   `feature-web-*`) all MEAN website and are correct untouched. `done/` left
+   alone per the precedence rule.
+3. `tools/progress.py`: `M` and `W` added to `--track` choices and to
+   `normalize_track`. An M decl-line rule plus `-(windows|win32|wine)-` slug
+   auto-tagging, mirroring S. **`S` was missing from `normalize_track`'s
+   character class too** — a ticket declaring `track: S` in frontmatter alone
+   had it silently stripped; fixed in the same pass. Name aliases added:
+   WEBSITE->W, WINDOWS/MSWINDOWS->M.
+4. CLAUDE.md: Track W (file-lane, separate repo) and Track M (work-tag, S's
+   shape) sections plus both one-liners; "D (docs/website)" corrected to "D
+   (docs; the website itself is W)".
+
+Verified by diffing every ticket's computed track before and after: exactly the
+9 intended rows moved (4 -> M, 5 -> W) and nothing else.
+
+### Correction to this ticket's own second finding
+
+The M slug rule needed a tie-break the S rule does not have: **this ticket**
+(`meta-track-w-collision-windows-vs-website`, a Track A board-hygiene item)
+auto-tagged itself M off its own slug. An explicit contradicting `track:` /
+`**Track:**` declaration now wins over the slug arm — a ticket ABOUT a campaign
+is not a ticket IN it. S has the same latent hole; it has not bitten yet.
+
+### Correction: the "invisible to the ranker" claim was too strong
+
+`feature-os-targets-bsd-mac` and ~130 other live tickets carry no frontmatter
+`track:`, but they are NOT invisible — the `**Track:**` / `**Type:**` prose
+fallback resolves them (bsd-mac -> A, correctly). Missing frontmatter is the
+norm here, not an anomaly, so a 130-ticket backfill was NOT done as part of this
+change. What genuinely was invisible was the unrecognised LETTER, which is
+fixed. The third finding (make `check` flag prose-only track declarations) is
+left open and split out: [[chore-progress-flag-prose-only-track-decl]].
+- 2026-08-08 — resolved, commit PENDING-COMMIT.

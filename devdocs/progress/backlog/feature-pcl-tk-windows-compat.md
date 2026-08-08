@@ -1,14 +1,14 @@
 ---
 summary: "NilPy tk on Windows — quarantine the Tcl/Tk-DLL-swarm problem behind a {$ifdef WINDOWS} include in tk.pas; emulate/wrap, stub now fill later. Linux keeps the real embed"
 type: feature
-track: W
+track: M
 prio: 25
 blocked-by: [feature-port-windows-pe]
 ---
 
 # PCL/NilPy — Windows tk compatibility (opt-in emulate/wrap)
 
-- **Type:** feature (**Track W** — Windows campaign; file-owned by Track B, `lib/pcl`).
+- **Type:** feature (**Track M** — MSWindows campaign; file-owned by Track B, `lib/pcl`).
   Gate = `make lib-test` green on Linux (Linux path unchanged); Windows tk = Wine-smoke
   best-effort.
 - **Status:** backlog. Implements the resolution of [[decide-nilpy-gui-tk-vs-pcl]].

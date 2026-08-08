@@ -226,9 +226,29 @@ frontend)"). **At session start, infer your track from the request:**
   lane (U holds *open questions*, not work). The `decide-*` tickets already in the
   backlog ARE Track U. Full autonomy model — scheduled per-lane workers, gates,
   review cadence — in **`devdocs/dev/autonomy.md`**.
+- **Track W — website (a real file-lane, in a SEPARATE repo).** The public site:
+  the private `~/pxx-website` repo (app, `deploy/`, `secrets/`, blog), its
+  deploy/secrets tooling and hosting. It earns a letter under the "don't invent
+  letters" rule precisely because it passes that rule's own test — a genuinely
+  new **place code lives**, the way Track T's watcher runs in its own clone. It
+  is NOT `docs/**`: Track D writes the Markdown *in this repo* that the site
+  publishes verbatim; W owns the machinery that publishes it. Rationale and the
+  lane's gate: `feature-web-track-w-bootstrap`.
+- **Track M — MSWindows (formal category, file-owned by A / B / T).** The
+  Windows campaign as one visible lane: the PE/COFF writer and MS x64 ABI
+  (**A**), the win32 widgetset and Tk-on-Windows compat in `lib/pcl` (**B**),
+  the Wine test harness (**T**). Exactly S's shape and rules — a **work-tag, not
+  a file-lane**: every M ticket ALSO carries its A/B/T file ownership for
+  collision purposes and obeys **that** lane's gate. `*-windows-*` /
+  `*-win32-*` / `*-wine-*` slugs auto-tag M. **M and not W**: W is the website
+  lane above, and Windows is not a place code lives. The two claimed W
+  simultaneously for months without anyone noticing, because Windows declared it
+  in frontmatter and the website in prose, so neither side's grep saw the other
+  (`meta-track-w-collision-windows-vs-website`). Declare a track in
+  **frontmatter** — that is what the ranker reads.
 
 If genuinely ambiguous, **ask: "Track A (core), B (libraries/demos), C (C
-frontend), D (docs/website), N (Nil-Python frontend), P (Pascal frontend), R (Rust
+frontend), D (docs; the website itself is W), N (Nil-Python frontend), P (Pascal frontend), R (Rust
 frontend), or Z (Zig frontend)?"** — don't guess; the tracks have opposite rules
 about rebuilding the compiler and where they work. (And remember one agent may legitimately hold
 several at once.) And whenever the fork is *what to build/decide* rather than
@@ -398,6 +418,20 @@ request, or a sane default → file `decide-<topic>` (fork + options + trade-off
 your recommendation) and move to the next queue item. The user resolves `decide-*`
 to steer; one answer unblocks the ranked chain behind it. A U item that's plain
 work once decided → re-file into the owning lane. See `devdocs/dev/autonomy.md`.
+
+### Track W in one line
+The website — a separate private repo (`~/pxx-website`: app, `deploy/`,
+`secrets/`, blog), not `docs/**` and not this checkout. A real file-lane, earned
+because it is a new place code lives (same test Track T's own clone passes).
+Track D writes the Markdown here that W's machinery publishes. Gate + disclosure
+rules: `feature-web-track-w-bootstrap`.
+
+### Track M in one line
+The MSWindows campaign (PE/COFF writer + MS x64 ABI, `lib/pcl` win32 widgetset
+and Tk compat, the Wine harness) surfaced as one lane — a work-tag like O and S,
+**file-owned per ticket by A / B / T** and gated by that lane, never a file-lane
+of its own. `*-windows-*` / `*-win32-*` / `*-wine-*` slugs auto-tag M. Not W: W
+is the website (see above).
 
 ## Claims discipline — TWO different "byte-identical", never conflate them
 Internal shorthand blurs these; **public-facing copy must not**. A compiler engineer

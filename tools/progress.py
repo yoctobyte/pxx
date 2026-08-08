@@ -83,14 +83,16 @@ def normalize_track(value: str) -> str:
     # full track names people actually write on Track: lines
     for name, letter in (("PASCAL", "P"), ("RUST", "R"), ("ZIG", "Z"),
                          ("DOCS", "D"), ("TESTING", "T"),
-                         ("NILPY", "N"), ("NIL-PYTHON", "N"), ("USER", "U")):
+                         ("NILPY", "N"), ("NIL-PYTHON", "N"), ("USER", "U"),
+                         ("MSWINDOWS", "M"), ("WINDOWS", "M"),
+                         ("WEBSITE", "W")):
         if name in t:
             return letter
-    t = re.sub(r"[^ABCDENOPRTUZ+/]", "", t)
+    t = re.sub(r"[^ABCDEMNOPRSTUWZ+/]", "", t)
     t = t.replace("/", "+")
     # strict: only clean single-letter combos survive; anything else (e.g.
     # letter-soup from a prose value) falls through to the Type-line detection
-    if not re.fullmatch(r"[ABCDENOPRTUZ](\+[ABCDENOPRTUZ])*", t):
+    if not re.fullmatch(r"[ABCDEMNOPRSTUWZ](\+[ABCDEMNOPRSTUWZ])*", t):
         return ""
     return t
 
@@ -244,6 +246,31 @@ class Ticket:
                 re.match(r"^(feature|bug|regression|idea|compat)-esp-", self.slug) or \
                 re.search(r"-(esp|esp32|xtensa)-", self.slug):
             return "S"
+        # Track M (MSWindows) — the Windows campaign, a work-tag with exactly
+        # S's shape: every M ticket ALSO carries its Track A (PE/COFF writer, MS
+        # x64 ABI), Track B (lib/pcl win32 widgetset) or Track T (wine harness)
+        # file-ownership tag for collision rules, and obeys THAT lane's gate.
+        # M and not W: W is the website lane (its own private repo — a genuinely
+        # new place code lives, per feature-web-track-w-bootstrap), and Windows
+        # is not a place code lives. The two spent months colliding because they
+        # declared the letter differently (frontmatter vs prose) and so hid from
+        # each other's greps — meta-track-w-collision-windows-vs-website.
+        # Separator MANDATORY like S, so the plural "Tracks" in ordinary prose
+        # ("Tracks M and A") cannot match.
+        # The slug arm needs the same tie-break the T rule needed: an explicit
+        # track that CONTRADICTS it wins. Without that,
+        # meta-track-w-collision-windows-vs-website — a board-hygiene ticket
+        # about the Windows lane, declaring Track A — was auto-tagged M by its
+        # own slug. A ticket ABOUT the campaign is not a ticket IN it.
+        explicit = normalize_track(self.fm.get("track", ""))
+        if not explicit:
+            _tl = first_bullet_value(self.text, "Track")
+            if _tl:
+                explicit = normalize_track(_tl.split()[0])
+        if re.search(r"\bTrack[ -]M\b", decl, re.I) or \
+                (re.search(r"-(windows|win32|wine)-", self.slug)
+                 and explicit in ("", "M")):
+            return "M"
         # Track O (Optimization: register allocation, opt passes, codegen/heap
         # perf) — a cross-cutting lane surfaced on its own, same decl-line rule as
         # R/T. Each ticket ALSO carries a Track A (compiler internals) or Track B
@@ -1272,13 +1299,13 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|N|O|P|R|S|T|U|Z]\n"
+        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|M|N|O|P|R|S|T|U|W|Z]\n"
         "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> [<commit>]",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
-        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "N", "O", "P", "R", "S", "T", "U", "Z"], default="")
+        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "M", "N", "O", "P", "R", "S", "T", "U", "W", "Z"], default="")
         sp.add_argument("--strict", action="store_true")
         sp.add_argument("--write", action="store_true")
     sp = sub.add_parser("claim")
