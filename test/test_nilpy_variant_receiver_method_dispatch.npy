@@ -1,0 +1,81 @@
+# feature-nilpy-runtime-method-dispatch-on-variant
+#
+# A method name declared by TWO pylib containers (`append` is both list.append
+# and bytearray.append) on a receiver with no static class used to resolve by a
+# documented PREFERENCE for the list. That was chosen on the assumption that "a
+# bytearray receiver is almost always a statically-typed local which never
+# reaches this path" — and the shape below is exactly where it fails.
+#
+# TWO bugs were in the way, and each hid the other:
+#
+#  1. `bytearray() if flag else [1, 2]` was typed from its THEN arm alone, so the
+#     def registered TPyBytes and the LIST arm came back declared as bytes:
+#     `d.append(99); print(d)` printed b'\x01\x00c' instead of [1, 2, 99]. Two
+#     different classes have no single static type, so the conditional now
+#     widens to a variant.
+#  2. With the receiver correctly a variant, `.append` then hit the list
+#     preference and ran TPyList.append over a TPyBytes. The preference is now a
+#     runtime class test: the list stays the fallback arm, so a receiver that is
+#     neither behaves exactly as before.
+#
+# BOTH arms of the conditional are asserted. Fixing only the reported one leaves
+# the other silently wrong, which is how this looked "half working" throughout.
+#
+# NOT asserted: that a bytearray PRINTS as `bytearray(b'..')`. NilPy models
+# bytes and bytearray as one type, so it prints `b'..'` and `type().__name__`
+# answers `bytes` — a real but separate gap, filed as
+# bug-nilpy-bytearray-and-bytes-are-the-same-type. Pinning today's answer either
+# way here would freeze it, so this test compares the CONTENT it can compare and
+# says so.
+#
+# Expectations are CPython's own output.
+
+
+def get_container(flag):
+    return bytearray() if flag else [1, 2]
+
+
+# the LIST arm: append and read back
+d = get_container(False)
+d.append(99)
+print("list  ", d, len(d))
+
+# the BYTEARRAY arm: append and read back by VALUE, not by repr
+c = get_container(True)
+c.append(99)
+print("bytes ", len(c), c[0])
+c.append(100)
+print("bytes2", len(c), c[0], c[1])
+
+
+# a conditional over two SCALARS still types cleanly
+def pick(flag):
+    return 1 if flag else 2
+
+
+print("scalar", pick(True), pick(False))
+
+
+# a conditional whose arms agree keeps its class (this is the case the
+# THEN-arm-only rule was added for: a class-valued conditional must not lose
+# its identity, or the next .method() on it fails to resolve)
+class Box:
+    def __init__(self, v):
+        self.v = v
+
+    def get(self):
+        return self.v
+
+
+def pick_box(flag):
+    return Box(1) if flag else Box(2)
+
+
+print("class ", pick_box(True).get(), pick_box(False).get())
+
+# ...and a mixed str/int conditional widens rather than claiming the then-arm
+def mixed(flag):
+    return "s" if flag else 7
+
+
+print("mixed ", mixed(True), mixed(False))

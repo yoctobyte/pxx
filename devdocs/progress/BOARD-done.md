@@ -1228,6 +1228,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-py-module-loader | N | 55 | feature | NilPy: `import <sibling>.py` — compile a real Python module as a unit | — |
 | feature-nilpy-qualified-class-construction | N | 55 | feature | nilpy: unit-qualified class construction (`tk.Frame(...)`) | — |
 | feature-nilpy-re-module | N | 50 | feature | nilpy: re module (match/search/sub/findall/fullmatch/compile) over the regex engine | feature-lib-regex-engine |
+| feature-nilpy-runtime-method-dispatch-on-variant | N | 50 | feature | NilPy: dispatch a method call on a VARIANT receiver at RUNTIME | — |
 | feature-nilpy-set-methods-issubset-union-etc | N | 35 | feature | set methods missing: issubset/issuperset/union/intersection/difference/discard | — |
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |

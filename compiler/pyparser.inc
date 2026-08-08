@@ -3078,6 +3078,7 @@ end;
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
+    ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
@@ -3096,7 +3097,51 @@ begin
     else if Tokens[k2].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
     else if (depth = 0) and (Tokens[k2].Kind = tkIf) and (k2 > startIdx) then
     begin
+      { ...but ONLY when both arms agree. Typing purely from the THEN arm
+        asserts a static type the value may not have: `bytearray() if flag else
+        [1, 2]` registered TPyBytes, so the list-returning call came back
+        declared as bytes and `d.append(99); print(d)` printed b'\x01\x00c'
+        instead of [1, 2, 99] — silently, and for a reason that has nothing to
+        do with the variant method dispatch this was filed under.
+        Two different classes have no single static answer, so widen to a
+        variant and let the runtime dispatch decide, which is the same
+        conclusion the reassigned-local rule reaches
+        (bug-nilpy-local-reassigned-across-classes-keeps-one-static-class).
+        feature-nilpy-runtime-method-dispatch-on-variant }
       Result := PyInferExprType(startIdx, k2);
+      ternCi := PyInferLastCi;
+      ternElse := -1;
+      ternDepth := 0;
+      for i := k2 + 1 to endIdx - 1 do
+      begin
+        if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(ternDepth)
+        else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(ternDepth)
+        else if (ternDepth = 0) and (Tokens[i].Kind = tkElse) then
+        begin ternElse := i; Break; end;
+      end;
+      if ternElse >= 0 then
+      begin
+        ternTk := PyInferExprType(ternElse + 1, endIdx);
+        if (ternTk <> tyUnknown) and (Result <> tyUnknown) then
+        begin
+          if (Result = tyClass) and (ternTk = tyClass) then
+          begin
+            if PyInferLastCi <> ternCi then
+            begin
+              Result := tyVariant;
+              PyInferLastCi := -1;
+              Exit;
+            end;
+          end
+          else if Result <> ternTk then
+          begin
+            Result := PyWiden(Result, ternTk);
+            PyInferLastCi := -1;
+            Exit;
+          end;
+        end;
+      end;
+      PyInferLastCi := ternCi;
       Exit;
     end;
     Inc(k2);
@@ -9674,17 +9719,38 @@ begin
         begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
       else if (ci = FindUClass('TPyBytes')) or (hitCi = FindUClass('TPyBytes')) then
       begin
-        { NARROW, DELIBERATE PREFERENCE, not a general tie-break: TPyList and
-          TPyBytes both legitimately declare append/extend (Python has both
-          list.append and bytearray.append), so neither can be renamed the way
-          TPyList.get was. On a receiver with no static class, prefer the LIST:
-          its parameter is a Variant and therefore accepts anything, while
-          TPyBytes takes an Integer, and a bytearray receiver is almost always
-          a statically-typed local (which never reaches this path).
-          The correct fix is runtime dispatch on the receiver's class —
-          feature-nilpy-runtime-method-dispatch-on-variant. }
-        if ci <> FindUClass('TPyBytes') then
-          begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end;
+        { TPyList and TPyBytes both legitimately declare append/extend (Python
+          has both list.append and bytearray.append), so neither can be renamed
+          the way TPyList.get was.
+
+          This used to be a NARROW PREFERENCE for the list — chosen because its
+          parameter is a Variant and accepts anything, and "a bytearray receiver
+          is almost always a statically-typed local which never reaches this
+          path". That assumption fails for exactly the shape this ticket is
+          about: `bytearray() if flag else [1, 2]` gives a receiver with no
+          static class, and `.append(99)` on the bytearray arm then ran
+          TPyList.append over a TPyBytes.
+
+          Now the same RUNTIME dispatch every other ambiguous pair here gets:
+          the LIST stays the static pick and the FALLBACK arm — so a receiver
+          that is neither behaves exactly as before — and TPyBytes becomes a
+          runtime-tested candidate, costing one class compare on these calls
+          only. feature-nilpy-runtime-method-dispatch-on-variant }
+        if ci = FindUClass('TPyBytes') then
+        begin
+          if nDual <= High(dualCis) then
+          begin
+            dualCis[nDual] := ci; dualMmis[nDual] := mmi; Inc(nDual);
+          end;
+        end
+        else
+        begin
+          if nDual <= High(dualCis) then
+          begin
+            dualCis[nDual] := hitCi; dualMmis[nDual] := hitMmi; Inc(nDual);
+          end;
+          hitCi := ci; hitMmi := mmi; hitPi := mpi;
+        end;
       end
       else if PyIsPylibContainerCi(hitCi) and not PyIsPylibContainerCi(ci) then
       begin

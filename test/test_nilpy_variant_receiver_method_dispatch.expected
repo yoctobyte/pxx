@@ -1,0 +1,6 @@
+list   [1, 2, 99] 3
+bytes  1 99
+bytes2 2 99 100
+scalar 1 2
+class  1 2
+mixed  s 7

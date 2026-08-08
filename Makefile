@@ -1077,6 +1077,11 @@ test-nilpy: $(COMPILER)
 	# as the sequence, not Integer. Controls pin ordinary `*` and `**`.
 	./$(COMPILER) test/test_nilpy_reversed_sequence_repeat_return.npy /tmp/test_nilpy_revrepeat26
 	/tmp/test_nilpy_revrepeat26 | diff -u test/test_nilpy_reversed_sequence_repeat_return.expected -
+	# a method name two pylib containers both declare, on a receiver with no
+	# static class, dispatches at RUNTIME; and a conditional whose arms disagree
+	# widens instead of claiming the then-arm's type.
+	./$(COMPILER) test/test_nilpy_variant_receiver_method_dispatch.npy /tmp/test_nilpy_vardispatch26
+	/tmp/test_nilpy_vardispatch26 | diff -u test/test_nilpy_variant_receiver_method_dispatch.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26
