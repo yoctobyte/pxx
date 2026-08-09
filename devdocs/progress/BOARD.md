@@ -255,7 +255,7 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-test-nilpy-test-nilpy-delitem-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_delitem_dunder.npy red at 954727cee668 (auto-filed by twatch) | — |
-| task-a-carve-nilpy-selectors-out-of-parser-inc | A | 45 | task | Carve NilPy's selector/subscript parsing out of `parser.inc` | — |
+| task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-drop-stale-known-tags-on-string-h-probes | T | 50 | task | Four gcc_diff_probe cases are still tagged `known` but no longer diverge — the compiler bug behind them is fixed, so the tag now hides future regressions in str-chr-nul / str-str-empty / mem-chr-miss | — |
@@ -390,9 +390,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1551)
+## done (1552)
 
-1551 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1552 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -525,7 +525,7 @@ _none_
 - [p 45] [A] meta-constant-normalisation
 - [p 45] [A] refactor-a-variant-object-tag-list-lives-in-four-places
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
-- [p 45] [A] task-a-carve-nilpy-selectors-out-of-parser-inc
+- [p 45] [A] task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class

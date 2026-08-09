@@ -23894,3 +23894,622 @@ begin
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   ApplyCallFixups;
 end;
+
+{ ===== NilPy selector/subscript parsing =====
+  The NilPy-only twin of parser.inc's ParseClassRecordSelectors, split out on
+  2026-08-09 (task-a-carve-nilpy-selectors-out-of-parser-inc). The user's rule:
+  once two languages diverge inside a shared parse helper, copy the helper and
+  specialise it -- the shared thing is the AST/IR, not the parser.
+
+  Why, concretely: the shared routine carried nine dialect forks, and in BOTH
+  bugs it produced, the PASCAL behaviour was the default and the NilPy arm was
+  something a reader had to remember to add (`f()[1]` on a string result applied
+  Pascal's 1-based index; a dataclass `str` default was eaten by a defensive
+  fill loop). A NilPy-only routine cannot accidentally do the Pascal thing,
+  because the Pascal code is not in it.
+
+  ParseClassRecordSelectors dispatches here whenever PyExprMode is on, so every
+  existing call site is unchanged. PyExprMode is only ever set by pyparser.inc,
+  so inside this copy PyExprMode / isNilPy / NilPyUserCode are all constantly
+  True and their guards are gone. Arms that are genuinely Pascal-only (the
+  interface IMT path, class-reference operations, `Free`) are still here on
+  purpose: pylib's classes are Pascal classes reached from NilPy code, so
+  proving an arm dead needs a measurement, not a reading. Delete them in a
+  later, separately gated pass -- narrowing is what this split makes safe, not
+  what it does. }
+
+function PyParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
+var crBlob, crNode: Integer;   { class-reference ops on a chained value }
+var dfCi, dfPri, dfMmi, dfMpi, dfI, dfSelf, dfIdxHead, dfIdxTail: Integer;   { default property on a chained value }
+    dfW, dfValArg: Integer; dfAssign: Boolean;
+    dfName: AnsiString;
+var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
+    ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
+    pri, i, w, margIdx: Integer; isAssign: Boolean;
+    cvIdx: Integer;
+begin
+  tk := IntToTypeKind(ASTTk[node]);
+  { EVALUATE THE RECEIVER ONCE. `f(args).m()` arrives here with the CALL as the
+    base, and an AST value node used in two places is re-emitted, not shared — so
+    `b.add(2).add(3)` ran add(2) TWICE and printed 7 where CPython prints 5.
+    Silent, and the more links a chain has the further the answer drifts. Bound
+    to a hidden temp, which is also what Python's evaluation order says. The
+    Pascal twin in parser.inc keeps its current codegen, so the self-host
+    binary is untouched. }
+  if (ASTKind[node] = AN_CALL) and (CurTok.Kind in [tkDot, tkLBrack]) then
+    node := PyEvalOnce(node);
+  while CurTok.Kind in [tkDot, tkLBrack] do
+  begin
+    { The chain has reached a VARIANT — `make()[0]` yields one, a list holding
+      variants — and a method on it dispatches at run time, not through this
+      class machinery. Without this the '.' was left unconsumed and reported as
+      an unexpected token, so `make()[0].upper()` did not compile at all. }
+    if (tk = tyVariant) and (CurTok.Kind = tkDot) and
+       (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+       (Tokens[TokPos + 1].Kind = tkLParen) then
+    begin
+      Next;                       { consume '.'; CurTok = the method name }
+      i := TokPos - 1;
+      Next;                       { consume the name; CurTok = '(' }
+      node := PyParseVariantMethod(node, GetTokenStr(i));
+      tk := IntToTypeKind(ASTTk[node]);
+      Continue;
+    end;
+    if CurTok.Kind = tkDot then
+    begin
+      Next;
+      if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+        Error('expected field name after .');
+      prevTok := TokPos - 1;
+      fieldName := GetTokenStr(prevTok);
+
+      ci := -1;
+      if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
+
+      { The class-reference OPERATIONS on a chained value: `(Data as TJSONArray).ClassType`,
+        `(b as TD).ClassName`. They are not methods, so the method path below never matched --
+        and a pointer accepts any member name silently, so the selector was simply DROPPED and
+        the expression evaluated to the object pointer. It printed a number where a class name
+        was expected, with no error at all.
+
+        An INSTANCE reaches its blob through AN_RTTIOF; a class REFERENCE is the blob. A real
+        member of that name on the class still wins. }
+      if (ci >= 0) and (CurTok.Kind = tkIdent) and IsClassRefOpName(fieldName) and
+         (FindUMeth(ci, fieldName) < 0) and (FindUField(ci, fieldName) < 0) and
+         (not UClsIsRecord[ci]) then
+      begin
+        crBlob := GenMakeRttiOfCall(node);
+        if crBlob >= 0 then
+        begin
+          Next;                          { consume the operation name }
+          crNode := GenMakeClassRefOp(crBlob, fieldName, outTk);
+          if crNode >= 0 then
+          begin
+            node := ParseClassRefOpTail(crNode, outTk);
+            recId := REC_NONE;
+            Continue;
+          end;
+        end;
+      end;
+
+      { Method call on the value: `.M(args)` (or 0-arg `.M`). Checked before the
+        field path so a method name isn't mistaken for a field. Mirrors the
+        instance-method arg parsing (ref/array params taken by lvalue). Self =
+        the current node; virtual methods dispatch dynamically on the real object
+        (a hard cast doesn't change the dynamic type). }
+
+      { Property on the value: TT(c).Prop — resolve to the backing field
+        (rename the AN_FIELD to the accessor field) or the getter/setter call,
+        mirroring the plain member-access property path (~2200). Previously the
+        property name fell through to the field builder unresolved, so
+        RecFieldOffset found nothing and read offset 0 — the VMT pointer
+        (bug-downcast-inherited-property-wrong-offset). }
+      pri := -1;
+      if ci >= 0 then pri := FindUProp(ci, fieldName);
+      if pri >= 0 then
+      begin
+        isAssign := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign);
+        { Indexed property write: `:=` follows the subscript — peek past the
+          bracket group (CurTok = name, TokPos = `[`). }
+        if UPropIsIndexed[pri] and (not isAssign) and
+           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLBrack) then
+        begin
+          i := TokPos; w := 0;
+          while i < TokCount do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(w)
+            else if Tokens[i].Kind = tkRBrack then
+            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+            Inc(i);
+          end;
+          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+        end;
+        if isAssign then
+        begin
+          if UPropWriteFLen[pri] > 0 then
+          begin
+            { field-backed write: rename to the backing field; the caller
+              consumes the `:=` and builds the assignment }
+            sub := AllocNode(AN_FIELD);
+            ASTLeft[sub] := node;
+            ASTSOffset[sub] := UPropWriteFOff[pri];
+            ASTSLen[sub] := UPropWriteFLen[pri];
+            accName := '';
+            for i := 0 to UPropWriteFLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropWriteFOff[pri] + i]);
+            tk := RecFieldType(recId, accName);
+            recId := RecFieldRecId(recId, accName);
+            ASTTk[sub] := Ord(tk);
+            Next; { consume property name }
+            node := sub;
+            Continue;
+          end
+          else if UPropWriteMLen[pri] > 0 then
+          begin
+            accName := '';
+            for i := 0 to UPropWriteMLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropWriteMOff[pri] + i]);
+            mmi := FindUMeth(ci, accName);
+            if mmi < 0 then Error('setter method not found: ' + accName);
+            mpi := UMthProc_[mmi];
+            Next; { consume property name }
+            margIdx := -1;
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA)
+            else PropIndexConstArg(pri, margIdx, lastA);
+            Expect(tkAssign, ':=');
+            ParseExpr;
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              callN := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[callN] := UMthVirSlot[mmi];
+            end
+            else
+              callN := AllocNode(AN_CALL);
+            ASTIVal[callN] := mpi;
+            ASTTk[callN] := Ord(Procs[mpi].RetType);
+            selfArg := AllocNode(AN_ARG);
+            ASTLeft[selfArg] := node;
+            ASTLeft[callN] := selfArg;
+            aSeq := AllocNode(AN_ARG);
+            ASTLeft[aSeq] := CurASTNode;   { value }
+            { Setter args: self [, index...], value }
+            if margIdx >= 0 then
+            begin
+              ASTRight[selfArg] := margIdx;
+              ASTRight[lastA] := aSeq;
+            end
+            else
+              ASTRight[selfArg] := aSeq;
+            outTk := Procs[mpi].RetType;
+            Result := callN;   { a complete call statement; caller uses it as-is }
+            Exit;
+          end
+          else
+            Error('property is read-only');
+        end
+        else
+        begin
+          if UPropReadFLen[pri] > 0 then
+          begin
+            sub := AllocNode(AN_FIELD);
+            ASTLeft[sub] := node;
+            ASTSOffset[sub] := UPropReadFOff[pri];
+            ASTSLen[sub] := UPropReadFLen[pri];
+            accName := '';
+            for i := 0 to UPropReadFLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropReadFOff[pri] + i]);
+            tk := RecFieldType(recId, accName);
+            recId := RecFieldRecId(recId, accName);
+            ASTTk[sub] := Ord(tk);
+            Next; { consume property name }
+            node := sub;
+            Continue;
+          end
+          else if UPropReadMLen[pri] > 0 then
+          begin
+            accName := '';
+            for i := 0 to UPropReadMLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropReadMOff[pri] + i]);
+            mmi := FindUMeth(ci, accName);
+            if mmi < 0 then Error('getter method not found: ' + accName);
+            mpi := UMthProc_[mmi];
+            Next; { consume property name }
+            margIdx := -1;
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA)
+            else PropIndexConstArg(pri, margIdx, lastA);
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              callN := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[callN] := UMthVirSlot[mmi];
+            end
+            else
+              callN := AllocNode(AN_CALL);
+            ASTIVal[callN] := mpi;
+            ASTTk[callN] := Ord(Procs[mpi].RetType);
+            selfArg := AllocNode(AN_ARG);
+            ASTLeft[selfArg] := node;
+            ASTLeft[callN] := selfArg;
+            { Getter args: self [, index...] }
+            if margIdx >= 0 then ASTRight[selfArg] := margIdx;
+            tk := Procs[mpi].RetType;
+            if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
+            else recId := REC_NONE;
+            node := callN;
+            Continue;
+          end
+          else
+            Error('property is write-only');
+        end;
+      end;
+
+      mmi := -1;
+      if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
+      if mmi >= 0 then
+      begin
+        EnforceMethVis(mmi, fieldName);
+        mpi := UMthProc_[mmi];
+        { NilPy: `<expr>.method` with NO following call is a BOUND-METHOD VALUE,
+          exactly as ParseLValueAST treats `name.method`. That was the ONLY site
+          building one, so the value form worked only when the receiver was a
+          bare identifier: `C().m`, `objs[0].m`, `a.b.m` — every receiver that
+          reaches the selector path instead — fell through to the call path and
+          yielded a bare code address with no receiver, which SEGFAULTED when
+          called (bug-nilpy-bound-method-of-a-temporary-receiver-segfaults).
+
+          The same bare-vs-selector split that hid a class-attribute read
+          through a non-bare receiver, in this same routine. Two paths for one
+          construct, and the second one stays broken —
+          devdocs/dev/normalise-dont-special-case.md.
+
+          A TEMPORARY receiver survives because the pair RETAINS it
+          (pybound_new), so `C().m` keeps its instance alive for the pair's
+          lifetime rather than reading a freed block. }
+        if (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkLParen) and
+           (ci >= 0) and not UClsIsInterface[ci] then
+        begin
+          Next;                                  { consume the method name }
+          node := PyMakeBoundMethod(mpi, node);
+          ASTTk[node] := Ord(tyVariant);
+          outTk := tyVariant;
+          Result := node;
+          Exit;
+        end;
+        if (ci >= 0) and UClsIsInterface[ci] then
+        begin
+          { INTERFACE receiver reached through a chained value — `IFoo(List[i]).M`,
+            `(x as IFoo).M`. Must dispatch through the IMT slot like the
+            ParseLValueAST path does: an interface method's proc is a body-less
+            SIGNATURE, so building a plain AN_CALL to it called address 0. }
+          callN := AllocNode(AN_INTF_CALL);
+          ASTRight[callN] := node;                  { the interface value }
+          ASTIVal[callN] := mpi;                    { signature proc (marshalling) }
+          ASTSOffset[callN] := UMthVirSlot[mmi];    { IMT slot }
+          ASTTk[callN] := Ord(Procs[mpi].RetType);
+          lastA := -1;
+          Next; { consume method name }
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            mai := 1;   { param 0 = Self, supplied by the interface value }
+            while CurTok.Kind <> tkRParen do
+            begin
+              ParseArgExpr; aNode := CurASTNode;
+              aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
+              if lastA = -1 then ASTLeft[callN] := aSeq else ASTRight[lastA] := aSeq;
+              lastA := aSeq;
+              Inc(mai);
+              if CurTok.Kind = tkComma then Next
+              else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+            end;
+            Expect(tkRParen, ')');
+          end;
+          outTk := Procs[mpi].RetType;
+          tk := outTk;
+          recId := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recId := REC_NONE;
+          node := callN;
+          Continue;
+        end;
+        if UMthVirSlot[mmi] >= 0 then
+        begin
+          callN := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[callN] := UMthVirSlot[mmi];
+        end
+        else
+          callN := AllocNode(AN_CALL);
+        ASTIVal[callN] := mpi;
+        ASTTk[callN] := Ord(Procs[mpi].RetType);
+        selfArg := AllocNode(AN_ARG);
+        ASTLeft[selfArg] := node;
+        ASTLeft[callN] := selfArg;
+        lastA := selfArg;
+        Next; { consume method name }
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          mai := 1;  { param 0 = Self }
+          { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
+            accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
+            the `)` to ParseExpr and reports "expected expression". A method with NO parameters
+            already worked, because the loop simply never ran. }
+          if CurTok.Kind = tkRParen then
+          begin
+            if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+              FillDefaultArgs(mpi, 1, callN, lastA);
+            mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
+          end;
+          while mai <= Procs[mpi].ParamCount - 1 do
+          begin
+            { NilPy keyword argument on a method — `.decode(enc, errors="x")`.
+              The censused uses pass keywords in declaration order, so the
+              `name=` prefix is consumed and the value binds positionally. }
+            if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+               (Tokens[TokPos].Kind = tkAssign) then
+            begin Next; Next; end;
+            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mai) then
+            begin
+              { `[...]` array-of-const literal to a method reached through a
+                value/selector chain — same as the plain-call path (b287) }
+              aNode := ParseVarRecLiteralAST;
+            end
+            else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mai) then
+            begin
+              { `[...]` open-array literal (r.SumAll([10,20]) on a record
+                method) — was parsed as a SET literal and crashed (b334) }
+              aNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind,
+                ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mai]);
+            end
+            else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+            begin
+              if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mai)) then
+              begin
+                { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                  param, [..] literals, casts): parse as an expression }
+                ParseArgExpr; aNode := CurASTNode;
+              end
+              else
+              begin
+                aIdx := FindSym(CurTok.SVal); Next;
+                aNode := ParseLValueAST(aIdx, TokPos - 2);
+              end;
+            end
+            else
+            begin
+              ParseArgExpr; aNode := CurASTNode;
+            end;
+            aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
+            ASTRight[lastA] := aSeq; lastA := aSeq;
+            if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+            begin
+              FillDefaultArgs(mpi, mai+1, callN, lastA);
+              mai := Procs[mpi].ParamCount-1;
+            end
+            else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
+            else if CurTok.Kind = tkComma then Next;  { Python trailing comma }
+            Inc(mai);
+          end;
+          Expect(tkRParen, ')');
+        end;
+        tk := Procs[mpi].RetType;
+        if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
+        else recId := REC_NONE;
+        node := callN;
+        { A method whose result is a STRING (e.g. bytes.decode) may be followed
+          by str methods — `bytes(b).decode("latin-1").upper()`. The generic
+          selector loop cannot resolve `.upper` (the result is not a class), so
+          chain them here, exactly as ParseFactor does for a call result. }
+        while PyIsStrBaseTk(tk) and (CurTok.Kind = tkDot) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+              (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkLParen) do
+        begin
+          Next;                          { consume '.'; CurTok = method name }
+          prevTok := TokPos - 1;
+          Next;                          { consume the name; CurTok = '(' }
+          node := PyParseStrMethod(node, GetTokenStr(prevTok));
+          tk := IntToTypeKind(ASTTk[node]);
+          recId := REC_NONE;
+        end;
+        outTk := tk;
+        Continue;
+      end;
+
+      { `(o as T).Free;` and friends — see BuiltinFreeHere. Same reason and same
+        guard as the ParseLValueAST site; this is the path a `(`-led statement
+        takes. }
+      if BuiltinFreeHere(node, recId, fieldName, TokPos) then
+      begin
+        Next;                        { consume 'Free' }
+        outTk := tyInteger;
+        Result := GenMakeFreeObjectExpr(node, recId - REC_UCLASS_BASE);
+        Exit;
+      end;
+      { Class variable / class ATTRIBUTE reached through a NON-BARE receiver —
+        the same fall-through the bare-identifier path already does in
+        ParseFactor ("class variable accessed via an instance"). A class-written
+        class attribute has no instance field BY CONSTRUCTION (it is one shared
+        slot), so without this arm `Base(1).made` reaches RequireRecMember and
+        dies as "no such member" while `b.made` on the very same object works —
+        the sibling arm of a double case (normalise-dont-special-case.md). }
+      if (recId >= REC_UCLASS_BASE) and
+         (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
+      begin
+        { An attribute that instances ALSO write needs the per-instance override
+          fall-through, not the bare slot — same precedence as the ParseFactor
+          site, where this branch sits ahead of the plain class-var one. Reading
+          the slot directly here would ignore an override that `self.attr = x`
+          in a constructor had just created. }
+        cvIdx := PyClsAttrOvrSlot(recId - REC_UCLASS_BASE, fieldName);
+        if cvIdx >= 0 then
+        begin
+          Next;                        { consume the field name }
+          node := PyClsAttrOvrGet(node, fieldName, cvIdx);
+          tk := tyVariant;
+          recId := REC_NONE;
+          outTk := tk;
+          Continue;
+        end;
+        cvIdx := FindClassVar(recId - REC_UCLASS_BASE, fieldName);
+        if cvIdx >= 0 then
+        begin
+          sub := AllocNode(AN_IDENT);
+          ASTIVal[sub] := cvIdx;
+          ASTTk[sub] := Ord(Syms[cvIdx].TypeKind);
+          tk := Syms[cvIdx].TypeKind;
+          recId := REC_NONE;
+          Next;                        { consume the field name }
+          node := sub;
+          outTk := tk;
+          Continue;
+        end;
+      end;
+      RequireRecMember(recId, fieldName);
+      sub := AllocNode(AN_FIELD);
+      ASTLeft[sub] := node;
+      ASTSOffset[sub] := Tokens[prevTok].SOffset;
+      ASTSLen[sub] := Tokens[prevTok].SLen;
+      EnforceFieldVis(recId, fieldName);   { --strict-visibility member access control }
+      tk := RecFieldType(recId, fieldName);
+      recId := RecFieldRecId(recId, fieldName);
+      ASTTk[sub] := Ord(tk);
+      Next;
+      node := sub;
+    end
+    else { tkLBrack — a DEFAULT PROPERTY on a class value, else index the array just selected }
+    begin
+      { `(Data as TJSONArray)[0]` (fcl-json's suite), `obj.Child[i]`. A class value with a
+        DEFAULT property means the getter, not an array index -- and building a raw AN_INDEX
+        over it left the base (an as-cast, say) with no address to take, which surfaced as
+        "IR_UNSUPPORTED: could not lower AST node". ParseLValueAST's suffix loop has always
+        dispatched this; the chained loop never did. }
+      { NilPy SLICE on a SELECTED member, e.g. `self.memory[a:b]`. This is the
+        chained-selector twin of the divert in ParseLValueAST: same reason
+        (ParsePropIndexArgs below consumes the bracket), same lookahead. A
+        plain `[i]` is untouched and still becomes the getter call. }
+      if PyIsSliceBase(node) and PySliceBracketAt(TokPos - 1) then
+      begin
+        Next;                     { consume '[' }
+        if CurTok.Kind = tkColon then
+          node := PyParseSliceTail(node, -1)
+        else
+        begin
+          PyParseBoolExpr;
+          node := PyParseSliceTail(node, CurASTNode);
+        end;
+        tk := IntToTypeKind(ASTTk[node]);
+        recId := ASTRight[node];
+        CurASTNode := node;
+        continue;
+      end;
+      { A CHAINED subscript whose base is now a VARIANT — `f()[0][0]`,
+        `g()["k"]["j"]`. The first subscript of a container-returning call
+        yields a variant, and this loop had no arm for indexing one: it fell
+        through to the raw array index below, which silently produced the
+        FIRST subscript's value again (`f()[0][0]` gave ['a', 1] instead of
+        'a'), or None, or SEGFAULTED for a dict of dicts.
+
+        PyMakeSuffixIndex is the same dispatcher a named receiver uses, so the
+        chained spelling and `x = f(); x[0][0]` now agree by construction
+        rather than by two paths happening to match — which is the failure this
+        function's own header already records twice for other cases.
+        bug-nilpy-subscript-of-a-call-result-ignores-the-index }
+      if tk = tyVariant then
+      begin
+        Next;                     { consume '[' }
+        PyParseBoolExpr;
+        node := PyMakeSuffixIndex(node, CurASTNode);
+        Expect(tkRBrack, ']');
+        tk := IntToTypeKind(ASTTk[node]);
+        recId := ASTRight[node];
+        CurASTNode := node;
+        continue;
+      end;
+      dfCi := -1;
+      if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
+      dfPri := -1;
+      if dfCi >= 0 then dfPri := FindDefaultProp(dfCi);
+      { Default-property WRITE on a chained base — `f(x)[k] = v`, where the base
+        is a call result (a dict/list reference) rather than a named lvalue, so
+        the whole target reaches this expression loop instead of ParseLValueAST.
+        Peek past the [...] group for a trailing '=' and, if present, build the
+        setter (mirrors the ParseLValueAST default-property write path). }
+      if (dfPri >= 0) and (UPropWriteMLen[dfPri] > 0) then
+      begin
+        dfAssign := False;
+        dfI := TokPos - 1; dfW := 0;      { TokPos-1 = the '[' }
+        while dfI < TokCount do
+        begin
+          if Tokens[dfI].Kind = tkLBrack then Inc(dfW)
+          else if Tokens[dfI].Kind = tkRBrack then
+          begin Dec(dfW); if dfW = 0 then begin Inc(dfI); Break; end; end;
+          Inc(dfI);
+        end;
+        if (dfI < TokCount) and (Tokens[dfI].Kind = tkAssign) then dfAssign := True;
+        if dfAssign then
+        begin
+          dfName := '';
+          for dfI := 0 to UPropWriteMLen[dfPri] - 1 do
+            AppendChar(dfName, TokChars[UPropWriteMOff[dfPri] + dfI]);
+          dfMmi := FindUMeth(dfCi, dfName);
+          if dfMmi < 0 then Error('default property setter not found: ' + dfName);
+          dfMpi := UMthProc_[dfMmi];
+          dfIdxHead := -1; dfIdxTail := -1;
+          ParsePropIndexArgs(dfIdxHead, dfIdxTail);   { consumes [ .. ] }
+          Expect(tkAssign, '=');
+          ParseExpr;
+          if UMthVirSlot[dfMmi] >= 0 then
+          begin sub := AllocNode(AN_VIRTUAL_CALL); ASTRight[sub] := UMthVirSlot[dfMmi]; end
+          else sub := AllocNode(AN_CALL);
+          ASTIVal[sub] := dfMpi; ASTTk[sub] := Ord(Procs[dfMpi].RetType);
+          dfSelf := AllocNode(AN_ARG); ASTLeft[dfSelf] := node; ASTLeft[sub] := dfSelf;
+          dfValArg := AllocNode(AN_ARG); ASTLeft[dfValArg] := CurASTNode;  { value }
+          ASTRight[dfSelf] := dfIdxHead; ASTRight[dfIdxTail] := dfValArg;
+          node := sub; outTk := Procs[dfMpi].RetType; Result := node; Exit;
+        end;
+      end;
+      if (dfPri >= 0) and (UPropReadMLen[dfPri] > 0) then
+      begin
+        dfName := '';
+        for dfI := 0 to UPropReadMLen[dfPri] - 1 do
+          AppendChar(dfName, TokChars[UPropReadMOff[dfPri] + dfI]);
+        dfMmi := FindUMeth(dfCi, dfName);
+        if dfMmi < 0 then Error('default property getter not found: ' + dfName);
+        dfMpi := UMthProc_[dfMmi];
+
+        dfIdxHead := -1; dfIdxTail := -1;
+        ParsePropIndexArgs(dfIdxHead, dfIdxTail);   { consumes [ .. ] }
+
+        if UMthVirSlot[dfMmi] >= 0 then
+        begin
+          sub := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[sub] := UMthVirSlot[dfMmi];
+        end
+        else
+          sub := AllocNode(AN_CALL);
+        ASTIVal[sub] := dfMpi;
+        ASTTk[sub] := Ord(Procs[dfMpi].RetType);
+        dfSelf := AllocNode(AN_ARG);
+        ASTLeft[dfSelf] := node;
+        ASTLeft[sub] := dfSelf;
+        ASTRight[dfSelf] := dfIdxHead;       { self, index... }
+
+        node := sub;
+        tk := Procs[dfMpi].RetType;
+        if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[dfMpi]
+        else recId := REC_NONE;
+        Continue;
+      end;
+
+      Next;
+      sub := AllocNode(AN_INDEX);
+      ASTLeft[sub] := node;
+      ParseExpr;
+      ASTRight[sub] := CurASTNode;
+      Expect(tkRBrack, ']');
+      if (tk = tyString) or (tk = tyAnsiString) then tk := tyChar;
+      ASTTk[sub] := Ord(tk);
+      node := sub;
+    end;
+  end;
+  outTk := tk;
+  Result := node;
+end;

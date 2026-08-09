@@ -32,6 +32,7 @@ function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
 function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean; forward;
 function ParamIsConstVariant(pi, slot: Integer): Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
+function PyParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;  { NilPy twin (pyparser.inc) }
 
 
 { ===== DWARF -g: the multi-file line table =====================================
@@ -7521,41 +7522,26 @@ end;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
 var crBlob, crNode: Integer;   { class-reference ops on a chained value }
 var dfCi, dfPri, dfMmi, dfMpi, dfI, dfSelf, dfIdxHead, dfIdxTail: Integer;   { default property on a chained value }
-    dfW, dfValArg: Integer; dfAssign: Boolean;
     dfName: AnsiString;
 var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
     cvIdx: Integer;
 begin
+  { NilPy has its OWN copy of this routine (PyParseClassRecordSelectors,
+    pyparser.inc), split out 2026-08-09 by
+    task-a-carve-nilpy-selectors-out-of-parser-inc. Everything below is the
+    PASCAL selector parser; the dialect forks that used to be interleaved here
+    live over there with their guards folded away. Keep it that way — a NilPy
+    fix belongs in the twin, not in a new `if PyExprMode` arm here. }
+  if PyExprMode then
+  begin
+    Result := PyParseClassRecordSelectors(node, recId, outTk);
+    Exit;
+  end;
   tk := IntToTypeKind(ASTTk[node]);
-  { EVALUATE THE RECEIVER ONCE. `f(args).m()` arrives here with the CALL as the
-    base, and an AST value node used in two places is re-emitted, not shared — so
-    `b.add(2).add(3)` ran add(2) TWICE and printed 7 where CPython prints 5.
-    Silent, and the more links a chain has the further the answer drifts. Bound
-    to a hidden temp, which is also what Python's evaluation order says. Guarded
-    on PyExprMode: the identical shape in Pascal keeps its current codegen, so
-    the self-host binary is untouched. }
-  if PyExprMode and (ASTKind[node] = AN_CALL) and
-     (CurTok.Kind in [tkDot, tkLBrack]) then
-    node := PyEvalOnce(node);
   while CurTok.Kind in [tkDot, tkLBrack] do
   begin
-    { The chain has reached a VARIANT — `make()[0]` yields one, a list holding
-      variants — and a method on it dispatches at run time, not through this
-      class machinery. Without this the '.' was left unconsumed and reported as
-      an unexpected token, so `make()[0].upper()` did not compile at all. }
-    if PyExprMode and (tk = tyVariant) and (CurTok.Kind = tkDot) and
-       (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
-       (Tokens[TokPos + 1].Kind = tkLParen) then
-    begin
-      Next;                       { consume '.'; CurTok = the method name }
-      i := TokPos - 1;
-      Next;                       { consume the name; CurTok = '(' }
-      node := PyParseVariantMethod(node, GetTokenStr(i));
-      tk := IntToTypeKind(ASTTk[node]);
-      Continue;
-    end;
     if CurTok.Kind = tkDot then
     begin
       Next;
@@ -7842,12 +7828,6 @@ begin
           end;
           while mai <= Procs[mpi].ParamCount - 1 do
           begin
-            { NilPy keyword argument on a method — `.decode(enc, errors="x")`.
-              The censused uses pass keywords in declaration order, so the
-              `name=` prefix is consumed and the value binds positionally. }
-            if PyExprMode and (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
-               (Tokens[TokPos].Kind = tkAssign) then
-            begin Next; Next; end;
             if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mai) then
             begin
               { `[...]` array-of-const literal to a method reached through a
@@ -7983,91 +7963,10 @@ begin
         over it left the base (an as-cast, say) with no address to take, which surfaced as
         "IR_UNSUPPORTED: could not lower AST node". ParseLValueAST's suffix loop has always
         dispatched this; the chained loop never did. }
-      { NilPy SLICE on a SELECTED member, e.g. `self.memory[a:b]`. This is the
-        chained-selector twin of the divert in ParseLValueAST: same reason
-        (ParsePropIndexArgs below consumes the bracket), same lookahead. A
-        plain `[i]` is untouched and still becomes the getter call. }
-      if PyExprMode and PyIsSliceBase(node) and PySliceBracketAt(TokPos - 1) then
-      begin
-        Next;                     { consume '[' }
-        if CurTok.Kind = tkColon then
-          node := PyParseSliceTail(node, -1)
-        else
-        begin
-          PyParseBoolExpr;
-          node := PyParseSliceTail(node, CurASTNode);
-        end;
-        tk := IntToTypeKind(ASTTk[node]);
-        recId := ASTRight[node];
-        CurASTNode := node;
-        continue;
-      end;
-      { A CHAINED subscript whose base is now a VARIANT — `f()[0][0]`,
-        `g()["k"]["j"]`. The first subscript of a container-returning call
-        yields a variant, and this loop had no arm for indexing one: it fell
-        through to the raw array index below, which silently produced the
-        FIRST subscript's value again (`f()[0][0]` gave ['a', 1] instead of
-        'a'), or None, or SEGFAULTED for a dict of dicts.
-
-        PyMakeSuffixIndex is the same dispatcher a named receiver uses, so the
-        chained spelling and `x = f(); x[0][0]` now agree by construction
-        rather than by two paths happening to match — which is the failure this
-        function's own header already records twice for other cases.
-        bug-nilpy-subscript-of-a-call-result-ignores-the-index }
-      if PyExprMode and (tk = tyVariant) then
-      begin
-        Next;                     { consume '[' }
-        PyParseBoolExpr;
-        node := PyMakeSuffixIndex(node, CurASTNode);
-        Expect(tkRBrack, ']');
-        tk := IntToTypeKind(ASTTk[node]);
-        recId := ASTRight[node];
-        CurASTNode := node;
-        continue;
-      end;
       dfCi := -1;
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;
       if dfCi >= 0 then dfPri := FindDefaultProp(dfCi);
-      { Default-property WRITE on a chained base — `f(x)[k] = v`, where the base
-        is a call result (a dict/list reference) rather than a named lvalue, so
-        the whole target reaches this expression loop instead of ParseLValueAST.
-        Peek past the [...] group for a trailing '=' and, if present, build the
-        setter (mirrors the ParseLValueAST default-property write path). }
-      if (dfPri >= 0) and PyExprMode and (UPropWriteMLen[dfPri] > 0) then
-      begin
-        dfAssign := False;
-        dfI := TokPos - 1; dfW := 0;      { TokPos-1 = the '[' }
-        while dfI < TokCount do
-        begin
-          if Tokens[dfI].Kind = tkLBrack then Inc(dfW)
-          else if Tokens[dfI].Kind = tkRBrack then
-          begin Dec(dfW); if dfW = 0 then begin Inc(dfI); Break; end; end;
-          Inc(dfI);
-        end;
-        if (dfI < TokCount) and (Tokens[dfI].Kind = tkAssign) then dfAssign := True;
-        if dfAssign then
-        begin
-          dfName := '';
-          for dfI := 0 to UPropWriteMLen[dfPri] - 1 do
-            AppendChar(dfName, TokChars[UPropWriteMOff[dfPri] + dfI]);
-          dfMmi := FindUMeth(dfCi, dfName);
-          if dfMmi < 0 then Error('default property setter not found: ' + dfName);
-          dfMpi := UMthProc_[dfMmi];
-          dfIdxHead := -1; dfIdxTail := -1;
-          ParsePropIndexArgs(dfIdxHead, dfIdxTail);   { consumes [ .. ] }
-          Expect(tkAssign, '=');
-          ParseExpr;
-          if UMthVirSlot[dfMmi] >= 0 then
-          begin sub := AllocNode(AN_VIRTUAL_CALL); ASTRight[sub] := UMthVirSlot[dfMmi]; end
-          else sub := AllocNode(AN_CALL);
-          ASTIVal[sub] := dfMpi; ASTTk[sub] := Ord(Procs[dfMpi].RetType);
-          dfSelf := AllocNode(AN_ARG); ASTLeft[dfSelf] := node; ASTLeft[sub] := dfSelf;
-          dfValArg := AllocNode(AN_ARG); ASTLeft[dfValArg] := CurASTNode;  { value }
-          ASTRight[dfSelf] := dfIdxHead; ASTRight[dfIdxTail] := dfValArg;
-          node := sub; outTk := Procs[dfMpi].RetType; Result := node; Exit;
-        end;
-      end;
       if (dfPri >= 0) and (UPropReadMLen[dfPri] > 0) then
       begin
         dfName := '';
