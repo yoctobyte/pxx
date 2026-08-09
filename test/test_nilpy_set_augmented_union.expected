@@ -10,3 +10,13 @@ int       7
 list +=   [1, 2]
 int +=    3
 realworld ['x', 'y']
+and       [2, 3]
+xor       [1, 2, 4]
+sub       [1, 3]
+alias and [2] [2] True
+alias xor [1, 3] [1, 3] True
+self xor  []
+self sub  []
+self and  [1, 2]
+empty and []
+int ops   8 6 2

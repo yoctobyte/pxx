@@ -3,6 +3,7 @@ prio: 50
 track: N
 type: bug
 blocked-by: []
+status: done
 ---
 
 # `a |= <set>` silently does nothing (and mixing it with `+=` segfaults)
@@ -93,18 +94,29 @@ the only one that can tell them apart, and its `rebind` twin pins that the plain
 The integer control is the other one that matters: `n |= 2` must stay bitwise
 (7), which is what keeps a set-specific arm from capturing the numeric case.
 
-### Deliberately still open: `&=` and `^=`
+### `&=`, `^=` and `-=` — DONE in the same session
 
-They REMOVE elements and there is no in-place primitive for that yet, so they
-keep today's (wrong) behaviour rather than gaining a second half-right path.
-The ticket stays OPEN for them, and the `normalise-dont-special-case` answer in
-the section above — route the augmented desugar through the same operator
-lowering the plain form uses — is still the right shape for finishing it. What
-changed is that `|=`, the common one and the one real code accumulates with, no
-longer silently loses data.
+Finished rather than left half-done, since a sibling kept broken beside a fixed
+one is exactly the trap this codebase keeps recording. All four now take the
+same in-place route (`setupdate` / `setintersect` / `setsymdiff` / `setdiff`).
+
+The removing three each **snapshot the side they iterate** before removing: an
+index walk over a list you are shrinking skips the element after every removal.
+The cases that catch getting that wrong are the SELF ones — `s ^= s`, `s -= s`,
+`s &= s` — where both sides are the same object; `s ^= s` must end EMPTY and
+`s &= s` must be unchanged. All three are in the test, as are the aliasing
+assertions and integer controls for every operator.
+
+The `normalise-dont-special-case` answer — route the augmented desugar through
+the same operator lowering the plain form uses — is still the better shape and
+would delete this arm. It stays worth doing; it is no longer urgent, because no
+spelling silently loses data now.
 
 ### The SEGFAULT row is a different bug
 
 The "mixing `|=` with `+=` segfaults" row was NOT this. Reduced separately to a
 name reused as an assignment target and then as a for-loop target, and filed as
 [[bug-nilpy-name-assigned-from-a-call-then-reused-as-a-loop-target-segfaults]].
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

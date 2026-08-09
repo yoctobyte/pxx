@@ -15,9 +15,11 @@
 # The INTEGER control is the one that keeps a set-specific fix honest: `n |= 2`
 # must stay bitwise (7), not become a set operation.
 #
-# `&=` and `^=` are deliberately NOT fixed here: they REMOVE elements and have
-# no in-place primitive yet, so they keep today's behaviour rather than gaining
-# a second half-right path. Recorded in the ticket, not pinned here.
+# `&=`, `^=` and `-=` are covered too, by the same route. They REMOVE elements,
+# so each snapshots the side it iterates before removing — an index walk over a
+# list you are shrinking skips the element after every removal. The SELF cases
+# (`s ^= s`, `s -= s`, `s &= s`) are what catch getting that wrong: they are the
+# only ones where the two sides are the same object.
 #
 # Expectations are CPython's own output.
 
@@ -81,3 +83,47 @@ allkeys = set()
 for sec in cfg.values():
     allkeys |= set(sec.keys())
 print("realworld", sorted(allkeys))
+
+# --- the removing operators, same in-place contract ---
+b = set([1, 2, 3])
+b &= set([2, 3, 9])
+print("and      ", sorted(b))
+c = set([1, 2, 3])
+c ^= set([3, 4])
+print("xor      ", sorted(c))
+d = set([1, 2, 3])
+d -= set([2, 9])
+print("sub      ", sorted(d))
+
+# they mutate, so aliases see it
+ab = set([1, 2])
+abal = ab
+ab &= set([2])
+print("alias and", sorted(ab), sorted(abal), ab is abal)
+ax = set([1, 2])
+axal = ax
+ax ^= set([2, 3])
+print("alias xor", sorted(ax), sorted(axal), ax is axal)
+
+# SELF on both sides: the snapshot cases
+sx = set([1, 2])
+sx ^= sx
+print("self xor ", sorted(sx))
+sd = set([1, 2])
+sd -= sd
+print("self sub ", sorted(sd))
+sa = set([1, 2])
+sa &= sa
+print("self and ", sorted(sa))
+ea = set([1])
+ea &= set()
+print("empty and", sorted(ea))
+
+# integer controls for the other three operators too
+ia = 12
+ia &= 10
+ix = 12
+ix ^= 10
+isb = 12
+isb -= 10
+print("int ops  ", ia, ix, isb)

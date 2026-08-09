@@ -16053,6 +16053,7 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     chainN, chainI, chainTmp, chainSeq: Integer;   { chained assignment a = b = v }
     chainNames: array[0..7] of AnsiString;
     delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
+    setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -16733,11 +16734,17 @@ begin
       in-place primitive yet, so they keep today's behaviour rather than gaining
       a second half-right path.
       bug-nilpy-set-augmented-union-does-nothing }
-    if (augTk = tkOr) and (PyNodeListCi(PyMakeIdent(symIdx)) >= 0) then
+    if ((augTk = tkOr) or (augTk = tkAnd) or (augTk = tkXor) or
+        (augTk = tkMinus)) and (PyNodeListCi(PyMakeIdent(symIdx)) >= 0) then
     begin
-      Result := PyCallMeth1(PyNodeListCi(PyMakeIdent(symIdx)), 'setupdate',
+      if augTk = tkOr then setOp := 'setupdate'
+      else if augTk = tkAnd then setOp := 'setintersect'
+      else if augTk = tkXor then setOp := 'setsymdiff'
+      else setOp := 'setdiff';
+      Result := PyCallMeth1(PyNodeListCi(PyMakeIdent(symIdx)), setOp,
                             PyMakeIdent(symIdx), CurASTNode);
-      if Result < 0 then Error('Nil Python: pylib TPyList.setupdate not loaded');
+      if Result < 0 then
+        Error('Nil Python: pylib TPyList.' + setOp + ' not loaded');
       Exit;
     end;
     { a USER class instance: __iadd__, else __add__ and rebind (Python's rule).

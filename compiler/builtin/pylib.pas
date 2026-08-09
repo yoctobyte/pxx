@@ -111,6 +111,13 @@ type
       exactly as `+=` on a list extends rather than rebinding.
       bug-nilpy-set-augmented-union-does-nothing }
     function setupdate(other: TPyList): Variant;
+    { ...and the three REMOVING in-place set ops: `&=`, `^=`, `-=`. Each is the
+      same contract — mutate Self, return None — and each takes a SNAPSHOT of
+      the side it iterates before removing, because removal renumbers the
+      elements under an index walk. }
+    function setintersect(other: TPyList): Variant;
+    function setsymdiff(other: TPyList): Variant;
+    function setdiff(other: TPyList): Variant;
     { NOT spelled `get`: Python lists have no .get, and sharing the name with
       TPyDict.get made every `.get(...)` on a dynamically-typed receiver
       ambiguous across classes. Internal accessor only — indexing goes through
@@ -3006,6 +3013,63 @@ begin
   if (Self = nil) or (other = nil) then Exit;
   for i := 0 to other.count - 1 do
     Self.add(other.at(i));
+end;
+
+function TPyList.setintersect(other: TPyList): Variant;
+var i: Integer; snap: TPyList; v: Variant;
+begin
+  Result := pynone;
+  if (Self = nil) or (other = nil) then Exit;
+  { snapshot Self's elements first: removing renumbers them, so a straight
+    index walk over Self would skip the element after every removal }
+  snap := TPyList.Create;
+  for i := 0 to Self.count - 1 do snap.append(Self.at(i));
+  for i := 0 to snap.count - 1 do
+  begin
+    v := snap.at(i);
+    if not pycontains(other, v) then Self.remove(v);
+  end;
+end;
+
+function TPyList.setsymdiff(other: TPyList): Variant;
+var i: Integer; snapSelf, snapOther: TPyList; v: Variant;
+begin
+  Result := pynone;
+  if (Self = nil) or (other = nil) then Exit;
+  { BOTH sides are snapshotted: the common elements leave Self and the
+    other-only ones join it, and each decision must be made against the sets as
+    they were, not as they are becoming. `s ^= s` must end EMPTY, which is the
+    case that catches doing it in one pass. }
+  snapSelf := TPyList.Create;
+  for i := 0 to Self.count - 1 do snapSelf.append(Self.at(i));
+  snapOther := TPyList.Create;
+  for i := 0 to other.count - 1 do snapOther.append(other.at(i));
+  for i := 0 to snapSelf.count - 1 do
+  begin
+    v := snapSelf.at(i);
+    if pycontains(snapOther, v) then Self.remove(v);
+  end;
+  for i := 0 to snapOther.count - 1 do
+  begin
+    v := snapOther.at(i);
+    if not pycontains(snapSelf, v) then Self.add(v);
+  end;
+end;
+
+function TPyList.setdiff(other: TPyList): Variant;
+var i: Integer; snapOther: TPyList; v: Variant;
+begin
+  Result := pynone;
+  if (Self = nil) or (other = nil) then Exit;
+  { snapshot the OTHER side, so `s -= s` (same object) does not shrink the list
+    it is iterating }
+  snapOther := TPyList.Create;
+  for i := 0 to other.count - 1 do snapOther.append(other.at(i));
+  for i := 0 to snapOther.count - 1 do
+  begin
+    v := snapOther.at(i);
+    if pycontains(Self, v) then Self.remove(v);
+  end;
 end;
 
 function TPyList.at(i: Integer): Variant;
