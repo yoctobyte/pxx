@@ -89,7 +89,8 @@ the CPython oracle that drove Track N, and the same shape as
 `tools/c_torture_harvest.sh` (vendored corpus, cross-check against the
 reference, never auto-dismiss a candidate because the reference disagrees).
 **Licensing and current packaging of ACATS are unverified** — check before
-counting on it.
+counting on it. Filed as
+[[chore-check-acats-and-nist-cobol85-corpus-availability]].
 
 ## Log
 - 2026-08-09 — noted. Track letter L (Legacy) agreed for Ada + COBOL; CLAUDE.md

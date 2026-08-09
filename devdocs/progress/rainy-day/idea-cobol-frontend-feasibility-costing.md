@@ -119,5 +119,11 @@ Scope it as a subset with an explicit refusal list (Report Writer, OO COBOL,
 type **first** — it is the part every COBOL program is made of, and the part
 where "mostly right" is worth nothing.
 
+## Corpus
+
+The NIST COBOL-85 suite and GnuCOBOL as a differential oracle are the plan;
+neither has been verified as obtainable — see
+[[chore-check-acats-and-nist-cobol85-corpus-availability]].
+
 ## Log
 - 2026-08-09 — costed against the current tree. Not scheduled.
