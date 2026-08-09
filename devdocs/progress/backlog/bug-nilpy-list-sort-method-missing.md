@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 50
 type: bug
 ---
 
@@ -117,7 +117,18 @@ be confirmed).
 Cross-reference: [[feature-nilpy-list-sort-inplace-key-reverse]] covers the same
 ground; these two should be merged or one closed as a duplicate.
 
-## 2026-08-09 — hit by a realistic program, and the diagnostic improved
+## 2026-08-09 — raised to prio 50: TWO independent realistic programs hit it
+
+Raised from 35 because it stopped being hypothetical. Writing ordinary little
+programs and diffing them against CPython, `.sort(key=...)` was the ONLY gap
+that came up **twice, in unrelated domains**:
+
+- a task scheduler: `ready.sort(key=lambda t: (cost[t], t))`
+- an account ledger: `accounts.sort(key=lambda x: -x.balance)`
+
+Sorting a working list in place by a computed key is not a corner of the
+language; it is how the idiom is written. Every other gap those programs hit was
+one-off.
 
 A hand-written scheduler (`ready.sort(key=lambda t: (cost[t], t))`) hit this,
 which is worth recording because it settles that `.sort(key=)` is a REAL-WORLD
