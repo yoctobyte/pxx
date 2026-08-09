@@ -483,6 +483,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
 | bug-nilpy-callable-value-abi-sorted-key-and-builtins | N | 65 | bug | `sorted(key=...)` ignores most keys, and a callable passed as a VALUE has no common ABI | — |
+| bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor | N | 55 | bug | Calling an instance whose NAME matches a class runs the CONSTRUCTOR | — |
 | bug-nilpy-caught-exception-objects-are-never-freed | N | 60 | bug | Every caught exception leaks its object — 640k raises cost 105 MB | — |
 | bug-nilpy-chained-assign-power-assign-and-semicolon-statements | N | 40 | bug | Three statement-level forms don't parse: chained assignment `a = b = 5`, `**=`, and semicolon-separated statements on one line — all loud | — |
 | bug-nilpy-chained-subscript-assignment-writes-only-the-last-target | N | 50 | bug | `xs[0] = xs[1] = 3` writes only `xs[1]` — the other target is silently skipped | — |

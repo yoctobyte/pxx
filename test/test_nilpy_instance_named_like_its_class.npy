@@ -1,0 +1,103 @@
+# bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor
+#
+# `parser = Parser(1)` then `parser(2)` built a NEW Parser and printed its
+# POINTER, where CPython invokes __call__ and prints 3. Silent, and
+# `parser = Parser(...)` / `widget = Widget()` / `p = Point(...)` is how Python
+# code is written — so the collision is the common case, not a corner.
+#
+# Cause: the constructor intercept tested FindUClassNonRecord, which matches
+# case-INSENSITIVELY, so the lowercase instance name found the CapWords class.
+# `Name(` is now a constructor only on an EXACT-case class match, which is
+# Python's own rule. A case-insensitive match with a different spelling can only
+# arise between names differing solely in case, which no NilPy source and no
+# shim does — so exactness costs nothing.
+#
+# This is the CALL half of a family whose TYPING half was fixed earlier by
+# PyIsClassTypeExact (a local named like a class was TYPED as that class). The
+# control below — `thing = Other()` then `thing(3)` — already worked, and its
+# working is what identified the NAME as the whole variable rather than
+# __call__ dispatch being broken generally.
+#
+# The rest of the file is the regression surface for the change: ordinary
+# construction must be untouched, including from a comprehension, nested in
+# another constructor's arguments, for a @dataclass, and for a builtin
+# exception — every one of those goes through the intercept that was narrowed.
+#
+# Expectations are CPython's own output.
+
+
+class Parser:
+    def __init__(self, n):
+        self.n = n
+
+    def __call__(self, a):
+        return self.n + a
+
+    def run(self):
+        return "ran"
+
+
+# the bug: an instance whose name matches its class, case-insensitively
+parser = Parser(1)
+print(parser.run())
+print(parser(2))
+print(parser(0), parser(10))
+
+# a SECOND instance of the same class, same collision
+parser2 = Parser(100)
+print(parser2(1))
+
+
+# the control that always worked: a name matching NO class
+class Other:
+    def __init__(self):
+        pass
+
+    def __call__(self, a):
+        return a * 10
+
+
+thing = Other()
+print(thing(3))
+
+# an instance named EXACTLY like its class is a real shadowing question, not a
+# spelling accident — it is not asserted here, only the case-differing form is.
+
+
+# --- regression surface: ordinary construction must be untouched ---
+from dataclasses import dataclass
+
+
+class Node:
+    def __init__(self, v):
+        self.v = v
+
+
+@dataclass
+class Point:
+    x: int
+
+
+class Wrapper:
+    def __init__(self, inner):
+        self.inner = inner
+
+
+node = Node(1)
+point = Point(2)
+print(node.v, point.x, point)
+
+# constructed inline, in a comprehension, and nested in another ctor's args
+print(Node(9).v, Point(8).x)
+print([Node(i).v for i in range(3)])
+wrapper = Wrapper(Node(7))
+print(wrapper.inner.v)
+
+# a builtin exception class, constructed and raised
+try:
+    raise ValueError("v")
+except ValueError as e:
+    print("exc", e)
+
+# isinstance still resolves the class name in TYPE position
+print(isinstance(node, Node), isinstance(node, Point))

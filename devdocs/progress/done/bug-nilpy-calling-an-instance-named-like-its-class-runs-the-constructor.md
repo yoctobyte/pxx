@@ -81,3 +81,26 @@ not "never construct".
 in the SAME case, and one named differently (control); `__call__` and a method
 call on each; a class-attribute instance counter proving no extra construction
 happens; and a genuine construction of an unbound class name still working.
+
+## 2026-08-09 — FIXED (sole-A confirmed by the user)
+
+`Name(` is a constructor only on an EXACT-case class match now, which is
+Python's own rule. The intercept tested `FindUClassNonRecord`, which matches
+case-INSENSITIVELY, so a lowercase instance name found its CapWords class.
+
+A case-insensitive match with a *different* spelling can only arise between
+names that differ solely in case, which no NilPy source and no shim does — so
+requiring exactness costs nothing and removes the whole class of collision.
+
+This is the CALL half of the family whose TYPING half `PyIsClassTypeExact`
+fixed earlier (a local named like a class was TYPED as that class); the new
+predicate is deliberately written in the same shape, next to it.
+
+The control that always worked — `thing = Other()` then `thing(3)` — is what
+identified the NAME as the variable rather than `__call__` dispatch being
+broken in general, and it is kept in the test for that reason. The rest of the
+test is the regression surface for narrowing an intercept: ordinary
+construction inline, in a comprehension, nested in another constructor's
+arguments, for a @dataclass, and for a builtin exception.
+
+Verified against CPython; `gate.sh quick` GREEN.

@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (220)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +52,6 @@ _none_
 | bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses | N | 60 | bug | A class used as a VALUE: SEGFAULT from a container, compile errors from a name | decide-sole-a-guard-for-unattended-sessions |
 | bug-nilpy-augmented-subscript-evaluates-its-index-twice | N | 30 | bug | NilPy: `d[key()] += 1` calls key() TWICE — the augmented-subscript desugar re-evaluates the base and index. CPython evaluates each once. The stored value is correct; only a side-effecting index is observable. | — |
 | bug-nilpy-calling-a-non-callable-segfaults | N | 55 | bug | Calling a non-callable SEGFAULTS instead of raising TypeError | — |
-| bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor | N | 55 | bug | Calling an instance whose NAME matches a class runs the CONSTRUCTOR | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-curried-lambda-fails-at-runtime | N | 40 | bug | A lambda whose body is another lambda dies at RUN time | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
@@ -391,9 +390,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1542)
+## done (1543)
 
-1542 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1543 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -449,7 +448,6 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
-- [p 55] [N] bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor
 - [p 55] [N] bug-nilpy-return-inside-a-with-skips-exit
 - [p 55] [N] bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver
 - [p 55] [B] bug-rtl-log10-is-inexact-for-powers-of-ten

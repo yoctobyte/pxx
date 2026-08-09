@@ -546,6 +546,30 @@ begin
   Result := PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm;
 end;
 
+{ `Name(` is a CONSTRUCTOR only when Name matches a class EXACTLY, Python's
+  own rule. FindUClassNonRecord matches case-INSENSITIVELY, so an instance
+  called `parser` beside `class Parser` was construed as a construction:
+  `parser(2)` built a NEW Parser and printed its pointer where CPython invokes
+  `__call__` and prints 3. Silent, and `parser = Parser(...)` /
+  `widget = Widget()` is how Python code is written, so the collision is the
+  common case rather than a corner.
+
+  A case-INSENSITIVE match with a different spelling can only arise between
+  names that differ solely in case, which no NilPy source and no shim does — so
+  requiring exactness costs nothing and is what the language says.
+
+  Same shape as PyIsClassTypeExact above, which fixed the TYPING half of this
+  family; this is the CALL half.
+  bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor }
+function PyIsExactCtorName(const nm: AnsiString): Boolean;
+var ci: Integer;
+begin
+  Result := False;
+  ci := FindUClassNonRecord(nm);
+  if ci < 0 then Exit;
+  Result := PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm;
+end;
+
 function PyTypeFromTokenIndex(i: Integer): TTypeKind;
 var lo: AnsiString;
 begin

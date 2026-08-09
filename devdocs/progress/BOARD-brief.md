@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:220 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1542 rejected:30`
+`unfinished:11 blocked:6 backlog:219 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1543 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 200, ranked
+## Ready — top 30 of 199, ranked
 
 - `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -53,7 +53,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
-- `[p 55] [N]` bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor
 - `[p 55] [N]` bug-nilpy-return-inside-a-with-skips-exit
 - `[p 55] [N]` bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver
 - `[p 55] [B]` bug-rtl-log10-is-inexact-for-powers-of-ten
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
+- `[p 55] [T]` feature-t-est-mem-from-measurement
 
-_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -987,6 +987,7 @@ begin
 end;
 procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
 function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
+function PyIsExactCtorName(const nm: AnsiString): Boolean; forward; { Nil Python: `Name(` is a ctor only on an EXACT-case class match (pyparser.inc) }
 function PyIsDictCompAhead: Boolean; forward; { Nil Python dict comprehension lookahead (pyparser.inc) }
 function PyParseDictCompExprValue: Integer; forward; { Nil Python dict comp in expression position (pyparser.inc) }
 
@@ -9116,7 +9117,7 @@ begin
     intercept: Pascal code still gets the record, which is what `var f: Text`
     means there. }
   if PyExprMode and (CurTok.Kind = tkIdent) and
-     (FindUClassNonRecord(CurTok.SVal) >= 0) and
+     PyIsExactCtorName(CurTok.SVal) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     CurASTNode := PyClassCreateExpr;
