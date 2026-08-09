@@ -1331,6 +1331,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-rtl-environment-variables | B | 45 | feature | No access to environment variables anywhere in the RTL | — |
 | feature-rtl-environment-write-side | B | 40 | feature | The environment's write side — SetEnvironmentVariable, and the child sees it | — |
 | feature-rtl-image-bitmap-library | B | 50 | feature | RTL image bitmap library | — |
+| feature-rtl-math-surface-gaps | B | 30 | feature | `math` surface gaps — 16 names missing, all LOUD | — |
 | feature-rtl-month-day-name-arrays | B | 55 | feature | RTL: ShortMonthNames / LongMonthNames / day-name arrays — lib-test's synapse step is red on them | — |
 | feature-rtl-terminal-raw-mode | B | 50 | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
 | feature-rtti-field-reflection | A | 45 | feature | RTTI: field get/set by name (extends the VMT-8 method-reflection blob) | — |

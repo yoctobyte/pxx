@@ -7961,6 +7961,15 @@ lib-test: pxx-stable-check
 	# implementation gets wrong ("a"b is TWO items; a"b" is one literal item).
 	$(PXX_STABLE) -Fulib/rtl test/lib_commatext.pas /tmp/lib_commatext
 	test "$$(/tmp/lib_commatext | tail -n 1)" = "COMMATEXT OK"
+	# The Python math surface (NilPy's `import math` resolves against lib/rtl's
+	# math unit): e/tau/inf/nan, isnan/isinf, pow, log(x,base), atan2,
+	# degrees/radians, copysign's sign-bit rule, isclose, factorial, comb.
+	$(PXX_STABLE) -Fulib/rtl test/lib_math_python_surface.pas /tmp/lib_math_python_surface
+	test "$$(/tmp/lib_math_python_surface | tail -n 1)" = "MATHPY OK"
+	# Canary for a change in ANOTHER lane: a Pascal RTL name that collides with
+	# a libc one silently hijacks it in every C program (pxxcio does `uses math`).
+	$(PXX_STABLE) test/cmath_no_pascal_hijack.c /tmp/cmath_no_pascal_hijack
+	test "$$(/tmp/cmath_no_pascal_hijack)" = "$$(printf 'pow=1024 1.41421\nlog=1.386294361 log10=3.000000000 log2=3.000000000\nexp=2.718281828\natan2=0.785398163\ncopysign=-3 3\nisnan=1 0\nisinf=1 0\nnan=1\nhypot=5.000000000 fmod=1\nsqrt=1.414213562 ceil=-2 floor=-3')"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.
 	# The output is identical either way — the property that separates a futex
 	# mutex from the spinlock it replaced is CPU TIME, so assert that: three

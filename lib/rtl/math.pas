@@ -60,6 +60,39 @@ function Max(a, b: Double): Double;
 function DegToRad(d: Double): Double;
 function RadToDeg(r: Double): Double;
 
+{ ---- Python `math` module surface ----
+  NilPy's `import math` resolves ordinary names straight against THIS unit,
+  case-insensitively, so a Python spelling with no Pascal counterpart under that
+  name simply does not exist (feature-rtl-math-surface-gaps measured 16).
+
+  THREE NAMES ARE DELIBERATELY ABSENT — `pow`, `log` and `copysign` — and adding
+  them is a trap that measures as a C REGRESSION rather than a Pascal one:
+  `pxxcio` is auto-pulled into every C program and does `uses math`, so every
+  name here is in scope for C name resolution and a Pascal `Pow`/`Log`/
+  `CopySign` HIJACKS libc's. Measured: gcc gives pow(2,10) = 1024, and with a
+  `Pow` in this unit a C program answered 1; `copysign(3,-1)` answered 0.785398,
+  which is atan2's result. Filed as
+  bug-c-pascal-math-names-hijack-libc-through-pxxcio; NilPy gets intercepts for
+  those three instead. `trunc` is absent for a different reason — Python's
+  returns an int, the same contract mismatch that made math.floor/ceil
+  intercepts.
+
+  IsClose uses Python's defaults: rel_tol 1e-09, abs_tol 0.0; equal infinities
+  are close and NaN never is. }
+function E: Double;
+function Tau: Double;
+function Inf: Double;
+function NaN: Double;
+function IsNan(x: Double): Boolean;
+function IsInf(x: Double): Boolean;
+function Atan2(y, x: Double): Double;
+function Degrees(r: Double): Double;
+function Radians(d: Double): Double;
+function IsClose(a, b: Double): Boolean;
+function IsClose(a, b, relTol, absTol: Double): Boolean;
+function Factorial(n: Integer): Int64;
+function Comb(n, k: Integer): Int64;
+
 { ---- Single overloads (widen -> Double -> narrow) ---- }
 function Abs(x: Single): Single;
 function Sqrt(x: Single): Single;
@@ -397,6 +430,112 @@ end;
 function Hypot(x, y: Double): Double;
 begin
   Result := Sqrt(x * x + y * y);
+end;
+
+{ ---- Python `math` module surface (see the interface note) ---- }
+
+function E: Double;
+begin
+  Result := 2.71828182845904523536;
+end;
+
+function Tau: Double;
+begin
+  Result := 6.28318530717958647692;
+end;
+
+{ Inf and NaN are built from the IEEE BIT PATTERNS, not 1.0/0.0 and 0.0/0.0.
+  The division form is the obvious one and it is wrong twice over: NilPy raises
+  ZeroDivisionError on the divide, so `math.inf` DIED rather than answering, and
+  a checked-arithmetic build would trap for the same reason. The reinterpret is
+  exact by construction anyway — the same trick as the Sqrt seed above. }
+function Inf: Double;
+var bits: Int64; p: PSqrtDouble;
+begin
+  bits := $7FF0000000000000;
+  p := PSqrtDouble(@bits);
+  Result := p^;
+end;
+
+function NaN: Double;
+var bits: Int64; p: PSqrtDouble;
+begin
+  bits := $7FF8000000000000;    { quiet NaN }
+  p := PSqrtDouble(@bits);
+  Result := p^;
+end;
+
+function IsNan(x: Double): Boolean;
+begin
+  { The only value not equal to itself — and the reason this needs to exist is
+    that `x <> x` is the trick everyone has to know without it. }
+  Result := x <> x;
+end;
+
+function IsInf(x: Double): Boolean;
+begin
+  Result := (x > 1.7976931348623157e308) or (x < -1.7976931348623157e308);
+end;
+
+function Atan2(y, x: Double): Double;
+begin
+  Result := ArcTan2(y, x);
+end;
+
+function Degrees(r: Double): Double;
+begin
+  Result := RadToDeg(r);
+end;
+
+function Radians(d: Double): Double;
+begin
+  Result := DegToRad(d);
+end;
+
+function IsClose(a, b, relTol, absTol: Double): Boolean;
+var d, m, ta, tb: Double;
+begin
+  if (a <> a) or (b <> b) then begin Result := False; Exit; end;   { NaN }
+  if a = b then begin Result := True; Exit; end;                   { incl. equal Inf }
+  if IsInf(a) or IsInf(b) then begin Result := False; Exit; end;   { differing Inf }
+  d := Abs(a - b);
+  ta := Abs(a); tb := Abs(b);
+  if ta > tb then m := ta else m := tb;
+  Result := (d <= relTol * m) or (d <= absTol);
+end;
+
+function IsClose(a, b: Double): Boolean;
+begin
+  Result := IsClose(a, b, 1.0e-9, 0.0);   { Python's defaults }
+end;
+
+function Factorial(n: Integer): Int64;
+var i: Integer; r: Int64;
+begin
+  { Python's factorial is arbitrary precision; Int64 holds it exactly to 20! and
+    overflows past that, so the range is the honest limit of the return type
+    rather than a choice made here. }
+  r := 1;
+  for i := 2 to n do r := r * i;
+  if n < 0 then r := 0;
+  Result := r;
+end;
+
+function Comb(n, k: Integer): Int64;
+var i: Integer; r: Int64;
+begin
+  { Multiplicative form, dividing as it goes: the partial product r*(n-k+i) is
+    always divisible by i, so this stays exact and overflows far later than
+    n!/(k!(n-k)!) computed literally would. }
+  if (k < 0) or (n < 0) or (k > n) then begin Result := 0; Exit; end;
+  if k > n - k then k := n - k;
+  r := 1;
+  for i := 1 to k do
+  begin
+    r := r * (n - k + i);
+    r := r div i;
+  end;
+  Result := r;
 end;
 
 function Power(base, exponent: Double): Double;
