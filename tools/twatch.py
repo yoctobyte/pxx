@@ -53,7 +53,8 @@ INDEX_REL = TSTATE_REL + "/TSTATE.md"  # generated; the ONE co-written tstate fi
 WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
 PUBHEALTH_REL = ".testmgr/pubhealth.json"  # publish outcome: quiet vs stuck
 CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
-CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
+CONF_DEFAULTS = {"tier": "full", "mid_tier": "limited",
+                 "fast_tier": "native", "interval": 60,
                  "debounce": 20, "no_bisect": False,
                  "autoticket": True,   # stub regression tickets (face 1)
                  "idle_opt": True,     # idle: O-level differential sweep
@@ -2397,6 +2398,38 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
 NOTEST_PREFIXES = ("devdocs/", "docs/")
 
 
+def idle_phase(st, tested, mid_tier, deep_tier):
+    """Which tier to run on an IDLE cycle for `tested`, or None if done.
+
+    The escalation ladder, and the order is the point
+    (task-t-pin-fast-track-t-owns-verification, deliverable 2):
+
+        new commit -> fast_tier   native, seconds, so A+/B never wait
+        idle       -> mid_tier    NATIVE DEPTH: all frontends + the real
+                                  corpus, no qemu. Where the yield is, so it
+                                  runs first and therefore most often.
+        still idle -> deep_tier   PLATFORM BREADTH: + the qemu cross matrix,
+                                  an order of magnitude slower, so it only
+                                  happens if nothing has landed meanwhile.
+        still idle -> opt         the O-level differential (handled by caller)
+
+    A push preempts whatever is running and the ladder restarts at the bottom
+    for the new sha — which is the intent, not a cost: fresh commits outrank
+    breadth on an old one.
+
+    `last_full` carries the tier of the last REPLACING run, so no new state is
+    needed to know how far up the ladder this sha has climbed. A mid-tier run
+    cannot evict the deep tier's verdicts: eviction is by tier COVERAGE, and
+    covered_tiers("limited") excludes the cross jobs.
+    """
+    lf = st.get("last_full") or {}
+    if lf.get("sha") != tested:
+        return mid_tier
+    if mid_tier != deep_tier and lf.get("tier") != deep_tier:
+        return deep_tier
+    return None
+
+
 def needs_test(repo, sha):
     out = sh(["git", "diff-tree", "--no-commit-id", "--name-only", "-r",
               "-m", "--first-parent", sha], cwd=repo)
@@ -3121,6 +3154,10 @@ def main():
                          "idle (a new push aborts and reclaims the box). "
                          "'none' or same as --tier = single-phase (default "
                          "native)")
+    ap.add_argument("--mid-tier", dest="mid_tier", default=None,
+                    choices=["quick", "native", "limited", "full"],
+                    help="idle backfill run BEFORE the full matrix: native "
+                         "depth, all frontends, no qemu (default limited)")
     ap.add_argument("--host", default=socket.gethostname().split(".")[0])
     ap.add_argument("--interval", type=float, default=None, help="poll seconds")
     ap.add_argument("--debounce", type=float, default=None,
@@ -3173,6 +3210,8 @@ def main():
         args.tier = conf["tier"]
     if args.fast_tier is None:
         args.fast_tier = conf["fast_tier"]
+    if getattr(args, "mid_tier", None) is None:
+        args.mid_tier = conf.get("mid_tier", "limited")
     if args.interval is None:
         args.interval = conf["interval"]
     if args.debounce is None:
@@ -3229,15 +3268,18 @@ def main():
                         test_sha(clone, host, st, head, args.tier, full=True)
                     did_work = True
             elif tested and fast and \
-                    (st.get("last_full") or {}).get("sha") != tested:
-                # idle: backfill the full matrix (cross + corpus) for the
-                # newest fast-tested sha; a new push preempts it — the run is
-                # SIGINTed and discarded, no verdict recorded
-                test_sha(clone, host, st, tested, args.tier,
+                    idle_phase(st, tested, args.mid_tier, args.tier):
+                # idle: climb the ladder — native DEPTH first, platform
+                # BREADTH only if the repo is still quiet after it. A new push
+                # preempts either; the run is SIGINTed and discarded, no
+                # verdict recorded, and the ladder restarts for the new sha.
+                nxt = idle_phase(st, tested, args.mid_tier, args.tier)
+                test_sha(clone, host, st, tested, nxt,
                          full=True, abort_check=make_preempted(clone, tested))
                 did_work = True
             elif tested and CONF.get("idle_opt") and \
                     (st.get("last_full") or {}).get("sha") == tested and \
+                    (st.get("last_full") or {}).get("tier") == args.tier and \
                     (st.get("last_opt") or {}).get("sha") != tested:
                 # idle, full matrix done: O-level differential sweep (tier
                 # opt — the silent-miscompile oracle). A push preempts it.
