@@ -116,3 +116,28 @@ be confirmed).
 
 Cross-reference: [[feature-nilpy-list-sort-inplace-key-reverse]] covers the same
 ground; these two should be merged or one closed as a duplicate.
+
+## 2026-08-09 — hit by a realistic program, and the diagnostic improved
+
+A hand-written scheduler (`ready.sort(key=lambda t: (cost[t], t))`) hit this,
+which is worth recording because it settles that `.sort(key=)` is a REAL-WORLD
+shape and not just an API-surface gap: sorting a work list by a computed key,
+in place, is how the idiom is written.
+
+The message is now more useful than the ticket records — `TPyList.sort has no
+parameter named 'key'` rather than a parse error — because `reverse=` was
+already declared. That also confirms the mechanism precisely: `PyKwArgIndex`
+(pyparser.inc) resolves `key=` against the CALLEE's declared parameters, so the
+whole gap is that `TPyList.sort` declares no `key`.
+
+Which means the frontend half is free, and only the BODY is blocked: declaring
+`key: Pointer = nil` would bind the argument immediately, but pylib cannot
+invoke it (`PyCallKey1` and the closure machinery are in `pyeval`, which uses
+pylib and not the reverse).
+
+**Do not declare `key` without implementing it.** A declared-but-ignored `key=`
+would turn today's loud, accurate compile error into a silently unsorted list —
+which is strictly worse and is the failure class this project ranks highest.
+
+Workaround remains `sorted(xs, key=...)`, which is correct today, plus an
+assignment if in-place is wanted (aliases will not see it).
