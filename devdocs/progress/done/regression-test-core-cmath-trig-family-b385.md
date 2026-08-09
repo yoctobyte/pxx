@@ -26,3 +26,6 @@ FAIL 20 got=0.78539816339744828 want=0.46364760900080609
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-09 — auto-closed by the plexus watcher: `test-core#src:test/cmath_trig_family_b385.c` passes at c397e9f969bd (tier native); it was red at 93d6232f05d1. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
