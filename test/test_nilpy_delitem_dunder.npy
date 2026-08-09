@@ -82,3 +82,12 @@ del xs[1]
 print("index ", xs)
 del xs[1:3]
 print("slice ", xs)
+
+# The del TARGET must not be claimed by the not-subscriptable refusal, and the
+# READ of the same class must still be refused — the two halves are decided by
+# PyInDelTarget, so both are asserted or the flag could be inverted and pass.
+try:
+    v = o[7]
+    print("readdel", "NO ERROR")
+except TypeError:
+    print("readdel", "TypeError")

@@ -10,3 +10,4 @@ nodel  TypeError
 dict   {'y': 2}
 index  [0, 2, 3, 4]
 slice  [0, 4]
+readdel TypeError

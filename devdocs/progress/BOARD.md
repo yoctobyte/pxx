@@ -40,7 +40,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (212)
+## backlog (211)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -248,7 +248,6 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-test-nilpy-test-nilpy-delitem-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_delitem_dunder.npy red at 954727cee668 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -384,9 +383,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1567)
+## done (1568)
 
-1567 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1568 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (31)
 
@@ -426,7 +425,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-nilpy-test-nilpy-delitem-dunder
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins

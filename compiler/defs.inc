@@ -2414,6 +2414,21 @@ var
   TokCapacity : Integer;   { current allocated length of the token parallel arrays (grown by EnsureTokCapacity) }
   TokPos     : Integer;
   MainProgramTokCount : Integer;
+  { True only while parsing the TARGET of a NilPy `del`. The del lowering parses
+    `c[k]` as an ordinary expression and then REWRITES the node it gets, rather
+    than re-implementing the postfix grammar — so it depends on which node the
+    subscript arms build. A class declaring only `__delitem__` has no
+    `__getitem__`, and the not-subscriptable refusal (added for
+    bug-nilpy-subscript-read-without-getitem-yields-garbage) replaced the plain
+    AN_INDEX that rewrite looks for with a run-time TypeError call, so
+    `del o[7]` stopped compiling — the red twatch filed as
+    regression-test-nilpy-test-nilpy-delitem-dunder.
+
+    A `del` target is not a read, so the refusal does not apply to it; this flag
+    is how the arm can tell. Scoped to the one PyParseBoolExpr call in the del
+    parser and restored after. }
+  PyInDelTarget : Boolean;
+
   PyExprMode : Boolean;  { True only while parsing Nil Python expressions: gives `and`/`or`/`not`
                            Python precedence (below comparison) via PyParseBoolExpr; suppressed
                            in Pascal RTL units pulled in by .npy programs }

@@ -16801,6 +16801,7 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     chainN, chainI, chainTmp, chainSeq: Integer;   { chained assignment a = b = v }
     chainNames: array[0..7] of AnsiString;
     delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
+    delSavedInDel: Boolean;
     setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
 begin
   Result := -1;
@@ -16975,7 +16976,13 @@ begin
       Parsing the base and the subscript separately would mean re-implementing
       the postfix grammar (`del vm.file_handles[fid]` has a field base), which
       is exactly the duplication this frontend keeps getting bitten by. }
+    { see PyInDelTarget: a del TARGET is not a read, so the getter-less
+      not-subscriptable refusal must not claim it — a class declaring only
+      __delitem__ needs the plain AN_INDEX this rewrite reads back. }
+    delSavedInDel := PyInDelTarget;
+    PyInDelTarget := True;
     PyParseBoolExpr;
+    PyInDelTarget := delSavedInDel;
     delBase := CurASTNode;
     { `del l[lo:hi]` — the read lowered to a pylist_slice COPY; swap the proc to
       the in-place delete (same l, lo, hi arguments). }

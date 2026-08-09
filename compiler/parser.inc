@@ -5153,7 +5153,7 @@ begin
             continue;   { allow further postfix on the getter result }
           end;
         end
-        else if PyExprMode and (mci >= 0) and
+        else if PyExprMode and (mci >= 0) and (not PyInDelTarget) and
                 (FindUMeth(mci, '__getitem__') < 0) and
                 (FindUMeth(mci, '__setitem__') < 0) and
                 (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + mci)) and

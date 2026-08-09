@@ -1529,6 +1529,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_augmented_assign_class_dunder.npy red at 9294bce2c800 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-bytes-decode | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bytes_decode.npy red at 74a925112afc (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-class-return | N | 70 | regression | a def whose body is a FORWARD call loses its annotated class result, so attribute access on the call no longer parses | — |
+| regression-test-nilpy-test-nilpy-delitem-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_delitem_dunder.npy red at 954727cee668 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-dotted-package-import | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-for-two-names-over-a-variant | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_for_two_names_over_a_variant.npy red at b51f4eeffbf9 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-from-import-as-alias | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_from_import_as_alias.npy red at 954727cee668 (auto-filed by twatch) | — |
