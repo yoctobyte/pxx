@@ -1,0 +1,91 @@
+# feature-nilpy-fstring-self-documenting-equals + the `!=` bug it uncovered
+#
+# TWO gaps, found by sweeping f-string forms against CPython (21 of 24 already
+# matched exactly, so the sweep was the only way to see which three did not):
+#
+# 1. `f"{n=}"` — the self-documenting form, which prints the EXPRESSION TEXT,
+#    an `=`, then the value. Did not compile. It is debug-print syntax, so it
+#    appears wherever someone was diagnosing something.
+#
+# 2. `f"{a != b}"` — an INEQUALITY inside a hole. Never compiled, in any
+#    version: the `!r`/`!s` conversion arm claims any `!` at depth 0, so `!=`
+#    was read as an unknown conversion. Nothing to do with the `=` form; found
+#    while writing the controls for it, which is the argument for writing
+#    controls.
+#
+# The `=` form defaults to REPR, not str: `f"{s=}"` gives s='hi' with quotes.
+# That is asserted for a string, and separately for a list and a dict, because
+# repr and str differ for all three and picking str would have looked right for
+# an int.
+#
+# `!s` had to become an explicit swap rather than the no-op it was: the `=` form
+# opens the hole as repr, so `f"{s=!s}"` must UNDO that default. A `:` format
+# spec must override it too — and did not at first, because the swap helper
+# searched for the literal text `pystr_of(` and could not see the `pyrepr_of(`
+# the new form emits, so the spec was passed to it as a second ARGUMENT.
+#
+# The controls are the point of this file: every comparison and keyword-argument
+# spelling that contains an `=` must keep meaning what it says, and a quoted
+# `a=b` inside a subscript must not be mistaken for the form either.
+#
+# NOT asserted: a nested format spec (`f"{n:{w}d}"`) or a nested f-string
+# (`f"{f'{n}'}"`), both still unsupported and filed separately. The nested spec
+# raises a NAMED ValueError rather than a wrong number.
+#
+# Expectations are CPython's own output.
+
+n = 42
+s = "hi"
+f = 3.14159
+xs = [1, 2]
+d = {"k": "v"}
+
+
+def g(a):
+    return a * 2
+
+
+class P:
+    def __init__(self, x):
+        self.x = x
+
+
+p = P(7)
+
+# the form itself, over every value kind (repr and str differ for str/list/dict)
+print(f"{n=}")
+print(f"{s=}")
+print(f"{f=}")
+print(f"{xs=}")
+print(f"{d=}")
+
+# more than one hole, and text around them
+print(f"{n=} {s=}")
+print(f"pre {n=} post")
+
+# the expression is not just a name
+print(f"{n + 1=}")
+print(f"{g(3)=}")
+print(f"{p.x=}")
+print(f"{d['k']=}")
+
+# a format spec after the `=` overrides the repr default
+print(f"{f=:.2f}")
+print(f"{n=:5d}|")
+
+# an explicit !s undoes the repr default
+print(f"{s=!s}")
+
+# whitespace around the `=` is part of the printed text
+print(f"{n = }")
+
+# --- controls: an `=` that is NOT this form ---
+print(f"{n == 42}")
+print(f"{n != 1}")
+print(f"{n >= 42} {n <= 42}")
+print(f"{g(a=5)}")
+print(f"{d['a=b'] if 'a=b' in d else 'none'}")
+
+# --- controls: ordinary holes still behave ---
+print(f"plain {n} {s!r} {f:.3f}")
+print(f"brace {{literal}} {n}")

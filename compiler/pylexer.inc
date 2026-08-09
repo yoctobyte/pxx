@@ -205,24 +205,52 @@ end;
   hole's call was appended by this same pass, so the LAST occurrence is that
   hole's, and both names are 9 or 10 characters — the tail is shifted rather
   than the buffer rebuilt. }
-procedure PyFStrSwapLastCall(const newCall: AnsiString);
-var i, k, delta, oldLen: Integer;
+{ Does the emitted text hold `lit` starting at i? }
+function PyFsHasAt(i: Integer; const lit: AnsiString): Boolean;
+var k: Integer;
 begin
-  for i := PyFsLen - 8 downto 1 do
-    if (PyFsOut[i] = 'p') and (PyFsOut[i+1] = 'y') and (PyFsOut[i+2] = 's') and
-       (PyFsOut[i+3] = 't') and (PyFsOut[i+4] = 'r') and (PyFsOut[i+5] = '_') and
-       (PyFsOut[i+6] = 'o') and (PyFsOut[i+7] = 'f') and (PyFsOut[i+8] = '(') then
+  Result := False;
+  if i + Length(lit) - 1 > PyFsLen then Exit;
+  for k := 1 to Length(lit) do
+    if PyFsOut[i + k - 1] <> lit[k] then Exit;
+  Result := True;
+end;
+
+{ Replace the most recently emitted hole call with `newCall`.
+
+  It must recognise BOTH openers, not just `pystr_of(`: a hole normally starts
+  as pystr_of, but the self-documenting `expr=` form starts as `pyrepr_of`
+  because that form defaults to repr. Searching only for the pystr_of spelling
+  meant a `:` format spec after `=` found nothing to swap and the spec was
+  handed to pyrepr_of as a SECOND ARGUMENT — "no overload of pyrepr_of matches
+  (Double, ShortString)". The two spellings are different LENGTHS, so the shift
+  has to be driven by the matched one rather than by a constant 9. }
+procedure PyFStrSwapLastCall(const newCall: AnsiString);
+var i, k, delta, oldLen, oldCallLen: Integer;
+begin
+  for i := PyFsLen downto 1 do
+  begin
+    oldCallLen := 0;
+    if PyFsHasAt(i, 'pystr_of(') then oldCallLen := 9
+    else if PyFsHasAt(i, 'pyrepr_of(') then oldCallLen := 10;
+    if oldCallLen > 0 then
     begin
-      delta := Length(newCall) - 9;
+      delta := Length(newCall) - oldCallLen;
       oldLen := PyFsLen;
       if delta > 0 then
       begin
         for k := 1 to delta do PyFsPutCh(' ');
-        for k := oldLen downto i + 9 do PyFsOut[k + delta] := PyFsOut[k];
+        for k := oldLen downto i + oldCallLen do PyFsOut[k + delta] := PyFsOut[k];
+      end
+      else if delta < 0 then
+      begin
+        for k := i + oldCallLen to oldLen do PyFsOut[k + delta] := PyFsOut[k];
+        PyFsLen := oldLen + delta;
       end;
       for k := 1 to Length(newCall) do PyFsOut[i + k - 1] := newCall[k];
       Exit;
     end;
+  end;
 end;
 
 { Python concatenates adjacent string/f-string literals: `"a" "b"` and, across
@@ -260,10 +288,80 @@ begin
   else if PyFStrIsQuote(ch) then Result := True;
 end;
 
+{ Python's self-documenting f-string hole — the `expr=` form, which prints the
+  EXPRESSION TEXT, an `=`, and then the value: f"n=" with n in the hole gives
+  `n=42`. (Braces are spelled out in this comment rather than written, because
+  Pascal comments do not nest and a literal closing brace would end it early —
+  which is exactly how this function first failed to compile.)
+
+  Returns the index of the `=` that ends the expression, or 0 when this hole is
+  not that form. The whole point is that it must be answered BEFORE the hole is
+  emitted: the expression text becomes LITERAL text, and the literal is flushed
+  ahead of the call that produces the value, so there is no going back once the
+  hole has started.
+
+  The `=` must be the last thing in the hole — before the closing brace, a `:`
+  format spec or a `!r` conversion — and must not be part of a comparison:
+  `a == b`, `a != b`, `x <= 1` and the augmented spellings all have to keep
+  meaning what they say. Quotes and nesting are skipped the same way the hole
+  scanner skips them, so `d["a=b"]` and `f(a=1)` are not mistaken for it (a
+  keyword argument is inside parentheses, hence the depth test). }
+function PyFStrSelfDocEq(const src: AnsiString; st, n: Integer): Integer;
+var j, d: Integer; qq: Char;
+begin
+  Result := 0;
+  d := 0;
+  j := st;
+  while j <= n do
+  begin
+    if PyFStrIsQuote(src[j]) then
+    begin
+      qq := src[j];
+      Inc(j);
+      while (j <= n) and (src[j] <> qq) do
+      begin
+        if src[j] = '\' then Inc(j);
+        Inc(j);
+      end;
+      if j > n then Exit;
+      Inc(j);
+      continue;
+    end;
+    if src[j] = #10 then Exit;
+    if (src[j] = '(') or (src[j] = '[') or (src[j] = '{') then Inc(d)
+    else if (src[j] = ')') or (src[j] = ']') or (src[j] = '}') then
+    begin
+      if (src[j] = '}') and (d = 0) then Exit;   { hole ended without one }
+      Dec(d);
+    end
+    else if (d = 0) and (src[j] = '=') then
+    begin
+      if (j + 1 <= n) and (src[j + 1] = '=') then begin Inc(j, 2); continue; end;
+      if (j > st) and
+         ((src[j - 1] = '=') or (src[j - 1] = '!') or (src[j - 1] = '<') or
+          (src[j - 1] = '>') or (src[j - 1] = '+') or (src[j - 1] = '-') or
+          (src[j - 1] = '*') or (src[j - 1] = '/') or (src[j - 1] = '%') or
+          (src[j - 1] = '&') or (src[j - 1] = '|') or (src[j - 1] = '^')) then
+      begin Inc(j); continue; end;
+      { trailing spaces are part of the printed text: f"{n = }" gives `n = 42` }
+      d := j + 1;
+      while (d <= n) and (src[d] = ' ') do Inc(d);
+      if (d <= n) and ((src[d] = '}') or (src[d] = ':') or (src[d] = '!')) then
+      begin
+        Result := j;
+        Exit;
+      end;
+      Exit;
+    end;
+    Inc(j);
+  end;
+end;
+
 procedure PyExpandFStrings;
 var
   lit: AnsiString;
   i, n, depth, ln, pdepth: Integer;
+  sdEq, sdK: Integer;      { `{expr=}`: index of the `=`, and a copy cursor }
   q, c, hq: Char;
   inHole, wroteAny, sawTriple: Boolean;
 begin
@@ -370,6 +468,7 @@ begin
       wroteAny := False;
       inHole := False;
       depth := 0;
+      sdEq := 0;
       while i <= n do
       begin
         c := Source[i];
@@ -390,9 +489,23 @@ begin
           begin lit := lit + '}'; Inc(i, 2); continue; end;
           if c = '{' then
           begin
+            { The self-documenting `expr=` form is decided HERE, before
+              anything is emitted: the expression TEXT joins the literal, and
+              the literal is flushed ahead of the call producing the value. }
+            sdEq := PyFStrSelfDocEq(Source, i + 1, n);
+            if sdEq > 0 then
+            begin
+              for sdK := i + 1 to sdEq do lit := lit + Source[sdK];
+              sdK := sdEq + 1;
+              while (sdK <= n) and (Source[sdK] = ' ') do
+              begin lit := lit + ' '; Inc(sdK); end;
+            end;
             PyFStrFlush(lit, wroteAny);
             if wroteAny then PyFsPut(' + ');
-            PyFsPut('pystr_of(');
+            { the `=` form defaults to REPR, not str — it yields s='hi', not
+              s=hi. An explicit !s or a `:` spec still overrides it below,
+              because both swap the call rather than wrapping it. }
+            if sdEq > 0 then PyFsPut('pyrepr_of(') else PyFsPut('pystr_of(');
             wroteAny := True;
             inHole := True;
             depth := 0;
@@ -426,6 +539,17 @@ begin
           if i <= n then begin PyFsPutCh(Source[i]); Inc(i); end;
           continue;
         end;
+        { the self-documenting `=` is text, not part of the expression — skip
+          it and any spaces after it. Matched by POSITION, so the guard that
+          decided it (comparison operators, quotes, nesting) lives in exactly
+          one place and cannot drift. }
+        if (sdEq > 0) and (i = sdEq) then
+        begin
+          Inc(i);
+          while (i <= n) and (Source[i] = ' ') do Inc(i);
+          sdEq := 0;
+          continue;
+        end;
         if (c = '(') or (c = '[') or (c = '{') then Inc(depth)
         else if (c = ')') or (c = ']') or (c = '}') then
         begin
@@ -447,10 +571,29 @@ begin
             call rather than wrapping it — pyrepr_of carries the same per-type
             overload set as pystr_of. }
           if Source[i + 1] = 'r' then
-            PyFStrSwapLastCall('pyrepr_of(');
+            PyFStrSwapLastCall('pyrepr_of(')
+          else
+            { !s used to be a no-op, because the hole was always pystr_of
+              already. The self-documenting `expr=` form opens as pyrepr_of, so
+              an explicit !s now has to UNDO that default rather than assume it.
+              This is what makes `s=` with !s print s=hi, not s='hi'. }
+            PyFStrSwapLastCall('pystr_of(');
           PyFsPutCh(')');
           inHole := False;
           Inc(i, 3);
+          continue;
+        end
+        else if (depth = 0) and (c = '!') and (i + 1 <= n) and (Source[i + 1] = '=') then
+        begin
+          { `!=` is the INEQUALITY OPERATOR, not a conversion. Every f-string
+            containing one failed to compile — `f"...{a != b}..."` — because the
+            conversion arm claims any `!` at depth 0. The `!r`/`!s` arm above
+            requires the hole to END right after, so reaching here with a `=`
+            next means an operator, unambiguously.
+            bug-nilpy-fstring-hole-cannot-contain-an-inequality }
+          PyFsPutCh(c);
+          PyFsPutCh('=');
+          Inc(i, 2);
           continue;
         end
         else if (depth = 0) and (c = '!') then

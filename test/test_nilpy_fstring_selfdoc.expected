@@ -1,0 +1,22 @@
+n=42
+s='hi'
+f=3.14159
+xs=[1, 2]
+d={'k': 'v'}
+n=42 s='hi'
+pre n=42 post
+n + 1=43
+g(3)=6
+p.x=7
+d['k']='v'
+f=3.14
+n=   42|
+s=hi
+n = 42
+True
+True
+True True
+10
+none
+plain 42 'hi' 3.142
+brace {literal} 42
