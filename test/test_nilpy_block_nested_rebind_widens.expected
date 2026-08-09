@@ -6,3 +6,4 @@ dunder ADD7
 module TypeError
 scalar text 4
 nopre  3 ADD9
+chained adder4 6

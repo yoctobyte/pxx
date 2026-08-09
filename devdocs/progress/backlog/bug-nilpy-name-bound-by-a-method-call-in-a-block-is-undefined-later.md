@@ -76,3 +76,65 @@ The repro, plus `for`/`if` blocks, plus a JSON round trip — **and
 fix. Any change here wants the whole-suite HEAD-vs-pinned sweep, not a spot
 check: nine realistic programs and the direct repro all passed the version that
 was wrong.
+
+## 2026-08-09 — the proposed route is CLOSED, and a worse sibling was found and fixed
+
+### The route this ticket recommended does not work
+
+"Register the name **without asserting a type** … worth checking whether
+`AllocVar(name, tyUnknown)` alone does it." Implemented exactly that (no
+`PyNoteLocalType`, so nothing reaches the widening table) and measured:
+
+```
+raw = f.read()  inside a block, then  n = len(raw)
+  ->  pascal26: error: Variant := this type not yet supported
+```
+
+All three repro shapes (`with`, `for`, `Cls().m()`) fail the same way. A symbol
+allocated as `tyUnknown` does not stay unknown — it is widened to Variant
+downstream, and the real assignment then has no conversion. So the route trades
+"undefined variable" for a different compile error, and does NOT reach the
+type-free registration the ticket was after. Reverted.
+
+That leaves the close recorded on [[feature-n-nilpy-ast-typing-module-scope]]
+— a pre-pass that does not `Error()`-and-Halt on an as-yet-unseen name — as the
+only route still standing. Worth raising this ticket's stake in that one rather
+than trying a fourth shape here: three attempts (tyVariant, per-shape widening,
+type-free registration) have now each been measured and each failed for a
+different reason.
+
+### A WORSE sibling, found while reproducing, and fixed
+
+The reason the repro was written as `b = S().read()` is that it segfaulted the
+*measurement*, not the compile:
+
+```python
+if True:
+    k = Adder(4).describe()
+print(k, len(k))
+```
+
+| | result |
+| --- | --- |
+| `pinned` | `error: undefined variable (k)` — loud |
+| HEAD (before this) | prints the raw instance HANDLE, `len(k)` = **0** — silent |
+
+The constructor arm added by `5d9d64e1b` (same day) recognises `name = Cls(...)`
+from **two tokens** — an identifier naming a known class, and a `(` — without
+checking they END the right-hand side. So a method call whose RECEIVER is a
+construction was typed as the class. That is a **regression in kind**: a loud
+compile error became a silent wrong value, which is the direction that matters.
+
+Fixed by `PyBlkRhsEndsAfterCall`: scan to the matching `)` and require the next
+token to end the statement. Scanning cannot `Error()`, so it respects the
+constraint the whole branch works under. Exactly
+`project_nilpy_constant_fastpath_claims_first_token_pattern` — a fast path
+beside a real expression path is a second parser, and it disagrees quietly.
+
+Test case added to `test_nilpy_block_nested_rebind_widens.npy` (the arm's own
+test, rather than a near-duplicate file), with its three existing controls
+confirming the narrowing did not undo the fix it guards: a plain
+`b = Bare(1)` in a block still widens, and `test_nilpy_none_str_field` — the
+canary for the tempting wrong fix — still passes.
+
+**This ticket stays OPEN**: its own defect, `raw = f.read()`, is unchanged.

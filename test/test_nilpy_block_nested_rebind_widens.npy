@@ -41,6 +41,9 @@ class Adder:
     def __add__(self, o):
         return "ADD" + str(o.n)
 
+    def describe(self):
+        return "adder" + str(self.n)
+
 
 def check(label, fn):
     try:
@@ -95,3 +98,13 @@ print("scalar", g, len(g))
 if True:
     h = Adder(3)
 print("nopre ", h.n, h + Adder(9))
+
+# --- the fast path must not claim a CONSTRUCTION that is only the RECEIVER:
+# `k = Adder(4).describe()` is a method call, not a construction, so typing k as
+# an Adder made len(k) answer 0 and printing it show the raw instance handle.
+# Silent, and a regression in KIND — the same line was a loud "undefined
+# variable" before the constructor arm was added. A fast path beside a real
+# expression path is a second parser unless it checks it ENDED the construct.
+if True:
+    k = Adder(4).describe()
+print("chained", k, len(k))

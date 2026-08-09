@@ -3125,6 +3125,47 @@ begin
   end;
 end;
 
+{ Does the `(` at token `lp` close on the LAST token of its line — i.e. is the
+  right-hand side exactly `Name(...)` and nothing more?
+
+  The block-local pre-pass recognises `name = Cls(...)` by looking at two
+  tokens, an identifier naming a known class and a following `(`. That claims
+  the FIRST tokens without checking they END the construct, so
+  `b = S().read()` was read as a construction and `b` was typed as an S: `len(b)`
+  answered 0 and printing it gave the raw instance handle. Silently — and it was
+  a REGRESSION IN KIND, because the same line was a loud "undefined variable" on
+  `pinned`.
+
+  Same shape as project_nilpy_constant_fastpath_claims_first_token_pattern: a
+  fast path beside a real expression path is a second parser, and it disagrees
+  quietly. Scanning to the matching `)` costs nothing and cannot Halt, which is
+  the constraint this whole branch works under. }
+function PyBlkRhsEndsAfterCall(lp: Integer): Boolean;
+var d, k: Integer;
+begin
+  PyBlkRhsEndsAfterCall := False;
+  if (lp < 0) or (lp >= MainProgramTokCount) then Exit;
+  if Tokens[lp].Kind <> tkLParen then Exit;
+  d := 0;
+  k := lp;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(d)
+    else if Tokens[k].Kind = tkRParen then
+    begin
+      Dec(d);
+      if d = 0 then
+      begin
+        PyBlkRhsEndsAfterCall := (k + 1 >= MainProgramTokCount) or
+          (Tokens[k + 1].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon]);
+        Exit;
+      end;
+    end
+    else if Tokens[k].Kind in [tkNewline, tkEOF] then Exit;   { unbalanced }
+    Inc(k);
+  end;
+end;
+
 { Does ANY user class declare this method? (Records excluded — the closed-world
   dispatch below skips them too.) }
 function PyAnyClassDeclaresMeth(const mname: AnsiString): Boolean;
@@ -18373,7 +18414,8 @@ begin
            (Tokens[blkJ].Kind = tkIdent) and
            (blkJ + 1 < MainProgramTokCount) and
            (Tokens[blkJ + 1].Kind = tkLParen) and
-           (FindUClass(GetTokenStr(blkJ)) >= 0) then
+           (FindUClass(GetTokenStr(blkJ)) >= 0) and
+           PyBlkRhsEndsAfterCall(blkJ + 1) then
         begin
           blkTk := tyClass;
           blkRec := REC_UCLASS_BASE + FindUClass(GetTokenStr(blkJ));
