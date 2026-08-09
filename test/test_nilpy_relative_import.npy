@@ -16,6 +16,12 @@
 # exactly the unit `mod` does: right for the single-dot case, and the closest
 # available answer for `..`.
 #
+# The helper modules resolve relative to this SOURCE file, not to the working
+# directory, so the Makefile recipe is an ordinary one-liner like every other
+# test's. It briefly used `cd test && ...`, which made it the only recipe in the
+# file with that shape — worth avoiding on its own, and a suspect while a
+# per-source test job was reporting red at the watcher and green locally.
+#
 # WHY THE EXPECTATIONS ARE NOT CPython's, unusually for a NilPy test: CPython
 # REFUSES a relative import in a script that is not part of a package
 # ("attempted relative import with no known parent package"), so it cannot run

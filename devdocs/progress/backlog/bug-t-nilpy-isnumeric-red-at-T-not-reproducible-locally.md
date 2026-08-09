@@ -57,3 +57,27 @@ this ticket closes.
 **What would settle it:** the actual diff output from T's run of that recipe.
 The tstate record carries the job name and shas but not the failing output, so
 there is nothing to diagnose from — which may itself be worth improving.
+
+## 2026-08-09 (later) — T BISECTED it to one commit, and it is not the isnumeric one
+
+`twatch --status` now reports `bad=e3b8023ef736 (1 in range)`. That is the
+**relative-imports** commit, not the commit that added the isnumeric test.
+
+That reframes it. In the Makefile the isnumeric recipe sits IMMEDIATELY BEFORE
+the relative-import recipe, so a failure in the latter attributed to the nearest
+preceding test source would name exactly this job. Both recipes pass locally in
+the same full run (log lines 284-286 and 290-292).
+
+**The structural difference is now removed.** The relative-import recipe was the
+only one in the whole file shaped `cd test && $(CURDIR)/$(COMPILER) ...`. It
+turns out the `cd` was never needed — pxx resolves the sibling helper modules
+relative to the SOURCE file, so the test compiles and passes from the repo root
+like every other one. The recipe is now an ordinary one-liner.
+
+If the watcher's per-source job extraction was tripping on that `cd` (running the
+`diff` line without its compile line, say), this fixes the red. If the red
+persists at the next full run, the `cd` was not the cause and the ticket stands
+with its original evidence.
+
+Worth keeping either way: a recipe shaped unlike its 300 neighbours is a bad
+thing to introduce, independent of whether it caused this.

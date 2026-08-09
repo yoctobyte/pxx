@@ -450,10 +450,12 @@ test-nilpy: $(COMPILER)
 	# str.isnumeric()/istitle(), with their five neighbouring predicates.
 	./$(COMPILER) test/test_nilpy_str_isnumeric_istitle.npy /tmp/test_nilpy_isnumtitle26
 	/tmp/test_nilpy_isnumtitle26 | diff -u test/test_nilpy_str_isnumeric_istitle.expected -
-	# RELATIVE imports (`from .mod import x`, `from . import mod`). Compiled from
-	# test/ so the sibling helper modules resolve; CPython cannot be the oracle
-	# here (it refuses a relative import outside a package) — see the test header.
-	cd test && $(CURDIR)/$(COMPILER) test_nilpy_relative_import.npy /tmp/test_nilpy_relimp26
+	# RELATIVE imports (`from .mod import x`, `from . import mod`). The sibling
+	# helper modules resolve relative to the SOURCE file, so this needs no `cd`
+	# and is an ordinary one-line recipe like every other test here. CPython
+	# cannot be the oracle (it refuses a relative import outside a package) —
+	# see the test header for what is asserted instead.
+	./$(COMPILER) test/test_nilpy_relative_import.npy /tmp/test_nilpy_relimp26
 	/tmp/test_nilpy_relimp26 | diff -u test/test_nilpy_relative_import.expected -
 	# backslash line continuation, and `class C(object):`
 	./$(COMPILER) test/test_nilpy_line_continuation.npy /tmp/test_nilpy_linecont26
