@@ -5154,6 +5154,7 @@ begin
         end
         else if PyExprMode and (mci >= 0) and
                 (FindUMeth(mci, '__getitem__') < 0) and
+                (FindUMeth(mci, '__setitem__') < 0) and
                 (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + mci)) and
                 (PyNotSubscriptableNode(mci) >= 0) then
         begin
@@ -5168,12 +5169,19 @@ begin
             Replaced by a run-time TypeError naming the class, which is what
             CPython raises — at RUN time, so `try: obj[k] / except TypeError:`
             still compiles.
-            Only a READ is taken over. `obj[k] = v` on a class with
-            `__setitem__` but no `__getitem__` is legal Python and already
-            worked through the write path below, so the same closing-bracket
-            peek the `__getitem__` arm uses decides that here — otherwise this
-            refusal would have broken the very shape that motivated it
-            (a class declaring only `__setitem__`).
+
+            This arm is now for a class declaring NEITHER member. It used to be
+            `__getitem__` alone, and it said it left `obj[k] = v` on a
+            `__setitem__`-only class to "the write path below" — but "below" is
+            the next arm of an else-if CHAIN, so matching here skipped it, and
+            the write fell to the generic AN_INDEX and reported "expected
+            expression". The gate now names both members and the arm below
+            accepts either, which is what actually reaches that write path
+            (bug-nilpy-setitem-without-getitem-write-does-not-compile).
+
+            A WRITE into a class with neither member gets the same treatment as
+            a read: PyNoSetitemError at run time, rather than the pointer
+            arithmetic on the instance handle it used to fall through to.
             bug-nilpy-subscript-read-without-getitem-yields-garbage }
           isAssign := False;
           i := TokPos - 1; w := 0;   { TokPos-1 = the '[' }
@@ -5185,18 +5193,30 @@ begin
             Inc(i);
           end;
           if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+          Next;                     { consume '[' }
+          ParseExpr;                { the key is still evaluated, as Python does }
+          Expect(tkRBrack, ']');
           if not isAssign then
           begin
-            Next;                     { consume '[' }
-            ParseExpr;                { the key is still evaluated, as Python does }
-            Expect(tkRBrack, ']');
             node := PyNotSubscriptableNode(mci);
             tk := tyInt64; recName := REC_NONE;
             continue;
           end;
-          { an assignment target — fall through to the write path below }
+          { `obj[k] = v` with no __setitem__ anywhere: evaluate the value too
+            (Python's left-to-right order) and raise the same runtime error the
+            getter-bearing arm raises for a missing setter. }
+          Expect(tkAssign, ':=');
+          if PyExprMode then PyParseBoolExpr else ParseExpr;
+          prevTok := FindProc('PyNoSetitemError');
+          if prevTok < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := prevTok;
+          ASTTk[node] := Ord(tyInteger);
+          ASTLeft[node] := -1;
+          Result := node; Exit;
         end
-        else if FindUMeth(mci, '__getitem__') >= 0 then
+        else if (FindUMeth(mci, '__getitem__') >= 0) or
+                (FindUMeth(mci, '__setitem__') >= 0) then
         begin
           { A user class with NO Pascal default property (pylib's own
             TPyList/TPyDict declare one; a plain user class never does) but
@@ -5255,6 +5275,19 @@ begin
           end
           else
           begin
+            { …and the mirror of the missing-setter case: this arm is now
+              entered for a class declaring only `__setitem__`, so a READ has
+              no getter to call. Same run-time TypeError the neither-member arm
+              above raises, rather than a compile error — `try: obj[k] /
+              except TypeError:` must still compile.
+              bug-nilpy-setitem-without-getitem-write-does-not-compile }
+            if FindUMeth(mci, '__getitem__') < 0 then
+            begin
+              node := PyNotSubscriptableNode(mci);
+              if node < 0 then Error('Nil Python: pylib (not-subscriptable) not loaded');
+              tk := tyInt64; recName := REC_NONE;
+              continue;
+            end;
             node := PyCallMeth1(mci, '__getitem__', node, keyNode);
             tk := IntToTypeKind(ASTTk[node]); recName := ResolveNodeRec(node);
             continue;   { allow further postfix on the getter result }

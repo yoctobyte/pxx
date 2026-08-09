@@ -19,11 +19,14 @@
 # uses decides that, because `obj[k] = v` is a different path — otherwise this
 # refusal would have broken the very shape that motivated it.
 #
-# NOT asserted: `so["k"] = 1` on a class with `__setitem__` but NO
-# `__getitem__`. That WRITE does not compile, and pinned does not compile it
-# either — a pre-existing gap in the same family, since the write path is
-# reached through the getter-gated arm as well. Filed separately rather than
-# pinned here.
+# The WRITE half — `so["k"] = 1` on a class with `__setitem__` but NO
+# `__getitem__` — was parked here as "not asserted, filed separately" and is now
+# fixed and asserted below
+# (bug-nilpy-setitem-without-getitem-write-does-not-compile). The gate was an
+# else-if CHAIN keyed on `__getitem__`, so a setitem-only class matched the
+# refusal arm and never reached the write path the comment said it would fall
+# through to. All four cells of the 2x2 are pinned now, because the old gate
+# conflated two of them.
 #
 # Expectations are CPython's own output.
 
@@ -59,3 +62,56 @@ d = {"a": 1}
 s = "abc"
 print(xs[1], d["a"], s[1], xs[-1], s[-1], xs[0:2], s[0:2])
 print(sorted(d.items())[0][0])
+
+# --- the 2x2: {__getitem__?} x {__setitem__?}, read AND write for each.
+# Written with try/except throughout for the same run-time-not-compile-time
+# reason as above.
+
+class WriteOnly:
+    def __init__(self):
+        self.last = "none"
+    def __setitem__(self, k, v):
+        self.last = str(k) + "=" + str(v)
+
+class ReadOnly:
+    def __getitem__(self, k):
+        return "r:" + str(k)
+
+class Both:
+    def __init__(self):
+        self.d = {}
+    def __setitem__(self, k, v):
+        self.d[k] = v
+    def __getitem__(self, k):
+        return self.d[k]
+
+w = WriteOnly()
+w["k"] = 1
+print("wo-write", w.last)
+try:
+    print(w["k"])
+except TypeError as e:
+    print("wo-read", e)
+
+r = ReadOnly()
+print("ro-read", r["x"])
+try:
+    r["x"] = 2
+    print("ro-write NO-RAISE")
+except TypeError:
+    # the LABEL only, not the message: PyNoSetitemError does not name the class
+    # ("object does not support item assignment (no __setitem__)"), where CPython
+    # says "'ReadOnly' object ...". Behaviour is what this pins; the wording is
+    # filed as bug-nilpy-nosetitem-error-does-not-name-the-class.
+    print("ro-write TypeError")
+
+bo = Both()
+bo["a"] = 5
+print("both", bo["a"])
+
+pl = Plain()
+try:
+    pl["q"] = 3
+    print("neither-write NO-RAISE")
+except TypeError:
+    print("neither-write TypeError")

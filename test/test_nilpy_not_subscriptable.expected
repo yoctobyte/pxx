@@ -3,3 +3,9 @@ read: 'SetOnly' object is not subscriptable
 plain: 'Plain' object is not subscriptable
 2 1 b 3 c [1, 2] ab
 a
+wo-write k=1
+wo-read 'WriteOnly' object is not subscriptable
+ro-read r:x
+ro-write TypeError
+both 5
+neither-write TypeError
