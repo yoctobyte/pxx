@@ -40,6 +40,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-len-of-variant-picks-wrong-overload | A | 55 | bug | `len(v)` on a Variant segfaults — a polymorphic builtin cannot pick an overload statically | — |
 | bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
 | bug-a-local-static-array-of-string-never-released-at-scope-exit | A | 55 | bug | a local `array[0..N] of string` never releases its element handles at scope exit — merely FILLING one in a called procedure leaks linearly (~60 MB per 1M calls) | — |
+| bug-a-low-high-of-a-named-subrange-answer-the-base-type | A | 55 | bug | `Low`/`High` of a named SUBRANGE answer the base type's bounds | — |
 | bug-a-managed-record-return-into-reused-dest-leaks | A | 55 | bug | Managed-record function results into a REUSED destination leak the old payload | — |
 | bug-a-managed-string-arg-temp-leaks-on-loop-reuse | A | 45 | bug | Managed-string arg-materialization temp leaks one handle per loop iteration | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |

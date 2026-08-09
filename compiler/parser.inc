@@ -8806,7 +8806,23 @@ begin
   if btk = tyUnknown then
   begin
     aliasIdx := FindTypeAlias(nm);
-    if aliasIdx >= 0 then btk := IntToTypeKind(AliasTk[aliasIdx]);
+    if aliasIdx >= 0 then
+    begin
+  { A named SUBRANGE answers its OWN bounds, not the base type's. `TDigit = 0..9`
+    gave Low = -2147483648 / High = 2147483647 (Integer's), and `TLetter =
+    'a'..'e'` gave #0/#255 — so the idiomatic `for i := Low(T) to High(T)` over a
+    named subrange ran four billion times instead of ten, silently.
+    The bounds are already retained: AliasIsSub/AliasSubLo/AliasSubHi were added
+    for {$R+} range checks, and nothing here consulted them.
+    bug-a-low-high-of-a-named-subrange-answer-the-base-type }
+      if AliasIsSub[aliasIdx] then
+      begin
+        if wantHigh then v := AliasSubHi[aliasIdx] else v := AliasSubLo[aliasIdx];
+        Next;
+        Result := True; Exit;
+      end;
+      btk := IntToTypeKind(AliasTk[aliasIdx]);
+    end;
   end;
   if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, v) then
   begin
@@ -8846,7 +8862,19 @@ begin
   if btk = tyUnknown then
   begin
     aliasIdx := FindTypeAlias(nm);
-    if aliasIdx >= 0 then btk := IntToTypeKind(AliasTk[aliasIdx]);
+    if aliasIdx >= 0 then
+    begin
+      { the same subrange rule as TryConstHighLowValue — these two are one
+        concept in two places, so they change together }
+      if AliasIsSub[aliasIdx] then
+      begin
+        if wantHigh then bv := AliasSubHi[aliasIdx] else bv := AliasSubLo[aliasIdx];
+        Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv;
+        ASTTk[outNode] := Ord(IntToTypeKind(AliasTk[aliasIdx]));
+        Result := True; Exit;
+      end;
+      btk := IntToTypeKind(AliasTk[aliasIdx]);
+    end;
   end;
   if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, bv) then
   begin

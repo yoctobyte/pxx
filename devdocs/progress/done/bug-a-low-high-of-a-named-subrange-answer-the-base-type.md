@@ -3,6 +3,8 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
+status: done
+owner: claude-A
 ---
 
 # `Low`/`High` of a named SUBRANGE answer the base type's bounds
@@ -42,3 +44,36 @@ worked and the alias form did not.
 Both spellings, integer and char subranges, `Low`/`High` and a
 `for i := Low(T) to High(T)` loop that must run the right number of times, all
 diffed against FPC.
+
+## 2026-08-09 — FIXED
+
+Both resolvers learned it, because they are one concept in two functions:
+`TryConstHighLowValue` (the constant evaluator, for `const`/array bounds) and
+`TryFoldHighLowType` (the expression path). Each resolved an alias to
+`AliasTk[]` — the BASE kind — and never looked at `AliasIsSub`. Fixing only one
+would have left `const DLo = Low(TDigit)` and `WriteLn(Low(TDigit))` disagreeing
+with each other, which is the sibling trap this repo keeps paying for.
+
+Measured against FPC, all identical:
+
+```
+int  0 9          char a e          neg  -5 5
+const 0 9         loop 10           cloop 5
+base -2147483648 2147483647 0 255   bool FALSE TRUE
+```
+
+The `loop 10` row is the point: `for i := Low(TDigit) to High(TDigit)` used to
+iterate the whole Integer range.
+
+### Verified
+
+`test/test_high_low_const_expr.pas` extended — subrange bounds folded in a
+`const` declaration, read as expressions, integer/negative/char subranges, and
+both `for` loops counting their iterations. Byte-identical to FPC.
+The base-type rows (`Low(Integer)`, `High(Byte)`, `Boolean`) are asserted
+unchanged in the same file.
+`make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
+
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

@@ -46,12 +46,11 @@ lives in git, not in a timestamp._
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (225)
+## backlog (224)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-fixed-array-function-result-faults-on-i386-and-arm32 | A | 45 | bug | A fixed-array function result faults on i386 and arm32 | — |
-| bug-a-low-high-of-a-named-subrange-answer-the-base-type | A | 55 | bug | `Low`/`High` of a named SUBRANGE answer the base type's bounds | — |
 | bug-a-nd-array-function-result-indexes-the-wrong-slot | A | 50 | bug | An N-D array function RESULT indexes the wrong slot inside the callee | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
 | bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc | A | 40 | bug | `shr` on a 32-bit operand shifts at 32 bits; FPC promotes to 64 first | — |
@@ -408,9 +407,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1584)
+## done (1585)
 
-1584 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1585 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (31)
 
@@ -472,7 +471,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-a-low-high-of-a-named-subrange-answer-the-base-type
 - [p 55] [C] bug-c-pascal-math-names-hijack-libc-through-pxxcio
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument

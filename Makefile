@@ -2662,7 +2662,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_tobject_methodaddress_b25626)" = "$$(printf 'found-alpha=TRUE\nname-of-it=TestAlpha\ncase-insensitive=TRUE\nfound-inherited=TRUE\nfound-private=FALSE\nfound-missing=FALSE\nname-of-nil=[]\nran TestAlpha\nshadowed=zzz\nshadow-nil=TRUE')"
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
-	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"
+	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1\n0 9\n0 9 -5 5\na e\n10\n5')"
 	# {$I} -Fi search + hard error on miss (bug-pascal-include-search-silent-miss)
 	./$(COMPILER) -Fitest/incdir_fi test/test_include_fi_search.pas /tmp/test_include_fi26
 	test "$$(/tmp/test_include_fi26)" = "fi-ok"
