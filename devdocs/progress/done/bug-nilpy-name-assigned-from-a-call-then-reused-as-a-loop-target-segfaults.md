@@ -3,6 +3,7 @@ prio: 50
 track: N
 type: bug
 blocked-by: []
+status: done
 ---
 
 # A name assigned from a CALL, then reused as a for-loop target, SEGFAULTS
@@ -128,3 +129,30 @@ Not started: an ARC lifetime fix at the tail of a long session is how a
 double-free ships, which is the same call made for
 [[bug-nilpy-lambda-returning-a-call-result-container-yields-none]] earlier
 tonight.
+
+## RESOLVED (2026-08-09) — same root as a broader bug, fixed there
+
+This ticket's exact repro now matches CPython (`1` / `['h']`, exit 0).
+
+It was **not** what this ticket says. Reducing further showed the CALL was
+incidental: the same failure appears with a plain dict LITERAL as the earlier
+binding, and what actually matters is a module-level name rebound INSIDE a block
+by a shape the pre-pass does not recognise. Filed and fixed as
+[[bug-nilpy-module-name-reassigned-from-a-subscript-in-a-block-reads-garbage]],
+which covers the subscript RHS, the `.values()`/`.keys()` loop target and the
+`list()`/`sorted()`/`reversed()` wrappers.
+
+The earlier diagnosis on this ticket — "an ARC lifetime fault, a borrowed
+reference released" — was **wrong**, and worth recording as a caution. The
+`-dPXX_OBJTRACE` trace really did show alloc → release-to-0 → free, which reads
+exactly like a premature free. It was the CONSEQUENCE: a variant written into a
+class-shaped slot, then released as if it were the class it was declared to be.
+An ARC instrument shows you the release; it does not tell you whether the
+*type* that led there was right. The reduction (vary the shape until the call
+drops out) is what found it, not the tracer.
+
+Closed as a duplicate of the broader ticket rather than resolved on its own, so
+the narrowing above stays findable.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.
