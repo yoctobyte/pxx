@@ -70,4 +70,4 @@ the next agent a full read-and-reproduce cycle to discover there is nothing to
 do, which is exactly what happened here.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit f0ce6cd58.
