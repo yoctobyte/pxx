@@ -1293,6 +1293,27 @@ function pydict_or(a: TPyDict; b: TPyDict): TPyDict;
   string handle as a TPyList and scanned its header words as variant slots —
   a segfault. }
 function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
+{ ---- FORWARD DECLARATIONS for helpers used ABOVE their definitions --------
+  Each of these was called from a routine EARLIER in this unit with no
+  declaration of any kind. That does not fail to compile — it links to a
+  plausible wrong address
+  (project_bodyless_procaddr_links_to_entry_minus_one) — and it is a tripwire
+  twice over: such a call can pass its tests, and an unrelated declaration
+  added elsewhere can make it start failing to compile in code nobody touched
+  (PySliceBounds and PyVarText both did, 2026-08-09).
+  Declared HERE, in the top block, rather than beside each implementation: a
+  declaration dropped into the middle of the implementation section is what
+  disturbed the resolution order in the first place.
+  chore-nilpy-pylib-forward-uses-are-a-build-tripwire }
+procedure PySliceBounds(n: Integer; var lo, hi: Integer); forward;
+function PyVarIsFloat(p: PPyVarRec): Boolean; forward;
+function PyVarAsFloat(p: PPyVarRec): Double; forward;
+function PyVarText(p: PPyVarRec): AnsiString; forward;
+procedure PyPromoteIntArith(dst: Pointer; x, y: Int64; op: Integer); forward;
+function PyIntOpOverflows(x, y, r: Int64; op: Integer): Boolean; forward;
+function PyFmtExp(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
+function PyFmtG(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
+
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
 { pyvarobj plus a RETAIN. Use where the unboxed pointer is STORED into a

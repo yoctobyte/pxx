@@ -935,6 +935,7 @@ should not read it to find out what to do. Grep it freely._
 | chore-asmtext-per-platform-split | A | 50 | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-fast-pin-tiered-tests | A | 50 | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
+| chore-nilpy-pylib-forward-uses-are-a-build-tripwire | N | 40 | chore | `pylib.pas` calls eight helpers before defining them, with no forward declaration | — |
 | chore-qemu-test-env | A | 50 | chore | QEMU cross-target test environment | — |
 | chore-repin-c-stdio-pal-bridge | A+C | 50 | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-repin-new-intrinsics | A | 50 | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |

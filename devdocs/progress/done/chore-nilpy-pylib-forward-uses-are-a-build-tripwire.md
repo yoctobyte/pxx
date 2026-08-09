@@ -3,6 +3,7 @@ prio: 40
 track: N
 type: chore
 blocked-by: []
+status: done
 ---
 
 # `pylib.pas` calls eight helpers before defining them, with no forward declaration
@@ -70,3 +71,32 @@ a lint, since the failure mode is silent by construction.
 `gate.sh quick` plus `make test-nilpy`: the change is declarations only, so any
 behaviour difference at all is a bug in the change. Re-run the audit afterwards
 and expect zero.
+
+## DONE (2026-08-09, claude-AN)
+
+All eight now carry a `forward;` declaration in the unit's TOP block. The audit
+re-run reports zero of them remaining.
+
+Declarations only — no behaviour change intended, and none observed: `gate.sh
+quick` GREEN, and the str/format/set/dunder test families plus four realistic
+programs re-diffed against CPython unchanged.
+
+### Notes for the Track T lint, learned by writing it twice
+
+The audit is ~30 lines but has two traps that make a naive version useless:
+
+1. **Type CASTS look like calls.** `TPyList(o)` matches `\bname\s*\(`, so the
+   class names appear as "forward uses" of themselves. Filter them out, or match
+   only against known routine names.
+2. **Multi-line signatures.** A declaration's first `;` is usually INSIDE the
+   parameter list (`function f(a: TObject;` …), so "does this line end in
+   `forward;`" is wrong — the blob has to be accumulated to the real end of the
+   signature. A version that got this wrong reported every correctly-declared
+   helper as a violation.
+
+Both false-positive classes are still in the checker's output as of this fix;
+the eight genuine findings were separated by hand. Worth fixing before it is
+wired into a tier, since a lint that cries wolf gets ignored.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.
