@@ -289,7 +289,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (33)
+## rainy-day (34)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -323,6 +323,7 @@ _none_
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 | goal-compile-fpc-compiler | A | 50 | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
 | goal-compile-linux-tinyconfig | C | 50 | goal | 🗼 Lighthouse — boot a Linux tinyconfig kernel built with PXX's C frontend | — |
+| idea-cobol-frontend-feasibility-costing | U | 20 | idea | COBOL frontend: parser is cheap (grammar is rigid, records map onto Pascal, unstructured flow already proven by BASIC), but it needs a real fixed-point decimal type — Currency is currently a Double — plus PICTURE-edited MOVE and, for full file support, ISAM | — |
 | idea-demo-app-candidates | E | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |

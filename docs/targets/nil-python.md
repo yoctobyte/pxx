@@ -7,7 +7,7 @@ order: 63
 
 Nil Python is a statically compiled Python-shaped frontend for the PXX compiler. It compiles `.npy` source files directly to native machine code through the shared AST and backend, achieving high performance without the overhead of a Python interpreter or runtime.
 
-It is a **mainline frontend**, a peer of Pascal and C rather than a research path: it has its own test gate (`test-nilpy`), which must be green — along with a byte-identical self-host and the cross-target builds — before any change lands. BASIC and Rust are the experimental frontends; Nil Python began there and no longer is.
+It is a **mainline frontend**, a peer of Pascal and C rather than a research path: it has its own test gate (`test-nilpy`), which must be green — along with a byte-identical self-host and the cross-target builds — before any change lands. BASIC, Rust and Zig are the experimental frontends; Nil Python began there and no longer is.
 
 > [!NOTE]
 > Nil Python is not a full Python implementation. Source files can use either the `.npy` extension or plain `.py` — both compile through the same frontend; PXX does not require CPython-standard syntax, so a `.py` file that leans on dynamic-typing features CPython allows may not compile as-is.

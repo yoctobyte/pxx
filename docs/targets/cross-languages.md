@@ -8,8 +8,8 @@ order: 62
 PXX is centered on Pascal, but several frontends share one backend, one symbol
 table, and one `uses`/`import` resolver — the project's working nickname for
 this is **Frankonpiler**. Pascal and C are mainline, gated frontends; Nil
-Python is also mainline (see [Nil Python](./nil-python.md)); BASIC and Rust
-remain experimental research paths.
+Python is also mainline (see [Nil Python](./nil-python.md)); BASIC, Rust and
+Zig remain experimental research paths.
 
 ## Frontends by suffix
 
@@ -21,9 +21,10 @@ remain experimental research paths.
 | `.bas` | BASIC, experimental |
 | `.npy`, `.py` | Nil Python |
 | `.rs` | Rust, experimental |
+| `.zig` | Zig, experimental |
 
 The Pascal frontend is the original, most complete surface. C and Nil Python
-are full peer frontends with their own gates; BASIC and Rust exist to test
+are full peer frontends with their own gates; BASIC, Rust and Zig exist to test
 interop and backend reuse, and their accepted language subsets are still
 moving.
 
@@ -49,6 +50,23 @@ BASIC, it exists to stress backend reuse across a very different grammar, not as
 a usable Rust toolchain. Nil Python started in that same category and is no
 longer in it — it is a gated mainline frontend, listed here only because it
 shares the resolver.
+
+## Zig
+
+The `.zig` frontend is the newest research path, and the most explicit about
+what it is for: a probe that pushes a Zig-shaped program through the shared
+AST, IR and codegen **without adding a single AST node, IR op or backend
+change**. Everything it accepts is desugared at parse time onto machinery the
+other frontends already use — `switch` becomes a chain of ifs over a hidden
+temporary, `defer`/`errdefer` is a function-level stash replayed at each exit,
+optionals and slices are auto-registered two-field classes, error unions use an
+errno-style global slot, and `std.debug.print` lands on the same write
+machinery as Pascal's `writeln` and BASIC's `PRINT`.
+
+That constraint is the experiment. A frontend that needs no shared-internals
+changes is evidence the IR is general rather than Pascal-shaped, which is worth
+more than the Zig subset itself. It is **not** a usable Zig toolchain and is not
+trying to be one.
 
 ## C Frontend
 

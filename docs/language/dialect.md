@@ -33,7 +33,7 @@ Some features are project-specific or still early:
 - `--target=ARCH` selects the output CPU target.
 - `.c` and `.npy` inputs route to the C and Nil Python frontends, which are
   mainline and gated alongside Pascal; `.bas` and `.rs` route to the
-  experimental BASIC and Rust research frontends.
+  experimental BASIC, Rust and Zig research frontends.
 
 ## Inline and auto-typed variables
 
