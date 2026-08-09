@@ -2944,6 +2944,8 @@ begin
     begin pname := 'pystr_format'; retTk := tyAnsiString; wantArgs := -6; end
   else if CaseEqual(mname, 'isspace') then
     begin pname := 'pystr_isspace'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'isascii') then
+    begin pname := 'pystr_isascii'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'isdigit') then
     begin pname := 'pystr_isdigit'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'isalpha') then
@@ -5538,7 +5540,7 @@ begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
       + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
-      + 'isdigit, isalpha, isalnum, isupper, islower, format, '
+      + 'isdigit, isalpha, isalnum, isupper, islower, isascii, format, '
       + 'join, split, rsplit, partition, rpartition, splitlines, replace, '
       + 'count, rfind, title, capitalize, '
       + 'swapcase, casefold, ljust, rjust, center, zfill, removeprefix, '

@@ -1284,6 +1284,13 @@ function pystr_rindex(const s: AnsiString; const sub: AnsiString): Integer;
 { str.find(sub, start): searches from `start` but reports the index in the
   ORIGINAL string, as Python does. }
 function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
+{ `s.isascii()` — every byte below 128. NilPy strings ARE byte strings, so this
+  is a plain scan and needs no codepoint model (unlike encode/decode, which is
+  parked on one — bug-nilpy-encode-ignores-the-codec). CPython answers True for
+  the EMPTY string, unlike isspace/isdigit/isalpha which answer False, because
+  "all characters are ascii" is vacuously true where "is a digit" is not.
+  feature-nilpy-str-surface-gaps-2026-08-09 }
+function pystr_isascii(const s: AnsiString): Boolean;
 function pystr_isspace(const s: AnsiString): Boolean;
 { CPython: "".isdigit()/.isalpha()/.isupper()/.islower() are all FALSE — the
   all-quantifier does not hold vacuously for any of them. }
@@ -1656,6 +1663,16 @@ begin
   for i := 1 to Length(s) do
     if not PyIsSpaceCh(s[i]) then begin Result := False; Exit; end;
   Result := True;
+end;
+
+function pystr_isascii(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  { EMPTY is True here — CPython's rule, and the opposite of the sibling
+    predicates above, so it is stated rather than inherited. }
+  Result := True;
+  for i := 1 to Length(s) do
+    if Ord(s[i]) > 127 then begin Result := False; Exit; end;
 end;
 
 function pyvartag(const v: Variant): Int64;

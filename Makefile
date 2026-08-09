@@ -1092,6 +1092,10 @@ test-nilpy: $(COMPILER)
 	# values for parameter 'b'" -- the star packer filled b's default first.
 	./$(COMPILER) test/test_nilpy_kwarg_with_star_params.npy /tmp/test_nilpy_kwstar26
 	/tmp/test_nilpy_kwstar26 | diff -u test/test_nilpy_kwarg_with_star_params.expected -
+	# str.isascii() -- note the EMPTY string is True, unlike its isspace/isdigit
+	# siblings which are False.
+	./$(COMPILER) test/test_nilpy_str_isascii.npy /tmp/test_nilpy_isascii26
+	/tmp/test_nilpy_isascii26 | diff -u test/test_nilpy_str_isascii.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

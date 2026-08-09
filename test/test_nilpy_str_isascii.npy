@@ -1,0 +1,39 @@
+# feature-nilpy-str-surface-gaps-2026-08-09 — the isascii() row.
+#
+# `"abc".isascii()` was a compile error ("unsupported str method"). It is the
+# one item on that survey needing no codepoint model at all: NilPy strings ARE
+# byte strings, so this is a scan for any byte >= 128.
+#
+# The EMPTY string is the case worth pinning. CPython answers True — "all
+# characters are ascii" is vacuously true — which is the OPPOSITE of the sibling
+# predicates isspace/isdigit/isalpha, all of which answer False on "". Inheriting
+# their shape would have been wrong in exactly one place.
+#
+# The boundary is asserted on both sides: \x7f is ascii, \x80 is not.
+#
+# NOT asserted: len() of a non-ascii string. CPython counts CODEPOINTS and NilPy
+# counts BYTES, which is the byte-string model and a separate, already-filed
+# question (bug-nilpy-non-ascii-string-surface-measured). Including it here
+# would fail the test for a reason that has nothing to do with isascii.
+#
+# Expectations are CPython's own output.
+
+print("plain  ", "abc".isascii(), "a b".isascii(), "123!".isascii())
+print("empty  ", "".isascii())
+print("high   ", "café".isascii(), "héllo".isascii())
+print("bound  ", "\x7f".isascii(), "\x80".isascii())
+print("mixed  ", "abc\x80".isascii(), "\x80abc".isascii())
+
+# the siblings keep their own empty-string answers
+print("siblings", "".isdigit(), "".isspace(), "".isalpha(), "abc".isalpha())
+
+# through a variable and a parameter, not just a literal
+s = "héllo"
+print("var    ", s.isascii(), s[0].isascii())
+
+
+def f(v):
+    return v.isascii()
+
+
+print("param  ", f("ok"), f("nö"))

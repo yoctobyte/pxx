@@ -25,7 +25,7 @@ work, and bundling them buries the one that matters.
 | `b.hex()` on bytes | `TPyBytes has no method hex` |
 | `str.maketrans(a, b)` | `unsupported str method .maketrans()` |
 | `s.translate(table)` | `unsupported str method .translate()` |
-| `s.isascii()` | `unsupported str method .isascii()` |
+| ~~`s.isascii()`~~ | **DONE 2026-08-09** — `pystr_isascii`, pinned by `test/test_nilpy_str_isascii.npy` |
 
 ## Already working — do not re-file
 
@@ -39,8 +39,10 @@ with maxsplit, `splitlines`, `find`/`rfind`/`index`/`rindex` with windows,
 
 ## Notes for whoever picks this up
 
-- `isascii()` is trivial: NilPy strings are byte strings, so it is a scan for
-  any byte >= 128.
+- ~~`isascii()`~~ **done** — a scan for any byte >= 128, no codepoint model
+  needed. The one non-obvious part, now pinned: CPython answers **True** for the
+  EMPTY string, the opposite of the `isspace`/`isdigit`/`isalpha` siblings, so
+  inheriting their shape would have been wrong in exactly one place.
 - `hex()` on bytes is equally small and pairs with `bytes.fromhex`.
 - `maketrans`/`translate` go together and want a decision about what the
   translation table IS (CPython's is a dict keyed by ordinal). The 1:1

@@ -1,0 +1,8 @@
+plain   True True True
+empty   True
+high    False False
+bound   True False
+mixed   False False
+siblings False False False True
+var     False True
+param   True False
