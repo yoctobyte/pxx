@@ -78,4 +78,4 @@ every power of ten from 1 to 1e15, `log2` for every power of two in range, and
 a handful of non-power values against CPython.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 2ae8d1509.
