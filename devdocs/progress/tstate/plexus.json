@@ -4886,7 +4886,7 @@
  },
  "open_regressions": [
   {
-   "bad": "0d6de0cbeae14acc49cf9a7c6f3d007b61118319",
+   "bad": "e3b8023ef73688e91386e40f4dc956c0b7e3b146",
    "good": "5f7bf848de9b3c214af628ca863534893a09092e",
    "job": "test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy",
    "name": "test-nilpy#63",
@@ -4894,11 +4894,7 @@
    "range": [
     "07f78101e4055bd6966dedfb48c163b4742f7364",
     "0ece0a483c1a1674d8842ded68dfa7ca4f2d7dc1",
-    "e3b8023ef73688e91386e40f4dc956c0b7e3b146",
-    "b70e48cbe26730e049e2324939374116f1a61916",
-    "3ef2fa43feed9b4036733bbb36a146be7bb95c3d",
-    "755794b3f3346e0b8f642b81aeb7faa2b3bb8f19",
-    "0d6de0cbeae14acc49cf9a7c6f3d007b61118319"
+    "e3b8023ef73688e91386e40f4dc956c0b7e3b146"
    ],
    "src": "test/test_nilpy_str_isnumeric_istitle.npy test/test_nilpy_str_isnumeric_istitle.expected +1"
   }
