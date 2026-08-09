@@ -150,4 +150,4 @@ unexplained rather than as meaning something.
   spillover) explicitly not attempted; the founding-day import and the
   seven-hue palette failure are both recorded above because both would
   otherwise be re-discovered by whoever touches this next.
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 9f62fcfbe.
