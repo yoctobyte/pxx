@@ -1,0 +1,8 @@
+v | ValueError('v') | v
+t | TypeError('t') | t
+m | MyErr('m') | m
+x | Exception('x') | x
+ | ValueError()
+caught ValueError('caught')
+mine MyErr
+msg: concat

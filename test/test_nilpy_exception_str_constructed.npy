@@ -1,0 +1,38 @@
+# bug-nilpy-exception-str-and-repr-diverge-from-cpython — the str() half
+#
+# `str(ValueError("v"))` on an exception that was CONSTRUCTED and never raised
+# gave `<__main__.ValueError object at 0x...>`, while a CAUGHT one gave its
+# message — two paths disagreeing about the same object. An address is also not
+# stable run to run, so nothing could pin it.
+#
+# Both routes are asserted side by side here, which is the point: fixing the
+# constructed one while leaving the caught one alone is exactly the kind of
+# divergence that produced the bug.
+#
+# NOT asserted, and filed separately as
+# bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored: an Exception
+# subclass that defines its OWN __str__ still has it IGNORED (a third route,
+# which short-circuits before the dunder lookup — pinned does the same, so it is
+# not a consequence of this fix). Pinning today's answer would freeze it.
+#
+# NOT asserted either: KeyError, whose message is stored already repr'd and so
+# cannot be rendered correctly from a Message alone until `e.args` exists — see
+# the ticket.
+#
+# Expectations are CPython's own output.
+
+class MyErr(Exception):
+    pass
+
+for e in [ValueError("v"), TypeError("t"), MyErr("m"), Exception("x")]:
+    print(str(e), "|", repr(e), "|", "%s" % e)
+print(str(ValueError()), "|", repr(ValueError()))
+try:
+    raise ValueError("caught")
+except ValueError as e:
+    print(str(e), repr(e))
+try:
+    raise MyErr("mine")
+except Exception as e:
+    print(str(e), type(e).__name__)
+print("msg: " + str(ValueError("concat")))

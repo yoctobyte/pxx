@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (222)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -80,6 +80,7 @@ _none_
 | bug-nilpy-subscript-of-a-call-result-ignores-the-index | N | 60 | bug | Subscripting a CALL RESULT: a string ignores the index, a chain drops the second | decide-sole-a-guard-for-unattended-sessions |
 | bug-nilpy-subscript-read-without-getitem-yields-garbage | N | 35 | bug | A subscript READ on a class with no `__getitem__` yields a silent wrong value | — |
 | bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver | N | 55 | bug | A user method named `find`/`index` raises AttributeError when the receiver has no static class | — |
+| bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored | N | 45 | bug | A user `__str__` on an Exception subclass is ignored | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-rtl-log10-is-inexact-for-powers-of-ten | B | 55 | bug | `Log10` is inexact for powers of ten — `int(log10(n))` is off by one | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -491,6 +492,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 3)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+- [p 45] [N] bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-nilpy-isnumeric-red-at-T-not-reproducible-locally
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path

@@ -102,8 +102,18 @@ a single Message string where Python carries an argument tuple. Until that
 exists, KeyError's repr and the `ValueError('')` case cannot be right. That is
 the next piece of this ticket.
 
-## Also found, still open: `str()` of a CONSTRUCTED exception
+## `str()` of a CONSTRUCTED exception — also FIXED
 
-`str(ValueError("v"))` on an exception that was never raised gives the address
-form, while a CAUGHT one gives its message — two different paths. Pre-existing,
-found while testing the above, and deliberately not pinned by the new test.
+`str(ValueError("v"))` on an exception that was never raised gave the address
+form while a CAUGHT one gave its message. Both routes now return the message and
+`test/test_nilpy_exception_str_constructed.npy` asserts them SIDE BY SIDE —
+fixing one and leaving the other is exactly the divergence that produced this.
+
+A THIRD route turned up while testing and is filed separately: an Exception
+subclass defining its own `__str__` has it IGNORED, printing the constructor
+argument instead. Pinned does the same, so it is not a consequence of this work —
+it short-circuits before the dunder lookup and never enters `PyUserObjStr`. See
+`bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored`.
+
+**So `str()`/`repr()` of an exception had THREE routes**, and that is the shape
+worth remembering here rather than any individual fix.

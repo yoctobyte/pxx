@@ -11132,6 +11132,22 @@ begin
     than the address, because an address is obviously unhelpful while a wrongly
     quoted key looks authoritative.
     bug-nilpy-exception-str-and-repr-diverge-from-cpython }
+  { str() of an exception is its MESSAGE. A CAUGHT exception already reached
+    that through another path; one that was CONSTRUCTED and never raised
+    (`str(ValueError("v"))`, or an exception held in a list) fell through to the
+    address form here — two paths disagreeing about the same object.
+
+    KeyError comes out right for free on the raise path, because PyKeyError
+    stores its message already repr'd, which is exactly what CPython's
+    str(KeyError) is. A user-CONSTRUCTED `KeyError("k")` still loses the quotes;
+    that is the `e.args` gap, and the message is a strict improvement on an
+    address either way. }
+  if (mi = nil) and (not wantRepr) and (o is Exception) then
+  begin
+    outS := Exception(o).Message;
+    PyUserObjStr := True;
+    Exit;
+  end;
   if (mi = nil) and wantRepr and (o is Exception) and (not (o is KeyError)) then
   begin
     if Exception(o).Message = '' then
