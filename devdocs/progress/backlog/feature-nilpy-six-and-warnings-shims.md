@@ -2,6 +2,7 @@
 track: B
 prio: 45
 type: feature
+blocked-by: bug-n-a-type-name-is-not-a-first-class-value
 ---
 
 # `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign
@@ -84,3 +85,41 @@ method, so aliasing it to `dict.keys` needs the unbound-method-as-a-value
 support that `feature-nilpy-str-surface-gaps-2026-08-09` records as missing
 (`sorted(xs, key=str.lower)` fails the same way). A one-line `def viewkeys(d):
 return d.keys()` sidesteps that entirely.
+
+## MEASURED 2026-08-09, Track B: the premise does not hold yet
+
+Before writing a line of the shim, the aliasing idiom it is built on was
+compiled. It does not:
+
+    text_type = str          ->  pascal26:1: error: unexpected token
+    string_types = (str,)    ->  pascal26:1: error: unexpected token
+    unichr = chr             ->  pascal26:1: error: undefined variable (chr)
+
+A type name is not a first-class value in NilPy — filed with the full boundary
+as [[bug-n-a-type-name-is-not-a-first-class-value]] (functions ARE values;
+`f = len` and a user `def` both work, and a user-class alias `A = B` parses but
+is then unusable, which is worse).
+
+That re-scores this ticket rather than blocking all of it:
+
+| name | sites | writable today? |
+| --- | --- | --- |
+| `text_type` | 8 | **no** — needs `str` as a value |
+| `PY3` | 2 | yes, `PY3 = True` |
+| `binary_type` | 1 | **no** — needs `bytes` as a value |
+| `string_types` | 1 | **no** — needs a tuple of types |
+| `unichr` | 1 | yes, as `def unichr(i): return chr(i)` |
+| `viewkeys` | 1 | yes, as `def viewkeys(d): return d.keys()` |
+| `with_metaclass` | 1 | the separate hard one (metaclasses) |
+
+So **10 of the 13 import sites are blocked**, and the three writable ones are
+the periphery. A shim shipped now would resolve `import six` and then fail at
+the first `text_type`, which is a worse experience than the honest missing
+module — and it would violate the T1 rule in
+`devdocs/dev/python-compat-tiers.md` that a shim states its subset and fails
+loudly rather than approximating.
+
+`warnings` is unaffected by any of this and is still a small, self-contained
+win: `warn(msg)` to stderr, `simplefilter`/`catch_warnings` as no-ops.
+
+Blocked on the N ticket for the `six` half; the `warnings` half can go first.
