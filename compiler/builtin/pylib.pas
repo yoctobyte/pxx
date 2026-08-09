@@ -526,6 +526,18 @@ function repr(o: TObject): AnsiString; overload;
   corresponding display builds. Not "for rendering only" any more: the kind is
   what `type(x).__name__` and `isinstance` answer from, so a display that fails
   to stamp it is a wrong TYPE, not just wrong brackets. }
+{ The STARRED target of an unpack is ALWAYS a list, even when the source was a
+  tuple — `a, *b = (1,2,3)` gives b == [2, 3], not (2, 3). The slice that
+  produces it copies the source's kind (correct for an ordinary slice, where a
+  slice of a tuple IS a tuple), so the result has to be re-marked.
+  feature-nilpy-starred-and-nested-unpacking }
+function pylist_mark_list(l: TPyList): TPyList;
+function pyvar_mark_list(const v: Variant): Variant;
+{ `a, b, *c = xs` with too FEW values raises ValueError in CPython, naming how
+  many were expected. Without the check the indexed stores raise IndexError
+  instead — a different exception type, so an `except ValueError` around the
+  unpack does not catch it. }
+function pyunpack_check(have, need: Integer): Integer;
 function pylist_mark_tuple(l: TPyList): TPyList;
 function pylist_mark_set(l: TPyList): TPyList;
 { The Python type name of a sequence kind: 'list' / 'tuple' / 'set'. }
@@ -11069,6 +11081,29 @@ begin
   if l <> nil then l.FKind := PYSEQ_TUPLE;
   pylist_mark_tuple := l;
 end;
+function pylist_mark_list(l: TPyList): TPyList;
+begin
+  if l <> nil then l.FKind := PYSEQ_LIST;
+  Result := l;
+end;
+
+function pyvar_mark_list(const v: Variant): Variant;
+var o: TObject;
+begin
+  Result := v;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  if (o <> nil) and (o is TPyList) then TPyList(o).FKind := PYSEQ_LIST;
+end;
+
+function pyunpack_check(have, need: Integer): Integer;
+begin
+  if have < need then
+    raise ValueError.Create('not enough values to unpack (expected at least '
+      + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
+  Result := have;
+end;
+
 
 function pylist_mark_set(l: TPyList): TPyList;
 begin

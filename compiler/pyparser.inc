@@ -15860,15 +15860,67 @@ end;
   into a hidden temp before ANY target is stored, which is the whole reason this
   is not just a sequence of assignments: `a, b = b, a` would otherwise become
   `a = b; b = a` and lose the old `a` (feature-nilpy-tuple-unpack). }
+{ Two builders for the STARRED unpack in PyParseUnpackAssign — a slice and a
+  length over a value that may be a static TPyList or a bare variant. Written
+  once each rather than inline at three call sites, because the list/variant
+  fork has to be made identically every time and that is exactly the kind of
+  duplication this frontend keeps getting bitten by.
+  feature-nilpy-starred-and-nested-unpacking }
+function PyMakeSliceOf(baseNode, loNode, hiNode: Integer; listCi: Integer): Integer;
+var pn: AnsiString; pi, a1, a2, a3: Integer;
+begin
+  if listCi >= 0 then pn := 'pylist_slice' else pn := 'pyvar_slice';
+  pi := FindProc(pn);
+  if pi < 0 then Error('Nil Python: pylib (' + pn + ') not loaded');
+  a3 := AllocNode(AN_ARG); ASTLeft[a3] := hiNode; ASTRight[a3] := -1;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := loNode; ASTRight[a2] := a3;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := baseNode; ASTRight[a1] := a2;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := pi;
+  ASTLeft[Result] := a1;
+  ASTTk[Result] := Ord(Procs[pi].RetType);
+  ASTRight[Result] := ProcRetRecId[pi];
+end;
+
+function PyMakeLenOf(baseNode: Integer; listCi: Integer): Integer;
+var pi, a1: Integer;
+begin
+  if listCi >= 0 then
+  begin
+    Result := PyCallMeth1(listCi, 'count', baseNode, -1);
+    if Result < 0 then Error('Nil Python: pylib (TPyList.count) not loaded');
+    Exit;
+  end;
+  pi := FindProc('pylen_v');
+  if pi < 0 then Error('Nil Python: pylib (pylen_v) not loaded');
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := baseNode; ASTRight[a1] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := pi;
+  ASTLeft[Result] := a1;
+  ASTTk[Result] := Ord(tyInteger);
+end;
+
 function PyParseUnpackAssign: Integer;
 var names: array[0..7] of AnsiString;
     flds: array[0..7] of AnsiString;    { attribute target, or '' for a plain name }
     tmps: array[0..7] of Integer;
     nTargets, nValues, i, symIdx, node, seq, tk: Integer;
     unpCi, unpIdx, unpElem: Integer;
+    starAt, unpCnt, unpHi, unpTrail: Integer;   { `a, *rest = xs` }
 begin
   nTargets := 0;
+  starAt := -1;
   repeat
+    if CurTok.Kind = tkStar then
+    begin
+      { `*rest` — takes a LIST of the surplus. Python allows exactly one per
+        target list; a second is a hard error there too. }
+      if starAt >= 0 then
+        Error('Nil Python: two starred targets in one assignment — Python '
+              + 'allows at most one');
+      starAt := nTargets;
+      Next;
+    end;
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a name in the assignment target');
     if nTargets >= 8 then Error('Nil Python: at most 8 unpacking targets');
     names[nTargets] := CurTok.SVal;
@@ -15917,11 +15969,99 @@ begin
     if (unpCi < 0) and (IntToTypeKind(ASTTk[PyMakeIdent(tmps[0])]) <> tyVariant) then
       Error('Nil Python: cannot unpack this value into several names — it is '
             + 'not a list, tuple or variant');
+    { With a STAR, the index of a target after it depends on the sequence's
+      LENGTH, so the fixed ones are counted from each end and the starred one
+      takes the slice between. `a, *rest = xs` -> a = xs[0], rest = xs[1:len].
+      `*init, last = xs` -> init = xs[0:len-1], last = xs[len-1].
+      unpTrail is how many fixed targets follow the star. }
+    unpTrail := 0;
+    if starAt >= 0 then
+    begin
+      unpTrail := nTargets - starAt - 1;
+      { CPython raises ValueError when the source is shorter than the FIXED
+        targets. Without this the indexed stores raise IndexError, a different
+        type, so an `except ValueError` around the unpack would not catch it. }
+      unpCnt := FindProc('pyunpack_check');
+      if unpCnt < 0 then Error('Nil Python: pylib (pyunpack_check) not loaded');
+      unpHi := AllocNode(AN_INT_LIT);
+      ASTIVal[unpHi] := nTargets - 1;
+      ASTTk[unpHi] := Ord(tyInteger);
+      unpIdx := AllocNode(AN_ARG);
+      ASTLeft[unpIdx] := unpHi;
+      ASTRight[unpIdx] := -1;
+      unpElem := AllocNode(AN_ARG);
+      ASTLeft[unpElem] := PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi);
+      ASTRight[unpElem] := unpIdx;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := unpCnt;
+      ASTLeft[node] := unpElem;
+      ASTTk[node] := Ord(tyInteger);
+      seq := PySeqAppend(seq, node);
+    end;
     for i := 0 to nTargets - 1 do
     begin
-      unpIdx := AllocNode(AN_INT_LIT);
-      ASTIVal[unpIdx] := i;
-      ASTTk[unpIdx] := Ord(tyInteger);
+      if (starAt >= 0) and (i = starAt) then
+      begin
+        { the surplus: xs[starAt : count - unpTrail]. The high bound is a
+          RUNTIME expression, which is the whole reason a star cannot be a
+          compile-time slot count. }
+        unpIdx := AllocNode(AN_INT_LIT);
+        ASTIVal[unpIdx] := starAt;
+        ASTTk[unpIdx] := Ord(tyInteger);
+        unpCnt := PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi);
+        if unpTrail = 0 then
+          unpHi := unpCnt
+        else
+        begin
+          unpElem := AllocNode(AN_INT_LIT);
+          ASTIVal[unpElem] := unpTrail;
+          ASTTk[unpElem] := Ord(tyInteger);
+          unpHi := AllocNode(AN_BINOP);
+          ASTIVal[unpHi] := Ord(tkMinus);
+          ASTLeft[unpHi] := unpCnt;
+          ASTRight[unpHi] := unpElem;
+          ASTTk[unpHi] := Ord(tyInteger);
+        end;
+        unpElem := PyMakeSliceOf(PyMakeIdent(tmps[0]), unpIdx, unpHi, unpCi);
+        { ...and force it to a LIST. The slice copies the source's kind, which
+          is right for an ordinary slice (a slice of a tuple is a tuple) and
+          wrong here: `a, *b = (1,2,3)` gives b == [2, 3] in CPython, a list. }
+        if unpCi >= 0 then unpCnt := FindProc('pylist_mark_list')
+        else unpCnt := FindProc('pyvar_mark_list');
+        if unpCnt < 0 then Error('Nil Python: pylib (mark_list) not loaded');
+        unpHi := AllocNode(AN_ARG);
+        ASTLeft[unpHi] := unpElem;
+        ASTRight[unpHi] := -1;
+        unpIdx := AllocNode(AN_CALL);
+        ASTIVal[unpIdx] := unpCnt;
+        ASTLeft[unpIdx] := unpHi;
+        ASTTk[unpIdx] := Ord(Procs[unpCnt].RetType);
+        ASTRight[unpIdx] := ProcRetRecId[unpCnt];
+        unpElem := unpIdx;
+        node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
+        seq := PySeqAppend(seq, node);
+        Continue;
+      end;
+      if (starAt >= 0) and (i > starAt) then
+      begin
+        { counted from the END: the k-th target after the star is
+          xs[count - (nTargets - 1 - i) - 1] }
+        unpCnt := PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi);
+        unpElem := AllocNode(AN_INT_LIT);
+        ASTIVal[unpElem] := nTargets - i;
+        ASTTk[unpElem] := Ord(tyInteger);
+        unpIdx := AllocNode(AN_BINOP);
+        ASTIVal[unpIdx] := Ord(tkMinus);
+        ASTLeft[unpIdx] := unpCnt;
+        ASTRight[unpIdx] := unpElem;
+        ASTTk[unpIdx] := Ord(tyInteger);
+      end
+      else
+      begin
+        unpIdx := AllocNode(AN_INT_LIT);
+        ASTIVal[unpIdx] := i;
+        ASTTk[unpIdx] := Ord(tyInteger);
+      end;
       if unpCi >= 0 then
       begin
         unpElem := PyCallMeth1(unpCi, 'at', PyMakeIdent(tmps[0]), unpIdx);
@@ -15935,6 +16075,10 @@ begin
     Result := seq;
     Exit;
   end;
+  if starAt >= 0 then
+    Error('Nil Python: a starred target needs ONE sequence to unpack '
+          + '(`a, *rest = xs`); several values (`a, *rest = 1, 2, 3`) '
+          + 'is not supported yet');
   if nValues <> nTargets then
     Error('Nil Python: not enough values to unpack');
 
@@ -15951,11 +16095,25 @@ end;
 { Does an `a, b = ...` target list start here? Only a bare comma-separated name
   list followed by `=` qualifies — anything else is left to the ordinary paths. }
 function PyUnpackTargetAhead: Boolean;
-var i: Integer;
+var i, nstar: Integer;
 begin
+  { A STAR is accepted as a target element now — `a, *rest = xs` and
+    `*init, last = xs`. Exactly one, anywhere in the list, which is Python's own
+    rule; a second one is left to PyParseUnpackAssign to refuse by name rather
+    than being silently declined here (a decline reads as "undefined variable"
+    at the first name, which is the message this whole area was fixed to stop
+    producing). feature-nilpy-starred-and-nested-unpacking }
   Result := False;
-  if CurTok.Kind <> tkIdent then Exit;
-  i := TokPos;                    { the token AFTER the current ident }
+  nstar := 0;
+  i := TokPos - 1;                { the CURRENT token }
+  if Tokens[i].Kind = tkStar then
+  begin
+    Inc(nstar);
+    Inc(i);
+    if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
+  end
+  else if Tokens[i].Kind <> tkIdent then Exit;
+  Inc(i);                         { past the name }
   { an ATTRIBUTE target counts as one name — `self.x, self.y = x, y` }
   if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
      (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
@@ -15965,6 +16123,12 @@ begin
     if Tokens[i].Kind = tkComma then
     begin
       Inc(i);
+      if (i < TokCount) and (Tokens[i].Kind = tkStar) then
+      begin
+        Inc(nstar);
+        if nstar > 1 then Exit;   { two stars: not ours, say so elsewhere }
+        Inc(i);
+      end;
       if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
       Inc(i);
       if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and

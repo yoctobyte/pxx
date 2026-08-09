@@ -583,12 +583,11 @@ test-nilpy: $(COMPILER)
 	grep -q "inconsistent dedent" /tmp/test_nilpy_inconsistent_dedent_fail.log
 	! ./$(COMPILER) test/test_nilpy_mixed_indent_fail.npy /tmp/test_nilpy_mixed_indent_fail26 > /tmp/test_nilpy_mixed_indent_fail.log 2>&1
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
-	@# unsupported unpacking targets must NAME the shape, not report a good name
-	@# as undefined (feature-nilpy-starred-and-nested-unpacking)
-	! ./$(COMPILER) test/test_nilpy_starred_target_fail.npy /tmp/test_nilpy_starred_target_fail26 > /tmp/test_nilpy_starred_target_fail.log 2>&1
-	grep -q "STARRED assignment target" /tmp/test_nilpy_starred_target_fail.log
-	! ./$(COMPILER) test/test_nilpy_leading_star_target_fail.npy /tmp/test_nilpy_leading_star_target_fail26 > /tmp/test_nilpy_leading_star_target_fail.log 2>&1
-	grep -q "STARRED assignment target" /tmp/test_nilpy_leading_star_target_fail.log
+	@# the STARRED forms are IMPLEMENTED now (test_nilpy_starred_unpack.npy);
+	@# their two "must be refused with this message" recipes were retired with
+	@# the feature. The NESTED forms are still unsupported, so theirs stay --
+	@# an unsupported shape must NAME itself rather than report a perfectly good
+	@# name as undefined (feature-nilpy-starred-and-nested-unpacking).
 	! ./$(COMPILER) test/test_nilpy_nested_assign_target_fail.npy /tmp/test_nilpy_nested_assign_target_fail26 > /tmp/test_nilpy_nested_assign_target_fail.log 2>&1
 	grep -q "NESTED assignment target" /tmp/test_nilpy_nested_assign_target_fail.log
 	! ./$(COMPILER) test/test_nilpy_nested_for_target_fail.npy /tmp/test_nilpy_nested_for_target_fail26 > /tmp/test_nilpy_nested_for_target_fail.log 2>&1
@@ -1142,6 +1141,11 @@ test-nilpy: $(COMPILER)
 	# "unsupported format character *". The starred arg is consumed before the value.
 	./$(COMPILER) test/test_nilpy_percent_star_width.npy /tmp/test_nilpy_pctstar26
 	/tmp/test_nilpy_pctstar26 | diff -u test/test_nilpy_percent_star_width.expected -
+	# STARRED unpack targets: `a, *rest = xs`, `*init, last = xs`, `p, *mid, q`.
+	# The starred name is always a LIST (even from a tuple) and too few values
+	# is a ValueError, not an IndexError.
+	./$(COMPILER) test/test_nilpy_starred_unpack.npy /tmp/test_nilpy_starunpack26
+	/tmp/test_nilpy_starunpack26 | diff -u test/test_nilpy_starred_unpack.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

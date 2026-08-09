@@ -1,0 +1,91 @@
+# feature-nilpy-starred-and-nested-unpacking — the STARRED half.
+#
+# `a, *rest = xs` was refused ("a STARRED assignment target ... is not supported
+# yet"). The starred name takes a LIST of the surplus, whose length is only
+# known at run time, so it cannot be a compile-time slot count the way the flat
+# `a, b = xs` form is — the fixed targets are counted from each end and the
+# starred one takes the slice between.
+#
+# Three things a first implementation gets wrong, all pinned here:
+#
+#  * THE STARRED TARGET IS ALWAYS A LIST, even from a tuple source.
+#    `a, *b = (1,2,3)` gives b == [2, 3] in CPython, NOT (2, 3). The slice that
+#    builds it copies the source's kind — correct for an ordinary slice, where a
+#    slice of a tuple IS a tuple — so it has to be re-marked. `type(v).__name__`
+#    is asserted, because the VALUES look identical either way.
+#  * TOO FEW VALUES raise ValueError, naming the count. Indexed stores alone
+#    raise IndexError, a different type, so an `except ValueError` around the
+#    unpack would not catch it.
+#  * THE STAR MAY CAPTURE ZERO. `b, *empty = [9]` gives [], and `*e, c = [9]`
+#    gives [] too — the from-the-end arithmetic is what breaks first here.
+#
+# Star positions: leading, trailing and MIDDLE (`p, *mid, q`), since the middle
+# form is the only one that exercises both index directions at once.
+#
+# Sources: a list literal, a tuple, a def's return value, and a dict value (a
+# variant, which takes the runtime-slice path rather than TPyList.slice).
+#
+# NOT covered: a STRING source (`a, *b = "abc"`). Unpacking a string into names
+# fails on the pinned binary too, for the flat form as well, so it is a separate
+# pre-existing gap and not this feature's business.
+#
+# Expectations are CPython's own output.
+
+xs = [1, 2, 3, 4]
+
+a, *rest = xs
+print("leading ", a, rest, type(rest).__name__)
+*init, last = xs
+print("trailing", init, last)
+p, *mid, q = xs
+print("middle  ", p, mid, q)
+
+# the star may capture nothing, at either end
+b, *empty = [9]
+print("zero-tl ", b, empty)
+*e2, c = [9]
+print("zero-ld ", e2, c)
+a2, b2, *c2 = [1, 2]
+print("zero-two", a2, b2, c2)
+
+# a TUPLE source still yields a LIST for the starred name
+t = (5, 6, 7)
+u, *v = t
+print("tuple   ", u, v, type(v).__name__)
+
+# from a call, and from a dict value (a variant source)
+def f():
+    return [7, 8, 9]
+
+
+h, *tl = f()
+print("call    ", h, tl)
+box = {"k": [1, 2, 3]}
+w, *x = box["k"]
+print("variant ", w, x)
+
+# the starred name is a real, mutable list and the source is untouched
+h2, *tl2 = xs
+tl2.append(99)
+print("mutable ", tl2, xs)
+
+# nested values survive
+first, *others = [[1, 2], [3], [4, 5]]
+print("nested  ", first, len(others), others[0])
+
+
+# too few values for the fixed targets is a ValueError, not an IndexError
+def few():
+    a1, b1, *c1 = [1]
+    return (a1, b1, c1)
+
+
+try:
+    print("toofew  ", few())
+except ValueError:
+    print("toofew  ", "ValueError")
+
+# control: the flat forms are unchanged
+s1, s2 = [10, 20]
+k1, k2 = 30, 40
+print("flat    ", s1, s2, k1, k2)

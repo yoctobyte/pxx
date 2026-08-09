@@ -1,0 +1,13 @@
+leading  1 [2, 3, 4] list
+trailing [1, 2, 3] 4
+middle   1 [2, 3] 4
+zero-tl  9 []
+zero-ld  [] 9
+zero-two 1 2 []
+tuple    5 [6, 7] list
+call     7 [8, 9]
+variant  1 [2, 3]
+mutable  [2, 3, 4, 99] [1, 2, 3, 4]
+nested   [1, 2] 2 [3]
+toofew   ValueError
+flat     10 20 30 40

@@ -2,6 +2,8 @@
 track: N
 prio: 50
 type: feature
+status: working
+owner: claude-AN
 ---
 
 # Starred and NESTED unpacking targets
@@ -104,3 +106,62 @@ the whole lowering is keyed on, so that is a bigger change than "make the scan
 recurse" suggests. A cheaper route worth weighing first: DESUGAR a nested target
 into a temp plus an inner unpack (`for n, __t in xs:` + `p, q = __t`), which
 reuses the flat machinery and the existing two-name assignment.
+
+## 2026-08-09 — the STARRED half is IMPLEMENTED; NESTED still open
+
+`a, *rest = xs`, `*init, last = xs` and `p, *mid, q = xs` all work and match
+CPython. The two halves were independent as the ticket said, and only the
+starred one is done.
+
+### How
+
+The fixed targets are counted from each END and the starred one takes the slice
+between — `a, *rest = xs` is `a = xs[0]; rest = xs[1:len(xs)]`, and
+`*init, last` is `init = xs[0:len(xs)-1]; last = xs[len(xs)-1]`. The high bound
+is a RUNTIME expression, which is exactly why a star cannot be a compile-time
+slot count the way the flat form is.
+
+### Three things the first attempt got wrong, now pinned
+
+- **The starred target is always a LIST**, even from a tuple source:
+  `a, *b = (1,2,3)` gives `b == [2, 3]`, not `(2, 3)`. The slice that builds it
+  copies the source's kind — correct for an ordinary slice, where a slice of a
+  tuple IS a tuple — so it is re-marked. The VALUES look identical either way,
+  so the test asserts `type(v).__name__`.
+- **Too few values raise ValueError**, naming the count. The indexed stores
+  alone raise IndexError, a different type, so `except ValueError` around the
+  unpack would not catch it. A length check is emitted once per starred unpack.
+- **The star may capture ZERO**, at either end. The from-the-end arithmetic is
+  what breaks first there.
+
+### The negative tests it retired — and the trap that nearly shipped
+
+`test_nilpy_starred_target_fail` and `test_nilpy_leading_star_target_fail`
+asserted the OLD refusal message. With the feature implemented they compile, so
+their `! $(COMPILER) ...` recipes would have FAILED `make test-nilpy` — and
+`gate.sh quick` does **not** run that target, so the per-fix gate was green with
+a broken suite waiting for Track T. Both are retired with their recipes; the
+diagnostic reasoning they recorded lives in this ticket, and
+`test_nilpy_starred_unpack.npy` covers the behaviour.
+
+The nested pair (`nested_assign_target_fail`, `nested_for_target_fail`) is
+UNCHANGED and still exercised — those forms are still unsupported and must still
+name themselves.
+
+**Lesson worth carrying: implementing a feature can break its own `{%FAIL}`
+tests, and the quick gate cannot see it.** Grep for `_fail` tests naming the
+feature before landing one.
+
+### Verified
+`test/test_nilpy_starred_unpack.{npy,expected}` (`.expected` from CPython): all
+three star positions, zero-capture at both ends, tuple/list/call/variant
+sources, the mutability of the starred list, and the ValueError. Whole-suite
+HEAD-vs-pinned sweep: **zero regressions**, 74 -> 45 differing. `make test-nilpy`
+run to 1647 lines with no failure (cut short by a local timeout, not an error),
+confirming the retired recipes are gone and the nested ones still run.
+`gate.sh quick` GREEN.
+
+### Still open
+The NESTED half — `a, (b, c) = ...` and `for n, (p, q) in xs:` — is untouched.
+Its shape is a target TREE, so the flat name-list scan has to recurse. Both
+still refuse themselves by name.
