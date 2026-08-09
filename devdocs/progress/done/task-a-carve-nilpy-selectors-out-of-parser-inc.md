@@ -148,4 +148,4 @@ fix for that recurring double-case — not possible while both are entangled wit
 Pascal.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 3e7a6b792.
