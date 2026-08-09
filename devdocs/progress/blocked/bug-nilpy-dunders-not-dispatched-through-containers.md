@@ -94,3 +94,30 @@ The body named the blocker (twice, under two different slugs) but no
 [[decide-nilpy-runtime-dunder-dispatch-strategy]], per the supersession note on
 [[decide-nilpy-runtime-dunder-dispatch-mechanism]]: one answer settles both, and
 deciding them separately is the outcome that note warns against.
+
+## 2026-08-09 — the `__getitem__` half, measured (a variant PARAMETER)
+
+The ticket predicted "a Variant parameter next". It is:
+
+```python
+class Vec:
+    def __init__(self, xs): self.xs = list(xs)
+    def __getitem__(self, i): return self.xs[i]
+
+v = Vec([7, 8])
+print(v[0])                       # 7 — static receiver, correct
+def first(w): return w[0]
+print(first(v))                   # CPython 7;  pxx TypeError: object is not subscriptable
+print([w[0] for w in [v]])        # same
+print(sorted([v], key=lambda w: w[0]))   # same
+```
+
+So the SUBSCRIPT protocol belongs on the blast-radius list alongside
+`__repr__`/`__str__`/ordering — and per
+[[project_nilpy_subscript_protocol_has_three_members]] that is three members
+(`__getitem__` / `__setitem__` / `__delitem__`), not one, whenever this is
+built. `pyeval.pas`'s `PySubscriptGet` is where the tag-7 arm ends today: it
+knows TPyList/TPyDict/TPyBytes and nothing else.
+
+No fix attempted — same root, same blocker, deliberately not grown a private
+path. Found by a Vec/Mat program diffed against CPython.
