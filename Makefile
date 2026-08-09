@@ -7949,6 +7949,11 @@ lib-test: pxx-stable-check
 	# against an FPC build, per the ticket's method note.
 	$(PXX_STABLE) -Fulib/rtl test/lib_fpc_surface_2026_08.pas /tmp/lib_fpc_surface
 	test "$$(/tmp/lib_fpc_surface | tail -n 1)" = "FPCSURFACE OK"
+	# TStrings.CommaText/DelimitedText: 43 cases whose expectations are FPC's own
+	# output, including the two quoting rules a from-the-description
+	# implementation gets wrong ("a"b is TWO items; a"b" is one literal item).
+	$(PXX_STABLE) -Fulib/rtl test/lib_commatext.pas /tmp/lib_commatext
+	test "$$(/tmp/lib_commatext | tail -n 1)" = "COMMATEXT OK"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.
 	# The output is identical either way — the property that separates a futex
 	# mutex from the spinlock it replaced is CPU TIME, so assert that: three

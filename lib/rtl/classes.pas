@@ -253,6 +253,37 @@ type
       parsers; the constructor gives it FPC's default. Name matching is
       CASE-INSENSITIVE, as FPC's is. }
     NameValueSeparator: Char;
+
+    { ---- the CommaText / DelimitedText surface ----
+      A TStrings is also how FPC code parses and emits a delimited line, and
+      the QUOTING RULES are the whole job. Read off an FPC build case by case,
+      because none of them is obvious from the description:
+
+      Writing: an item is quoted when it contains the Delimiter, the QuoteChar,
+      or — unless StrictDelimiter — any character <= ' '. An embedded QuoteChar
+      is DOUBLED. An empty item normally writes as nothing (`a,,b`), with one
+      exception: a list of exactly one empty string writes as `""`, which is
+      what keeps it distinguishable from an empty list. A list with no items
+      writes as ''.
+
+      Reading: a quoted section is taken literally with doubled QuoteChars
+      collapsed. Unless StrictDelimiter, WHITESPACE ALSO SEPARATES — `a b,c d`
+      parses to FOUR items, not two — and space around an item is dropped. Under
+      StrictDelimiter only the Delimiter separates and spacing is preserved.
+
+      CommaText is DelimitedText pinned to ',' and '"' and forced NON-strict,
+      and reading or writing it does NOT disturb Delimiter/QuoteChar/
+      StrictDelimiter. }
+    Delimiter: Char;
+    QuoteChar: Char;
+    StrictDelimiter: Boolean;
+    function BuildDelimited(delim, quote: Char; strict: Boolean): string;
+    procedure ParseDelimited(const Value: string; delim, quote: Char; strict: Boolean);
+    function GetDelimitedText: string;
+    procedure SetDelimitedText(const Value: string);
+    function GetCommaText: string;
+    procedure SetCommaText(const Value: string);
+
     constructor Create;
     function IndexOfName(const Name: string): Integer; virtual;
     function GetName(Index: Integer): string;
@@ -264,6 +295,8 @@ type
     property Strings[Index: Integer]: string read Get write Put; default;
     property Objects[Index: Integer]: TObject read GetObject write PutObject;
     property Text: string read GetText write SetText;
+    property DelimitedText: string read GetDelimitedText write SetDelimitedText;
+    property CommaText: string read GetCommaText write SetCommaText;
     property Names[Index: Integer]: string read GetName;
     { Assigning an empty value here keeps `Name=` with an empty value; it is
       ValueFromIndex that deletes. Both follow FPC, measured. }
@@ -794,6 +827,158 @@ end;
 constructor TStrings.Create;
 begin
   NameValueSeparator := '=';
+  Delimiter := ',';
+  QuoteChar := '"';
+  StrictDelimiter := False;
+end;
+
+{ The shared engine for both properties: CommaText is this with the delimiter,
+  quote and strictness pinned, which is why they are parameters here rather than
+  reads of the fields. }
+function TStrings.BuildDelimited(delim, quote: Char; strict: Boolean): string;
+var
+  i, j: Integer;
+  item, r: string;
+  needQuote: Boolean;
+  ch: Char;
+begin
+  r := '';
+  { FPC's one special case: a single empty string must not render as '', or it
+    would be indistinguishable from a list with no items at all. }
+  if (GetCount = 1) and (Get(0) = '') then
+  begin
+    Result := quote + quote;
+    Exit;
+  end;
+  for i := 0 to GetCount - 1 do
+  begin
+    if i > 0 then r := r + delim;
+    item := Get(i);
+    needQuote := False;
+    for j := 1 to Length(item) do
+    begin
+      ch := item[j];
+      if (ch = delim) or (ch = quote) or ((not strict) and (ch <= ' ')) then
+      begin
+        needQuote := True;
+        Break;
+      end;
+    end;
+    if needQuote then
+    begin
+      r := r + quote;
+      for j := 1 to Length(item) do
+      begin
+        ch := item[j];
+        if ch = quote then r := r + quote;   { doubled, not escaped }
+        r := r + ch;
+      end;
+      r := r + quote;
+    end
+    else
+      r := r + item;
+  end;
+  Result := r;
+end;
+
+procedure TStrings.ParseDelimited(const Value: string; delim, quote: Char;
+                                  strict: Boolean);
+var
+  i, n: Integer;
+  item: string;
+  ch: Char;
+begin
+  Clear;
+  n := Length(Value);
+  i := 1;
+  { An empty (or, when non-strict, all-whitespace) input is a list of NO items,
+    not a list of one empty item. }
+  if not strict then
+    while (i <= n) and (Value[i] <= ' ') do i := i + 1;
+  if i > n then Exit;
+  while i <= n do
+  begin
+    item := '';
+    { The quote is special ONLY at the start of an item, and the closing quote
+      ENDS the item — measured, both directions:
+        `"a"b`  -> two items <a> <b>   (closing quote terminates, b starts anew)
+        `a"b"`  -> one item <a"b">     (a quote mid-item is a literal character)
+      Getting this from the description rather than from FPC produced <ab> for
+      both, which round-trips fine and is wrong twice. }
+    if Value[i] = quote then
+    begin
+      i := i + 1;
+      while i <= n do
+      begin
+        if Value[i] = quote then
+        begin
+          if (i < n) and (Value[i + 1] = quote) then
+          begin
+            item := item + quote;            { doubled quote = one literal }
+            i := i + 2;
+          end
+          else
+          begin
+            i := i + 1;                      { closing quote ends the item }
+            Break;
+          end;
+        end
+        else
+        begin
+          item := item + Value[i];
+          i := i + 1;
+        end;
+      end;
+    end
+    else
+      while i <= n do
+      begin
+        ch := Value[i];
+        if ch = delim then Break;
+        if (not strict) and (ch <= ' ') then Break;   { whitespace separates too }
+        item := item + ch;
+        i := i + 1;
+      end;
+    Add(item);
+    { Consume the separator. Non-strict, a run of whitespace and at most one
+      delimiter count as ONE separator, which is what makes `a, b` two items
+      rather than three. }
+    if not strict then
+    begin
+      while (i <= n) and (Value[i] <= ' ') do i := i + 1;
+      if (i <= n) and (Value[i] = delim) then
+      begin
+        i := i + 1;
+        while (i <= n) and (Value[i] <= ' ') do i := i + 1;
+        if i > n then Add('');               { trailing delimiter = empty item }
+      end;
+    end
+    else if i <= n then
+    begin
+      i := i + 1;                            { the delimiter itself }
+      if i > n then Add('');
+    end;
+  end;
+end;
+
+function TStrings.GetDelimitedText: string;
+begin
+  Result := BuildDelimited(Delimiter, QuoteChar, StrictDelimiter);
+end;
+
+procedure TStrings.SetDelimitedText(const Value: string);
+begin
+  ParseDelimited(Value, Delimiter, QuoteChar, StrictDelimiter);
+end;
+
+function TStrings.GetCommaText: string;
+begin
+  Result := BuildDelimited(',', '"', False);
+end;
+
+procedure TStrings.SetCommaText(const Value: string);
+begin
+  ParseDelimited(Value, ',', '"', False);
 end;
 
 { FPC's own rule, measured against an FPC build rather than assumed: the

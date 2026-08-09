@@ -993,6 +993,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-b-rtl-missing-fpc-surface-2026-08 | B | 35 | feature | Missing FPC surface found by the differential probe (Eoln, TSeekOrigin, Sorted, IncMonth) | — |
 | feature-b-textreadchar-with-pushback | B | 50 | feature | lib/rtl/textfile.pas needs TextReadChar(var f; var c) with one-character pushback, so read(f, c) can consume ONE character like FPC instead of a whole line | — |
 | feature-b-tstringlist-sorted-duplicates-casesensitive | B | 50 | feature | TStringList gained Sorted / Duplicates / CaseSensitive / Find, and Sort is now case-insensitive like FPC's — it had been comparing with CompareStr, so `Sort` on (Banana, apple, Cherry) gave ASCII order | — |
+| feature-b-tstrings-commatext | B | 30 | feature | TStrings.CommaText / DelimitedText are missing | — |
 | feature-bignum-library | B | 50 | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-binary-integer-literals | A | 50 | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
