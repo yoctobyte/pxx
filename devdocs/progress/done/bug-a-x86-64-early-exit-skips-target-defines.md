@@ -3,6 +3,8 @@ track: A
 prio: 55
 type: bug
 summary: "PasApplyTargetDefines returns early on x86-64, so every define appended after that Exit is dead on the DEFAULT target — PXX_TS_HARDLOCK is therefore never set on any build, and builtinheap takes the racing path it was written to avoid"
+status: done
+owner: claude-A
 ---
 
 # An early `Exit` makes later target defines dead on x86-64
@@ -91,3 +93,41 @@ Landing [[feature-a-pxx-threadsafe-conditional-define]]. Its one-line
 and the probe showed it FALSE on x86-64 `--threadsafe`. That define now sits
 ABOVE the `Exit`; this ticket is the underlying cause, left separate because it
 switches on a runtime path and deserves its own gate.
+
+## 2026-08-09 — FIXED
+
+The early return is now a scoped `if TargetArch <> TARGET_X86_64 then begin …
+end` around the CPU-define swap it was written for, so nothing appended below it
+is dead any more — the shape matters as much as the fix, because the failure
+mode was "the next block someone appends here is silently dead".
+
+Measured, x86-64:
+
+| build | HARDLOCK | SOFTLOCK | THREADSAFE |
+| --- | --- | --- | --- |
+| plain | no | no | no |
+| `--threadsafe` | **yes** (was `no`) | no | yes |
+| `--threadsafe`, PINNED (control) | no | no | yes |
+
+and aarch64 `--threadsafe` still answers SOFTLOCK yes / HARDLOCK no with the
+CPU defines swapped, so the block that moved is intact.
+
+The pinned row is the point: the define had never been true on any build, so
+this is the first time `builtinheap`'s `{$ifndef PXX_TS_HARDLOCK}` guard
+actually suppresses `PXXRecordRelease` on an x86-64 threaded build.
+
+### Verified
+
+- `test/threadsafe_lockdefine.pas`, run both ways from `test-threads` beside the
+  existing `threadsafe_define.pas` — both spellings asserted, since an
+  unconditionally-set define would pass the ON case alone.
+- `threadsafe_define.pas`'s header comment updated: it no longer has to sit
+  above an early return, and saying it does would send the next reader looking
+  for a constraint that is gone.
+- `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN, plus
+  `make test-core` — the `--threadsafe` self-host named in the Gate section
+  above, and the only job that exercises the path this change switches.
+
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

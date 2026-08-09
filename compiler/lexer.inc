@@ -763,8 +763,21 @@ begin
     PasDefine(name);
   end;
   { PasInitDefines seeds host (x86-64) defines before option parsing; once the
-    target is known, swap them so ifdef CPU... branches see the target. }
-  if TargetArch = TARGET_X86_64 then Exit;
+    target is known, swap them so ifdef CPU... branches see the target.
+
+    This used to be `if TargetArch = TARGET_X86_64 then Exit;` — correct for the
+    swap (on the host target there is nothing to swap) and quietly fatal for
+    everything appended BELOW it, which is unconditionally dead on the DEFAULT
+    target, the one nearly everything is built for. `PXX_TS_HARDLOCK` is set
+    exactly once, below, guarded on `TargetArch = TARGET_X86_64` — the one
+    target that could never reach it — so the condition was unsatisfiable and
+    the define was dead on EVERY build, leaving x86-64 `--threadsafe` class
+    finalization on the allocator-racing path the define exists to prevent.
+    Scoped to a block instead of an early return so the next thing appended
+    here cannot repeat it.
+    bug-a-x86-64-early-exit-skips-target-defines }
+  if TargetArch <> TARGET_X86_64 then
+  begin
   name := 'CPU64';
   PasUndefine(name);
   name := 'CPUX86_64';
@@ -814,6 +827,7 @@ begin
     name := 'CPU_RISCV32';
     PasDefine(name);
   end;
+  end;   { …end of the non-x86-64 CPU-define swap }
   { Bare-metal ESP profile: let the source select UART MMIO output / drop the
     IDF externals via {$ifdef PXX_ESP_BARE}. }
   if EspBareBoot then

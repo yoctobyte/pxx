@@ -2085,6 +2085,14 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_tsdefine_off26)" = "plain"
 	./$(COMPILER) --threadsafe test/threadsafe_define.pas /tmp/test_tsdefine_on26
 	test "$$(/tmp/test_tsdefine_on26)" = "threadsafe"
+	# ...and the per-target heap-lock defines. PXX_TS_HARDLOCK was dead on every
+	# build (set below an early Exit that x86-64 always took), so x86-64
+	# --threadsafe ran the allocator-racing finalization path the define exists
+	# to prevent. bug-a-x86-64-early-exit-skips-target-defines
+	./$(COMPILER) test/threadsafe_lockdefine.pas /tmp/test_tslock_off26
+	test "$$(/tmp/test_tslock_off26)" = "$$(printf 'no-hardlock\nno-softlock')"
+	./$(COMPILER) --threadsafe test/threadsafe_lockdefine.pas /tmp/test_tslock_on26
+	test "$$(/tmp/test_tslock_on26)" = "$$(printf 'hardlock\nno-softlock')"
 	./$(COMPILER) --threadsafe test/test_thread_clone.pas /tmp/test_thread_clone26
 	test "$$(/tmp/test_thread_clone26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
 	./$(COMPILER) --threadsafe test/test_palthread.pas /tmp/test_palthread26
