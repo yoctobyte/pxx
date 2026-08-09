@@ -3,6 +3,7 @@ prio: 40
 track: N
 type: bug
 blocked-by: []
+owner: agent-AN
 ---
 
 # `startswith`/`endswith` with a TUPLE of prefixes silently answered False
@@ -10,7 +11,7 @@ blocked-by: []
 - **Type:** bug (NilPy, **silent wrong answer**) — **Track N**
 - **Found:** 2026-08-09 by a differential sweep of the str surface against
   CPython (`tools/pydiff.py`), not by a report.
-- **Status:** FIXED in the same session — see below.
+- **Status:** done
 
 ```python
 s = "Hello, World"
@@ -51,3 +52,22 @@ pinning it.
 `test/test_nilpy_startswith_tuple.{npy,expected}` (`.expected` from CPython):
 tuple literal, tuple in a variable, tuple from a def (the variant case), empty
 tuple, plain string both ways, the start/end window, and a windowed miss.
+
+## 2026-08-09 — VERIFIED already fixed; this is a bookkeeping close
+
+Not new work. The fix and its test had landed but the ticket was never moved out
+of `backlog/`, so it kept being offered by `progress.sh ready`. Verified at HEAD
+before moving it rather than trusting the write-up:
+
+- `test/test_nilpy_startswith_tuple.npy` passes against its CPython-derived
+  `.expected`, and is wired into `make test-nilpy` (Makefile ~1154).
+- Re-probed by hand, including the shape the ticket says hides — a tuple guard
+  through a VARIANT receiver (`for v in xs: v.startswith(("he", "x"))`) — and a
+  tuple that must MISS. All match CPython.
+
+Recorded because "the ticket is the record": a fixed-but-unmoved ticket costs
+the next agent a full read-and-reproduce cycle to discover there is nothing to
+do, which is exactly what happened here.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.
