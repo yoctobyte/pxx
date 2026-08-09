@@ -98,3 +98,41 @@ sweeps EVERY str-method name as a user-class method reached through a
 dynamically-typed receiver (a list element, a `dict` value, an unannotated
 parameter), plus controls proving a genuine string receiver still gets the str
 method for each of those names.
+
+## Recon 2026-08-09 — why the hardcoded list exists, and what the fix actually costs
+
+Mapped the alternatives before writing any code. Recording them so the next
+session does not re-derive them.
+
+**Widening `PyStrMethodLosesToClass` to every declared name is wrong**, and the
+reason is sharper than "it flips priority": the predicate already requires that
+some class declares the name, so widening it would mean a program containing a
+class with a `strip` method loses `x.strip()` on EVERY dynamically-typed string.
+One of the two must lose at compile time, and which one is genuinely undecidable
+from the source — which is exactly why `title` and `count` were added by hand
+rather than by rule.
+
+**A compile-time two-way choice cannot be right.** CPython dispatches on the
+runtime type; any purely static rule is wrong for one of the two receivers.
+
+**The obvious runtime lowering is blocked on argument parsing.** The natural
+shape is a hidden temp and an `if pyvar_is_strtag(tmp)` with the str call in one
+arm and the class call in the other, both storing into a variant result. The
+statement hoisting, hidden temps and `AN_IF` all exist. What does not work is
+that `PyParseStrMethod` PARSES ITS ARGUMENTS FROM THE TOKEN STREAM (and has
+several bespoke shapes for it — the -5 / -6 / -9 cases). Building two calls
+needs the argument chain parsed ONCE and shared, so either PyParseStrMethod
+grows a "parse args, do not build" split, or the arguments are parsed generically
+first and PyParseStrMethod is fed them.
+
+**So the practical route is the runtime one named in the ticket**: dispatch in
+pylib, where the receiver's tag and its class RTTI are both available at the
+moment of the call, rather than choosing a branch in the frontend. That is the
+same mechanism `PyFindDunder` already uses to call a user class's `__eq__` /
+`__repr__` from pylib, and it is why this ticket belongs with
+`feature-nilpy-runtime-method-dispatch-on-variant` rather than beside the
+hardcoded list.
+
+Not attempted this session: a half-done version would either break string
+receivers or add a third hand-maintained name, and both are worse than the
+current visible AttributeError.
