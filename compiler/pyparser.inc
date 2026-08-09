@@ -22539,6 +22539,34 @@ end;
   first error in 86 of the neuzelaar corpus's 168 files, and it is line 1 of
   each, so it walled the file before anything diagnostic could be learned from
   it. }
+{ Consume the leading dots of a RELATIVE import — `from .labels import LABELS`,
+  `from ..pkg.mod import x`, `from . import labels`. Returns True when the
+  remaining `from` target is EMPTY (the `from . import mod` spelling), so the
+  caller knows the names after `import` are MODULES rather than members.
+
+  The dots are simply skipped. NilPy's unit scope is FLAT — a dotted module path
+  already becomes one underscore-joined unit name — so "the package this file is
+  in" and "the units reachable from here" are the same set, and a leading dot
+  adds no information to resolve. `from .labels import LABELS` therefore lands on
+  exactly the unit `from labels import LABELS` does, which is the right answer
+  for the single-dot case and the closest available one for `..`.
+
+  Before this, a relative import failed with "expected a module name after from"
+  — and essentially every real package uses them internally, so it walled the
+  compile-the-source strategy at the first library
+  (feature-nilpy-thirdparty-libraries-as-targets). webencodings is the worked
+  example: `from labels import LABELS` compiles and yields all 214 entries,
+  while the `.labels` spelling the package actually ships did not parse. }
+function PyEatRelativeImportDots: Boolean;
+begin
+  Result := False;
+  if CurTok.Kind <> tkDot then Exit;
+  while CurTok.Kind = tkDot do Next;
+  { `from . import x` / `from .. import x` — nothing between the dots and the
+    `import`, so the imported names are module names. }
+  Result := CurTok.Kind = tkUses;
+end;
+
 function PyImportRootIsConsumedOnly(const root: AnsiString): Boolean;
 begin
   Result := CaseEqual(root, 'dataclasses') or CaseEqual(root, 'typing') or
@@ -22563,6 +22591,23 @@ begin
   if PyIsIdent('from') then
   begin
     Next;
+    if PyEatRelativeImportDots then
+    begin
+      { `from . import a, b` — the names ARE the modules. }
+      Next;                                { past `import` }
+      while CurTok.Kind = tkIdent do
+      begin
+        ParseUsesUnit(CurTok.SVal);
+        Next;
+        if PyIsIdent('as') then
+        begin
+          Next;
+          if CurTok.Kind = tkIdent then Next;
+        end;
+        if not Eat(tkComma) then Break;
+      end;
+      Exit;
+    end;
     if CurTok.Kind <> tkIdent then
       Error('Nil Python: expected a module name after from');
     impName := PyConsumeDottedModule(impRoot);
@@ -22622,6 +22667,24 @@ begin
     if PyIsIdent('from') then
     begin
       Next;
+      if PyEatRelativeImportDots then
+      begin
+        { `from . import a, b` — see PyEatRelativeImportDots }
+        Next;                              { past `import` }
+        while CurTok.Kind = tkIdent do
+        begin
+          ParseUsesUnit(CurTok.SVal);
+          Next;
+          if PyIsIdent('as') then
+          begin
+            Next;
+            if CurTok.Kind = tkIdent then Next;
+          end;
+          if not Eat(tkComma) then Break;
+        end;
+        PySkipNewlines;
+        Continue;
+      end;
       if CurTok.Kind <> tkIdent then
         Error('Nil Python: expected a module name after from');
       impName := PyConsumeDottedModule(impRoot);

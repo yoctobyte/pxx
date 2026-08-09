@@ -1,0 +1,7 @@
+value 41 41 True
+func 2 42
+class 5 10
+alias relhelper
+sibling sibling
+qualified 41 relhelper
+agree True

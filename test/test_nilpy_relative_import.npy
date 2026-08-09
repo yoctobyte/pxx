@@ -1,0 +1,46 @@
+# feature-nilpy-thirdparty-libraries-as-targets — RELATIVE imports
+#
+# `from .labels import LABELS` failed with "expected a module name after from":
+# the leading dot was not handled at all. Essentially every real Python package
+# uses relative imports internally, so this walled the campaign's
+# compile-the-source strategy at its very first library.
+#
+# webencodings is the worked example that found it. `from labels import LABELS`
+# compiles and yields all 214 entries of a real library's label table; the
+# `.labels` spelling the package actually ships did not parse.
+#
+# The dots are SKIPPED rather than resolved. NilPy's unit scope is flat — a
+# dotted path already becomes one underscore-joined unit name — so "the package
+# this file is in" and "the units reachable from here" are the same set, and a
+# leading dot carries no information to resolve with. That makes `.mod` land on
+# exactly the unit `mod` does: right for the single-dot case, and the closest
+# available answer for `..`.
+#
+# WHY THE EXPECTATIONS ARE NOT CPython's, unusually for a NilPy test: CPython
+# REFUSES a relative import in a script that is not part of a package
+# ("attempted relative import with no known parent package"), so it cannot run
+# this file at all. The values below come from the helper modules in this
+# directory, which the test also imports ABSOLUTELY — so the real assertion is
+# that the two spellings agree, and that is checked here rather than assumed.
+#
+# Covered: `from .mod import name`, several names at once, a CLASS through a
+# relative import, `as` aliasing, `from . import mod` with qualified access, and
+# two different relative imports in one file (which must resolve to two
+# different modules, not the first one twice).
+
+from .nilpy_relhelper import VALUE, bump
+from .nilpy_relhelper import Thing
+from .nilpy_relhelper import NAME as ALIASED
+from .nilpy_relsibling import OTHER
+from . import nilpy_relhelper
+
+# ...and the ABSOLUTE spelling of the same module, which must agree
+from nilpy_relhelper import VALUE as ABS_VALUE
+
+print("value", VALUE, ABS_VALUE, VALUE == ABS_VALUE)
+print("func", bump(1), bump(41))
+print("class", Thing(5).v, Thing(5).doubled())
+print("alias", ALIASED)
+print("sibling", OTHER)
+print("qualified", nilpy_relhelper.VALUE, nilpy_relhelper.NAME)
+print("agree", nilpy_relhelper.VALUE == VALUE)

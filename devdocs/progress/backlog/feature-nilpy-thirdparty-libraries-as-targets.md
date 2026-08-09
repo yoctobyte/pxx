@@ -175,3 +175,39 @@ Child: [[feature-nilpy-cpyext-c-api-from-source]].
 - [[feature-nilpy-dataclasses]]
 - [[feature-nilpy-corpus-html5lib]]
 - [[feature-nilpy-corpus-neuzelaar]]
+
+## 2026-08-09 — plan steps 1 and 2 done; step 3 STARTED on webencodings
+
+**Step 1, `__future__`, DONE.** `from __future__ import annotations` is now a
+no-op, as it should be — NilPy never evaluates annotations, which is what the
+import asks for. It was line 1 of 86 of the 168 corpus files.
+
+**Step 2, `@dataclass`, advanced.** The decorator generates `__repr__` as well
+as `__eq__` now (`print(p)` printed the instance HANDLE before). Remaining and
+filed: a `str` field's DEFAULT is dropped —
+`bug-nilpy-dataclass-str-field-default-is-dropped`.
+
+**Step 3, webencodings — first real measurement.** It is 5 files / ~1100 lines,
+pure Python, with its own test suite, and it is the bottom of the
+`webencodings -> tinycss2 -> html5lib` stack this ticket prescribes.
+
+- `labels.py` — a 214-entry table — **COMPILES AND RUNS**, and
+  `from labels import LABELS; print(len(LABELS))` answers 214. A real library's
+  data module, compiled as source, correct.
+- **RELATIVE IMPORTS were the first wall and are now FIXED.**
+  `from .labels import LABELS` failed with "expected a module name after from" —
+  the leading dot was not handled at all. Every real package uses them
+  internally, so this walled compile-the-source at the first library. All the
+  spellings work now: `from .mod import a, b`, a class through one, `as`
+  aliasing, `from . import mod` with qualified access, and two different
+  relative imports in one file. Pinned by `test/test_nilpy_relative_import.npy`.
+- **`import codecs` is the next wall**, and it is a real one rather than a
+  parse gap: webencodings is *about* codecs, so it needs an actual `codecs`
+  shim. That is Track B (a `mimic_codecs` unit), and it is the honest next
+  item for this step — filed below.
+
+The order of these findings is worth keeping: the parse-level walls
+(`__future__`, relative imports) were cheap and unblocked everything behind
+them; the remaining wall is a genuine missing stdlib module, which is the
+"class 4 — stdlib-C edge" row of this ticket's own table and the recurring cost
+it predicts.
