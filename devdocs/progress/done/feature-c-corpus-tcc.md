@@ -260,3 +260,45 @@ but anything reading the environment through it gets nothing.
 it builds from `lib/*.c`; the `-c` path above deliberately sidesteps it. Suspect
 #1 (mmap/mprotect stubs for `tcc_relocate`) is untested and only matters for
 `-run`.
+
+## Second wall CLEARED the same day: linking works, `libtcc1.a` builds
+
+The other recorded wall — *"linking — 'error: invalid archive' on libtcc1.a"* —
+is also gone. `libtcc1.a` is not something we were missing; it is tcc's own
+runtime archive, and **the pxx-built tcc builds it itself**:
+
+```
+$ for f in libtcc1 stdatomic builtin va_list dsohandle; do tcc_bin -c lib/$f.c; done
+$ for f in alloca alloca-bt atomic;                     do tcc_bin -c lib/$f.S; done
+$ ar rcs libtcc1.a *.o          # 8 objects, 39 KB
+```
+
+Note it assembled the `.S` files too, not just the C.
+
+Then the full compile-AND-LINK path:
+
+```
+$ ./tcc_bin -B<tccdir> -I<tccdir>/include -o hello_full hello.c
+$ ./hello_full
+sum=55
+$ file hello_full
+ELF 64-bit LSB executable, x86-64, dynamically linked
+```
+
+And a harder program through the same path — `qsort` with a comparator function
+pointer, `strcpy`, `sprintf` into a buffer, `puts`:
+
+```
+sorted: 1 3 5 7 9
+```
+
+So **both** walls this ticket recorded are cleared, and a tcc built by pxx is a
+working C compiler end to end: preprocess, compile, assemble, link, run.
+
+`libtcc1.a` is a BUILD ARTEFACT and lives in the gitignored
+`library_candidates/tcc/` beside the sources — nothing entered the repo.
+
+Remaining, untested rather than known-broken: `tcc -run` (suspect #1 on the list
+above, mmap/mprotect stubs for `tcc_relocate`), and the self-host fixpoint the
+benchmark note names — a pxx-built tcc compiling tcc, gen2 vs gen3
+byte-identical, which is the hard correctness target.
