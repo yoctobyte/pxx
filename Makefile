@@ -8000,6 +8000,10 @@ lib-test: pxx-stable-check
 	# printf-based check would be testing the bug with the bug.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_inttypes.c /tmp/crtl_inttypes
 	/tmp/crtl_inttypes; test "$$?" = "42"
+	# clock(): plausible CPU microseconds with a NON-NEGATIVE delta between
+	# readings — the property the __pxx_clock Int64-cast workaround protected.
+	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_clock_monotonic.c /tmp/crtl_clock_monotonic
+	/tmp/crtl_clock_monotonic; test "$$?" = "42"
 	# Payne-Hanek huge-argument trig: sin/cos/tan past 1e8, expected values are
 	# the correctly-rounded doubles judged against 400-digit references.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_trig_huge.c /tmp/crtl_trig_huge

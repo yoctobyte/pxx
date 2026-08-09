@@ -3,12 +3,13 @@ summary: "Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocke
 type: task
 track: B
 prio: 45
+owner: claude-B
 ---
 
 # Revert the `__pxx_clock` Int64-cast workaround
 
 - **Type:** task — Track B (`lib/rtl`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Filed by:** Track A, on closing
   `bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit`.
@@ -50,3 +51,6 @@ Until Track A runs `make pin`, `pinned` still has the bug and the reverted
 one-liner would be WRONG when built against it. So either wait for the pin, or
 verify against `compiler/pascal26` and land the revert only once `pinned` has
 moved. That ordering is the only real hazard here.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

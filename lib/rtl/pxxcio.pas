@@ -342,23 +342,10 @@ begin
   Result := 0;
   n := SysClockGettimeNr;
   if n = -1 then Exit;
-  { 2 = CLOCK_PROCESS_CPUTIME_ID; report microseconds (CLOCKS_PER_SEC=1e6).
-
-    WORKAROUND (track-b-workarounds.md), blocked-by
-    bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit: the
-    idiomatic `Int64(ts.Sec) * 1000000 + Int64(ts.Nsec) div 1000` is wrong on
-    i386/arm32, where the EXPLICIT Int64() cast of a 4-byte NativeInt
-    reinterprets 8 bytes instead of extending — clock() came back as a huge
-    random number with a negative delta between calls. The implicit widening
-    below is correct on every target. Revert to the one-liner when that closes.
-    (Int64(@ts) on the syscall line is a POINTER cast and is unaffected —
-    verified high-half 0 on both 32-bit targets.) }
+  { 2 = CLOCK_PROCESS_CPUTIME_ID; report microseconds (CLOCKS_PER_SEC=1e6). }
   r := __pxxrawsyscall(n, 2, Int64(@ts), 0, 0, 0, 0);
   if r = 0 then
-  begin
-    Result := ts.Sec;                              { implicit widen: correct }
-    Result := Result * 1000000 + Int64(ts.Nsec div 1000);
-  end;
+    Result := Int64(ts.Sec) * 1000000 + Int64(ts.Nsec) div 1000;
 end;
 
 procedure FillStatBuf(const info: TPalFileStat; sb: PPxxStatBuf);

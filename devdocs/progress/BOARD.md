@@ -98,6 +98,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-thread-api-surface-differs-from-fpc | B | 35 | compat | Threaded FPC code does not compile as-is: TThread lives in palthreadobj rather than Classes, there is no cthreads shim, WaitFor is a procedure where FPC's returns LongWord, and BeginThread/TThreadID do not exist | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
+| decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
@@ -254,7 +255,6 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-test-nilpy-test-nilpy-delitem-dunder | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_delitem_dunder.npy red at 954727cee668 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-selectors-out-of-parser-inc | A | 45 | task | Carve NilPy's selector/subscript parsing out of `parser.inc` | — |
-| task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-drop-stale-known-tags-on-string-h-probes | T | 50 | task | Four gcc_diff_probe cases are still tagged `known` but no longer diverge — the compiler bug behind them is fixed, so the tag now hides future regressions in str-chr-nul / str-str-empty / mem-chr-miss | — |
@@ -389,9 +389,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1550)
+## done (1551)
 
-1550 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1551 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -472,6 +472,7 @@ _none_
 - [p 50] [N] bug-nilpy-list-sort-method-missing
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
+- [p 50] [U] decide-may-agents-fetch-thirdparty-sources-as-oracles
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
@@ -524,7 +525,6 @@ _none_
 - [p 45] [A] refactor-a-variant-object-tag-list-lives-in-four-places
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [A] task-a-carve-nilpy-selectors-out-of-parser-inc
-- [p 45] [B] task-b-revert-pxxcio-clock-int64-cast-workaround
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
