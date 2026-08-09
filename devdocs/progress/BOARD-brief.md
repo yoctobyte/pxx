@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:7 backlog:214 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1566 rejected:30`
+`unfinished:11 blocked:7 backlog:213 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1566 rejected:31`
 
 ## Held now (working/ — do not touch these files)
 
@@ -35,7 +35,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 191, ranked
+## Ready — top 30 of 190, ranked
 
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-delitem-dunder
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
@@ -58,7 +58,6 @@ _none — no lane is locked._
 - `[p 55] [C]` bug-c-pascal-math-names-hijack-libc-through-pxxcio
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- `[p 55] [W]` chore-register-pxxc-domain-variants
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -67,5 +66,6 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
+- `[p 55] [A]` feature-signal-siginfo-ucontext
 
-_161 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_160 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

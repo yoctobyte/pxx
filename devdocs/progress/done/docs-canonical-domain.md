@@ -23,6 +23,13 @@ seen the real one. Cheap, high leverage, do it early so it propagates everywhere
 ## Scope
 
 ### Do NOW (independent of the site being live) — user action
+**REJECTED 2026-08-09 by the user** — see
+[[chore-register-pxxc-domain-variants]]. The premise below is out of date:
+`pxxc.com` was already registered by someone else (parked on non-responding
+nameservers) before this ticket was written, so there was no gap left to close
+cheaply. `pxxc.nl`/`.eu` are still free; the user does not want them. Original
+reasoning kept for the record:
+
 **Register the variants of `pxxc`.** This is the one item that gets *harder* with time: once the
 project is visible, squatters watch for exactly this gap.
 - **`pxxc.com`** — priority. A compiler whose canonical home is `.org` while `.com` sits free is
@@ -55,9 +62,10 @@ project is visible, squatters watch for exactly this gap.
 
 ## Log
 - 2026-08-09 — items 1 and 3 done; 2 and 4 are not ours to finish and are
-  carried by the two related tickets. The **do-now variant registration is still
-  open and still decaying**, so it is re-filed as its own ticket rather than
-  buried in a resolved one: [[chore-register-pxxc-domain-variants]].
+  carried by the two related tickets. The do-now variant registration was split
+  out as [[chore-register-pxxc-domain-variants]] and **rejected by the user the
+  same day**: the homework predated this ticket, and DNS confirms `pxxc.com` was
+  already taken, which removes the premise the item rested on.
   HSTS caveat worth repeating: it is not revertible from the server, so pxxc.org
   is https-only for two years for anyone who has visited.
 - 2026-07-31 — unblocked: pxxc.org verified live and serving.

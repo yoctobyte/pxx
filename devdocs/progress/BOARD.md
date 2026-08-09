@@ -40,7 +40,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (214)
+## backlog (213)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -86,7 +86,6 @@ _none_
 | bug-t-tstate-launders-skip-into-pass | T | 50 | bug | tstate records a SKIPPED job as \"pass\", so a green published state cannot be distinguished from one that actually ran — cross-host coverage differences are invisible exactly when they matter | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
-| chore-register-pxxc-domain-variants | W | 55 | chore | Register the pxxc domain variants (.com, .nl, .eu) | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-calling-convention-directives-uneven | P | 35 | compat | `stdcall`/`safecall`/`pascal`/`mwpascal` are accepted on a class METHOD declaration but are a parse ERROR on a plain routine, an `external`, or a procedural type — so FPC sources that spell a convention on a routine do not compile, and which spelling works depends on where it is written. | — |
@@ -390,7 +389,7 @@ _none_
 
 1566 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (30)
+## rejected (31)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -407,6 +406,7 @@ _none_
 | bug-str-float-broken-by-copy-shadow | A | 50 | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
 | bugfix-cfront-bitfield-packing-gcc-compat | A+C | 50 | bugfix | bugfix: C front — bitfield packing GCC-compatibility | — |
 | chore-inc-to-units | A | 50 | chore | `.inc` → real `.pas` units refactor | — |
+| chore-register-pxxc-domain-variants | W | 55 | chore | Register the pxxc domain variants (.com, .nl, .eu) — REJECTED | — |
 | chore-runtime-emission-size | A | 50 | chore | Finer runtime-support emission (code size) | — |
 | decide-when-to-move-the-pin-after-a-long-fix-run | U | 60 | decide | 32 compiler fixes sit on master unpinned; Track B builds against pinned and has a workaround waiting on the move. Pin all at once, pin incrementally, or leave it — the brake is deliberate and this is a judgment call, not a default | — |
 | feature-asm-structured-ir-library | A | 50 | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
@@ -448,7 +448,6 @@ _none_
 - [p 55] [C] bug-c-pascal-math-names-hijack-libc-through-pxxcio
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- [p 55] [W] chore-register-pxxc-domain-variants
 - [p 55] [U] decide-sole-a-guard-for-unattended-sessions
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
