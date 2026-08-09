@@ -47,4 +47,4 @@ statement form and a method using it, all diffed against CPython's own output.
 `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit d5905f284.
