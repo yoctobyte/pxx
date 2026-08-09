@@ -80,13 +80,46 @@ TIERS = {
     # remembering to type `make test-uforth`. limited+full, NOT native: it is
     # ~46 s and native is the tier dev boxes gate their pushes on. Placement
     # matches test-nilpy for the same reason.
+    # TIER 1 — native depth, ALL frontends, no qemu.
+    #
+    # The hunt is two-dimensional: test cases x platforms. Both axes cost, and
+    # they are NOT equally valuable — native depth pays more per minute right
+    # now, so it must be runnable WITHOUT paying for platform breadth
+    # (task-t-pin-fast-track-t-owns-verification, deliverable 2).
+    #
+    # `limited` already meant "the tier for a box that cannot run qemu"
+    # (devdocs/dev/track-t.md), so this deepens that meaning rather than
+    # changing it: the native corpus subjects — real programs, the densest
+    # signal there is — used to appear ONLY in `full`, behind twelve cross
+    # targets. Depth therefore cost breadth's price, and got run at breadth's
+    # cadence.
+    #
+    # NilPy is tier 1 deliberately, not an afterthought: it is a first-class
+    # frontend whose bugs cluster (one fix routinely uncovers the next), so a
+    # full native NilPy run pays for itself on nearly every cycle.
+    #
+    # And a byte-identical self-host proves only that the compiler reproduces
+    # itself through the paths IT exercises. A codegen bug in a construct
+    # compiler.pas never uses is invisible to that gate forever — which is the
+    # whole reason a heavier native tier is worth running past a green pin.
     "limited": [
         "test-smoke",          # test-quick + self-host byte-identity chain
         "test-core", "test-threads", "test-asm", "test-debug-g",
         "test-nilpy", "test-uforth",
         "lib-fpc-clean",
         "test-c-conformance",
+        # NOT test-float-determinism: it drives examples/mandelbrot through
+        # tools/run_target.sh, so it classes `qemu` and would break the one
+        # property `limited` promises — that a box with no qemu can run it.
+        # It stays in full.
+        "test-emit-obj",
+        # the real-program corpus, native only — the cross variants stay in full
+        "test-lua", "test-cjson", "test-zlib",
+        "test-sqlite-threads-x86_64",
     ],
+    # TIER 2 — everything in tier 1, PLUS platform breadth under qemu. An order
+    # of magnitude slower, so it runs less often; a cross-only red is an
+    # ordinary ticket, while a tier-1 red is what the tracks are building on.
     "full": [
         "test-smoke",
         "test-core", "test-threads", "test-asm", "test-debug-g",
