@@ -75,3 +75,49 @@ is ready to go as written — the shape, the comparison level (extracted text pl
 per-glyph positions rather than PDF bytes) and the starting cases are all
 already decided here.
 
+## 2026-08-09 (Track B): harness built, oracle pinned, three real bugs found
+
+**The harness exists and runs:** `tools/reportlab_diff.py`. reportlab 4.2.5 is
+pinned in `tools/install_lib_candidates.sh` (sdist + SHA256 — upstream is
+Mercurial and the GitHub mirror's tags are 2002-era artefacts, so PyPI is the
+pinnable source). It runs ONE script through both implementations and compares
+extracted text plus per-word bounding boxes from `pdftotext -bbox` — the level
+this ticket specified, since byte-identical PDFs are the wrong bar.
+
+**It found what the ticket predicted it would.** "Validity is not agreement" was
+right three times over:
+
+1. **`canvas.Canvas("out.pdf")` SEGFAULTED** — the one-argument form, which is
+   reportlab's most common and the first line of nearly every example. The
+   mimic's `pagesize` parameter had no default where reportlab's does, so the
+   ctor read an uninitialised Variant. Fixed (`= 0`; the body already fell back
+   to A4). *Nothing in-tree caught this because the only reportlab test exercises
+   IMPORTS, never a Canvas.*
+
+2. **A 0.11pt systematic baseline shift.** Every word was 0.1102pt low — across
+   four fonts and four sizes, with x positions and word widths already EXACT.
+   That constant is `842.0 - 841.8897637795`: the ctor hardcoded A4 as
+   `595.0 x 842.0` while `mimic_reportlab_lib_pagesizes` already had the exact
+   210x297mm conversion. Two places encoding "A4", disagreeing. Fixed to the
+   exact values; positions now match reportlab to **0.000029 pt**, which is
+   `pdftotext`'s own print precision, and widths to **0.000000**.
+
+3. **`AnsiString` handed raw to `const char *`** in five places including
+   `drawString`'s text — the most-used call in the shim. All now go through
+   `PChar()`.
+
+**Still open:** [[bug-b-reportlab-mimic-multi-font-heap-corruption]] — four or
+more distinct fonts corrupts the heap intermittently (~1 run in 6; 3 in 10 under
+`-dPXX_HEAP_DEBUG`). Filed at prio 55 with the full diagnosis, including that
+the vendored writer and the C frontend are both exonerated: driving
+`lib/vendor/pdfgen` directly with four fonts works under gcc AND pxx.
+
+The harness is deliberately **NOT wired into `make lib-test`** while that bug is
+live — it would make the gate intermittently red on a known issue. Wire it in
+when the crash is fixed; until then it is a probe you run
+(`tools/reportlab_diff.py`), like the other differential probes.
+
+**Where it stands per case:** `positions` (1 font, 4 strings) matches reportlab
+exactly. `text_fonts` and `many_fonts` cannot complete until the heap bug is
+fixed.
+

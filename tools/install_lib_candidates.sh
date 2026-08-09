@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|webencodings|tinycss2|html5lib|nilpy-stack] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -77,6 +77,15 @@ DUKTAPE_SHA256="90f8d2fa8b5567c6899830ddef2c03f3c27960b11aca222fa17aa7ac613c2890
 # names webencodings -> tinycss2 -> html5lib as the bottom-up stack to bring up,
 # and the codecs shim has to be scoped against what these actually import rather
 # than against the whole `codecs` module.
+# reportlab: the ORACLE for feature-lib-reportlab-fidelity-vs-oracle — the
+# mimic in lib/pcl is a clean-room reimplementation and has never been compared
+# against the real thing. An sdist rather than a git tag: upstream is Mercurial,
+# and the GitHub mirror's tags are 2002-era artefacts, so PyPI is the pinnable
+# source. Fetched to be RUN under CPython as a reference, not compiled by pxx.
+REPORTLAB_VERSION="4.2.5"
+REPORTLAB_URL="https://files.pythonhosted.org/packages/source/r/reportlab/reportlab-${REPORTLAB_VERSION}.tar.gz"
+REPORTLAB_SHA256="5cf35b8fd609b68080ac7bbb0ae1e376104f7d5f7b2d3914c7adc63f2593941f"
+
 WEBENCODINGS_URL="https://github.com/gsnedders/python-webencodings"
 WEBENCODINGS_COMMIT="fa2cb5d75ab41e63ace691bc0825d3432ba7d694"   # v0.5.1 tag
 
@@ -164,6 +173,34 @@ Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, neve
 License: see LICENSE (Unlicense / public-domain-style).
 EOF
   say "tiny-regex-c -> $DEST/tiny-regex-c"
+}
+
+fetch_reportlab() {
+  if present reportlab; then say "reportlab present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  command -v curl >/dev/null 2>&1 || die "curl required for reportlab"
+  say "fetching reportlab-${REPORTLAB_VERSION}"
+  tmp="$(mktemp -d)"
+  curl -fsSL "$REPORTLAB_URL" -o "$tmp/rl.tgz"
+  if command -v sha256sum >/dev/null 2>&1; then
+    got="$(sha256sum "$tmp/rl.tgz" | cut -d' ' -f1)"
+    [ "$got" = "$REPORTLAB_SHA256" ] || die "reportlab sha256 mismatch: got $got want $REPORTLAB_SHA256"
+  fi
+  rm -rf "$DEST/reportlab"; mkdir -p "$DEST/reportlab"
+  tar -xzf "$tmp/rl.tgz" -C "$tmp"
+  cp -a "$tmp/reportlab-${REPORTLAB_VERSION}/." "$DEST/reportlab/"
+  rm -rf "$tmp"
+  cat > "$DEST/reportlab/PROVENANCE.md" <<EOF
+# reportlab Candidate (differential ORACLE)
+Upstream: https://www.reportlab.com/  (PyPI sdist)
+Version: ${REPORTLAB_VERSION} (${REPORTLAB_URL})
+SHA256: ${REPORTLAB_SHA256}
+Used as the REFERENCE for feature-lib-reportlab-fidelity-vs-oracle: run under
+CPython to produce PDFs that lib/pcl/mimic_reportlab_* output is compared
+against. Not a pxx compile target.
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: BSD (see LICENSE).
+EOF
+  say "reportlab -> $DEST/reportlab"
 }
 
 fetch_webencodings() {
@@ -564,7 +601,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -585,11 +622,12 @@ EOF
     duktape)       fetch_duktape ;;
     fcl-json)      fetch_fcl_json ;;
     csmith)        fetch_csmith ;;
+    reportlab)     fetch_reportlab ;;
     webencodings)  fetch_webencodings ;;
     tinycss2)      fetch_tinycss2 ;;
     html5lib)      fetch_html5lib ;;
-    nilpy-stack)   fetch_webencodings; fetch_tinycss2; fetch_html5lib ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack)" ;;
+    nilpy-stack)   fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

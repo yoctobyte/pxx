@@ -36,7 +36,13 @@ unit mimic_reportlab_pdfgen;
 
 interface
 
-{ The C backend is reached by PATH, not by unit name: it is vendored under
+{ EVERY AnsiString handed to this C backend goes through PChar(). Passing one
+  raw to a `const char *` compiled fine and then CRASHED once a document used
+  four distinct fonts — three was survivable, which is exactly why it lasted:
+  the failure needs enough calls to matter. drawString's text was unwrapped too,
+  the most-used call in the shim (feature-lib-reportlab-fidelity-vs-oracle).
+
+  The C backend is reached by PATH, not by unit name: it is vendored under
   lib/vendor/, which is not on the unit search chain, and naming the file keeps
   the dependency visible. A `.c` (not `.h`) is compiled INTO this binary,
   statically, so nothing is loaded at runtime. }
@@ -97,7 +103,12 @@ type
     strokeColour: LongWord;
     lineWidth: Double;
     pageOpen: Boolean;
-    constructor Create(const afilename: AnsiString; const pagesize: Variant);
+    { pagesize DEFAULTS, as reportlab's does. Without the default,
+      `canvas.Canvas("out.pdf")` — reportlab's most common form, and the first
+      line of nearly every example — passed an uninitialised Variant and
+      SEGFAULTED in the ctor's pyvartag/pyvarobj read. The body already falls
+      back to A4 for anything that is not a (w,h) tuple, so 0 lands there. }
+    constructor Create(const afilename: AnsiString; const pagesize: Variant = 0);
     destructor Destroy; override;
     procedure setFont(const name: AnsiString; size: Double);
     procedure setFillColorRGB(r, g, b: Double);
@@ -115,6 +126,11 @@ type
     procedure drawImage(const src: Variant; const x: Variant; const y: Variant;
                         const width: Variant = 0; const height: Variant = 0;
                         const mask: Variant = 0);
+    { NOTE: reportlab's is beginText(x=0, y=0); ours requires both, so
+      `c.beginText()` is a compile error rather than an origin at 0,0. Left
+      required deliberately — it fails LOUDLY, which the T1 shim rule allows,
+      and the obvious `x: Double = 0.0; y: Double = 0.0` is not accepted here
+      (the rect/circle precedent works because those params are `const`). }
     function beginText(x, y: Double): PDFTextObject;
     procedure drawText(t: PDFTextObject);
     function stringWidth(const text: AnsiString; const font: AnsiString;
@@ -236,12 +252,19 @@ end;
 
 { ===== Canvas ===== }
 
-constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant);
+constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant = 0);
 var w, h: Single; ps: TPyList;
 begin
   outPath := afilename;
-  pageWidth := 595.0;      { A4 in points, reportlab's own default }
-  pageHeight := 842.0;
+  { EXACT A4, the same values mimic_reportlab_lib_pagesizes gives — 210x297mm
+    converted at 72dpi. These were rounded to 595.0 x 842.0, which is a
+    different page from reportlab's and shifted every drawString down by
+    842.0 - 841.8897637795 = 0.1102pt. Found by the differential harness: x
+    positions and word widths matched reportlab exactly, and every y was off by
+    that same constant, which is what pointed at the page box rather than at
+    the text placement (feature-lib-reportlab-fidelity-vs-oracle). }
+  pageWidth := 595.2755905511812;
+  pageHeight := 841.8897637795277;
   { pagesize is a (width, height) tuple; anything else keeps A4 }
   if pyvartag(pagesize) = 7 then
   begin
@@ -261,7 +284,7 @@ begin
   fillColour := 0;                 { black }
   strokeColour := 0;
   lineWidth := 1.0;
-  pdf_set_font(doc, curFont);
+  pdf_set_font(doc, PChar(curFont));
   pdf_append_page(doc);
   pageOpen := True;
 end;
@@ -280,7 +303,7 @@ procedure Canvas.setFont(const name: AnsiString; size: Double);
 begin
   curFont := name;
   curSize := size;
-  if pdf_set_font(doc, name) < 0 then
+  if pdf_set_font(doc, PChar(name)) < 0 then
     raise Exception.Create('reportlab shim: unsupported font "' + name +
       '" (the PDF standard-14 names only; embedded fonts are not in this subset)');
 end;
@@ -314,7 +337,7 @@ procedure Canvas.drawString(x, y: Double; const text: AnsiString);
 var sz, sx, sy: Single;
 begin
   sz := curSize; sx := x; sy := y;
-  pdf_add_text(doc, nil, text, sz, sx, sy, fillColour);
+  pdf_add_text(doc, nil, PChar(text), sz, sx, sy, fillColour);
 end;
 
 procedure Canvas.line(x1, y1, x2, y2: Double);
@@ -357,7 +380,7 @@ begin
   sx := pyvar_to_float(x); sy := pyvar_to_float(y);
   if pyvartag(width) = 0 then sw := 0 else sw := pyvar_to_float(width);
   if pyvartag(height) = 0 then sh := 0 else sh := pyvar_to_float(height);
-  pdf_add_image_file(doc, nil, sx, sy, sw, sh, path);
+  pdf_add_image_file(doc, nil, sx, sy, sw, sh, PChar(path));
 end;
 
 function Canvas.beginText(x, y: Double): PDFTextObject;
@@ -375,7 +398,7 @@ begin
     drawString(pyvar_to_float(t.xs.at(i)), pyvar_to_float(t.ys.at(i)),
                pystr_of(t.lines.at(i)));
   curFont := savedFont; curSize := savedSize;
-  pdf_set_font(doc, curFont);
+  pdf_set_font(doc, PChar(curFont));
 end;
 
 function Canvas.stringWidth(const text: AnsiString; const font: AnsiString;
@@ -386,7 +409,7 @@ begin
   if size <= 0.0 then sz := curSize else sz := size;
   w := 0.0;
   { pdfgen returns the width through an out-parameter and 0 on success }
-  if pdf_get_font_text_width(doc, useFont, text, sz, @w) < 0 then stringWidth := 0.0
+  if pdf_get_font_text_width(doc, PChar(useFont), PChar(text), sz, @w) < 0 then stringWidth := 0.0
   else stringWidth := w;
 end;
 
