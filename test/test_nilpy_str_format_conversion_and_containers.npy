@@ -1,0 +1,69 @@
+# bug-nilpy-str-format-drops-the-r-conversion (+ the container hole beside it)
+#
+# Two SILENT wrong answers in `"...".format(...)`. Both produce a value, so
+# nothing raises and nothing looks obviously wrong at the call site:
+#
+# 1. `"{!r}".format("s")` printed `s` where Python prints `'s'`. The field text
+#    is scanned up to `}` or `:`, so `!r` landed inside the FIELD, made it
+#    non-numeric, and was thrown away with it. It also had to be removed from
+#    the field rather than merely noticed, or the automatic argument counter
+#    would skip.
+#
+# 2. `"{}".format([1, 2])` printed the EMPTY STRING. The substitution used
+#    pystr_of, which answers '' for a container payload — so a list argument
+#    did not merely format oddly, it VANISHED. Now pyvar_print_of, the same
+#    rendering print() uses, which is what str() means here.
+#
+# The second is the reason this test asserts a list and a dict argument for
+# every shape, not just the conversion: the two bugs were adjacent in one
+# routine and a fix for either alone still leaves silent wrong output.
+#
+# Both `!r` spellings are covered — bare `{!r}` and indexed `{0!r}` — because
+# they take different paths through the field split (empty field vs a field
+# with the conversion suffixed), and the indexed one is what proves the
+# automatic counter is not disturbed.
+#
+# Expectations are CPython's own output.
+
+s = "s"
+n = 2
+xs = [1, 2]
+d = {"k": "v"}
+
+# the conversion
+print("{!r}".format(s))
+print("{!s}".format(s))
+print("{!r}".format(n))
+print("{!r}".format(xs))
+print("{!r}".format(d))
+
+# indexed, and mixed with automatic fields
+print("{0!r} {1!r}".format("a", 2))
+print("{0!r}-{0}".format("a"))
+print("{!r} {}".format("a", "b"))
+print("{} {!r}".format("a", "b"))
+
+# containers through the plain field and through a spec
+print("{}".format(xs))
+print("{}".format(d))
+print("{} {}".format(xs, d))
+print("{0} {0}".format(xs))
+
+# controls: the spec grammar is untouched
+print("{:>10}|".format("hi"))
+print("{:<10}|".format("hi"))
+print("{:^10}|".format("hi"))
+print("{:5}|".format("ab"))
+print("{:,}".format(1234567))
+print("{:+d}".format(5))
+print("{:x} {:o} {:b}".format(255, 8, 5))
+print("{:08.3f}".format(3.14159))
+print("{:.2f}".format(1.005))
+
+# controls: ordering and repetition still work
+print("{1} {0}".format("first", "second"))
+print("{0}{0}{1}".format("a", "b"))
+print("{} {} {}".format(1, 2, 3))
+
+# controls: literal braces
+print("{{}} {}".format(7))

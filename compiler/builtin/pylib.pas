@@ -8713,6 +8713,7 @@ end;
   argument. }
 function PyFormatApply(const fmt: AnsiString; args: TPyList): AnsiString;
 var i, j, argi, useIdx, k, nArgs: Integer; spec, fld, outS: AnsiString;
+    conv: Char;
 begin
   outS := '';
   nArgs := 0;
@@ -8736,8 +8737,27 @@ begin
       j := i + 1;
       spec := '';
       fld := '';
+      conv := ' ';
       while (j <= Length(fmt)) and (fmt[j] <> '}') and (fmt[j] <> ':') do
       begin fld := fld + fmt[j]; Inc(j); end;
+      { A `!r` / `!s` CONVERSION is part of the field text as scanned above, so
+        it used to end up in `fld`, make it non-numeric, and be silently
+        DROPPED: `"{!r}".format("s")` printed s where Python prints 's'. Split
+        it off before the field is interpreted — and note it also has to leave
+        `fld` empty rather than the literal '!r', or the automatic index would
+        be skipped. bug-nilpy-str-format-drops-the-r-conversion }
+      if (Length(fld) = 2) and (fld[1] = '!') and
+         ((fld[2] = 'r') or (fld[2] = 's')) then
+      begin
+        conv := fld[2];
+        fld := '';
+      end
+      else if (Length(fld) > 2) and (fld[Length(fld) - 1] = '!') and
+              ((fld[Length(fld)] = 'r') or (fld[Length(fld)] = 's')) then
+      begin
+        conv := fld[Length(fld)];
+        fld := Copy(fld, 1, Length(fld) - 2);
+      end;
       if (j <= Length(fmt)) and (fmt[j] = ':') then
       begin
         Inc(j);
@@ -8766,7 +8786,12 @@ begin
       end;
       if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
-      if spec = '' then outS := outS + pystr_of(args.at(useIdx))
+      { pyvar_print_of, NOT pystr_of: pystr_of answers '' for a CONTAINER
+        payload, so `"{}".format([1, 2])` produced an EMPTY string — silent, and
+        the value vanished rather than looking wrong. pyvar_print_of is the same
+        rendering print() uses, which is what str() means here. }
+      if conv = 'r' then outS := outS + pyvar_repr(args.at(useIdx))
+      else if spec = '' then outS := outS + pyvar_print_of(args.at(useIdx))
       else outS := outS + pyformat_of(args.at(useIdx), spec);
       i := j + 1;
       Continue;
