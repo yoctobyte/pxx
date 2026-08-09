@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (217)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -173,6 +173,7 @@ _none_
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
+| feature-nilpy-six-and-warnings-shims | B | 45 | feature | `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign | — |
 | feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep | N | 30 | feature | Ordinary Python forms NilPy diagnoses cleanly but does not accept. print(sep=) and str.format() with 3+ (and 0) placeholders are DONE (2026-08-08); ten rows remain: enumerate(str), type(x) other than .__name__, a non-name lambda default, dict(x=1), .update(b=2), extended-slice assign, self.__class__.__name__, nested unpacking, bare tuple, two-for comprehension | — |
 | feature-nilpy-starred-and-nested-unpacking | N | 40 | feature | Starred and NESTED unpacking targets | — |
 | feature-nilpy-staticmethod-and-classmethod | N | 35 | feature | `@staticmethod` and `@classmethod` are rejected | — |
@@ -509,6 +510,7 @@ _none_
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
 - [p 45] [N] feature-nilpy-process-exec-binding
+- [p 45] [B] feature-nilpy-six-and-warnings-shims
 - [p 45] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
