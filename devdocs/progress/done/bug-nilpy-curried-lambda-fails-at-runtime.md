@@ -134,4 +134,4 @@ shapes that already worked as controls. Matches CPython byte for byte; self-host
 fixedpoint byte-identical.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 5e149bbbd.
