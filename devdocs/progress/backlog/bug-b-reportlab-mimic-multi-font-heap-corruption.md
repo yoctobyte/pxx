@@ -52,6 +52,14 @@ is a second, rarer corruption that is sensitive to the output path length, not
 to the font count. Prio dropped to 30: the common paths are fixed and the
 remaining trigger is narrow, but it is real and should not be closed.
 
+**One more raw-string call found and fixed, though it was NOT the residual:**
+`pdf_save(doc, outPath)` passed an `AnsiString` straight to a `const char *`.
+My earlier sweep for exactly this defect MISSED it because the grep excluded
+`pdf_save` by name — the sibling check was run with a filter that hid one of the
+siblings. Fixed (`PChar(outPath)`), and it is correct on its own terms, but the
+long-path case still reproduces at 1/40, so the residual is elsewhere. Every
+remaining call to the C backend now passes only numbers.
+
 Next tool per the playbook: `-dPXX_OBJTRACE` with `grep <addr>`, and a long-path
 Pascal-direct repro to try to make it deterministic the way the ctor one was.
 

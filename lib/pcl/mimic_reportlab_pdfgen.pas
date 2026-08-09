@@ -439,7 +439,7 @@ end;
 
 procedure Canvas.save;
 begin
-  if pdf_save(doc, outPath) < 0 then
+  if pdf_save(doc, PChar(outPath)) < 0 then
     raise Exception.Create('reportlab shim: could not write ' + outPath);
 end;
 
