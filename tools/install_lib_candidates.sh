@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|webencodings|tinycss2|html5lib|nilpy-stack] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -71,6 +71,20 @@ FPC_COMMIT="0d122c49534b480be9284c21bd60b53d99904346"   # release_3_2_2 tag
 DUKTAPE_VERSION="2.7.0"
 DUKTAPE_URL="https://duktape.org/duktape-${DUKTAPE_VERSION}.tar.xz"
 DUKTAPE_SHA256="90f8d2fa8b5567c6899830ddef2c03f3c27960b11aca222fa17aa7ac613c2890"
+
+# --- Python packages, for the NilPy library campaign ---------------------
+# Compile targets, not C libraries: feature-nilpy-thirdparty-libraries-as-targets
+# names webencodings -> tinycss2 -> html5lib as the bottom-up stack to bring up,
+# and the codecs shim has to be scoped against what these actually import rather
+# than against the whole `codecs` module.
+WEBENCODINGS_URL="https://github.com/gsnedders/python-webencodings"
+WEBENCODINGS_COMMIT="fa2cb5d75ab41e63ace691bc0825d3432ba7d694"   # v0.5.1 tag
+
+TINYCSS2_URL="https://github.com/Kozea/tinycss2"
+TINYCSS2_COMMIT="f295a49711a4d348664bba7fb34113b3b4b78cb2"       # v1.5.1 tag
+
+HTML5LIB_URL="https://github.com/html5lib/html5lib-python"
+HTML5LIB_COMMIT="f87487a4ada2d6cf223bdd182774a01ba3c84618"       # 1.1 tag
 
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
@@ -150,6 +164,50 @@ Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, neve
 License: see LICENSE (Unlicense / public-domain-style).
 EOF
   say "tiny-regex-c -> $DEST/tiny-regex-c"
+}
+
+fetch_webencodings() {
+  if present webencodings; then say "webencodings present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$WEBENCODINGS_URL" webencodings "$WEBENCODINGS_COMMIT"
+  cat > "$DEST/webencodings/PROVENANCE.md" <<EOF
+# python-webencodings Candidate
+Upstream: ${WEBENCODINGS_URL}
+Commit: ${WEBENCODINGS_COMMIT} (v0.5.1)
+A COMPILE TARGET for the NilPy frontend, not a C library — its .py files are fed
+to pxx as source (feature-nilpy-thirdparty-libraries-as-targets).
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: see LICENSE (BSD).
+EOF
+  say "webencodings -> $DEST/webencodings"
+}
+
+fetch_tinycss2() {
+  if present tinycss2; then say "tinycss2 present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$TINYCSS2_URL" tinycss2 "$TINYCSS2_COMMIT"
+  cat > "$DEST/tinycss2/PROVENANCE.md" <<EOF
+# tinycss2 Candidate
+Upstream: ${TINYCSS2_URL}
+Commit: ${TINYCSS2_COMMIT} (v1.5.1)
+A COMPILE TARGET for the NilPy frontend. Depends on webencodings.
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: see LICENSE (BSD).
+EOF
+  say "tinycss2 -> $DEST/tinycss2"
+}
+
+fetch_html5lib() {
+  if present html5lib; then say "html5lib present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$HTML5LIB_URL" html5lib "$HTML5LIB_COMMIT"
+  cat > "$DEST/html5lib/PROVENANCE.md" <<EOF
+# html5lib-python Candidate
+Upstream: ${HTML5LIB_URL}
+Commit: ${HTML5LIB_COMMIT} (1.1)
+A COMPILE TARGET for the NilPy frontend — the biggest single win named in
+feature-nilpy-thirdparty-libraries-as-targets. Depends on webencodings and six.
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: see LICENSE (MIT).
+EOF
+  say "html5lib -> $DEST/html5lib"
 }
 
 fetch_cjson() {
@@ -506,7 +564,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -527,7 +585,11 @@ EOF
     duktape)       fetch_duktape ;;
     fcl-json)      fetch_fcl_json ;;
     csmith)        fetch_csmith ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith)" ;;
+    webencodings)  fetch_webencodings ;;
+    tinycss2)      fetch_tinycss2 ;;
+    html5lib)      fetch_html5lib ;;
+    nilpy-stack)   fetch_webencodings; fetch_tinycss2; fetch_html5lib ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."
