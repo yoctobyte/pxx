@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (220)
+## backlog (221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-return-inside-a-with-skips-exit | N | 55 | bug | `return` inside a `with` does not run `__exit__` | — |
+| bug-nilpy-set-comprehension-over-range-does-not-deduplicate | N | 55 | bug | A set comprehension over `range()` does not deduplicate | — |
 | bug-nilpy-startswith-endswith-ignore-a-tuple-argument | N | 40 | bug | `startswith`/`endswith` with a TUPLE of prefixes silently answered False | — |
 | bug-nilpy-subscript-read-without-getitem-yields-garbage | N | 35 | bug | A subscript READ on a class with no `__getitem__` yields a silent wrong value | — |
 | bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver | N | 55 | bug | A user method named `find`/`index` raises AttributeError when the receiver has no static class | — |
@@ -452,6 +453,7 @@ _none_
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor
 - [p 55] [N] bug-nilpy-return-inside-a-with-skips-exit
+- [p 55] [N] bug-nilpy-set-comprehension-over-range-does-not-deduplicate
 - [p 55] [N] bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver
 - [p 55] [B] bug-rtl-log10-is-inexact-for-powers-of-ten
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state

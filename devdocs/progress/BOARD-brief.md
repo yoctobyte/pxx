@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:220 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1539 rejected:30`
+`unfinished:11 blocked:6 backlog:221 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1539 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 200, ranked
+## Ready — top 30 of 201, ranked
 
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-str-isnumeric-istitle
 - `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 2)
@@ -56,6 +56,7 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
 - `[p 55] [N]` bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor
 - `[p 55] [N]` bug-nilpy-return-inside-a-with-skips-exit
+- `[p 55] [N]` bug-nilpy-set-comprehension-over-range-does-not-deduplicate
 - `[p 55] [N]` bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver
 - `[p 55] [B]` bug-rtl-log10-is-inexact-for-powers-of-ten
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
@@ -65,6 +66,5 @@ _none — no lane is locked._
 - `[p 55] [N]` feature-nilpy-corpus-uforth
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
-- `[p 55] [T]` feature-pasmith-multi-unit-programs
 
-_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_171 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
