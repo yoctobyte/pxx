@@ -59,5 +59,6 @@ documentation first.
 - [Examples](./examples/) — demo programs included in the checkout.
 - [Reference](./reference/) — command line, configuration, limits, and glossary.
 
-> These docs are published directly from the project's git repository. Found a
-> mistake? The source lives in `docs/` — edits there flow to the site.
+> These docs are published at <https://pxxc.org> directly from the project's git
+> repository, <https://github.com/yoctobyte/pxx>. Found a mistake? The source
+> lives in `docs/` — edits there flow to the site.

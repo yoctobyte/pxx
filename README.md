@@ -1,5 +1,9 @@
 # PXX
 
+**Home: <https://pxxc.org>** — the documentation site, published from this
+repository. Source: <https://github.com/yoctobyte/pxx>. Those two are the only
+official sources; nothing else distributes PXX.
+
 PXX is a provisional name for a from-scratch, self-hosting Pascal compiler. It
 emits ELF executables directly — no assembler or linker step — for Linux x86-64
 (native) plus i386, aarch64, and arm32, with bare-metal ESP32 (xtensa/riscv32)
@@ -128,7 +132,8 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 ## Documentation
 
 - [Public documentation](docs/index.md) — install, getting started, language,
-  features, targets, library, and reference pages.
+  features, targets, library, and reference pages. Published at
+  <https://pxxc.org/docs/>; the Markdown here is the source it renders.
 - [Internal documentation index](devdocs/README.md)
 - [Legacy command line](devdocs/cli.md)
 - [Legacy dialect notes](devdocs/dialect/README.md)

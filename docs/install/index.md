@@ -14,6 +14,20 @@ cd pxx
 ./install.sh
 ```
 
+## Official sources
+
+There are exactly two, and there is no third:
+
+- **Website** — <https://pxxc.org>
+- **Source** — <https://github.com/yoctobyte/pxx>
+
+PXX is installed by cloning that repository — there is no installer to download,
+no package in a distro repository, and no binary release channel yet. Anything
+offering a PXX download from another address is not us. When signed releases do
+exist, the signing key's fingerprint will be published here and on the website,
+and verifying against it will be the check that matters — not the address you
+got the file from.
+
 The root `install.sh` is the friendly setup script. It verifies that a compiler
 can run on the host, writes a ready-to-use `./pxx` wrapper in the project root,
 and optionally offers to install a PATH wrapper, fetch external libraries,

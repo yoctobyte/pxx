@@ -968,6 +968,7 @@ should not read it to find out what to do. Grep it freely._
 | compat-pascal-sqrt-requires-uses-math | A | 30 | compat | Sqrt (and friends) need `uses math`, where FPC has them as system intrinsics | — |
 | compat-pascal-thread-api-surface-differs-from-fpc | B | 35 | compat | Threaded FPC code does not compile as-is: TThread lives in palthreadobj rather than Classes, there is no cthreads shim, WaitFor is a procedure where FPC's returns LongWord, and BeginThread/TThreadID do not exist | — |
 | doc-licensing-split-mpl-zlib | D | 45 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
+| docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-reference-cli-modes-directives | D | 40 | docs | Reference docs incomplete: cli.md lists ~26 of the compiler's 37 --flags, there is no compiler-modes/strictness page (lax -> --strict -> granular -> --mimic-fpc), and no {$...} directive reference — three linked reference gaps | — |
 | docs-user-documentation-site-structure | D | 50 | docs | User documentation site structure and first content pass | — |

@@ -100,3 +100,10 @@ rule above; secrets and infra private.
   agent viable post-deploy.
 
 - 2026-07-19 (backlog sweep note) Done-in-substance (private ~/pxx-website repo live: app, deploy/, secrets/, blog; deploy-guard logged 2026-07-15). Remaining from own steps: CLAUDE.md Track W section so the lane exists for other agents; canonical-domain wiring is a separate ticket.
+- 2026-08-09 — the "remaining" item above is **stale**: CLAUDE.md has carried the
+  Track W lane section and its one-liner since before this note was written, so
+  step 1 is done. All four steps are now closed (repo, stack, CLAUDE.md, and
+  [[docs-canonical-domain]] wired the same day). Left in backlog rather than
+  resolved only because CLAUDE.md cites this slug for the lane's gate and
+  disclosure rules — it reads as charter, not as queued work. Resolve it if the
+  board would rather that lived somewhere permanent.
