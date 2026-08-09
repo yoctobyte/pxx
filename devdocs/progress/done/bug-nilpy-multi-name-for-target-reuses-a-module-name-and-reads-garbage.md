@@ -71,4 +71,4 @@ the same `in` position the old `Tokens[i+2] = tkIn` test required.
 - `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit eb2ed6279.
