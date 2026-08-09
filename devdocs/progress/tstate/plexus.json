@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-08T23:44:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c3c98f395ea46b515d66760c44a30a7f41a42450",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-09T00:05:08Z",
    "fixed": [],
    "new_red": [],
@@ -403,6 +395,14 @@
    "sha": "29d980110b58b64e9f5ded34d3619ace345aff27",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-09T10:08:20Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "29d980110b58b64e9f5ded34d3619ace345aff27",
+   "tier": "opt",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -421,7 +421,6 @@
   "optdiff#shard7/12": "opt",
   "optdiff#shard8/12": "opt",
   "optdiff#shard9/12": "opt",
-  "selfhost-fixedpoint#src:compiler/compiler.pas": "opt",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "full",
   "test-aarch64#src:test/ccross_args.c": "full",
   "test-aarch64#src:test/ccross_double_to_int.c": "full",
@@ -2651,7 +2650,6 @@
   "optdiff#shard7/12": "pass",
   "optdiff#shard8/12": "pass",
   "optdiff#shard9/12": "pass",
-  "selfhost-fixedpoint#src:compiler/compiler.pas": "fail",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
@@ -4866,11 +4864,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-09T10:04:28Z",
+  "date": "2026-08-09T10:08:20Z",
   "sha": "29d980110b58b64e9f5ded34d3619ace345aff27",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 784.5
+  "wall": 220.3
  },
  "last_bench": {
   "conf_rows": 550,
