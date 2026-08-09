@@ -17653,6 +17653,33 @@ begin
             else blkTk := tyVariant;
           end;
         end;
+        { ...and a SUBSCRIPT of a known name, `name = other[k]`. Another
+          no-parse shape: an identifier already visible to this pre-pass,
+          followed by '['. A subscript of a dict or a list yields a VARIANT, so
+          that is what it notes.
+
+          Without it, a name bound at MODULE level and then reassigned from a
+          subscript INSIDE a block kept the module binding's type, and the
+          variant was written into a class-typed slot. It reads back as
+          garbage — `len(sec)` answered 106954864 and `sorted(sec.keys())`
+          either printed [] or SEGFAULTED, depending on layout. Silent, and the
+          shape is as ordinary as it gets:
+
+              current = {}
+              for k in keys:
+                  current = table[k]
+                  ...
+
+          Lists behave the same. Reassigning OUTSIDE a loop was always fine, and
+          so was a loop with no prior binding — it is specifically the pair.
+          bug-nilpy-module-name-reassigned-from-a-subscript-in-a-block-reads-garbage }
+        if (blkTk = tyUnknown) and (blkJ < MainProgramTokCount) and
+           (Tokens[blkJ].Kind = tkIdent) and
+           (blkJ + 1 < MainProgramTokCount) and
+           (Tokens[blkJ + 1].Kind = tkLBrack) and
+           ((PyFindModuleConstraint(GetTokenStr(blkJ)) >= 0) or
+            (PyProgSym(GetTokenStr(blkJ)) >= 0)) then
+          blkTk := tyVariant;
         { ...and a CONSTRUCTOR CALL of an already-declared class, `name =
           Cls(...)`. It belongs in this safe list for the same reason the
           literals do: recognising it needs no PARSE, only that the identifier
@@ -18054,7 +18081,43 @@ begin
             else
               forElemTk := tyVariant;
           end;
-        end;
+        end
+        { ...and `for x in name.values()` / `.keys()`, which is a token shape
+          like the others and needs no parse either: a known name, a dot, the
+          method name, and '('. Both yield VARIANT elements.
+
+          The comment above lists "a call, a subscript, d.items()" as
+          deliberately unhandled, and for `.items()` that still holds — it binds
+          a TWO-name target, which this arm does not do. But leaving `.values()`
+          out was not free: a name bound at MODULE level and then used as the
+          target of a `.values()` loop kept the module binding's CLASS type,
+          and the variant element was written into a class-typed slot. It read
+          back as garbage or SEGFAULTED depending on layout, and
+          `for sec in cfg.values()` after any earlier `sec` is an ordinary shape.
+          bug-nilpy-module-name-reassigned-from-a-subscript-in-a-block-reads-garbage }
+        else if (forJ + 3 < MainProgramTokCount) and (Tokens[forJ].Kind = tkIdent) and
+                (Tokens[forJ + 1].Kind = tkDot) and
+                (Tokens[forJ + 2].Kind = tkIdent) and
+                (Tokens[forJ + 3].Kind = tkLParen) and
+                ((LowerCase(GetTokenStr(forJ + 2)) = 'values') or
+                 (LowerCase(GetTokenStr(forJ + 2)) = 'keys')) and
+                ((PyFindModuleConstraint(GetTokenStr(forJ)) >= 0) or
+                 (PyProgSym(GetTokenStr(forJ)) >= 0)) then
+          forElemTk := tyVariant
+        { ...and the three sequence WRAPPERS people put around an iterable —
+          `for x in list(...)`, `sorted(...)`, `reversed(...)`. Each yields a
+          TPyList whose elements are variants whatever the argument was, so the
+          element type needs no look inside the parentheses and this stays a
+          token peek. They are named individually rather than accepting any
+          call, because an arbitrary call's element type is exactly what this
+          arm must not guess at. }
+        else if (forJ + 1 < MainProgramTokCount) and (Tokens[forJ].Kind = tkIdent) and
+                (Tokens[forJ + 1].Kind = tkLParen) and
+                ((LowerCase(GetTokenStr(forJ)) = 'list') or
+                 (LowerCase(GetTokenStr(forJ)) = 'sorted') or
+                 (LowerCase(GetTokenStr(forJ)) = 'reversed')) and
+                (PyProgSym(GetTokenStr(forJ)) < 0) then   { not a user def of that name }
+          forElemTk := tyVariant;
         if forElemTk <> tyUnknown then PyNoteLocalType(forName, forElemTk, REC_NONE);
       end;
       Inc(i);

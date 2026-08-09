@@ -1,0 +1,16 @@
+subscript  ['h'] 1
+list rhs   2 [1, 2]
+values     ['h']
+values     ['g']
+keys       w
+keys       v
+list()     ['h']
+list()     ['g']
+sorted()   v
+sorted()   w
+no prior   ['h']
+no prior   ['g']
+outside    ['h']
+accumulate 8
+str target c
+augmented  3

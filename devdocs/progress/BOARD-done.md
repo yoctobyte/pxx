@@ -599,6 +599,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-module-class-vmtaddr | N | 60 | bug | A class in an imported `.py` module: "invalid class index in vmtaddr" | — |
 | bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch | N | 45 | bug | NilPy: operator dunders NEVER dispatch on a VARIANT operand holding a user class — dispatch is compile-time only. Scalar-then-class rebinding is just one way to get a variant. | feature-nilpy-runtime-dunder-dispatch-on-variants |
 | bug-nilpy-module-level-name-bound-in-a-block-is-invisible-to-a-later-assignment | N | 55 | bug | nilpy: at module level, a name first bound inside if/for/with is 'undefined variable' on the RHS of a later top-level assignment | — |
+| bug-nilpy-module-name-reassigned-from-a-subscript-in-a-block-reads-garbage | N | 60 | bug | A module name rebound INSIDE a block reads as garbage | — |
 | bug-nilpy-multi-arg-exception-constructor-segfaults | N | 55 | bug | A multi-argument exception constructor SEGFAULTED | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-nested-comprehension-over-range-evaluates-the-inner-one-once | N | 75 | bug | NilPy: in [[expr for j in ...] for i in range(n)] the inner comprehension is hoisted OUT of the outer loop and evaluated once with i at its initial value — and the same list object is appended to every row, so mutating one row mutates all | — |

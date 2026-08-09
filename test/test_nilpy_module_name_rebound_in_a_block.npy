@@ -1,0 +1,81 @@
+# bug-nilpy-module-name-reassigned-from-a-subscript-in-a-block-reads-garbage
+#
+# A name bound at MODULE level and then rebound INSIDE a block kept the module
+# binding's type, and the new value was written into a slot of the wrong shape:
+#
+#     cfg = {"w": {"h": "1"}}
+#     sec = {"z": "0"}          # module-level: a dict, so tyClass
+#     for k in ["w"]:
+#         sec = cfg[k]          # a SUBSCRIPT yields a variant
+#         print(len(sec))       # CPython 1    pxx 106954864
+#
+# `len()` returned a pointer read as a length; `sorted(sec.keys())` printed []
+# or SEGFAULTED depending on heap layout. Silent, and about as ordinary a shape
+# as Python has.
+#
+# The module pre-pass only recognises a few RHS shapes inside a block (it must
+# not trial-parse a name it cannot yet see). A SUBSCRIPT was not one of them,
+# and neither was a `.values()` / `.keys()` loop or a `list(...)` wrapper — all
+# three are added, all as token peeks with no parse.
+#
+# The controls are the point. "No prior binding" and "rebind OUTSIDE a loop"
+# both always worked, so a fix has to leave them alone; and the INT ACCUMULATOR
+# (`n = n * 2` in a loop) is the case the block arm exists for in the first
+# place — it must keep promoting rather than being widened to a variant.
+#
+# Expectations are CPython's own output.
+
+cfg = {"w": {"h": "1"}, "v": {"g": "2"}}
+lists = {"w": [1, 2], "v": [3]}
+
+# --- subscript rebind inside a loop ---
+sec = {"z": "0"}
+for k in ["w"]:
+    sec = cfg[k]
+    print("subscript ", sorted(sec.keys()), len(sec))
+
+lst = [9]
+for k in ["w"]:
+    lst = lists[k]
+    print("list rhs  ", len(lst), lst)
+
+# --- the same name as a .values() LOOP TARGET ---
+row = {"z": "0"}
+for row in cfg.values():
+    print("values    ", sorted(row.keys()))
+
+col = {"z": "0"}
+for col in cfg.keys():
+    print("keys      ", col)
+
+# --- wrapped in list() ---
+wrapped = {"z": "0"}
+for wrapped in list(cfg.values()):
+    print("list()    ", sorted(wrapped.keys()))
+
+srt = {"z": "0"}
+for srt in sorted(cfg.keys()):
+    print("sorted()  ", srt)
+
+# --- controls that must not change ---
+for fresh in cfg.values():
+    print("no prior  ", sorted(fresh.keys()))
+
+out = {"z": "0"}
+out = cfg["w"]
+print("outside   ", sorted(out.keys()))
+
+n = 1
+for i in [1, 2, 3]:
+    n = n * 2
+print("accumulate", n)
+
+s = "a"
+for s in ["b", "c"]:
+    pass
+print("str target", s)
+
+total = 0
+for i in [1, 2]:
+    total += i
+print("augmented ", total)
