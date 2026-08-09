@@ -1,0 +1,98 @@
+# bug-nilpy-dataclass-no-generated-repr
+#
+# `print(p)` on a @dataclass printed the instance HANDLE — a bare 15-digit
+# number, different every run — where CPython prints `P(x=1, y=5)`. The
+# decorator generates BOTH __eq__ and __repr__; only __eq__ was synthesized.
+#
+# Silent, and the most visible thing a dataclass does: the handle IS a number,
+# so nothing raises and a debug print just looks unhelpful rather than wrong.
+#
+# The generated body is `'P(' + 'x=' + repr(self.x) + ...`, and it is repr() per
+# field, NOT str() — `Named(name='bob')` keeps the quotes. That is asserted
+# rather than assumed, because str() would be the easier thing to reach for and
+# would differ only for strings.
+#
+# Each field is boxed and passed to pyvar_repr, which is the ONE variant repr
+# that knows about None, the pylib containers and nested user objects — so a
+# dataclass holding a dataclass prints as CPython prints it (`Nested` below)
+# rather than as a handle, and a list field prints its elements.
+#
+# A hand-written __repr__ WINS over the generated one (Custom), the same rule
+# the generated __eq__ follows.
+#
+# NOT asserted: a `str` field's DEFAULT. `s: str = "t"` silently defaults to ''
+# — a separate, pre-existing bug in argument lowering, confirmed against the
+# pinned binary and filed as bug-nilpy-dataclass-str-field-default-is-dropped.
+# Every default here is therefore int/float/bool, which are correct. Pinning
+# today's wrong string-default answer in THIS test would freeze the bug.
+#
+# Expectations are CPython's own output.
+
+from dataclasses import dataclass
+
+
+@dataclass
+class P:
+    x: int
+    y: int = 5
+
+
+@dataclass
+class Named:
+    name: str
+    n: int
+
+
+@dataclass
+class Nested:
+    inner: P
+    n: int
+
+
+@dataclass
+class Empty:
+    pass
+
+
+@dataclass
+class Mixed:
+    i: int
+    f: float
+    b: bool
+    s: str
+
+
+@dataclass
+class Custom:
+    v: int
+
+    def __repr__(self):
+        return "CUSTOM"
+
+
+# the plain case, and that repr/str/print all agree
+p = P(1)
+print(p)
+print(repr(p), str(p))
+
+# inside a container: the element repr is the one that must fire
+print([p, P(2, 3)])
+print({"k": P(4, 6)})
+
+# repr() per field, not str() — the quotes are the whole point
+print(Named("bob", 2))
+
+# a dataclass field holding another dataclass
+print(Nested(P(7, 8), 9))
+
+# no fields at all
+print(Empty())
+
+# every scalar kind in one line
+print(Mixed(1, 2.5, True, "s"))
+
+# a hand-written __repr__ wins
+print(Custom(4))
+
+# control: the generated __eq__ still works and is unaffected
+print(P(1) == P(1), P(1) == P(2), Nested(P(1, 2), 3) == Nested(P(1, 2), 3))

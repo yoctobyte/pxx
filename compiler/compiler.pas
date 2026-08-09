@@ -901,7 +901,11 @@ begin
   if isNilPy then
   begin
     PyLoopElseFlag := -1;   { no enclosing loop yet; 0 is a real Syms index }
-    for i := 0 to MAX_UCLASS - 1 do PyDcEqProc[i] := -1;
+    for i := 0 to MAX_UCLASS - 1 do
+    begin
+      PyDcEqProc[i] := -1;
+      PyDcReprProc[i] := -1;
+    end;
     PyExpandFStrings;
     PyLexAll(False);
     { -g: main-file token boundary, exactly as the Pascal branch below sets it.

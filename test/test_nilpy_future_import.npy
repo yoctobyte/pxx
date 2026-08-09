@@ -1,0 +1,57 @@
+# feature-nilpy-thirdparty-libraries-as-targets (first wall)
+#
+# `from __future__ import annotations` failed with "no unit named __future__".
+# It is line 1 of 86 of the neuzelaar corpus's 168 files, so it walled each file
+# before anything more diagnostic could be learned from it.
+#
+# In NilPy every __future__ import is a genuine no-op. `annotations` asks
+# CPython to stop EVALUATING annotations at run time and treat them as strings;
+# NilPy never evaluates them at all — it reads them statically as types, which
+# is exactly the behaviour being requested. So consuming the import and
+# continuing is correct, not a stub.
+#
+# The consumed-and-ignored root list had TWO copies, one per import routine,
+# and they had already drifted (`collections` was in one and not the other);
+# both are now one predicate, and both paths are exercised: the __future__
+# import at the top runs the leading-import loop, and the `from typing import`
+# after a statement runs the statement-level single-import path.
+#
+# NOT a second __future__ import mid-file: CPython REFUSES that outright
+# ("__future__ imports must occur at the beginning of the file"), so no oracle
+# output exists to compare against. NilPy accepting it would be a laxness, not
+# a defect (upward compatibility runs one way), but it cannot be pinned here.
+#
+# Controls: annotations still WORK as types after the import (the point of the
+# no-op is that nothing else changes) — a str-annotated parameter, a return
+# annotation, and a forward reference to a class declared LATER, which is the
+# whole reason real code writes this import.
+#
+# Expectations are CPython's own output.
+
+from __future__ import annotations
+
+import sys
+
+
+# the statement-level path: an import that is not at the top of the file
+from typing import Optional
+
+
+def greet(name: str, n: int = 2) -> str:
+    return (name + "! ") * n
+
+
+# a forward reference — `Node` is not declared until below. This is what the
+# import exists for in CPython, and it must still resolve here.
+def head(node: Node) -> int:
+    return node.v
+
+
+class Node:
+    def __init__(self, v: int):
+        self.v = v
+
+
+print(greet("hi").strip())
+print(head(Node(7)))
+print(greet("a", 1).strip())

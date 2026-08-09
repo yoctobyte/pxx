@@ -414,6 +414,12 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_intrinsic26)" = "$$(printf '10\n4\n2\n6\n105')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy /tmp/test_nilpy_dataclass_eq26
 	test "$$(/tmp/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
+	# @dataclass also generates __repr__: `print(p)` printed the instance HANDLE.
+	./$(COMPILER) test/test_nilpy_dataclass_repr.npy /tmp/test_nilpy_dcrepr26
+	/tmp/test_nilpy_dcrepr26 | diff -u test/test_nilpy_dataclass_repr.expected -
+	# `from __future__ import annotations` is a no-op, not a missing unit.
+	./$(COMPILER) test/test_nilpy_future_import.npy /tmp/test_nilpy_future26
+	/tmp/test_nilpy_future26 | diff -u test/test_nilpy_future_import.expected -
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
 	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26

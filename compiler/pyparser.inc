@@ -176,6 +176,10 @@ var
     body is emitted by PyEmitDataclassEq once the fields are known.
     bug-nilpy-dataclass-no-generated-eq }
   PyDcEqProc: array[0..MAX_UCLASS-1] of Integer;
+  { Same, for the synthesized @dataclass `__repr__`. Separate from PyDcEqProc
+    because a class may hand-write one and not the other, and each generated
+    body is skipped independently. bug-nilpy-dataclass-no-generated-repr }
+  PyDcReprProc: array[0..MAX_UCLASS-1] of Integer;
   { True when the member pre-pass already ran the FULL PyRegisterClassMembers
     for this ci (methods + fields + defaults), so PyParseClass must not run it
     again — a second full run would duplicate the append-only PyDc* defaults
@@ -21197,6 +21201,29 @@ begin
       AddUMeth(ci, k, 6, procIdx);
       PyDcEqProc[ci] := procIdx;
     end;
+    { ...and `__repr__`, the other half of what the decorator generates.
+      Without it `print(p)` printed the instance HANDLE — a bare 15-digit
+      number, different every run — where CPython prints `P(x=1, y=5)`. That is
+      the single most visible thing a dataclass does, and the failure is silent:
+      the number IS a value, so nothing raises.
+      A hand-written __repr__ wins, same rule as __eq__ (repr=False is not
+      modelled). bug-nilpy-dataclass-no-generated-repr }
+    if FindUMeth(ci, '__repr__') < 0 then
+    begin
+      pnames[0] := 'self'; ptypes[0] := tyClass;
+      fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+      AppendChar(fullName, '.');
+      name := '__repr__';
+      for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+      procIdx := RegisterProc(fullName, True, tyAnsiString, 1, pnames, ptypes);
+      k := PyStoredName(name);
+      { Length(name), NOT a literal: AddUMeth's third argument is the name
+        LENGTH, and copying the neighbouring __eq__ registration's literal 6
+        registered this method as `__repr` — which compiles, emits a correct
+        body, and is simply never found. }
+      AddUMeth(ci, k, Length(name), procIdx);
+      PyDcReprProc[ci] := procIdx;
+    end;
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
 
@@ -21774,6 +21801,84 @@ begin
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
+procedure PyEmitDataclassRepr(ci: Integer);
+{ Emit the synthesized @dataclass `__repr__`:
+  `Result := 'P(' + 'x=' + repr(self.x) + ', ' + 'y=' + repr(self.y) + ')'`,
+  in field-declaration order — what CPython's decorator generates.
+
+  Each field goes through `pyvar_repr`, NOT `pyrepr_of`: pyrepr_of is OVERLOADED
+  five ways and FindProc resolves by NAME ALONE, so it would silently pick one
+  arm and hand an Int64 field to the AnsiString one
+  (project_findproc_by_name_ignores_overloads). pyvar_repr has a single
+  signature, and PyForceVariant boxes the field first, so one call site serves
+  every field type — and it is the variant repr that knows about None, the pylib
+  containers and nested USER objects, so a dataclass holding a dataclass prints
+  the way CPython prints it rather than as a handle.
+
+  repr, not str, for the FIELDS — `P(name='x')` keeps the quotes. That falls out
+  of using pyvar_repr and is the distinction the test pins.
+  bug-nilpy-dataclass-no-generated-repr }
+var procIdx, i, k, idx, savedSC, savedFS, savedSelf, patchPos: Integer;
+    selfNode, fld, callN, argN, acc, retNode: Integer;
+    clsName, sep: AnsiString;
+begin
+  procIdx := PyDcReprProc[ci];
+  if procIdx < 0 then Exit;
+  clsName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+  savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
+  FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
+  Procs[procIdx].ScopeBase := SymCount;
+  idx := AllocParam('self', tyClass, False, False);
+  Procs[procIdx].Params[0].SymIdx := idx;
+  Syms[idx].RecName := REC_UCLASS_BASE + ci;
+  SymSyncTypeRef(idx);
+  { tyAnsiString, not tyString: the result is a MANAGED refcounted handle, and
+    the frozen inline-length kind cannot hold a concatenation. }
+  idx := AllocVar('$pyresult', tyAnsiString);
+  Procs[procIdx].RetSymIdx := idx;
+  Syms[idx].Kind := skLocal;
+  Procs[procIdx].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
+  PyEmitParamSpills(procIdx, 1);
+  acc := PyExcFoldLit(clsName + '(');
+  for i := 0 to UClsFCount[ci] - 1 do
+  begin
+    k := UClsFBase[ci] + i;
+    if i = 0 then sep := '' else sep := ', ';
+    acc := PyExcFoldCat(acc,
+             PyExcFoldLit(sep + PyRawName(UFldNOff[k], UFldNLen[k]) + '='));
+    selfNode := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
+    fld := AllocNode(AN_FIELD);
+    ASTLeft[fld] := selfNode;
+    ASTSOffset[fld] := UFldNOff[k]; ASTSLen[fld] := UFldNLen[k];
+    ASTTk[fld] := UFldTk[k]; ASTRight[fld] := UFldRec_[k];
+    argN := AllocNode(AN_ARG);
+    ASTLeft[argN] := PyForceVariant(fld);
+    ASTRight[argN] := -1;
+    callN := AllocNode(AN_CALL);
+    ASTIVal[callN] := FindProc('pyvar_repr');
+    if ASTIVal[callN] < 0 then Error('Nil Python: pylib (pyvar_repr) not loaded');
+    ASTTk[callN] := Ord(tyAnsiString);
+    ASTLeft[callN] := argN;
+    acc := PyExcFoldCat(acc, callN);
+  end;
+  acc := PyExcFoldCat(acc, PyExcFoldLit(')'));
+  retNode := AllocNode(AN_ASSIGN);
+  ASTLeft[retNode] := PyMakeIdent(Procs[procIdx].RetSymIdx);
+  ASTRight[retNode] := acc;
+  { The result slot MUST be zeroed before the first assignment: a managed
+    AnsiString handle full of stale stack bytes gets RELEASED as if it were a
+    live string. Reusing PyPrependResultZero rather than open-coding it is the
+    point of that helper — bug-nilpy-method-returning-str-garbage is the same
+    fault, found the hard way once already. }
+  CompileAST(PyPrependResultZero(procIdx, retNode));
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  PatchProcPrologue(patchPos, FrameSize);
+  ProcBodyEnd[procIdx] := CodeLen;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
+  SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+end;
+
 { FIELD pre-pass. PyRegisterClassShells registers class NAMES only, and
   PyCollectModuleLocals runs before the main loop that parses class bodies — so
   without this every class has zero fields during module-local inference and a
@@ -22100,7 +22205,7 @@ begin
       PyRegisterClassMembers(ci, bodyStart, bodyStart, isDC, False);
     if CurTok.Kind = tkNewline then Next;
     PySkipNewlines;
-    if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); end;
+    if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); end;
     Exit;
   end;
   Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
@@ -22217,7 +22322,7 @@ begin
     end;
   end;
   Expect(tkDedent, 'dedent');
-  if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); end;
+  if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); end;
 end;
 
 { One run of `import` / `from ... import` statements, wherever they appear.
@@ -22249,6 +22354,29 @@ begin
   end;
 end;
 
+{ Module roots whose `from ROOT import a, b` is CONSUMED AND IGNORED rather than
+  resolved to a unit: what they export is either a compile-time annotation with
+  no run-time existence, or an ordinary pylib symbol already in scope. An
+  unsupported name from one of them walls visibly at its USE site ("undefined
+  variable"), which is the right failure — silently dropping the import is not.
+
+  This list had TWO copies, one per import routine, and they had already drifted
+  (`collections` was in one and not the other). One predicate, both call sites.
+
+  `__future__` is here because in NilPy every `from __future__ import ...` is a
+  genuine no-op: `annotations` asks CPython to stop EVALUATING annotations at
+  run time, and NilPy never evaluates them at all — it reads them statically as
+  types, which is the behaviour the import is requesting. Before this it was the
+  first error in 86 of the neuzelaar corpus's 168 files, and it is line 1 of
+  each, so it walled the file before anything diagnostic could be learned from
+  it. }
+function PyImportRootIsConsumedOnly(const root: AnsiString): Boolean;
+begin
+  Result := CaseEqual(root, 'dataclasses') or CaseEqual(root, 'typing') or
+            CaseEqual(root, 'itertools') or CaseEqual(root, 'collections') or
+            CaseEqual(root, '__future__');
+end;
+
 { A single `import X [as Y]` / `from X import a, b` statement, leaving the
   parser ON the terminating newline. Shares the resolver with PyParseImportRun;
   see the note at the statement-level call site for why the newline matters. }
@@ -22272,8 +22400,7 @@ begin
     if CurTok.Kind <> tkUses then
       Error('Nil Python: expected import after from ' + impName);
     Next;
-    if not (CaseEqual(impRoot, 'dataclasses') or CaseEqual(impRoot, 'typing') or
-            CaseEqual(impRoot, 'itertools') or CaseEqual(impRoot, 'collections')) then
+    if not PyImportRootIsConsumedOnly(impRoot) then
       ParseUsesUnit(impName);
     while CurTok.Kind = tkIdent do
     begin
@@ -22338,8 +22465,7 @@ begin
         ordinary pylib symbols (Counter -> pylib's TPyCounter constructors), so
         consuming the from-import is enough — an unsupported name from it walls
         visibly at its use site as an undefined variable, same as itertools. }
-      if CaseEqual(impRoot, 'dataclasses') or CaseEqual(impRoot, 'typing') or
-         CaseEqual(impRoot, 'itertools') or CaseEqual(impRoot, 'collections') then
+      if PyImportRootIsConsumedOnly(impRoot) then
       begin
         while CurTok.Kind = tkIdent do
         begin

@@ -1,0 +1,10 @@
+P(x=1, y=5)
+P(x=1, y=5) P(x=1, y=5)
+[P(x=1, y=5), P(x=2, y=3)]
+{'k': P(x=4, y=6)}
+Named(name='bob', n=2)
+Nested(inner=P(x=7, y=8), n=9)
+Empty()
+Mixed(i=1, f=2.5, b=True, s='s')
+CUSTOM
+True False True
