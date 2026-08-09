@@ -1,0 +1,37 @@
+# bug-nilpy-percent-format-star-width-unsupported
+#
+# `"%-*s" % (w, s)` — the DYNAMIC width form, where the width comes from an
+# argument — raised `ValueError: unsupported format character "*"`. So did
+# `%*s` and `%.*f`.
+#
+# That is the idiom a report uses when a column's width is computed rather than
+# literal (`W = max(len(r) for r in rows)`), so the whole shape was unavailable.
+# Found by writing a table-formatting program and diffing it against CPython.
+#
+# The starred argument is consumed BEFORE the value, which is the part an
+# implementation gets wrong: `"%s=%*d" % ("k", 4, 7)` has to read "k", then 4 as
+# the width, then 7 as the value. That mixed case is asserted.
+#
+# Two CPython rules that are not obvious and are pinned here: a NEGATIVE starred
+# width means left-align with the magnitude as the width (so `%*s` with -8
+# equals `%-8s`), and a negative starred PRECISION is treated as absent.
+#
+# The plain forms are controls -- `*` shares the width slot with the digit
+# parse, so a fix that captured too much would break every ordinary `%-8s`.
+#
+# Expectations are CPython's own output.
+
+W = 8
+print("left   ", "%-*s|" % (W, "ab"))
+print("right  ", "%*s|" % (W, "ab"))
+print("negw   ", "%*s|" % (-W, "ab"))
+print("int    ", "%*d|" % (5, 42))
+print("zero   ", "%0*d|" % (5, 42))
+print("prec   ", "%.*f" % (3, 3.14159))
+print("both   ", "%*.*f|" % (10, 2, 3.14159))
+print("negprec", "%.*f" % (-1, 3.14159))
+print("zerow  ", "%*s|" % (0, "ab"))
+print("plain  ", "%-8s|%8s|%.3f|%05d" % ("ab", "cd", 3.14159, 42))
+print("flags  ", "%+d %#x %5.2f" % (7, 255, 3.14159))
+print("pct    ", "100%%")
+print("mixed  ", "%s=%*d" % ("k", 4, 7))

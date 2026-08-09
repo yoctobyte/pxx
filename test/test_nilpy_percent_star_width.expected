@@ -1,0 +1,13 @@
+left    ab      |
+right         ab|
+negw    ab      |
+int        42|
+zero    00042|
+prec    3.142
+both          3.14|
+negprec 3
+zerow   ab|
+plain   ab      |      cd|3.142|00042
+flags   +7 0xff  3.14
+pct     100%%
+mixed   k=   7

@@ -1138,6 +1138,10 @@ test-nilpy: $(COMPILER)
 	# "empty sequence" -- the only single-arg overload took an AnsiString.
 	./$(COMPILER) test/test_nilpy_min_max_of_a_variant_list.npy /tmp/test_nilpy_minmaxvar26
 	/tmp/test_nilpy_minmaxvar26 | diff -u test/test_nilpy_min_max_of_a_variant_list.expected -
+	# `%-*s` -- dynamic width/precision from an argument -- raised
+	# "unsupported format character *". The starred arg is consumed before the value.
+	./$(COMPILER) test/test_nilpy_percent_star_width.npy /tmp/test_nilpy_pctstar26
+	/tmp/test_nilpy_pctstar26 | diff -u test/test_nilpy_percent_star_width.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

@@ -626,6 +626,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-param-with-string-default-reads-garbage | N | 75 | bug | A parameter with a STRING default is read as garbage | — |
 | bug-nilpy-parent-method-call-breaks-if-parent-instantiated-first | N | 60 | bug | `A.call(self)` won't parse if `A` was instantiated at module level first | bug-nilpy-identifiers-are-case-insensitive |
 | bug-nilpy-percent-e-and-g-silently-render-as-fixed-point | N | 55 | bug | `%e` and `%g` silently render as `%f` — a wrong answer to an EXPLICITLY requested format | — |
+| bug-nilpy-percent-format-star-width-unsupported | N | 40 | bug | `%-*s` — dynamic width from an argument — was unsupported | — |
 | bug-nilpy-percent-r-renders-as-str-not-repr | N | 60 | bug | `%r` rendered as `%s` — silently, and only for strings | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver | N | 35 | bug | A plain class's `Callable` field records no signature, so `def run(o): o.native(x)` on a dynamically-typed receiver is a COMPILE ERROR (\"no class declares a method or callable field\") — only a @dataclass field is reachable that way | — |

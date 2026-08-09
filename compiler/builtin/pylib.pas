@@ -8862,20 +8862,70 @@ begin
       else signCh := fmt[i];
       Inc(i);
     end;
-    while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+    { `*` takes the width from an ARGUMENT instead of the format string —
+      `"%-*s" % (w, s)`, which is how a report lays out a column whose width is
+      computed. It raised `unsupported format character "*"`, so the whole
+      idiom was unavailable. The starred argument is consumed HERE, before the
+      value, exactly as CPython consumes it.
+      A NEGATIVE starred width means left-align in CPython, with the magnitude
+      as the width — the same as writing the '-' flag. }
+    if (i <= Length(fmt)) and (fmt[i] = '*') then
     begin
-      width := width * 10 + (Ord(fmt[i]) - Ord('0'));
+      if lst <> nil then
+      begin
+        if argi >= nargs then
+          raise TypeError.Create('not enough arguments for format string');
+        width := Integer(pyvar_to_int(lst.at(argi)));
+      end
+      else
+      begin
+        if argi >= 1 then
+          raise TypeError.Create('not enough arguments for format string');
+        width := Integer(pyvar_to_int(args));
+      end;
+      Inc(argi);
+      if width < 0 then
+      begin
+        leftAlign := True;
+        width := -width;
+      end;
       Inc(i);
-    end;
+    end
+    else
+      while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      begin
+        width := width * 10 + (Ord(fmt[i]) - Ord('0'));
+        Inc(i);
+      end;
     if (i <= Length(fmt)) and (fmt[i] = '.') then
     begin
       hasPrec := True;
       Inc(i);
-      while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      { `.*` — the precision from an argument too, `"%.*f" % (3, x)` }
+      if (i <= Length(fmt)) and (fmt[i] = '*') then
       begin
-        prec := prec * 10 + (Ord(fmt[i]) - Ord('0'));
+        if lst <> nil then
+        begin
+          if argi >= nargs then
+            raise TypeError.Create('not enough arguments for format string');
+          prec := Integer(pyvar_to_int(lst.at(argi)));
+        end
+        else
+        begin
+          if argi >= 1 then
+            raise TypeError.Create('not enough arguments for format string');
+          prec := Integer(pyvar_to_int(args));
+        end;
+        Inc(argi);
+        if prec < 0 then prec := 0;   { CPython treats a negative as absent }
         Inc(i);
-      end;
+      end
+      else
+        while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+        begin
+          prec := prec * 10 + (Ord(fmt[i]) - Ord('0'));
+          Inc(i);
+        end;
     end;
     if i > Length(fmt) then
     begin
