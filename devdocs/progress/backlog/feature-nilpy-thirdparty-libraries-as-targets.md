@@ -211,3 +211,47 @@ The order of these findings is worth keeping: the parse-level walls
 them; the remaining wall is a genuine missing stdlib module, which is the
 "class 4 — stdlib-C edge" row of this ticket's own table and the recurring cost
 it predicts.
+
+### Ranked walls over the whole stack, measured 2026-08-09
+
+Compiled every `.py` of `webencodings` (5), `tinycss2` (10) and `html5lib` (33)
+as source and ranked what stopped each file. Two of the walls were LANGUAGE gaps
+and are now fixed; everything else is a missing MODULE.
+
+**Fixed here:**
+
+- **backslash line continuation** — `error: unexpected character: \`, in 6 of
+  html5lib's 33 files, all the same shape (`if a and \` split across lines).
+  Handled exactly as an open bracket is: no NEWLINE token, no indentation
+  processing on the next line. It needed a second fix for ADJACENT STRING
+  LITERALS across a continuation, whose rule was keyed on paren depth alone —
+  `"x" \` + `"y"` quietly evaluated to just `"x"`, a silent half-value.
+- **`class C(object):`** — Python 2's explicit new-style spelling, still common.
+  A no-op in Python 3, so the class registers with no parent. Consumed rather
+  than resolved: inventing an `object` class would put a real base in the chain
+  for `super()` and the method tables to explain.
+- **relative imports** (above).
+
+**Everything still failing is `import <module not present>`**, which is this
+ticket's own "class 4 — stdlib-C edge" cost rather than a language gap:
+
+| missing module | files blocked |
+| --- | --- |
+| `six` | 11 |
+| `base` / `_utils` (html5lib's own, via relative imports inside subpackages) | 5 |
+| `xml.dom` / `xml.sax` | 5 |
+| `warnings` | 3 |
+| `genshi` (an optional treewalker) | 2 |
+| `codecs` | 2 |
+
+**`six` is the single biggest lever** — 11 files. It is a tiny pure-Python
+compatibility shim (`PY3`, `text_type`, `string_types`, `iteritems`, …) and
+almost all of it is trivially true on a Python-3-only dialect, so a `mimic_six`
+is a small Track B job with a large unblock. `warnings` is nearly as cheap (a
+`warn()` that prints to stderr). Those two plus `codecs` would take html5lib
+from 1/33 to most of the way.
+
+Worth stating plainly, because the file counts read worse than the reality: a
+file is rejected at its FIRST unavailable import, so one missing module hides
+however many language gaps are behind it. The two language walls above were only
+visible because they happened to sit in files whose imports all resolved.

@@ -1,0 +1,123 @@
+# feature-nilpy-thirdparty-libraries-as-targets — backslash line continuation
+# and `class C(object):`
+#
+# Two walls found by compiling html5lib's 33 files as source and ranking what
+# stopped them.
+#
+# 1. A BACKSLASH LINE CONTINUATION was `error: unexpected character: \` —
+#    core Python syntax, and 6 of those 33 files use it, all in the same shape:
+#    a long `if a and \` condition split across lines.
+#
+#    A continuation is handled exactly as an open bracket is: no NEWLINE token,
+#    and no indentation processing on the next physical line. Both suppressions
+#    already existed for paren depth, so this reuses them rather than adding a
+#    second notion of "still the same logical line" — which is also why the
+#    continued line's indentation can be anything, as it can in Python.
+#
+#    A backslash that is NOT last on its line is refused by name. Python rejects
+#    it too, and lexing the rest of the line as if the backslash were absent
+#    would be a silent misparse.
+#
+#    The case that needed a second fix: ADJACENT STRING LITERALS across a
+#    continuation. `"x" \` then `"y"` is one string in Python; the adjacency
+#    rule was keyed on paren depth alone, so the continuation form joined
+#    nothing and quietly evaluated to just "x" — a silent half-value, which is
+#    why it is asserted here rather than left to the obvious cases.
+#
+# 2. `class C(object):` — Python 2's explicit new-style spelling, still all over
+#    real code. In Python 3 every class derives from object anyway, so naming it
+#    is a no-op: the class registers with no parent, exactly as `class C:` does.
+#    Consumed rather than resolved, because inventing an `object` class would
+#    put a real base in the chain that super() and the method tables would then
+#    have to explain.
+#
+# Expectations are CPython's own output.
+
+a = True
+b = False
+n = 5
+
+# the shape html5lib uses
+if a and \
+   not b:
+    print("cont-if")
+
+if n > 1 \
+   and n < 10 \
+   and a:
+    print("three-way")
+
+# arithmetic across several continuations
+total = 1 + \
+        2 + \
+        3
+print("sum", total)
+
+# adjacent string literals across a continuation — one string, not the first half
+s = "x" \
+    "y"
+print("adj", s, len(s))
+
+# ...and the bracketed and same-line spellings, which must still agree
+s2 = ("x"
+      "y")
+s3 = "x" "y"
+print("adj2", s2, s3, s == s2, s2 == s3)
+
+# a continuation inside a def, and inside a class body
+def g():
+    v = n * \
+        2
+    return v
+
+
+class C(object):
+    def m(self):
+        return 1 + \
+               1
+
+
+print("infn", g(), "cls", C().m())
+
+# the continued line's indentation is arbitrary, as in Python
+y = 1 + \
+                    1
+print("indent-free", y)
+
+# a normal statement immediately after a continuation resumes normally
+z = 2 + \
+    2
+print("after", z)
+
+
+# class C(object) with inheritance and super()
+class Base(object):
+    def __init__(self, v):
+        self.v = v
+
+    def get(self):
+        return self.v
+
+
+class Derived(Base):
+    def get(self):
+        return super().get() * 2
+
+
+class Plain:
+    def __init__(self):
+        self.x = 9
+
+
+print("obj", Base(3).get(), Derived(4).get(), Plain().x)
+print("isinst", isinstance(Base(1), Base), isinstance(Derived(1), Base))
+
+# control: bracketed continuation (never needed a backslash) still works
+def f(p,
+      q):
+    return p + q
+
+
+xs = [1,
+      2]
+print("paren", f(1, 2), xs)

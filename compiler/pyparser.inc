@@ -22277,6 +22277,22 @@ begin
       if CurTok.Kind <> tkIdent then
         Error('Nil Python: expected a class name after . in the base class');
     end;
+    { `class C(object):` — Python 2's explicit new-style spelling, still all over
+      real code (html5lib writes it). In Python 3 every class derives from
+      `object` anyway, so naming it is a NO-OP: the class is registered with no
+      parent, exactly as `class C:` is. Consumed here rather than resolved,
+      because there is no `object` class to point at and inventing one would put
+      a real base in the chain that `super()` and the method tables would then
+      have to explain. }
+    if CurTok.SVal = 'object' then
+    begin
+      Next;
+      { fall through to the closing paren / multiple-inheritance handling below
+        with no parent set }
+      baseCi := -1;
+    end
+    else
+    begin
     baseCi := FindUClass(CurTok.SVal);
     if (baseCi < 0) and CaseEqual(CurTok.SVal, 'Exception') then
     begin
@@ -22288,6 +22304,7 @@ begin
       Error('Nil Python: unknown base class ' + CurTok.SVal);
     UClsParent[ci] := baseCi;
     Next;
+    end;
     { MULTIPLE INHERITANCE — `class D(B, C):`. Refused BY NAME rather than
       accepted-and-ignored: Python resolves attributes by C3 linearisation, so
       `D().who()` must give B's, and with a diamond the order is D, B, C, A.

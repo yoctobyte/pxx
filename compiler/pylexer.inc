@@ -270,6 +270,19 @@ begin
   begin
     ch := src[j];
     if (ch = ' ') or (ch = #9) or (ch = #13) then Inc(j)
+    else if ch = '\' then
+    begin
+      { A BACKSLASH CONTINUATION keeps the next line adjacent, exactly as an
+        open bracket does — `"x" \` then `"y"` is one string in Python. The
+        pdepth test below is the bracket half of the same rule; without this
+        arm the continuation form joined nothing and `"x" \ / "y"` evaluated to
+        just "x", silently losing the second half. }
+      Inc(j);
+      while (j <= srcLen) and ((src[j] = ' ') or (src[j] = #9) or (src[j] = #13)) do
+        Inc(j);
+      if (j > srcLen) or (src[j] <> #10) then Exit;
+      Inc(j);
+    end
     else if ch = #10 then
     begin
       if pdepth <= 0 then Exit;   { statement-level newline: not adjacent }
@@ -700,6 +713,7 @@ var
   IndentWidth: Integer;
   IsBlankOrComment: Boolean;
   IsLogicalLine: Boolean;
+  contLine, wasCont: Boolean;   { backslash line continuation }
   c, quoteChar, c2: Char;
   s: AnsiString;
   n: Int64;
@@ -728,6 +742,7 @@ begin
   IndentStack[0] := 0;
   IndentStackTop := 0;
   parenDepth := 0;
+  contLine := False;
   lineIsDefClass := False;
   lineSawColon := False;
   inlineSuite := False;
@@ -736,6 +751,12 @@ begin
 
   while P <= Length(Source) do
   begin
+    { A backslash-continued line is a CONTINUATION of the previous one, so it
+      has no indentation of its own and ends no logical line — exactly the two
+      things being inside parentheses already suppresses. Taken (and cleared)
+      here so the flag set while tokenizing line N governs line N+1. }
+    wasCont := contLine;
+    contLine := False;
     { 1. Measure indentation width at the start of a physical line }
     IndentWidth := 0;
     while (P <= Length(Source)) and ((Source[P] = ' ') or (Source[P] = #9)) do
@@ -763,7 +784,7 @@ begin
     if not IsBlankOrComment then
     begin
       { If parenDepth = 0, process indentation changes }
-      if parenDepth = 0 then
+      if (parenDepth = 0) and (not wasCont) then
       begin
         if IndentWidth > IndentStack[IndentStackTop] then
         begin
@@ -1239,6 +1260,32 @@ begin
           else
             PyEmitToken(tkGt, 0, SrcLine, '');
         end;
+        '\':
+        begin
+          { LINE CONTINUATION. A backslash may only be the last thing on the
+            line; anything else after it (bar trailing blanks and the CR of a
+            CRLF) is a syntax error in Python too, and saying so beats lexing
+            the rest of the line as if the backslash were not there.
+
+            The continuation is then handled exactly as an open parenthesis is:
+            no tkNewline here, and no indentation processing on the next
+            physical line. Both suppressions already exist for parenDepth; this
+            reuses them rather than adding a second notion of "still the same
+            logical line".
+
+            6 of html5lib's 33 files use this, all in the same shape — a long
+            `if a and \` condition split across lines
+            (feature-nilpy-thirdparty-libraries-as-targets). }
+          while (P <= Length(Source)) and
+                ((Source[P] = ' ') or (Source[P] = #9) or (Source[P] = #13)) do
+            Inc(P);
+          if (P <= Length(Source)) and (Source[P] <> #10) then
+          begin
+            CurTok.Line := SrcLine;
+            Error('a backslash must be the last character on its line');
+          end;
+          contLine := True;
+        end;
         else
         begin
           CurTok.Line := SrcLine;
@@ -1248,7 +1295,7 @@ begin
     end;
 
     { 4. End of physical line: emit tkNewline if logical line and paren depth is 0 }
-    if IsLogicalLine and (parenDepth = 0) then
+    if IsLogicalLine and (parenDepth = 0) and (not contLine) then
     begin
       PyEmitToken(tkNewline, 0, SrcLine, '');
     end;
