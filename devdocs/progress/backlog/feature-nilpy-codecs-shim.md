@@ -2,6 +2,7 @@
 track: B
 prio: 40
 type: feature
+blocked-by: bug-n-str-encode-and-bytes-decode-ignore-the-encoding
 ---
 
 # `import codecs` — the next wall for the compile-real-libraries campaign
@@ -126,4 +127,31 @@ header, as `mimic_reportlab_pdfgen` does.
 `make lib-test`, plus `webencodings/__init__.py` compiling, plus a `.npy`
 round-tripping utf-8 and utf-16 against CPython's own `codecs` output, plus a
 refused label producing an error rather than wrong bytes.
+
+## BLOCKED 2026-08-09 — the builtins it would delegate to are wrong
+
+Before writing `lookup()`, the obvious question: what do the existing
+`str.encode` / `bytes.decode` do? Measured against CPython:
+
+    "hé".encode("latin-1")   pxx 3 bytes (UTF-8)   CPython 2 bytes
+    "hé".encode("utf-16le")  pxx 3 bytes (UTF-8)   CPython 4 bytes
+    "hé".encode("ascii")     pxx succeeds          CPython UnicodeEncodeError
+    b.decode("latin-1")      pxx 'h\ufffd'         CPython 'hé'
+    b.decode("utf-8")        pxx 'h\ufffd'         CPython UnicodeDecodeError
+
+**The encoding argument is ignored in both directions** — always UTF-8, never
+raising. Filed as
+[[bug-n-str-encode-and-bytes-decode-ignore-the-encoding]] (prio 60: it is a
+silent-wrong-bytes bug in its own right, quite apart from this ticket).
+
+So a `codecs.lookup(name)` whose `.encode`/`.decode` delegated to the builtins
+would hand webencodings a wrong answer for every non-UTF-8 label while appearing
+to work — the approximation `python-compat-tiers.md` forbids. And implementing
+the encodings a second time INSIDE the shim, while `str.encode` stays wrong,
+would be two mechanisms for one concept that can disagree.
+
+The order is therefore: fix the builtins to honour their argument (and raise for
+what they cannot do), then `lookup()` is a thin delegation and this ticket is
+small again. The scope proposed above — which encodings to do correctly and
+which to refuse by name — applies to the BUILTINS now; it moved down a layer.
 

@@ -42,7 +42,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (213)
+## backlog (214)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,6 +55,7 @@ _none_
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
+| bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 60 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses | N | 60 | bug | A class used as a VALUE: SEGFAULT from a container, compile errors from a name | decide-nilpy-class-as-value-dispatch-strategy |
 | bug-nilpy-calling-a-non-callable-segfaults | N | 55 | bug | Calling a non-callable SEGFAULTS instead of raising TypeError | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
@@ -149,7 +150,7 @@ _none_
 | feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
-| feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | — |
+| feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | bug-n-str-encode-and-bytes-decode-ignore-the-encoding |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-cpyext-cycle-collector | N | 40 | feature | cpyext: a cycle collector for the extension object model | — |
@@ -431,6 +432,7 @@ _none_
 
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
 - [p 65] [O] bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
+- [p 60] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
@@ -539,7 +541,6 @@ _none_
 - [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
-- [p 40] [B] feature-nilpy-codecs-shim
 - [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-dataclass-expression-field-default
 - [p 40] [N] feature-nilpy-enum-class
@@ -630,6 +631,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
+- **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-may-agents-fetch-thirdparty-sources-as-oracles
 - **1** — decide-nilpy-class-as-value-dispatch-strategy
