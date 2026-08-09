@@ -53,4 +53,4 @@ verify against `compiler/pascal26` and land the revert only once `pinned` has
 moved. That ordering is the only real hazard here.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit c6b9b078d.
