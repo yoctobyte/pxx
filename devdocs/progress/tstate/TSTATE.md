@@ -3,12 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 8d19h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `5c0450f30044` | 2026-08-09T13:08:02Z | RED (native) | 148.1s | `85179011f728` RED |
+| plexus | `c397e9f969bd` | 2026-08-09T13:15:06Z | GREEN (native) | 148.9s | `85179011f728` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_delitem_dunder.npy** — test/test_nilpy_delitem_dunder.npy test/test_nilpy_delitem_dunder.expected (plexus): bad `954727cee668`, last good `29d980110b58`, 15 commit(s) in range
-- **test-core#src:test/cmath_trig_family_b385.c** — test/cmath_trig_family_b385.c (plexus): bad `93d6232f05d1`, last good `0df2b14318f5`, 3 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
