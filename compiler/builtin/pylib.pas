@@ -4914,6 +4914,19 @@ end;
   be far past the end. A smaller handle would have silently indexed the WRONG
   element, which is the shape this dunder family keeps producing
   (bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror). }
+function PyNotSubscriptable(const clsName: AnsiString): Int64;
+{ `w["x"]` on a class that declares no __getitem__. CPython raises TypeError at
+  RUN time, so this must too — a compile error would reject the ordinary
+  `try: obj[k] / except TypeError:` probe, which is valid Python.
+
+  A FUNCTION returning Int64 for the same reason PyIndexTypeError is one: it
+  stands in for the whole subscript EXPRESSION at the call site.
+  bug-nilpy-subscript-read-without-getitem-yields-garbage }
+begin
+  raise TypeError.Create('''' + clsName + ''' object is not subscriptable');
+  PyNotSubscriptable := 0;   { unreachable }
+end;
+
 function PyIndexTypeError(const seqKind: AnsiString;
                           const clsName: AnsiString): Int64;
 begin

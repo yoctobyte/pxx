@@ -908,6 +908,7 @@ function PyRawName(off, len: Integer): AnsiString; forward;           { name tex
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
+function PyNotSubscriptableNode(ci: Integer): Integer; forward; { Nil Python: run-time TypeError for a class with no __getitem__ (pyparser.inc) }
 function PyIsSliceBase(n: Integer): Boolean; forward;
 function PySliceBracketAt(i: Integer): Boolean; forward; { Nil Python: is the bracket group at i a SLICE? (pyparser.inc) }
 function PyParseSliceTail(baseNode, loNode: Integer): Integer; forward; { Nil Python x[a:b], from the ':' (pyparser.inc) }
@@ -5132,6 +5133,50 @@ begin
             ASTTk[node] := StrValTk(tk);
             continue;   { allow further postfix on the getter result }
           end;
+        end
+        else if PyExprMode and (mci >= 0) and
+                (FindUMeth(mci, '__getitem__') < 0) and
+                (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + mci)) and
+                (PyNotSubscriptableNode(mci) >= 0) then
+        begin
+          { A user class with NO `__getitem__` at all. It used to fall past this
+            point to the generic AN_INDEX below — pointer arithmetic on the
+            instance handle — and yield a plausible NUMBER or end the program.
+            Declaring a SIBLING member (`__setitem__`, `__delitem__`) did not
+            rescue it, because the arm below tests `__getitem__` specifically,
+            which is what made "the class clearly supports subscripting" and
+            "the read is garbage" coexist.
+
+            Replaced by a run-time TypeError naming the class, which is what
+            CPython raises — at RUN time, so `try: obj[k] / except TypeError:`
+            still compiles.
+            Only a READ is taken over. `obj[k] = v` on a class with
+            `__setitem__` but no `__getitem__` is legal Python and already
+            worked through the write path below, so the same closing-bracket
+            peek the `__getitem__` arm uses decides that here — otherwise this
+            refusal would have broken the very shape that motivated it
+            (a class declaring only `__setitem__`).
+            bug-nilpy-subscript-read-without-getitem-yields-garbage }
+          isAssign := False;
+          i := TokPos - 1; w := 0;   { TokPos-1 = the '[' }
+          while i < TokCount do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(w)
+            else if Tokens[i].Kind = tkRBrack then
+            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+            Inc(i);
+          end;
+          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+          if not isAssign then
+          begin
+            Next;                     { consume '[' }
+            ParseExpr;                { the key is still evaluated, as Python does }
+            Expect(tkRBrack, ']');
+            node := PyNotSubscriptableNode(mci);
+            tk := tyInt64; recName := REC_NONE;
+            continue;
+          end;
+          { an assignment target — fall through to the write path below }
         end
         else if FindUMeth(mci, '__getitem__') >= 0 then
         begin

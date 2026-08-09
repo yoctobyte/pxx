@@ -7247,6 +7247,37 @@ begin
   ASTLeft[PyIndexNotIntKind] := a0;
 end;
 
+{ The whole subscript EXPRESSION replaced by a run-time TypeError, for a user
+  class that declares no `__getitem__`. Before this the subscript fell through
+  to the generic AN_INDEX — pointer arithmetic on the instance handle — and
+  yielded a plausible NUMBER or ended the program. Declaring a SIBLING member
+  (`__setitem__`, `__delitem__`) did not rescue it, because the arm above tests
+  `__getitem__` specifically.
+
+  Run time, not compile time: CPython raises TypeError when the subscript
+  EXECUTES, and `try: obj[k] / except TypeError:` is valid Python that must
+  still compile. Returns -1 when the base is not a user class, so callers leave
+  every other receiver alone.
+  bug-nilpy-subscript-read-without-getitem-yields-garbage }
+function PyNotSubscriptableNode(ci: Integer): Integer;
+var procIdx, a0, lit: Integer;
+begin
+  PyNotSubscriptableNode := -1;
+  if ci < 0 then Exit;
+  procIdx := FindProc('PyNotSubscriptable');
+  if procIdx < 0 then Exit;
+  a0 := AllocNode(AN_ARG);
+  lit := AllocNode(AN_STR_LIT);
+  ASTSOffset[lit] := PyStoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
+  ASTSLen[lit] := UClsNLen[ci];
+  ASTTk[lit] := Ord(tyString);
+  ASTLeft[a0] := lit; ASTRight[a0] := -1;
+  PyNotSubscriptableNode := AllocNode(AN_CALL);
+  ASTIVal[PyNotSubscriptableNode] := procIdx;
+  ASTTk[PyNotSubscriptableNode] := Ord(tyInt64);
+  ASTLeft[PyNotSubscriptableNode] := a0;
+end;
+
 { The sequence KIND a receiver NODE is, or '' when it is not a sequence (a dict,
   or a variant that may hold one at run time). }
 function PyIndexSeqKind(baseNode: Integer): AnsiString;

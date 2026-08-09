@@ -698,6 +698,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-subscript-argument-boxes-wrong-into-variant-param | N | 75 | bug | A SUBSCRIPT argument passed to a variant parameter arrives as garbage | — |
 | bug-nilpy-subscript-of-a-call-result-ignores-the-index | N | 60 | bug | Subscripting a CALL RESULT: a string ignores the index, a chain drops the second | — |
 | bug-nilpy-subscript-on-literal | N | 35 | bug | NilPy: cannot subscript a string LITERAL — `"abc"[1]` | — |
+| bug-nilpy-subscript-read-without-getitem-yields-garbage | N | 35 | bug | A subscript READ on a class with no `__getitem__` yields a silent wrong value | — |
 | bug-nilpy-super-and-unbound-parent-method-calls | N | 70 | bug | Neither `super().m()` nor `Parent.m(self)` reaches an overridden method | — |
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-ternary-comprehension-element-stringified | N | 70 | bug | A mixed-type conditional in a comprehension element turns numbers into strings | — |

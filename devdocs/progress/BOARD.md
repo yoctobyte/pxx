@@ -74,8 +74,8 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-return-inside-a-with-skips-exit | N | 55 | bug | `return` inside a `with` does not run `__exit__` | — |
+| bug-nilpy-setitem-without-getitem-write-does-not-compile | N | 40 | bug | `obj[k] = v` does not compile when the class has `__setitem__` but no `__getitem__` | — |
 | bug-nilpy-startswith-endswith-ignore-a-tuple-argument | N | 40 | bug | `startswith`/`endswith` with a TUPLE of prefixes silently answered False | — |
-| bug-nilpy-subscript-read-without-getitem-yields-garbage | N | 35 | bug | A subscript READ on a class with no `__getitem__` yields a silent wrong value | — |
 | bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver | N | 55 | bug | A user method named `find`/`index` raises AttributeError when the receiver has no static class | — |
 | bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored | N | 45 | bug | A user `__str__` on an Exception subclass is ignored | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
@@ -389,9 +389,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1544)
+## done (1545)
 
-1544 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1545 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -534,6 +534,7 @@ _none_
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
+- [p 40] [N] bug-nilpy-setitem-without-getitem-write-does-not-compile
 - [p 40] [N] bug-nilpy-startswith-endswith-ignore-a-tuple-argument
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
@@ -562,7 +563,6 @@ _none_
 - [p 35] [N] bug-nilpy-input-has-two-lowerings-one-discards-the-prompt
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
-- [p 35] [N] bug-nilpy-subscript-read-without-getitem-yields-garbage
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [B] compat-pascal-thread-api-surface-differs-from-fpc

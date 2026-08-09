@@ -477,6 +477,9 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_instname26 | diff -u test/test_nilpy_instance_named_like_its_class.expected -
 	# a class used as a VALUE must REFUSE BY NAME, not compile and segfault.
 	! ./$(COMPILER) test/test_nilpy_class_as_value_fail.npy /tmp/test_nilpy_clsval26 2>&1 | grep -q 'ok:'
+	# a subscript READ on a class with no __getitem__ raises TypeError at RUN time.
+	./$(COMPILER) test/test_nilpy_not_subscriptable.npy /tmp/test_nilpy_notsub26
+	/tmp/test_nilpy_notsub26 | diff -u test/test_nilpy_not_subscriptable.expected -
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
 	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26

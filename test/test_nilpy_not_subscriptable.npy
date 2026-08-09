@@ -1,0 +1,61 @@
+# bug-nilpy-subscript-read-without-getitem-yields-garbage
+#
+# `w["x"]` on a class declaring no __getitem__ fell through to the generic
+# AN_INDEX — pointer arithmetic on the instance handle — and yielded a plausible
+# NUMBER or ended the program. CPython raises
+# `TypeError: 'W' object is not subscriptable`.
+#
+# Declaring a SIBLING member did not rescue it: the getter arm tests
+# `__getitem__` specifically, so a class with `__setitem__` or `__delitem__`
+# still read as garbage. That is what made "this class clearly supports
+# subscripting" and "the read is silently wrong" coexist.
+#
+# The refusal is at RUN time, not compile time, and that is load-bearing:
+# `try: obj[k] / except TypeError:` is ordinary Python and must still COMPILE.
+# The test is written that way throughout, so a compile-time refusal would fail
+# it rather than pass it.
+#
+# Only a READ is taken over. The same closing-bracket peek the `__getitem__` arm
+# uses decides that, because `obj[k] = v` is a different path — otherwise this
+# refusal would have broken the very shape that motivated it.
+#
+# NOT asserted: `so["k"] = 1` on a class with `__setitem__` but NO
+# `__getitem__`. That WRITE does not compile, and pinned does not compile it
+# either — a pre-existing gap in the same family, since the write path is
+# reached through the getter-gated arm as well. Filed separately rather than
+# pinned here.
+#
+# Expectations are CPython's own output.
+
+class G:
+    def __getitem__(self, k):
+        return "got:" + str(k)
+
+class SetOnly:
+    def __setitem__(self, k, v):
+        self.last = k
+
+class Plain:
+    def __init__(self):
+        self.v = 1
+
+g = G()
+print(g["x"], g[0], g["a"])
+
+so = SetOnly()
+try:
+    print(so["k"])
+except TypeError as e:
+    print("read:", e)
+
+p = Plain()
+try:
+    print(p[0])
+except TypeError as e:
+    print("plain:", e)
+
+xs = [1, 2, 3]
+d = {"a": 1}
+s = "abc"
+print(xs[1], d["a"], s[1], xs[-1], s[-1], xs[0:2], s[0:2])
+print(sorted(d.items())[0][0])

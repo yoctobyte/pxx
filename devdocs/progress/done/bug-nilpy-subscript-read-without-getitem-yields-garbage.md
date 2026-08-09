@@ -56,3 +56,34 @@ records all use the same generic fallback legitimately.
 `__delitem__`-only class, and on a class with no dunders at all, each a
 catchable TypeError; plus controls that array/pointer/string/record indexing and
 `__getitem__`-declaring classes are unchanged.
+
+## 2026-08-09 — FIXED (sole-A confirmed)
+
+A getter-less user class now raises `TypeError: 'W' object is not subscriptable`
+from a subscript READ, which is what CPython raises.
+
+**At RUN time, not compile time, and that is load-bearing:**
+`try: obj[k] / except TypeError:` is ordinary Python and must still COMPILE. The
+raiser is a `Int64`-returning function so it can stand in for the whole subscript
+EXPRESSION, exactly as `PyIndexTypeError` does for the index expression.
+
+**Only a READ is taken over.** The first cut fired on assignments too and broke
+`so["k"] = 1`; the same closing-bracket peek the `__getitem__` arm uses now
+decides it, and an assignment target falls through to the write path untouched.
+
+Two traps on the way, both worth recording:
+
+- the arm needed a `PyExprMode` gate. Without it, it fired while parsing the
+  PASCAL sources of pylib itself, and every `.npy` failed to compile with an
+  error 6000 lines into a builtin unit — nothing pointing at the change.
+- the new pylib raiser's declaration was inserted immediately ABOVE its own
+  body rather than into the unit's top block, giving two consecutive function
+  headers. Same landmine recorded earlier that day for a different helper: put
+  a new declaration in the TOP block or not at all.
+
+**Found while fixing, filed separately:** `obj[k] = v` does NOT compile when the
+class has `__setitem__` but no `__getitem__` — pinned does not compile it either.
+The write path lives INSIDE the getter-gated arm, so the gate asks about the
+wrong member. See
+`bug-nilpy-setitem-without-getitem-write-does-not-compile`, which proposes
+collapsing the gate to "declares either" with each half checking what it needs.
