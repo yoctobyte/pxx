@@ -103,12 +103,21 @@ type
     strokeColour: LongWord;
     lineWidth: Double;
     pageOpen: Boolean;
-    { pagesize DEFAULTS, as reportlab's does. Without the default,
-      `canvas.Canvas("out.pdf")` — reportlab's most common form, and the first
-      line of nearly every example — passed an uninitialised Variant and
-      SEGFAULTED in the ctor's pyvartag/pyvarobj read. The body already falls
-      back to A4 for anything that is not a (w,h) tuple, so 0 lands there. }
-    constructor Create(const afilename: AnsiString; const pagesize: Variant = 0);
+    { TWO constructors rather than one with a default, and that is a WORKAROUND
+      (devdocs/dev/track-b-workarounds.md) for
+      bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory: a
+      CONSTRUCTOR with a defaulted Variant parameter smashes the stack when the
+      caller omits it. Deterministic from Pascal, intermittent through NilPy,
+      and it lands as a crash in unrelated code — the original symptom faulted
+      inside printf formatting with the return addresses overwritten by text.
+
+      The one-argument form is `canvas.Canvas("out.pdf")`, reportlab's most
+      common call, so it has to work. Forwarding to the two-argument form with
+      an EXPLICIT 0 avoids the defaulted-parameter path entirely.
+
+      REVERT to a single `pagesize: Variant = 0` when that bug closes. }
+    constructor Create(const afilename: AnsiString);
+    constructor Create(const afilename: AnsiString; const pagesize: Variant);
     destructor Destroy; override;
     procedure setFont(const name: AnsiString; size: Double);
     procedure setFillColorRGB(r, g, b: Double);
@@ -252,7 +261,15 @@ end;
 
 { ===== Canvas ===== }
 
-constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant = 0);
+constructor Canvas.Create(const afilename: AnsiString);
+var none: Variant;
+begin
+  { explicit argument — see the declaration for why this is not a default }
+  none := 0;
+  Create(afilename, none);
+end;
+
+constructor Canvas.Create(const afilename: AnsiString; const pagesize: Variant);
 var w, h: Single; ps: TPyList;
 begin
   outPath := afilename;
