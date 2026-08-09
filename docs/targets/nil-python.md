@@ -10,7 +10,40 @@ Nil Python is a statically compiled Python-shaped frontend for the PXX compiler.
 It is a **mainline frontend**, a peer of Pascal and C rather than a research path: it has its own test gate (`test-nilpy`), which must be green — along with a byte-identical self-host and the cross-target builds — before any change lands. BASIC and Rust are the experimental frontends; Nil Python began there and no longer is.
 
 > [!NOTE]
-> Nil Python is not a full Python implementation. It is a compiled dialect designed for close interop with Pascal and C. Source files can use either the `.npy` extension or plain `.py` — both compile through the same frontend; PXX does not require CPython-standard syntax, so a `.py` file that leans on dynamic-typing features CPython allows may not compile as-is.
+> Nil Python is not a full Python implementation. Source files can use either the `.npy` extension or plain `.py` — both compile through the same frontend; PXX does not require CPython-standard syntax, so a `.py` file that leans on dynamic-typing features CPython allows may not compile as-is.
+
+## What it is aiming at
+
+The frontend began as a Python-*shaped* dialect — the point was to prove that a
+grammar nothing like Pascal's could reach the same backend. That is no longer
+the goal it is measured against. Where a construct is implemented, the target
+is **CPython's observable behaviour**, and divergences from it are filed as
+bugs rather than accepted as dialect differences. Nil Python is a from-scratch
+compiler that targets CPython compatibility; it is not derived from CPython's
+implementation, and it is not an interpreter.
+
+That is a harder target than Pascal or C, and the board shows it: Nil Python's
+open queue peaked at 79 tickets against 30 for the C frontend and 20 for
+Pascal's, and 77% of its tickets are bugs or regressions. A deep queue here
+means the reference is exacting, not that the frontend is fragile — see
+[ticket flow](https://pxxc.org/status/flow/) for the curves.
+
+**What it will not do**, and this is a design boundary rather than a gap to
+close: anything requiring a live interpreter. No `eval` of runtime-constructed
+code, no monkeypatching a class after compilation, no duck typing resolved at
+run time. Function parameters and return types need annotations; locals are
+inferred. If a program's design depends on Python's dynamism, it belongs on
+CPython.
+
+### It hardens the rest of the compiler
+
+Compiling Python-shaped code exercises the shared AST, IR and runtime along
+paths that Pascal and C programs rarely reach — variants, dunder dispatch,
+container semantics — and the defects it turns up are usually **not** in the
+Nil Python frontend at all. They land in the shared layers, where fixing them
+benefits every frontend. Over 100 tickets in the compiler-core lane reference
+Nil Python work. It has been the cheapest bug-discovery route the project has:
+no third-party test corpus had to be dragged into Pascal or C to find them.
 
 ---
 
@@ -90,9 +123,20 @@ Preprocessor integer `#define` macros in the C header (such as `SQLITE_ROW` or `
 ## Classes
 
 Single inheritance only — `class C(A, B):` (multiple bases) is not accepted.
-Only `__init__`, `__str__`, and `__repr__` are special-cased dunder methods;
-there is no operator-overload protocol yet (`__eq__`, `__len__`, `__iter__`,
-`__getitem__`, `__call__`, `__enter__`/`__exit__` are not hooked in).
+The compiler refuses it outright rather than ignoring the second base, and says
+why: Python resolves multiple bases by C3 linearisation and the object model
+here is single-inheritance. Compose instead — hold the would-be second base as
+a field and forward to it.
+
+Dunder methods dispatch. Verified against the pinned compiler:
+`__init__`, `__str__`, `__repr__`, `__eq__`, `__len__`, `__getitem__`,
+`__call__`, and `__enter__`/`__exit__` (so `with` works on your own classes)
+all resolve to the method you defined.
+
+The gap is **iteration**: a class implementing `__iter__`/`__next__` is not yet
+usable as the subject of a `for` loop. A related sharp edge on the way there —
+`raise StopIteration` must be written `raise StopIteration()`, because an
+exception class is not usable as a bare value.
 
 `super().method(args)` is recognized specifically as its own call
 **statement** — most commonly `super().__init__(...)` chaining a parent
