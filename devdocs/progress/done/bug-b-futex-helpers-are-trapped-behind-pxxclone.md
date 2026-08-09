@@ -65,4 +65,4 @@ Track B: `tools/gate.sh lib`. Also rebuild the threading demos and re-run
 one that proves the lock still excludes.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 59104b815.
