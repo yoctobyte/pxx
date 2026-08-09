@@ -80,6 +80,13 @@ rename/getcwd/stat/access/poll and nothing else). So each needs a new PAL
 syscall first, and `listdir` additionally needs the `getdents64` buffer walk
 rather than a single call.
 
+And the PAL is **per-target**: `pypal.pas` carries a separate syscall-number
+const block for x86-64, i386, aarch64, arm32, riscv32 and xtensa, each with its
+own numbering and its own `NR_* = -1` holes. So "add mkdir" is six const blocks
+plus the routine, not one line — which is the real reason these three are a job
+rather than plumbing, and why they were left when the four pure `os.path` names
+above were added.
+
 Worth doing together, and worth checking the ESP platform arm at the same time
 — `devdocs/dev` records that ESP refuses a batch of POSIX entry points
 deliberately, and directory enumeration is likely one of them.
