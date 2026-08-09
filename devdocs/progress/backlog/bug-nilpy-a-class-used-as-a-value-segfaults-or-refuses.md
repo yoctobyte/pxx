@@ -2,6 +2,7 @@
 track: N
 prio: 60
 type: bug
+blocked-by: decide-sole-a-guard-for-unattended-sessions
 ---
 
 # A class used as a VALUE: SEGFAULT from a container, compile errors from a name
@@ -95,3 +96,35 @@ a dict of name→class; a class passed as an argument and returned; `raise cls(m
 in both spellings; `type(x).__name__` on the result; and `print(cls)` /
 `cls.__name__`. If the scope is narrowed to a refusal, the test asserts the
 diagnostic instead and this ticket stays open for the feature.
+
+## Recon 2026-08-09 — located to the line, BLOCKED on the sole-A guard
+
+A bare class name used as a value is built at **`compiler/parser.inc:4409`**:
+
+```pascal
+{ Class identifier used as a value (metaclass / class reference) }
+node := AllocNode(AN_CLASSREF);
+ASTIVal[node] := ci;
+ASTTk[node] := Ord(tyPointer);
+```
+
+That is the shared expression parser — a Track A file under the sole-A guard —
+so neither the full fix nor the interim NAMED REFUSAL can be written from an
+unattended Track N session. Same block as the four tickets already behind
+`decide-sole-a-guard-for-unattended-sessions`; marked `blocked-by` so the queue
+stops offering it.
+
+**What the refusal cannot be:** a blanket "class name as a value" error. The
+same node is what `isinstance(x, A)` and `except SomeError:` produce, and both
+work today. The refusal has to be narrower — the classref being stored into a
+variable or a container element, i.e. where it becomes an untagged integer — and
+that distinction is exactly why it belongs with someone who can see the whole
+expression path rather than being bolted on.
+
+**Also measured, and it constrains the eventual fix:** the runtime cannot
+recover here either. `pyvar_callv0..3` guard only `Payload = 0`, and a plain
+compiled def is *its code address boxed as a plain integer*, so a class
+reference and a callable are indistinguishable by tag — see
+`bug-nilpy-calling-a-non-callable-segfaults` for the measurement and for the
+guard I built, found inert, and reverted. Both tickets therefore want the same
+thing: **a distinct callable/classref variant tag.**

@@ -34,10 +34,10 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 197, ranked
+## Ready — top 30 of 196, ranked
 
+- `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 2)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -50,7 +50,6 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
-- `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 1)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
+- `[p 55] [A]` feature-signal-siginfo-ucontext
 
-_167 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_166 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
