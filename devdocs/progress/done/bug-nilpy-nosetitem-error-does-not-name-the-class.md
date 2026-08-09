@@ -104,4 +104,4 @@ weaker claim. `test_nilpy_delitem_dunder.npy` still green. Self-host fixedpoint
 byte-identical; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 84a2d5d71.
