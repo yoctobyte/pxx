@@ -7,7 +7,7 @@
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy** — test/test_nilpy_str_isnumeric_istitle.npy test/test_nilpy_str_isnumeric_istitle.expected +1 (plexus): bad `e3b8023ef736`, last good `5f7bf848de9b`, 3 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy** — test/test_nilpy_str_isnumeric_istitle.npy test/test_nilpy_str_isnumeric_istitle.expected +1 (plexus): bad `e3b8023ef736`, last good `07f78101e405`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 

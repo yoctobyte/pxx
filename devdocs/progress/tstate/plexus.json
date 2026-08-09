@@ -4887,12 +4887,11 @@
  "open_regressions": [
   {
    "bad": "e3b8023ef73688e91386e40f4dc956c0b7e3b146",
-   "good": "5f7bf848de9b3c214af628ca863534893a09092e",
+   "good": "07f78101e4055bd6966dedfb48c163b4742f7364",
    "job": "test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy",
    "name": "test-nilpy#63",
    "opened": "2026-08-09T08:30:09Z",
    "range": [
-    "07f78101e4055bd6966dedfb48c163b4742f7364",
     "0ece0a483c1a1674d8842ded68dfa7ca4f2d7dc1",
     "e3b8023ef73688e91386e40f4dc956c0b7e3b146"
    ],
