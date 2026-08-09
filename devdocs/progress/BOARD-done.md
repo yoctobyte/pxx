@@ -748,6 +748,8 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |
 | bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field | N | 50 | bug | SILENT->CRASH: a callable stored in a `Callable` field outlives its object — `-dPXX_HEAP_DEBUG` reports WRITE AFTER FREE and the recycled block comes back as a list's element storage, so calling the field jumps into a variant array. This is what blocks uforth now. | — |
 | bug-nilpy-zero-param-lambda-cannot-call-a-def | N | 70 | bug | `lambda: f()` — a zero-parameter lambda cannot call a compiled def | — |
+| bug-nilpy-zip-in-a-comprehension-fails-to-parse | N | 55 | bug | `zip()` inside a comprehension fails to parse | — |
+| bug-nilpy-zip-loop-target-in-a-def-binds-a-module-global | N | 55 | bug | A zip loop target inside a def binds the module global of that name | — |
 | bug-nilpy-zip-over-a-string-yields-nothing-or-segfaults | N | 70 | bug | `zip(list, str)` yields nothing — and segfaults if any loop ran before it | — |
 | bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-o3-inline-breaks-frame-walk-intrinsics | A | 60 | bug | -O3 inlining deletes a frame the stack-frame intrinsics can observe | — |

@@ -1350,6 +1350,12 @@ test-nilpy: $(COMPILER)
 	@# a `for` target reused after a non-string binding (and the reverse order)
 	./$(COMPILER) test/test_nilpy_for_variable_reuse.npy /tmp/test_nilpy_for_var_reuse26
 	test "$$(/tmp/test_nilpy_for_var_reuse26)" = "$$(printf 'a\nZ\na\nZ\na\nZ\na\nZ\na\nb\n5\n1.5\nTrue\n1\n2')"
+	@# zip() inside a COMPREHENSION parses (the zip intercept is statement-only)
+	./$(COMPILER) test/test_nilpy_zip_in_a_comprehension.npy /tmp/test_nilpy_zipcomp26
+	/tmp/test_nilpy_zipcomp26 | diff -u test/test_nilpy_zip_in_a_comprehension.expected -
+	@# a for target inside a def is a LOCAL, not the module global of that name
+	./$(COMPILER) test/test_nilpy_loop_target_in_a_def_is_local.npy /tmp/test_nilpy_loctgt26
+	/tmp/test_nilpy_loctgt26 | diff -u test/test_nilpy_loop_target_in_a_def_is_local.expected -
 	@# an `except ... as e` binder is scoped to its handler, so a later
 	@# ordinary `e = ...` does not land in the exception-typed slot
 	./$(COMPILER) test/test_nilpy_except_as_binder_scope.npy /tmp/test_nilpy_exc_as26

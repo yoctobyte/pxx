@@ -1,0 +1,81 @@
+# A `for` target is a BINDING, so inside a def it must make a LOCAL rather
+# than write through to a module global of the same name (Python's rule).
+# The zip desugar looked the name up with PyProgSym and bound the SECOND
+# target to the module global -- a variant element into a class-typed module
+# slot, SIGSEGV -- while an ordinary loop escaped only because the locals
+# pre-pass happened to have harvested the name.
+# bug-nilpy-zip-loop-target-in-a-def-binds-a-module-global
+# Every expectation is CPython's own output.
+
+items = [1, 2, 3]
+other = [4, 5, 6]
+
+
+class Vec:
+    def __init__(self, xs):
+        self.xs = list(xs)
+
+    def dot(self, o):
+        t = 0
+        for a, b in zip(self.xs, o.xs):
+            t = t + a * b
+        return t
+
+    def pairs(self, ps):
+        t = 0
+        for a, b in ps:
+            t = t + a * b
+        return t
+
+    def total(self, ys):
+        t = 0
+        for a in ys:
+            t = t + a
+        return t
+
+    def counted(self, n):
+        t = 0
+        for i in range(n):
+            t = t + i
+        return t
+
+
+# module names that COLLIDE with every loop target used above
+a = Vec([1, 2, 3])
+b = Vec([4, 5, 6])
+i = "not an int"
+
+print("zip  ", a.dot(b))
+print("pairs", a.pairs([(1, 4), (2, 5)]))
+print("total", a.total(items))
+print("range", a.counted(4))
+
+# the module names are untouched by the calls
+print("a is a Vec:", isinstance(a, Vec), a.xs)
+print("b is a Vec:", isinstance(b, Vec), b.xs)
+print("i unchanged:", i)
+
+# `global` still writes through
+count = 0
+
+
+def bump():
+    global count
+    for count in items:
+        pass
+
+
+bump()
+print("global after loop:", count)
+
+# without `global`, the target is a local and the module name survives
+n = 99
+
+
+def shadow():
+    for n in items:
+        pass
+    return n
+
+
+print("shadow", shadow(), "module n", n)

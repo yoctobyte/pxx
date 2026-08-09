@@ -14182,7 +14182,7 @@ begin
   end
   else
   begin
-    symIdx := PyProgSym(name);
+    symIdx := PyAssignTargetSym(name);
     if symIdx < 0 then
     begin
       if enumMode then tk := tyInteger
@@ -14216,7 +14216,7 @@ begin
       extraSyms[xi] := AllocVar(hExtraNames[xi], tyVariant)
     else
     begin
-      extraSyms[xi] := PyProgSym(PyForExtraName[xi]);
+      extraSyms[xi] := PyAssignTargetSym(PyForExtraName[xi]);
       if extraSyms[xi] < 0 then extraSyms[xi] := AllocVar(PyForExtraName[xi], tyVariant);
     end;
   end;
@@ -14230,7 +14230,7 @@ begin
     end
     else
     begin
-      sym2 := PyProgSym(name2);
+      sym2 := PyAssignTargetSym(name2);
       if sym2 < 0 then
       begin
         { enumerate over a STRING yields 1-character strs, like the single-name
@@ -14852,8 +14852,16 @@ begin
   cbN := AllocVar(PyHiddenName('znb'), tyInteger);
   nSym := AllocVar(PyHiddenName('zn'), tyInteger);
   iSym := AllocVar(PyHiddenName('zi'), tyInteger);
-  xSym := PyProgSym(name);  if xSym < 0 then xSym := AllocVar(name, tyVariant);
-  ySym := PyProgSym(name2); if ySym < 0 then ySym := AllocVar(name2, tyVariant);
+  { PyAssignTargetSym, not PyProgSym: a loop target is a BINDING, so inside a
+    def it must make a LOCAL rather than write through to a module global of
+    the same name (Python's rule; `global x` is still honoured, that lookup
+    checks). `for a, b in zip(self.xs, other.xs)` in a method, with module-level
+    objects also called `a`/`b`, bound the SECOND name to the global — a variant
+    element into a class-typed module slot, SIGSEGV. The first name escaped only
+    because the locals pre-pass happened to have harvested it.
+    bug-nilpy-zip-loop-target-in-a-def-binds-a-module-global }
+  xSym := PyAssignTargetSym(name);  if xSym < 0 then xSym := AllocVar(name, tyVariant);
+  ySym := PyAssignTargetSym(name2); if ySym < 0 then ySym := AllocVar(name2, tyVariant);
 
   { drain a comp-iterable's hoisted build before the loop — see PyParseForIn }
   seq := PyFlushHoist(-1);
@@ -15136,9 +15144,19 @@ begin
   Expect(tkIn, 'in');
   if (PyForExtraCount > 0) and PyIsIdent('zip') then
     Error('Nil Python: zip() with more than two loop variables is not supported yet');
-  { `for x, y in zip(A, B):` — parallel iteration over two containers. }
-  if (name2 <> '') and PyIsIdent('zip') and (TokPos < TokCount) and
-     (Tokens[TokPos].Kind = tkLParen) then
+  { `for x, y in zip(A, B):` — parallel iteration over two containers.
+
+    STATEMENT form only. PyParseForZip is a statement desugar: it demands the
+    header's ':' and parses a SUITE, so a comprehension — `[a + b for a, b in
+    zip(A, B)]`, one of the most ordinary lines in Python — died on "expected
+    :" pointing at the closing bracket. A comprehension needs no special case
+    at all: zip() is already a working EXPRESSION yielding a list of pairs
+    (`list(zip(A, B))` has always been right), so falling through to
+    PyParseForIn hands it to the two-name pair-unpack path that a plain list of
+    pairs already takes.
+    bug-nilpy-zip-in-a-comprehension-fails-to-parse }
+  if (name2 <> '') and (PyCompTarget < 0) and PyIsIdent('zip') and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     Result := PyParseForZip(name, name2);
     Exit;
@@ -15177,7 +15195,7 @@ begin
   end
   else
   begin
-    symIdx := PyProgSym(name);
+    symIdx := PyAssignTargetSym(name);
     { tyInt64, not tyInteger: the counter is compared against `stop` and a bound
       at or past 2^31 wrapped into a 4-byte cell, so
       `for i in range(3000000000, 3000000003)` started at -1294967296 and never

@@ -1,0 +1,38 @@
+# `[a + b for a, b in zip(A, B)]` failed to PARSE: the zip intercept in
+# PyParseFor is a STATEMENT desugar that demands the header's ':' and parses a
+# suite, so a comprehension died on "expected :" pointing at the closing
+# bracket. A comprehension needs no zip special case at all -- zip() is already
+# an expression yielding a list of pairs.
+# bug-nilpy-zip-in-a-comprehension-fails-to-parse
+# Every expectation is CPython's own output.
+
+A = [1, 2, 3]
+B = [4, 5, 6]
+NAMES = ["x", "y", "z"]
+
+print([a + b for a, b in zip(A, B)])
+print([a * b for a, b in zip(A, B)])
+print([n + str(v) for n, v in zip(NAMES, A)])
+print([(a, b) for a, b in zip(A, B)])
+print([a for a, b in zip(A, B) if b > 4])
+print(sum(a * b for a, b in zip(A, B)))
+print({n: v for n, v in zip(NAMES, A)})
+print([a + b for a, b in zip(A, [9])])
+print([a + b for a, b in zip([], B)])
+
+# the STATEMENT form must keep working unchanged
+total = 0
+for a, b in zip(A, B):
+    total = total + a * b
+print("stmt", total)
+
+# and inside a def, over attributes
+class Vec:
+    def __init__(self, xs):
+        self.xs = list(xs)
+
+    def dot(self, other):
+        return sum(p * q for p, q in zip(self.xs, other.xs))
+
+
+print("dot", Vec(A).dot(Vec(B)))
