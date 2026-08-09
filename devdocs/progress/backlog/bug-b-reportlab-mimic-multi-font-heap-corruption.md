@@ -1,5 +1,5 @@
 ---
-track: B
+track: N
 prio: 30
 type: bug
 summary: "ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains"
@@ -144,3 +144,35 @@ file, or `PXXDBG=a.ir` on the `showPage` path in `mimic_reportlab_pdfgen.pas`.
 
 **Retitle when picked up** — the slug still says `multi-font-heap-corruption`
 and both halves are now disproven. Left in place only so existing links resolve.
+
+## 2026-08-09 (Track B): isolated to the NILPY path — re-filed to Track N
+
+Kept narrowing after the stack-overrun finding above, and the bug leaves Track B
+entirely. Four builds, same calls, same library, same vendored C writer:
+
+| driver | build | rate |
+| --- | --- | --- |
+| vendored `pdfgen.c` alone, `pdf_append_page` + `pdf_save` | **gcc** | 25/25 ok |
+| vendored `pdfgen.c` alone, same | **pxx (C frontend)** | 25/25 ok |
+| `Canvas.Create` + `showPage` + `save` | **pxx (Pascal)** | 25/25 ok |
+| `canvas.Canvas(...)` + `showPage()` + `save()` | **pxx (NilPy)** | 16/20, 23/25 |
+
+Controlled for the obvious confounder: the Pascal case was re-run writing to a
+real file (25/25) and the NilPy case re-run writing to `/dev/null` (still
+crashes), so the output path is not the variable. The Pascal program goes
+through the *same* `mimic_reportlab_pdfgen` -> `mimic_reportlab_pdfbase` ->
+`pdfgen.c` chain and links the same `pylib`.
+
+So the shim, the bridge unit and the C writer are all clean; only the NilPy
+frontend's lowering of these calls crashes. **Re-filed `track: N`.** It may
+bottom out in shared IR (Track A) rather than `pyparser`/lowering — that is for
+N to determine, and N owns the first look either way.
+
+Track B's part is done: the shim was fixed (one-arg ctor, exact A4, `PChar()`),
+and `text_fonts` matches real reportlab to 0.000029 pt whenever it completes.
+
+**Note for whoever takes it:** both builds emit a C/Pascal name-collision
+warning (`nan` vs `NaN`, `bcmp` vs `BCmp`, "binding to the C declaration"). The
+Pascal build is clean despite its warning, so a collision is not sufficient on
+its own — but silent same-signature collisions are the known hazard class here
+(`test/cmath_no_pascal_hijack.c`) and are worth ruling out early.

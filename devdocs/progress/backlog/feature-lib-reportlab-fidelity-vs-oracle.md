@@ -136,3 +136,11 @@ and is neither multi-font nor heap-related as previously recorded. Which case
 should not be read as fidelity results.
 
 Still deliberately NOT wired into `make lib-test` while the crash is live.
+
+### Blocker is Track N's, not Track B's
+
+The crash gating `positions` and `many_fonts` was isolated to the NilPy path —
+the identical calls from Pascal are 25/25 clean — and re-filed as `track: N`.
+Nothing further is actionable here under Track B until that lands; the harness
+and the shim are both ready, and the one case that completes agrees with the
+oracle to 0.000029 pt.
