@@ -55,4 +55,4 @@ Char arm in `ParseTextReadRest` that routes to it and removes the error. The
 write-side twin (`bug-p-writeln-text-rejects-char`, fixed) shows the arm shape.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 56b177f0b.
