@@ -282,9 +282,19 @@ microfix as a consolation.
 ### Track A in one line
 Own `compiler/**` (shared internals: AST, IR, symtab, backends, ABI, ELF). Gate
 = `make test` + self-host fixedpoint (byte-identical). When a feature B/C needs
-lands: `make stabilize` (records a checkpoint, moves `latest`) then `make pin`
-(blesses it, moves `pinned`), then commit `stable_linux_amd64/**`. `make
-stabilize` alone does NOT move B's ground.
+lands: **`make stabilize-fast`** (~35s) then `make pin` (blesses it, moves
+`pinned`), then commit `stable_linux_amd64/**`. `stabilize` alone does NOT move
+B's ground.
+
+**Use `stabilize-fast`, not `stabilize`** (user, 2026-08-09): all-target
+verification belongs to a RELEASE, not to a pin. Other tracks — and the human —
+are BLOCKED while a pin runs, and `stabilize`'s ~25 minutes buys breadth that is
+cheap to undo (`make revert` moves `pinned` back), while the one property a bad
+pin could poison for everyone — a compiler that cannot reproduce itself — is
+what `stabilize-fast`'s self→next→fixedpoint chain proves in seconds. Same
+"confirm native, offload the matrix" split as the per-fix loop above; Track T
+sweeps the matrix against the pinned sha. Full `stabilize` is for a RELEASE, or
+when Track T is PROVEN down.
 
 ### Track B in one line
 Build everything with `$(PXX_STABLE)` (= `stable_linux_amd64/default/pinned`);

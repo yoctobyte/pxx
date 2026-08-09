@@ -3,6 +3,8 @@ track: A
 prio: 75
 type: feature
 summary: "Set ONE PXX_THREADSAFE conditional define whenever ThreadSafeMode is on, every target — so RTL units can gate a declaration on 'threads are enabled' instead of on a lock-implementation flag. Unblocks TThread in Classes; decided by the user 2026-08-09"
+status: done
+owner: agent-AN
 ---
 
 # `{$IFDEF PXX_THREADSAFE}` — one define meaning "threads are enabled"
@@ -129,3 +131,68 @@ If pxx adopts that ([[decide-ismultithread-runtime-flag-vs-compile-time-mode]]),
 That is not a reason to wait — the define is cheap, useful on its own, and
 removing it later is trivial.
 
+## DONE 2026-08-09 — and it was NOT one more `PasDefine` next to the others
+
+The ticket's own sketch was to add the define beside `PXX_TS_SOFTLOCK` /
+`PXX_TS_HARDLOCK`, "one more unconditional-on-`ThreadSafeMode` `PasDefine`". I
+did exactly that, then ran the probe the Gate section asks for — and it read
+**FALSE on x86-64 `--threadsafe`**, which is the target Track B builds on.
+
+`PasApplyTargetDefines` begins:
+
+```pascal
+if TargetArch = TARGET_X86_64 then Exit;
+```
+
+That `Exit` is right for what it was written for (on the host there are no CPU
+defines to swap), but every block appended *below* it over time is dead on the
+DEFAULT target. So the define went in **above** the `Exit`, and the probe then
+reads correctly on all four cells.
+
+### The probe was load-bearing, not ceremony
+
+The one-liner compiled, self-hosted byte-identical, and would have shipped inert
+on the primary target. The Gate line asking for `{$ifdef PXX_THREADSAFE}` to be
+asserted true AND false is the only thing that caught it — worth noting because
+this is a define, and a define that is silently never set looks exactly like a
+feature that works.
+
+### A pre-existing bug found by the same probe
+
+`PXX_TS_HARDLOCK` is set at one place, below that `Exit`, guarded on
+`TargetArch = TARGET_X86_64` — the one target that cannot reach it. **The
+condition is unsatisfiable, so the define is dead on every build**, on HEAD and
+on `pinned` alike. Its only consumer is `builtinheap.pas`:
+
+```pascal
+{$ifndef PXX_TS_HARDLOCK}
+  PXXRecordRelease(inst, desc);
+{$endif}
+```
+
+so an x86-64 `--threadsafe` build takes the class-finalization path that the
+define exists to suppress — the one the lexer's own comment says would be
+"racing the allocator". Filed as
+[[bug-a-x86-64-early-exit-skips-target-defines]] rather than fixed here: it
+switches a runtime path on for the first time and deserves its own gate, and
+this ticket is meant to be small and land in a pin.
+
+### Verified, all four cells
+
+| build | `PXX_THREADSAFE` |
+| --- | --- |
+| x86-64, default | off |
+| x86-64, `--threadsafe` | **on** |
+| i386, default | off |
+| i386, `--threadsafe` | **on** (with `PXX_TS_SOFTLOCK`, as expected) |
+
+aarch64 and arm32 `--threadsafe` cross-build clean.
+
+### Gate
+
+`test/threadsafe_define.pas`, run BOTH ways from `test-threads` — with only the
+on case, a define set unconditionally would pass. Full gate + `make stabilize`
++ `make pin`, since Track B is waiting on it reaching `$(PXX_STABLE)`.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

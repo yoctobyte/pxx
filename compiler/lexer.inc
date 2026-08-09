@@ -728,6 +728,40 @@ end;
 procedure PasApplyTargetDefines;
 var name: AnsiString;
 begin
+  { --threadsafe, EVERY target: "threads are enabled in this build". The one
+    define an RTL unit should gate a DECLARATION on — `{$ifdef PXX_THREADSAFE}
+    uses palthreadobj` in classes.pas, so a threaded build gets TThread where
+    FPC code looks for it and a non-threaded build never parses palthread.
+
+    ABOVE the x86-64 early-Exit below ON PURPOSE. That Exit means "the host
+    defines PasInitDefines already seeded are correct, nothing to swap", and
+    everything appended after it is silently dead on the DEFAULT target — which
+    is the one Track B builds on. Verified while landing this: PXX_TS_HARDLOCK
+    sits below the Exit and is therefore never defined on any build, which is a
+    separate pre-existing bug (bug-a-x86-64-early-exit-skips-target-defines).
+    Placing this define first is what makes it work on x86-64 at all.
+
+    Deliberately NOT one of the three near-misses, each of which would compile
+    and each of which would be wrong:
+      * PXX_TS_SOFTLOCK / PXX_TS_HARDLOCK say WHICH LOCK IMPLEMENTATION is in
+        use, and neither covers all targets on its own — gating a declaration on
+        one keys off a correlated implementation detail rather than the thing
+        meant, which is a workaround in ifdef form;
+      * PXX_HAS_THREADS is a PLATFORM CAPABILITY ("can this target do threads at
+        all"), true on a posix build with no --threadsafe, which must still not
+        parse palthread.
+
+    PREFIXED on purpose: a bare THREADSAFE is exactly what an application
+    programmer would {$DEFINE} in their own source, and the collision would
+    silently change what the RTL declares. The unprefixed defines here are
+    precisely the FPC-compatibility ones (CPU64, LINUX, FPC, ENDIAN_LITTLE);
+    everything pxx invents carries the prefix.
+    feature-a-pxx-threadsafe-conditional-define }
+  if ThreadSafeMode then
+  begin
+    name := 'PXX_THREADSAFE';
+    PasDefine(name);
+  end;
   { PasInitDefines seeds host (x86-64) defines before option parsing; once the
     target is known, swap them so ifdef CPU... branches see the target. }
   if TargetArch = TARGET_X86_64 then Exit;

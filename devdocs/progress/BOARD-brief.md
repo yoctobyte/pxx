@@ -5,15 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:11 blocked:7 backlog:212 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1569 rejected:31`
+`unfinished:11 blocked:7 backlog:213 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1570 rejected:31`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
-
-## urgent (1) — jump the queue
-
-- `feature-a-pxx-threadsafe-conditional-define` [A]
 
 ## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
@@ -41,7 +37,6 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 190, ranked
 
-- `[p 75] [A]` feature-a-pxx-threadsafe-conditional-define
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -59,6 +54,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [A]` bug-a-x86-64-early-exit-skips-target-defines
 - `[p 55] [C]` bug-c-pascal-math-names-hijack-libc-through-pxxcio
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state

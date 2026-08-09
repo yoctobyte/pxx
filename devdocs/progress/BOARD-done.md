@@ -983,6 +983,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-a-promoint-variant-integration | A | 60 | feature | Promotable int inside a Variant | — |
 | feature-a-promoint-wide-literals | A | 60 | feature | PromoInt cannot be initialised from a literal wider than Int64 | — |
 | feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |
+| feature-a-pxx-threadsafe-conditional-define | A | 75 | feature | Set ONE PXX_THREADSAFE conditional define whenever ThreadSafeMode is on, every target — so RTL units can gate a declaration on 'threads are enabled' instead of on a lock-implementation flag. Unblocks TThread in Classes; decided by the user 2026-08-09 | — |
 | feature-a-typeref-handle | A | 65 | feature | TypeRef: one type handle, carried — not ten parallel tuples | — |
 | feature-a-unify-32bit-call-argument-marshalling | A | 40 | feature | Each 32-bit backend has the by-value argument ladder (Int64, double, set, 5-8 byte record) written out separately per call KIND — direct, indirect, virtual — and the virtual copy was missing the Int64 case entirely for years | — |
 | feature-aarch64-asm-emitter | A | 50 | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |

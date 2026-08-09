@@ -2054,6 +2054,12 @@ test-asm-emit:
 # the futex mutex (mutual-exclusion test). tids stay out of stdout so output is
 # deterministic.
 test-threads: $(COMPILER)
+	# PXX_THREADSAFE is set by --threadsafe and only by it. Both spellings are
+	# asserted: with only the ON case, a define set unconditionally would pass.
+	./$(COMPILER) test/threadsafe_define.pas /tmp/test_tsdefine_off26
+	test "$$(/tmp/test_tsdefine_off26)" = "plain"
+	./$(COMPILER) --threadsafe test/threadsafe_define.pas /tmp/test_tsdefine_on26
+	test "$$(/tmp/test_tsdefine_on26)" = "threadsafe"
 	./$(COMPILER) --threadsafe test/test_thread_clone.pas /tmp/test_thread_clone26
 	test "$$(/tmp/test_thread_clone26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
 	./$(COMPILER) --threadsafe test/test_palthread.pas /tmp/test_palthread26
@@ -7748,11 +7754,26 @@ test-opt: $(COMPILER)
 	cmp /tmp/pascal26-o3b /tmp/pascal26-o3c
 	@echo "test-opt OK (differential corpus + -O1/-O2 fixedpoint)"
 
-# stabilize-fast: everyday iteration pin — test-smoke instead of the full
-# suite, and the already-proven fixedpoint binary is recorded directly (the
-# full target's s4/s5 re-derivations only re-prove what cmp(next,fixedpoint)
-# established). Policy: fine for iteration; run full `stabilize` before
-# pushing a batch / milestone pins / releases.
+# stabilize-fast: THE DEFAULT PATH TO A PIN. test-smoke instead of the full
+# suite, and the already-proven fixedpoint binary is recorded directly (the full
+# target's s4/s5 re-derivations only re-prove what cmp(next,fixedpoint)
+# established). ~35s, against ~25min for `stabilize`.
+#
+# POLICY, user 2026-08-09, revising the old "fine for iteration; run full
+# stabilize before batch/milestone pins": **all-target verification belongs to a
+# RELEASE, not to a pin.** A pin exists to hand other tracks a working compiler,
+# and they — and the human — are BLOCKED while it runs. Paying 25 minutes of
+# cross-target breadth up front buys protection against something that is cheap
+# to undo (move `pinned` back; see `make revert`), while the one property a bad
+# pin could poison for everyone — a compiler that cannot reproduce itself — is
+# exactly what test-smoke's self->next->fixedpoint chain proves in seconds.
+#
+# This is the same "confirm native, offload the matrix" split CLAUDE.md already
+# states for the per-fix loop; the pin bar had simply never been brought in line
+# with it. Track T sweeps the matrix against the pinned sha asynchronously and
+# files what it finds.
+#
+# Use full `stabilize` for a RELEASE, or when Track T is PROVEN down.
 stabilize-fast: test-smoke
 	$(MAKE) stabilize-record
 

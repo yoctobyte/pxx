@@ -105,6 +105,19 @@ type
       NilPy backs `set` with TPyList (see PyAnnTypeAt), and this is the whole
       set contract the corpus uses — `s.add(x)` then `x in s`. }
     function add(const v: Variant): TPyList;
+    { set.update / `s |= other` — add every element of `other` that is not
+      already present, IN PLACE. In place, not a rebind, because CPython's `|=`
+      mutates: an alias taken before the statement must see the new elements,
+      exactly as `+=` on a list extends rather than rebinding.
+      bug-nilpy-set-augmented-union-does-nothing }
+    function setupdate(other: TPyList): Variant;
+    { ...and the three REMOVING in-place set ops: `&=`, `^=`, `-=`. Each is the
+      same contract — mutate Self, return None — and each takes a SNAPSHOT of
+      the side it iterates before removing, because removal renumbers the
+      elements under an index walk. }
+    function setintersect(other: TPyList): Variant;
+    function setsymdiff(other: TPyList): Variant;
+    function setdiff(other: TPyList): Variant;
     { NOT spelled `get`: Python lists have no .get, and sharing the name with
       TPyDict.get made every `.get(...)` on a dynamically-typed receiver
       ambiguous across classes. Internal accessor only — indexing goes through
@@ -170,6 +183,12 @@ type
     function union(other: TPyList): TPyList;
     function intersection(other: TPyList): TPyList;
     function difference(other: TPyList): TPyList;
+    { set.symmetric_difference / set.isdisjoint — the last two of the set
+      protocol, thin over the operator forms that already exist (pyset_xor,
+      and intersection for the disjoint test).
+      feature-nilpy-stdlib-coverage-gaps-measured }
+    function symmetric_difference(other: TPyList): TPyList;
+    function isdisjoint(other: TPyList): Boolean;
     { set.discard: like remove(), but does NOT raise when the value is absent. }
     procedure discard(const v: Variant);
     property Items[i: Integer]: Variant read at write put; default;
@@ -253,6 +272,14 @@ type
       merges them. The mode picks which, which is why they share a name. }
     function update(l: TPyList): Variant;   { None, see TPyList.remove }
     function update(d: TPyDict): Variant; overload;
+    { ...and a VARIANT argument, which is what an unannotated PARAMETER is.
+      Neither typed overload can be chosen for one, and the pair was resolved to
+      the TPyList arm — so `def f(sec): m.update(sec)` read a TPyDict as a
+      TPyList and SEGFAULTED. `m.update({"k": v})` with a literal was fine,
+      because a literal has a static type to match on.
+      Dispatches on the runtime tag and delegates to whichever typed arm the
+      value actually is. bug-nilpy-dict-update-with-a-variant-argument-segfaults }
+    function update(const v: Variant): Variant; overload;
     { dict.copy() — a SHALLOW copy, like TPyList.copy: a new dict holding the
       same key/value pairs, so storing into the copy leaves the original alone
       while a mutable VALUE stays shared. }
@@ -375,6 +402,18 @@ type
   public
     FLen: Integer;
     FData: Pointer;
+    { `bytes` and `bytearray` are ONE class here, exactly as list/tuple/set are
+      one TPyList — so, exactly like those, the Python TYPE has to be a runtime
+      tag rather than a class name. Without it `print(bytearray([1]))` rendered
+      `b'\x01'` and `type(b).__name__` answered `bytes`, both silently wrong for
+      a working CPython program.
+      False (a plain `bytes`) is the default, so a TPyBytes built by any of the
+      ~30 other construction sites keeps today's behaviour and only the
+      `bytearray(...)` constructors stamp it.
+      NOT about mutability: NilPy lets you mutate either, which is accepting
+      what CPython REJECTS and therefore laxity rather than a defect — see the
+      ticket. bug-nilpy-bytearray-and-bytes-are-the-same-type }
+    FIsByteArray: Boolean;
     constructor Create(n: Integer);
     function count: Integer;
     { see TPyList.at — bytearrays have no Python .get either }
@@ -382,13 +421,17 @@ type
     procedure put(i: Integer; v: Integer);
     { bytearray.extend / .append — uforth builds output buffers byte by byte }
     procedure extend(src: TPyBytes);
-    { NO .append here on purpose: TPyList.append already exists, and a second
-      class declaring the name makes EVERY `.append(...)` on a dynamically
-      typed receiver ambiguous — the same collision TPyList.get caused. Python
-      does have bytearray.append, so if a corpus needs it the answer is runtime
-      dispatch on the receiver's class, not another method on this class.
-      (filed as feature-nilpy-runtime-method-dispatch-on-variant) }
+    { bytearray.append. This comment used to say "NO .append here on purpose",
+      because a second class declaring the name made every `.append(...)` on a
+      dynamically typed receiver ambiguous — and then the method was added
+      anyway, leaving the two contradicting each other.
+      Settled 2026-08-09: the receiver's class is now decided at RUN time
+      (feature-nilpy-runtime-method-dispatch-on-variant), with TPyList as the
+      fallback arm, so the collision this warned about is handled rather than
+      avoided. }
     procedure append(v: Integer);
+    { bytes.hex() — the lowercase two-digit-per-byte form, '' for empty. }
+    function hex: AnsiString;
     { bytes.find(sub[, start]) — index of the sub-bytes at/after start (0), or -1. }
     function find(sub: TPyBytes): Integer; overload;
     function find(sub: TPyBytes; start: Integer): Integer; overload;
@@ -464,6 +507,16 @@ function repr(c: Char): AnsiString; overload;
 function repr(const v: Variant): AnsiString; overload;
 function repr(l: TPyList): AnsiString; overload;
 function repr(dc: TPyDict): AnsiString; overload;
+{ ...and a USER class instance, which had NO overload at all: a class handle
+  matched the AnsiString one and was read as a managed string, so `repr(c)`
+  answered the EMPTY string — silently, and only for a STATICALLY class-typed
+  argument. `repr([c])` was already right, because a boxed element reaches
+  pyvar_repr, and `str(c)` / `print(c)` were right because those have their own
+  class arm in the frontend. An overload rather than a frontend intrinsic, per
+  the note above: the ordinary resolution machinery does the dispatch, and
+  TPyList/TPyDict keep their exact-match overloads.
+  bug-nilpy-unsupported-protocols-repr-iter-getattr-delitem-hash }
+function repr(o: TObject): AnsiString; overload;
 { Python's repr() of a CONTAINER. print(xs) is the most natural debugging line
   in Python, and it used to print the TPyList instance POINTER — the container
   fell through to the integer path (bug-a-nilpy-print-of-a-list-prints-a-pointer).
@@ -473,6 +526,18 @@ function repr(dc: TPyDict): AnsiString; overload;
   corresponding display builds. Not "for rendering only" any more: the kind is
   what `type(x).__name__` and `isinstance` answer from, so a display that fails
   to stamp it is a wrong TYPE, not just wrong brackets. }
+{ The STARRED target of an unpack is ALWAYS a list, even when the source was a
+  tuple — `a, *b = (1,2,3)` gives b == [2, 3], not (2, 3). The slice that
+  produces it copies the source's kind (correct for an ordinary slice, where a
+  slice of a tuple IS a tuple), so the result has to be re-marked.
+  feature-nilpy-starred-and-nested-unpacking }
+function pylist_mark_list(l: TPyList): TPyList;
+function pyvar_mark_list(const v: Variant): Variant;
+{ `a, b, *c = xs` with too FEW values raises ValueError in CPython, naming how
+  many were expected. Without the check the indexed stores raise IndexError
+  instead — a different exception type, so an `except ValueError` around the
+  unpack does not catch it. }
+function pyunpack_check(have, need: Integer): Integer;
 function pylist_mark_tuple(l: TPyList): TPyList;
 function pylist_mark_set(l: TPyList): TPyList;
 { The Python type name of a sequence kind: 'list' / 'tuple' / 'set'. }
@@ -480,6 +545,11 @@ function PySeqKindName(k: Integer): AnsiString;
 { The sequence kind of a VARIANT, or -1 when it does not hold a TPyList. The
   shape isinstance() asks: it must distinguish the three kinds that share the
   row, which a class test cannot do. }
+{ 0 = a plain `bytes`, 1 = a `bytearray`, -1 = not a TPyBytes at all. The
+  bytes/bytearray twin of pyseq_kind_v, and it exists for the same reason:
+  isinstance cannot answer from the CLASS when two Python types share one.
+  bug-nilpy-bytearray-and-bytes-are-the-same-type }
+function pybytes_kind_v(const v: Variant): Integer;
 function pyseq_kind_v(const v: Variant): Integer;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
@@ -661,6 +731,20 @@ function pyos_path_isfile(const p: AnsiString): Boolean;
   leading dot is not an extension (".bashrc" -> (".bashrc", "")), and a dot in a
   directory component does not count. Pure string work, so it is exact on every
   target. Returns a TUPLE, as CPython does. }
+{ os.path.split(p) -> (head, tail), the pair os.path.dirname/basename already
+  answer separately. A TUPLE, like splitext beside it.
+  feature-nilpy-stdlib-coverage-gaps-measured }
+function pyos_path_split(const p: AnsiString): TPyList;
+{ os.path.normpath — collapse '.', '..' and repeated slashes, textually and
+  without touching the filesystem, exactly as CPython's does. }
+function pyos_path_normpath(const p: AnsiString): AnsiString;
+{ os.path.getsize — st_size, raising the same FileNotFoundError pyos_stat does
+  for a missing path rather than answering 0. }
+function pyos_path_getsize(const p: AnsiString): Int64;
+{ os.path.expanduser — a leading '~' becomes $HOME. Any other shape (including
+  '~user') is returned unchanged, which is also what CPython does when it cannot
+  resolve the user. }
+function pyos_path_expanduser(const p: AnsiString): AnsiString;
 function pyos_path_splitext(const p: AnsiString): TPyList;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
@@ -993,6 +1077,20 @@ function min(a: Double; b: Double): Double; overload;
 function max(const a: Variant; const b: Variant): Variant; overload;
 function max(a: Int64; b: Int64): Int64; overload;
 function max(a: Double; b: Double): Double; overload;
+{ min()/max() of ONE argument that is a VARIANT — a loop element, a dict value,
+  an unannotated parameter. Without these the only single-argument overload in
+  this unit was the AnsiString one, so a variant holding a LIST was read as a
+  STRING: `for row in grid: max(row)` raised "max() arg is an empty sequence"
+  while `sum(row)`, `len(row)` and `sorted(row)` on the same value were all
+  correct. Dispatches on the runtime tag, and compares with pyvar_gt so a list
+  of user objects honours __gt__/__lt__ exactly as sorted() does.
+  Declared HERE in the top block rather than beside the implementation: a
+  forward declaration dropped into the middle of the implementation section
+  disturbs this unit's resolution order, and unrelated long-standing forward
+  uses (PySliceBounds, PyVarText) started failing when it was.
+  bug-nilpy-min-max-of-a-variant-list-reads-it-as-a-string }
+function max(const v: Variant): Variant; overload;
+function min(const v: Variant): Variant; overload;
 { `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
   rather than one variant-taking function so the ordinary call path resolves
   them by argument type, like min/max (feature-nilpy-missing-builtins). }
@@ -1017,6 +1115,13 @@ function tuple(const s: AnsiString): TPyList; overload;
   was a compile error ("no overload of tuple matches"), the loud sibling of
   the silent list(b). }
 function tuple(b: TPyBytes): TPyList; overload;
+{ tuple(<variant>) — a VARIANT receiver, which is what a list element or an
+  unannotated parameter is. Without it the call bound the TPyList overload and
+  the compiler inserted an unchecked unwrap, so a variant holding a STRING was
+  reinterpreted as a list instance and `for x in ["cab"]: tuple(x)` SEGFAULTED.
+  `list` never had the bug precisely because it has this overload.
+  bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked }
+function tuple(const v: Variant): TPyList; overload;
 { pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
 { pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
@@ -1053,6 +1158,7 @@ function dict(l: TPyList): TPyDict; overload;
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
   preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
 function pydict_fromkeys(l: TPyList): TPyDict;
+function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
 { `set(iterable)` — Python's set constructor. A set is a TPyList here (see
   PyAnnTypeAt and TPyList.add), so this is "copy, skipping duplicates". The
   iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
@@ -1155,6 +1261,9 @@ function Counter(const s: AnsiString): TPyDict; overload;
   identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
 function reversed(l: TPyList): TPyList;
 function reversed(const s: AnsiString): TPyList; overload;
+{ reversed(<variant>) — a VARIANT receiver, same shape and same crash as
+  tuple(<variant>) above. }
+function reversed(const v: Variant): TPyList; overload;
 { `hex(n)` — Python spells it with the 0x prefix and lower-case digits, and
   spells a negative as -0x… rather than in two's complement. }
 function hex(n: Int64): AnsiString;
@@ -1206,6 +1315,27 @@ function pydict_or(a: TPyDict; b: TPyDict): TPyDict;
   string handle as a TPyList and scanned its header words as variant slots —
   a segfault. }
 function pystr_contains(const s: AnsiString; const sub: AnsiString): Boolean;
+{ ---- FORWARD DECLARATIONS for helpers used ABOVE their definitions --------
+  Each of these was called from a routine EARLIER in this unit with no
+  declaration of any kind. That does not fail to compile — it links to a
+  plausible wrong address
+  (project_bodyless_procaddr_links_to_entry_minus_one) — and it is a tripwire
+  twice over: such a call can pass its tests, and an unrelated declaration
+  added elsewhere can make it start failing to compile in code nobody touched
+  (PySliceBounds and PyVarText both did, 2026-08-09).
+  Declared HERE, in the top block, rather than beside each implementation: a
+  declaration dropped into the middle of the implementation section is what
+  disturbed the resolution order in the first place.
+  chore-nilpy-pylib-forward-uses-are-a-build-tripwire }
+procedure PySliceBounds(n: Integer; var lo, hi: Integer); forward;
+function PyVarIsFloat(p: PPyVarRec): Boolean; forward;
+function PyVarAsFloat(p: PPyVarRec): Double; forward;
+function PyVarText(p: PPyVarRec): AnsiString; forward;
+procedure PyPromoteIntArith(dst: Pointer; x, y: Int64; op: Integer); forward;
+function PyIntOpOverflows(x, y, r: Int64; op: Integer): Boolean; forward;
+function PyFmtExp(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
+function PyFmtG(v: Double; prec: Integer; upper: Boolean): AnsiString; forward;
+
 function pyvartag(const v: Variant): Int64;
 function pyvarobj(const v: Variant): Pointer;
 { pyvarobj plus a RETAIN. Use where the unboxed pointer is STORED into a
@@ -1216,6 +1346,25 @@ function pyvarobj(const v: Variant): Pointer;
   by `d.get(k, [])[:6]` passed to a dataclass ctor: correct at the call, garbage
   (a recycled block) by the time the field was read. }
 function pyvarobj_owned(const v: Variant): Pointer;
+{ pyvarobj for an ARGUMENT that is binding a CLASS-typed parameter, CHECKED.
+
+  Overload resolution lets a Variant argument bind a class parameter and the
+  compiler inserts an unwrap to make it fit (IRLowerCallArg, ir.inc). Unwrapping
+  with plain pyvarobj hands back the raw payload, so a variant holding a STRING
+  was reinterpreted as an instance pointer and the callee dereferenced it —
+  `tuple(v)`, `sorted(v)`, `bytes(v)`, `reversed(v)` and `sum(v)` all SEGFAULTED
+  on an ordinary `for x in ["cab"]` receiver
+  (bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked).
+
+  Deliberately a SEPARATE entry point rather than a check inside pyvarobj: the
+  runtime dispatch arms call `pyvarobj(v) is C ? ... : ...` with variants holding
+  strings and ints ON PURPOSE and need the test to come back False. Making
+  pyvarobj raise would turn every one of those chains into an exception on its
+  first non-matching arm.
+
+  None unwraps to nil, which is legitimate — passing None where a class is
+  expected is ordinary Python. }
+function pyvarobj_arg(const v: Variant): Pointer;
 { The callee address of `<variant>(args)`, CHECKED. A name bound to None — an
   optional import that did not resolve, a value never assigned — has a nil
   payload, and calling it jumped to address 0: a segfault with no diagnostic,
@@ -1274,10 +1423,30 @@ function pystr_rindex(const s: AnsiString; const sub: AnsiString): Integer;
 { str.find(sub, start): searches from `start` but reports the index in the
   ORIGINAL string, as Python does. }
 function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
+{ `s.isascii()` — every byte below 128. NilPy strings ARE byte strings, so this
+  is a plain scan and needs no codepoint model (unlike encode/decode, which is
+  parked on one — bug-nilpy-encode-ignores-the-codec). CPython answers True for
+  the EMPTY string, unlike isspace/isdigit/isalpha which answer False, because
+  "all characters are ascii" is vacuously true where "is a digit" is not.
+  feature-nilpy-str-surface-gaps-2026-08-09 }
+function pystr_isascii(const s: AnsiString): Boolean;
+{ str.maketrans(frm, to) — CPython's table is a DICT keyed by the ORDINAL of
+  each source character, valued by the ordinal of its replacement. Modelled
+  exactly, so `print(str.maketrans("lo","01"))` shows `{108: 48, 111: 49}` like
+  CPython and a hand-written dict literal works as a table too.
+  feature-nilpy-str-surface-gaps-2026-08-09 }
+function pystr_maketrans(const frm: AnsiString; const t: AnsiString): TPyDict;
+{ str.translate(table) — map each byte through the table. A missing key leaves
+  the character alone; an INT value is a replacement ordinal, a STRING value is
+  substituted whole (CPython allows a multi-character replacement), and None
+  DELETES the character. }
+function pystr_translate(const s: AnsiString; t: TPyDict): AnsiString;
 function pystr_isspace(const s: AnsiString): Boolean;
 { CPython: "".isdigit()/.isalpha()/.isupper()/.islower() are all FALSE — the
   all-quantifier does not hold vacuously for any of them. }
 function pystr_isdigit(const s: AnsiString): Boolean;
+function pystr_isnumeric(const s: AnsiString): Boolean;
+function pystr_istitle(const s: AnsiString): Boolean;
 function pystr_isalpha(const s: AnsiString): Boolean;
 function pystr_isupper(const s: AnsiString): Boolean;
 function pystr_islower(const s: AnsiString): Boolean;
@@ -1324,6 +1493,15 @@ function pystr_rfind_from(const s, sub: AnsiString; a: Integer): Integer;
 function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
 function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
 function pystr_startswith_range(const s, pre: AnsiString; a, b: Integer): Boolean;
+{ `s.startswith(("a", "b"))` — Python accepts a TUPLE of prefixes and answers
+  True if ANY matches. The argument arrives as a Variant so one entry point
+  covers a tuple literal, a tuple-typed local and a variant that only turns out
+  to hold one at run time; a plain string still answers as the ordinary form
+  does. Used only when the argument is NOT statically a string, so the common
+  `sys.platform.startswith("win")` path is unchanged.
+  bug-nilpy-startswith-endswith-ignore-a-tuple-argument }
+function pystr_startswith_any(const s: AnsiString; const v: Variant): Boolean;
+function pystr_endswith_any(const s: AnsiString; const v: Variant): Boolean;
 function pystr_endswith_from(const s, suf: AnsiString; a: Integer): Boolean;
 function pystr_endswith_range(const s, suf: AnsiString; a, b: Integer): Boolean;
 { str.rfind(sub) — last occurrence, -1 when absent. }
@@ -1616,6 +1794,45 @@ begin
   pystr_isupper := cased;
 end;
 
+function pystr_isnumeric(const s: AnsiString): Boolean;
+{ For the ASCII range this is str.isdigit's answer; the two differ only on
+  characters NilPy has no representation for anyway (Unicode fractions, Roman
+  numerals and the like), and pxx strings are bytes. Kept as its own routine
+  rather than aliased at the call site so the divergence has one place to be
+  recorded — and fixed — when wide strings arrive.
+  Empty string is False, as in CPython. }
+begin
+  pystr_isnumeric := pystr_isdigit(s);
+end;
+
+function pystr_istitle(const s: AnsiString): Boolean;
+{ Titlecase: every run of letters starts with an uppercase and continues
+  lowercase, and there is at least one letter. Non-letters separate runs, so
+  "Hello, World" and "A1b"->False are the cases that pin it. CPython answers
+  False for a string with no cased characters at all. }
+var i: Integer; prevCased, seenCased: Boolean;
+begin
+  prevCased := False;
+  seenCased := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] in ['A'..'Z'] then
+    begin
+      if prevCased then begin pystr_istitle := False; Exit; end;
+      prevCased := True;
+      seenCased := True;
+    end
+    else if s[i] in ['a'..'z'] then
+    begin
+      if not prevCased then begin pystr_istitle := False; Exit; end;
+      seenCased := True;
+    end
+    else
+      prevCased := False;
+  end;
+  pystr_istitle := seenCased;
+end;
+
 function pystr_islower(const s: AnsiString): Boolean;
 var i: Integer; cased: Boolean;
 begin
@@ -1638,6 +1855,54 @@ begin
     if not PyIsSpaceCh(s[i]) then begin Result := False; Exit; end;
   Result := True;
 end;
+
+function pystr_isascii(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  { EMPTY is True here — CPython's rule, and the opposite of the sibling
+    predicates above, so it is stated rather than inherited. }
+  Result := True;
+  for i := 1 to Length(s) do
+    if Ord(s[i]) > 127 then begin Result := False; Exit; end;
+end;
+function pystr_maketrans(const frm: AnsiString; const t: AnsiString): TPyDict;
+var d: TPyDict; i, n: Integer;
+begin
+  d := TPyDict.Create;
+  n := Length(frm);
+  { CPython raises when the two arguments differ in length; matching that keeps
+    a silently truncated table from being built. }
+  if n <> Length(t) then
+    raise ValueError.Create(
+      'the first two maketrans arguments must have equal length');
+  for i := 1 to n do
+    d.store(Ord(frm[i]), Ord(t[i]));
+  Result := d;
+end;
+
+function pystr_translate(const s: AnsiString; t: TPyDict): AnsiString;
+var i: Integer; k, v: Variant; tag: Int64;
+begin
+  Result := '';
+  if t = nil then begin Result := s; Exit; end;
+  for i := 1 to Length(s) do
+  begin
+    k := Ord(s[i]);
+    if not pydictcontains(t, k) then
+    begin
+      Result := Result + s[i];        { absent: unchanged }
+      Continue;
+    end;
+    v := t.fetch(k);
+    tag := pyvartag(v);
+    if tag = 0 then Continue;         { None: DELETE the character }
+    if tag = 6 then                   { a string replacement, possibly >1 char }
+      Result := Result + VariantToStr(v)   { not PyVarText — see pystr_startswith_any }
+    else
+      Result := Result + Chr(pyvar_to_int(v) and 255);
+  end;
+end;
+
 
 function pyvartag(const v: Variant): Int64;
 begin
@@ -1994,6 +2259,65 @@ begin
   if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
 end;
 
+function pystr_startswith_any(const s: AnsiString; const v: Variant): Boolean;
+var p: PPyVarRec; o: TObject; k: Integer; e: Variant;
+begin
+  Result := False;
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    if o is TPyList then
+    begin
+      for k := 0 to TPyList(o).count - 1 do
+      begin
+        e := TPyList(o).at(k);
+        if pystr_startswith(s, VariantToStr(e)) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+      Exit;
+    end;
+    Exit;
+  end;
+  { not a sequence: an ordinary single prefix.
+    VariantToStr, NOT PyVarText: PyVarText is defined ~3000 lines below and a
+    forward use in this unit does not fail to compile — it links to a plausible
+    wrong address (project_bodyless_procaddr_links_to_entry_minus_one). These
+    three sites were added earlier the same night and passed their tests by
+    luck; adding an unrelated forward declaration later made the compiler
+    finally reject them, which is how the latent bug surfaced. }
+  Result := pystr_startswith(s, VariantToStr(v));
+end;
+
+function pystr_endswith_any(const s: AnsiString; const v: Variant): Boolean;
+var p: PPyVarRec; o: TObject; k: Integer; e: Variant;
+begin
+  Result := False;
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    if o is TPyList then
+    begin
+      for k := 0 to TPyList(o).count - 1 do
+      begin
+        e := TPyList(o).at(k);
+        if pystr_endswith(s, VariantToStr(e)) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+      Exit;
+    end;
+    Exit;
+  end;
+  Result := pystr_endswith(s, VariantToStr(v));   { see startswith's note }
+end;
+
 function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
 begin
   Result := pystr_startswith(pystr_slice(s, a, PY_SLICE_OMIT), pre);
@@ -2245,6 +2569,17 @@ begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
+function pyvarobj_arg(const v: Variant): Pointer;
+begin
+  { tag 7 = VT_OBJECT; tag 0 = VT_EMPTY, i.e. None, which unwraps to nil }
+  if (pyvartag(v) = 7) or (pyvartag(v) = 0) then
+  begin
+    Result := Pointer(PPyVarRec(@v)^.Payload);
+    Exit;
+  end;
+  raise TypeError.Create('expected an object argument, got ' + pytype_name_v(v));
+end;
+
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
 var nm: AnsiString;
 begin
@@ -2384,7 +2719,10 @@ begin
     Result := PySeqKindName(TPyList(o).FKind);
   end
   else if o is TPyDict then Result := 'dict'
-  else if o is TPyBytes then Result := 'bytes'
+  else if o is TPyBytes then
+  begin
+    if TPyBytes(o).FIsByteArray then Result := 'bytearray' else Result := 'bytes';
+  end
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -2802,6 +3140,72 @@ begin
   Result := Self;
 end;
 
+function TPyList.setupdate(other: TPyList): Variant;
+var i: Integer;
+begin
+  Result := pynone;                  { Python's set.update returns None }
+  if (Self = nil) or (other = nil) then Exit;
+  for i := 0 to other.count - 1 do
+    Self.add(other.at(i));
+end;
+
+function TPyList.setintersect(other: TPyList): Variant;
+var i: Integer; snap: TPyList; v: Variant;
+begin
+  Result := pynone;
+  if (Self = nil) or (other = nil) then Exit;
+  { snapshot Self's elements first: removing renumbers them, so a straight
+    index walk over Self would skip the element after every removal }
+  snap := TPyList.Create;
+  for i := 0 to Self.count - 1 do snap.append(Self.at(i));
+  for i := 0 to snap.count - 1 do
+  begin
+    v := snap.at(i);
+    if not pycontains(other, v) then Self.remove(v);
+  end;
+end;
+
+function TPyList.setsymdiff(other: TPyList): Variant;
+var i: Integer; snapSelf, snapOther: TPyList; v: Variant;
+begin
+  Result := pynone;
+  if (Self = nil) or (other = nil) then Exit;
+  { BOTH sides are snapshotted: the common elements leave Self and the
+    other-only ones join it, and each decision must be made against the sets as
+    they were, not as they are becoming. `s ^= s` must end EMPTY, which is the
+    case that catches doing it in one pass. }
+  snapSelf := TPyList.Create;
+  for i := 0 to Self.count - 1 do snapSelf.append(Self.at(i));
+  snapOther := TPyList.Create;
+  for i := 0 to other.count - 1 do snapOther.append(other.at(i));
+  for i := 0 to snapSelf.count - 1 do
+  begin
+    v := snapSelf.at(i);
+    if pycontains(snapOther, v) then Self.remove(v);
+  end;
+  for i := 0 to snapOther.count - 1 do
+  begin
+    v := snapOther.at(i);
+    if not pycontains(snapSelf, v) then Self.add(v);
+  end;
+end;
+
+function TPyList.setdiff(other: TPyList): Variant;
+var i: Integer; snapOther: TPyList; v: Variant;
+begin
+  Result := pynone;
+  if (Self = nil) or (other = nil) then Exit;
+  { snapshot the OTHER side, so `s -= s` (same object) does not shrink the list
+    it is iterating }
+  snapOther := TPyList.Create;
+  for i := 0 to other.count - 1 do snapOther.append(other.at(i));
+  for i := 0 to snapOther.count - 1 do
+  begin
+    v := snapOther.at(i);
+    if pycontains(Self, v) then Self.remove(v);
+  end;
+end;
+
 function TPyList.at(i: Integer): Variant;
 var
   src, dst: PPyVarRec;
@@ -2822,9 +3226,19 @@ begin
   PyVarSlotSet(dst, src);
 end;
 
+{ Both pops CLEAR the slot they vacate. Lowering FLen over a slot that still
+  holds a reference leaves an alias nothing counts, and the next append writes
+  exactly there — PyVarSlotSet releases whatever the slot held on its way in.
+  For pop() that was merely a leak the next append happened to collect; for
+  pop_at() it was CORRUPTION, because the raw shift below moved a LIVE element
+  into the list while leaving its unbacked duplicate at the tail. The next
+  append then released a live element: `[A, B]` -> `pop(0)` -> `append(x)` gave
+  `[(), x]`, and uforth's CS-ROLL turned a control-flow entry into an empty
+  tuple mid-compile (bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element). }
 function TPyList.pop: Variant;
 begin
-  Result := at(FLen - 1);
+  Result := at(FLen - 1);                  { the caller's +1 }
+  PyVarSlotClear(PPyVarRec(NativeInt(FItems) + (FLen - 1) * 16));
   FLen := FLen - 1;
 end;
 
@@ -2836,17 +3250,16 @@ end;
 function TPyList.pop_at(i: Integer): Variant;
 var
   k: Integer;
-  src, dst: PPyVarRec;
 begin
   i := PyListFix(Self, i);
-  Result := at(i);
+  Result := at(i);                         { the caller's +1 }
+  { A COUNTED shift, the same idiom pylist_del_slice uses: put/at retain the
+    value into its new slot and release the old occupant, so no slot is ever
+    an alias the refcount does not know about. The raw VType/Payload copy this
+    replaced was the whole bug. }
   for k := i to FLen - 2 do
-  begin
-    src := PPyVarRec(NativeInt(FItems) + (k + 1) * 16);
-    dst := PPyVarRec(NativeInt(FItems) + k * 16);
-    dst^.VType := src^.VType;
-    dst^.Payload := src^.Payload;
-  end;
+    put(k, at(k + 1));
+  PyVarSlotClear(PPyVarRec(NativeInt(FItems) + (FLen - 1) * 16));
   FLen := FLen - 1;
 end;
 
@@ -2993,6 +3406,20 @@ begin
   Result := pyset_sub(Self, other);
 end;
 
+function TPyList.symmetric_difference(other: TPyList): TPyList;
+begin
+  Result := pyset_xor(Self, other);
+end;
+
+function TPyList.isdisjoint(other: TPyList): Boolean;
+var r: TPyList;
+begin
+  { "no element in common" — the intersection being empty. Python accepts ANY
+    iterable here, and a list IS the set representation, so no kind check. }
+  r := pyset_and(Self, other);
+  Result := (r = nil) or (r.count = 0);
+end;
+
 procedure TPyList.discard(const v: Variant);
 begin
   if Self = nil then Exit;
@@ -3007,12 +3434,46 @@ end;
   compare by CONTENT — a dict keyed by str is keyed by the TEXT, not by which
   copy of it you happen to be holding — and everything else compares tag and
   payload. }
+{ `a.__eq__(b)` on a USER class instance reached only as a boxed handle. Same
+  runtime dunder lookup PyUserObjStr uses for __repr__/__str__; implemented
+  beside it and forward-declared here because PyVarEq is the only caller and
+  sits far above it. Answers False in `handled` when the class defines no usable
+  __eq__, so PyVarEq keeps its identity result.
+  bug-nilpy-container-membership-ignores-the-eq-dunder }
+function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean; forward;
+{ `a.__hash__()` on the same boxed handle — the consistency partner of the
+  above. False when the class defines no usable __hash__, leaving the caller's
+  identity hash. }
+function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
+{ `a > b` for two user objects, via __gt__ or the reflected __lt__ — what
+  .sort()/sorted() need. False when neither exists, leaving pyvar_gt's existing
+  numeric path (and its TypeError) alone.
+  bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
+function PyUserObjGt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean; forward;
+{ `a < b` for two user objects: __lt__, or the reflected __gt__. }
+function PyUserObjLt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean; forward;
+{ `divmod(a, b)` via __divmod__ / the reflected __rdivmod__, answering the
+  2-tuple. False when neither exists. }
+function PyUserObjDivmod(pobj, qobj: TObject; const pv, qv: Variant;
+                         var res: TObject): Boolean; forward;
+{ `a <op> b` for two user objects via an arithmetic dunder and its reflected
+  form — what a VARIANT-typed operand needs, since the compile-time dispatch
+  keys on a static class the operand does not have.
+  bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+function PyUserObjArith(pobj, qobj: TObject; const pv, qv: Variant;
+                        const dunder, rdunder: AnsiString;
+                        var res: Variant): Boolean; forward;
+
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
   la, lb: Int64;
   a, b: PChar;
   pl, ql: TObject;
+  userEq: Boolean;
 begin
   Result := False;
   { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
@@ -3084,7 +3545,19 @@ begin
         was False while the list-valued `{"n": [1, 2]}` form was already True.
         Mutually recursive with pydict_eq, which is why that one is
         forward-declared. }
-      Result := pydict_eq(TPyDict(pl), TPyDict(ql));
+      Result := pydict_eq(TPyDict(pl), TPyDict(ql))
+    else
+      { Neither is one of this unit's containers, so they may be USER class
+        instances with an `__eq__`. Identity above already settled the equal
+        case; without this arm an equal-but-DISTINCT pair reported False, so
+        `H(3) in [H(1), H(3)]` was False while the bare `H(3) == H(3)` was True
+        — the operator path dispatches at COMPILE time on the static class, and
+        a container element has no static class for that to key on.
+
+        Every value comparison in this unit funnels through PyVarEq, so fixing
+        it here is what also fixes .index(), .count(), .remove() and `not in`.
+        bug-nilpy-container-membership-ignores-the-eq-dunder }
+      if PyUserObjEq(pl, ql, PVariant(q)^, userEq) then Result := userEq;
     Exit;
   end;
   if p^.VType = 8193 then
@@ -3299,9 +3772,23 @@ begin
 end;
 
 procedure PyKeyError;
-{ RAISE — see PyIndexError. }
+{ RAISE — see PyIndexError. The keyless form, for callers with no key to hand. }
 begin
   raise KeyError.Create('key not found');
+end;
+
+procedure PyKeyError(const k: Variant); overload;
+{ The same, naming the KEY — which is the entire content of a KeyError. The
+  fixed text 'key not found' said nothing: every real "which key?" question had
+  to be answered by adding a print.
+
+  pyvar_repr, not pystr_of, and that is not a detail: CPython's KeyError is the
+  one builtin exception whose str() is the REPR of its argument, so a missing
+  string key reports 'nope' WITH the quotes. Using the repr here makes the
+  message match CPython's for free, and keeps an int key unquoted the way
+  CPython does. }
+begin
+  raise KeyError.Create(pyvar_repr(k));
 end;
 
 constructor TPyDict.Create;
@@ -3422,6 +3909,18 @@ begin
                              Integer(PInt64(NativeInt(p^.Payload) - 8)^));
   end
   else if (p^.VType = 7) and (p^.Payload <> 0) and
+          PyUserObjHash(TObject(Pointer(NativeInt(p^.Payload))), h) then
+  begin
+    { a USER class's own __hash__. Required for consistency the moment PyVarEq
+      started consulting __eq__: equal keys MUST hash equal, and two distinct
+      but __eq__-equal objects hashed by their HANDLES land in different
+      buckets, so `d[K(1)]` missed the key `K(1)` inserted. A class defining
+      __eq__ and NOT __hash__ is UNHASHABLE in CPython (TypeError), so the only
+      programs affected are the ones that define both — which is exactly the
+      pair this reads.
+      bug-nilpy-container-membership-ignores-the-eq-dunder }
+  end
+  else if (p^.VType = 7) and (p^.Payload <> 0) and
           (TObject(Pointer(NativeInt(p^.Payload))) is TPyList) then
   begin
     { sequence hash over the elements, seeded by the length — the same shape
@@ -3520,7 +4019,7 @@ begin
       Result := 0;
       exit;
     end;
-    PyKeyError;
+    PyKeyError(k);
   end;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
@@ -3618,7 +4117,7 @@ var
 begin
   Result := pynone;   { Python's in-place mutators return None }
   i := indexof(k);
-  if i < 0 then PyKeyError;
+  if i < 0 then PyKeyError(k);
   for j := i to FLen - 2 do
   begin
     src := PPyVarRec(NativeInt(FKeys) + (j + 1) * 16);
@@ -3674,7 +4173,7 @@ function TPyDict.pop(const k: Variant): Variant;
 var i: Integer; src, dst: PPyVarRec;
 begin
   i := indexof(k);
-  if i < 0 then PyKeyError;
+  if i < 0 then PyKeyError(k);
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);
@@ -3741,6 +4240,7 @@ var pa, pb: PPyVarRec;
     ea, eb: Variant;
     oa, ob: TObject;
     pg: Integer;
+    pg2: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   { Two SEQUENCES compare LEXICOGRAPHICALLY: the first index where the elements
@@ -3771,6 +4271,19 @@ begin
         end;
       end;
       pyvar_gt := la > lb;
+      Exit;
+    end;
+    { Two USER objects: their own __gt__, or the reflected __lt__. Without this
+      both fell through to pyvar_to_int and `pts.sort()` over a class defining
+      __lt__ died with "expected a number, got object" — a runtime TypeError for
+      the single most idiomatic way to make a class sortable.
+      The bare `Point(1,1) < Point(1,2)` EXPRESSION already dispatched, because
+      that path keys on the operands' static class at compile time; a sort
+      compares two boxed variants with no static class to key on.
+      bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
+    if PyUserObjGt(oa, ob, b, pg2) then
+    begin
+      pyvar_gt := pg2;
       Exit;
     end;
   end;
@@ -3964,6 +4477,56 @@ begin
     if s[i] > best then best := s[i];
   Result := best;
 end;
+function max(const v: Variant): Variant; overload;
+var o: TObject; i: Integer; e: Variant; n: Integer;
+begin
+  if pyvartag(v) = 6 then
+  begin
+    { a str iterates its CHARACTERS, as the AnsiString overload above does.
+      VariantToStr rather than PyVarText: PyVarText is defined ~1000 lines
+      BELOW here, and a forward use in this unit links to a plausible wrong
+      address rather than failing to compile. }
+    Result := max(VariantToStr(v));
+    Exit;
+  end;
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('max() argument is not iterable');
+  o := TObject(pyvarobj(v));
+  if (o = nil) or (not (o is TPyList)) then
+    raise TypeError.Create('max() argument is not iterable');
+  n := TPyList(o).count;
+  if n = 0 then raise ValueError.Create('max() arg is an empty sequence');
+  Result := TPyList(o).at(0);
+  for i := 1 to n - 1 do
+  begin
+    e := TPyList(o).at(i);
+    if pyvar_gt(e, Result) then Result := e;
+  end;
+end;
+
+function min(const v: Variant): Variant; overload;
+var o: TObject; i: Integer; e: Variant; n: Integer;
+begin
+  if pyvartag(v) = 6 then
+  begin
+    Result := min(VariantToStr(v));   { see max's note on PyVarText }
+    Exit;
+  end;
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('min() argument is not iterable');
+  o := TObject(pyvarobj(v));
+  if (o = nil) or (not (o is TPyList)) then
+    raise TypeError.Create('min() argument is not iterable');
+  n := TPyList(o).count;
+  if n = 0 then raise ValueError.Create('min() arg is an empty sequence');
+  Result := TPyList(o).at(0);
+  for i := 1 to n - 1 do
+  begin
+    e := TPyList(o).at(i);
+    if pyvar_gt(Result, e) then Result := e;
+  end;
+end;
+
 
 function min(const s: AnsiString): AnsiString;
 var i: Integer; best: Char;
@@ -4045,6 +4608,25 @@ begin
   Result := d;
 end;
 
+{ dict.fromkeys(iterable, value) — the two-argument form, which fills every key
+  with the SAME value rather than None. A genuine Pascal OVERLOAD: the stdlib
+  call site re-targets by ARITY via FindProcArity, which is exactly the route
+  its own comment recommends ("declare a 3-argument overload like any Pascal
+  routine"). Type-based selection would still not be reachable that way, but
+  arity is all this needs.
+  Note CPython shares ONE value object across all the keys — it does not copy
+  it — so a mutable fill is aliased by every key. Storing the same variant is
+  exactly that behaviour, not a shortcut. }
+function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
+var d: TPyDict; i: Integer;
+begin
+  d := TPyDict.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      d.store(l.at(i), v);
+  Result := d;
+end;
+
 { ---- collections.Counter ------------------------------------------------- }
 
 function TPyDict.update(l: TPyList): Variant;
@@ -4071,6 +4653,21 @@ begin
       end;
     end;
   end;
+end;
+
+function TPyDict.update(const v: Variant): Variant;
+var o: TObject;
+begin
+  Result := pynone;
+  if Self = nil then Exit;
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
+  o := TObject(pyvarobj(v));
+  if o = nil then Exit;
+  if o is TPyDict then Result := Self.update(TPyDict(o))
+  else if o is TPyList then Result := Self.update(TPyList(o))
+  else
+    raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
 end;
 
 { CPython's Counter.update(mapping) ADDS the mapping's values; a plain dict's
@@ -4357,6 +4954,19 @@ end;
   be far past the end. A smaller handle would have silently indexed the WRONG
   element, which is the shape this dunder family keeps producing
   (bug-nilpy-missing-index-dunder-raises-indexerror-not-typeerror). }
+function PyNotSubscriptable(const clsName: AnsiString): Int64;
+{ `w["x"]` on a class that declares no __getitem__. CPython raises TypeError at
+  RUN time, so this must too — a compile error would reject the ordinary
+  `try: obj[k] / except TypeError:` probe, which is valid Python.
+
+  A FUNCTION returning Int64 for the same reason PyIndexTypeError is one: it
+  stands in for the whole subscript EXPRESSION at the call site.
+  bug-nilpy-subscript-read-without-getitem-yields-garbage }
+begin
+  raise TypeError.Create('''' + clsName + ''' object is not subscriptable');
+  PyNotSubscriptable := 0;   { unreachable }
+end;
+
 function PyIndexTypeError(const seqKind: AnsiString;
                           const clsName: AnsiString): Int64;
 begin
@@ -4412,10 +5022,31 @@ begin
 end;
 
 { `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
-  -- CPython's own error shape ("does not support item assignment"). }
-procedure PyNoSetitemError;
+  -- CPython's own error shape, class name and all:
+  `'ReadOnly' object does not support item assignment`.
+
+  It used to say "object does not support item assignment (no __setitem__)",
+  naming the DUNDER instead of the class — implementation-facing, and backwards
+  for a diagnostic a user meets while debugging a write. Its own sibling on the
+  READ side already named the class, so the two halves of one feature disagreed
+  and the worse-reading half was the one a write reached
+  (bug-nilpy-nosetitem-error-does-not-name-the-class). }
+procedure PyNoSetitemError(const cls: AnsiString);
 begin
-  raise TypeError.Create('object does not support item assignment (no __setitem__)');
+  if cls = '' then
+    raise TypeError.Create('object does not support item assignment');
+  raise TypeError.Create('''' + cls + ''' object does not support item assignment');
+end;
+
+{ `del obj[i]` where obj's class defines no `__delitem__` -- CPython's own error
+  shape. A raise rather than a compile error, so a try/except around it builds,
+  same reasoning as PyNoSetitemError above.
+  bug-nilpy-delitem-dunder-not-supported }
+procedure PyNoDelitemError(const cls: AnsiString);
+begin
+  if cls = '' then
+    raise TypeError.Create('object does not support item deletion');
+  raise TypeError.Create('''' + cls + ''' object does not support item deletion');
 end;
 
 function pyvar_to_int(const v: Variant): Int64;
@@ -4610,6 +5241,17 @@ var
   src, rep: TPyList;
   k, cnt, li: Integer;
 begin
+  { A USER class operand: its own __mul__, or the reflected __rmul__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__mul__', '__rmul__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A SEQUENCE repeats too — `[0] * n` is how Python allocates a fixed-size
@@ -4693,6 +5335,17 @@ function PyMathLn(x: Double): Double;
 const Ln2 = 0.6931471805599453;
 var e: Integer; m, t, tt, term, sum: Double; i: Integer;
 begin
+  { A DOMAIN GUARD, and it is what stops an infinite loop rather than merely
+    reporting one: the normalising loop below is `while m < 1.0 do m := m * 2.0`,
+    and for any x <= 0 that condition can never become false — 0 doubles to 0
+    and a negative doubles away from 1 forever. So `math.log(0)` and every
+    caller that reaches here with a non-positive value HUNG, producing no
+    output and no diagnostic.
+    CPython raises ValueError('math domain error') for log of a non-positive,
+    and this is the same message.
+    bug-nilpy-pow-and-log-hang-on-a-non-positive-base }
+  if x <= 0.0 then
+    raise ValueError.Create('math domain error');
   e := 0; m := x;
   while m >= 2.0 do begin m := m / 2.0; Inc(e); end;
   while m < 1.0 do begin m := m * 2.0; Dec(e); end;
@@ -4766,6 +5419,17 @@ var pa, pb, r: PPyVarRec;
     it: Int64; ovf: Boolean;   { overflow watch on the machine-word loop }
     fr, fbase, fexp: Double; negExp: Boolean;
 begin
+  { A USER class operand: its own __pow__, or the reflected __rpow__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__pow__', '__rpow__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   if (not PyVarIsFloat(pa)) and (not PyVarIsFloat(pb)) and
      (pyvar_to_int(b) >= 0) then
@@ -4806,6 +5470,30 @@ begin
   fexp := pyvar_to_float(b);
   if (fbase = 0.0) and (fexp < 0.0) then
     raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+  { ZERO to a POSITIVE power is 0.0 — CPython's answer, and it has to be
+    settled HERE because the fractional-exponent path below goes through
+    PyMathLn, whose normalising loop never terminates for a non-positive
+    argument. `0 ** 0.5` therefore HUNG: no output, no diagnostic, and about as
+    ordinary an expression as there is.
+    bug-nilpy-pow-and-log-hang-on-a-non-positive-base }
+  if (fbase = 0.0) and (fexp > 0.0) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := 0.0;
+    Exit;
+  end;
+  { A NEGATIVE base with a FRACTIONAL exponent is a COMPLEX number in CPython
+    ((-8) ** (1/3) is 1.0000000000000002+1.7320508075688772j). NilPy has no
+    complex type, so the honest answer is a named refusal rather than a real
+    number that is not the answer — and certainly rather than the hang this
+    used to be, for the same PyMathLn reason as above. An INTEGER exponent is
+    unaffected and still goes down the repeated-squaring path below, which is
+    where every ordinary `(-2) ** 3` lands.
+    Complex support is filed as bug-nilpy-no-complex-number-type. }
+  if (fbase < 0.0) and (Frac(fexp) <> 0.0) then
+    raise ValueError.Create(
+      'a negative number raised to a fractional power is complex, '
+      + 'which NilPy does not have');
   if Frac(fexp) = 0.0 then
   begin
     negExp := fexp < 0.0;
@@ -4826,7 +5514,33 @@ begin
 end;
 
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
+var pa, pb: PPyVarRec; oa, ob, r: TObject;
 begin
+  { A USER class first: `divmod(M(7), M(3))` used to reach pyfloordiv_v with two
+    object handles and die with runtime error 219 (a bad cast) rather than
+    calling __divmod__ or raising. Both operands must be objects for the dunder
+    to be the right answer; a mixed pair falls through to the numeric path, and
+    CPython's own reflected rule is covered by trying __rdivmod__ on b.
+    feature-nilpy-arithmetic-dunders-full-protocol }
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if (pa^.VType = 7) and (pb^.VType = 7) and
+     (pa^.Payload <> 0) and (pb^.Payload <> 0) then
+  begin
+    oa := TObject(Pointer(NativeInt(pa^.Payload)));
+    ob := TObject(Pointer(NativeInt(pb^.Payload)));
+    if not ((oa is TPyList) or (oa is TPyDict) or (oa is TPyBytes)) then
+    begin
+      if PyUserObjDivmod(oa, ob, a, b, r) then
+      begin
+        pydivmod_v := TPyList(r);
+        Exit;
+      end;
+      { an object with no __divmod__ is a TypeError in CPython, and used to be
+        a runtime-219 crash here }
+      raise TypeError.Create(
+        'unsupported operand type(s) for divmod() (no __divmod__/__rdivmod__)');
+    end;
+  end;
   Result := TPyList.Create;
   Result.FKind := PYSEQ_TUPLE;
   Result.append(pyfloordiv_v(a, b));
@@ -4854,6 +5568,17 @@ var
   pa, pb, r: PPyVarRec;
   dv: Double;
 begin
+  { A USER class operand: its own __floordiv__, or the reflected __rfloordiv__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__floordiv__', '__rfloordiv__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -4885,6 +5610,17 @@ var
   pa, pb, r: PPyVarRec;
   dv: Double;
 begin
+  { A USER class operand: its own __mod__, or the reflected __rmod__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__mod__', '__rmod__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A str LEFT operand makes `%` printf-style FORMATTING, not modulo — the
@@ -5019,6 +5755,17 @@ var pa, pb, r: PPyVarRec; concat: AnsiString;
     oa, ob: TObject; joined: TPyList; ji: Integer;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  { A USER class operand: its own __add__, or the reflected __radd__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__add__', '__radd__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { list + list -> a NEW list holding both, like Python. `xs += ys` is separate
@@ -5111,6 +5858,17 @@ function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
+  { A USER class operand: its own __sub__, or the reflected __rsub__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__sub__', '__rsub__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -5139,6 +5897,17 @@ end;
 
 function pymod_v(const a: Variant; const b: Variant): Variant;
 begin
+  { A USER class operand: its own __mod__, or the reflected __rmod__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__mod__', '__rmod__', Result) then Exit;
   Result := pyfloormod_v(a, b);
 end;
 
@@ -5224,7 +5993,7 @@ end;
 
 function pycmp_v(const a: Variant; const b: Variant): Int64;
 var pa, pb: PPyVarRec; sa, sb: AnsiString; fa, fb: Double; ia, ib: Int64;
-    oa, ob: TObject; pc: Integer;
+    oa, ob: TObject; pc: Integer; cmpB: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   if (pa^.VType = 7) and (pb^.VType = 7) then
@@ -5233,6 +6002,28 @@ begin
     if (oa is TPyList) and (ob is TPyList) then
     begin
       Result := pylist_cmp(TPyList(oa), TPyList(ob));
+      Exit;
+    end;
+    { a USER class's own ordering. pycmp_v owes -1/0/1, so BOTH directions are
+      asked: `__lt__` (or the reflected `__gt__`) decides less-than, and only if
+      that is False is greater-than asked. A class declaring just one of the two
+      still answers correctly, because each helper falls back to the other
+      operand's mirror dunder — which is the common case, since Python's
+      ordering protocol only requires __lt__.
+      Without this, `lhs < p` on two VARIANT-typed operands raised while the
+      statically-typed spelling worked.
+      bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+    if PyUserObjLt(oa, ob, b, cmpB) then
+    begin
+      if cmpB then begin Result := -1; Exit; end;
+      if PyUserObjGt(oa, ob, b, cmpB) then
+        if cmpB then begin Result := 1; Exit; end;
+      Result := 0;
+      Exit;
+    end;
+    if PyUserObjGt(oa, ob, b, cmpB) then
+    begin
+      if cmpB then Result := 1 else Result := 0;
       Exit;
     end;
     { any other object pair: no ordering defined, and reading the handles as
@@ -5282,6 +6073,17 @@ end;
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
 var r: PPyVarRec; da, db: Double;
 begin
+  { A USER class operand: its own __truediv__, or the reflected __rtruediv__. The
+    compile-time dispatch in the parser keys on a STATIC class, which a variant
+    operand does not have, so without this the operands fell through to the
+    numeric path and raised "expected a number, got object" for a dunder the
+    program plainly declares. Placed FIRST so a user class can override even the
+    list/str arms below, matching Python's own precedence.
+    bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
+     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
+    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
+                      '__truediv__', '__rtruediv__', Result) then Exit;
   { pyvar_to_float RAISES TypeError for a str/list/dict/None tag, so the
     coercion is the type check — there is no arm that reads a handle as a
     number. Divisor first is deliberate only in that both must be numbers
@@ -5647,26 +6449,40 @@ end;
 function bytearray: TPyBytes; overload;
 begin
   Result := TPyBytes.Create(0);
+  Result.FIsByteArray := True;
 end;
 
 function bytearray(n: Integer): TPyBytes; overload;
 begin
   Result := TPyBytes.Create(n);
+  Result.FIsByteArray := True;
 end;
 
 function bytearray(b: TPyBytes): TPyBytes; overload;
 var i: Integer;
 begin
-  if b = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  if b = nil then
+  begin
+    Result := TPyBytes.Create(0);
+    Result.FIsByteArray := True;
+    Exit;
+  end;
   Result := TPyBytes.Create(b.FLen);
+  Result.FIsByteArray := True;
   for i := 0 to b.FLen - 1 do Result.put(i, b.at(i));
 end;
 
 function bytearray(l: TPyList): TPyBytes; overload;
 var i: Integer; v: Int64;
 begin
-  if l = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  if l = nil then
+  begin
+    Result := TPyBytes.Create(0);
+    Result.FIsByteArray := True;
+    Exit;
+  end;
   Result := TPyBytes.Create(l.count);
+  Result.FIsByteArray := True;
   for i := 0 to l.count - 1 do
   begin
     v := pyvar_to_int(l.at(i));
@@ -5789,6 +6605,7 @@ var i, k, cnt: Integer; src, dst: PByte;
 begin
   cnt := PySliceBoundsStep(b.FLen, lo, hi, step);
   Result := TPyBytes.Create(cnt);
+  if b <> nil then Result.FIsByteArray := b.FIsByteArray;   { see pybytes_slice }
   i := lo;
   for k := 0 to cnt - 1 do
   begin
@@ -5822,6 +6639,10 @@ var k: Integer; src, dst: PByte;
 begin
   PySliceBounds(b.FLen, lo, hi);
   Result := TPyBytes.Create(hi - lo);
+  { a slice of a bytearray is a BYTEARRAY, of bytes is bytes — the tag has to
+    travel with every operation that builds a new buffer from an old one, or it
+    is lost at the first slice. bug-nilpy-bytearray-and-bytes-are-the-same-type }
+  if b <> nil then Result.FIsByteArray := b.FIsByteArray;
   for k := 0 to (hi - lo) - 1 do
   begin
     src := PByte(NativeInt(b.FData) + lo + k);
@@ -6960,6 +7781,76 @@ begin
   end;
 end;
 
+function pyos_path_split(const p: AnsiString): TPyList;
+begin
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(pyos_path_dirname(p));
+  Result.append(pyos_path_basename(p));
+end;
+
+function pyos_path_normpath(const p: AnsiString): AnsiString;
+var parts: array[0..255] of AnsiString; n, i, st: Integer;
+    seg: AnsiString; absPath: Boolean;
+begin
+  if p = '' then begin Result := '.'; Exit; end;
+  absPath := p[1] = '/';
+  n := 0; st := 1;
+  for i := 1 to Length(p) + 1 do
+    if (i > Length(p)) or (p[i] = '/') then
+    begin
+      seg := Copy(p, st, i - st);
+      st := i + 1;
+      if (seg = '') or (seg = '.') then Continue;
+      if seg = '..' then
+      begin
+        { pop, except past the root of an ABSOLUTE path (where '..' is the root
+          itself) and except a leading run of '..' in a RELATIVE one, which
+          cannot be collapsed without knowing the cwd }
+        if (n > 0) and (parts[n - 1] <> '..') then Dec(n)
+        else if not absPath then
+        begin
+          if n <= High(parts) then begin parts[n] := seg; Inc(n); end;
+        end;
+        Continue;
+      end;
+      if n <= High(parts) then begin parts[n] := seg; Inc(n); end;
+    end;
+  Result := '';
+  for i := 0 to n - 1 do
+  begin
+    if Result <> '' then Result := Result + '/';
+    Result := Result + parts[i];
+  end;
+  if absPath then Result := '/' + Result
+  else if Result = '' then Result := '.';
+end;
+
+function pyos_path_getsize(const p: AnsiString): Int64;
+var stx: TPyStat;
+begin
+  stx := pyos_stat(p);          { raises FileNotFoundError when absent }
+  Result := stx.st_size;
+end;
+
+function pyos_path_expanduser(const p: AnsiString): AnsiString;
+var home: Variant; hs: AnsiString;
+begin
+  Result := p;
+  if p = '' then Exit;
+  if p[1] <> '~' then Exit;
+  { only a bare '~' or '~/...' — '~user' needs a passwd lookup this has no PAL
+    entry for, and CPython also returns it unchanged when it cannot resolve. }
+  if (Length(p) > 1) and (p[2] <> '/') then Exit;
+  home := pyos_getenv('HOME');
+  if pyvartag(home) <> 6 then Exit;         { unset: unchanged, as CPython does }
+  hs := PyVarText(PPyVarRec(@home));
+  if hs = '' then Exit;
+  if Length(p) = 1 then Result := hs
+  else Result := hs + Copy(p, 2, Length(p) - 1);
+end;
+
+
 { ---- environment ---------------------------------------------------------- }
 
 var
@@ -7545,10 +8436,27 @@ begin
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
-  input() does. (A prompt argument is printed by the caller, then ignored here.) }
+  input() does. (A prompt argument is printed by the caller, then ignored here.)
+
+  EOF RAISES EOFError, it does not return ''. This is what terminates the
+  canonical `while True: line = input()` REPL — CPython's loop leaves through
+  the exception, so returning '' forever turns the standard shape into an
+  infinite busy-loop. uforth's repl() is exactly that shape and SPUN (state R,
+  PC in PyPalPoll/PyPalRead) at the end of the Forth-2012 core.fr word set,
+  whose ACCEPT test eats the trailing BYE and leaves stdin at EOF:
+  regression-test-uforth-00. Output was byte-identical to CPython right up to
+  the hang, which is why it read as a timeout rather than a wrong answer.
+
+  '' and EOF are distinguishable HERE and nowhere above: pystdin_readline
+  KEEPS the newline, so a blank line is #10 and only a true EOF is ''. The
+  check therefore has to happen before the newline is stripped. }
 function pyinput: AnsiString;
+var raw: AnsiString;
 begin
-  Result := pystdin_readline;
+  raw := pystdin_readline;
+  if raw = '' then
+    raise EOFError.Create('EOF when reading a line');
+  Result := raw;
   if (Length(Result) > 0) and (Result[Length(Result)] = #10) then
     SetLength(Result, Length(Result) - 1);
   if (Length(Result) > 0) and (Result[Length(Result)] = #13) then
@@ -7911,6 +8819,7 @@ end;
   argument. }
 function PyFormatApply(const fmt: AnsiString; args: TPyList): AnsiString;
 var i, j, argi, useIdx, k, nArgs: Integer; spec, fld, outS: AnsiString;
+    conv: Char;
 begin
   outS := '';
   nArgs := 0;
@@ -7934,8 +8843,27 @@ begin
       j := i + 1;
       spec := '';
       fld := '';
+      conv := ' ';
       while (j <= Length(fmt)) and (fmt[j] <> '}') and (fmt[j] <> ':') do
       begin fld := fld + fmt[j]; Inc(j); end;
+      { A `!r` / `!s` CONVERSION is part of the field text as scanned above, so
+        it used to end up in `fld`, make it non-numeric, and be silently
+        DROPPED: `"{!r}".format("s")` printed s where Python prints 's'. Split
+        it off before the field is interpreted — and note it also has to leave
+        `fld` empty rather than the literal '!r', or the automatic index would
+        be skipped. bug-nilpy-str-format-drops-the-r-conversion }
+      if (Length(fld) = 2) and (fld[1] = '!') and
+         ((fld[2] = 'r') or (fld[2] = 's')) then
+      begin
+        conv := fld[2];
+        fld := '';
+      end
+      else if (Length(fld) > 2) and (fld[Length(fld) - 1] = '!') and
+              ((fld[Length(fld)] = 'r') or (fld[Length(fld)] = 's')) then
+      begin
+        conv := fld[Length(fld)];
+        fld := Copy(fld, 1, Length(fld) - 2);
+      end;
       if (j <= Length(fmt)) and (fmt[j] = ':') then
       begin
         Inc(j);
@@ -7964,7 +8892,12 @@ begin
       end;
       if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
-      if spec = '' then outS := outS + pystr_of(args.at(useIdx))
+      { pyvar_print_of, NOT pystr_of: pystr_of answers '' for a CONTAINER
+        payload, so `"{}".format([1, 2])` produced an EMPTY string — silent, and
+        the value vanished rather than looking wrong. pyvar_print_of is the same
+        rendering print() uses, which is what str() means here. }
+      if conv = 'r' then outS := outS + pyvar_repr(args.at(useIdx))
+      else if spec = '' then outS := outS + pyvar_print_of(args.at(useIdx))
       else outS := outS + pyformat_of(args.at(useIdx), spec);
       i := j + 1;
       Continue;
@@ -8031,9 +8964,11 @@ end;
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 var i, width, prec, argi, nargs: Integer;
     zero, leftAlign, hasPrec, alt: Boolean;
-    outS, spec: AnsiString;
+    outS, spec, mapKey: AnsiString;
     conv, signCh: Char;
     lst: TPyList;
+    dct: TPyDict;
+    hasMapKey: Boolean;
     cur: Variant;
 begin
   { TUPLE OR SINGLE VALUE — Python's rule: a tuple is a sequence of arguments, a
@@ -8046,6 +8981,15 @@ begin
     if TObject(pyvarobj(args)) is TPyList then
       if TPyList(pyvarobj(args)).FKind = PYSEQ_TUPLE then lst := TPyList(pyvarobj(args));
   if lst <> nil then nargs := lst.count else nargs := 1;
+  { MAPPING form — `"%(k)s" % {...}`. The right-hand side is a dict and each
+    placeholder names its key instead of consuming the next positional
+    argument, which is why logging and templating code uses it: the format
+    string can be reordered without touching the arguments.
+    Previously `%(` reached the conversion switch as the character `(` and
+    raised `unsupported format character "("`. }
+  dct := nil;
+  if PPyVarRec(@args)^.VType = 7 then
+    if TObject(pyvarobj(args)) is TPyDict then dct := TPyDict(pyvarobj(args));
   outS := '';
   argi := 0;
   i := 1;
@@ -8063,6 +9007,21 @@ begin
       outS := outS + '%';
       Inc(i);
       Continue;
+    end;
+    { the KEY comes first, before the flags — `%(name)-10s` }
+    hasMapKey := False;
+    mapKey := '';
+    if (i <= Length(fmt)) and (fmt[i] = '(') then
+    begin
+      if dct = nil then
+        raise TypeError.Create('format requires a mapping');
+      Inc(i);
+      while (i <= Length(fmt)) and (fmt[i] <> ')') do
+      begin mapKey := mapKey + fmt[i]; Inc(i); end;
+      if i > Length(fmt) then
+        raise ValueError.Create('incomplete format key');
+      Inc(i);                      { past the ')' }
+      hasMapKey := True;
     end;
     leftAlign := False;
     zero := False;
@@ -8086,20 +9045,70 @@ begin
       else signCh := fmt[i];
       Inc(i);
     end;
-    while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+    { `*` takes the width from an ARGUMENT instead of the format string —
+      `"%-*s" % (w, s)`, which is how a report lays out a column whose width is
+      computed. It raised `unsupported format character "*"`, so the whole
+      idiom was unavailable. The starred argument is consumed HERE, before the
+      value, exactly as CPython consumes it.
+      A NEGATIVE starred width means left-align in CPython, with the magnitude
+      as the width — the same as writing the '-' flag. }
+    if (i <= Length(fmt)) and (fmt[i] = '*') then
     begin
-      width := width * 10 + (Ord(fmt[i]) - Ord('0'));
+      if lst <> nil then
+      begin
+        if argi >= nargs then
+          raise TypeError.Create('not enough arguments for format string');
+        width := Integer(pyvar_to_int(lst.at(argi)));
+      end
+      else
+      begin
+        if argi >= 1 then
+          raise TypeError.Create('not enough arguments for format string');
+        width := Integer(pyvar_to_int(args));
+      end;
+      Inc(argi);
+      if width < 0 then
+      begin
+        leftAlign := True;
+        width := -width;
+      end;
       Inc(i);
-    end;
+    end
+    else
+      while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      begin
+        width := width * 10 + (Ord(fmt[i]) - Ord('0'));
+        Inc(i);
+      end;
     if (i <= Length(fmt)) and (fmt[i] = '.') then
     begin
       hasPrec := True;
       Inc(i);
-      while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      { `.*` — the precision from an argument too, `"%.*f" % (3, x)` }
+      if (i <= Length(fmt)) and (fmt[i] = '*') then
       begin
-        prec := prec * 10 + (Ord(fmt[i]) - Ord('0'));
+        if lst <> nil then
+        begin
+          if argi >= nargs then
+            raise TypeError.Create('not enough arguments for format string');
+          prec := Integer(pyvar_to_int(lst.at(argi)));
+        end
+        else
+        begin
+          if argi >= 1 then
+            raise TypeError.Create('not enough arguments for format string');
+          prec := Integer(pyvar_to_int(args));
+        end;
+        Inc(argi);
+        if prec < 0 then prec := 0;   { CPython treats a negative as absent }
         Inc(i);
-      end;
+      end
+      else
+        while (i <= Length(fmt)) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+        begin
+          prec := prec * 10 + (Ord(fmt[i]) - Ord('0'));
+          Inc(i);
+        end;
     end;
     if i > Length(fmt) then
     begin
@@ -8108,7 +9117,15 @@ begin
     conv := fmt[i];
     Inc(i);
     { the argument this placeholder consumes }
-    if lst <> nil then
+    if hasMapKey then
+    begin
+      { fetch RAISES KeyError naming the key, which is what CPython does for a
+        missing mapping key — and it now names it properly (see
+        bug-nilpy-exception-str-and-repr-diverge-from-cpython). A mapping
+        placeholder consumes no positional argument, so argi is left alone. }
+      cur := dct.fetch(mapKey);
+    end
+    else if lst <> nil then
     begin
       if argi >= nargs then
         raise TypeError.Create('not enough arguments for format string');
@@ -8120,7 +9137,7 @@ begin
         raise TypeError.Create('not enough arguments for format string');
       cur := args;
     end;
-    Inc(argi);
+    if not hasMapKey then Inc(argi);
     { translate into the {}-spec grammar and reuse its formatter }
     spec := '';
     if leftAlign then spec := '<';
@@ -8932,17 +9949,15 @@ end;
 
 function pyrepr_of(const v: Variant): AnsiString; overload;
 begin
-  { A STRING payload gains quotes -- and so does a CHAR, which is tag 5 and was
-    missing here. Python has no character type: `s[0]` is a str of length 1 and
-    reprs with quotes like any other, so `{s[0]: 1}` printed `{a: 1}` where
-    CPython prints `{'a': 1}`
-    (bug-nilpy-char-vs-string-literal-ordering-compares-an-address). }
-  if (pyvartag(v) = 6) or (pyvartag(v) = 5) then
-  begin
-    Result := PyReprQuote(VariantToStr(v));
-    Exit;
-  end;
-  Result := pystr_of(v);
+  { ONE implementation, and it is pyvar_repr's. This is the hole an f-string's
+    `!r` lowers to (PyFStrSwapLastCall swaps pystr_of( for pyrepr_of(), and it
+    used to quote a string and hand everything else to pystr_of — which answers
+    '' for a user instance, so `f"{obj!r}"` printed nothing while `repr([obj])`
+    printed it correctly.
+    The string/char quoting that used to live here now lives at pyvar_repr's
+    tail, so the two cannot drift.
+    bug-nilpy-repr-of-a-variant-holding-an-object-is-empty }
+  Result := pyvar_repr(v);
 end;
 
 { repr() — see the interface. Each forwards to the pyrepr_of overload that
@@ -8976,7 +9991,17 @@ end;
 
 function repr(const v: Variant): AnsiString; overload;
 begin
-  Result := pyrepr_of(v);
+  { pyvar_repr, NOT pyrepr_of. Two variant reprs exist and only one knows about
+    objects: pyvar_repr handles None, callables, the pylib containers and a USER
+    class's __repr__, then falls back to pyrepr_of for scalars and strings.
+    pyrepr_of on its own quotes a string and hands everything else to pystr_of,
+    which answers '' for a user instance — so `repr(xs[0])` on a list ELEMENT
+    printed nothing while `repr(xs)` printed the elements correctly, because the
+    container path goes through pyvar_repr.
+    pyvar_repr is now the single implementation and pyrepr_of(Variant) forwards
+    to it, so either name works here; this one is spelled out.
+    bug-nilpy-repr-of-a-variant-holding-an-object-is-empty }
+  Result := pyvar_repr(v);
 end;
 
 function repr(l: TPyList): AnsiString; overload;
@@ -8987,6 +10012,29 @@ end;
 function repr(dc: TPyDict): AnsiString; overload;
 begin
   Result := pydict_repr(dc);
+end;
+
+function repr(o: TObject): AnsiString; overload;
+var v: Variant;
+begin
+  { straight to pyvar_repr, the same renderer a boxed element already used —
+    so `repr(c)` and `repr([c])[1:-1]` cannot disagree, and a class with no
+    __repr__ gets CPython's `<__main__.C object at 0x..>` shape for free
+    instead of a second, divergent default.
+
+    The boxing is INLINE, not a call to PyObjAsVar: that helper is defined ~900
+    lines below with no entry in this unit's top declaration block, so calling
+    it from here is a forward use — which does not fail to compile, it links to
+    a plausible-looking wrong address and crashes far away. pyvar_repr itself
+    IS declared up top, so that call is fine.
+
+    The RETAIN matters for the same reason it does there: `v` is a local, so
+    its scope exit releases the object-tagged slot, and without the retain
+    `repr(c)` would hand back a net release of the caller's `c`. }
+  PPyVarRec(@v)^.VType := 7;
+  PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(o)));
+  PXXObjRetain(Pointer(o));
+  Result := pyvar_repr(v);
 end;
 
 function pyabs_v(const v: Variant): Variant;
@@ -9174,6 +10222,39 @@ begin
   if l <> nil then
     for i := 0 to l.count - 1 do r.append(l.at(i));
   Result := r;
+end;
+
+function tuple(const v: Variant): TPyList; overload;
+var o: TObject;
+begin
+  { mirrors list(const v: Variant), with the tuple flag stamped on the result }
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := tuple(TPyList(o)); Exit; end;
+    if o is TPyDict then
+    begin
+      Result := TPyDict(o).keylist;
+      Result.FKind := PYSEQ_TUPLE;
+      Exit;
+    end;
+    if o is TPyBytes then begin Result := tuple(TPyBytes(o)); Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := tuple(pystr_of(v)); Exit; end;
+  Result := TPyList.Create;      { None / empty }
+  Result.FKind := PYSEQ_TUPLE;
+end;
+
+function reversed(const v: Variant): TPyList; overload;
+var o: TObject;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := reversed(TPyList(o)); Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := reversed(pystr_of(v)); Exit; end;
+  Result := TPyList.Create;
 end;
 
 function tuple(const s: AnsiString): TPyList; overload;
@@ -9561,6 +10642,10 @@ begin
   if a = nil then na := 0 else na := a.count;
   if b = nil then nb := 0 else nb := b.count;
   r := TPyBytes.Create(na + nb);
+  { the LEFT operand decides, as it does in CPython: bytearray + bytes is a
+    bytearray, bytes + bytearray is bytes. }
+  if a <> nil then r.FIsByteArray := a.FIsByteArray
+  else if b <> nil then r.FIsByteArray := b.FIsByteArray;
   for i := 0 to na - 1 do r.put(i, a.at(i));
   for i := 0 to nb - 1 do r.put(na + i, b.at(i));
   Result := r;
@@ -9803,6 +10888,312 @@ begin
   end;
 end;
 
+{ The __eq__ half of the same dispatch — see the forward declaration above
+  PyVarEq for why it lives here.
+
+  Only the shape `def __eq__(self, other) -> bool` is called, verified against
+  the RTTI rather than assumed: Arity 2, RetKind tyBoolean (2), and the second
+  ParamKind tyVariant (22). That IS what the frontend emits — measured with
+  `PXXDBG=a.ir:H.__eq__`, whose `other` arrives as a `const Variant` (an `lea`
+  of the slot). Anything else falls through to the caller's identity answer
+  rather than being called through a pointer whose ABI has not been checked.
+
+  CPython tries `a.__eq__(b)` and then the REFLECTED `b.__eq__(a)` when the
+  first returns NotImplemented. There is no NotImplemented here, so the
+  reflection is used only when `a`'s class has no __eq__ at all — which is what
+  makes `plain_obj == H(3)` still consult H's. }
+type
+  TPyEqFn = function(self: Pointer; const other: Variant): Boolean;
+  { ...and the shape a @dataclass-GENERATED __eq__ has, whose `other` is a bare
+    class pointer rather than a variant. Two shapes, measured with
+    `PXXDBG=a.ir:<Class>.__eq__`: a hand-written `def __eq__(self, other)`
+    leaves `other` unannotated, so it arrives tk=22 (Variant), while the
+    generated one is emitted class-typed, tk=6. Checking only the first shape
+    fixed hand-written classes and left every dataclass still comparing by
+    handle. }
+  TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
+  TPyHashFn  = function(self: Pointer): Int64;
+  TPyObjDunderFn    = function(self: Pointer; const other: Variant): Pointer;
+  TPyObjDunderObjFn = function(self: Pointer; other: Pointer): Pointer;
+  { An ARITHMETIC dunder returns whatever the body returns, so the call has to
+    be typed by the method's RetKind rather than assumed. Only the
+    Variant-`other` shape is declared: a hand-written `def __add__(self, q)`
+    leaves `q` unannotated, which is tk=22, and unlike __eq__ there is no
+    dataclass-GENERATED arithmetic dunder to produce the class-pointer shape.
+    Any other parameter shape falls through to the caller's existing path. }
+  TPyArithV = function(self: Pointer; const other: Variant): Variant;
+  TPyArithS = function(self: Pointer; const other: Variant): AnsiString;
+  TPyArithI = function(self: Pointer; const other: Variant): Int64;
+  TPyArithD = function(self: Pointer; const other: Variant): Double;
+  TPyArithB = function(self: Pointer; const other: Variant): Boolean;
+  TPyArithO = function(self: Pointer; const other: Variant): Pointer;
+
+{ ONE dunder call, shared by every boolean binary dunder this unit dispatches
+  at run time. Looks `dunder` up on selfObj's class and calls it with otherObj,
+  answering False when the class has no method of that name in a shape whose ABI
+  has been checked. The reflection rules differ per operator, so they live in
+  the callers; this only does the lookup and the call.
+
+  Written as one routine deliberately: the __eq__ version was the third copy of
+  "find a dunder in the RTTI and call it" in this file, and adding __gt__/__lt__
+  would have made a fourth. See
+  refactor-nilpy-three-places-decide-a-locals-class-identity for the same
+  lesson one level up. }
+function PyUserObjBoolDunder(selfObj, otherObj: TObject; const otherV: Variant;
+                             const dunder: AnsiString; var res: Boolean): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyEqFn; fnObj: TPyEqObjFn; pk: PInt64;
+begin
+  PyUserObjBoolDunder := False;
+  if (selfObj = nil) or (otherObj = nil) then Exit;
+  { this unit's own containers have their own value rules and must not come here
+    (PyRecIsPylibOwnClass's runtime equivalent) }
+  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  if (otherObj is TPyList) or (otherObj is TPyDict) or (otherObj is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(selfObj));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, dunder);
+  if mi = nil then Exit;
+  if mi^.Arity <> 2 then Exit;
+  if mi^.RetKind <> 2 then Exit;              { Boolean }
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk[1] = 22 then                          { `other` is a Variant }
+  begin
+    fn := TPyEqFn(mi^.Code);
+    res := fn(Pointer(selfObj), otherV);
+    PyUserObjBoolDunder := True;
+    Exit;
+  end;
+  if pk[1] = 6 then                           { `other` is a class pointer }
+  begin
+    { A class-typed `other` is only safe to pass an instance of THAT class: the
+      body reads its fields at fixed offsets and would otherwise read an
+      unrelated layout — the same wrong-offset failure as
+      bug-nilpy-local-reassigned-across-classes-keeps-one-static-class.
+      Requiring the EXACT class is also what CPython's own dataclass __eq__
+      does (`if other.__class__ is self.__class__`), returning NotImplemented
+      otherwise — which falls back to identity, i.e. exactly the False the
+      caller is left with. So `P(3) == "x"` and `P(3) == Q(3)` stay False
+      instead of reading a Q as a P. }
+    if GetInstanceRTTI(Pointer(selfObj)) <> GetInstanceRTTI(Pointer(otherObj)) then Exit;
+    fnObj := TPyEqObjFn(mi^.Code);
+    res := fnObj(Pointer(selfObj), Pointer(otherObj));
+    PyUserObjBoolDunder := True;
+    Exit;
+  end;
+end;
+
+{ The object-RETURNING sibling of PyUserObjBoolDunder, for a dunder whose result
+  is a value rather than a flag (`__divmod__` returns a 2-tuple, i.e. a TPyList).
+  Same two `other` shapes and the same exact-class guard on the class-pointer
+  one; the return must be a class (RetKind 6), and the caller checks what class
+  it actually got. }
+function PyUserObjObjDunder(selfObj, otherObj: TObject; const otherV: Variant;
+                            const dunder: AnsiString; var res: TObject): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyObjDunderFn; fnObj: TPyObjDunderObjFn;
+    pk: PInt64;
+begin
+  PyUserObjObjDunder := False;
+  if (selfObj = nil) or (otherObj = nil) then Exit;
+  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(selfObj));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, dunder);
+  if mi = nil then Exit;
+  if mi^.Arity <> 2 then Exit;
+  if mi^.RetKind <> 6 then Exit;              { returns a class (the tuple) }
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk[1] = 22 then
+  begin
+    fn := TPyObjDunderFn(mi^.Code);
+    res := TObject(fn(Pointer(selfObj), otherV));
+    PyUserObjObjDunder := True;
+    Exit;
+  end;
+  if pk[1] = 6 then
+  begin
+    if GetInstanceRTTI(Pointer(selfObj)) <> GetInstanceRTTI(Pointer(otherObj)) then Exit;
+    fnObj := TPyObjDunderObjFn(mi^.Code);
+    res := TObject(fnObj(Pointer(selfObj), Pointer(otherObj)));
+    PyUserObjObjDunder := True;
+    Exit;
+  end;
+end;
+
+{ Call ONE arithmetic dunder, converting its result to a Variant by the RetKind
+  the RTTI declares. Every kind the frontend actually emits for a `return` is
+  covered — measured with `PXXDBG=a.ir:<Class>.__add__` over bodies returning a
+  str, an int, a float, a bool, a list and a mixed pair — and an unrecognised
+  kind answers False so the caller keeps its existing behaviour rather than
+  calling through a pointer whose ABI has not been checked. }
+function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
+                          const dunder: AnsiString; var res: Variant): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
+    fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
+    fb: TPyArithB; fo: TPyArithO;
+    sres: AnsiString; ores: Pointer; r: PPyVarRec;
+begin
+  PyUserArithCall1 := False;
+  if (selfObj = nil) or (otherObj = nil) then Exit;
+  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(selfObj));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, dunder);
+  if mi = nil then Exit;
+  if mi^.Arity <> 2 then Exit;
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if pk[1] <> 22 then Exit;               { `other` must be a Variant }
+  rk := mi^.RetKind;
+  r := PPyVarRec(@res);
+  if rk = 22 then
+  begin
+    fv := TPyArithV(mi^.Code); res := fv(Pointer(selfObj), otherV);
+  end
+  else if (rk = 23) or (rk = 4) then
+  begin
+    fs := TPyArithS(mi^.Code); sres := fs(Pointer(selfObj), otherV);
+    r^.VType := 6; PPyAnsiString(@r^.Payload)^ := sres;
+  end
+  else if (rk = 13) or (rk = 1) or (rk = 11) or (rk = 15) then
+  begin
+    fi := TPyArithI(mi^.Code);
+    r^.VType := 2; r^.Payload := fi(Pointer(selfObj), otherV);
+  end
+  else if (rk = 19) or (rk = 18) then
+  begin
+    fd := TPyArithD(mi^.Code);
+    r^.VType := 3; PPyDouble(@r^.Payload)^ := fd(Pointer(selfObj), otherV);
+  end
+  else if rk = 2 then
+  begin
+    fb := TPyArithB(mi^.Code);
+    r^.VType := 4;
+    if fb(Pointer(selfObj), otherV) then r^.Payload := 1 else r^.Payload := 0;
+  end
+  else if rk = 6 then
+  begin
+    fo := TPyArithO(mi^.Code); ores := fo(Pointer(selfObj), otherV);
+    if ores = nil then Exit;
+    r^.VType := 7; r^.Payload := Int64(NativeInt(ores));
+    PXXObjRetain(ores);
+  end
+  else
+    Exit;
+  PyUserArithCall1 := True;
+end;
+
+{ Box an object handle as a VT_OBJECT variant, for handing the REFLECTED operand
+  to a Variant-shaped dunder.
+
+  It RETAINS. The first version did not — "the variant is only a borrowed view
+  for the call below it" — and that is wrong, because the variant is a LOCAL:
+  its scope exit runs PXXVarClear, which releases an object-tagged slot. So
+  boxing without a retain hands back a net release of the CALLER's object.
+  Measured as `repr(c)` followed by `repr([c])` on the same variable —
+  the first call freed `c` and the second read freed memory (SIGSEGV). Each on
+  its own was fine, which is what makes this shape easy to ship. }
+procedure PyObjAsVar(o: TObject; var v: Variant);
+begin
+  PPyVarRec(@v)^.VType := 7;
+  PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(o)));
+  PXXObjRetain(Pointer(o));
+end;
+
+function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean;
+var pv: Variant;
+begin
+  { a.__eq__(b), then the REFLECTED b.__eq__(a). There is no NotImplemented
+    here, so the reflection fires only when a's class has no __eq__ at all —
+    which is what makes `plain_obj == H(3)` still consult H's. }
+  PyUserObjEq := PyUserObjBoolDunder(pobj, qobj, qv, '__eq__', res);
+  if PyUserObjEq then Exit;
+  PyObjAsVar(pobj, pv);
+  PyUserObjEq := PyUserObjBoolDunder(qobj, pobj, pv, '__eq__', res);
+end;
+
+{ `a > b` for two user objects, which is what `.sort()` / `sorted()` ask for
+  through pyvar_gt. CPython tries `a.__gt__(b)` and then the reflected
+  `b.__lt__(a)` — and the reflected arm is the one that matters in practice,
+  because the idiomatic class defines ONLY __lt__ (that is all Python's sort
+  requires) and so has no __gt__ to find.
+  bug-nilpy-list-sort-ignores-lt-dunder-on-objects }
+function PyUserObjGt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean;
+var pv: Variant;
+begin
+  PyUserObjGt := PyUserObjBoolDunder(pobj, qobj, qv, '__gt__', res);
+  if PyUserObjGt then Exit;
+  PyObjAsVar(pobj, pv);
+  PyUserObjGt := PyUserObjBoolDunder(qobj, pobj, pv, '__lt__', res);
+end;
+
+{ `a <op> b` on two user objects: the direct dunder, then the REFLECTED one on
+  the other operand — CPython's own order. This is the runtime twin of the
+  compile-time dispatch in the parser, which cannot fire when an operand's
+  static type is a variant: a module global bound to a scalar BEFORE the class
+  instance is one ordinary way to get one (`other = 0` then `other = V(1)`),
+  and the symptom was a bare `TypeError: expected a number, got object` on an
+  `__add__` the program plainly declares.
+  bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
+function PyUserObjArith(pobj, qobj: TObject; const pv, qv: Variant;
+                        const dunder, rdunder: AnsiString;
+                        var res: Variant): Boolean;
+begin
+  PyUserObjArith := PyUserArithCall1(pobj, qobj, qv, dunder, res);
+  if PyUserObjArith then Exit;
+  PyUserObjArith := PyUserArithCall1(qobj, pobj, pv, rdunder, res);
+end;
+
+{ `a < b`, the mirror of PyUserObjGt: __lt__ direct, then the reflected __gt__.
+  Needed on its own because pycmp_v owes a THREE-way answer, so "not greater"
+  is not the same question as "less". }
+function PyUserObjLt(pobj, qobj: TObject; const qv: Variant;
+                     var res: Boolean): Boolean;
+var pv: Variant;
+begin
+  PyUserObjLt := PyUserObjBoolDunder(pobj, qobj, qv, '__lt__', res);
+  if PyUserObjLt then Exit;
+  PyObjAsVar(pobj, pv);
+  PyUserObjLt := PyUserObjBoolDunder(qobj, pobj, pv, '__gt__', res);
+end;
+
+{ `divmod(a, b)`: a.__divmod__(b), then the reflected b.__rdivmod__(a). The
+  result must be a TPyList (Python's contract is "a pair"); anything else is
+  left to the caller's fallback rather than cast to a tuple it is not. }
+function PyUserObjDivmod(pobj, qobj: TObject; const pv, qv: Variant;
+                         var res: TObject): Boolean;
+begin
+  PyUserObjDivmod := PyUserObjObjDunder(pobj, qobj, qv, '__divmod__', res);
+  if not PyUserObjDivmod then
+    PyUserObjDivmod := PyUserObjObjDunder(qobj, pobj, pv, '__rdivmod__', res);
+  if PyUserObjDivmod and not (res is TPyList) then PyUserObjDivmod := False;
+end;
+
+{ See the forward declaration above PyVarEq. Only `def __hash__(self) -> int`
+  is called: Arity 1 and an integer RetKind (tyInt64 13, or tyInteger 1 /
+  tyNativeInt 15 should the frontend ever narrow it). CPython truncates a
+  __hash__ result to Py_hash_t, and this hash is avalanched by the caller
+  afterwards, so any int width is fine to take verbatim here. }
+function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyHashFn;
+begin
+  PyUserObjHash := False;
+  if o = nil then Exit;
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, '__hash__');
+  if mi = nil then Exit;
+  if mi^.Arity <> 1 then Exit;
+  if (mi^.RetKind <> 13) and (mi^.RetKind <> 1) and (mi^.RetKind <> 15) then Exit;
+  fn := TPyHashFn(mi^.Code);
+  h := NativeUInt(fn(Pointer(o)));
+  PyUserObjHash := True;
+end;
+
 function PyUserObjStr(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
 var cls: PClassRTTI; mi: PMethInfo; fn: TPyDunderFn;
 begin
@@ -9818,6 +11209,52 @@ begin
     callers below pass wantRepr = True. }
   if not wantRepr then mi := PyFindDunder(cls, '__str__');
   if mi = nil then mi := PyFindDunder(cls, '__repr__');
+  { An EXCEPTION with no __repr__ of its own: CPython prints `ValueError('v')`,
+    not an address. That is what appears in a log or a `%r`, and an address there
+    is useless. Only for repr() — str(e) is the message, which already works.
+
+    TWO documented approximations, because a pxx Exception carries a single
+    Message string rather than Python's `args` tuple:
+
+      - an EMPTY message renders as `ValueError()`, the zero-argument form.
+        `ValueError('')` is indistinguishable from `ValueError()` here and takes
+        the same rendering; the zero-argument spelling is much the commoner.
+    KEYERROR IS DELIBERATELY EXCLUDED and keeps the address form. It cannot be
+    rendered correctly from a Message alone: CPython's KeyError is the one
+    builtin whose str() is repr(arg), and PyKeyError stores the message ALREADY
+    REPR'D so that str() matches. Quoting that again gives
+    `KeyError("'nope'")`; not quoting it gives `KeyError(k)` for a
+    user-constructed `KeyError("k")`. Both are wrong, in opposite cases, and
+    which one you hit depends on who raised it — so neither is shipped. The real
+    fix is `e.args`, which is its own open item; guessing here would be worse
+    than the address, because an address is obviously unhelpful while a wrongly
+    quoted key looks authoritative.
+    bug-nilpy-exception-str-and-repr-diverge-from-cpython }
+  { str() of an exception is its MESSAGE. A CAUGHT exception already reached
+    that through another path; one that was CONSTRUCTED and never raised
+    (`str(ValueError("v"))`, or an exception held in a list) fell through to the
+    address form here — two paths disagreeing about the same object.
+
+    KeyError comes out right for free on the raise path, because PyKeyError
+    stores its message already repr'd, which is exactly what CPython's
+    str(KeyError) is. A user-CONSTRUCTED `KeyError("k")` still loses the quotes;
+    that is the `e.args` gap, and the message is a strict improvement on an
+    address either way. }
+  if (mi = nil) and (not wantRepr) and (o is Exception) then
+  begin
+    outS := Exception(o).Message;
+    PyUserObjStr := True;
+    Exit;
+  end;
+  if (mi = nil) and wantRepr and (o is Exception) and (not (o is KeyError)) then
+  begin
+    if Exception(o).Message = '' then
+      outS := TObject(o).ClassName + '()'
+    else
+      outS := TObject(o).ClassName + '(' + pyrepr_of(Exception(o).Message) + ')';
+    PyUserObjStr := True;
+    Exit;
+  end;
   if mi = nil then
   begin
     { No dunder: CPython's DEFAULT object repr, `<__main__.Cls object at 0x..>`.
@@ -9852,7 +11289,19 @@ begin
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
     if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
-  Result := pyrepr_of(v);
+  { the scalar/string tail, INLINE rather than delegating to pyrepr_of. The two
+    used to call each other in the wrong direction — pyrepr_of was the entry
+    point everything reached and it knew nothing about objects, while pyvar_repr
+    knew about objects and then handed the rest back. Now pyvar_repr is the ONE
+    implementation and pyrepr_of(Variant) forwards to it, which is what makes
+    an f-string's `!r` hole render a user instance instead of ''.
+    A STRING and a CHAR gain quotes: Python has no character type, so `s[0]`
+    reprs like any other one-character str.
+    bug-nilpy-repr-of-a-variant-holding-an-object-is-empty }
+  if (pyvartag(v) = 6) or (pyvartag(v) = 5) then
+    Result := PyReprQuote(VariantToStr(v))
+  else
+    Result := pystr_of(v);
 end;
 
 function pyvar_print_of(const v: Variant): AnsiString;
@@ -9890,6 +11339,29 @@ begin
   if l <> nil then l.FKind := PYSEQ_TUPLE;
   pylist_mark_tuple := l;
 end;
+function pylist_mark_list(l: TPyList): TPyList;
+begin
+  if l <> nil then l.FKind := PYSEQ_LIST;
+  Result := l;
+end;
+
+function pyvar_mark_list(const v: Variant): Variant;
+var o: TObject;
+begin
+  Result := v;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  if (o <> nil) and (o is TPyList) then TPyList(o).FKind := PYSEQ_LIST;
+end;
+
+function pyunpack_check(have, need: Integer): Integer;
+begin
+  if have < need then
+    raise ValueError.Create('not enough values to unpack (expected at least '
+      + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
+  Result := have;
+end;
+
 
 function pylist_mark_set(l: TPyList): TPyList;
 begin
@@ -9914,6 +11386,18 @@ begin
   if not (TObject(o) is TPyList) then Exit;
   pyseq_kind_v := TPyList(o).FKind;
 end;
+function pybytes_kind_v(const v: Variant): Integer;
+var o: Pointer;
+begin
+  pybytes_kind_v := -1;
+  if pyvartag(v) <> 7 then Exit;
+  o := pyvarobj(v);
+  if o = nil then Exit;
+  if not (TObject(o) is TPyBytes) then Exit;
+  if TPyBytes(TObject(o)).FIsByteArray then pybytes_kind_v := 1
+  else pybytes_kind_v := 0;
+end;
+
 
 function pylist_repr(l: TPyList): AnsiString;
 var i: Integer;
@@ -9961,6 +11445,24 @@ end;
 { CPython bytes repr: b'...' with printable ASCII kept, \t \n \r named, the
   rest as \xHH. Like CPython, the quote flips to double quotes when the data
   contains a single quote but no double quote. }
+function TPyBytes.hex: AnsiString;
+const HexD = '0123456789abcdef';
+var k, v: Integer; p: PByte;
+begin
+  Result := '';
+  if (Self = nil) or (Self.FLen <= 0) then Exit;
+  SetLength(Result, Self.FLen * 2);
+  p := PByte(Self.FData);
+  for k := 0 to Self.FLen - 1 do
+  begin
+    v := PByte(NativeInt(p) + k)^;
+    { LOWERCASE, and always two digits — CPython's bytes.hex() pads, so
+      b'\x01'.hex() is '01' and not '1'. }
+    Result[k * 2 + 1] := HexD[(v shr 4) + 1];
+    Result[k * 2 + 2] := HexD[(v and 15) + 1];
+  end;
+end;
+
 function pybytes_repr(b: TPyBytes): AnsiString;
 var i, c: Integer; q: Char; hasSq, hasDq: Boolean;
 const HexD: array[0..15] of Char = ('0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f');
@@ -9991,6 +11493,12 @@ begin
       end;
     end;
   Result := Result + q;
+  { CPython renders a bytearray as `bytearray(b'..')` — the same bytes literal
+    wrapped in its type name — so the wrap goes on AFTER the escaping above and
+    reuses all of it rather than duplicating the quoting rules.
+    bug-nilpy-bytearray-and-bytes-are-the-same-type }
+  if (b <> nil) and b.FIsByteArray then
+    Result := 'bytearray(' + Result + ')';
 end;
 
 function pystr_of(const v: Variant): AnsiString; overload;
