@@ -64,4 +64,4 @@ AttributeError). Loud, and a separate piece of surface:
 [[bug-nilpy-exception-args-attribute-missing]].
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit e22540ffc.
