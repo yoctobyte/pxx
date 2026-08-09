@@ -1,8 +1,8 @@
 ---
-summary: "The full tier grew from ~520s to the 3600s global deadline once test-uforth carried the 13 ANS word sets, so it is being TRUNCATED every run — and auto-pin shadow mode, which only evaluates on a full tier, never evaluates at all"
+summary: "DOWNGRADED: the 3600s truncation was ONE run inflated by the uforth driver collision, not a permanent size problem — a full tier completed GREEN in 768s once that was fixed. What remains is watching the growth from ~520s to ~768s"
 type: bug
 track: T
-prio: 65
+prio: 45
 ---
 
 # The full tier no longer fits its deadline, so it is truncated every run
@@ -77,3 +77,33 @@ Recommend **1**, with **2** as a stopgap if the shadow week is wanted sooner.
 
 A full tier that completes inside its deadline on an idle box, and
 `plexus.json` showing a `pin_shadow` verdict rather than "not evaluated yet".
+
+
+---
+
+## CORRECTION 2026-08-09 — downgraded from urgent (prio 65 -> 45)
+
+**I was wrong about the cause, and the ticket overstated the problem.**
+
+A full tier completed **GREEN in 768s** at 2026-08-09T01:43:38Z. The tier fits
+its deadline comfortably.
+
+The 3600.3s run was **one run** inflated by the `test-uforth` driver collision
+([[bug-t-make-test-uforth-drivers-are-not-concurrency-safe]] — fixed in
+`6f54e33f7`): a concurrent manual run deleted the watcher's in-flight drivers
+via an unscoped glob, so uforth churned instead of finishing. The 1753s runs
+sit either side of the same window. Reading three contaminated samples as a
+trend was the error.
+
+**And the second claim was wrong too.** "auto-pin shadow mode never evaluates"
+was attributed to the tier not finishing. The real reason: `twatch.py` is read
+once at process start and has **no hot reload**, and the daemon had been
+running since Aug 7 18:51 — before `pin_shadow` existed. `testmgr.py` changes
+went live immediately (spawned per run, which is why test-uforth got fixed),
+`twatch.py` changes did not. Restarted 2026-08-09T05:02; shadow mode evaluates
+on the next full tier.
+
+**What genuinely remains**, and why this stays open at a lower priority: the
+full tier did grow from ~520s to ~768s, and `test-uforth` is most of that. The
+options below still apply — sharding is still the right call for attribution
+and parallelism — but this is capacity planning, not a fire.
