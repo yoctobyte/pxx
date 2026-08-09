@@ -7142,7 +7142,9 @@ test-c: test-core test-c-conformance
 # crtl + the zlib TUs + zlib's own test/example.c and diffs stdout+exit against
 # the SAME sources built with gcc (the oracle). Skips if the gitignored tree is
 # absent (tools/install_lib_candidates.sh zlib). NOT in `make test` (3rd-party +
-# needs gcc). Currently blocked — see the ticket's two compiler blockers.
+# needs gcc). PASSING as of 2026-08-09 — byte-identical to the gcc oracle,
+# verified against the pinned compiler. The "currently blocked, two compiler
+# blockers" note that used to be here was stale; both are fixed.
 ZLIB_SRC ?= library_candidates/zlib
 test-zlib: $(COMPILER)
 	@if [ ! -f "$(ZLIB_SRC)/zlib.h" ]; then \

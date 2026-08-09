@@ -431,3 +431,59 @@ Reproduce the probe any time: it is a dozen lines of shell over
 before a user finds it. The failure mode is always the same and always quiet —
 the program links against glibc, works on the dev box, and cannot run anywhere
 else.
+
+## 2026-08-09 (Track B) — corpus pass: zlib clean, tcc surfaces one gap
+
+Worked the ticket's own method: bring up a real project, record the *library*
+gaps. Both targets against the PINNED compiler (Track B does not rebuild).
+
+### zlib — PASSING, no crtl gap
+
+Ran the `test-zlib` recipe by hand: gcc oracle from the same 16 TUs, pxx runner
+from `test/zlib/runner.c`, outputs diffed. **Byte-identical to the gcc oracle.**
+The ticket [[feature-c-corpus-zlib]] still said "2 compiler blockers filed. Not
+yet passing" and the Makefile carried a matching "currently blocked" comment —
+both stale, both corrected. zlib demands no unmet crtl surface.
+
+### tcc — GAP: `longjmp` is a macro only, so it cannot be used as a value
+
+`library_candidates/tcc/libtcc.c` stops at exactly one thing:
+
+```
+error: undeclared identifier passed as argument 4 of '_tcc_setjmp',
+       where a pointer is expected — this would call/dereference through NULL
+```
+
+Call site (`libtcc.h:106`):
+
+```c
+#define tcc_setjmp(s1,jb,f) setjmp(_tcc_setjmp(s1, jb, f, longjmp))
+```
+
+It passes **`longjmp` as a function pointer**. `lib/crtl/include/setjmp.h`
+provides only function-like macros:
+
+```c
+#define longjmp(env, val)   __pxx_longjmp(&(env), val)
+```
+
+A function-like macro does not expand when the name is not followed by `(`, so
+bare `longjmp` is an undeclared identifier. **C requires this to work**: 7.13
+says `setjmp` may be a macro, but `longjmp` shall be an external function.
+
+**Why the fix is not a one-liner, and needs care.** Our `jmp_buf` is a STRUCT,
+not the usual array typedef — deliberately, and the header explains why: an
+array typedef loses its dimension in the C frontend and is sized as one long, so
+a struct field of it would underflow the frame. That choice is what makes the
+macros take `&(env)`. A real `void longjmp(jmp_buf, int)` would therefore take
+the struct BY VALUE, which does not match `__pxx_longjmp`'s pointer parameter —
+so simply declaring the function alongside the macro produces a symbol whose ABI
+disagrees with the implementation.
+
+Options, none yet chosen: give `jmp_buf` array semantics so it decays like
+standard C (needs the frontend's array-typedef sizing fixed first); or provide a
+real `longjmp` shim that takes the struct by value and forwards its address; or
+declare the function and accept that only address-taking callers use it.
+
+Filed here rather than fixed because picking between those is a design call that
+touches the documented jmp_buf decision, and tcc is the first caller to need it.

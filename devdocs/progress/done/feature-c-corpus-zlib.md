@@ -155,3 +155,20 @@ with a regression, all self-host byte-identical, c-conformance 194→198):
 Diagnosis chain: test-zlib diff → each line one bug → minimal repro → isolate to a
 compiler primitive. zlib is the first real-world multi-file C project compiling +
 running byte-identical under pxx. Next corpus target: tcc.
+
+## Re-verified 2026-08-09 (Track B, pinned v252): PASSING
+
+Ran the `test-zlib` recipe by hand against the PINNED compiler (Track B does not
+rebuild): gcc oracle from the same 16 TUs, pxx runner from `test/zlib/runner.c`,
+outputs diffed.
+
+```
+run exit=0
+BYTE-IDENTICAL TO GCC ORACLE
+```
+
+The body above still said "2 compiler blockers filed. Not yet passing", and the
+Makefile carried a matching "currently blocked" comment. Both were stale —
+corrected. Checked while driving
+[[feature-crtl-implement-libc-assumptions]], whose method is "bring up a real
+project, record the library gaps": zlib now demands **no** unmet crtl surface.
