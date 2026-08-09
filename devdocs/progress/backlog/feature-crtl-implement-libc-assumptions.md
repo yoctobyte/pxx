@@ -512,5 +512,26 @@ walks the environment simply sees none. `feature-c-corpus-tcc`'s own suspect lis
 asked "environ is referenced — resolved how? verify"; the answer is that it is
 not.
 
-Needs the PAL to expose the environment block (the entry stub already receives
-`envp`), then `extern char **environ` in `<unistd.h>` bound to it.
+**It needs an init-before-main hook, which is the same missing piece `atexit`
+needs.** Investigated rather than guessed:
+
+- crtl ALREADY has the environment — `lib/crtl/src/stdlib.c` loads
+  `/proc/self/environ` into `pxx_env_buf` for `getenv()`, lazily on first call.
+- `lib/rtl/sysutils.pas` has the same thing on the Pascal side, and
+  `EnvironmentBlock` already returns an execve-shaped `char **`.
+- So the DATA is there. What is missing is that `environ` is a VARIABLE, read
+  directly (`char **envp = environ;`) with no call to trigger a lazy load. A
+  program that reads it before ever calling `getenv` sees NULL.
+
+Populating it requires running an initializer before `main`, and the C entry
+stub is `call main; exit_group(retval)` with no init phase — exactly the gap
+[[feature-c-entry-stub-must-run-finalizers]] describes from the other end (it
+needs a FINI phase for `atexit`).
+
+**That raises that ticket's value: one entry-stub change unblocks both** the last
+declared-but-unimplemented crtl function (`atexit`) and this silent-NULL
+`environ`. Worth doing as one piece of work rather than two.
+
+Not faked in the meantime: a lazily-populated `environ` cannot work without the
+hook, and a `#define environ (__pxx_environ())` macro would break every
+`extern char **environ;` declaration in real code.

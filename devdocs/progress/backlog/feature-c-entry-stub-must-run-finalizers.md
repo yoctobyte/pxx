@@ -48,3 +48,26 @@ Track B adds the handler table in crtl against it, and
 and an explicit `exit()` — matching gcc in `tools/gcc_diff_probe.sh`, plus the
 existing C suites staying green (the stub is on every C program's path, so this
 is not a narrow change).
+
+## 2026-08-09: this unblocks `environ` too, not just `atexit`
+
+Found bringing up tcc ([[feature-crtl-implement-libc-assumptions]]). `tcc.c`
+builds and runs now, but warns:
+
+```
+warning: undeclared identifier 'environ' used as value (treated as 0)
+```
+
+so `char **envp = environ;` silently becomes NULL.
+
+crtl already HAS the environment — `stdlib.c` loads `/proc/self/environ` into
+`pxx_env_buf` for `getenv()`. The blocker is the same shape as this ticket's:
+`environ` is a VARIABLE read directly, with no call to trigger the lazy load, so
+it must be populated **before `main`** — and the C entry stub has no init phase,
+just as it has no fini phase.
+
+So the change this ticket describes is worth more than it says: **one entry-stub
+change unblocks both** the last declared-but-unimplemented crtl function
+(`atexit`) and a silent-wrong-value `environ`. Consider raising its priority
+accordingly — the `environ` half is the silent-wrong-answer class, which this
+project ranks worst.
