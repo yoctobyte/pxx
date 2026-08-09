@@ -1,0 +1,49 @@
+# feature-nilpy-stdlib-coverage-gaps-measured — four os.path names.
+#
+# split / normpath / getsize / expanduser were all "undefined variable (os)".
+# Loud, so nothing computed a wrong answer; this is plumbing, and the value is
+# that a script reaching for them now runs.
+#
+# normpath is the one with real content, and its edges are where a hand-rolled
+# version goes wrong — they are all asserted against CPython: '..' popping a
+# segment, '..' past the ROOT of an absolute path staying at the root, a LEADING
+# '..' in a relative path that cannot be collapsed without the cwd, repeated
+# slashes, a bare '.', and '' answering '.' rather than ''.
+#
+# split's own edge is a trailing slash ('/a/b/' -> ('/a/b', '')) and a bare name
+# ('file.txt' -> ('', 'file.txt')), neither of which falls out of dirname and
+# basename by accident.
+#
+# getsize on a MISSING path must raise, not answer 0 — the failure direction
+# that would otherwise look like an empty file.
+#
+# expanduser is checked by PROPERTY rather than by value: $HOME differs between
+# machines, so the test asserts it changed and that '~/x' keeps its suffix,
+# which is true anywhere.
+#
+# Expectations are CPython's own output.
+
+import os
+print("split abs ", os.path.split("/a/b/c.txt"))
+print("split bare", os.path.split("file.txt"))
+print("split dir ", os.path.split("/a/b/"))
+print("split root", os.path.split("/x"))
+print("norm dotdot", os.path.normpath("/a/b/../c/./d"))
+print("norm rel   ", os.path.normpath("a/b/../c"))
+print("norm dup   ", os.path.normpath("a//b///c"))
+print("norm dot   ", os.path.normpath("./a"), os.path.normpath("."))
+print("norm up    ", os.path.normpath("../a"), os.path.normpath("a/.."))
+print("norm root  ", os.path.normpath("/"), os.path.normpath("/.."))
+print("norm empty ", os.path.normpath(""))
+print("expand     ", os.path.expanduser("~") != "~", os.path.expanduser("~/x").endswith("/x"))
+print("expand no  ", os.path.expanduser("/abs"), os.path.expanduser("rel"), os.path.expanduser(""))
+p = "/tmp/pxx_osp_test.txt"
+with open(p, "w") as h:
+    h.write("hello\n")
+print("getsize    ", os.path.getsize(p))
+try:
+    os.path.getsize("/nope/zz")
+    print("missing    ", "NO ERROR")
+except OSError:
+    print("missing    ", "OSError")
+os.remove(p)

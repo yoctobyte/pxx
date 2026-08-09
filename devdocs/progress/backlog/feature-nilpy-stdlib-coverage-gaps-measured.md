@@ -58,3 +58,32 @@ referenced above.
 ## Gate
 
 `make test-nilpy` + self-host byte-identical, plus the table above.
+
+## 2026-08-09 — four more os.path names, and what the syscall ones need
+
+Added, each the same one-line-per-name shape the ticket describes, pinned by
+`test/test_nilpy_os_path_more.{npy,expected}` (`.expected` from CPython):
+
+| name | note |
+| --- | --- |
+| `os.path.split` | the (head, tail) TUPLE; its edges are a trailing slash and a bare name, neither of which falls out of dirname/basename by accident |
+| `os.path.normpath` | the one with real content — '..' popping, '..' past the ROOT staying at the root, a LEADING '..' in a relative path that cannot be collapsed without the cwd, repeated slashes, and '' answering '.' |
+| `os.path.getsize` | via `pyos_stat`, so a missing path RAISES rather than answering 0 |
+| `os.path.expanduser` | `~` and `~/...` from $HOME; `~user` returned unchanged, as CPython does when it cannot resolve |
+
+### Still missing, and why they are not one-liners
+
+`os.makedirs`, `os.listdir` and `os.rmdir` came out of the same sweep and are a
+different job: **there is no `mkdir`, `rmdir` or `getdents` entry in the PAL**
+(`compiler/builtin/pypal.pas` has open/read/write/close/lseek/ftruncate/unlink/
+rename/getcwd/stat/access/poll and nothing else). So each needs a new PAL
+syscall first, and `listdir` additionally needs the `getdents64` buffer walk
+rather than a single call.
+
+Worth doing together, and worth checking the ESP platform arm at the same time
+— `devdocs/dev` records that ESP refuses a batch of POSIX entry points
+deliberately, and directory enumeration is likely one of them.
+
+### Also still missing from the same sweep
+`os.sep` and `os.linesep` — ATTRIBUTES rather than calls, so they need a
+different hook from the dotted-call table this ticket has been extending.

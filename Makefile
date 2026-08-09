@@ -1107,6 +1107,9 @@ test-nilpy: $(COMPILER)
 	# the surplus args were emitted anyway). CPython renders them as a tuple.
 	./$(COMPILER) test/test_nilpy_exception_multi_arg.npy /tmp/test_nilpy_excmulti26
 	/tmp/test_nilpy_excmulti26 | diff -u test/test_nilpy_exception_multi_arg.expected -
+	# os.path.split / normpath / getsize / expanduser
+	./$(COMPILER) test/test_nilpy_os_path_more.npy /tmp/test_nilpy_ospathmore26
+	/tmp/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

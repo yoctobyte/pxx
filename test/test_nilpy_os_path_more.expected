@@ -1,0 +1,15 @@
+split abs  ('/a/b', 'c.txt')
+split bare ('', 'file.txt')
+split dir  ('/a/b', '')
+split root ('/', 'x')
+norm dotdot /a/c/d
+norm rel    a/c
+norm dup    a/b/c
+norm dot    a .
+norm up     ../a .
+norm root   / /
+norm empty  .
+expand      True True
+expand no   /abs rel 
+getsize     6
+missing     OSError

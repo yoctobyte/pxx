@@ -692,6 +692,20 @@ function pyos_path_isfile(const p: AnsiString): Boolean;
   leading dot is not an extension (".bashrc" -> (".bashrc", "")), and a dot in a
   directory component does not count. Pure string work, so it is exact on every
   target. Returns a TUPLE, as CPython does. }
+{ os.path.split(p) -> (head, tail), the pair os.path.dirname/basename already
+  answer separately. A TUPLE, like splitext beside it.
+  feature-nilpy-stdlib-coverage-gaps-measured }
+function pyos_path_split(const p: AnsiString): TPyList;
+{ os.path.normpath — collapse '.', '..' and repeated slashes, textually and
+  without touching the filesystem, exactly as CPython's does. }
+function pyos_path_normpath(const p: AnsiString): AnsiString;
+{ os.path.getsize — st_size, raising the same FileNotFoundError pyos_stat does
+  for a missing path rather than answering 0. }
+function pyos_path_getsize(const p: AnsiString): Int64;
+{ os.path.expanduser — a leading '~' becomes $HOME. Any other shape (including
+  '~user') is returned unchanged, which is also what CPython does when it cannot
+  resolve the user. }
+function pyos_path_expanduser(const p: AnsiString): AnsiString;
 function pyos_path_splitext(const p: AnsiString): TPyList;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
@@ -7352,6 +7366,76 @@ begin
     Result.append(Copy(p, dot, Length(p) - dot + 1));
   end;
 end;
+
+function pyos_path_split(const p: AnsiString): TPyList;
+begin
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(pyos_path_dirname(p));
+  Result.append(pyos_path_basename(p));
+end;
+
+function pyos_path_normpath(const p: AnsiString): AnsiString;
+var parts: array[0..255] of AnsiString; n, i, st: Integer;
+    seg: AnsiString; absPath: Boolean;
+begin
+  if p = '' then begin Result := '.'; Exit; end;
+  absPath := p[1] = '/';
+  n := 0; st := 1;
+  for i := 1 to Length(p) + 1 do
+    if (i > Length(p)) or (p[i] = '/') then
+    begin
+      seg := Copy(p, st, i - st);
+      st := i + 1;
+      if (seg = '') or (seg = '.') then Continue;
+      if seg = '..' then
+      begin
+        { pop, except past the root of an ABSOLUTE path (where '..' is the root
+          itself) and except a leading run of '..' in a RELATIVE one, which
+          cannot be collapsed without knowing the cwd }
+        if (n > 0) and (parts[n - 1] <> '..') then Dec(n)
+        else if not absPath then
+        begin
+          if n <= High(parts) then begin parts[n] := seg; Inc(n); end;
+        end;
+        Continue;
+      end;
+      if n <= High(parts) then begin parts[n] := seg; Inc(n); end;
+    end;
+  Result := '';
+  for i := 0 to n - 1 do
+  begin
+    if Result <> '' then Result := Result + '/';
+    Result := Result + parts[i];
+  end;
+  if absPath then Result := '/' + Result
+  else if Result = '' then Result := '.';
+end;
+
+function pyos_path_getsize(const p: AnsiString): Int64;
+var stx: TPyStat;
+begin
+  stx := pyos_stat(p);          { raises FileNotFoundError when absent }
+  Result := stx.st_size;
+end;
+
+function pyos_path_expanduser(const p: AnsiString): AnsiString;
+var home: Variant; hs: AnsiString;
+begin
+  Result := p;
+  if p = '' then Exit;
+  if p[1] <> '~' then Exit;
+  { only a bare '~' or '~/...' — '~user' needs a passwd lookup this has no PAL
+    entry for, and CPython also returns it unchanged when it cannot resolve. }
+  if (Length(p) > 1) and (p[2] <> '/') then Exit;
+  home := pyos_getenv('HOME');
+  if pyvartag(home) <> 6 then Exit;         { unset: unchanged, as CPython does }
+  hs := PyVarText(PPyVarRec(@home));
+  if hs = '' then Exit;
+  if Length(p) = 1 then Result := hs
+  else Result := hs + Copy(p, 2, Length(p) - 1);
+end;
+
 
 { ---- environment ---------------------------------------------------------- }
 
