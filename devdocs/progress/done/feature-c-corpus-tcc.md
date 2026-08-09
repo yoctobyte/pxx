@@ -302,3 +302,28 @@ Remaining, untested rather than known-broken: `tcc -run` (suspect #1 on the list
 above, mmap/mprotect stubs for `tcc_relocate`), and the self-host fixpoint the
 benchmark note names — a pxx-built tcc compiling tcc, gen2 vs gen3
 byte-identical, which is the hard correctness target.
+
+## `-run` (suspect #1) — mmap fixed, but `-run` is limited by symbol resolution
+
+The mmap/mprotect stubs were real and are fixed (PAL `PalMmapAnonProt` /
+`PalMprotect`, crtl serving anonymous mappings; `test/cmman_jit_exec_pages.c`
+pins the JIT shape against gcc). With that in, **`tcc -run` executes**:
+`-run ret7.c` exits 7, `-run say.c` exits 3.
+
+What it cannot do is call host libc. Measured: `write(1,...)` prints;
+`puts`/`printf`/`fputs`/`fwrite` are all silent while RETURNING success; a
+genuinely undefined symbol errors properly.
+
+Cause, and it is not ours to fix in crtl:
+
+- the pxx-built host exports **no symbol table** — `readelf -h` shows 0 section
+  headers, no `.symtab`, no `.dynsym`;
+- tcc's static-build fallback `dlsym` (`tccrun.c`, `tcc_syms[]`) knows exactly
+  **four** symbols: `printf`, `fprintf`, `fopen`, `fclose`.
+
+So `-run` has almost nothing to bind against, and `write` works only because tcc
+emits it as a direct syscall. Making `-run` generally useful needs pxx to emit a
+symbol table (a Track A/C ELF question), or tcc built with the dynamic-linking
+path.
+
+`-c` and full `-o` linking are unaffected and both work end to end.

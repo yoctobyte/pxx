@@ -581,11 +581,26 @@ What is actually true, measured:
 | a genuinely undefined symbol | `tcc: error: unresolved reference to '...'` |
 | output redirected to a file | 0 bytes (so not a tty/pipe buffering artefact) |
 
-So symbol resolution is NOT silently failing (undefined symbols do error), and
-the resolved function RETURNS success while emitting nothing. Both `write` and
-`puts` bottom out on the same `__pxx_write`, so the difference is not the write
-path itself. Something about which `puts` the JIT'd code binds to is the next
-thing to look at — `nm` the host binary and check whether `libtcc1.a` or the
-ELF symtab offers a second definition.
+Ran that next step, and the answer moves this OUT of crtl:
 
-Recorded rather than guessed at a second time.
+- **The pxx-built host exports no symbol table at all.** `readelf -h` reports
+  **0 section headers**, and there is no `.symtab` and no `.dynsym`. `nm` finds
+  nothing.
+- **tcc's static-build fallback `dlsym` knows exactly four symbols** —
+  `tccrun.c`'s `tcc_syms[]` is `printf`, `fprintf`, `fopen`, `fclose` and
+  nothing else.
+
+So a `-run` program has essentially nothing to bind libc calls against, which is
+a property of how tcc resolves under `CONFIG_TCC_STATIC` plus our minimal ELF —
+not a missing crtl function. `write(2)` works because tcc emits it as a direct
+syscall rather than a host call.
+
+**This is therefore not a crtl gap and does not belong on this ticket's list.**
+The pxx-side fact worth carrying elsewhere is that our binaries emit no symbol
+table, so anything that resolves symbols in a running process — a JIT, a
+plugin loader, `dlsym` on ourselves — has nothing to work with. Whether that is
+worth changing is a Track A/C question about ELF emission, not a library gap.
+
+`tcc -c` and full `tcc -o` linking both work; `-run` is the only affected mode.
+Recorded rather than guessed at a second time — the first guess (a missing
+stdout flush) was disproven by crtl's `puts` being unbuffered.
