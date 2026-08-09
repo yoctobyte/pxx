@@ -599,3 +599,28 @@ and PyMakeDynCall gains a tag-branch prepending the closure state — same
 reverse-bridge gap as VT_BOUNDMETHOD. Direction set by [[decide-nilpy-closure-model]].
 Backs VARIABLE/CONSTANT/CREATE/arrays → gates the memory-word half of the
 conformance suite. Full scope in the new ticket.
+
+## 2026-08-09 — corpus re-verified after a night of NilPy changes
+
+Integration check after ~18 NilPy fixes landed in one session (runtime dunder
+dispatch, class-identity widening, argument packing, bytes/bytearray, exception
+construction, `input()` EOF, the `pow` domain guard). Run against a HEAD build,
+not the pinned binary:
+
+- `uforth.py` compiles; smoke (`1 2 + .` / `10 3 / .` / `BYE`) green.
+- All four own corpora — `testje.for`, `testjefixed.for`, `testjefix2.for`,
+  `testjefix3.for` — byte-identical to CPython.
+- **12 of the 13 Forth-2012 word sets byte-identical and exiting 0**: core.fr,
+  coreplustest, doubletest, exceptiontest, facilitytest, localstest, memorytest,
+  searchordertest, stringtest, coreexttest, toolstest, filetest. `blocktest.fth`
+  was skipped in this pass for time (it alone runs ~270s under pxx and ~90s
+  under CPython) — it was green earlier the same night.
+
+`core.fr` is the one worth noting: it was RED at session start and is where
+[[regression-test-uforth-00]] came from — its interactive `ACCEPT` test consumes
+the driver's trailing `BYE`, leaving stdin at EOF, and the REPL spun there
+forever. Now exit 0 and byte-identical.
+
+This is the corpus doing the job it exists for: a whole night of frontend and
+runtime changes, and the one differential suite big enough to notice says
+nothing moved.
