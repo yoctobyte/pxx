@@ -40,3 +40,6 @@ Segmentation fault (core dumped)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-09 — auto-closed by the plexus watcher: `test-nilpy#src:test/test_nilpy_from_import_as_alias.npy` passes at 85179011f728 (tier full); it was red at 954727cee668. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
