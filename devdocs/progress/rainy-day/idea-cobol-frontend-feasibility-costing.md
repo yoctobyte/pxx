@@ -12,7 +12,10 @@ summary: "COBOL frontend: parser is cheap (grammar is rigid, records map onto Pa
 - **Status:** rainy-day — costed 2026-08-09 at the user's prompting. Nobody has
   agreed to build this.
 - **Owner:** —
-- **Related:** [[feature-zig-frontend]]
+- **Related:** [[feature-zig-frontend]], [[idea-ada-frontend-bare-metal-fit]]
+- **Lane:** Track **L** (Legacy), shared with Ada — decided 2026-08-09. The
+  CLAUDE.md section waits until the lane has code; the reasoning, and why not
+  Track H, is in [[idea-ada-frontend-bare-metal-fit]].
 
 ## Why it is worth costing at all
 
