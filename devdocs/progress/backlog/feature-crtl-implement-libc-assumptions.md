@@ -471,19 +471,26 @@ A function-like macro does not expand when the name is not followed by `(`, so
 bare `longjmp` is an undeclared identifier. **C requires this to work**: 7.13
 says `setjmp` may be a macro, but `longjmp` shall be an external function.
 
-**Why the fix is not a one-liner, and needs care.** Our `jmp_buf` is a STRUCT,
-not the usual array typedef — deliberately, and the header explains why: an
-array typedef loses its dimension in the C frontend and is sized as one long, so
-a struct field of it would underflow the frame. That choice is what makes the
-macros take `&(env)`. A real `void longjmp(jmp_buf, int)` would therefore take
-the struct BY VALUE, which does not match `__pxx_longjmp`'s pointer parameter —
-so simply declaring the function alongside the macro produces a symbol whose ABI
-disagrees with the implementation.
+**FIXED 2026-08-09**, and I nearly did not attempt it. My first write-up called
+this a design call needing a choice between three options, because our `jmp_buf`
+is a STRUCT rather than the usual array typedef (deliberately — an array typedef
+loses its dimension in the C frontend and would be sized as one long), so a real
+`void longjmp(jmp_buf, int)` takes the buffer BY VALUE and I assumed that
+conflicted with `__pxx_longjmp`'s pointer parameter.
 
-Options, none yet chosen: give `jmp_buf` array semantics so it decays like
-standard C (needs the frontend's array-typedef sizing fixed first); or provide a
-real `longjmp` shim that takes the struct by value and forwards its address; or
-declare the function and accept that only address-taking callers use it.
+**By-value is fine here**, and that is the whole fix. `longjmp` only ever READS
+the saved stack pointer, return address and callee-saved registers, so restoring
+from a 128-byte copy restores identical values. Writing through such a copy
+would be wrong; nothing does.
 
-Filed here rather than fixed because picking between those is a design call that
-touches the documented jmp_buf decision, and tcc is the first caller to need it.
+So `lib/crtl/src/setjmp.c` defines real `longjmp` / `_longjmp` / `siglongjmp`
+forwarding to `__pxx_longjmp(&env, val)`, with the names PARENTHESISED at the
+definition so the function-like macro does not expand and eat the declarator,
+and `setjmp.h` declares them ahead of the macros. A bare `longjmp` now resolves
+to the function; an ordinary `longjmp(env, val)` call still takes the macro and
+skips the copy.
+
+**Result:** `libtcc.c` compiles past it — the only remaining diagnostic is
+"main function not found", which is correct for a library TU. Regression test
+`test/crtl_longjmp_as_value.c` in `make lib-test` checks both spellings (through
+a function pointer, and as an ordinary call); `crtl_setjmp_oracle` still passes.
