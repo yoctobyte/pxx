@@ -85,3 +85,29 @@ with maxsplit, `splitlines`, `find`/`rfind`/`index`/`rindex` with windows,
 ## Gate
 `.npy` per method diffed against CPython's own output, plus the "already
 working" list above staying green (`test_nilpy_str_methods` covers most of it).
+
+## Third sweep, 2026-08-09 — the last two str predicates, DONE
+
+`"12".isnumeric()` and `"AB".istitle()` were the only names left failing in a
+full sweep of the str method surface (every other call in a 24-line probe
+matched CPython exactly — split/rsplit/splitlines with limits, partition,
+center/ljust/rjust/zfill, casefold/swapcase, removeprefix/removesuffix,
+expandtabs, replace with a count, index/rfind, count with a start, strip with a
+character set, title/capitalize, join, slicing with a step including `[::-1]`).
+
+Both implemented and pinned by `test/test_nilpy_str_isnumeric_istitle.npy`.
+
+`istitle` is the one with content: a RUN of letters must start uppercase and
+continue lowercase, with at least one cased character — so `"A1b"` is False (the
+run resumes after the digit and `b` does not start it uppercase) and a string
+with no letters is False rather than vacuously True.
+
+`isnumeric` delegates to `isdigit`: over the byte range pxx strings occupy the
+answers are identical, and they diverge only on Unicode characters that have no
+representation here. Kept as its own routine so that divergence has ONE place to
+be fixed when wide strings arrive.
+
+The test asserts all six related predicates per case (isnumeric, istitle,
+isdigit, isalnum, isupper, islower) because they share the "empty is False" and
+"needs a cased character" rules, and copying a neighbour is exactly how one of
+them ends up disagreeing.

@@ -447,6 +447,9 @@ test-nilpy: $(COMPILER)
 	# `with A() as a, B() as b:` — lowered by NESTING, so exit order is free.
 	./$(COMPILER) test/test_nilpy_with_multiple_managers.npy /tmp/test_nilpy_withmulti26
 	/tmp/test_nilpy_withmulti26 | diff -u test/test_nilpy_with_multiple_managers.expected -
+	# str.isnumeric()/istitle(), with their five neighbouring predicates.
+	./$(COMPILER) test/test_nilpy_str_isnumeric_istitle.npy /tmp/test_nilpy_isnumtitle26
+	/tmp/test_nilpy_isnumtitle26 | diff -u test/test_nilpy_str_isnumeric_istitle.expected -
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy /tmp/test_nilpy_is_identity26
 	test "$$(/tmp/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy /tmp/test_nilpy_min_max_variadic26

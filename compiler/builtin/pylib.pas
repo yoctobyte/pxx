@@ -1416,6 +1416,8 @@ function pystr_isspace(const s: AnsiString): Boolean;
 { CPython: "".isdigit()/.isalpha()/.isupper()/.islower() are all FALSE — the
   all-quantifier does not hold vacuously for any of them. }
 function pystr_isdigit(const s: AnsiString): Boolean;
+function pystr_isnumeric(const s: AnsiString): Boolean;
+function pystr_istitle(const s: AnsiString): Boolean;
 function pystr_isalpha(const s: AnsiString): Boolean;
 function pystr_isupper(const s: AnsiString): Boolean;
 function pystr_islower(const s: AnsiString): Boolean;
@@ -1761,6 +1763,45 @@ begin
     if s[i] in ['A'..'Z'] then cased := True;
   end;
   pystr_isupper := cased;
+end;
+
+function pystr_isnumeric(const s: AnsiString): Boolean;
+{ For the ASCII range this is str.isdigit's answer; the two differ only on
+  characters NilPy has no representation for anyway (Unicode fractions, Roman
+  numerals and the like), and pxx strings are bytes. Kept as its own routine
+  rather than aliased at the call site so the divergence has one place to be
+  recorded — and fixed — when wide strings arrive.
+  Empty string is False, as in CPython. }
+begin
+  pystr_isnumeric := pystr_isdigit(s);
+end;
+
+function pystr_istitle(const s: AnsiString): Boolean;
+{ Titlecase: every run of letters starts with an uppercase and continues
+  lowercase, and there is at least one letter. Non-letters separate runs, so
+  "Hello, World" and "A1b"->False are the cases that pin it. CPython answers
+  False for a string with no cased characters at all. }
+var i: Integer; prevCased, seenCased: Boolean;
+begin
+  prevCased := False;
+  seenCased := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] in ['A'..'Z'] then
+    begin
+      if prevCased then begin pystr_istitle := False; Exit; end;
+      prevCased := True;
+      seenCased := True;
+    end
+    else if s[i] in ['a'..'z'] then
+    begin
+      if not prevCased then begin pystr_istitle := False; Exit; end;
+      seenCased := True;
+    end
+    else
+      prevCased := False;
+  end;
+  pystr_istitle := seenCased;
 end;
 
 function pystr_islower(const s: AnsiString): Boolean;

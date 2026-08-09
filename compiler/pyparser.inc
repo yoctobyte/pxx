@@ -2984,6 +2984,10 @@ begin
     begin pname := 'pystr_translate'; retTk := tyAnsiString; wantArgs := 1; end
   else if CaseEqual(mname, 'isdigit') then
     begin pname := 'pystr_isdigit'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'isnumeric') then
+    begin pname := 'pystr_isnumeric'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'istitle') then
+    begin pname := 'pystr_istitle'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'isalpha') then
     begin pname := 'pystr_isalpha'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'isupper') then

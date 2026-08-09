@@ -1,0 +1,28 @@
+# feature-nilpy-str-surface-gaps-2026-08-09 — isnumeric() and istitle()
+#
+# Both were missing and both were LOUD: the compiler named them and listed the
+# 36 str methods it does have, so neither could produce a wrong answer. They are
+# the last two of that sweep's list.
+#
+# istitle is the one with real content. Titlecase means every RUN of letters
+# starts uppercase and continues lowercase, with at least one cased character —
+# so `"Title Case"` is True, `"Title case"` is False, `"A1b"` is False (the run
+# resumes after the digit, and `b` does not start it uppercase), and a string
+# with no letters at all is False rather than vacuously True.
+#
+# isnumeric delegates to isdigit: over the byte range pxx strings occupy, the
+# two answers are identical, and they diverge only on Unicode characters with no
+# representation here. It is its own routine rather than a call-site alias so
+# that divergence has one place to be fixed when wide strings arrive.
+#
+# Every case is asserted against the NEIGHBOURING predicates too — isdigit,
+# isalnum, isupper, islower — because these six share the "empty string is
+# False" and "needs at least one cased character" rules, and a new one added by
+# copying its neighbour is exactly how one of them ends up disagreeing.
+#
+# Expectations are CPython's own output.
+
+cases = ["12", "", "ab1", "AB", "Hello, World", "Hello World", "A1b", "hello", "HELLO",
+         "Title Case", "Title case", "123", "12.3", "  ", "A", "a", "AbC", "A-B", "a1B"]
+for c in cases:
+    print(repr(c), c.isnumeric(), c.istitle(), c.isdigit(), c.isalnum(), c.isupper(), c.islower())

@@ -1,0 +1,19 @@
+'12' True False True True False False
+'' False False False False False False
+'ab1' False False False True False True
+'AB' False False False True True False
+'Hello, World' False True False False False False
+'Hello World' False True False False False False
+'A1b' False False False True False False
+'hello' False False False True False True
+'HELLO' False False False True True False
+'Title Case' False True False False False False
+'Title case' False False False False False False
+'123' True False True True False False
+'12.3' False False False False False False
+'  ' False False False False False False
+'A' False True False True True False
+'a' False False False True False True
+'AbC' False False False True False False
+'A-B' False True False False True False
+'a1B' False False False True False False
