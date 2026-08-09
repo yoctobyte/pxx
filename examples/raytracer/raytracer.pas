@@ -136,8 +136,8 @@ end;
 function PlaneColor(const p: Vec3): Vec3;
 var ix, iz: Integer;
 begin
-  ix := Trunc(Floor(p.x));
-  iz := Trunc(Floor(p.z));
+  ix := Floor(p.x);   { FPC-shaped now: Floor returns Integer }
+  iz := Floor(p.z);
   if ((ix + iz) and 1) = 0 then PlaneColor := V(0.9, 0.9, 0.9)
   else PlaneColor := V(0.2, 0.2, 0.2);
 end;

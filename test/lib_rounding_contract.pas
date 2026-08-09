@@ -66,14 +66,22 @@ begin
   h := 2.7;  CheckI(Trunc(h), 2, 'Trunc(2.7)');
   h := -2.7; CheckI(Trunc(h), -2, 'Trunc(-2.7)');
 
-  { ---- Floor/Ceil: C semantics, returning Double. That the return type is
-         Double rather than FPC's Integer is a KNOWN divergence with its own
-         ticket (bug-b-fpc-numeric-compat-floor-ceil-return-float-currency-is-
-         double); pinned here as it stands so the change is deliberate. ---- }
-  h := -2.7; CheckF(Floor(h), -3.0, 'Floor(-2.7)');
-  h := -2.7; CheckF(Ceil(h), -2.0, 'Ceil(-2.7)');
-  h := 2.7;  CheckF(Floor(h), 2.0, 'Floor(2.7)');
-  h := 2.7;  CheckF(Ceil(h), 3.0, 'Ceil(2.7)');
+  { ---- Floor/Ceil return INTEGER, as FPC's do, with Floor64/Ceil64 for the
+         64-bit range. They are NOT C's floor()/ceil(), which return double and
+         live in crtl — the two coexist and must keep giving their own answers
+         (test/cmath_no_pascal_hijack.c watches the C side). ---- }
+  h := -2.7; CheckI(Floor(h), -3, 'Floor(-2.7)');
+  h := -2.7; CheckI(Ceil(h), -2, 'Ceil(-2.7)');
+  h := 2.7;  CheckI(Floor(h), 2, 'Floor(2.7)');
+  h := 2.7;  CheckI(Ceil(h), 3, 'Ceil(2.7)');
+  h := -3.0; CheckI(Floor(h), -3, 'Floor(-3.0) exact');
+  h := -3.0; CheckI(Ceil(h), -3, 'Ceil(-3.0) exact');
+  { the 64-bit pair exists BECAUSE the Integer one overflows past 2^31 — the
+    same limitation FPC has, which is why FPC ships both }
+  h := 4503599627370495.0;
+  CheckI(Floor64(h), 4503599627370495, 'Floor64 past 2^31');
+  h := -4503599627370495.0;
+  CheckI(Floor64(h), -4503599627370495, 'Floor64 negative past 2^31');
 
   { ---- RoundTo: FPC's formula, Round(v / 10^d) * 10^d. The 2.675 row is the
          one that catches a re-derivation: dividing by 0.01 lands just ABOVE

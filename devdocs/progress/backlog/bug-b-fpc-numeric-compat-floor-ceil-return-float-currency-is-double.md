@@ -2,6 +2,7 @@
 track: B
 prio: 25
 type: bug
+blocked-by: idea-cobol-frontend-feasibility-costing
 summary: "Two FPC numeric divergences in lib/rtl: Math.Floor/Ceil return Double where FPC returns Integer (and Floor64/Ceil64 are missing), and sysutils declares Currency = Double where FPC's is a fixed-point 4-decimal Int64 — so a money type cannot represent 0.10"
 ---
 
@@ -91,3 +92,55 @@ together.
 ## Log
 - 2026-08-09 — filed. Found while verifying rounding behaviour for a docs
   claim; neither is blocking anything today.
+
+## Half 1 DONE 2026-08-09 (Track B): Floor/Ceil return Integer
+
+`Floor`/`Ceil` return `Integer` and `Floor64`/`Ceil64` return `Int64`, matching
+FPC — verified against an FPC build: `Floor(-2.7) = -3`, `Ceil(-2.7) = -2`,
+`Floor(2.7) = 2`, `Ceil(2.7) = 3`. Single overloads return `Integer` too, as
+FPC's do.
+
+All 12 in-tree call sites updated, and the ticket's own evidence held up: the
+raytracers got SIMPLER. `ix := Trunc(Floor(p.x))` is now `ix := Floor(p.x)`,
+which is what the same line says in FPC. `examples/mathf/mathdemo.pas` gained a
+`ChkI` integer comparator for its four assertions.
+
+**Two hazards worth recording, because neither is obvious:**
+
+1. **An internal caller would have silently overflowed.** `DdRint` — the
+   ties-to-even helper under the double-double kernel — floors values up to
+   2^52. With `Floor` returning a 32-bit `Integer`, everything between 2^31 and
+   2^52 would have wrapped, in a function whose whole job is exact rounding. It
+   now uses `Int()` directly, which is what it always meant (its operand is
+   non-negative, so the two agree). This is exactly why FPC ships the 64-bit
+   pair, and the new test pins `Floor64` past 2^31 in both signs.
+
+2. **`floor`/`ceil` are C names, and the return type was the only thing making a
+   collision invisible.** Before, Pascal `Floor(Double): Double` and C
+   `floor(double): double` had identical signatures, so a hijack would have been
+   undetectable; afterwards it would be loudly wrong. Measured before committing
+   — with a deliberately broken Pascal `Floor` returning 0, C's `floor` still
+   gave gcc's answer, so C resolves to crtl's. `test/cmath_no_pascal_hijack.c`
+   keeps watching (bug-c-pascal-math-names-hijack-libc-through-pxxcio).
+
+## Half 2 (`Currency = Double`) — NOT done, and deliberately deferred
+
+Left as filed, with `blocked-by` pointing at the COBOL costing ticket, because
+that is where the requirement actually lives. Reasons not to do it now:
+
+- **It is the same theme as a live design discussion** — fixed-point decimal,
+  rounding modes and COBOL — and [[idea-cobol-frontend-feasibility-costing]]
+  already says what is missing is narrower than "a decimal type": scale-aware
+  add/sub/mul/div with the standard's rounding modes. Building a
+  4-decimal `Int64` `Currency` in isolation risks being the wrong shape for the
+  thing that will actually consume it.
+- **The blast radius is not where it looks.** Only 6 in-tree `Currency`
+  references outside `sysutils`, so the type change is small — but `Currency`
+  currently rides every `Double` path (`FloatToStr`, `FormatFloat`, `StrToCurr`,
+  `writeln`), and a scaled `Int64` needs its own formatting and parsing that
+  agrees with FPC's 4-decimal output. That is the real work, and it belongs with
+  the decimal arithmetic rather than ahead of it.
+
+This ticket's own text agrees splitting is reasonable; half 1 stands alone and
+is done.
+

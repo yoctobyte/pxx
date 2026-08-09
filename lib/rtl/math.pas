@@ -51,8 +51,20 @@ function LogN(base, x: Double): Double;
 function Hypot(x, y: Double): Double;
 function Power(base, exponent: Double): Double;
 function IntPower(base: Double; n: Integer): Double;
-function Floor(x: Double): Double;
-function Ceil(x: Double): Double;
+{ FPC's Floor/Ceil return INTEGER (Floor64/Ceil64 give Int64) — they are not
+  C's floor()/ceil(). They used to return Double here, which is C semantics
+  wearing FPC's names, and the divergence had already propagated into our own
+  tree: examples/raytracer wrote `Trunc(Floor(p.x))`, a wrapper that exists
+  ONLY because Floor handed back a float. In FPC that is plain `Floor(p.x)`.
+  bug-b-fpc-numeric-compat-floor-ceil-return-float-currency-is-double.
+
+  The Integer forms overflow past 2^31 exactly as FPC's do — that is why FPC
+  ships the 64-bit pair, and why RTL code that floors a large magnitude must
+  reach for Floor64. }
+function Floor(x: Double): Integer;
+function Ceil(x: Double): Integer;
+function Floor64(x: Double): Int64;
+function Ceil64(x: Double): Int64;
 function FMod(x, y: Double): Double;
 function Sign(x: Double): Integer;
 function Min(a, b: Double): Double;
@@ -141,8 +153,8 @@ function Log10(x: Single): Single;
 function Log2(x: Single): Single;
 function Hypot(x, y: Single): Single;
 function Power(base, exponent: Single): Single;
-function Floor(x: Single): Single;
-function Ceil(x: Single): Single;
+function Floor(x: Single): Integer;
+function Ceil(x: Single): Integer;
 
 implementation
 
@@ -354,12 +366,15 @@ var t, f, a: Double;
 begin
   a := Abs(x);
   if a >= 4503599627370496.0 then begin Result := x; Exit; end;  { >= 2^52: integral }
-  t := Floor(a);
+  { Int(), not Floor(): a is non-negative here so the two agree, and Floor now
+    returns a 32-bit Integer which would SILENTLY OVERFLOW for a between 2^31
+    and 2^52 — a range this function is explicitly still handling. }
+  t := Int(a);
   f := a - t;
   if f > 0.5 then t := t + 1.0
   else if f = 0.5 then
   begin
-    if t - 2.0 * Floor(t / 2.0) <> 0.0 then t := t + 1.0;   { ties to even }
+    if t - 2.0 * Int(t / 2.0) <> 0.0 then t := t + 1.0;   { ties to even }
   end;
   if x < 0.0 then Result := -t else Result := t;
 end;
@@ -957,16 +972,30 @@ begin
   Result := res;
 end;
 
-function Floor(x: Double): Double;
+function Floor64(x: Double): Int64;
+var t: Double;
 begin
-  if (x < 0.0) and (Frac(x) <> 0.0) then Result := Int(x) - 1.0
-  else Result := Int(x);
+  t := Int(x);
+  if (x < 0.0) and (t <> x) then t := t - 1.0;
+  Result := Trunc(t);
 end;
 
-function Ceil(x: Double): Double;
+function Ceil64(x: Double): Int64;
+var t: Double;
 begin
-  if (x > 0.0) and (Frac(x) <> 0.0) then Result := Int(x) + 1.0
-  else Result := Int(x);
+  t := Int(x);
+  if (x > 0.0) and (t <> x) then t := t + 1.0;
+  Result := Trunc(t);
+end;
+
+function Floor(x: Double): Integer;
+begin
+  Result := Integer(Floor64(x));
+end;
+
+function Ceil(x: Double): Integer;
+begin
+  Result := Integer(Ceil64(x));
 end;
 
 function FMod(x, y: Double): Double;
@@ -1126,14 +1155,14 @@ begin
   Result := Power(b, e);
 end;
 
-function Floor(x: Single): Single;
+function Floor(x: Single): Integer;
 var d: Double;
 begin
   d := x;
   Result := Floor(d);
 end;
 
-function Ceil(x: Single): Single;
+function Ceil(x: Single): Integer;
 var d: Double;
 begin
   d := x;

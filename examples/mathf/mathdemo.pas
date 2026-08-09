@@ -42,6 +42,17 @@ begin
   end;
 end;
 
+procedure ChkI(const name: AnsiString; got, want: Int64);
+begin
+  if got = want then
+    writeln('  ok   ', name, ' = ', got)
+  else
+  begin
+    ok := False;
+    writeln('  FAIL ', name, ' = ', got, '  want ', want);
+  end;
+end;
+
 procedure ChkS(const name: AnsiString; got, want: Single);
 begin
   if Approx(got, want, EPSS) then
@@ -102,10 +113,12 @@ begin
   Chk('arctanh(tanh1)', ArcTanh(Tanh(1.0)), 1.0);
 
   writeln('-- rounding / misc --');
-  Chk('floor(-2.3)',  Floor(-2.3),      -3.0);
-  Chk('ceil(-2.3)',   Ceil(-2.3),       -2.0);
-  Chk('floor(2.7)',   Floor(2.7),       2.0);
-  Chk('ceil(2.1)',    Ceil(2.1),        3.0);
+  { Floor/Ceil return Integer, as FPC's do — so these compare as integers now,
+    not against -3.0/2.0 (bug-b-fpc-numeric-compat-floor-ceil-...). }
+  ChkI('floor(-2.3)', Floor(-2.3),      -3);
+  ChkI('ceil(-2.3)',  Ceil(-2.3),       -2);
+  ChkI('floor(2.7)',  Floor(2.7),       2);
+  ChkI('ceil(2.1)',   Ceil(2.1),        3);
   Chk('fmod(7,3)',    FMod(7.0, 3.0),   1.0);
   Chk('fmod(-7,3)',   FMod(-7.0, 3.0),  -1.0);
   Chk('degtorad(180)',DegToRad(180.0),  Pi);
