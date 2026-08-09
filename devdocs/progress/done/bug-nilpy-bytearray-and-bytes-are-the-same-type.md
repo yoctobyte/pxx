@@ -105,4 +105,4 @@ dict, and through a function parameter. `gate.sh quick` GREEN; the bytes,
 isinstance, set and tuple test families re-diffed against CPython.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit c752cf4dc.
