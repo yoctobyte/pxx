@@ -661,6 +661,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-repr-and-sum-over-range-are-undefined-variables | N | 30 | bug | repr() is not a builtin at all, and sum(range(n)) fails 'undefined variable (range)' because range is only a for-header form | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |
 | bug-nilpy-repr-of-a-variant-holding-an-object-is-empty | N | 50 | bug | `repr()` of a VARIANT holding a user instance answered '' | — |
+| bug-nilpy-return-inside-a-with-skips-exit | N | 55 | bug | `return` inside a `with` does not run `__exit__` | — |
 | bug-nilpy-return-none-from-a-str-returning-def-yields-the-text-None | N | 55 | bug | RESOLVED — `return None` from a `-> Optional[str]` def handed back the TEXT 'None', so `x is None` was False and the value was truthy. The assignment path had the rule; the return path did not. Broke every `while True: ... if tok is None: break` loop. | — |
 | bug-nilpy-return-type-inference-mistypes-several-expression-shapes | N | 75 | bug | An unannotated def's inferred return type is wrong for several common expression shapes | — |
 | bug-nilpy-returning-a-construction-leaks-one-ref | N | 60 | bug | `return Node(...)` leaks one object ref per call; `x = Node(...); return x` does not | — |

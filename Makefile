@@ -1967,6 +1967,12 @@ test-nilpy: $(COMPILER)
 	# one of them whichever way it is made.
 	./$(COMPILER) test/test_nilpy_str_method_name_collides_with_class_method.npy /tmp/test_nilpy_strcoll26
 	/tmp/test_nilpy_strcoll26 | diff -u test/test_nilpy_str_method_name_collides_with_class_method.expected -
+	# __exit__ runs on EVERY way out of a `with` body — return, break, continue,
+	# fall-through and the exception path. The finally body must be a STATEMENT;
+	# as a bare call expression it was pruned as an unused value on every arm but
+	# the exception one, which is why only that arm ever measured correct.
+	./$(COMPILER) test/test_nilpy_with_early_exit_runs_exit.npy /tmp/test_nilpy_withexit26
+	/tmp/test_nilpy_withexit26 | diff -u test/test_nilpy_with_early_exit_runs_exit.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

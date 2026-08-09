@@ -1,0 +1,83 @@
+# `__exit__` must run on EVERY way out of a `with` body, not only on the two
+# that happened to be measured: return, break and continue all left it unrun,
+# silently, because the value produced was still correct.
+# bug-nilpy-return-inside-a-with-skips-exit
+
+
+class C:
+    def __init__(self, n):
+        self.n = n
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, a, b, c):
+        print("exit", self.n)
+        return False
+
+
+def ret_single():
+    with C(1) as a:
+        return a.n
+
+
+def ret_multi():
+    with C("m1") as a, C("m2") as b:
+        return "multi"
+
+
+def brk():
+    for i in [1, 2, 3]:
+        with C("brk") as a:
+            if i == 2:
+                break
+    return "after-break"
+
+
+def cont():
+    for i in [1, 2]:
+        with C("cont") as a:
+            continue
+    return "after-continue"
+
+
+def falls():
+    with C("fall") as a:
+        pass
+    return "fell-through"
+
+
+def raises():
+    # the arm that already worked — kept as a CONTROL, so a future change that
+    # fixes one arm by breaking the other is caught here rather than in a corpus
+    try:
+        with C("raise") as a:
+            raise ValueError("boom")
+    except ValueError:
+        return "caught"
+
+
+def ret_in_try_in_with():
+    with C("nested") as a:
+        try:
+            return "from-try"
+        finally:
+            print("inner-finally")
+
+
+def ret_from_loop_in_with():
+    with C("loopret") as a:
+        for i in [1, 2, 3]:
+            if i == 2:
+                return "returned-from-loop"
+    return "unreachable"
+
+
+print("ret", ret_single())
+print(ret_multi())
+print(brk())
+print(cont())
+print(falls())
+print(raises())
+print(ret_in_try_in_with())
+print(ret_from_loop_in_with())

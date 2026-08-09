@@ -13178,7 +13178,20 @@ begin
       begin
         node := AllocNode(AN_TRY_FINALLY);
         ASTLeft[node] := bodyNode;
-        ASTRight[node] := exitNode;
+        { The finally body must be a STATEMENT, not a bare call EXPRESSION.
+          PyCallMeth3 yields a value node, and the IR lowering emits an unused
+          value on the fall-through/return path without marking it a statement
+          root — so it was pruned, and `__exit__` never ran there. The EXCEPTION
+          path survived because the landing pad lowers its copy as a root
+          regardless, which is exactly why the exception case measured correct
+          and made the node kind look innocent: the same AN_TRY_FINALLY was
+          right in one arm and dead in the other.
+
+          A statement-level `finally:` suite is an AN_SEQ, which is why the
+          identical program written with try/finally always worked. Wrapping in
+          the same seq is the whole fix.
+          bug-nilpy-return-inside-a-with-skips-exit }
+        ASTRight[node] := PySeqAppend(-1, exitNode);
         bodyNode := node;
       end;
     end;

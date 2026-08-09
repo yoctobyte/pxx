@@ -1,0 +1,20 @@
+exit 1
+ret 1
+exit m2
+exit m1
+multi
+exit brk
+exit brk
+after-break
+exit cont
+exit cont
+after-continue
+exit fall
+fell-through
+exit raise
+caught
+inner-finally
+exit nested
+from-try
+exit loopret
+returned-from-loop
