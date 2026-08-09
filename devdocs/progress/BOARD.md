@@ -97,12 +97,12 @@ _none_
 | compat-pascal-inline-generic-specialization | P | 35 | compat | pxx accepts only the declaration form `specialize Max<Integer> as MaxInt;` — FPC's inline `specialize Max<Integer>(a, b)` in an expression or statement is rejected with 'undefined variable' | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
-| compat-pascal-thread-api-surface-differs-from-fpc | B | 35 | compat | Threaded FPC code does not compile as-is: TThread lives in palthreadobj rather than Classes, there is no cthreads shim, WaitFor is a procedure where FPC's returns LongWord, and BeginThread/TThreadID do not exist | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
+| decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
@@ -390,9 +390,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1552)
+## done (1553)
 
-1552 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1553 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -497,6 +497,7 @@ _none_
 - [p 45] [T] bug-t-the-full-tier-no-longer-fits-its-deadline
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
+- [p 45] [U] decide-threadsafe-gate-is-reach-based-not-use-based
 - [p 45] [D] docs-canonical-domain
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
@@ -566,7 +567,6 @@ _none_
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
-- [p 35] [B] compat-pascal-thread-api-surface-differs-from-fpc
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 35] [B] feature-b-rtl-missing-fpc-surface-2026-08
 - [p 35] [S] feature-c-esp-conformance-coverage

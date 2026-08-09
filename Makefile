@@ -7939,6 +7939,11 @@ lib-test: pxx-stable-check
 	# TextReadLn — expectations measured against FPC, not reasoned about.
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadchar.pas /tmp/lib_textreadchar
 	test "$$(/tmp/lib_textreadchar | tail -n 1)" = "TEXTREADCHAR OK"
+	# The FPC threading surface where FPC code looks for it: WaitFor as a
+	# FUNCTION returning ReturnValue, the BeginThread family, and an empty
+	# cthreads shim. Expectations are FPC's own output for the same program.
+	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas /tmp/lib_fpc_thread_surface
+	test "$$(/tmp/lib_fpc_thread_surface | tail -n 1)" = "FPCTHREAD OK"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.
 	# The output is identical either way — the property that separates a futex
 	# mutex from the spinlock it replaced is CPU TIME, so assert that: three

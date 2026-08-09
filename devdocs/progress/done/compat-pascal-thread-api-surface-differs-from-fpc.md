@@ -3,12 +3,13 @@ summary: "Threaded FPC code does not compile as-is: TThread lives in palthreadob
 type: compat
 track: B
 prio: 35
+owner: claude-B
 ---
 
 # The threading surface is not where FPC code looks for it
 
 - **Type:** compat (RTL parity) — Track B (`lib/rtl`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** writing the `tools/fpc_diff_probe.sh` thread cases. Every one
   needed a `{$IFDEF FPC}` split in its `uses` line before it would build on
@@ -59,3 +60,45 @@ the core Create/Start/WaitFor/Finished path is verified against FPC today.
 
 Track B: `make lib-test` / `tools/gate.sh lib`. If `Classes` gains the
 re-export, re-check binary size on a Classes-only demo before and after.
+
+## Resolution 2026-08-09 (Track B) — 3 of 4 shipped, 1 escalated
+
+**2. `cthreads`** — `lib/rtl/cthreads.pas`, deliberately EMPTY. pxx has no thread
+manager to install and no libc to install one from, so "install the C thread
+manager" correctly does nothing here. Kept dependency-free on purpose: a program
+that inherited `{$IFDEF UNIX}cthreads,{$ENDIF}` from a portable header must not
+thereby acquire the thread runtime.
+
+**3. `WaitFor`** — now `function WaitFor: LongWord` returning `ReturnValue`, read
+AFTER the join. FPC prints 77 for the probe program; so do we. Existing
+statement-form callers are unaffected: pxx allows a discarded function result,
+verified before making the change.
+
+**4. `BeginThread` family** — `BeginThread`, `EndThread`, `TThreadID`,
+`WaitForThreadTerminate`, `CloseThread` in `palthreadobj` (M3, not M1: the
+registry needs a mutex and palsync is built ON palthread, so putting the
+FPC-surface layer here keeps the layering one-way). `PalThreadExit` added to
+palthread as EndThread's primitive — SYS_exit, not exit_group. FPC ground truth
+reproduced exactly: `rc=55`, `EndThread(88)` -> `rc=88` with the following line
+not reached, `SizeOf(TThreadID)=8`.
+
+*A race the test caught, worth recording:* the slot registry first keyed on the
+tid the CHILD writes, so a joiner that beat the child's first instruction found
+no slot and `WaitForThreadTerminate` returned 0. The quick standalone probe
+passed; the fuller test failed every time. It now matches on either tid field —
+`Handle.Tid` (parent-written, what a joiner can rely on) or the child-written one
+(what `EndThread` needs to find itself) — which is the RACE CONTRACT in
+palthread.pas applied to a second reader. 500-iteration stress: 0 bad.
+
+**1. `TThread` in `Classes`** — **escalated, not done**, per this ticket's own
+instruction. Measuring it first showed the cost is not the size/dependency
+trade-off the ticket assumed: adding `palthreadobj` to `classes` makes EVERY
+`uses classes` program fail to compile without `--threadsafe`, because the gate
+fires on REACHING `__pxxclone`'s unit rather than on calling it. Filed with the
+numbers as [[decide-threadsafe-gate-is-reach-based-not-use-based]].
+
+Regression test: `test/lib_fpc_thread_surface.pas`, in `make lib-test`.
+
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

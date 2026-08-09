@@ -64,6 +64,13 @@ procedure PalThreadJoin(var h: TThreadHandle);
 { Kernel thread id of the caller (gettid). }
 function PalThreadSelf: Int64;
 
+{ End the CALLING thread now, without unwinding (SYS_exit, NOT exit_group — the
+  process and its other threads keep running). The kernel clears the handle's
+  TidWord and futex-wakes any joiner, so a PalThreadJoin on this thread returns
+  normally. Never returns. Called on the main thread it ends that thread only,
+  which on Linux leaves the process alive with no main — so don't. }
+procedure PalThreadExit;
+
 implementation
 
 const
@@ -81,6 +88,7 @@ const
   SYS_munmap   = 11;
   SYS_mprotect = 10;
   SYS_gettid   = 186;
+  SYS_exit     = 60;
 {$else}
 {$ifdef CPUI386}
   { i386 int 0x80 numbers. SYS_mmap is mmap2 (192): its last arg is an offset
@@ -90,6 +98,7 @@ const
   SYS_munmap   = 91;
   SYS_mprotect = 125;
   SYS_gettid   = 224;
+  SYS_exit     = 1;
 {$else}
 {$ifdef CPUAARCH64}
   { aarch64 uses the asm-generic syscall table. Real mmap (222), byte offset. }
@@ -97,6 +106,7 @@ const
   SYS_munmap   = 215;
   SYS_mprotect = 226;
   SYS_gettid   = 178;
+  SYS_exit     = 93;
 {$else}
 {$ifdef CPUARM}
   { arm32 EABI. mmap2 (192, page offset — we pass 0). These five happen to match
@@ -105,6 +115,7 @@ const
   SYS_munmap   = 91;
   SYS_mprotect = 125;
   SYS_gettid   = 224;
+  SYS_exit     = 1;
 {$else}
   { Other targets trip the __pxxclone compile-error before these matter; define
     placeholders so the unit still parses. }
@@ -112,6 +123,7 @@ const
   SYS_munmap   = -1;
   SYS_mprotect = -1;
   SYS_gettid   = -1;
+  SYS_exit     = -1;
 {$endif}
 {$endif}
 {$endif}
@@ -120,6 +132,16 @@ const
 function PalThreadSelf: Int64;
 begin
   Result := __pxxrawsyscall(SYS_gettid, 0, 0, 0, 0, 0, 0);
+end;
+
+procedure PalThreadExit;
+var ignore: Int64;
+begin
+  { SYS_exit (this thread) rather than exit_group (the process). The clone flags
+    include CLONE_CHILD_CLEARTID, so the kernel zeroes TidWord and futex-wakes
+    the joiner as part of this call — which is what makes an early exit
+    indistinguishable from returning off the end of the thread body. }
+  ignore := __pxxrawsyscall(SYS_exit, 0, 0, 0, 0, 0, 0);
 end;
 
 function PalThreadCreate(var h: TThreadHandle; entry: TThreadEntry; arg: Pointer;

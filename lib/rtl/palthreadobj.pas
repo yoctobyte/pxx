@@ -63,10 +63,13 @@ type
 
     { Spawn the OS thread (no-op if already started). }
     procedure Start;
-    { Block until the thread's Execute returns (no-op if never started, or when
-      called from the thread itself — a self-join would deadlock).
-      Idempotent; also called by the destructor (auto-join). }
-    procedure WaitFor;
+    { Block until the thread's Execute returns, then hand back its ReturnValue —
+      `r := t.WaitFor` is the FPC idiom and this matches it (FPC: `function
+      WaitFor: LongWord`). No-op if never started, or when called from the
+      thread itself, since a self-join would deadlock; both of those answer
+      with whatever ReturnValue currently holds. Idempotent; also called by the
+      destructor (auto-join), where the result is discarded. }
+    function WaitFor: LongWord;
 
     { Run m (`@Self.SomeMethod`) on the MAIN thread and block until it has run
       there. The main thread must pump CheckSynchronize (console programs have
@@ -112,6 +115,46 @@ type
       TNotifyEvent(Sender) — Data already carries the receiver. }
     property OnTerminate: TThreadMethod read FOnTerminate write FOnTerminate;
   end;
+
+{ ---- FPC's low-level thread API -------------------------------------------
+  System-unit names in FPC, so portable sources call them with no uses line;
+  here they need `uses palthreadobj` until they are reachable the way FPC's are
+  (the same wart as bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc).
+
+  They live in M3 rather than in palthread itself so the layering stays one-way:
+  the registry that makes WaitForThreadTerminate able to hand back a body's
+  result needs a mutex, and palsync (M2) is built ON palthread (M1). Putting an
+  FPC-surface layer here keeps M1 raw. }
+type
+  { FPC: PtrUInt, 8 bytes on 64-bit. Here it carries the kernel tid, the same
+    value TThread.ThreadID reports, so the two APIs agree about identity —
+    FPC's is a pthread_t, which is opaque, so nothing portable can tell. }
+  TThreadID = Int64;
+
+  { FPC's thread body shape: takes the opaque argument, returns the thread's
+    result. `function(p: Pointer): PtrInt`. }
+  TThreadFunc = function(p: Pointer): Int64;
+
+{ Spawn f(p) on a new thread. Returns its TThreadID, or 0 on failure. The
+  thread's result is kept until CloseThread, so WaitForThreadTerminate can
+  return it after the thread is gone. }
+function BeginThread(f: TThreadFunc; p: Pointer): TThreadID;
+
+{ End the CALLING thread with the given result. Returning from the body does
+  the same thing; this is the early-exit form. }
+procedure EndThread(exitCode: Int64);
+
+{ Block until the thread ends and return its result. FPC's timeoutMs is
+  accepted and IGNORED — the underlying join is unbounded, and silently
+  returning early would be a wrong answer rather than a missing feature, so a
+  caller that passes a timeout gets a correct (late) result rather than a
+  plausible wrong one. 0 means "no timeout" in FPC and is the only value with
+  identical behaviour here. }
+function WaitForThreadTerminate(id: TThreadID; timeoutMs: Int64): Int64;
+
+{ Release the bookkeeping for a finished thread. Safe to call once per
+  BeginThread; after it, the id is no longer known. }
+procedure CloseThread(id: TThreadID);
 
 { Drain the Synchronize/Queue backlog (and reap the handles/stacks of
   FreeOnTerminate threads that have since exited). Call it periodically FROM
@@ -363,12 +406,14 @@ begin
   PalThreadCreate(FHandlePtr^, @ThreadObjLauncher, Pointer(Self), 0);
 end;
 
-procedure TThread.WaitFor;
+function TThread.WaitFor: LongWord;
 begin
-  if not FStarted then Exit;
-  if FHandlePtr = nil then Exit;
-  if PalThreadSelf = FHandlePtr^.Tid then Exit;   { self-join would deadlock }
-  PalThreadJoin(FHandlePtr^);
+  if FStarted and (FHandlePtr <> nil)
+     and (PalThreadSelf <> FHandlePtr^.Tid) then  { self-join would deadlock }
+    PalThreadJoin(FHandlePtr^);
+  { Read AFTER the join: that is the whole point of returning it — Execute's
+    store to ReturnValue happens-before the thread exit the join waits on. }
+  Result := LongWord(FReturnValue);
 end;
 
 function TThread.ThreadID: Int64;
@@ -454,7 +499,166 @@ begin
   SyncEnqueue(e);
 end;
 
+{ ---- FPC's low-level thread API --------------------------------------------
+  BeginThread's body has FPC's shape (returns a result); PalThreadCreate's has
+  the PAL's (returns nothing). The bridge is a heap SLOT per thread, passed as
+  the PAL's opaque arg: the launcher finds its own slot with no lookup, runs the
+  body, and parks the result there.
+
+  The slot is what makes WaitForThreadTerminate answerable AFTER the thread is
+  gone — the result cannot live in the thread, and the tid stops identifying
+  anything once the kernel reuses it. So the slot outlives the thread and
+  CloseThread is what releases it, which is exactly why FPC has CloseThread at
+  all. }
+type
+  PThreadSlot = ^TThreadSlot;
+  TThreadSlot = record
+    Handle:   TThreadHandle;
+    Body:     TThreadFunc;
+    Arg:      Pointer;
+    Res:      Int64;
+    Tid:      Int64;
+    NextSlot: PThreadSlot;
+  end;
+
+var
+  SlotHead: PThreadSlot;    { guarded by SyncLock }
+
+procedure BeginThreadLauncher(arg: Pointer);
+var
+  s: PThreadSlot;
+  f: TThreadFunc;
+begin
+  s := PThreadSlot(arg);
+  { Same tid-identity rule as ThreadObjLauncher: the parent's store of the tid
+    races our start, so write our own before anything can look for us. }
+  s^.Tid := PalThreadSelf;
+  f := s^.Body;
+  s^.Res := f(s^.Arg);
+end;
+
+{ Match on EITHER tid field, because the two sides of this API learn the tid at
+  different moments and neither ordering can be assumed (the RACE CONTRACT on
+  TThreadHandle in palthread.pas). Handle.Tid is written by the PARENT when
+  __pxxclone returns, so it is the one a joiner can rely on; s^.Tid is written by
+  the CHILD as its first act, so it is the one the child itself can rely on when
+  EndThread has to find its own slot. Keying on only the child's field made
+  WaitForThreadTerminate return 0 whenever the joiner beat the child's first
+  instruction — which it does whenever the box is busy, and did not on the quick
+  standalone probe that "passed". Ids are always > 0, so a half-filled slot's 0
+  cannot be matched by accident; id <= 0 is refused outright. }
+function FindSlot(id: TThreadID): PThreadSlot;
+var s: PThreadSlot;
+begin
+  Result := nil;
+  if id <= 0 then Exit;
+  s := SlotHead;
+  while s <> nil do
+  begin
+    if (s^.Handle.Tid = id) or (s^.Tid = id) then
+    begin
+      Result := s;
+      Break;
+    end;
+    s := s^.NextSlot;
+  end;
+end;
+
+function BeginThread(f: TThreadFunc; p: Pointer): TThreadID;
+var
+  s, prev: PThreadSlot;
+  rc: Integer;
+begin
+  GetMem(s, SizeOf(TThreadSlot));
+  s^.Body := f;
+  s^.Arg := p;
+  s^.Res := 0;
+  s^.Tid := 0;
+  { Linked in BEFORE the spawn: the child writes s^.Tid as its first act, and a
+    joiner that raced in between would otherwise not find a slot that exists. }
+  MutexLock(SyncLock);
+  s^.NextSlot := SlotHead;
+  SlotHead := s;
+  MutexUnlock(SyncLock);
+  rc := PalThreadCreate(s^.Handle, @BeginThreadLauncher, Pointer(s), 0);
+  if rc <> 0 then
+  begin
+    { Unlink by identity, not by head: another BeginThread may have pushed in
+      front of us between the link and the failed clone. }
+    MutexLock(SyncLock);
+    if SlotHead = s then SlotHead := s^.NextSlot
+    else
+    begin
+      prev := SlotHead;
+      while (prev <> nil) and (prev^.NextSlot <> s) do prev := prev^.NextSlot;
+      if prev <> nil then prev^.NextSlot := s^.NextSlot;
+    end;
+    MutexUnlock(SyncLock);
+    FreeMem(s);
+    Result := 0;
+    Exit;
+  end;
+  Result := s^.Handle.Tid;
+end;
+
+procedure EndThread(exitCode: Int64);
+var
+  s: PThreadSlot;
+  tid: Int64;
+begin
+  tid := PalThreadSelf;
+  MutexLock(SyncLock);
+  s := FindSlot(tid);
+  if s <> nil then s^.Res := exitCode;
+  MutexUnlock(SyncLock);
+  PalThreadExit;
+end;
+
+function WaitForThreadTerminate(id: TThreadID; timeoutMs: Int64): Int64;
+var
+  s: PThreadSlot;
+begin
+  Result := 0;
+  MutexLock(SyncLock);
+  s := FindSlot(id);
+  MutexUnlock(SyncLock);
+  if s = nil then Exit;                    { unknown or already closed }
+  if PalThreadSelf <> id then              { a self-join would deadlock }
+    PalThreadJoin(s^.Handle);
+  Result := s^.Res;
+end;
+
+procedure CloseThread(id: TThreadID);
+var
+  s, prev: PThreadSlot;
+begin
+  MutexLock(SyncLock);
+  s := SlotHead;
+  prev := nil;
+  if id > 0 then
+    while s <> nil do
+    begin
+      if (s^.Handle.Tid = id) or (s^.Tid = id) then Break;
+      prev := s;
+      s := s^.NextSlot;
+    end
+  else
+    s := nil;
+  if s <> nil then
+  begin
+    if prev = nil then SlotHead := s^.NextSlot else prev^.NextSlot := s^.NextSlot;
+  end;
+  MutexUnlock(SyncLock);
+  if s = nil then Exit;
+  { Join before releasing: the handle lives IN the slot, and the kernel clears
+    its TidWord at thread exit, so freeing an unjoined slot hands the kernel a
+    dangling write. PalThreadJoin is idempotent once joined. }
+  if PalThreadSelf <> id then PalThreadJoin(s^.Handle);
+  FreeMem(s);
+end;
+
 initialization
+  SlotHead := nil;
   MainTid := PalThreadSelf;
   SyncHead := nil;
   SyncTail := nil;
