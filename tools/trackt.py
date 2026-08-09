@@ -1090,6 +1090,173 @@ def shutil_which(prog):
 
 
 # ------------------------------------------------------------------ main ---
+# ------------------------------------------------------------ pinstatus ---
+# `pinned` is a POINTER, not a label. Status belongs to a SHA, and Track T
+# already tracks that per-sha — so "what is the status of the current pin?" is
+# a JOIN of pin.log x tstate, never a second copy of the fact stored on the
+# artifact (task-t-pin-fast-track-t-owns-verification; the user rejected a
+# pinned/verified/release ladder for exactly this reason).
+#
+# The trade the fast pin makes is that a bad pin is RECOVERED, not prevented.
+# Recovery needs somewhere to fall back to, which is why the last fully-green
+# pin is the most important line this prints.
+PIN_LOG_REL = "stable_linux_amd64/default/pin.log"
+
+
+def repo_root(cli=None):
+    """The checkout to read pin.log and tstate from (not the watcher clone)."""
+    if cli:
+        return os.path.abspath(os.path.expanduser(cli))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def read_pin_log(repo):
+    """[{ts, ver, binsha, git}] oldest first.
+
+    Two shapes live in this file: older lines omit the binary sha256
+    (`ts pinned v9 (was v9) <gitsha>`), newer ones carry it
+    (`ts pinned v249 <binsha> (was xxx) <gitsha>`). The GIT sha is last in
+    both, so key off that rather than a field index.
+    """
+    out = []
+    try:
+        with open(os.path.join(repo, PIN_LOG_REL)) as f:
+            for ln in f:
+                w = ln.split()
+                if len(w) < 5 or w[1] != "pinned":
+                    continue
+                git = w[-1]
+                if len(git) != 40:
+                    continue
+                out.append({"ts": w[0], "ver": w[2],
+                            "binsha": w[3] if len(w) >= 7 else "",
+                            "git": git})
+    except OSError:
+        pass
+    return out
+
+
+def tstate_runs(repo):
+    """{sha: {tier: (verdict, host, date)}} from the UNCAPPED ndjson archives.
+
+    host.json's `history` is capped; runs-<host>.ndjson is not, and a pin can
+    easily be older than the cap.
+    """
+    out = {}
+    tdir = os.path.join(repo, twatch.TSTATE_REL)
+    try:
+        names = sorted(os.listdir(tdir))
+    except OSError:
+        return out
+    for fn in names:
+        if not (fn.startswith("runs-") and fn.endswith(".ndjson")):
+            continue
+        host = fn[5:-7]
+        try:
+            with open(os.path.join(tdir, fn)) as f:
+                for ln in f:
+                    ln = ln.strip()
+                    if not ln:
+                        continue
+                    try:
+                        r = json.loads(ln)
+                    except ValueError:
+                        continue
+                    sha, tier = r.get("sha"), r.get("tier")
+                    if sha and tier:
+                        out.setdefault(sha, {})[tier] = (
+                            r.get("verdict", "?"), host, r.get("date", ""))
+        except OSError:
+            continue
+    return out
+
+
+def report_failures(repo, sha, limit=2):
+    """The failing job names T published for `sha`, best effort."""
+    rdir = os.path.join(repo, twatch.TSTATE_REL, "reports")
+    hits = []
+    try:
+        names = [n for n in sorted(os.listdir(rdir)) if sha[:7] in n]
+    except OSError:
+        return hits
+    for n in names:
+        try:
+            with open(os.path.join(rdir, n), errors="replace") as f:
+                body = f.read()
+        except OSError:
+            continue
+        for ln in body.splitlines():
+            if ln.startswith("- ") and ("#" in ln):
+                job = ln[2:].split(" — ")[0].strip()
+                if job not in hits:
+                    hits.append(job)
+            if len(hits) >= limit:
+                return hits
+    return hits
+
+
+def pin_is_green(runs_for_sha):
+    """Judged by T, with a `full` run, and nothing RED in any tier judged."""
+    if not runs_for_sha or "full" not in runs_for_sha:
+        return False
+    return all(v[0] == "GREEN" for v in runs_for_sha.values())
+
+
+def cmd_pinstatus(repo):
+    pins = read_pin_log(repo)
+    if not pins:
+        print("pinstatus: no %s — nothing pinned here" % PIN_LOG_REL)
+        return 1
+    runs = tstate_runs(repo)
+    cur = pins[-1]
+    print("pin %s  %s  %s  %s"
+          % (cur["ver"], (cur["binsha"] or "-")[:8], cur["git"][:8], cur["ts"]))
+
+    got = runs.get(cur["git"]) or {}
+    if not got:
+        # T tests HEAD, not every commit, so the pinned sha may simply not have
+        # been judged yet. Say which — "untested" and "green" are not the same
+        # answer, and this is the line that must never blur them.
+        # NEAREST judged descendant, not an arbitrary one: sort the candidates
+        # by when T judged them and take the first that contains the pin. Also
+        # keeps this cheap — is_ancestor is a git call per candidate, and there
+        # are hundreds of judged shas.
+        cands = sorted(((min(v[2] for v in t.values()), sha)
+                        for sha, t in runs.items() if sha != cur["git"]),
+                       key=lambda x: x[0])
+        covered = next((sha for when, sha in cands
+                        if when >= cur["ts"]
+                        and twatch.is_ancestor(repo, cur["git"], sha)), None)
+        print("  NOT JUDGED at this sha%s"
+              % ("" if not covered
+                 else " — but %s, a descendant, is judged (%s)"
+                      % (covered[:8],
+                         ", ".join("%s %s" % (t, v[0])
+                                   for t, v in sorted(runs[covered].items())))))
+    else:
+        for tier in sorted(got):
+            verdict, host, date = got[tier]
+            extra = ""
+            if verdict != "GREEN":
+                jobs = report_failures(repo, cur["git"])
+                if jobs:
+                    extra = "  " + ", ".join(jobs)
+            print("  %-7s %-6s%s  (%s)" % (tier, verdict, extra, host))
+
+    back = next((p for p in reversed(pins)
+                 if pin_is_green(runs.get(p["git"]))), None)
+    if back:
+        same = " — that is the current pin" if back["git"] == cur["git"] else ""
+        print("  last pin T found fully green: %s  (%s)%s"
+              % (back["ver"], back["git"][:8], same))
+    else:
+        print("  last pin T found fully green: NONE in this log — "
+              "no fallback target; demote by hand if the current pin is bad")
+    print("  (green = a `full` run judged this sha and no tier was RED; "
+          "`make revert` demotes)")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(
         prog="trackt", description=__doc__.splitlines()[0],
@@ -1097,7 +1264,8 @@ def main():
     ap.add_argument("cmd", nargs="?", default="up",
                     choices=["up", "status", "start", "stop", "restart",
                              "watch", "run", "setup", "config", "log", "web",
-                             "dashboard", "health", "install", "uninstall"])
+                             "dashboard", "health", "install", "uninstall",
+                             "pinstatus"])
     ap.add_argument("arg", nargs="*")
     ap.add_argument("--clone", help="watcher clone dir")
     ap.add_argument("--remote", help="start: clone URL if dir missing")
@@ -1124,6 +1292,8 @@ def main():
         return cmd_up(clone, a)
     if a.cmd in ("install", "uninstall"):
         return cmd_install(clone, uninstall=(a.cmd == "uninstall"))
+    if a.cmd == "pinstatus":
+        return cmd_pinstatus(repo_root(a.clone if a.clone else None))
     if a.cmd == "health":
         return cmd_health(clone, json_out=a.json)
     if a.cmd == "status":
