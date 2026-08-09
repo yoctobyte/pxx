@@ -65,10 +65,22 @@ exception propagation and above all *tasking* each imply real runtime work.
    divergence **independent of COBOL** and is arguably worth its own ticket.
    COBOL needs a real one: `COMP-3` packed decimal, zoned `DISPLAY`, and the
    standard's intermediate-precision rules for `COMPUTE`.
-   - *Substrate already exists:* `lib/rtl/bignum.pas` (530 lines, signed
-     add/sub/mul/compare, base-10 string conversion, proven under RSA and
-     P-256). COBOL 2002 permits 31 digits and a scaled `Int64` runs out at 18,
-     so this is exactly what a serious implementation would build on.
+   - *Substrate already exists, and more of it than "missing" suggests.*
+     `lib/rtl/bignum.pas` (530 lines, signed add/sub/mul/compare, base-10
+     string conversion, proven under RSA and P-256). COBOL 2002 permits 31
+     digits and a scaled `Int64` runs out at 18, so this is exactly what a
+     serious implementation would build on. Nil Python already has **working
+     arbitrary-precision integers** on top of this — verified: `2 ** 100` and
+     `10 ** 30 // 7` are both exact — via promotable ints whose payload is the
+     exact decimal in a managed string. And `compiler/exdec.inc` (520 lines) is
+     exact double↔decimal-digit conversion with correct rounding.
+   - *So what is actually missing is narrower than "a decimal type":* the
+     scaled fixed-point **arithmetic** — a bigint mantissa plus a scale, with
+     decimal-aware add/sub/mul/div, rounding modes and the standard's
+     intermediate-precision rules. The big-integer half and the digit-string
+     half are both already built and in production use. Note the codebase says
+     "decimal" for the *conversion* core, not for an arithmetic type; there is
+     no type named `Decimal` in the tree.
    - *Rounding:* `Round` is already half-to-even (verified: 0.5→0, 1.5→2,
      2.5→2, -2.5→-2). Note this is the mode COBOL uses **least** — plain
      arithmetic truncates, bare `ROUNDED` is half-away-from-zero, and
