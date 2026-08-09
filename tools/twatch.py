@@ -1537,7 +1537,14 @@ def stub_sources(pdir):
     CASCADE_THRESHOLD, but the bucket holds ~200 files.
     """
     out = {}
-    for b in PROGRESS_BUCKETS:
+    # OPEN buckets only. A ticket in done/ or rejected/ is a finished argument,
+    # and a source going red again after it closed is a NEW finding that must
+    # get its own stub — `already_filed` scans every bucket on purpose (same job,
+    # same slug, never two tickets), but that reasoning does not carry over to
+    # "some other job once had trouble with this file". Found 2026-08-09: the
+    # optdiff dedupe was matching `regression-optdiff-shard4-6`, resolved days
+    # earlier and sitting in done/.
+    for b in ("urgent", "working", "unfinished", "backlog", "blocked"):
         d = os.path.join(pdir, b)
         try:
             names = os.listdir(d)
