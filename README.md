@@ -12,8 +12,9 @@ one compiler problem not solved by recursion.
 
 The compiler is written in plain Pascal and currently supports a tested Object
 Pascal subset: classes, generics, overloads, operators, exceptions, RTTI,
-component streaming groundwork, C interop, and early BASIC / Nil Python
-frontends. The long-term direction is a multi-language native compiler sharing
+component streaming groundwork, C interop, and mainline C and Nil Python
+frontends alongside experimental BASIC and Rust ones. The long-term direction
+is a multi-language native compiler sharing
 one IR and backend.
 
 ## ⚠️ Security warning — do not expose to a network

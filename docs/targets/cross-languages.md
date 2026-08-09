@@ -45,8 +45,10 @@ validates the `--shared` (`.so`) and `--emit-obj` (`.o`) output modes. See the
 
 The `.rs` frontend is an experimental research path that lowers a growing subset
 of Rust (generics with trait bounds, enum-payload `match`) to the same IR. Like
-BASIC and Nil Python it exists to stress backend reuse across very different
-grammars, not as a usable Rust toolchain.
+BASIC, it exists to stress backend reuse across a very different grammar, not as
+a usable Rust toolchain. Nil Python started in that same category and is no
+longer in it — it is a gated mainline frontend, listed here only because it
+shares the resolver.
 
 ## C Frontend
 

@@ -103,8 +103,7 @@ Integer overflow, range, and IO checking exist but are opt-in per region
 (`{$Q+}`, `{$R+}`, `{$I+}`); the lax default wraps and does not range-check.
 Member visibility (`private`/`protected`/`strict`) is enforced only under
 `--strict-visibility`; the lax default parses the markers but grants access
-anywhere. Nil Python is limited to four parameters per function and has no
-pointer syntax of its own. See [Limits](../reference/limits.md) for the
+anywhere. Nil Python has no pointer syntax of its own. See [Limits](../reference/limits.md) for the
 complete list.
 
 PXX is early, experimental software. It should not be used for

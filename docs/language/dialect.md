@@ -31,7 +31,9 @@ Some features are project-specific or still early:
 - `--no-auto-var` and `--no-lazy-var` disable PXX's auto-typed/inline variable
   declarations.
 - `--target=ARCH` selects the output CPU target.
-- `.c`, `.bas`, and `.npy` inputs route to experimental non-Pascal frontends.
+- `.c` and `.npy` inputs route to the C and Nil Python frontends, which are
+  mainline and gated alongside Pascal; `.bas` and `.rs` route to the
+  experimental BASIC and Rust research frontends.
 
 ## Inline and auto-typed variables
 
