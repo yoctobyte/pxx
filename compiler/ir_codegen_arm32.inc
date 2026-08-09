@@ -2538,7 +2538,7 @@ begin
         { Aggregate result: push the caller's hidden destination first (deepest
           word) so arg evaluation can't disturb it; it is loaded into r12 (ip,
           a scratch reg) just before the call. }
-        if RetViaHiddenDest(Procs[procIdx].RetType) then
+        if ABIRetViaHiddenDestProc(procIdx) then
         begin
           IREmitNodeArm32(IRC[node]);   { r0 = hidden destination }
           EmitI32($E92D0001);           { push {r0} }
@@ -2680,7 +2680,7 @@ begin
           if i < 4 then
             EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
 
-        if RetViaHiddenDest(Procs[procIdx].RetType) then
+        if ABIRetViaHiddenDestProc(procIdx) then
         begin
           { Hidden dest is the deepest word, at [sp + j*4]; load it into r12.
             The callee prologue stashes r12 (EmitAggregateDestStash) and returns

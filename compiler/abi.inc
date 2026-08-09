@@ -146,6 +146,15 @@ function AggRetCopySize(retSymIdx: Integer): Integer;
 { Byte count copied from the Result local into the caller's hidden destination. }
 var tk: TTypeKind;
 begin
+  { A FIXED-ARRAY result: the byte count is the whole array, recorded per-proc
+    because the Result symbol's KIND is only its element type.
+    bug-a-set-and-array-function-results-come-back-empty }
+  if (CurProc >= 0) and (CurProc < MAX_PROCS) and
+     (ProcRetFixedArrBytes[CurProc] > 0) then
+  begin
+    Result := ProcRetFixedArrBytes[CurProc];
+    Exit;
+  end;
   tk := Syms[retSymIdx].TypeKind;
   if tk = tyRecord then Result := RecSize(SymTR[retSymIdx].RecId)
   else if tk = tyString then Result := LOCAL_STR_CAP + 8
@@ -153,3 +162,20 @@ begin
     Result := FrozenStrSlotSize(tk, SymStrCap[retSymIdx])
   else Result := TypeSize(tk);
 end;
+
+{ Does a CALL to this routine return through the caller-owned hidden
+  destination? The kind-only `RetViaHiddenDest` cannot answer for a FIXED-ARRAY
+  result: `function F: TArr` records the ELEMENT kind in `Procs[].RetType`, so
+  the kind says tyInteger and the aggregate is invisible. The parser records the
+  byte size in ProcRetFixedArrBytes instead, and this is the query that joins
+  the two — the caller allocates the scratch and the callee's epilogue copies
+  into it, exactly as for a record.
+  bug-a-set-and-array-function-results-come-back-empty }
+function ABIRetViaHiddenDestProc(procIdx: Integer): Boolean;
+begin
+  ABIRetViaHiddenDestProc := False;
+  if (procIdx < 0) or (procIdx >= MAX_PROCS) then Exit;
+  ABIRetViaHiddenDestProc := RetViaHiddenDest(Procs[procIdx].RetType) or
+                             (ProcRetFixedArrBytes[procIdx] > 0);
+end;
+

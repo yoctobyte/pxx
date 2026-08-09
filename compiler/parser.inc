@@ -27110,6 +27110,7 @@ var
   zeroBytes : Integer;
   zfLoop, zfDone : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
+  retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j, savedVisVarSeq: Integer;
@@ -27235,6 +27236,7 @@ begin
 
   nparams := 0; retType := tyInteger; retRecId := REC_NONE;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
+  retFixedArrBytes := 0;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
 
   if CurTok.Kind = tkLParen then
@@ -27476,6 +27478,41 @@ begin
     end
     else
     begin
+      { A named FIXED-array result (`function F: TArr` where TArr =
+        array[0..2] of Integer). ParseTypeKind answers the ELEMENT kind, so
+        without recording the aggregate here the result looked like a plain
+        Integer: no hidden destination was allocated, the callee returned
+        element 0 in a register and the caller stored that one scalar —
+        `a := MkArr` gave `8 0 0` where FPC gives `8 9 10`, silently.
+        Measured against FPC, 2026-08-09.
+        bug-a-set-and-array-function-results-come-back-empty }
+      if (CurTok.Kind = tkIdent) and (FindArrayType(CurTok.SVal) >= 0) and
+         not ArrTypeIsDyn[FindArrayType(CurTok.SVal)] then
+      begin
+        { The 32-bit pair does not carry it yet: measured, i386 and arm32 both
+          fault on the hidden-destination call for an array result even with the
+          whole path wired (arm32 faulted BEFORE this work too — the shape has
+          never worked there). Refuse with a diagnostic rather than emit a call
+          that crashes: on arm32 that replaces a SIGSEGV, and on i386 it says
+          plainly what its old "arrays not yet supported" meant.
+          bug-a-fixed-array-function-result-faults-on-i386-and-arm32 }
+        if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
+          Error('a function result of a FIXED ARRAY type is not supported on '
+                + 'this target yet — return a dynamic array, or use a var '
+                + 'parameter');
+        paramAi := FindArrayType(CurTok.SVal);
+        { ONE-DIMENSIONAL only. An N-D array RESULT is wrong before it is ever
+          returned: the callee's own `MkArr2[0,1] := 2` lands in the wrong slot
+          (`inside 1 3 3 4` for 1,2,3,4 — on `pinned` as well as at HEAD), so
+          returning it correctly would just deliver the callee's own garbage
+          faithfully. Refused here rather than half-supported.
+          bug-a-nd-array-function-result-indexes-the-wrong-slot }
+        if ArrTypeNDims[paramAi] >= 2 then
+          Error('a function result of a MULTI-DIMENSIONAL array type is not '
+                + 'supported yet — use a var parameter');
+        retFixedArrBytes := (ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1) *
+                            TypeSize(IntToTypeKind(ArrTypeElemTk[paramAi]));
+      end;
       retType := ParseTypeKind;
       if (retType = tyRecord) or (retType = tyClass) then
         retRecId := LastTypeRecId;
@@ -27671,6 +27708,7 @@ begin
       `AnsiString(f(...))` silently mis-lowers (reads a bogus managed-string
       header). See bug-pascal-ansistring-cast-of-cdecl-call-result. }
     ProcRetIsDynArray[procIdx] := retIsDynArr;
+  ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
     ProcRetElemTk[procIdx] := retElemTk;
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
@@ -27968,6 +28006,7 @@ begin
       if declFlexColumn then ProcFlexColumn[procIdx] := True;
       ProcRetRecId[procIdx] := retRecId;
       ProcRetIsDynArray[procIdx] := retIsDynArr;
+  ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
       ProcRetElemTk[procIdx] := retElemTk;
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
@@ -27995,6 +28034,7 @@ begin
   if declFlexColumn then ProcFlexColumn[procIdx] := True;
   ProcRetRecId[procIdx] := retRecId;
   ProcRetIsDynArray[procIdx] := retIsDynArr;
+  ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
   ProcRetElemTk[procIdx] := retElemTk;
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
@@ -28374,8 +28414,9 @@ begin
       Syms[SymCount-1].Kind := skLocal;
     end;
     LastTypeRecId := savedLastTypeRecId;
-    if not retIsDynArr and RetViaHiddenDest(retType) then
+    if not retIsDynArr and (RetViaHiddenDest(retType) or (retFixedArrBytes > 0)) then
     begin
+      { …or a FIXED-ARRAY result, whose aggregate nature the kind cannot show }
       idx := AllocVar('', tyPointer);
       ProcAggregateDestSym[procIdx] := idx;
     end;

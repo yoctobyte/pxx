@@ -4451,7 +4451,7 @@ begin
               and epilogue fills. External libc aggregate returns (true SysV sret)
               are not modelled here. Evaluate the dest into r10 before AL is set
               and the call is made; arg registers are already loaded above. }
-            if (not ProcExternal[procIdx]) and RetViaHiddenDest(Procs[procIdx].RetType) then
+            if (not ProcExternal[procIdx]) and ABIRetViaHiddenDestProc(procIdx) then
             begin
               IREmitNode(IRC[node]);                  { rax = hidden destination }
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
@@ -4670,7 +4670,7 @@ begin
                   5: begin EmitB($41); EmitB($59); end; { pop r9 }
                 end;
             end;
-            if RetViaHiddenDest(Procs[procIdx].RetType) then
+            if ABIRetViaHiddenDestProc(procIdx) then
             begin
               IREmitNode(IRC[node]);                   { rax = hidden destination }
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }

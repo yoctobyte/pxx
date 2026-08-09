@@ -239,7 +239,7 @@ begin
         if (IRA[i] >= ProcCount) then
           Error('invalid IR proc reference in call');
         IRRequireOptionalNode(IRB[i], 'call first arg');
-        if (IRA[i] >= 0) and RetViaHiddenDest(Procs[IRA[i]].RetType) then
+        if ABIRetViaHiddenDestProc(IRA[i]) then
           IRRequireNode(IRC[i], 'call aggregate destination');
         { Otherwise IRC = classIdx (record id for constructor/method dispatch),
           NOT a node. Args chain via IRB[argNode]. }
@@ -1670,7 +1670,15 @@ var scratchSym, savedRecId: Integer;
 begin
   savedRecId := LastTypeRecId;
   if Procs[procIdx].RetType = tyRecord then LastTypeRecId := ProcRetRecId[procIdx];
-  scratchSym := AllocVar('', Procs[procIdx].RetType);
+  { A FIXED-ARRAY result needs a scratch of the WHOLE array, not of one element:
+    Procs[].RetType carries the element kind, so AllocVar would reserve 4 bytes
+    for a 12-byte answer and the callee's copy would run off the end. Byte array
+    of the recorded size — the destination is only ever memcpy'd into and out of.
+    bug-a-set-and-array-function-results-come-back-empty }
+  if ProcRetFixedArrBytes[procIdx] > 0 then
+    scratchSym := AllocArray('', tyUInt8, 0, ProcRetFixedArrBytes[procIdx] - 1)
+  else
+    scratchSym := AllocVar('', Procs[procIdx].RetType);
   LastTypeRecId := savedRecId;
   if (Procs[procIdx].RetType = tyRecord) and RecordHasManagedFields(ProcRetRecId[procIdx]) then
     SymIsHiddenArgTemp[scratchSym] := True;
@@ -1680,14 +1688,18 @@ end;
 function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer;
 var scratchSym, scratchAddr, savedRecId: Integer;
 begin
-  if (procIdx >= 0) and RetViaHiddenDest(Procs[procIdx].RetType) then
+  if ABIRetViaHiddenDestProc(procIdx) then
   begin
     { Aggregate (and frozen-string) calls return into caller-owned storage. IRC carries an IR_LEA
       node for that hidden destination; ordinary calls keep the class index. }
     savedRecId := LastTypeRecId;
     if Procs[procIdx].RetType = tyRecord then
       LastTypeRecId := ProcRetRecId[procIdx];
-    scratchSym := AllocVar('', Procs[procIdx].RetType);
+    { see IRBuildHiddenDest: a fixed-array result needs the whole array }
+    if ProcRetFixedArrBytes[procIdx] > 0 then
+      scratchSym := AllocArray('', tyUInt8, 0, ProcRetFixedArrBytes[procIdx] - 1)
+    else
+      scratchSym := AllocVar('', Procs[procIdx].RetType);
     LastTypeRecId := savedRecId;
     { This hidden aggregate-result temp is allocated during IR lowering, after the
       parser's prologue zero-init pass. If the call sits on a branch that is not
@@ -5876,7 +5888,7 @@ begin
       callVal := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer)); { code }
 
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
-      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+      if ABIRetViaHiddenDestProc(cpi) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 
@@ -7631,8 +7643,20 @@ begin
         seq := IRLowerAST(ASTLeft[left]);
         Result := IRAppend(IR_STORE_MEM, outNode, seq, -1, 0, Ord(tyPointer));
       end
-      else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet then
+      else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet) or
+              ((ASTKind[ASTLeft[node]] = AN_IDENT) and
+               (ASTIVal[ASTLeft[node]] >= 0) and
+               (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tySet) and
+               not Syms[ASTIVal[ASTLeft[node]]].IsArray) then
       begin
+        { The symbol-TypeKind fallback is the SAME rule the record arm below
+          carries, and this arm was the sibling that never got it: the
+          function-name result form (`FuncName := [1, 4]`) leaves the LHS ASTTk
+          unset (0), so a set-returning function fell through to the scalar
+          store path and wrote the literal's ADDRESS into the 32-byte Result
+          slot. Every set-returning function therefore answered the EMPTY set —
+          silently, on every target, whatever the body did.
+          bug-a-set-and-array-function-results-come-back-empty }
         leftAddr := IRLowerAddress(ASTLeft[node]);
         right := IRLowerAST(ASTRight[node]);
         Result := IRAppend(IR_SET_COPY, leftAddr, right, -1, 0, Ord(tySet));
@@ -7661,6 +7685,36 @@ begin
                 from the symbol here, so a byte count computed now would be
                 wrong. tyFixedString/tyShortString DO carry their capacity
                 (SymStrCap) and are handled below. }
+              (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyString) and
+              (not rhsIsLValue) and
+              ((ASTKind[ASTRight[node]] = AN_CALL) or
+               (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL)) and
+              (ASTIVal[ASTRight[node]] >= 0) and
+              (ASTIVal[ASTRight[node]] < MAX_PROCS) and
+              (ProcRetFixedArrBytes[ASTIVal[ASTRight[node]]] > 0) then
+      begin
+        { `a := MkArr` — a whole static array from a CALL. The arm below wants an
+          LVALUE on the right, and a call is not one, so this fell through to the
+          scalar store and moved a single element's width: with the hidden
+          destination in place the value stored was the DEST POINTER itself, and
+          before it the callee's element 0. Either way `8 9 10` came back as one
+          number and two zeros, silently.
+
+          The call's value IS the hidden destination's address (see
+          ABIRetViaHiddenDestProc), so this is the same IR_COPY_REC the
+          array-to-array case emits, sourced from the call instead of from an
+          address-of. bug-a-set-and-array-function-results-come-back-empty }
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        right := IRLowerAST(ASTRight[node]);
+        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                           ProcRetFixedArrBytes[ASTIVal[ASTRight[node]]],
+                           Ord(tyRecord));
+      end
+      else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
+              (ASTIVal[ASTLeft[node]] >= 0) and
+              Syms[ASTIVal[ASTLeft[node]]].IsArray and
+              (Syms[ASTIVal[ASTLeft[node]]].ArrLen >= 0) and
+              (SymElemDynDepth[ASTIVal[ASTLeft[node]]] = 0) and
               (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyString) and
               rhsIsLValue then
       begin
@@ -9083,7 +9137,7 @@ begin
       else
         callVal := IRLowerAST(ASTRight[node]);   { plain: load the code-address value }
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
-      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+      if ABIRetViaHiddenDestProc(cpi) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
       { copy-OUT the var/out open-array writebacks this call's args registered —
         the direct AN_CALL path already flushes these; the indirect path never
@@ -9199,7 +9253,7 @@ begin
       { IRC=0: the interface signature's ParamCount already counts Self (param 0),
         and Self is the first node in the arg chain, so no extra injected-Self. }
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
-      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+      if ABIRetViaHiddenDestProc(cpi) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 
@@ -10104,7 +10158,7 @@ begin
       { Aggregate / frozen-string result: the IR node has no free operand for the
         hidden caller-destination, so stash its IR_LEA in IRCallDest (codegen loads
         it into the per-target dest register before the dispatch). }
-      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+      if ABIRetViaHiddenDestProc(cpi) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 

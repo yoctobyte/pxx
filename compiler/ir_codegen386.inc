@@ -3088,7 +3088,7 @@ begin
           equality blocked it. }
         if (vaNvw <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
           Error('target i386: call argument count mismatch (defaults not supported yet)');
-        if RetViaHiddenDest(Procs[procIdx].RetType) then
+        if ABIRetViaHiddenDestProc(procIdx) then
         begin
           { Aggregate result: pass the caller's hidden destination buffer in ecx
             (args already pushed; computing the address only touches eax). The

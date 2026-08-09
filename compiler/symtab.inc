@@ -2241,6 +2241,7 @@ end;
   there, forward-declared here because abi.inc is included after this file.
   feature-a-abi-oracle }
 function RetViaHiddenDest(tk: TTypeKind): Boolean; forward;
+function ABIRetViaHiddenDestProc(procIdx: Integer): Boolean; forward;
 function AggRetCopySize(retSymIdx: Integer): Integer; forward;
 
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
@@ -7167,7 +7168,7 @@ begin
       Legacy fixed string returns the address of its inline buffer. }
     if retSymIdx >= 0 then
     begin
-      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
+      if ABIRetViaHiddenDestProc(CurProc) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate result: copy the Result local into the caller's hidden
@@ -7333,7 +7334,7 @@ begin
 
     if retSymIdx >= 0 then
     begin
-      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
+      if ABIRetViaHiddenDestProc(CurProc) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate result: copy the Result local into the caller's hidden
@@ -7483,7 +7484,7 @@ begin
       end;
     if retSymIdx >= 0 then
     begin
-      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
+      if ABIRetViaHiddenDestProc(CurProc) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate result: copy the Result local into the caller's hidden
@@ -7578,7 +7579,7 @@ begin
         end;
     if retSymIdx >= 0 then
     begin
-      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
+      if ABIRetViaHiddenDestProc(CurProc) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate (record) result: copy the Result local into the caller's
@@ -7702,7 +7703,7 @@ begin
         end;
     if retSymIdx >= 0 then
     begin
-      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
+      if ABIRetViaHiddenDestProc(CurProc) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate (record) result: copy the Result local into the caller's
@@ -7773,7 +7774,7 @@ begin
 
   if retSymIdx >= 0 then
   begin
-    if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
+    if ABIRetViaHiddenDestProc(CurProc) and
        (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
     begin
       { Aggregate results use a hidden caller-owned destination pointer in r10.

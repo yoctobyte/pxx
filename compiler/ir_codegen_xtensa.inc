@@ -1784,7 +1784,7 @@ begin
           for a >16-byte struct return; every real argument shifts up one word
           and the callee's param-copy loop starts at word 1. }
         if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           RetViaHiddenDest(Procs[procIdx].RetType) and (XtensaABI = XTENSA_ABI_CALL0) then
+           ABIRetViaHiddenDestProc(procIdx) and (XtensaABI = XTENSA_ABI_CALL0) then
         begin
           IREmitNodeXtensa(IRC[node]);     { a2 = hidden dest addr }
           XtensaPushA2;
@@ -1794,7 +1794,7 @@ begin
         i := 0;         { argument index }
         argBase := XtSpillDepth;   { windowed: base offset of this call's arg block }
         if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           RetViaHiddenDest(Procs[procIdx].RetType) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+           ABIRetViaHiddenDestProc(procIdx) and (XtensaABI = XTENSA_ABI_WINDOWED) then
         begin
           IREmitNodeXtensa(IRC[node]);     { a2 = hidden dest addr }
           XtensaPushA2;                    { word 0 }
@@ -1885,7 +1885,7 @@ begin
         begin
           XtensaLoadArgRegsCall0(nArgs);
           if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-             RetViaHiddenDest(Procs[procIdx].RetType) then
+             ABIRetViaHiddenDestProc(procIdx) then
           begin
             xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);   { hidden dest (deepest) }
             argFree := (nArgs + 1) * 4;

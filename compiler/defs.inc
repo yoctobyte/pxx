@@ -1556,6 +1556,7 @@ var
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
+  ProcRetFixedArrBytes : array[0..MAX_PROCS-1] of Integer; { result is a FIXED array (`array[0..N] of T`): its byte size, returned via the hidden caller destination like a record. 0 = not one. See abi.inc / bug-a-set-and-array-function-results-come-back-empty }
   ProcIsAsync     : array[0..MAX_PROCS-1] of Boolean;   { `; async;` routine — non-viral hint; legalises `await` in the body (stackful: documentary; stackless transform later) }
   ProcIsGenerator : array[0..MAX_PROCS-1] of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
   ProcIsStackless : array[0..MAX_PROCS-1] of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }

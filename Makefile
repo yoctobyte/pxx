@@ -2168,6 +2168,13 @@ test-threads: $(COMPILER)
 	./$(COMPILER) test/test_open_array_value_param_copies.pas /tmp/test_oavp26
 	test "$$(/tmp/test_oavp26 | tail -1)" = "OPEN ARRAY VALUE PARAM OK"
 	test "$$(/tmp/test_oavp26 | head -2 | tail -1)" = "open by value      : 1"
+	# function RESULTS of the aggregate kinds. A set-returning function used to
+	# answer the EMPTY set on every target, and a fixed-array one element 0 and
+	# zeros -- both silent. Every row diffed against FPC.
+	./$(COMPILER) test/test_aggregate_function_results.pas /tmp/test_aggret26
+	test "$$(/tmp/test_aggret26 | tail -1)" = "AGGREGATE FUNCTION RESULTS OK"
+	test "$$(/tmp/test_aggret26 | head -1)" = "set lit   TRUE TRUE FALSE"
+	test "$$(/tmp/test_aggret26 | head -7 | tail -1)" = "arr       8 9 10"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed
