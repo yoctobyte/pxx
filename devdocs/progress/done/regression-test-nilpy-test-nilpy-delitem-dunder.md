@@ -75,4 +75,4 @@ shape — the rewrite's whole point is not to know about grammar.
 flag are pinned**: `del o[7]` must work AND `v = o[7]` on that same class must
 still raise TypeError. With only the first, inverting the flag would pass.
 Matches CPython. Self-host fixedpoint byte-identical.
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit b679bca25.
