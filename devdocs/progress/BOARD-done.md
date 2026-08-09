@@ -642,6 +642,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-percent-r-renders-as-str-not-repr | N | 60 | bug | `%r` rendered as `%s` — silently, and only for strings | — |
 | bug-nilpy-percent-string-format-garbage | N | 60 | bug | nilpy: printf-style % on a string yields garbage instead of formatting (silent wrong output) | — |
 | bug-nilpy-plain-class-callable-field-unreachable-through-a-dynamic-receiver | N | 35 | bug | A plain class's `Callable` field records no signature, so `def run(o): o.native(x)` on a dynamically-typed receiver is a COMPILE ERROR (\"no class declares a method or callable field\") — only a @dataclass field is reachable that way | — |
+| bug-nilpy-postfix-after-a-parenthesised-expression | A | 55 | bug | A method call or subscript on a parenthesised expression fails (or crashes) | — |
 | bug-nilpy-pow-and-log-hang-on-a-non-positive-base | N | 55 | bug | `0 ** 0.5` HUNG — PyMathLn never terminates for a non-positive argument | — |
 | bug-nilpy-pow-assign-to-a-subscript-does-not-parse | N | 35 | bug | `xs[0] **= 5` does not parse — 'expected expression'. `**` is not a binop token, and the subscript-target augmented path (ParseLValueAST's augBin) has no arm for tkPowEq, so the third of three augmented-assign target shapes still refuses a valid CPython statement. | — |
 | bug-nilpy-power-augmented-assign-does-not-parse | N | 30 | bug | NilPy `x **= n` is a hard parse error — power is the one operator with no token, so the token-keyed augmented-assignment machinery cannot express it | — |

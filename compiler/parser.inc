@@ -9556,7 +9556,20 @@ begin
         value was used as-is (e.g. `(p)^` returned the pointer, not the pointee). }
       node := CurASTNode;
       { `.to_bytes(` is left for the NilPy intrinsic — see PyIsToBytesSuffixAhead. }
-      while (CurTok.Kind in [tkCaret, tkDot, tkLBrack]) and
+      { …and in PYTHON mode, so is every other `.` and `[`. This tail is
+        Pascal-shaped: it builds a raw AN_INDEX for `[` and reads a record FIELD
+        for `.`, neither of which is what a Python receiver means. So
+        `("ab").upper()` was "expected newline after statement" and `(x)[1]`
+        SIGSEGV'd — a grouped receiver was simply not usable, while the same
+        expression without the parentheses worked. ParseFactor's own Python
+        suffix loops (str methods, subscript/slice, variant dispatch, class
+        methods) run immediately after this and handle all of it, so the fix is
+        to stand down rather than to grow a Python arm here — the same call the
+        comment below makes about not writing a fourth copy of member dispatch.
+        `^` stays: it has no Python spelling and no Python loop.
+        bug-nilpy-postfix-after-a-parenthesised-expression }
+      while ((CurTok.Kind = tkCaret) or
+             ((CurTok.Kind in [tkDot, tkLBrack]) and not PyExprMode)) and
             not (PyExprMode and PyIsToBytesSuffixAhead) do
       begin
         { A grouped value whose type is a CLASS goes to the real member/index dispatcher --

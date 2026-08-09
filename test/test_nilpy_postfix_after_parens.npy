@@ -1,0 +1,50 @@
+# A method call or subscript on a PARENTHESISED expression: `("ab").upper()`
+# was "expected newline after statement" and `(x)[1]` SIGSEGV'd, while the
+# same expressions without the parentheses always worked. The grouped-postfix
+# tail in ParseFactorCore is Pascal-shaped -- a raw AN_INDEX for `[`, a record
+# FIELD read for `.` -- and it ran in Python mode too.
+# bug-nilpy-postfix-after-a-parenthesised-expression
+# Every expectation is CPython's own output.
+
+x = "ab"
+xs = [1, 2, 3]
+d = {"k": 7}
+
+print(("ab").upper())
+print((x).upper())
+print(("ab" + "cd").upper())
+print((x + "b").upper())
+print(("%s" % 5).upper())
+print(("%d" % 5).zfill(3))
+print((x).count("a"))
+print(("a b".split())[0])
+
+print((x)[1], (x)[-1], (x)[0:1])
+print((xs)[0], ([1, 2])[1], (xs)[1:])
+print((d)["k"], ({"j": 8})["j"])
+print(("%s" % 5)[0])
+
+# chains keep composing
+print((x + "c").upper().lower()[1])
+print(([1, 2, 3])[1:][0])
+
+
+class C:
+    def __init__(self, v):
+        self.v = v
+
+    def get(self):
+        return self.v
+
+
+c = C(5)
+print((c).get(), (c).v)
+print((C(6)).get())
+
+# a grouped callable value is still callable
+f = lambda a, b: a - b
+print((lambda a, b: a - b)(9, 4), (f)(9, 4))
+
+# a parenthesised TUPLE is still a tuple, not a grouping
+t = (1, 2)
+print(t, len(t), (1, 2)[0])
