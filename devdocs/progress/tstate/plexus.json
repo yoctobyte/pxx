@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-09T11:27:09Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "83a877eae01c6f0c7c1fc8762adcc78a3490a280",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-09T11:38:15Z",
    "fixed": [],
    "new_red": [],
@@ -406,6 +398,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "2227f8a5da5016e87c169761fbc4a938860139aa",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-09T18:16:39Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2228129b2c2e4e11edbc7b9314c0f0e724fffb0f",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -2655,6 +2655,8 @@
   "test-threads#src:test/test_tthread_terminate.pas": "native",
   "test-threads#src:test/threadsafe_define.pas@1": "native",
   "test-threads#src:test/threadsafe_define.pas@2": "native",
+  "test-threads#src:test/threadsafe_lockdefine.pas@1": "native",
+  "test-threads#src:test/threadsafe_lockdefine.pas@2": "native",
   "test-uforth#00": "full",
   "test-zlib#src:tools/install_lib_candidates.sh": "full"
  },
@@ -4901,15 +4903,17 @@
   "test-threads#src:test/test_tthread_terminate.pas": "pass",
   "test-threads#src:test/threadsafe_define.pas@1": "pass",
   "test-threads#src:test/threadsafe_define.pas@2": "pass",
+  "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
+  "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
   "test-uforth#00": "pass",
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-09T18:08:34Z",
-  "sha": "2227f8a5da5016e87c169761fbc4a938860139aa",
+  "date": "2026-08-09T18:16:39Z",
+  "sha": "2228129b2c2e4e11edbc7b9314c0f0e724fffb0f",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 143.0
+  "wall": 149.0
  },
  "last_bench": {
   "conf_rows": 550,
