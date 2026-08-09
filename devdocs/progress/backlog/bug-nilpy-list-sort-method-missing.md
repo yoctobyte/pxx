@@ -152,3 +152,49 @@ which is strictly worse and is the failure class this project ranks highest.
 
 Workaround remains `sorted(xs, key=...)`, which is correct today, plus an
 assignment if in-place is wanted (aliases will not see it).
+
+## 2026-08-09 — narrower than the title, and the runtime half is a 6-line job
+
+Measured: `xs.sort()` and `xs.sort(reverse=True)` both work. Only **`key=`** is
+missing, and it fails LOUDLY — "TPyList.sort has no parameter named 'key'". So
+the title overstates it; this is one keyword argument, not a missing method.
+
+**Why it is where it is.** `TPyList.sort` lives in pylib and its own comment
+explains the block: a `key` is a CLOSURE, and invoking one needs `PyCallKey1`,
+which lives in **pyeval — a unit that USES pylib**, so pylib cannot call it.
+`reverse=` needs no callable, which is exactly why that half shipped and this
+half did not.
+
+**The runtime half is trivial and belongs in pyeval, beside `sorted`:**
+
+```pascal
+procedure pylist_sort_key(l: TPyList; key: Pointer = nil; reverse: Boolean = False);
+var r: TPyList; i: Integer;
+begin
+  if l = nil then Exit;
+  r := sorted(l, key, reverse);
+  for i := 0 to r.count - 1 do l.put(i, r.at(i));
+  r.Free;
+end;
+```
+
+Delegating to `sorted` keeps the comparison, the key-computed-once rule and the
+STABILITY in one place. In-place matters: `xs.sort()` must be visible through
+every other reference to the same list, which is the whole difference from
+`sorted(xs)`.
+
+I wrote and built that, then **reverted it unlanded** rather than leave a helper
+with no caller — dead code in a builtin costs every compiled program.
+
+**What is actually left is FRONTEND routing, and that is the real work.** A
+statically-typed `TPyList` receiver goes through the generic method-call arg
+loop in `ParseClassRecordSelectors` (`parser.inc`, around the `PyKwArgIndex`
+call), which binds keywords against the callee's declared parameters — so the
+intercept has to sit BEFORE that loop, detect `key=` ahead in the argument list,
+and parse the arguments itself to build `pylist_sort_key(recv, key, reverse)`.
+There is no existing NilPy intercept for container methods on a STATIC receiver
+to hang it on (the variant-receiver path has several; a static one has none),
+which is what makes this frontend-shaped rather than runtime-shaped.
+
+Deprioritised against silent bugs while both were open: this one names itself at
+compile time and cannot produce a wrong answer.
