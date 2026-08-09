@@ -15172,15 +15172,23 @@ end;
 procedure ParseSimpleExpr;
 var op: TTokenKind; neg: Boolean; left, right, node, opci: Integer;
 begin
-  { Unary minus is an ADDITIVE-level sign in Pascal — `-7 div 2` really is
-    `-(7 div 2)` in FPC — but binds TIGHTER than `*`, `/`, `//` and `%` in
-    Python, so `-7 // 2` is `(-7) // 2` = -4, not -3. Under PyExprMode leave the
-    minus for ParseFactor's own tkMinus case, which negates one factor.
-    Only NON-DISTRIBUTIVE operators expose the difference, which is why `-7 * 2`
-    and `-7 + 2` never caught it
-    (bug-a-nilpy-unary-minus-precedence-vs-floordiv). }
-  neg := (CurTok.Kind = tkMinus) and not PyExprMode;
-  if neg then Eat(tkMinus);
+  { Unary minus binds TIGHTER than the multiplicative level in EVERY frontend
+    here — Pascal included. It used to be treated as an additive-level sign for
+    Pascal/C on the grounds that FPC reads `-7 div 2` as `-(7 div 2)`; that is
+    true and also unobservable, because both readings give -3. The operators
+    that DO expose it are `and` and `shr`, and measured against FPC:
+
+        var x: Integer; x := 8;
+        -x and 12    FPC 8                     pxx -8      { -(x and 12) }
+        -x shr 1     FPC 9223372036854775804   pxx -4      { -(x shr 1)  }
+
+    so the old note picked `div` to check the very question `div` cannot answer.
+    C agrees with FPC here too (`-a & b` is `(-a) & b`).
+
+    The minus now always falls through to ParseFactor's own tkMinus case, which
+    negates ONE factor — the path PyExprMode already took, for the same reason.
+    bug-a-unary-minus-binds-looser-than-and-shr }
+  neg := False;
   { Unary plus is identity, so its binding is unobservable — keep eating it here
     rather than teaching the factor a no-op case. }
   Eat(tkPlus);

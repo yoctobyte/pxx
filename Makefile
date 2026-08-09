@@ -4388,7 +4388,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_const_bitwise_shift.pas /tmp/test_const_bitshift26
 	test "$$(/tmp/test_const_bitshift26)" = "$$(printf '65536\n128\n2\n8\n15\n511\n65536')"
 	./$(COMPILER) test/test_const_precedence.pas /tmp/test_const_precedence26
-	test "$$(/tmp/test_const_precedence26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	test "$$(/tmp/test_const_precedence26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_const_typecast.pas /tmp/test_const_typecast26
 	test "$$(/tmp/test_const_typecast26)" = "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295\n-1\n1\n65535')"
 	# NativeUInt/NativeInt(field) widens the FIELD's width, not the cast's
