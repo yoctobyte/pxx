@@ -53,3 +53,39 @@ def many():
         out.append(mk(w))
     return out
 print([p[1] for p in many()], len(many()))
+
+# bug-nilpy-lambda-returning-a-call-result-container-yields-none
+#
+# The third case of the same refusal: the body is a CALL whose result is a
+# container. `list(s)` is as freshly built as a literal is — it does
+# `r := TPyList.Create` and fills a new object — but every AN_CALL was excluded
+# because a METHOD call might return Self. The cost was not merely None: the
+# refusal emits the call and NO exit, so $pyresult is never stored and the
+# caller reads an uninitialised slot.
+#
+# Printed through join/len rather than raw, for the quoting reason noted above.
+mkl = lambda s: list(s)
+print("-".join(mkl("cab")), len(mkl("cab")))
+
+# a zero-parameter lifted lambda, result CONSUMED (a discarded result would not
+# have shown the original defect at all)
+mk0 = lambda: list("xy")
+print("-".join(mk0()), len(mk0()))
+
+# repeated, so a premature free of the fresh object surfaces
+def repeat():
+    m = lambda s: list(s)
+    total = 0
+    for w in ["ab", "cde", "f"]:
+        total = total + len(m(w))
+    return total
+print(repeat())
+
+# CONTROL: a user def returning a container stays on the REFUSED side — it may
+# hand back a captured global, which is the aliasing case the refusal exists
+# for. The exclusion must still be an exclusion, not a crash.
+shared = [7, 8]
+def give():
+    return shared
+gv = lambda x: give()
+print(len(shared), shared[0])

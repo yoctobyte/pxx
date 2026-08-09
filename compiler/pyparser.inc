@@ -19315,7 +19315,6 @@ end;
   half — a lambda has no statements, no locals and no nested defs, so what is
   left is the prologue, the expression, and the epilogue.
   (feature-nilpy-lambda-compiled-closure) }
-function PyLambdaResultIsOwnedTemp(n, procIdx: Integer): Boolean;
 { Is this lambda body's value a FRESHLY BUILT object the body itself owns, as
   opposed to an alias of something that outlives the call?
 
@@ -19331,11 +19330,60 @@ function PyLambdaResultIsOwnedTemp(n, procIdx: Integer): Boolean;
   own scope. A capture arrives as a PARAMETER and so is excluded, which is the
   aliasing case the refusal exists for; a method-call result is an AN_CALL and
   is excluded too. A lambda body is a single expression, so a local here can
-  only be a hoist temp. }
+  only be a hoist temp.
+
+  SECOND CASE (2026-08-09): a call to one of pylib's own CONSTRUCTOR builtins —
+  `list(s)`, `tuple(s)`, `sorted(s)`, `dict(x)`, `bytes(b)`, `reversed(l)`.
+  These were on the wrong side of the line and the cost was not "returns None":
+  the refusal emits the call and NO exit at all, so `$pyresult` is never stored
+  and the caller reads an uninitialised slot — `lambda x: list(x)` gave None and
+  `lambda x: sorted(x)` SEGFAULTED, from the same cause.
+
+  The distinction that matters is fresh-vs-alias, not call-vs-ident, and these
+  are provably fresh: every one of them does `r := TPyList.Create` (or the
+  bytes/dict equivalent) and fills a NEW object, so the value owns its
+  construction ref exactly as a literal's hoist temp does. Verified by reading
+  the bodies in pylib.pas, not assumed from the Python semantics — `bytes(b)`
+  in particular could have returned its argument and does not, it copies.
+
+  A USER def returning a list stays excluded even though it is also an AN_CALL:
+  it may return a captured global, which is the aliasing case again. Hence the
+  unit check — the name alone is not enough, because a user `def list(...)`
+  shadows by argument fit (project_findproc_by_name_ignores_overloads), and
+  matching it by name would hand back an alias under a builtin's name. }
+function PyProcIsFreshContainerCtor(pi: Integer): Boolean;
+{ A pylib builtin that ALWAYS returns a newly constructed container. Named
+  rather than structural because "does this callee alias one of its arguments?"
+  is not answerable from the signature; the unit check is what keeps a
+  same-named user def out. }
+var nm, un: AnsiString;
+begin
+  PyProcIsFreshContainerCtor := False;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if ProcUnitIdx[pi] < 0 then Exit;      { the main program — a user def }
+  un := Strs[ProcUnitIdx[pi]].Text;
+  nm := Procs[pi].Name;
+  if un = 'pylib' then
+    PyProcIsFreshContainerCtor :=
+      CaseEqual(nm, 'list') or CaseEqual(nm, 'tuple') or CaseEqual(nm, 'dict') or
+      CaseEqual(nm, 'bytes') or CaseEqual(nm, 'bytearray') or
+      CaseEqual(nm, 'reversed')
+  else if un = 'pyeval' then
+    { `sorted` lives in pyeval, not pylib, because it takes a key CALLBACK. Its
+      body is `r := TPyList.Create` then append, same as the pylib rows. }
+    PyProcIsFreshContainerCtor := CaseEqual(nm, 'sorted');
+end;
+
+function PyLambdaResultIsOwnedTemp(n, procIdx: Integer): Boolean;
 var s: Integer;
 begin
   PyLambdaResultIsOwnedTemp := False;
   if n < 0 then Exit;
+  if ASTKind[n] = AN_CALL then
+  begin
+    PyLambdaResultIsOwnedTemp := PyProcIsFreshContainerCtor(ASTIVal[n]);
+    Exit;
+  end;
   if ASTKind[n] <> AN_IDENT then Exit;
   s := ASTIVal[n];
   if (s < 0) or (s >= SymCount) then Exit;

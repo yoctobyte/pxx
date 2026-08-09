@@ -310,7 +310,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_accumulate_float_from_container.npy /tmp/test_nilpy_accfloat26
 	test "$$(/tmp/test_nilpy_accfloat26)" = "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
 	./$(COMPILER) test/test_nilpy_lambda_container_result.npy /tmp/test_nilpy_lamctr26
-	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3')"
+	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
@@ -5013,7 +5013,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_accumulate_float_from_container.npy /tmp/test_nilpy_accfloat26
 	test "$$(/tmp/test_nilpy_accfloat26)" = "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
 	./$(COMPILER) test/test_nilpy_lambda_container_result.npy /tmp/test_nilpy_lamctr26
-	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3')"
+	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy /tmp/test_nilpy_sortpairs26
