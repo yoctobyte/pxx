@@ -74,13 +74,45 @@ Do layer 1 first and independently: it is the crash, it needs no per-name list,
 and layer 2 is then a behaviour improvement on top of something that is already
 safe.
 
-## Note on the gate
+## Located to the line
 
-Layer 2 edits `compiler/builtin/pylib.pas`, so `gate.sh`'s self-host fixedpoint
-will report A != B until `stabilize` + `pin` — expected, not a regression, and
-the sh-A/sh-B map diff is how to PROVE it rather than assume it
-(`project_builtin_change_needs_repin_for_gate_fixedpoint`). Layer 1 is a
-frontend change and has no such cost.
+The unwrap is `compiler/ir.inc:2397`, in `IRLowerCallArg`:
+
+```pascal
+{ NilPy: a VARIANT argument to a CLASS-typed parameter unboxes via pyvarobj }
+if PyProgramMode and ... and (IntToTypeKind(ASTTk[argAST]) = tyVariant) and
+   (Procs[cpi].Params[pathIdx].TypeKind = tyClass) and ... then
+begin
+  caSlCall := FindProc('pyvarobj');
+  ...
+```
+
+Guarded on `PyProgramMode`, so it is NilPy-only and Pascal cannot be affected by
+changing it.
+
+## Correction: `pyvarobj` itself must NOT be made to check
+
+The obvious shortcut is to put the tag test inside `pyvarobj`. **That is wrong**,
+and it is worth writing down before someone tries it: `pyvarobj` is also what the
+runtime-dispatch arms call — `pyvarobj(v) is C ? <call as C> : ...` in
+`PyParseVariantMethod` and the `isinstance` lowering. Those pass variants holding
+strings and ints ON PURPOSE and need the test to simply come back False. Making
+`pyvarobj` raise would turn every one of those dispatch chains into an exception
+on its first non-matching arm.
+
+So layer 1 needs its OWN entry point (`pyvarobj_arg` or similar) that raises
+`TypeError` unless the tag is VT_OBJECT, with None still unwrapping to nil since
+passing None to a class parameter is legitimate.
+
+## Note on the gate — BOTH layers need a re-pin
+
+Corrected: layer 1 is not frontend-only. It needs the new pylib routine above, so
+like layer 2 it edits `compiler/builtin/**` and `gate.sh`'s self-host fixedpoint
+will report A != B until `stabilize` + `pin`. Expected, not a regression — and
+the sh-A/sh-B map diff is how to PROVE that rather than assume it
+(`project_builtin_change_needs_repin_for_gate_fixedpoint`). Budget for the re-pin
+when picking this up; it moves the ground every other track builds on, so it is
+not a change to land in a hurry.
 
 ## Found by
 

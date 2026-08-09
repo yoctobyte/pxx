@@ -1470,6 +1470,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
 | regression-test-core-cgeneric-selection-b209 | T | 70 | regression | regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-cmath-trig-family-b385 | T | 70 | regression | regression: test-core#src:test/cmath_trig_family_b385.c red at 93d6232f05d1 (auto-filed by twatch) | — |
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
 | regression-test-core-csocket-loopback-b88 | B | 70 | regression | csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since | — |
 | regression-test-core-cstatic-init-cast | T | 70 | regression | regression: test-core#src:test/cstatic_init_cast.c red at 6995a1a0d618 (auto-filed by twatch) | — |
