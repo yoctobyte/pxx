@@ -198,3 +198,53 @@ which is what makes this frontend-shaped rather than runtime-shaped.
 
 Deprioritised against silent bugs while both were open: this one names itself at
 compile time and cannot produce a wrong answer.
+
+## Recon 2026-08-09 — no re-pin needed, and the frontend hook is the real cost
+
+### The gate is cheaper than this ticket assumes
+
+Editing `compiler/builtin/pylib.pas` / `pyeval.pas` does **not** force
+`stabilize` + `pin`. Measured on
+[[bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked]]:
+`compiler/compiler.pas` uses `SysUtils, Math, BaseUnix, asmcore_*` and never
+`pylib`, so a pylib change cannot move the compiler binary and the self-host
+fixedpoint still converges FROM PINNED. The A != B effect belongs to the builtin
+units the COMPILER links, not to `compiler/builtin/**` as a directory. So this
+is ordinary per-fix-loop work.
+
+### Where `key=` has to live, and why
+
+`TPyList.sort` cannot take a `key`: resolving a callable needs `PyCallKey1`,
+which lives in **pyeval**, and `pyeval uses pylib` — so pylib cannot call back
+into it. That is the same constraint that put `sorted` in pyeval, and the
+existing `sort(reverse=)` comment already records it.
+
+So the runtime half is a **pyeval free function**, e.g.
+`pylist_sort_key(l: TPyList; key: Pointer; reverse: Boolean): Variant`, sorting
+in place and returning None. It can reuse `sorted`'s comparison loop directly.
+That half is straightforward.
+
+### The frontend half is the actual work
+
+`rows.sort(key=...)` is a METHOD call on a statically TPyList receiver, so it
+binds keyword arguments against `TPyList.sort`'s declared parameters and fails
+with "TPyList.sort has no parameter named 'key'". It must instead be rewritten
+into a call to the pyeval free function, with the receiver becoming argument 0.
+
+The existing precedent does NOT stretch to cover it. `parser.inc` ~5521 renames
+`values`→`vallist`, `keys`→`keylist`, `destroy`→`destroy_` on a typed receiver,
+but that hook is guarded on `(` immediately followed by `)` — **empty argument
+lists only** — and it renames a METHOD to another METHOD rather than redirecting
+to a free function with a shifted receiver. Both limits have to go for `.sort`,
+which is why this is not a five-line change.
+
+Check the VARIANT receiver path at the same time (`PyParseVariantMethod`), or
+`.sort(key=)` will work on a list literal and not on a list that arrived as a
+list element — the split this frontend is repeatedly bitten by
+([[project_nilpy_lvalue_vs_selector_path_must_both_know]]).
+
+### Also still open, same family
+
+[[bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error]] in
+`unfinished/` is the parse-error half of this; they should be taken together,
+since the fix above resolves both.
