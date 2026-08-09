@@ -83,4 +83,4 @@ Run cross as well: x86-64 / aarch64 / arm32 all now match FPC, riscv32 unchanged
 `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 7d7bdad29.
