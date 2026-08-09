@@ -2160,6 +2160,15 @@ test-threads: $(COMPILER)
 	./$(COMPILER) test/test_open_array_value_param_copies.pas /tmp/test_oavp26
 	test "$$(/tmp/test_oavp26 | tail -1)" = "OPEN ARRAY VALUE PARAM OK"
 	test "$$(/tmp/test_oavp26 | head -2 | tail -1)" = "open by value      : 1"
+	# a by-value SET or string[N] param gets its own COPY too -- the callee's
+	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
+	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed
+	# against FPC, including var write-back and the const escape hatch.
+	./$(COMPILER) test/test_set_shortstring_value_param_copies.pas /tmp/test_ssvp26
+	test "$$(/tmp/test_ssvp26 | tail -1)" = "SET SHORTSTRING VALUE PARAM OK"
+	test "$$(/tmp/test_ssvp26 | head -1)" = "set value  : ok"
+	test "$$(/tmp/test_ssvp26 | head -2 | tail -1)" = "str20 value: orig"
+	test "$$(/tmp/test_ssvp26 | head -12 | tail -1)" = "forwarded  : orig"
 	# 64-bit named constants (were declared tyInteger -> truncated on 32-bit
 	# targets). Only meaningful cross; x86-64 passed even when broken.
 	./$(COMPILER) test/test_const64.pas /tmp/test_const64_26

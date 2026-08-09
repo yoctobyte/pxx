@@ -2110,6 +2110,81 @@ begin
      OpenArrayCopyEligible(argAST) then
     argAST := MakeWholeDynCopy(argAST);
 
+  { A by-VALUE SET or FROZEN-STRING param gets its OWN COPY too — the same rule
+    as the open array above, on the two remaining parameter kinds that got it
+    wrong. Measured against FPC:
+
+        procedure MutSet(s: TSet);   begin s := s + [7]; end;
+        procedure MutStr(s: TStr20); begin s := 'changed'; end;
+
+    FPC leaves the caller's `s`/`t` untouched. pxx wrote straight through to
+    them on x86-64, aarch64 and arm32 — silently, no error, the caller's value
+    simply changed. riscv32 answered FPC's result, and that split is exactly the
+    per-backend divergence table on [[bug-a-param-pointer-rule-divergence]]:
+    the three targets whose "param slot holds a pointer" copy lists `tySet`
+    deref the slot and so alias, the one that omits it does not.
+
+    That ticket concluded the divergence was LATENT after a probe that only READ
+    the set. It is not: writing to the parameter reaches it, and this is a live
+    wrong-value bug on three of five targets. Corrected there.
+
+    Fixed CALLER-side, in this one funnel, for the same reason the open-array
+    copy is here — and because it is target-neutral: the callee receives a temp
+    it may scribble on, whichever convention the backend uses for the slot. The
+    copy is spelled as an ordinary `tmp := arg` ASSIGNMENT lowered through the
+    normal path, which already knows how to copy both kinds (IR_SET_COPY for a
+    set, the frozen-string store for a string[N]) — no second copy mechanism.
+
+    `const` is the escape hatch, exactly as for open arrays: it cannot be
+    written, so the copy would be pure cost. }
+  if (not isRefArg) and (cpi >= 0) and (cpi < ProcCount) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (pathIdx < MAX_PROC_PARAMS) and
+     { ProcParamExplicitByRef, not IsRef: a frozen-string VALUE param carries
+       IsRef anyway — the ABI passes its slot by reference — and that is exactly
+       the flag this array exists to tell apart from a source-level `var`/`out`.
+       Keying on IsRef made the set half fire and left the string[N] half
+       aliasing, which is how the distinction was found. }
+     (not ProcParamExplicitByRef[cpi * MAX_PROC_PARAMS + pathIdx]) and
+     (not Procs[cpi].Params[pathIdx].IsArray) and
+     (not ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx]) and
+     (((Procs[cpi].Params[pathIdx].TypeKind = tySet) and
+       (IntToTypeKind(ASTTk[argAST]) = tySet)) or
+      (TypeIsFrozenString(Procs[cpi].Params[pathIdx].TypeKind) and
+       TypeIsFrozenString(IntToTypeKind(ASTTk[argAST])))) then
+  begin
+    if Procs[cpi].Params[pathIdx].TypeKind = tySet then
+      tmpSym := AllocVar('', tySet)
+    else
+    begin
+      { 255 covers every string[N], so a wider temp cannot truncate whatever
+        frozen kind the source is. Mirrors the managed->frozen arm below.
+
+        The two sides are matched by SHAPE (both frozen) rather than by exact
+        kind, because they legitimately differ: a `string[20]` VARIABLE's node
+        carries the legacy alias tyString (4) while the PARAMETER carries
+        tyFixedString (26) — the frozen-kind migration's two spellings of one
+        thing. An exact-kind test compiled fine and silently never fired, which
+        is how this was found: the set half worked and the string half still
+        aliased. An AnsiString argument is deliberately NOT matched here — it is
+        a CONVERSION, and the managed->frozen arm below already materialises its
+        own temp. }
+      LastTypeStrCap := 255;
+      tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind);
+    end;
+    caIdent := AllocNode(AN_IDENT);
+    ASTIVal[caIdent] := tmpSym;
+    ASTTk[caIdent] := Ord(Procs[cpi].Params[pathIdx].TypeKind);
+    caSlCall := AllocNode(AN_ASSIGN);
+    ASTLeft[caSlCall] := caIdent;
+    ASTRight[caSlCall] := argAST;
+    IRLowerAST(caSlCall);
+    caIdent := AllocNode(AN_IDENT);
+    ASTIVal[caIdent] := tmpSym;
+    ASTTk[caIdent] := Ord(Procs[cpi].Params[pathIdx].TypeKind);
+    argAST := caIdent;          { …and the ordinary arg lowering takes it from here }
+  end;
+
   { {$MODE DELPHI}: a bare procvar ARGUMENT is called when the parameter wants a
     value, and passed as-is when the parameter is itself proc-typed — measured
     both ways against FPC. Computed with explicit ifs rather than a chained

@@ -10,9 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | task-t-pin-fast-track-t-owns-verification | T | 80 | task | Track A pins in 30s and never waits; everything heavier moves to Track T, asynchronous and per-sha. Status is a JOIN of pin.log x tstate, not a label on the pin. Native full regression (incl. NilPy + corpus) is the priority right now, above the cross matrix. | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 
 ## unfinished (11)
 
@@ -42,7 +44,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (219)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -114,7 +116,6 @@ _none_
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
 | decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
-| feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
@@ -395,9 +396,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1578)
+## done (1579)
 
-1578 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1579 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (31)
 
@@ -444,7 +445,6 @@ _none_
 - [p 60] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
-- [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa

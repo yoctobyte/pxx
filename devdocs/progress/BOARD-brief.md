@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:11 blocked:7 backlog:219 experimental:20 rainy-day:35 done-followup:3 decided:51 done:1578 rejected:31`
+`urgent:1 working:1 unfinished:11 blocked:7 backlog:218 experimental:20 rainy-day:35 done-followup:3 decided:51 done:1579 rejected:31`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-a-abi-oracle` [A] — owner: claude-A
 
 ## urgent (1) — jump the queue
 
@@ -39,7 +39,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 198, ranked
+## Ready — top 30 of 197, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
@@ -48,7 +48,6 @@ _none — no lane is locked._
 - `[p 60] [N]` bug-nilpy-open-returns-two-different-classes-by-mode
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
-- `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -71,5 +70,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
+- `[p 55] [N]` feature-nilpy-corpus-uforth
 
-_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_167 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
