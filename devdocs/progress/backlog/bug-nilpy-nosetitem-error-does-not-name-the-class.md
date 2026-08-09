@@ -37,10 +37,14 @@ diagnostic.
 
 ## Gate
 
-Edits `compiler/builtin/pylib.pas`, so the self-host fixedpoint reports A != B
-until `stabilize` + `pin` (`project_builtin_change_needs_repin_for_gate_fixedpoint`) —
-worth batching with the other queued pylib work rather than re-pinning for a
-message. `test_nilpy_not_subscriptable.npy` already exercises both write cells;
+CORRECTED 2026-08-09: this needs **no re-pin**. `compiler/compiler.pas` does not
+link `pylib` (it uses SysUtils, Math, BaseUnix, asmcore), so a pylib change
+cannot move the compiler binary and the self-host fixedpoint still converges
+FROM PINNED — measured on
+[[bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked]].
+The A != B effect is specific to the builtin units the COMPILER itself links
+(builtinheap and friends), not to `compiler/builtin/**` as a directory. So this
+is ordinary per-fix-loop work. `test_nilpy_not_subscriptable.npy` already exercises both write cells;
 it asserts only the LABEL there, and would assert the full message once this
 lands.
 

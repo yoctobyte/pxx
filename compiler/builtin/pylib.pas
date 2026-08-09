@@ -1115,6 +1115,13 @@ function tuple(const s: AnsiString): TPyList; overload;
   was a compile error ("no overload of tuple matches"), the loud sibling of
   the silent list(b). }
 function tuple(b: TPyBytes): TPyList; overload;
+{ tuple(<variant>) — a VARIANT receiver, which is what a list element or an
+  unannotated parameter is. Without it the call bound the TPyList overload and
+  the compiler inserted an unchecked unwrap, so a variant holding a STRING was
+  reinterpreted as a list instance and `for x in ["cab"]: tuple(x)` SEGFAULTED.
+  `list` never had the bug precisely because it has this overload.
+  bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked }
+function tuple(const v: Variant): TPyList; overload;
 { pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
 { pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
@@ -1254,6 +1261,9 @@ function Counter(const s: AnsiString): TPyDict; overload;
   identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
 function reversed(l: TPyList): TPyList;
 function reversed(const s: AnsiString): TPyList; overload;
+{ reversed(<variant>) — a VARIANT receiver, same shape and same crash as
+  tuple(<variant>) above. }
+function reversed(const v: Variant): TPyList; overload;
 { `hex(n)` — Python spells it with the 0x prefix and lower-case digits, and
   spells a negative as -0x… rather than in two's complement. }
 function hex(n: Int64): AnsiString;
@@ -1336,6 +1346,25 @@ function pyvarobj(const v: Variant): Pointer;
   by `d.get(k, [])[:6]` passed to a dataclass ctor: correct at the call, garbage
   (a recycled block) by the time the field was read. }
 function pyvarobj_owned(const v: Variant): Pointer;
+{ pyvarobj for an ARGUMENT that is binding a CLASS-typed parameter, CHECKED.
+
+  Overload resolution lets a Variant argument bind a class parameter and the
+  compiler inserts an unwrap to make it fit (IRLowerCallArg, ir.inc). Unwrapping
+  with plain pyvarobj hands back the raw payload, so a variant holding a STRING
+  was reinterpreted as an instance pointer and the callee dereferenced it —
+  `tuple(v)`, `sorted(v)`, `bytes(v)`, `reversed(v)` and `sum(v)` all SEGFAULTED
+  on an ordinary `for x in ["cab"]` receiver
+  (bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked).
+
+  Deliberately a SEPARATE entry point rather than a check inside pyvarobj: the
+  runtime dispatch arms call `pyvarobj(v) is C ? ... : ...` with variants holding
+  strings and ints ON PURPOSE and need the test to come back False. Making
+  pyvarobj raise would turn every one of those chains into an exception on its
+  first non-matching arm.
+
+  None unwraps to nil, which is legitimate — passing None where a class is
+  expected is ordinary Python. }
+function pyvarobj_arg(const v: Variant): Pointer;
 { The callee address of `<variant>(args)`, CHECKED. A name bound to None — an
   optional import that did not resolve, a value never assigned — has a nil
   payload, and calling it jumped to address 0: a segfault with no diagnostic,
@@ -2538,6 +2567,17 @@ end;
 function pyvarobj(const v: Variant): Pointer;
 begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
+
+function pyvarobj_arg(const v: Variant): Pointer;
+begin
+  { tag 7 = VT_OBJECT; tag 0 = VT_EMPTY, i.e. None, which unwraps to nil }
+  if (pyvartag(v) = 7) or (pyvartag(v) = 0) then
+  begin
+    Result := Pointer(PPyVarRec(@v)^.Payload);
+    Exit;
+  end;
+  raise TypeError.Create('expected an object argument, got ' + pytype_name_v(v));
 end;
 
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
@@ -10170,6 +10210,39 @@ begin
   if l <> nil then
     for i := 0 to l.count - 1 do r.append(l.at(i));
   Result := r;
+end;
+
+function tuple(const v: Variant): TPyList; overload;
+var o: TObject;
+begin
+  { mirrors list(const v: Variant), with the tuple flag stamped on the result }
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := tuple(TPyList(o)); Exit; end;
+    if o is TPyDict then
+    begin
+      Result := TPyDict(o).keylist;
+      Result.FKind := PYSEQ_TUPLE;
+      Exit;
+    end;
+    if o is TPyBytes then begin Result := tuple(TPyBytes(o)); Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := tuple(pystr_of(v)); Exit; end;
+  Result := TPyList.Create;      { None / empty }
+  Result.FKind := PYSEQ_TUPLE;
+end;
+
+function reversed(const v: Variant): TPyList; overload;
+var o: TObject;
+begin
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := reversed(TPyList(o)); Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := reversed(pystr_of(v)); Exit; end;
+  Result := TPyList.Create;
 end;
 
 function tuple(const s: AnsiString): TPyList; overload;

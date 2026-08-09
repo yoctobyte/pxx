@@ -2405,7 +2405,21 @@ begin
      (Procs[cpi].Params[pathIdx].TypeKind = tyClass) and
      (not Procs[cpi].Params[pathIdx].IsRef) then
   begin
-    caSlCall := FindProc('pyvarobj');
+    { pyvarobj_arg, not pyvarobj: the unwrap is TAG-CHECKED. Plain pyvarobj
+      hands back the raw payload, so a variant holding a STRING bound to a
+      class parameter was reinterpreted as an instance pointer and the callee
+      dereferenced it — `tuple(v)`, `sorted(v)`, `bytes(v)`, `reversed(v)` and
+      `sum(v)` all SEGFAULTED on an ordinary `for x in ["cab"]` receiver, and
+      any pylib builtin added later without a Variant overload starts there too.
+      The checked entry point raises TypeError instead, so the failure mode for
+      the whole family is a Python-shaped error rather than a wild dereference.
+
+      A separate routine rather than a check inside pyvarobj, because the
+      runtime dispatch arms (`pyvarobj(v) is C ? ... : ...`) pass non-object
+      variants on purpose and need the test to come back False.
+      bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked }
+    caSlCall := FindProc('pyvarobj_arg');
+    if caSlCall < 0 then caSlCall := FindProc('pyvarobj');   { pre-pin pylib }
     if caSlCall < 0 then Error('variant unbox: pyvarobj builtin not loaded');
     caArg1 := IRAppend(IR_ARG, IRVariantAddr(argAST), -1, -1, 0, Ord(tyVariant));
     Result := IRAppendCall(caSlCall, caArg1, -1, Ord(tyPointer));

@@ -1,0 +1,51 @@
+# A VARIANT argument binding a CLASS-typed parameter used to be unwrapped with a
+# raw pyvarobj, so a variant holding a STRING was reinterpreted as an instance
+# pointer and the callee dereferenced it. Five builtins SEGFAULTED on the most
+# ordinary receiver there is — a list element.
+# bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked
+#
+# `list` never had the bug, because it is the one builtin in the group with a
+# Variant overload — which is what identified the shape.
+#
+# Both payload kinds are swept for every name, because the LIST payload was
+# always correct: testing only that would have shown nothing.
+#
+# Printed through join/len rather than raw where the output would contain
+# quotes, so the expectation survives the Makefile's printf.
+
+
+def show(label, v):
+    print(label, v)
+
+
+strs = ["cab"]
+nums = [[3, 1, 2]]
+
+for x in strs:
+    print("list-str  ", "-".join(list(x)))
+    print("tuple-str ", "-".join(tuple(x)), len(tuple(x)))
+    print("sorted-str", "-".join(sorted(x)))
+    print("len-str   ", len(x))
+    print("max-str   ", max(x))
+    print("str-str   ", str(x))
+
+for y in nums:
+    print("list-num  ", sum(list(y)))
+    print("tuple-num ", len(tuple(y)), sum(tuple(y)))
+    print("sorted-num", sorted(y))
+    print("sum-num   ", sum(y))
+    print("min-num   ", min(y), max(y))
+    print("bytes-num ", len(bytes(y)))
+
+# the two that CPython also rejects: a clean TypeError, not a crash
+for x in strs:
+    try:
+        bytes(x)
+        print("bytes-str NO-RAISE")
+    except TypeError:
+        print("bytes-str TypeError")
+    try:
+        sum(x)
+        print("sum-str NO-RAISE")
+    except TypeError:
+        print("sum-str TypeError")

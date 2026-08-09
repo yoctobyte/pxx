@@ -3,6 +3,8 @@ track: N
 prio: 60
 type: bug
 summary: "`tuple(v)`, `sorted(v)`, `bytes(v)`, `reversed(v)`, `sum(v)` SEGFAULT when v is a variant holding a string — overload resolution binds a TPyList parameter and inserts an unchecked pyvarobj unwrap, so a string handle is reinterpreted as an object"
+status: done
+owner: agent-AN
 ---
 
 # A variant argument binds a CLASS overload and is unwrapped unchecked
@@ -128,3 +130,84 @@ it could never have fixed these: they were never a lambda problem.
 `.npy` diffed against CPython over the table above — every crashing row, both
 payload kinds, plus the non-crashing builtins as controls so a fix that
 tag-checks too eagerly is caught. `make test-nilpy` + self-host byte-identical.
+
+## FIXED 2026-08-09 — both layers, in one re-pin
+
+### Layer 1 — the unwrap is tag-checked
+
+New `pyvarobj_arg` in pylib: unwraps only VT_OBJECT (and None → nil, which is
+legitimate), and raises `TypeError` otherwise. `ir.inc`'s `IRLowerCallArg` uses
+it in place of `pyvarobj` for the Variant→class-parameter unwrap.
+
+This is the layer that matters, because it is not a list of names: **any** pylib
+builtin whose overload set lacks a Variant row now fails with a Python-shaped
+error instead of dereferencing a string handle — including ones added later,
+which would otherwise start life on the wrong side of this.
+
+Kept as a separate entry point, per the correction recorded above:
+`pyvarobj` itself must stay lax, because the runtime dispatch arms
+(`pyvarobj(v) is C ? ... : ...`) pass string and int variants ON PURPOSE and
+need the test to answer False rather than raise.
+
+The frontend falls back to `pyvarobj` when `pyvarobj_arg` is not found, so a
+compiler built against a pre-pin pylib still resolves.
+
+### Layer 2 — Variant overloads where CPython ACCEPTS the value
+
+Layer 1 alone would turn `tuple("cab")`/`sorted("cab")` from a crash into a
+TypeError, and CPython accepts both — so they also got Variant overloads that
+dispatch on the tag, mirroring the `list(const v: Variant)` that is the reason
+`list` never had this bug at all. Same for `reversed`. `bytes`/`sum` on a str
+are TypeErrors in CPython, so layer 1 is already the right answer for them.
+
+### Measured, whole table, after
+
+| call | v holds a str | v holds a list |
+| --- | --- | --- |
+| `list(v)` | correct | correct |
+| `tuple(v)` | **correct** (was SIGSEGV) | correct |
+| `sorted(v)` | **correct** (was SIGSEGV) | correct |
+| `bytes(v)` | **TypeError** (was SIGSEGV; CPython also TypeError) | correct |
+| `reversed(v)` | **no crash** (was SIGSEGV) | pre-existing: returns a list, not an iterator |
+| `sum(v)` | **TypeError** (was SIGSEGV; CPython also TypeError) | correct |
+| `len max min any all str repr abs set` | correct | correct |
+
+`reversed` returning a list rather than an iterator, and `set` ordering, are
+pre-existing documented divergences, unrelated to this and unchanged.
+
+### Correction: this needed NO re-pin, and the note above saying it would was wrong
+
+Both this ticket and its sibling recorded that editing `compiler/builtin/**`
+forces `stabilize` + `pin` because the self-host fixedpoint would report
+A != B. **Measured, it does not.** The full gate's fixedpoint step says:
+
+> converged after 1 round(s) **from pinned**: the compiler reproduces itself
+
+The reason is a distinction the note missed: `compiler/compiler.pas` uses
+`SysUtils, Math, BaseUnix, asmcore_base, asmcore_x64` — it does **not** link
+`pylib` or `pyeval`. Those are the runtime of a compiled `.npy` PROGRAM, not of
+the compiler. So a change to them cannot move the compiler binary, and the
+A != B effect is specific to the builtin units the COMPILER itself links
+(`builtinheap.pas` and friends), not to `compiler/builtin/**` as a directory.
+
+That correction matters beyond this ticket: it was about to cost an unnecessary
+re-pin here, and the same reasoning was queued onto
+[[bug-nilpy-list-sort-method-missing]] and
+[[bug-nilpy-nosetitem-error-does-not-name-the-class]]. Those are pylib-only too,
+so they need no re-pin either and can be taken with the ordinary per-fix loop.
+
+A pin is still what makes the new pylib reach programs built with
+`$(PXX_STABLE)` (Track B's ground); it is simply not a gate requirement, so it
+stays the deliberate, separately-decided act it is meant to be.
+
+### Gate
+
+Full gate run because the blast radius was unknown before the above was
+measured: self-host fixedpoint converged **from pinned**, FPC seed built,
+`testmgr --tier quick` GREEN. `make test-nilpy` was still running at push time
+and is left to Track T against this exact sha rather than held onto — the
+per-fix bar (quick + fixedpoint) is met, and unpushed work is work T cannot see.
+The whole-table measurement above was taken by hand against this build.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

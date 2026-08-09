@@ -1973,6 +1973,12 @@ test-nilpy: $(COMPILER)
 	# the exception one, which is why only that arm ever measured correct.
 	./$(COMPILER) test/test_nilpy_with_early_exit_runs_exit.npy /tmp/test_nilpy_withexit26
 	/tmp/test_nilpy_withexit26 | diff -u test/test_nilpy_with_early_exit_runs_exit.expected -
+	# A VARIANT argument binding a CLASS parameter is unwrapped TAG-CHECKED:
+	# tuple/sorted/bytes/reversed/sum over a variant holding a string used to
+	# segfault. Both payload kinds are swept because the list payload was always
+	# correct, so testing only that would have shown nothing.
+	./$(COMPILER) test/test_nilpy_builtin_over_variant_receiver.npy /tmp/test_nilpy_bvrecv26
+	/tmp/test_nilpy_bvrecv26 | diff -u test/test_nilpy_builtin_over_variant_receiver.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

@@ -86,6 +86,14 @@ function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False): TPyLi
 function sorted(d: TPyDict; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
 { a str is an iterable too: sorted("cba") -> ['a','b','c'] }
 function sorted(const s: AnsiString; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
+{ sorted(<variant>) — a VARIANT argument, which is what a list element, a dict
+  value or an unannotated parameter is. Without it the call bound the TPyList
+  overload and the compiler inserted an unchecked unwrap, so a variant holding a
+  STRING was reinterpreted as a list instance and `for x in ["cab"]: sorted(x)`
+  SEGFAULTED. `list` never had the bug because it has such an overload; this is
+  the same fix on the pyeval side.
+  bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked }
+function sorted(const v: Variant; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
 
 { min(l)/max(l) over a LIST, WITH Python's `key=`. They live here rather than in
   pylib beside the scalar min/max because `key=` needs PyCallKey1's callable
@@ -4464,6 +4472,20 @@ begin
   chars := TPyList.Create;
   for i := 1 to Length(s) do chars.append(pystr_ofchar(s[i]));
   Result := sorted(chars, key, reverse);
+end;
+
+function sorted(const v: Variant; key: Pointer; reverse: Boolean): TPyList; overload;
+var o: TObject;
+begin
+  { dispatch on the runtime tag, exactly as list(const v: Variant) does }
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin Result := sorted(TPyList(o), key, reverse); Exit; end;
+    if o is TPyDict then begin Result := sorted(TPyDict(o), key, reverse); Exit; end;
+  end;
+  if pyvartag(v) = 6 then begin Result := sorted(pystr_of(v), key, reverse); Exit; end;
+  Result := TPyList.Create;      { None / empty }
 end;
 
 function sorted(l: TPyList; key: Pointer; reverse: Boolean): TPyList;
