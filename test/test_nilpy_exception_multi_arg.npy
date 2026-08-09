@@ -1,0 +1,59 @@
+# bug-nilpy-multi-arg-exception-constructor-segfaults
+#
+# `raise MyErr("boom", 42)` on `class MyErr(Exception): pass` SEGFAULTED. So did
+# a bare `e = MyErr("a", 1)` that was never raised — so a program could die
+# building a value it never threw.
+#
+# Ordinary Python: Exception takes *args and str(e) renders the TUPLE. The RTL's
+# Create(msg) takes exactly one, and the surplus arguments were emitted anyway.
+# The UNDER-call (`MyErr()` with a required msg) was already handled; the
+# over-call was not, which is the same asymmetry twice over.
+#
+# One argument is deliberately untouched: str(MyErr("boom")) is `boom`, not
+# `('boom',)`, so the fold only fires above one — both are asserted, since a
+# fold that also caught the single case would look right in the two-arg test.
+#
+# Zero, one, two and three arguments; a subclass two deep; a built-in exception;
+# non-string arguments (int, float, list) and a VARIABLE argument, because the
+# first version of the fix used pyrepr_of — which is overloaded, and FindProc
+# resolves by name without consulting overloads, so the integer 42 was passed to
+# a routine expecting a string handle and it crashed in a NEW place. Anything
+# but a string literal is the case that catches that.
+#
+# Expectations are CPython's own output.
+
+class MyErr(Exception):
+    pass
+class SubErr(MyErr):
+    pass
+
+def show(label, fn):
+    try:
+        fn()
+        print(label, "no raise")
+    except MyErr as e:
+        print(label, "caught", str(e))
+
+def r2():
+    raise MyErr("boom", 42)
+def r3():
+    raise MyErr("a", 1, 2.5)
+def r1():
+    raise MyErr("solo")
+def r0():
+    raise MyErr()
+def rs():
+    raise SubErr("sub", 7)
+
+show("two  ", r2)
+show("three", r3)
+show("one  ", r1)
+show("zero ", r0)
+show("sub  ", rs)
+
+print("built  ", str(MyErr("a", 1)))
+print("nested ", str(MyErr("x", [1, 2])))
+print("strs   ", str(MyErr("x", "y")))
+print("builtin", str(ValueError("v", 9)))
+v = 5
+print("var    ", str(MyErr("dyn", v)))

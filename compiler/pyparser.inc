@@ -4924,6 +4924,27 @@ case PyDcKind[i] of
   Result := valNode;
 end;
 
+{ Two tiny builders for the multi-argument Exception fold in PyClassCreate: a
+  string literal, and a `+` of two AnsiString expressions. Separate so the fold
+  reads as the concatenation it is rather than twelve node allocations.
+  bug-nilpy-multi-arg-exception-constructor-segfaults }
+function PyExcFoldLit(const t: AnsiString): Integer;
+begin
+  Result := AllocNode(AN_STR_LIT);
+  ASTSOffset[Result] := PyStoredName(t);
+  ASTSLen[Result] := Length(t);
+  ASTTk[Result] := Ord(tyString);
+end;
+
+function PyExcFoldCat(a, b: Integer): Integer;
+begin
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := Ord(tkPlus);
+  ASTLeft[Result] := a;
+  ASTRight[Result] := b;
+  ASTTk[Result] := Ord(tyAnsiString);
+end;
+
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     nArgs, i, k, dcBase, valNode, tkNode, ctorMi, ctorPi: Integer; tkF: TTypeKind;
@@ -4932,6 +4953,8 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
     attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi, attrGSym: Integer;
     attrD, attrCur: Integer;   { the ancestor-chain walk, root first }
+    excFoldCi, excFoldPi, excFoldStr, excFoldN, excFoldI: Integer;
+    excFoldA, excFoldC: Integer;   { the multi-arg Exception fold }
 begin
   name := CurTok.SVal;
   ci := -1;
@@ -5182,6 +5205,62 @@ begin
     diagnostic. Restricted to STRING parameters: those are the ones with a
     meaningful empty value, and it keeps this from quietly papering over an
     under-called ctor of any other shape, which should stay visible. }
+  { The OPPOSITE of the under-call above: MORE arguments than the inherited
+    ctor takes. `raise MyErr("boom", 42)` on `class MyErr(Exception): pass` is
+    ordinary Python — Exception takes *args and str(e) renders the TUPLE — but
+    the RTL's Create(msg) takes exactly one, so the surplus arguments were
+    emitted anyway and the call SEGFAULTED. Not only on `raise`: a bare
+    `e = MyErr("a", 1)` crashed too, so a program could die building a value it
+    never threw.
+    Folded into the single message CPython would print: '(' + repr(a) + ', ' +
+    ... + ')'. One argument is left completely alone — `str(MyErr("boom"))` is
+    `boom`, not `('boom',)` — which is why this only fires above one.
+    bug-nilpy-multi-arg-exception-constructor-segfaults }
+  if (ctorMi >= 0) and (nArgs > 1) and
+     (Procs[ctorPi].ParamCount - 1 = 1) and
+     (Procs[ctorPi].Params[1].TypeKind in [tyString, tyAnsiString]) then
+  begin
+    excFoldCi := FindUClass('Exception');
+    if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
+    begin
+      { pyvar_repr, NOT pyrepr_of: the latter is OVERLOADED per argument type
+        and FindProc resolves by NAME and never consults overloads
+        (project_findproc_by_name_ignores_overloads). It handed back the
+        AnsiString overload, so `MyErr("boom", 42)` passed the integer 42 to a
+        routine expecting a string handle and crashed in a NEW place instead of
+        the old one — the fix reproducing the symptom it was fixing. pyvar_repr
+        has ONE signature and takes a Variant, so each argument is boxed and
+        the type is decided at run time. }
+      excFoldPi := FindProc('pyvar_repr');
+      if excFoldPi < 0 then Error('Nil Python: pylib (pyvar_repr) not loaded');
+      excFoldStr := -1;
+      excFoldN := ASTRight[ASTLeft[node]];   { first user arg (slot 0 is size) }
+      excFoldI := 0;
+      while excFoldN >= 0 do
+      begin
+        { repr(arg) }
+        excFoldA := AllocNode(AN_ARG);
+        ASTLeft[excFoldA] := PyForceVariant(ASTLeft[excFoldN]);
+        ASTRight[excFoldA] := -1;
+        excFoldC := AllocNode(AN_CALL);
+        ASTIVal[excFoldC] := excFoldPi;
+        ASTTk[excFoldC] := Ord(tyAnsiString);
+        ASTLeft[excFoldC] := excFoldA;
+        if excFoldI = 0 then excFoldStr := PyExcFoldCat(PyExcFoldLit('('), excFoldC)
+        else excFoldStr := PyExcFoldCat(PyExcFoldCat(excFoldStr, PyExcFoldLit(', ')), excFoldC);
+        Inc(excFoldI);
+        excFoldN := ASTRight[excFoldN];
+      end;
+      excFoldStr := PyExcFoldCat(excFoldStr, PyExcFoldLit(')'));
+      { one argument in place of the whole surplus chain }
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := excFoldStr;
+      ASTRight[argNode] := -1;
+      ASTRight[ASTLeft[node]] := argNode;
+      lastArg := argNode;
+      nArgs := 1;
+    end;
+  end;
   if ctorMi >= 0 then
     while (nArgs < Procs[ctorPi].ParamCount - 1) and
           (nArgs + 1 < MAX_PROC_PARAMS) and

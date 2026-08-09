@@ -1103,6 +1103,10 @@ test-nilpy: $(COMPILER)
 	# type().__name__ and isinstance, and the tag must survive slice/concat.
 	./$(COMPILER) test/test_nilpy_bytearray_vs_bytes.npy /tmp/test_nilpy_bavsb26
 	/tmp/test_nilpy_bavsb26 | diff -u test/test_nilpy_bytearray_vs_bytes.expected -
+	# a multi-argument exception ctor SEGFAULTED (Exception.Create takes one msg;
+	# the surplus args were emitted anyway). CPython renders them as a tuple.
+	./$(COMPILER) test/test_nilpy_exception_multi_arg.npy /tmp/test_nilpy_excmulti26
+	/tmp/test_nilpy_excmulti26 | diff -u test/test_nilpy_exception_multi_arg.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

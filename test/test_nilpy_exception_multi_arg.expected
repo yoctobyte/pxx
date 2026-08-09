@@ -1,0 +1,10 @@
+two   caught ('boom', 42)
+three caught ('a', 1, 2.5)
+one   caught solo
+zero  caught 
+sub   caught ('sub', 7)
+built   ('a', 1)
+nested  ('x', [1, 2])
+strs    ('x', 'y')
+builtin ('v', 9)
+var     ('dyn', 5)
