@@ -213,4 +213,4 @@ returning a string is variant-typed where it used to be Integer — visible only
 something downstream needed the static type. No sweep test showed it.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 8fd5d7dd5.
