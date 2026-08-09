@@ -1,0 +1,117 @@
+---
+track: T
+prio: 80
+type: task
+summary: "Track A pins in 30s and never waits; everything heavier moves to Track T, asynchronous and per-sha. Status is a JOIN of pin.log x tstate, not a label on the pin. Native full regression (incl. NilPy + corpus) is the priority right now, above the cross matrix."
+---
+
+# Pinning is fast and unverified; Track T owns verification
+
+**Decided by the user, 2026-08-09.** Filed for Track T because T owns the
+hardware (12 Xeon cores) and the reporting; Track A has already done its half.
+
+## The principle
+
+> **Track A+ work should never wait long — not even when Track B asks for a
+> fresh pin.**
+
+A pin exists to hand other tracks a working compiler. While it runs, those
+tracks AND the human are blocked. So the pin path is 30 seconds, always, and
+every heavier thing happens *after* it, asynchronously, on T's machine.
+
+## What Track A already changed (done, v252)
+
+- `make stabilize-fast && make pin` — **34s measured** (`test-quick` + the
+  self-host `self→next→fixedpoint` byte-identity chain, then symlink moves).
+- The old default was `make stabilize`, which **depends on `make test`** — the
+  full native suite. Every pin was paying ~25 minutes. `stabilize-fast` already
+  existed with the right bar; its own comment told agents not to use it for real
+  pins. That comment and CLAUDE.md's Track A line now carry the new policy.
+- Full `stabilize` remains available for a release, or when T is proven down.
+
+Nothing below asks Track A to change anything further.
+
+## What NOT to build
+
+An earlier draft proposed a promotion ladder — `pinned` → `verified` →
+`release`, three labels on the artifact. **The user rejected it and was right.**
+
+Status is a property of a **sha**, and T already tracks that per-sha. A label on
+the pin stores the same fact twice and goes stale the moment T learns something
+new. So:
+
+- one artifact, one pointer (`pinned`), no labels;
+- "what is the status of the current pin?" is a **JOIN**: take the sha from
+  `stable_linux_amd64/default/pin.log`, look it up in `tstate/`.
+
+That also disposes of a layout problem the ladder would have created (the
+single shared `default/builtin/` freeze cannot serve labels sitting at different
+shas). Do not build labels, tiers or promotion until something actually hurts.
+
+## Deliverable 1 — make the join one command
+
+`tools/trackt.py pinstatus` (name negotiable), printing something like:
+
+```
+pin v252  32c8423c  dcd323d9  2026-08-09T15:43Z
+  quick   GREEN
+  full    RED  test-nilpy#src:test/foo.npy (aarch64)
+  last pin T found fully green: v250  (a1b2c3d4)
+```
+
+The last line is the point. **A bad pin is recovered, not prevented** — that is
+the whole trade the fast pin makes — and recovery needs somewhere to fall back
+to. Without this the join is manual, and a manual join is the one nobody does
+when it matters. Pair it with `make revert` so demoting is as cheap as pinning.
+
+## Deliverable 2 — run the right matrix, in the right order
+
+The thing being hunted is **two-dimensional: test cases x platforms.** Both axes
+are expensive and they are NOT equally valuable right now.
+
+**Native depth first, platform breadth second.** Specifically:
+
+1. **Native x86-64, ALL frontends, full** — Pascal `make test`, **`test-nilpy`**,
+   C, plus corpus subjects (**uforth**, and the other real programs). Run this
+   often; it is where the yield is.
+2. **Cross matrix under qemu** (i386/aarch64/arm32/riscv32/xtensa) — slower by
+   an order of magnitude, run less often.
+
+### Why NilPy is in tier 1 and not an afterthought
+
+**NilPy is a main target now.** The earlier framing — "only Pascal matters,
+because only Pascal can corrupt self-hosting" — is correct about *self-hosting
+integrity* and wrong as a *priority*. Self-host integrity is not the only thing
+worth protecting; NilPy is a first-class frontend with a real corpus, and at
+this stage of its development **fixing one bug routinely uncovers others**, so a
+full native NilPy regression pays for itself on nearly every run. This session
+alone: a `__setitem__` gate fix immediately exposed the `del`-target sibling
+(which was already red on master), and a lambda fix exposed five unrelated
+builtin segfaults.
+
+### Why byte-identical self-compile is NOT enough (the justification for tier 1 at all)
+
+Worth stating because it is the non-obvious part, and it is what makes a heavier
+tier worth running even though the fast pin is green:
+
+> A byte-identical fixedpoint proves the compiler reproduces itself **through
+> the paths the compiler itself exercises**. A codegen bug in a construct
+> `compiler.pas` never uses is invisible to it, forever.
+
+That gap is exactly what the regression suites cover and what `quick` may miss.
+
+## Suggested shape
+
+- T keeps publishing per-sha reports as it does today; nothing about tstate's
+  format needs to change for `pinstatus` to work.
+- T may treat "a new sha appeared in `pin.log`" as a trigger to run tier 1
+  against it promptly, so the pin the tracks are actually using is the one that
+  gets attention first.
+- A tier-1 RED on the current pin is worth surfacing loudly (it is what the
+  tracks are building against); a cross-matrix RED is an ordinary ticket.
+
+## Gate
+
+Track T's own: `tools/testmgr.py --tier full` green for tooling changes, and
+`pinstatus` exercised against a real `pin.log` + `tstate/` pair rather than a
+synthetic one.
