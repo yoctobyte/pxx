@@ -472,6 +472,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-bound-method-coerced-to-string | N | 65 | bug | A bound METHOD passed to a string parameter compiles, and produces garbage | — |
 | bug-nilpy-bound-method-of-a-temporary-receiver-segfaults | N | 45 | bug | `f(C().m)` — a bound method whose receiver is a TEMPORARY — segfaults. `c = C(); f(c.m)` is fine, so the pair outlives the instance it points at: a receiver-lifetime bug, not a callable-value one | — |
 | bug-nilpy-builtin-pairs-are-not-flagged-as-tuples | N | 35 | bug | `enumerate`, `zip`, `dict.items` and `most_common` build pairs that print as lists | — |
+| bug-nilpy-bytearray-and-bytes-are-the-same-type | N | 30 | bug | `bytearray` and `bytes` are the same type — repr, type name and mutability | — |
 | bug-nilpy-bytearray-constructor-only-accepts-a-length | N | 45 | bug | bytearray() only has () and (Integer) overloads — bytearray(b\"abc\") and bytearray([1,2,3]) are compile errors, so a bytearray cannot be built from data | — |
 | bug-nilpy-bytes-literal-escapes-not-decoded | N | 30 | bug | NilPy: `\xHH` (and presumably `\0`-style) escapes in a BYTES literal are not decoded | — |
 | bug-nilpy-bytes-of-slice-leaks-intermediate | A | 45 | bug | NilPy: `bytes(seq[a:b])` leaks the intermediate slice object every call | — |

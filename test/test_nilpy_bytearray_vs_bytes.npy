@@ -1,0 +1,41 @@
+# bug-nilpy-bytearray-and-bytes-are-the-same-type
+#
+# `bytes` and `bytearray` are ONE class here (TPyBytes), exactly as list/tuple/
+# set are one TPyList — so, exactly like those, the Python TYPE has to be a
+# runtime tag rather than a class name. Without it `print(bytearray([1]))`
+# rendered `b'\x01'` and `type(b).__name__` answered `bytes`: silently wrong
+# output from a working CPython program, and `isinstance` answered True BOTH
+# ways round where CPython says False both ways.
+#
+# The tag has to TRAVEL, which is most of this test. A construction-site-only
+# fix passes the first two lines and loses the type at the first slice or
+# concat, so those are asserted in both directions — CPython's rule for `+` is
+# that the LEFT operand decides.
+#
+# NOT asserted, and deliberately: that mutating a `bytes` raises. NilPy lets you
+# mutate either, and that is accepting what CPython REJECTS — laxity under the
+# upward-compatibility rule, not a defect, so pinning it would freeze a
+# non-decision. (The ticket originally called this "the deeper half"; it is not
+# a half of this bug at all.)
+#
+# Expectations are CPython's own output.
+
+b = bytearray([1, 2])
+c = bytes([1, 2])
+e = "hi".encode()
+print("repr    ", b, c, e)
+print("names   ", type(b).__name__, type(c).__name__, type(e).__name__)
+print("self    ", isinstance(b, bytearray), isinstance(c, bytes))
+print("cross   ", isinstance(b, bytes), isinstance(c, bytearray))
+print("other   ", isinstance(b, list), isinstance([1], bytes), isinstance("s", bytes))
+print("slice   ", b[0:1], c[0:1], b[::2], c[::2])
+print("concat  ", b + c, c + b)
+print("convert ", bytes(b), bytearray(c))
+print("empty   ", bytearray(), bytes([]))
+print("encoded ", e, isinstance(e, bytes), isinstance(e, bytearray))
+print("list/set", isinstance([1], list), isinstance((1,), tuple), isinstance({1}, set))
+print("eqval   ", b == c, b == bytearray([1, 2]), c == bytes([1, 2]))
+print("nested  ", [b, c], {"k": b})
+def f(v):
+    return type(v).__name__
+print("param   ", f(b), f(c))

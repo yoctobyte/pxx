@@ -1099,6 +1099,10 @@ test-nilpy: $(COMPILER)
 	# bytes.hex() -- zero-padded to two digits per byte, lowercase.
 	./$(COMPILER) test/test_nilpy_bytes_hex.npy /tmp/test_nilpy_byteshex26
 	/tmp/test_nilpy_byteshex26 | diff -u test/test_nilpy_bytes_hex.expected -
+	# bytes vs bytearray are distinct Python types over one TPyBytes: repr,
+	# type().__name__ and isinstance, and the tag must survive slice/concat.
+	./$(COMPILER) test/test_nilpy_bytearray_vs_bytes.npy /tmp/test_nilpy_bavsb26
+	/tmp/test_nilpy_bavsb26 | diff -u test/test_nilpy_bytearray_vs_bytes.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

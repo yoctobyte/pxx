@@ -1,0 +1,14 @@
+repr     bytearray(b'\x01\x02') b'\x01\x02' b'hi'
+names    bytearray bytes bytes
+self     True True
+cross    False False
+other    False False False
+slice    bytearray(b'\x01') b'\x01' bytearray(b'\x01') b'\x01'
+concat   bytearray(b'\x01\x02\x01\x02') b'\x01\x02\x01\x02'
+convert  b'\x01\x02' bytearray(b'\x01\x02')
+empty    bytearray(b'') b''
+encoded  b'hi' True False
+list/set True True True
+eqval    True True True
+nested   [bytearray(b'\x01\x02'), b'\x01\x02'] {'k': bytearray(b'\x01\x02')}
+param    bytearray bytes

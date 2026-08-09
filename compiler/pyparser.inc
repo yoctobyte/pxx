@@ -1604,6 +1604,26 @@ var xNode, node, left, term, callN, argN, tagCall: Integer;
     ASTTk[Result] := Ord(tyBoolean);
   end;
 
+  { the bytes/bytearray twin of KindEq — see the isinstance arms below }
+  function BytesKindEq(k: Int64): Integer;
+  var c, a, e: Integer;
+  begin
+    a := AllocNode(AN_ARG);
+    ASTLeft[a] := xNode;
+    c := AllocNode(AN_CALL);
+    ASTIVal[c] := FindProc('pybytes_kind_v');
+    if ASTIVal[c] < 0 then Error('Nil Python: pylib (pybytes_kind_v) not loaded');
+    ASTTk[c] := Ord(tyInteger);
+    ASTLeft[c] := a;
+    e := AllocNode(AN_INT_LIT);
+    ASTIVal[e] := k;
+    ASTTk[e] := Ord(tyInteger);
+    Result := AllocNode(AN_BINOP);
+    ASTIVal[Result] := Ord(tkEq);
+    ASTLeft[Result] := c; ASTRight[Result] := e;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+
   function OrJoin(a, b: Integer): Integer;
   begin
     if a < 0 then begin Result := b; Exit; end;
@@ -1639,6 +1659,13 @@ begin
     else if nm = 'list' then term := KindEq(PYSEQ_LIST)
     else if nm = 'tuple' then term := KindEq(PYSEQ_TUPLE)
     else if nm = 'set' then term := KindEq(PYSEQ_SET)
+    { ...and the same for the two TPyBytes-backed kinds. Answering from the
+      CLASS made `isinstance(bytearray(), bytes)` and `isinstance(b'', bytearray)`
+      BOTH True, where CPython says False both ways: they are distinct types
+      and neither derives from the other.
+      bug-nilpy-bytearray-and-bytes-are-the-same-type }
+    else if nm = 'bytes' then term := BytesKindEq(0)
+    else if nm = 'bytearray' then term := BytesKindEq(1)
     else
     begin
       { Python's container type NAMES map to the pylib classes that back them;

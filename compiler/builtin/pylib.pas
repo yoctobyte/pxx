@@ -375,6 +375,18 @@ type
   public
     FLen: Integer;
     FData: Pointer;
+    { `bytes` and `bytearray` are ONE class here, exactly as list/tuple/set are
+      one TPyList — so, exactly like those, the Python TYPE has to be a runtime
+      tag rather than a class name. Without it `print(bytearray([1]))` rendered
+      `b'\x01'` and `type(b).__name__` answered `bytes`, both silently wrong for
+      a working CPython program.
+      False (a plain `bytes`) is the default, so a TPyBytes built by any of the
+      ~30 other construction sites keeps today's behaviour and only the
+      `bytearray(...)` constructors stamp it.
+      NOT about mutability: NilPy lets you mutate either, which is accepting
+      what CPython REJECTS and therefore laxity rather than a defect — see the
+      ticket. bug-nilpy-bytearray-and-bytes-are-the-same-type }
+    FIsByteArray: Boolean;
     constructor Create(n: Integer);
     function count: Integer;
     { see TPyList.at — bytearrays have no Python .get either }
@@ -494,6 +506,11 @@ function PySeqKindName(k: Integer): AnsiString;
 { The sequence kind of a VARIANT, or -1 when it does not hold a TPyList. The
   shape isinstance() asks: it must distinguish the three kinds that share the
   row, which a class test cannot do. }
+{ 0 = a plain `bytes`, 1 = a `bytearray`, -1 = not a TPyBytes at all. The
+  bytes/bytearray twin of pyseq_kind_v, and it exists for the same reason:
+  isinstance cannot answer from the CLASS when two Python types share one.
+  bug-nilpy-bytearray-and-bytes-are-the-same-type }
+function pybytes_kind_v(const v: Variant): Integer;
 function pyseq_kind_v(const v: Variant): Integer;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
@@ -2477,7 +2494,10 @@ begin
     Result := PySeqKindName(TPyList(o).FKind);
   end
   else if o is TPyDict then Result := 'dict'
-  else if o is TPyBytes then Result := 'bytes'
+  else if o is TPyBytes then
+  begin
+    if TPyBytes(o).FIsByteArray then Result := 'bytearray' else Result := 'bytes';
+  end
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -6001,26 +6021,40 @@ end;
 function bytearray: TPyBytes; overload;
 begin
   Result := TPyBytes.Create(0);
+  Result.FIsByteArray := True;
 end;
 
 function bytearray(n: Integer): TPyBytes; overload;
 begin
   Result := TPyBytes.Create(n);
+  Result.FIsByteArray := True;
 end;
 
 function bytearray(b: TPyBytes): TPyBytes; overload;
 var i: Integer;
 begin
-  if b = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  if b = nil then
+  begin
+    Result := TPyBytes.Create(0);
+    Result.FIsByteArray := True;
+    Exit;
+  end;
   Result := TPyBytes.Create(b.FLen);
+  Result.FIsByteArray := True;
   for i := 0 to b.FLen - 1 do Result.put(i, b.at(i));
 end;
 
 function bytearray(l: TPyList): TPyBytes; overload;
 var i: Integer; v: Int64;
 begin
-  if l = nil then begin Result := TPyBytes.Create(0); Exit; end;
+  if l = nil then
+  begin
+    Result := TPyBytes.Create(0);
+    Result.FIsByteArray := True;
+    Exit;
+  end;
   Result := TPyBytes.Create(l.count);
+  Result.FIsByteArray := True;
   for i := 0 to l.count - 1 do
   begin
     v := pyvar_to_int(l.at(i));
@@ -6143,6 +6177,7 @@ var i, k, cnt: Integer; src, dst: PByte;
 begin
   cnt := PySliceBoundsStep(b.FLen, lo, hi, step);
   Result := TPyBytes.Create(cnt);
+  if b <> nil then Result.FIsByteArray := b.FIsByteArray;   { see pybytes_slice }
   i := lo;
   for k := 0 to cnt - 1 do
   begin
@@ -6176,6 +6211,10 @@ var k: Integer; src, dst: PByte;
 begin
   PySliceBounds(b.FLen, lo, hi);
   Result := TPyBytes.Create(hi - lo);
+  { a slice of a bytearray is a BYTEARRAY, of bytes is bytes — the tag has to
+    travel with every operation that builds a new buffer from an old one, or it
+    is lost at the first slice. bug-nilpy-bytearray-and-bytes-are-the-same-type }
+  if b <> nil then Result.FIsByteArray := b.FIsByteArray;
   for k := 0 to (hi - lo) - 1 do
   begin
     src := PByte(NativeInt(b.FData) + lo + k);
@@ -9955,6 +9994,10 @@ begin
   if a = nil then na := 0 else na := a.count;
   if b = nil then nb := 0 else nb := b.count;
   r := TPyBytes.Create(na + nb);
+  { the LEFT operand decides, as it does in CPython: bytearray + bytes is a
+    bytearray, bytes + bytearray is bytes. }
+  if a <> nil then r.FIsByteArray := a.FIsByteArray
+  else if b <> nil then r.FIsByteArray := b.FIsByteArray;
   for i := 0 to na - 1 do r.put(i, a.at(i));
   for i := 0 to nb - 1 do r.put(na + i, b.at(i));
   Result := r;
@@ -10614,6 +10657,18 @@ begin
   if not (TObject(o) is TPyList) then Exit;
   pyseq_kind_v := TPyList(o).FKind;
 end;
+function pybytes_kind_v(const v: Variant): Integer;
+var o: Pointer;
+begin
+  pybytes_kind_v := -1;
+  if pyvartag(v) <> 7 then Exit;
+  o := pyvarobj(v);
+  if o = nil then Exit;
+  if not (TObject(o) is TPyBytes) then Exit;
+  if TPyBytes(TObject(o)).FIsByteArray then pybytes_kind_v := 1
+  else pybytes_kind_v := 0;
+end;
+
 
 function pylist_repr(l: TPyList): AnsiString;
 var i: Integer;
@@ -10709,6 +10764,12 @@ begin
       end;
     end;
   Result := Result + q;
+  { CPython renders a bytearray as `bytearray(b'..')` — the same bytes literal
+    wrapped in its type name — so the wrap goes on AFTER the escaping above and
+    reuses all of it rather than duplicating the quoting rules.
+    bug-nilpy-bytearray-and-bytes-are-the-same-type }
+  if (b <> nil) and b.FIsByteArray then
+    Result := 'bytearray(' + Result + ')';
 end;
 
 function pystr_of(const v: Variant): AnsiString; overload;
