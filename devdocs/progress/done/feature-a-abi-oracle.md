@@ -2,7 +2,7 @@
 track: A
 prio: 60
 type: feature
-status: working
+status: done
 owner: claude-A
 ---
 
@@ -93,3 +93,61 @@ task of its own size and `working/` must not hold a Track A lock across
 sessions. Nothing is half-applied: the aliasing fix is complete and green on its
 own, and no oracle code was written.
 
+## 2026-08-09 — BUILT (`compiler/abi.inc`)
+
+`compiler/abi.inc`, included straight after `symtab.inc`, is now the one place
+that answers calling-convention questions. Three queries, and the file's header
+explains why they are three rather than one:
+
+| query | was | now |
+| --- | --- | --- |
+| callee SLOT-HOLDS (`ABIParamSlotHoldsValueAddr`) | written out longhand in **5 backends** | one function |
+| slot SIZE (`ABIParamSlotIsPointer`) | `symtab.inc`'s `ParamSlotIsPointer` | moved here unchanged |
+| ReturnVia (`RetViaHiddenDest` / `AggRetCopySize`) | already one function in `symtab.inc` | moved here |
+
+### The success metric
+
+Adding a pass-by-pointer kind is now **one edit** — to whichever of the three
+predicates actually governs it, which is itself the point: the old eight copies
+made "which rule am I changing?" unanswerable. The invariant is greppable, and
+currently clean:
+
+```
+$ grep -n "IsRef or Syms\|IsRef or .*IsArray or" compiler/ir_codegen*.inc
+  (no matches)
+```
+
+A ninth copy shows up in that grep.
+
+### Two of the ticket's own premises were wrong, and the file says so
+
+- **"the same rule written 8 times".** It is three different rules. `tyClass`
+  and `tyPointer` params are pointer-SIZED but must NOT be dereferenced (the
+  pointer IS the value); `tySet` is dereferenced on three targets and not on two
+  — and both arrangements are internally consistent with their own argument
+  lowering, so this is a per-target TABLE, not drift to be unified away. Encoding
+  it here makes the divergence deliberate and reviewable.
+- **"AN_CALL and AN_VIRTUAL_CALL decide returns independently".** Stale: the
+  direct, virtual, indirect and interface paths all reach `RetViaHiddenDest` and
+  all four build their destination with the one `IRBuildHiddenDest`.
+
+### Not claimed
+
+"Backends never touch `Syms[]`" is true for the CONVENTION now, not for
+everything — they still read offsets, kinds and sizes from it. Making the IR
+carry enough that a backend needs no symbol table at all is the TypeRef lane's
+job ([[feature-a-typeref-migrate-consumers]]), and this oracle is shaped to
+become a query on a TypeRef when it lands: the signature changes, the answers
+do not.
+
+### Verified
+
+Behaviour unchanged by construction and measured: the FPC differential that
+found [[bug-a-set-and-shortstring-value-params-alias-the-caller]] gives
+identical output on x86-64, aarch64 and arm32 (qemu) and riscv32, and
+`test_set_shortstring_value_param_copies` passes.
+`make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
+
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

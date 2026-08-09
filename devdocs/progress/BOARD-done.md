@@ -984,6 +984,7 @@ should not read it to find out what to do. Grep it freely._
 | docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-reference-cli-modes-directives | D | 40 | docs | Reference docs incomplete: cli.md lists ~26 of the compiler's 37 --flags, there is no compiler-modes/strictness page (lax -> --strict -> granular -> --mimic-fpc), and no {$...} directive reference — three linked reference gaps | — |
 | docs-user-documentation-site-structure | D | 50 | docs | User documentation site structure and first content pass | — |
+| feature-a-abi-oracle | A | 60 | feature | ABI oracle: backends consult it, and stop reading Syms[] | — |
 | feature-a-managed-block-kind-word | A | 60 | feature | Phase 1 of multi-type strings: add an 8-byte kind word below the refcount in the shared managed-block header (strings, dynarrays, objects), write zero, never read it. Prove nothing regressed, then pin — phase 2 depends on the pin | — |
 | feature-a-nilpy-str-method-parser-hook | A | 50 | feature | Shared-parser hook for NilPy str methods (filed for traceability) | — |
 | feature-a-promoint-32bit-bringup | A | 55 | feature | Promotable int: heap tier faults on 32-bit native targets — FIXED | — |

@@ -104,3 +104,52 @@ begin
                            (tk = tyRecord) or (tk = tyVariant) or
                            (tk = tyClass) or (tk = tyPointer);
 end;
+
+{ ---------------------------------------------------------------------------
+  RETURNS. `RetViaHiddenDest` is the oracle's `ReturnVia` query, and it was
+  ALREADY a single shared function when this ticket was written — the ticket's
+  claim that "AN_CALL and AN_VIRTUAL_CALL decide returns independently" is
+  stale. The direct, virtual, indirect and interface call paths all reach it,
+  and all four build their destination with the one IRBuildHiddenDest. Moved
+  here unchanged, so the oracle is genuinely one place rather than the parameter
+  half being here and the return half somewhere else.
+
+  The ticket's CAUTION holds and is visible in the predicate: this is NOT
+  "aggregate implies hidden dest". A tyAnsiString is an aggregate by any
+  informal reading and returns a heap HANDLE in a register, so it is absent from
+  the set on purpose.
+  --------------------------------------------------------------------------- }
+function RetViaHiddenDest(tk: TTypeKind): Boolean;
+{ Return types whose ABI is a caller-owned hidden destination pointer (NRVO):
+  records/sets AND the inline frozen string kinds. The callee copies its Result
+  local into [dest] and returns the dest pointer; the caller allocates the
+  destination. Frozen strings previously returned a shared BSS-global Result
+  address (not reentrant, bug-frozen-string-result-global). A default frozen
+  `string` result is capped at LOCAL_STR_CAP (256, the ShortString norm). }
+begin
+  { tyVariant added for Variant-returning functions (pylib TPyList.get/pop —
+    the first in the codebase): 16-byte result via the same caller-owned
+    hidden destination as records (feature-core-variant-function-return). }
+  { The PROMOTABLE INT family joins them for the same reason tyVariant did: a
+    promo value is a {tag, payload} STRUCT (8 or 16 bytes), and its rvalue is the
+    SLOT ADDRESS. Returned the ordinary way, a promo-returning function handed
+    back the address of its own dying Result local, so the caller read freed
+    stack — `function mk: PromoInt; begin end;` + `writeln(mk)` segfaulted, with
+    an EMPTY body, so it was never about the assignment
+    (bug-a-promoint-function-result-crashes). AggRetCopySize already falls
+    through to TypeSize, which is the right byte count for both widths. }
+  Result := TypeIsAggregate(tk) or TypeIsFrozenString(tk) or (tk = tyVariant)
+            or TypeIsPromoInt(tk);
+end;
+
+function AggRetCopySize(retSymIdx: Integer): Integer;
+{ Byte count copied from the Result local into the caller's hidden destination. }
+var tk: TTypeKind;
+begin
+  tk := Syms[retSymIdx].TypeKind;
+  if tk = tyRecord then Result := RecSize(SymTR[retSymIdx].RecId)
+  else if tk = tyString then Result := LOCAL_STR_CAP + 8
+  else if (tk = tyFixedString) or (tk = tyShortString) then
+    Result := FrozenStrSlotSize(tk, SymStrCap[retSymIdx])
+  else Result := TypeSize(tk);
+end;
