@@ -42,7 +42,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -51,6 +51,7 @@ _none_
 | bug-a-x86-64-early-exit-skips-target-defines | A | 55 | bug | PasApplyTargetDefines returns early on x86-64, so every define appended after that Exit is dead on the DEFAULT target — PXX_TS_HARDLOCK is therefore never set on any build, and builtinheap takes the racing path it was written to avoid | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-fpc-numeric-compat-floor-ceil-return-float-currency-is-double | B | 25 | bug | Two FPC numeric divergences in lib/rtl: Math.Floor/Ceil return Double where FPC returns Integer (and Floor64/Ceil64 are missing), and sysutils declares Currency = Double where FPC's is a fixed-point 4-decimal Int64 — so a money type cannot represent 0.10 | — |
+| bug-b-rounding-api-gaps-setroundmode-roundto-lround | B | 35 | bug | Per-language rounding DEFAULTS are all correct (Pascal banker's = FPC, C round() half-away = gcc, Python round() = CPython incl. round(2.675,2)=2.67) — but the escape hatches are missing: no SetRoundMode/RoundTo/SimpleRoundTo in lib/rtl/math.pas, no lround/llround in crtl | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-pascal-math-names-hijack-libc-through-pxxcio | C | 55 | bug | pxxcio is auto-pulled into EVERY C program and does `uses math`, so every name in lib/rtl/math.pas is in scope for C name resolution — adding a Pascal `Pow` made a C program's pow(2,10) answer 1 instead of 1024, and `CopySign` made copysign(3,-1) answer atan2's result | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
@@ -563,6 +564,7 @@ _none_
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] bug-a-write-fixed-fraction-digits-past-16-are-invented
+- [p 35] [B] bug-b-rounding-api-gaps-setroundmode-roundto-lround
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
 - [p 35] [N] bug-nilpy-def-returning-a-precreated-global-has-no-return-type
