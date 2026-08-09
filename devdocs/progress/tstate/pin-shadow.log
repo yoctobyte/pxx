@@ -10,3 +10,4 @@
 2026-08-09T14:04:37Z	plexus	dcfe7a6f8f0f4a13ca681a20a227e01a065efdf3	would NOT pin dcfe7a6f8f0f — 1 red(s) not in the allowlist: test-nilpy#src:test/test_nilpy_delitem_dunder.npy
 2026-08-09T15:03:50Z	plexus	b207fb462640af957517a3f0074e6bdef722cc94	would NOT pin b207fb462640 — 2 red(s) not in the allowlist: optdiff#shard1/12, optdiff#shard2/12
 2026-08-09T15:24:53Z	plexus	5b7b3691d7635249210b60f9e1c47b7be861d327	would NOT pin 5b7b3691d763 — 2 red(s) not in the allowlist: optdiff#shard1/12, optdiff#shard2/12
+2026-08-09T15:44:09Z	plexus	21941dd4172f4c8679e0df711fe22e39c25d086f	would NOT pin 21941dd4172f — 2 red(s) not in the allowlist: optdiff#shard1/12, optdiff#shard2/12
