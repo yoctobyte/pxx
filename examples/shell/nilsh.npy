@@ -17,7 +17,46 @@
 # buffer between two tasks; the applet signature (argv, stdin) -> stdout is
 # already the shape that allows it.
 
-APPLETS = ["echo", "cat", "wc", "head", "tail", "grep", "upper", "rev", "help"]
+APPLETS = ["echo", "cat", "ls", "wc", "head", "tail", "grep", "upper", "rev", "help"]
+
+# ---- the VFS (phase 2) ----------------------------------------------------
+# A dict is the whole filesystem. That is not a shortcut, it is the portable
+# shape: classic ESP32 has no filesystem at all, so "files" have to live
+# somewhere the app owns. On a hosted target `cat` falls through to a REAL file
+# when the name starts with "/" — same source, richer backend, which is the
+# thesis. Swapping this dict for the IDF VFS or PAL file calls is the phase-3
+# change and touches nothing above it.
+VFS = {
+    "motd": "welcome to nilsh\n",
+    "hosts": "127.0.0.1 localhost\n::1 localhost\n",
+    "notes": "alpha\nbeta\ngamma\n",
+}
+
+
+def vfs_list():
+    names = []
+    for k in VFS:
+        names.append(k)
+    names.sort()
+    return names
+
+
+def vfs_read(name):
+    if name in VFS:
+        return VFS[name]
+    if len(name) > 0 and name[0] == "/":
+        # hosted passthrough; on ESP this branch simply never matches
+        f = open(name)
+        data = f.read()
+        f.close()
+        return data
+    return ""
+
+
+def vfs_exists(name):
+    if name in VFS:
+        return True
+    return len(name) > 0 and name[0] == "/"
 
 
 def ap_echo(argv, stdin):
@@ -25,9 +64,24 @@ def ap_echo(argv, stdin):
 
 
 def ap_cat(argv, stdin):
-    # With no VFS yet, cat is the identity on its input — which is exactly what
-    # makes `echo x | cat` a meaningful pipe test.
-    return stdin
+    # No operands: identity on stdin, which is what makes `echo x | cat` a
+    # meaningful pipe test. With operands: read them from the VFS.
+    if len(argv) < 2:
+        return stdin
+    out = []
+    for name in argv[1:]:
+        if vfs_exists(name):
+            data = vfs_read(name)
+            if data.endswith("\n"):
+                data = data[:-1]
+            out.append(data)
+        else:
+            out.append("cat: " + name + ": no such file")
+    return "\n".join(out)
+
+
+def ap_ls(argv, stdin):
+    return "\n".join(vfs_list())
 
 
 def ap_upper(argv, stdin):
@@ -108,6 +162,8 @@ def dispatch(name, argv, stdin):
         return ap_echo(argv, stdin)
     if name == "cat":
         return ap_cat(argv, stdin)
+    if name == "ls":
+        return ap_ls(argv, stdin)
     if name == "upper":
         return ap_upper(argv, stdin)
     if name == "rev":
@@ -161,6 +217,11 @@ SESSION = [
     "echo a b c | head 1",
     "echo needle | grep needle",
     "echo haystack | grep needle",
+    "ls",
+    "cat motd",
+    "cat notes | wc",
+    "cat notes | grep beta",
+    "cat nothere",
     "nosuch",
 ]
 

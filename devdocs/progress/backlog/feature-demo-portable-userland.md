@@ -169,6 +169,28 @@ That is the cross-runtime half of the thesis, checked rather than claimed.
 `shell0.npy` is kept beside it as the phase-0 record of what the language could
 not do yet.
 
-**Next:** phase 2 wants a VFS for `ls`/`cat <file>`; phase 3 is the ESP cross.
-Neither is blocked by the frontend any more.
+## Phase 2 (2026-08-09): the VFS, `ls` and `cat <file>`
+
+A **dict is the whole filesystem**, and that is the portable shape rather than a
+shortcut: classic ESP32 has no filesystem at all, so "files" have to live
+somewhere the app owns. `ls` lists it, `cat <name>` reads it.
+
+On a hosted target `cat` falls THROUGH to a real file when the name starts with
+`/` — same source, richer backend, which is the thesis in one branch. On ESP
+that branch simply never matches. Swapping the dict for the IDF VFS is the
+phase-3 change and touches nothing above it, because the applets only ever call
+`vfs_list` / `vfs_read` / `vfs_exists`.
+
+Measured while building it: NilPy has `open`/`read`/`write`/`close` and
+`with open(...)`, so the passthrough is real — verified reading `/etc/hostname`.
+`os.listdir` does NOT exist, which is why `ls` is VFS-only; that is the honest
+boundary rather than a missing feature, since ESP would not have it either.
+
+The session now exercises `ls`, `cat motd`, `cat notes | wc`,
+`cat notes | grep beta` and a missing-file error, and the whole thing is still
+byte-identical to CPython under `make lib-test`.
+
+**Next:** phase 3, the ESP cross — applets as FreeRTOS tasks, pipes as stream
+buffers, the VFS backed by IDF. That one needs a device to finish, like the
+other ESP items.
 
