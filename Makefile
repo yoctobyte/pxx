@@ -1350,6 +1350,11 @@ test-nilpy: $(COMPILER)
 	@# a `for` target reused after a non-string binding (and the reverse order)
 	./$(COMPILER) test/test_nilpy_for_variable_reuse.npy /tmp/test_nilpy_for_var_reuse26
 	test "$$(/tmp/test_nilpy_for_var_reuse26)" = "$$(printf 'a\nZ\na\nZ\na\nZ\na\nZ\na\nb\n5\n1.5\nTrue\n1\n2')"
+	@# an EXPLICIT None separator means whitespace runs, like split() itself
+	./$(COMPILER) test/test_nilpy_split_none_separator.npy /tmp/test_nilpy_split_none26
+	@# .expected, not an inline printf: the expectation is full of Python reprs
+	@# of string lists, and a single quote ends a single-quoted printf
+	/tmp/test_nilpy_split_none26 | diff -u test/test_nilpy_split_none_separator.expected -
 	@# a MULTI-name `for` target whose names are already bound at module scope
 	./$(COMPILER) test/test_nilpy_for_multiname_target_reuses_name.npy /tmp/test_nilpy_for_multiname26
 	test "$$(/tmp/test_nilpy_for_multiname26)" = "$$(printf 'x,y\nx,y\nx,y\nx,y\n[%s]\nx,y\npqr\n3 10\none 2\nann ann,zz\nbo bo,zz\nfn x,y' "'x', 'y'")"

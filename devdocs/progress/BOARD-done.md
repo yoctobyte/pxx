@@ -687,6 +687,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-slice-of-variant-local-returned-is-unusable | N | 75 | bug | Returning a SLICE of a variant local gives the caller an unusable value | — |
 | bug-nilpy-songformatter-first-render-walls | N | 75 | bug | songformatter: the walls between "GUI builds" and "first document renders" | — |
 | bug-nilpy-sorted-over-tuples-or-lists-fails | N | 55 | bug | `sorted()` over a list of tuples or lists dies with "expected a number, got object" | — |
+| bug-nilpy-split-with-an-explicit-none-separator-does-not-split | N | 55 | bug | `s.split(None)` does not split — the whole string comes back as one field | — |
 | bug-nilpy-star-args-is-a-list-not-a-tuple | N | 40 | bug | `*args` inside a function is a LIST, so it prints as [2, 3] where CPython prints (2, 3) and type(args).__name__ is 'list' rather than 'tuple' | — |
 | bug-nilpy-startswith-endswith-ignore-a-tuple-argument | N | 40 | bug | `startswith`/`endswith` with a TUPLE of prefixes silently answered False | — |
 | bug-nilpy-statement-after-for-in-a-def | N | 60 | bug | NilPy: any statement after a `for` inside a def failed to parse | — |

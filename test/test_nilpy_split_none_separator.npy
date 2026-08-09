@@ -1,0 +1,34 @@
+# An EXPLICIT None separator means whitespace runs -- CPython's signature is
+# split(sep=None, maxsplit=-1), so None is the DEFAULT separator, not a
+# degenerate one. It used to reach the exact-separator runtime with the None
+# coerced to a string and answered the whole string as ONE field, silently:
+# a wrong split still looks like a list of strings.
+# bug-nilpy-split-with-an-explicit-none-separator-does-not-split
+# Every expectation is CPython's own output.
+
+s = "a b  c d"
+print(s.split())
+print(s.split(None))
+print(s.split(None, 1))
+print(s.split(None, 2))
+print(s.split(None, 0))
+print(s.split(None, -1))
+print(s.rsplit(None, 1))
+print(s.rsplit(None, 2))
+print(s.rsplit(None))
+
+# leading/trailing whitespace: dropped at the front, KEPT in the remainder
+print("  padded  x ".split(None, 1))
+print("  padded  x ".rsplit(None, 1))
+
+# an all-whitespace remainder contributes no field at all
+print("a  ".split(None, 1))
+print("   ".split(None, 1))
+print("".split(None, 1))
+print("one".split(None, 1))
+
+# an exact separator must keep behaving exactly as before
+print(s.split(" ", 1))
+print("a,b,c".split(",", 1))
+print("a,b,c".rsplit(",", 1))
+print("a,,b".split(","))

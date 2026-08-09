@@ -1459,6 +1459,10 @@ function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
 function pystr_split_ws(const s: AnsiString): TPyList;
 function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_split_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
+{ str.split(None, maxsplit) / str.rsplit(None, maxsplit) — an EXPLICIT None
+  separator means whitespace runs, exactly like the no-argument form. }
+function pystr_split_ws_max(const s: AnsiString; maxsplit: Integer): TPyList;
+function pystr_rsplit_ws_max(const s: AnsiString; maxsplit: Integer): TPyList;
 { str.rsplit(sep, maxsplit) — splits counted from the right end. }
 function pystr_rsplit_sep_max(const s: AnsiString; const sep: AnsiString; maxsplit: Integer): TPyList;
 { str.partition(sep) / str.rpartition(sep) — a 3-tuple (before, sep, after) at
@@ -2008,6 +2012,59 @@ begin
       Inc(i);
   end;
   Result.append(Copy(s, st, n - st + 1));
+end;
+
+{ s.split(None, maxsplit): whitespace RUNS as the separator, at most maxsplit
+  splits. Not expressible with pystr_split_sep_max — the separator is a run of
+  any width, leading whitespace is skipped entirely rather than producing an
+  empty first field, and the remainder keeps whatever whitespace is inside it.
+  An all-whitespace remainder contributes no field at all, so
+  "a  ".split(None, 1) is ["a"].
+  bug-nilpy-split-with-an-explicit-none-separator-does-not-split }
+function pystr_split_ws_max(const s: AnsiString; maxsplit: Integer): TPyList;
+var i, n, st, done: Integer;
+begin
+  if maxsplit < 0 then begin Result := pystr_split_ws(s); Exit; end;
+  Result := TPyList.Create;
+  n := Length(s);
+  i := 1;
+  done := 0;
+  while (i <= n) and (done < maxsplit) do
+  begin
+    while (i <= n) and PyIsSpaceCh(s[i]) do Inc(i);
+    if i > n then Break;
+    st := i;
+    while (i <= n) and not PyIsSpaceCh(s[i]) do Inc(i);
+    Result.append(Copy(s, st, i - st));
+    Inc(done);
+  end;
+  while (i <= n) and PyIsSpaceCh(s[i]) do Inc(i);
+  if i <= n then Result.append(Copy(s, i, n - i + 1));
+end;
+
+{ s.rsplit(None, maxsplit): the same, anchored at the RIGHT end —
+  "a b  c d".rsplit(None, 1) is ["a b  c", "d"]. }
+function pystr_rsplit_ws_max(const s: AnsiString; maxsplit: Integer): TPyList;
+var i, n, en, done, k: Integer; parts: TPyList;
+begin
+  if maxsplit < 0 then begin Result := pystr_split_ws(s); Exit; end;
+  n := Length(s);
+  parts := TPyList.Create;
+  i := n;
+  done := 0;
+  while (i >= 1) and (done < maxsplit) do
+  begin
+    while (i >= 1) and PyIsSpaceCh(s[i]) do Dec(i);
+    if i < 1 then Break;
+    en := i;
+    while (i >= 1) and not PyIsSpaceCh(s[i]) do Dec(i);
+    parts.append(Copy(s, i + 1, en - i));
+    Inc(done);
+  end;
+  while (i >= 1) and PyIsSpaceCh(s[i]) do Dec(i);
+  Result := TPyList.Create;
+  if i >= 1 then Result.append(Copy(s, 1, i));
+  for k := parts.count - 1 downto 0 do Result.append(parts.at(k));
 end;
 
 { s.rsplit(sep, maxsplit): like split(sep, maxsplit) but the splits are taken

@@ -5881,6 +5881,25 @@ begin
   Result := PyStrMethodFinish(mname, argNode, lastArg, i);
 end;
 
+{ Is this AN_ARG's expression the None LITERAL? A None literal is a call to
+  pylib's `pynone` with no arguments (PyMakeNone), so this recognises the value
+  rather than the spelling — `s.split(None)` and `s.split(sep)` where sep
+  happens to hold None are different programs, and only the first is a
+  compile-time fact.
+  bug-nilpy-split-with-an-explicit-none-separator-does-not-split }
+function PyArgIsNoneLiteral(argNode: Integer): Boolean;
+var e, pi: Integer;
+begin
+  PyArgIsNoneLiteral := False;
+  if argNode < 0 then Exit;
+  e := ASTLeft[argNode];
+  if e < 0 then Exit;
+  if ASTKind[e] <> AN_CALL then Exit;
+  if ASTLeft[e] <> -1 then Exit;
+  pi := FindProc('pynone');
+  PyArgIsNoneLiteral := (pi >= 0) and (ASTIVal[e] = pi);
+end;
+
 { Resolve a str method's ARITY-SUFFIXED pylib proc and build the call.
 
   Split out of PyParseStrMethod (2026-08-09,
@@ -5908,6 +5927,31 @@ begin
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   argNode := argHead;
   i := argCount;
+  { An EXPLICIT None separator — `s.split(None)`, `s.split(None, 1)` — means
+    whitespace runs, exactly what the no-argument form does; CPython's own
+    signature is `split(sep=None, maxsplit=-1)`, so None is not a degenerate
+    separator but the DEFAULT one. It used to reach pystr_split_sep with the
+    None coerced to a string and answered the whole string as one field —
+    silently, since a wrong split still looks like a list of strings. Drop the
+    None from the chain here and let the arity logic below pick the ws form. }
+  if ((wantArgs = -1) or (wantArgs = -8)) and (i >= 1) and
+     PyArgIsNoneLiteral(ASTRight[argHead]) then
+  begin
+    ASTRight[argHead] := ASTRight[ASTRight[argHead]];
+    Dec(i);
+    if i = 0 then lastArg := argHead;
+    if i = 1 then
+    begin
+      { `split(None, maxsplit)` — a whitespace split IS the separator-free form,
+        so the maxsplit variant needs its own runtime rather than any suffixing
+        of the sep-based one. }
+      if wantArgs = -1 then pname := 'pystr_split_ws_max'
+      else pname := 'pystr_rsplit_ws_max';
+      procIdx := FindProc(pname);
+      if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+      wantArgs := 1;
+    end;
+  end;
   if wantArgs = -1 then
   begin
     { optional-argument form: split(), split(sep) and split(sep, maxsplit) are
