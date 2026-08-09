@@ -27,6 +27,31 @@ work, and bundling them buries the one that matters.
 | `s.translate(table)` | `unsupported str method .translate()` |
 | ~~`s.isascii()`~~ | **DONE 2026-08-09** — `pystr_isascii`, pinned by `test/test_nilpy_str_isascii.npy` |
 
+## Second sweep, 2026-08-09 (formatting / sorting / float repr)
+
+Two more LOUD gaps, same ticket:
+
+| call | error |
+| --- | --- |
+| `format(0.1, ".17f")` — the BUILTIN, not `str.format` | `undefined variable (format)` |
+| `sorted(xs, key=str.lower)` — an UNBOUND method as a value | `unexpected token` at `.lower` |
+
+The second is the more interesting one: `str.lower` as a first-class value is
+how `key=` is most often written for case-insensitive sorts, and it is a
+different question from calling `"x".lower()` — it needs the TYPE's method to be
+reachable as a value, not just through an instance. Worth checking whether the
+same holds for `list.append`, `dict.get` etc. before picking a fix.
+
+## Verified working in that sweep — do not re-file
+
+`%` formatting with width/precision/flags (`%5d %-5d %05d %.2f %e %x %X %o %c`,
+`%%`), `.format()` positional and INDEXED (`{1} {0}`) with alignment and
+precision specs, f-strings including `{n:05}`, `{x!r}`, expressions and
+subscripts inside the braces, `sorted` with `key=` and with tuples (STABLE, and
+matching CPython's order for equal keys), and float `str()` at the awkward
+sizes (`1/3`, `1e-5`, `1e16`, `123456789.123456789`, `round(1.005, 2)`,
+`round(2.675, 2)`). 19 lines, all byte-identical to CPython.
+
 ## Already working — do not re-file
 
 Verified in the same sweep: `partition`, `rpartition`, `center`, `zfill`,
