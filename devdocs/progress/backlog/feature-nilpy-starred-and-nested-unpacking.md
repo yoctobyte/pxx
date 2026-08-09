@@ -1,9 +1,7 @@
 ---
 track: N
-prio: 50
+prio: 40
 type: feature
-status: working
-owner: claude-AN
 ---
 
 # Starred and NESTED unpacking targets
