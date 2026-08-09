@@ -8009,6 +8009,16 @@ lib-test: pxx-stable-check
 	# readings — the property the __pxx_clock Int64-cast workaround protected.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_clock_monotonic.c /tmp/crtl_clock_monotonic
 	/tmp/crtl_clock_monotonic; test "$$?" = "42"
+	# poll() over a SET (not a loop over a per-handle poll), and the LINKAGE that
+	# a declared-but-unimplemented crtl function silently gave away: a body-less
+	# declaration binds to libc.so.6 and still prints the right answers.
+	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_poll_set.c /tmp/crtl_poll_set
+	test "$$(/tmp/crtl_poll_set)" = "$$(printf 'timeout r=0 rev0=0 rev1=0\nready r=1 rev0=0 rev1in=1\nboth r=2 in0=1 in1=1\nnval r=1 nval=1\nzero r=0')"
+	@if command -v readelf >/dev/null 2>&1; then \
+	  n=$$(readelf -d /tmp/crtl_poll_set 2>/dev/null | grep -c NEEDED); \
+	  test "$$n" = "0" || (echo "FAIL: crtl_poll_set has $$n DT_NEEDED — poll bound to libc"; exit 1); \
+	  echo "  lib-test: crtl_poll_set is self-contained (no DT_NEEDED)"; \
+	else echo "  lib-test: readelf absent, skipping the poll linkage check"; fi
 	# Payne-Hanek huge-argument trig: sin/cos/tan past 1e8, expected values are
 	# the correctly-rounded doubles judged against 400-digit references.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_trig_huge.c /tmp/crtl_trig_huge

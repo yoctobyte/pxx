@@ -205,6 +205,15 @@ function PalSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
 function PalRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
                          var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
 function PalPoll(handle, events, timeoutMs: Integer): Integer;
+{ Set-shaped readiness poll: fds points at nfds C `struct pollfd` records (int
+  fd, short events, short revents — 8 bytes, the layout PalPoll already packs
+  for its single entry), and revents are written back IN PLACE. Returns the
+  number of ready descriptors, 0 on timeout, or -errno.
+
+  This is not a loop over PalPoll and cannot be: the point of a set poll is to
+  block on the WHOLE set at once, and calling the single-handle form per entry
+  either blocks on the first one or busy-spins the rest. Backs C's poll(). }
+function PalPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 function PalGetSockError(handle: Integer): Integer;
 function PalGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 function PalGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
@@ -598,6 +607,11 @@ end;
 function PalPoll(handle, events, timeoutMs: Integer): Integer;
 begin
   Result := PalBackendPoll(handle, events, timeoutMs);
+end;
+
+function PalPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
+begin
+  Result := PalBackendPollSet(fds, nfds, timeoutMs);
 end;
 
 function PalGetSockError(handle: Integer): Integer;

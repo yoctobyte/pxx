@@ -1,14 +1,16 @@
 ---
-summary: "The crtl declarations still without bodies — now 2: atexit and poll (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
+blocked-by: feature-c-entry-stub-must-run-finalizers
+summary: "The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
 type: feature
 track: B
 prio: 40
+owner: claude-B
 ---
 
 # crtl: the last declared-but-unimplemented functions
 
 - **Type:** feature (gap) — Track B (`lib/crtl`, `lib/rtl/pxxcio.pas` bridges)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-05
 - **Found by:** `tools/crtl_decl_probe.sh`. Was 366 declared / 359 implemented;
   **`chmod`, `umask`, `msync`, `mremap` and `ioctl` landed 2026-08-05**, so it is
@@ -73,3 +75,42 @@ Suggested split: file the stub change as a Track C ticket, then implement
 `tools/crtl_decl_probe.sh` reports 0 unimplemented; each new function
 byte-matches gcc in `tools/gcc_diff_probe.sh`; **and** a program calling it has
 no `DT_NEEDED` (`readelf -d`).
+
+## 2026-08-09 — `poll` done; `atexit` is all that is left
+
+**`poll`** shipped. It did need the new PAL entry the ticket predicted, and for
+the reason it gave: `PalPoll` is per-handle, and a set poll cannot be a loop
+over it, because the whole point is to block on the WHOLE set — a loop either
+blocks on the first descriptor or busy-spins the rest.
+
+- `PalPollSet(fds, nfds, timeoutMs)` in `platform.pas`, over `ppoll` in the
+  posix backend and `lwip_poll` under ESP-IDF (bare answers
+  `PAL_ERR_UNSUPPORTED`, the deliberate Track S refusal).
+- Nothing is repacked: C's `struct pollfd` is int-then-two-shorts, which is
+  exactly the 8-byte record `PalBackendPoll` already hands the kernel, so the
+  caller's own array is what `ppoll` writes revents into.
+- `__pxx_poll` bridge, `lib/crtl/src/poll.c` doing the -1/errno conversion.
+
+Measured against the gcc oracle on the same file, identical on **x86-64, i386,
+arm32 and aarch64** — including the cases a per-handle loop cannot pass (write
+to the SECOND of two pipes and require exactly it; then both). `readelf -d`
+shows **0 DT_NEEDED**, which is the assertion this ticket exists for.
+
+`tools/crtl_decl_probe.sh`: **367 declared, 1 unimplemented** (was 2).
+
+**`atexit` is unchanged and still cannot be finished here** for the reason
+written above: crtl owns `exit()` but not the C entry stub's `return`-from-main
+path, so a crtl-only atexit would look implemented and silently skip handlers.
+That half is now filed as [[feature-c-entry-stub-must-run-finalizers]], as this
+ticket's own "suggested split" line proposed, and this ticket is blocked on it.
+The crtl handler table is a small job once the stub calls the finalizer shell.
+
+Also surfaced by the probe, filed rather than fixed: **20 build-failures, all
+`pthread.h`**, every one of them `needs the thread-safe runtime: rebuild with
+--threadsafe`. That is not an unimplemented body — it is the reach-based gate,
+recorded as corroboration on
+[[decide-threadsafe-gate-is-reach-based-not-use-based]].
+
+Regression test: `test/crtl_poll_set.c`, in `make lib-test`, asserting the
+values AND the absence of DT_NEEDED.
+

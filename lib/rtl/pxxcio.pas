@@ -103,6 +103,7 @@ function __pxx_access(path: PChar; mode: Integer): Integer;
 function __pxx_fchown(fd, owner, group: Integer): Integer;
 function __pxx_isatty(fd: Integer): Integer;
 function __pxx_ioctl(fd: Integer; req: NativeInt; argp: Pointer): Integer;
+function __pxx_poll(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 function __pxx_getuid: Integer;
 function __pxx_getgid: Integer;
 function __pxx_getegid: Integer;
@@ -479,6 +480,19 @@ function __pxx_ioctl(fd: Integer; req: NativeInt; argp: Pointer): Integer;
   on failure); the crtl wrapper does the -1/errno conversion. }
 begin
   Result := PalIoctl(fd, req, argp);
+end;
+
+function __pxx_poll(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
+{ C's poll(). The caller's `struct pollfd` array goes straight through to the
+  PAL — the layout is identical — so revents are written back in the caller's
+  own memory. Returns the raw PAL result (ready count, 0 on timeout, negative
+  errno on failure); the crtl wrapper does the -1/errno conversion.
+
+  NOT a loop over __pxx_isatty-style single polls: a set poll must block on the
+  whole set, which is why this needed a new PAL entry (PalPollSet) rather than
+  reusing the per-handle PalPoll. }
+begin
+  Result := PalPollSet(fds, nfds, timeoutMs);
 end;
 
 function __pxx_getuid: Integer;

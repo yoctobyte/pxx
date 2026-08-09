@@ -80,6 +80,7 @@ function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
 function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
                                 var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
+function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
 function PalBackendGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 function PalBackendGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
@@ -806,6 +807,21 @@ begin
   Result := lwip_poll(@pfd[0], 1, timeoutMs);
   if Result > 0 then
     Result := (pfd[1] shr 16) and $FFFF;
+end;
+{$else}
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+{$endif}
+
+{ Set-shaped poll. Under IDF this is lwip_poll over the caller's own array —
+  lwIP's struct pollfd has the same int-then-two-shorts layout as Linux's, so
+  nothing is repacked. Bare answers PAL_ERR_UNSUPPORTED like every other socket
+  entry there: ESP is not a Unix, and a refusal beats a wrong answer. }
+function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+begin
+  Result := lwip_poll(fds, nfds, timeoutMs);
 end;
 {$else}
 begin

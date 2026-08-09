@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:220 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1553 rejected:30`
+`unfinished:11 blocked:7 backlog:220 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1553 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -25,12 +25,13 @@ _none — no lane is locked._
 - `feature-nilpy-text-string-kind` [N] — blocked-by: feature-a-managed-block-kind-word
 - `feature-pascal-corpus-generics` [P]
 
-## blocked (6) — has an unmet blocker; do not claim
+## blocked (7) — has an unmet blocker; do not claim
 
 - `bug-nilpy-dunders-not-dispatched-through-containers` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
 - `bug-nilpy-in-over-objects-ignores-eq` [N]
 - `compat-pascal-write-fixed-huge-magnitude-differs-from-fpc` [A] — blocked-by: decide-float-fixed-output-exact-or-fpc-17-digit-cap
+- `feature-b-crtl-last-seven-unimplemented-declarations` [B] — blocked-by: feature-c-entry-stub-must-run-finalizers
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 

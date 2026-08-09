@@ -85,6 +85,7 @@ function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
 function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
                                 var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
+function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
 function PalBackendGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 function PalBackendGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
@@ -968,6 +969,34 @@ begin
     Result := 0
   else
     Result := (pfd[1] shr 16) and $FFFF;
+end;
+
+{ Set-shaped ppoll. The caller's array IS the kernel's: C's `struct pollfd` is
+  int fd then two shorts, which is exactly the 8-byte pair PalBackendPoll packs
+  by hand for one entry, so nothing is copied or repacked and revents land back
+  in the caller's own memory. Returns the ready count (not a revents mask —
+  with a set there is no single mask to return), 0 on timeout, -errno on error. }
+function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
+var
+  ts: TTimeSpec;
+  tsp: Pointer;
+  res: Int64;
+begin
+  if nfds < 0 then
+  begin
+    Result := -22;                 { EINVAL }
+    Exit;
+  end;
+  if timeoutMs < 0 then
+    tsp := nil
+  else
+  begin
+    ts.Sec := timeoutMs div 1000;
+    ts.Nsec := (timeoutMs mod 1000) * 1000000;
+    tsp := @ts;
+  end;
+  res := __pxxrawsyscall(SYS_ppoll, Int64(fds), nfds, Int64(tsp), 0, 0, 0);
+  Result := Integer(res);
 end;
 
 { Pending socket error via getsockopt(SO_ERROR): the canonical way to read the

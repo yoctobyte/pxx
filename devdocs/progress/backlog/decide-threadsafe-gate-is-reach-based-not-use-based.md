@@ -56,6 +56,22 @@ So the real question is one level down: **the gate fires when a unit containing
 declares a `TStringList` and never spawns anything is refused for code it does
 not execute and, after dead-code elimination, may not even contain.
 
+## Corroboration found the same day, independently
+
+`tools/crtl_decl_probe.sh` reports **20 build-failures, all of them `pthread.h`**
+— `pthread_mutex_init`, `_lock`, `_unlock`, `pthread_once`, `pthread_self`, the
+whole family:
+
+```
+error: __pxx_pmutex_init needs the thread-safe runtime: rebuild with --threadsafe
+```
+
+`pthread_mutex_lock` does not create a thread either. That is a second,
+independent instance of the same shape, with 20 declared C symbols behind it,
+reached from a completely different direction (a C-side probe rather than a
+Pascal uses clause). Three instances now: syncobjs (fixed by splitting
+`palfutex`), `Classes`, and crtl's pthread surface.
+
 ## Options
 
 1. **Leave it.** `TThread` stays in `palthreadobj`; portable threaded sources
