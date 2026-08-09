@@ -2,7 +2,6 @@
 track: B
 prio: 40
 type: feature
-blocked-by: decide-may-agents-fetch-thirdparty-sources-as-oracles
 ---
 
 # `import codecs` — the next wall for the compile-real-libraries campaign
@@ -64,4 +63,67 @@ Blocked on [[decide-may-agents-fetch-thirdparty-sources-as-oracles]], which is
 the same wall [[feature-lib-reportlab-fidelity-vs-oracle]] hit: a differential
 or scoped-against-real-usage ticket needs the real thing present, and putting it
 there is the user's call, not an agent's.
+
+## UNBLOCKED and SCOPED 2026-08-09 (Track B) — against the real sources
+
+The sources are fetchable now (`install_lib_candidates.sh nilpy-stack`), so this
+ticket's own instruction — scope against the real usage before writing anything
+— could finally be followed. Measured against the pinned compiler at
+`0250202db`.
+
+### `codecs` is the keystone of the whole stack
+
+`webencodings/__init__.py` is blocked by **exactly one thing**, `import codecs`.
+Everything else in that package already compiles (`labels.py` OK; `mklabels.py`
+is a dev script wanting `urllib_request`; `tests.py` is tests). And
+webencodings is the bottom of the stack — six tinycss2/html5lib files then wall
+on `import webencodings`.
+
+### The measured surface — smaller than the ticket guessed, in one direction
+
+In `__init__.py`, the ONLY use is:
+
+```python
+codec_info = codecs.lookup(python_name)          # line 85
+... encoding.codec_info.decode(input, errors)[0]  # 158
+... encoding.codec_info.encode(input, errors)[0]  # 183
+... encoding.codec_info.incrementaldecoder(errors).decode   # 317
+... encoding.codec_info.incrementalencoder(errors).encode   # 342
+```
+
+The object-returning shape works in NilPy today — verified: a module function
+returning an instance whose attributes are then read compiles and runs. So no
+frontend work is needed for the shim's SHAPE.
+
+Elsewhere, and NOT needed for `__init__.py`:
+- `html5lib/_inputstream.py` wants only the BOM CONSTANTS (`BOM_UTF8`,
+  `BOM_UTF16_LE/BE`, `BOM_UTF32_LE/BE`) — byte strings, trivial.
+- `html5lib/serializer.py` wants `register_error` / `xmlcharrefreplace_errors`.
+- `webencodings/x_user_defined.py` subclasses `codecs.Codec` /
+  `IncrementalEncoder` / `StreamReader`. **That one is blocked** — a QUALIFIED
+  base class fails: `class C(math.Foo)` -> "unknown base class Foo". It is only
+  reached for the legacy `x-user-defined` encoding, via a lazy import inside a
+  branch, so it does not block `__init__.py`.
+
+### The real cost is the ENCODINGS, and it must not be faked
+
+`labels.py` maps to **41 distinct python encoding names** — including `big5`,
+`gb18030`, `euc-jp`, `euc-kr`, `iso-2022-jp`, `shift_jis`. A `lookup()` that
+returned a plausible-but-wrong codec for those is exactly the silent-wrong-output
+failure this project treats as worst, and `python-compat-tiers.md` forbids it for
+a T1 shim.
+
+**Proposed scope, which is the next session's job:** implement `lookup()` for the
+encodings that can be done CORRECTLY — utf-8, ascii, latin-1/iso-8859-1, the
+other single-byte iso-8859-* (simple tables), utf-16le/be, utf-32le/be — plus
+the incremental decoder/encoder shapes and the BOM constants, and **raise by
+name** for every other label. utf-8 covers the overwhelming majority of real
+input; the rest refuse loudly instead of guessing. State the subset in the unit
+header, as `mimic_reportlab_pdfgen` does.
+
+### Gate (updated)
+
+`make lib-test`, plus `webencodings/__init__.py` compiling, plus a `.npy`
+round-tripping utf-8 and utf-16 against CPython's own `codecs` output, plus a
+refused label producing an error rather than wrong bytes.
 

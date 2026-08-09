@@ -255,3 +255,52 @@ Worth stating plainly, because the file counts read worse than the reality: a
 file is rejected at its FIRST unavailable import, so one missing module hides
 however many language gaps are behind it. The two language walls above were only
 visible because they happened to sit in files whose imports all resolved.
+
+## Re-scan 2026-08-09 (Track B) — real sources, current pin
+
+The three packages are now fetchable — `tools/install_lib_candidates.sh
+nilpy-stack` (webencodings v0.5.1, tinycss2 v1.5.1, html5lib 1.1, pinned). So
+the scan is reproducible rather than dependent on whatever happened to be
+installed on one box.
+
+48 non-test `.py` files, compiled one at a time with the pinned compiler at
+`0250202db`. **4 compile, 44 wall.** Ranked by first wall:
+
+| first wall | files |
+| --- | --- |
+| `import: no unit named six and no shim mimic_six` | 13 |
+| `import: no unit named webencodings and no shim mimic_webencodings` | 6 |
+| `undefined variable (iter)` | 5 |
+| `import: no unit named warnings and no shim mimic_warnings` | 3 |
+| `import: no unit named xml_dom and no shim mimic_xml_dom` | 3 |
+| `import: no unit named genshi_core and no shim mimic_genshi_core` | 2 |
+| `import: no unit named xml_sax_xmlreader and no shim mimic_xml_sax_xmlreader` | 2 |
+| `import: no unit named codecs and no shim mimic_codecs` | 2 |
+| `unexpected token` | 1 |
+| `import: no unit named _utils and no shim mimic__utils` | 1 |
+| `import: no unit named constants and no shim mimic_constants` | 1 |
+| `Nil Python: unknown base class Mapping` | 1 |
+| `import: no unit named colorsys and no shim mimic_colorsys` | 1 |
+| `undefined variable (MULTILINE)` | 1 |
+| `import: no unit named urllib_request and no shim mimic_urllib_request` | 1 |
+| `undefined variable (lookup)` | 1 |
+
+### Two walls from the earlier scan are GONE
+
+An identical scan a few hours earlier, against the previous pin, had
+`__future__` second with **8 files** and backslash-continuation with **3**. Both
+are zero now — v252 fixed them. (That is also a caution: the pin moved
+underneath a running scan and the two runs disagreed until the compiler sha was
+pinned down. Any scan result here should name the sha it came from.)
+
+### What the ranking actually means
+
+- **`six` (13)** is blocked on class/type-as-value, not on writing a shim —
+  [[feature-nilpy-six-and-warnings-shims]] has the measurement.
+- **`webencodings` (6)** is INTRA-STACK: tinycss2 and html5lib importing the
+  package below them. Not a stdlib gap — it needs `import webencodings` to
+  resolve to the fetched source, i.e. the T3 module loader.
+- **`iter` (5)** is a missing builtin, and the cheapest item on this list.
+- **`codecs` (2)** is small in file count but it is the KEYSTONE: it is the only
+  thing blocking `webencodings/__init__.py`, the bottom of the stack.
+

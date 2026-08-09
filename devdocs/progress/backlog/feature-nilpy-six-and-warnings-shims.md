@@ -123,3 +123,32 @@ loudly rather than approximating.
 win: `warn(msg)` to stderr, `simplefilter`/`catch_warnings` as no-ops.
 
 Blocked on the N ticket for the `six` half; the `warnings` half can go first.
+
+## 2026-08-09, second measurement: the `warnings` half is blocked TOO
+
+The note above said "`warnings` is unaffected by any of this and is still a
+small, self-contained win". Measured against the real html5lib sources, that is
+wrong.
+
+In non-test html5lib code every call is `warnings.warn(msg, SomeWarningClass)` —
+16 of them — and passing a class as an argument is precisely the blocked
+pattern:
+
+```
+error: Nil Python: the class W cannot be used as a VALUE yet (stored in a
+variable, list or dict, or passed as an argument) — only construction W(...),
+isinstance(x, W) and `except W:` are supported.
+```
+
+So a `mimic_warnings` would resolve `import warnings` and then fail one line
+later at the first `warn(msg, Category)` — worse than the honest missing module,
+and against the T1 rule.
+
+`simplefilter` / `catch_warnings` / `resetwarnings` appear ONLY in html5lib's
+test files, which the campaign scan excludes, so they are not a reason to write
+the shim either.
+
+**Both halves of this ticket now wait on the same thing** —
+[[bug-n-a-type-name-is-not-a-first-class-value]] and its user-class sibling.
+Nothing here is worth writing until a class can be passed as a value.
+

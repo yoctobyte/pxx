@@ -148,7 +148,7 @@ _none_
 | feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
-| feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | decide-may-agents-fetch-thirdparty-sources-as-oracles |
+| feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-cpyext-cycle-collector | N | 40 | feature | cpyext: a cycle collector for the extension object model | — |
@@ -467,7 +467,7 @@ _none_
 - [p 55] [T] feature-t-shard-the-uforth-ans-suite-per-word-set
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 50] [U] decide-may-agents-fetch-thirdparty-sources-as-oracles (unblocks 2)
+- [p 50] [U] decide-may-agents-fetch-thirdparty-sources-as-oracles (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [N] bug-nilpy-list-sort-method-missing
@@ -538,6 +538,7 @@ _none_
 - [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
+- [p 40] [B] feature-nilpy-codecs-shim
 - [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-dataclass-expression-field-default
 - [p 40] [N] feature-nilpy-enum-class
@@ -627,9 +628,9 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **3** — feature-web-track-w-bootstrap
-- **2** — decide-may-agents-fetch-thirdparty-sources-as-oracles
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
+- **1** — decide-may-agents-fetch-thirdparty-sources-as-oracles
 - **1** — decide-nilpy-class-as-value-dispatch-strategy
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-representation

@@ -39,7 +39,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 191, ranked
+## Ready — top 30 of 192, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
@@ -72,4 +72,4 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 
-_161 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_162 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
