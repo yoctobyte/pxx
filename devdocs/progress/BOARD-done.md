@@ -669,6 +669,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-same-named-nested-defs-in-two-methods-collide | N | 45 | bug | Two methods of one class cannot both declare a nested def of the same name — the second call binds the first method's def and fails on arity. Pre-existing; loud. | — |
 | bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic | N | 45 | bug | `&`/`\|`/`-`/`^` on sets, `\|` on dicts silently did raw pointer arithmetic | — |
 | bug-nilpy-set-augmented-union-does-nothing | N | 50 | bug | `a \|= <set>` silently does nothing (and mixing it with `+=` segfaults) | — |
+| bug-nilpy-set-comprehension-over-range-does-not-deduplicate | N | 55 | bug | A set comprehension over `range()` does not deduplicate | — |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-literal-does-not-deduplicate | N | 60 | bug | A set LITERAL keeps duplicates; `set().add()` removes them | — |
 | bug-nilpy-settings-editor-segfaults-on-bound-method-field | N | 80 | bug | SettingsEditor segfaults reading a bound method off a field | — |

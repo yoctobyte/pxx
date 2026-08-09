@@ -69,3 +69,24 @@ set comprehensions whose elements COLLIDE, from a `range` source, a list source,
 a `list(range(...))` source and a string source; each asserted with both
 `sorted(...)` and `len(...)`; plus dict and list comprehensions over `range` as
 controls, and a filtered set comprehension over `range`.
+
+## 2026-08-09 — FIXED
+
+The `range` counted-loop path now makes the same two-arm choice the container
+path makes. One line of behaviour; the comment beside it names the symptom and
+the blind control so the next person to touch that builder sees both.
+
+`test/test_nilpy_set_comprehension_dedup.npy` asserts **only colliding element
+expressions**, and says why: `{x for x in range(9)}` PASSES against the broken
+compiler, because those values are already distinct and the test cannot observe
+deduplication at all. That case is kept at the end of the file precisely so its
+blindness is on the record.
+
+Both `sorted(...)` and `len(...)` are asserted for every case — the repr and the
+count came from different places and the count is what exposed it — and the
+sources are varied (`range`, list, `list(range(...))`, string, tuple) because
+the boundary was the SOURCE, and `list(range(6))` working while `range(6)` did
+not is what localised it. Controls check that list and dict comprehensions over
+`range` still do NOT deduplicate.
+
+Verified against CPython; `gate.sh quick` GREEN.

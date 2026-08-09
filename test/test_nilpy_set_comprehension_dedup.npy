@@ -1,0 +1,61 @@
+# bug-nilpy-set-comprehension-over-range-does-not-deduplicate
+#
+# `{x % 3 for x in range(9)}` held NINE elements — every duplicate kept — and
+# len() reported nine, while the object still reported itself a set. Silent:
+# every value present is one the comprehension should produce, so it reads as a
+# plausible set until something counts it.
+#
+# Cause: two comprehension-body builders, one per loop lowering. The CONTAINER
+# path chose `add` for a set and `append` otherwise; the `range` counted-loop
+# path called `append` unconditionally and never consulted the flag. The dict
+# arm was present in both — it was exactly the set arm missing from the second
+# copy.
+#
+# EVERY element expression here COLLIDES, and that is the point of the file.
+# `{x for x in range(9)}` PASSES against the broken compiler and is a blind
+# control: those values are already distinct, so the test cannot observe
+# deduplication at all. A probe has to produce duplicates to see this.
+#
+# Both `sorted(...)` and `len(...)` are asserted for each case: the repr and the
+# count came from different places, and the count is what actually exposed it.
+#
+# Sources are varied deliberately — `range`, a list, `list(range(...))`, a
+# string, a tuple — because the boundary was the SOURCE, not the element, and
+# `list(range(6))` working while `range(6)` did not is what localised it.
+#
+# Expectations are CPython's own output.
+
+# the bug: range source, colliding elements
+print(sorted({x % 3 for x in range(9)}), len({x % 3 for x in range(9)}))
+print(sorted({x // 2 for x in range(6)}), len({x // 2 for x in range(6)}))
+print(sorted({x % 2 for x in range(6)}), len({x % 2 for x in range(6)}))
+print(sorted({abs(x - 2) for x in range(5)}), len({abs(x - 2) for x in range(5)}))
+
+# a CONSTANT element — every value collides
+print(sorted({0 for x in range(3)}), len({0 for x in range(3)}))
+
+# range with a start/step
+print(sorted({x % 3 for x in range(1, 10)}), len({x % 3 for x in range(1, 10)}))
+print(sorted({x % 2 for x in range(0, 10, 2)}), len({x % 2 for x in range(0, 10, 2)}))
+
+# a FILTER, over range
+print(sorted({x % 2 for x in range(6) if x > 1}), len({x % 2 for x in range(6) if x > 1}))
+
+# other sources, same colliding elements — these were already correct and must stay so
+print(sorted({x % 3 for x in [0, 1, 2, 3, 4, 5]}), len({x % 3 for x in [0, 1, 2, 3, 4, 5]}))
+print(sorted({x % 2 for x in list(range(6))}), len({x % 2 for x in list(range(6))}))
+print(sorted({c for c in "aabbc"}), len({c for c in "aabbc"}))
+print(sorted({len(w) for w in ["a", "b", "cc"]}), len({len(w) for w in ["a", "b", "cc"]}))
+print(sorted({x % 2 for x in (0, 1, 2, 3)}), len({x % 2 for x in (0, 1, 2, 3)}))
+
+# the result really is a SET, not merely deduplicated
+s = {x % 3 for x in range(9)}
+print(type(s).__name__, isinstance(s, set), sorted(s | {9}), sorted(s & {1, 2}))
+
+# --- controls: the other comprehension kinds over range must NOT dedup ---
+print([x % 3 for x in range(9)], len([x % 3 for x in range(9)]))
+print(sorted({x % 3: x for x in range(9)}.items()))
+print(sorted([x % 2 for x in range(6) if x > 1]))
+
+# --- control: the blind case, kept so its blindness is on the record ---
+print(sorted({x for x in range(4)}), len({x for x in range(4)}))

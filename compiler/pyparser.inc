@@ -14694,9 +14694,25 @@ begin
     else
     begin
       PyParseBoolExpr;
-      bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
-                             PyMakeIdent(PyCompTarget), CurASTNode);
-      if bodyNode < 0 then Error('Nil Python: pylib TPyList.append not loaded');
+      { `add` for a SET comprehension, `append` otherwise — the same choice the
+        CONTAINER path makes. This copy did not make it, so EVERY set
+        comprehension over `range(...)` kept its duplicates:
+        `{x % 3 for x in range(9)}` held nine elements, and len() reported nine,
+        while PyParseSetComp still stamped the result a SET — so the object
+        REPORTED itself a set and behaved like a list.
+
+        Silent, because every value present is one the comprehension should
+        produce. And the obvious control is blind: `{x for x in range(9)}`
+        passes, since those values are all distinct and cannot observe
+        deduplication at all — the probe has to COLLIDE.
+        bug-nilpy-set-comprehension-over-range-does-not-deduplicate }
+      if PyCompIsSet then
+        bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'add',
+                               PyMakeIdent(PyCompTarget), CurASTNode)
+      else
+        bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
+                               PyMakeIdent(PyCompTarget), CurASTNode);
+      if bodyNode < 0 then Error('Nil Python: pylib TPyList.append/add not loaded');
     end;
     { A NESTED comprehension in the element expression hoists its own build loop
       onto PyHoistHead. Drain it INTO this body, ahead of the append that
