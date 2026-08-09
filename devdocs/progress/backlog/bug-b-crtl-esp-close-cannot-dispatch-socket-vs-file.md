@@ -63,3 +63,35 @@ distinguishable on IDF before committing to it.
 
 A C program that opens a file and a socket and closes both behaves correctly on
 POSIX (already true) and on ESP-IDF; `test/cerrno_strings.c` stays silent.
+
+## 2026-08-09 (Track B): hazard defanged; the dispatch itself still needs hardware
+
+**Not fixed as written, and deliberately so.** The ticket's own precondition for
+option 2 is *"confirm the two handle spaces really are distinguishable on IDF
+before committing to it"*, and that cannot be confirmed here — there is no ESP32
+on this box. Reasoning from the ESP32 address map (a `FILE*` lands in DRAM
+around `0x3F…`, an lwip fd is a small VFS integer) is exactly the kind of
+plausible-sounding inference this repo's debugging playbook says not to write
+into code.
+
+Option 1 (an fd registry in crtl) was also rejected on inspection: `poll()`
+hands `PalPollSet` the caller's `struct pollfd` array untouched, straight to
+`lwip_poll`, so any tagging or remapping of fd values has to be undone there
+too — the registry is not self-contained the way the ticket assumed.
+
+**What DID change** — `PalBackendClose` on IDF used to `fclose(Pointer(handle))`
+anything above `PAL_STDERR`, so reaching it with an lwip fd dereferenced a
+null-page address: undefined behaviour from a call that looks fine. It now
+refuses a handle below 4096 with `PAL_ERR_UNSUPPORTED`.
+
+That is not a guess about WHICH space a handle belongs to — it is the fact that
+no platform puts a valid pointer in the first page. So the outcome for a C
+socket close on ESP-IDF becomes the deliberate Track S refusal
+(`PAL_ERR_UNSUPPORTED`, like the other 33 entry points) rather than memory
+corruption. The bug the ticket describes is still open; its worst consequence is
+not.
+
+**Still to do, and it needs a device:** confirm the handle spaces are separable
+on real IDF, then implement option 2 in the PAL so every language gets it right,
+remembering the `PalPollSet` pass-through above.
+

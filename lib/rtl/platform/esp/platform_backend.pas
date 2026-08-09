@@ -368,9 +368,30 @@ function PalBackendClose(handle: Integer): Integer;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
 begin
   if handle <= PAL_STDERR then
-    Result := PAL_ERR_UNSUPPORTED
-  else
-    Result := fclose(Pointer(handle));
+  begin
+    Result := PAL_ERR_UNSUPPORTED;
+    Exit;
+  end;
+  { A file handle here IS a FILE* from fopen, cast to Integer. An lwip socket fd
+    is a small integer from the VFS. crtl has ONE close(), so a C program doing
+    sockets AND file I/O reaches this with either
+    (bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file), and fclose() of a
+    small integer dereferences a null-page address — undefined behaviour, from a
+    plausible-looking call.
+
+    This does NOT solve the dispatch: telling the two spaces apart properly
+    needs the PAL to own the handle namespace, and confirming they ARE
+    distinguishable on real IDF needs hardware nobody has run this against. What
+    it does is refuse the case that is certainly not a FILE*, because no
+    platform puts a valid pointer in the first page. So the failure mode becomes
+    PAL_ERR_UNSUPPORTED — the deliberate Track S refusal — instead of memory
+    corruption. }
+  if handle < 4096 then
+  begin
+    Result := PAL_ERR_UNSUPPORTED;
+    Exit;
+  end;
+  Result := fclose(Pointer(handle));
 end;
 {$else}
 begin
