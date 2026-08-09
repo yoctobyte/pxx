@@ -90,4 +90,4 @@ useful if it stays that way.
 
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 1a3cadc44.
