@@ -74,6 +74,9 @@ exception propagation and above all *tasking* each imply real runtime work.
      `10 ** 30 // 7` are both exact — via promotable ints whose payload is the
      exact decimal in a managed string. And `compiler/exdec.inc` (520 lines) is
      exact double↔decimal-digit conversion with correct rounding.
+   - *The `Currency = Double` half is now its own ticket:*
+     [[bug-b-fpc-numeric-compat-floor-ceil-return-float-currency-is-double]],
+     filed low-priority since it is an FPC-compat defect regardless of COBOL.
    - *So what is actually missing is narrower than "a decimal type":* the
      scaled fixed-point **arithmetic** — a bigint mantissa plus a scale, with
      decimal-aware add/sub/mul/div, rounding modes and the standard's
