@@ -164,4 +164,4 @@ can fix an argument-lowering hole.
 - Self-host fixedpoint byte-identical; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 943784977.
