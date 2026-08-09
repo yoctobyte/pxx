@@ -2,6 +2,7 @@
 track: N
 prio: 40
 type: bug
+blocked-by: decide-nilpy-none-str-representation
 summary: "`\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not."
 ---
 
@@ -57,3 +58,35 @@ outright and accepting the cost. This is a model decision — consider a Track U
 
 The three lines above matching CPython, `test_nilpy_none_str_field.npy` extended
 with the "" case it currently documents as NOT asserted, plus the per-fix loop.
+
+## Measured 2026-08-09 — the failure is NOT uniform, and that decides the fix
+
+The conflation is exactly **static `AnsiString` vs `Variant`**:
+
+| operand | `"" is None` | correct? |
+| --- | --- | --- |
+| `x = ""`, `"" + ""`, `"ab"[0:0]`, a `-> str` result, a class FIELD | True | no |
+| **`["", "x"][0]`, `{"k": ""}["k"]`** | **False** | **yes** |
+| `None is None` / `"abc" is None` | True / False | yes |
+
+A string boxed in a variant carries `VT_STRING` in its TAG and `is None` tests
+the tag, so **the variant representation already models None-vs-empty
+correctly** — it is only the statically str-typed path, where `pystr_is_none`
+tests `Pointer(s) = nil` against an empty AnsiString that IS nil, that
+conflates.
+
+That is the useful fact this ticket was missing: "the sentinel needs a
+representation `""` cannot collide with" is not a design to invent. One exists
+in-tree, works, and is exercised by the corpus. It makes "route str Optionals
+through variants" the option with a demonstrated precedent rather than one of
+three guesses.
+
+Also measured: `x == ""` answers True correctly, so it is `is None`
+specifically that conflates — which gives any fix a ready-made oracle, the
+`is`/`==` pair disagreeing the way CPython makes them disagree.
+
+Filed as [[decide-nilpy-none-str-representation]] with the four options and a
+recommendation (route `Optional[str]` through variants, and decide the promotion
+boundary EXPLICITLY — that boundary, not the representation, is where this will
+go wrong; widening a str to a variant from a different direction is what broke
+`test_nilpy_none_str_field` earlier the same day).
