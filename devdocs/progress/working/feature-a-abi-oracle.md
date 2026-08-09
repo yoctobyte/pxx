@@ -3,6 +3,7 @@ track: A
 prio: 60
 type: feature
 status: working
+owner: claude-A
 ---
 
 # ABI oracle: backends consult it, and stop reading Syms[]

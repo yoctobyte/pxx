@@ -1337,10 +1337,7 @@ begin
           catch-all. Without it, `procedure W(var r: TI)` indexed WRITES landed
           on the parameter slot itself — silently lost for 32-bit elements,
           wild for 64-bit ones (bug-riscv32-p256field-coredump). }
-        else if (Syms[si].Kind = skParam) and
-                (Syms[si].IsRef or Syms[si].IsArray or
-                 TypeIsFrozenString(Syms[si].TypeKind) or
-                 (Syms[si].TypeKind = tyVariant)) then
+        else if ABIParamSlotHoldsValueAddr(si) then
           rv32_lw(reg_a0, reg_a0, 0);
       end;
 

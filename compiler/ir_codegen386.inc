@@ -1701,10 +1701,7 @@ begin
         begin
           EmitB($B8); EmitGlobRef(Syms[si].Offset);          { mov eax, abs32 }
         end
-        else if (Syms[si].Kind = skParam) and
-                (Syms[si].IsRef or Syms[si].IsArray or
-                 TypeIsFrozenString(Syms[si].TypeKind) or
-                 (Syms[si].TypeKind = tyVariant)) then
+        else if ABIParamSlotHoldsValueAddr(si) then
         begin
           { By-ref, open-array, fixed-string, or Variant param: the slot holds a
             pointer the caller passed (the array data / buffer / forwarded slot),

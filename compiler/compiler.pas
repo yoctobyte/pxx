@@ -84,6 +84,7 @@ procedure AsmI64(v: Int64); forward;
   (bug-a-fpc-seed-drift-emitasmx64-forward). }
 procedure EmitAsmX64(const items: array of const); overload; forward;
 {$include symtab.inc}
+{$include abi.inc}      { the ABI oracle — after symtab.inc: it uses TypeIsFrozenString }
 {$include exception_emit.inc}
 {$include coroutine_emit.inc}
 {$include thread_emit.inc}

@@ -1186,10 +1186,7 @@ begin
           if not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
             EmitI32($F9400000);                 { ldr x0, [x0] = handle }
         end
-        else if (Syms[si].Kind = skParam) and
-                (Syms[si].IsRef or Syms[si].IsArray or
-                 TypeIsFrozenString(Syms[si].TypeKind) or (Syms[si].TypeKind = tySet) or
-                 (Syms[si].TypeKind = tyVariant)) then
+        else if ABIParamSlotHoldsValueAddr(si) then
         begin
           { By-ref, open-array, fixed-string, set, or Variant param: the slot holds a
             pointer the caller passed (the array data / buffer / forwarded slot),

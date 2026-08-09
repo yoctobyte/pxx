@@ -127,10 +127,7 @@ begin
     EmitI32($EA000000);  { b .+8 }
     EmitGlobRef(Syms[idx].Offset);
   end
-  else if (Syms[idx].Kind = skParam) and
-          (Syms[idx].IsRef or Syms[idx].IsArray or
-           TypeIsFrozenString(Syms[idx].TypeKind) or (Syms[idx].TypeKind = tySet) or
-           (Syms[idx].TypeKind = tyVariant)) then
+  else if ABIParamSlotHoldsValueAddr(idx) then
   begin
     { By-ref, open-array, fixed-string, set, or Variant param: the slot holds a pointer
       the caller passed (the array data / buffer / forwarded slot), so load the
