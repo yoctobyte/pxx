@@ -94,3 +94,25 @@ deliberately, and directory enumeration is likely one of them.
 ### Also still missing from the same sweep
 `os.sep` and `os.linesep` — ATTRIBUTES rather than calls, so they need a
 different hook from the dotted-call table this ticket has been extending.
+
+## 2026-08-09 (later) — three container names, from a dict/set sweep
+
+`set.symmetric_difference`, `set.isdisjoint` and the TWO-ARGUMENT
+`dict.fromkeys(seq, value)`. Pinned by
+`test/test_nilpy_set_dict_gaps.{npy,expected}`.
+
+The first two were thin over operator forms that already existed (`pyset_xor`,
+`pyset_and`), so the gap was the METHOD name, not the algorithm.
+
+`fromkeys(seq, value)` is a genuine Pascal **overload**, reached because
+`PyParseStdlibCall` re-targets by ARITY via `FindProcArity` — the route that
+site's own comment recommends ("declare a 3-argument overload like any Pascal
+routine"). Worth knowing for the next shim: arity is reachable that way, TYPE
+still is not.
+
+### Verified working in the same sweep — do not re-file
+
+`dict` keys/values/items/get with and without a default/pop/setdefault/update/
+popitem/`in`/`not in`/`len`/`clear`/dict(d) copy/`{**a, **b}` merge; `set`
+union/intersection/difference/add/discard/remove/issubset/issuperset/`len`/set
+comprehension/`set(s1)` copy. 17 lines, all byte-identical to CPython.

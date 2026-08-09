@@ -1,0 +1,7 @@
+symdiff  [1, 2, 4]
+symdiff2 [1, 2, 3]
+disjoint True False True
+fromkeys [('p', None), ('q', None)]
+fromkeyv [('p', 0), ('q', 0)]
+fromkeys2 [('a', 'z')]
+controls [1, 2, 3, 4] [2, 3] True

@@ -1110,6 +1110,9 @@ test-nilpy: $(COMPILER)
 	# os.path.split / normpath / getsize / expanduser
 	./$(COMPILER) test/test_nilpy_os_path_more.npy /tmp/test_nilpy_ospathmore26
 	/tmp/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -
+	# set.symmetric_difference / set.isdisjoint / dict.fromkeys(seq, value)
+	./$(COMPILER) test/test_nilpy_set_dict_gaps.npy /tmp/test_nilpy_setdictgaps26
+	/tmp/test_nilpy_setdictgaps26 | diff -u test/test_nilpy_set_dict_gaps.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

@@ -170,6 +170,12 @@ type
     function union(other: TPyList): TPyList;
     function intersection(other: TPyList): TPyList;
     function difference(other: TPyList): TPyList;
+    { set.symmetric_difference / set.isdisjoint — the last two of the set
+      protocol, thin over the operator forms that already exist (pyset_xor,
+      and intersection for the disjoint test).
+      feature-nilpy-stdlib-coverage-gaps-measured }
+    function symmetric_difference(other: TPyList): TPyList;
+    function isdisjoint(other: TPyList): Boolean;
     { set.discard: like remove(), but does NOT raise when the value is absent. }
     procedure discard(const v: Variant);
     property Items[i: Integer]: Variant read at write put; default;
@@ -1098,6 +1104,7 @@ function dict(l: TPyList): TPyDict; overload;
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
   preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
 function pydict_fromkeys(l: TPyList): TPyDict;
+function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
 { `set(iterable)` — Python's set constructor. A set is a TPyList here (see
   PyAnnTypeAt and TPyList.add), so this is "copy, skipping duplicates". The
   iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
@@ -3129,6 +3136,20 @@ begin
   Result := pyset_sub(Self, other);
 end;
 
+function TPyList.symmetric_difference(other: TPyList): TPyList;
+begin
+  Result := pyset_xor(Self, other);
+end;
+
+function TPyList.isdisjoint(other: TPyList): Boolean;
+var r: TPyList;
+begin
+  { "no element in common" — the intersection being empty. Python accepts ANY
+    iterable here, and a list IS the set representation, so no kind check. }
+  r := pyset_and(Self, other);
+  Result := (r = nil) or (r.count = 0);
+end;
+
 procedure TPyList.discard(const v: Variant);
 begin
   if Self = nil then Exit;
@@ -4250,6 +4271,25 @@ begin
   if l <> nil then
     for i := 0 to l.count - 1 do
       d.store(l.at(i), pynone());
+  Result := d;
+end;
+
+{ dict.fromkeys(iterable, value) — the two-argument form, which fills every key
+  with the SAME value rather than None. A genuine Pascal OVERLOAD: the stdlib
+  call site re-targets by ARITY via FindProcArity, which is exactly the route
+  its own comment recommends ("declare a 3-argument overload like any Pascal
+  routine"). Type-based selection would still not be reachable that way, but
+  arity is all this needs.
+  Note CPython shares ONE value object across all the keys — it does not copy
+  it — so a mutable fill is aliased by every key. Storing the same variant is
+  exactly that behaviour, not a shortcut. }
+function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
+var d: TPyDict; i: Integer;
+begin
+  d := TPyDict.Create;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+      d.store(l.at(i), v);
   Result := d;
 end;
 

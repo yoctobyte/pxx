@@ -1,0 +1,28 @@
+# feature-nilpy-stdlib-coverage-gaps-measured — three container names.
+#
+# `set.symmetric_difference`, `set.isdisjoint` and the TWO-ARGUMENT
+# `dict.fromkeys(seq, value)` were all compile errors. Loud, so nothing computed
+# a wrong answer; the value is that a script reaching for them now runs.
+#
+# The first two are thin over operator forms that already existed (pyset_xor,
+# pyset_and), so the gap was the METHOD name rather than the algorithm.
+#
+# fromkeys' two-arg form is a genuine Pascal OVERLOAD, reached because the
+# stdlib call site re-targets by ARITY -- the route that site's own comment
+# recommends. Both arities are asserted, since the one-arg form already worked
+# and an overload that fails to register would silently keep answering it.
+#
+# The EMPTY-set edges are asserted for both new set methods: symmetric
+# difference with an empty set is the original, and isdisjoint with an empty set
+# is True (vacuously) rather than False.
+#
+# Expectations are CPython's own output.
+
+s1 = {1, 2, 3}
+print("symdiff ", sorted(s1.symmetric_difference({3, 4})))
+print("symdiff2", sorted(s1.symmetric_difference(set())))
+print("disjoint", s1.isdisjoint({7}), s1.isdisjoint({1}), s1.isdisjoint(set()))
+print("fromkeys", sorted(dict.fromkeys(["p", "q"]).items()))
+print("fromkeyv", sorted(dict.fromkeys(["p", "q"], 0).items()))
+print("fromkeys2", sorted(dict.fromkeys(["a"], "z").items()))
+print("controls", sorted(s1.union({4})), sorted(s1.difference({1})), s1.issubset({1,2,3,4}))
