@@ -104,3 +104,19 @@ construction inline, in a comprehension, nested in another constructor's
 arguments, for a @dataclass, and for a builtin exception.
 
 Verified against CPython; `gate.sh quick` GREEN.
+
+### Follow-up the same day: a class ALIAS is an exact name too
+
+The first cut compared only against the CLASS name, which rejected every
+**aliased** constructor: `from m import Box as BoxAlias` registers `BoxAlias`
+against Box's row, so the class name never equals the spelling used and
+`BoxAlias(9)` stopped compiling. The predicate now also accepts an exact-case
+match against the alias TEXT — an alias is a real Python name and Python is
+case-sensitive about it too.
+
+**Found by the whole-suite HEAD-vs-pinned sweep, not by the fix's own test.**
+Nothing in `test_nilpy_instance_named_like_its_class.npy` exercises an alias;
+`test_nilpy_from_import_as_alias` did, and the sweep is what compared it against
+pinned and flagged it as the one HEAD-only failure. That is the argument for
+running the sweep after a narrowing change: narrowing an intercept cannot be
+regression-tested by the test that motivated it.

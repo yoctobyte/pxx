@@ -562,12 +562,29 @@ end;
   family; this is the CALL half.
   bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor }
 function PyIsExactCtorName(const nm: AnsiString): Boolean;
-var ci: Integer;
+var ci, i: Integer;
 begin
   Result := False;
   ci := FindUClassNonRecord(nm);
   if ci < 0 then Exit;
-  Result := PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm;
+  if PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm then
+  begin
+    Result := True;
+    Exit;
+  end;
+  { A class ALIAS is also an exact name — `from m import Box as BoxAlias`
+    registers `BoxAlias` against Box's row, so the CLASS name never equals the
+    spelling used. Checking only UClsName rejected every aliased constructor
+    (`BoxAlias(9)` stopped compiling), which the from-import-as-alias test
+    caught. Match the alias TEXT exactly, for the same reason: an alias is a
+    real Python name and Python is case-sensitive about it too. }
+  for i := 0 to UClsAliasCount - 1 do
+    if (UClsAliasCi[i] = ci) and
+       (PyRawName(UClsAliasNOff[i], UClsAliasNLen[i]) = nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
 end;
 
 function PyTypeFromTokenIndex(i: Integer): TTypeKind;

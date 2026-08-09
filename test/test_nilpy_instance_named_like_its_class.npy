@@ -23,6 +23,13 @@
 # another constructor's arguments, for a @dataclass, and for a builtin
 # exception — every one of those goes through the intercept that was narrowed.
 #
+# One case is NOT here and belongs to test_nilpy_from_import_as_alias: a class
+# ALIAS (`from m import Box as BoxAlias`) is an exact name too. The first cut of
+# this fix rejected every aliased constructor, because an alias is registered
+# against the TARGET class's row so the class name never equals the spelling
+# used. That test caught it; a whole-suite HEAD-vs-pinned sweep is what surfaced
+# it, since nothing in this file exercises an alias.
+#
 # Expectations are CPython's own output.
 
 

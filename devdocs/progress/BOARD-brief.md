@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:218 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1545 rejected:30`
+`unfinished:11 blocked:6 backlog:220 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1545 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,8 +34,10 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 200, ranked
+## Ready — top 30 of 202, ranked
 
+- `[p 70] [T]` regression-test-nilpy-test-nilpy-delitem-dunder
+- `[p 70] [T]` regression-test-nilpy-test-nilpy-from-import-as-alias
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [N]` bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
@@ -64,7 +66,5 @@ _none — no lane is locked._
 - `[p 55] [N]` feature-nilpy-corpus-uforth
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
-- `[p 55] [T]` feature-pasmith-multi-unit-programs
-- `[p 55] [A]` feature-signal-siginfo-ucontext
 
-_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
