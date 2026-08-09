@@ -69,4 +69,4 @@ Not fixed here, and hit by the same program: a user-raised `KeyError(k)`'s
 around it deliberately.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit d1e78c768.
