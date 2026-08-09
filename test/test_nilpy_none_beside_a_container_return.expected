@@ -1,0 +1,11 @@
+NoneType True False
+None None None
+None None
+NoneType True None None
+NoneType True None
+[1, 2] 2 2
+{'a': 1} 1 1
+[3]
+len TypeError
+False False False
+[1, 2] 2

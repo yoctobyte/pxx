@@ -1,0 +1,61 @@
+# A def returning None on one arm and a CONTAINER on another used to hand back
+# a NIL object pointer: right for identity (`is None` True, type() NoneType)
+# and unusable for everything else, because every consumer dereferences it.
+# print/repr/str/f-string rendered `[]` or `{}` -- a wrong VALUE with no
+# diagnostic -- and len()/index/`in`/iteration SIGSEGV'd. Such a def now
+# returns a VARIANT, which carries None and a container apart already.
+# bug-nilpy-none-returned-beside-a-container-is-an-unusable-nil-handle
+# Every expectation is CPython's own output.
+
+
+def fl(ok):
+    if not ok:
+        return None
+    return [1, 2]
+
+
+def fd(ok):
+    if not ok:
+        return None
+    return {"a": 1}
+
+
+def bare(ok):
+    if not ok:
+        return
+    return [3]
+
+
+x = fl(False)
+print(type(x).__name__, x is None, bool(x))
+print(x, repr(x), str(x))
+print(f"{x}", "%s" % (x,))
+
+d = fd(False)
+print(type(d).__name__, d is None, d, repr(d))
+
+b = bare(False)
+print(type(b).__name__, b is None, b)
+
+# the VALUE-bearing arm still answers a real container
+print(fl(True), len(fl(True)), fl(True)[1])
+print(fd(True), len(fd(True)), fd(True)["a"])
+print(bare(True))
+
+# consumers raise instead of crashing
+try:
+    print(len(x))
+except TypeError:
+    print("len TypeError")
+
+# a real empty container is NOT None
+print([] is None, {} is None, x == [])
+
+# a def with NO None arm keeps its container result (and its methods)
+def only_list():
+    return [1]
+
+
+ol = only_list()
+ol.append(2)
+print(ol, len(ol))

@@ -620,6 +620,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-nested-for-comprehension-not-supported | N | 45 | bug | A comprehension with TWO for-clauses — [c for r in rows for c in r] — fails with 'undefined variable (c)'; the flatten idiom is unavailable | — |
 | bug-nilpy-non-literal-class-attribute-corrupts-the-class-layout | N | 70 | bug | A class attribute with a NON-LITERAL initialiser (`g = 2 + 3`) corrupts the class: a method returning a tuple of two OTHER class attributes then prints nothing or segfaults. Deleting the unused attribute fixes it | — |
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |
+| bug-nilpy-none-returned-beside-a-container-is-an-unusable-nil-handle | N | 55 | bug | `return None` beside a container return hands back an unusable nil handle | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 65 | bug | NilPy: a `nonlocal` write through an ESCAPED closure segfaults (re-measured 2026-08-06 — it used to be a parse error). The write itself faults; read-only captures and the list-cell workaround are fine. | — |
 | bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope | N | 80 | bug | `nonlocal x` — the write never reaches the enclosing function | — |
 | bug-nilpy-nosetitem-error-does-not-name-the-class | N | 25 | bug | `obj[k] = v` on a class with no __setitem__ raises 'object does not support item assignment (no __setitem__)' where CPython names the class — the sibling read error already names it | — |

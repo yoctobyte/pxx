@@ -42,7 +42,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (212)
+## backlog (213)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ _none_
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
+| bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
 | bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack | O | 65 | bug | optdiff finds -O3 changing observable behaviour in two C tests — cmath_sign_bits returns rc 42 against the baseline's rc 1, and cmath_no_pascal_hijack's output differs at equal rc | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -386,9 +387,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1573)
+## done (1574)
 
-1573 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1574 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (31)
 
@@ -471,6 +472,7 @@ _none_
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [N] bug-nilpy-list-sort-method-missing
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
+- [p 50] [N] bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-vla-via-alloca

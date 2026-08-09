@@ -20481,7 +20481,8 @@ begin
   PySkipNestedSuite := k;
 end;
 
-function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
+function PyInferDefRetTypeScan(methodStart: Integer; var retRec: Integer;
+                               var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth: Integer;
     t2, cur, chainCur: TTypeKind;
@@ -20491,6 +20492,7 @@ begin
   retRec := REC_NONE;
   rec2 := -1;
   seenAny := False;
+  sawNone := False;
   PyInferRetSeenAny := False;
   j := methodStart + 2;
   pdepth := 0;
@@ -20551,6 +20553,7 @@ begin
         comment above describes. }
       if Tokens[j + 1].Kind in [tkNewline, tkDedent, tkEOF] then
       begin
+        sawNone := True;
         Inc(j);
         Continue;
       end;
@@ -20562,6 +20565,7 @@ begin
       if (Tokens[j + 1].Kind = tkNil) and (j + 2 < TokCount) and
          (Tokens[j + 2].Kind in [tkNewline, tkDedent, tkEOF]) then
       begin
+        sawNone := True;
         Inc(j);
         Continue;
       end;
@@ -20801,6 +20805,36 @@ begin
       Continue;
     end;
     Inc(j);
+  end;
+end;
+
+{ "`return None` says nothing about the type" — the rule the scan above is
+  built on — holds for every result kind EXCEPT a CLASS. A None result is a
+  sentinel in the result's own representation (0 for an int, a nil handle for a
+  str), and for a class that sentinel is a nil object pointer: correct for
+  IDENTITY (`is None` answers True, `type()` answers NoneType) and unusable for
+  everything else, because every consumer dereferences it. `len(x)`, `x[0]`,
+  `x + [1]`, `for q in x` and `x.append(1)` all SIGSEGV'd where CPython raises
+  TypeError, and `print(x)` / `repr(x)` / `str(x)` rendered `[]` — a wrong VALUE
+  with no diagnostic, which is the worse half.
+
+  So a def that returns None on one arm and a class on another returns a
+  VARIANT. That path is already correct today: a None boxes as VT_EMPTY and a
+  container as VT_OBJECT, which is exactly how list ELEMENTS and dict VALUES
+  have always carried the two apart. It is the same call
+  decide-nilpy-optional-int-none-vs-zero made for Optional[int].
+
+  Not covered, and deliberately: falling off the END of a def also yields None
+  in Python, but recognising that needs flow analysis rather than a token scan.
+  bug-nilpy-none-returned-beside-a-container-is-an-unusable-nil-handle }
+function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
+var sawNone: Boolean;
+begin
+  Result := PyInferDefRetTypeScan(methodStart, retRec, sawNone);
+  if sawNone and (Result = tyClass) then
+  begin
+    Result := tyVariant;
+    retRec := REC_NONE;
   end;
 end;
 
