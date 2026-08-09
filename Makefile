@@ -1960,6 +1960,13 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_cpyext_errformat26)" = "$$(printf 'U=[keyname]\nS=[1234]\nR=[%s]\nA=[%s]\nmix=[keyname][77]\ns=[txt] d=[-5]\nld=[9876543210] zd=[42]\npct=[100%s] c=[Z]\nx=[ff] wide=[    7]\nfmt=[keyname][5]' "'keyname'" "'keyname'" "%")"
 	./$(COMPILER) -DPy_LIMITED_API=0x030c0000 -DCYTHON_COMPRESS_STRINGS=0 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_cython.npy /tmp/test_cpyext_cython26
 	test "$$(/tmp/test_cpyext_cython26)" = "$$(printf '42\n0\n3000000\n1\n720\n3628800\n479001600\n22\n22\n22\n22\n42\nbadkw raised\ncython_function_or_method\ncyadd\ncysub\na,b\nn,i,r')"
+	# A str-method NAME a user class also declares (find/index/count/title/strip/
+	# split/replace/upper/startswith/format/ljust) dispatches on the receiver's
+	# RUNTIME tag, not on a hardcoded name list. Both receivers travel through the
+	# same dynamically typed loop variable, so a compile-time choice is wrong for
+	# one of them whichever way it is made.
+	./$(COMPILER) test/test_nilpy_str_method_name_collides_with_class_method.npy /tmp/test_nilpy_strcoll26
+	/tmp/test_nilpy_strcoll26 | diff -u test/test_nilpy_str_method_name_collides_with_class_method.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

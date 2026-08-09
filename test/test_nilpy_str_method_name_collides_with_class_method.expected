@@ -1,0 +1,26 @@
+B.find(b)
+B.index(b)
+B.count(b)
+B.title
+B.strip
+B.split(-)
+B.replace(az)
+B.upper
+B.startswith(a)
+B.format(q)
+B.ljust
+2
+2
+1
+A-B-C
+a-b-c
+['a', 'b', 'c']
+z-b-c
+A-B-C
+True
+a-b-c
+a-b-c   
+2
+-1
+1
+3

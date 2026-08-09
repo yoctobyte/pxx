@@ -2,6 +2,8 @@
 track: N
 prio: 55
 type: bug
+status: done
+owner: agent-AN
 ---
 
 # A user method named `find`/`index` raises AttributeError when the receiver has no static class
@@ -136,3 +138,79 @@ hardcoded list.
 Not attempted this session: a half-done version would either break string
 receivers or add a third hand-maintained name, and both are worse than the
 current visible AttributeError.
+
+## FIXED 2026-08-09 — dispatched at run time; the hardcoded list is gone
+
+Implemented the three-way dispatch the ticket asked for, as **one more arm of
+the runtime dispatcher that already existed** in `PyParseVariantMethod` (the one
+that tells `TPyList.pop` from a user class's `pop`) rather than as new machinery.
+`PyStrMethodLosesToClass` is now the general predicate — "this str-method name is
+also declared by some user class" — instead of a two-name list, and the choice it
+used to make at compile time is made at run time by a `pyvar_is_strtag` arm added
+LAST, so it is the OUTERMOST test and a genuine string keeps str-first priority.
+
+### Three things the recon had not found
+
+The recon concluded the frontend route was blocked because `PyParseStrMethod`
+parses its own arguments. That is true and was the smaller half.
+
+1. **The real blocker was a hoisted guard, not argument parsing.** Before any arm
+   is built, this function hoists `if not pyvar_is_objtag(recv) then
+   pydynattr_no_method(...)` as a STATEMENT — so it runs before the dispatch
+   expression is ever evaluated, and a string receiver raised there no matter
+   what arms existed below. Widened to `objtag or strtag` when the name is a str
+   method. This is why "just dispatch at run time" had not worked when tried.
+2. **The static class-arity check rejected valid programs.** `s.find("b", 1)` is
+   Python's optional-start form; with a class whose `find` takes one argument in
+   the program, the arity check errored at COMPILE time before dispatch. That
+   arity can only mean the str spelling, so it now builds the str call alone
+   behind the tag guard. Found by the sweep test, not by the repro.
+3. **`title` and `count` were broken in the OTHER direction all along.** Being in
+   the hardcoded list meant a receiver that really was a string LOST the str
+   method — silently, since the class arm just ran. So the list did not trade one
+   bug for none; it traded one bug for a quieter one. Both directions are fixed
+   by the same change, which is the "several latent collisions green at once"
+   the ticket predicted.
+
+### Shared, not duplicated
+
+The str table maps one pylib proc per ARITY (`''`/`_from`/`_range`/`_chars`/`2`/
+`n`) because `FindProc` is not arity-aware. Rather than re-derive that in the new
+arm, it was split out of `PyParseStrMethod` as `PyStrMethodFinish` and both
+callers use it — a second copy of that resolution is precisely the mechanism that
+drifts. `PyStrMethodArityOk` is its companion: the arm is built SPECULATIVELY, so
+it must ask whether an arity fits instead of erroring on it, and drop the arm when
+it does not (`n.find(a,b,c,d)` on a class whose find takes four is a class call).
+When the arm is dropped, the widened objtag guard puts its raise back, so the
+widening can never turn a clean AttributeError into a wild dereference.
+
+`encode` is excluded by name: its row SKIPS its arguments rather than parsing them
+(the `-4` case, because `errors="replace"` is a keyword), so the class path cannot
+produce an argument chain for it. It keeps the old str-first behaviour.
+
+### Gate
+
+- `test/test_nilpy_str_method_name_collides_with_class_method.npy` — twelve
+  colliding names (`find index count title strip split replace upper startswith
+  format ljust`, plus `join`) each called through ONE dynamically typed loop
+  variable holding BOTH a user object and a string, plus the optional-window
+  forms (`find(s,1)`, `find(s,0,2)`, `count(s,0,3)`) and the tree walk this was
+  found by. Expectation is **CPython's own output**; matches byte for byte.
+  Wired into `make test-nilpy`.
+- `make compiler/pascal26` — self-host fixedpoint converged, byte-identical.
+- `tools/gate.sh quick` — GREEN.
+- Whole-suite HEAD-vs-pinned `.npy` sweep, 513 files: **0 regressions**; the 3
+  HEAD diffs also differ under `pinned` (pre-existing: `delitem_dunder`,
+  `input_eof_raises`, `select_stdin_ready`). `pinned` differs on 50 vs HEAD's 3,
+  the extra one being this ticket's own new test.
+
+### Left open deliberately
+
+A str method and a class method of the same name that disagree on RETURN type
+make the expression `tyVariant`, exactly as the existing mixed-return class arms
+do. That is right, but it means `it.find(x)` in a program with a class `find`
+returning a string is variant-typed where it used to be Integer — visible only if
+something downstream needed the static type. No sweep test showed it.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

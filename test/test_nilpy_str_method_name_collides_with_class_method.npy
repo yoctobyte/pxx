@@ -1,0 +1,89 @@
+# A str-method NAME that a user class also declares. Which one is meant depends
+# on the receiver's RUNTIME type, so both must work through the same dynamically
+# typed variable.
+# bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver
+
+
+class Box:
+    def __init__(self, tag):
+        self.tag = tag
+
+    # every one of these shadows a str method of the same name
+    def find(self, t):
+        return "B.find(" + t + ")"
+
+    def index(self, t):
+        return "B.index(" + t + ")"
+
+    def count(self, t):
+        return "B.count(" + t + ")"
+
+    def title(self):
+        return "B.title"
+
+    def strip(self):
+        return "B.strip"
+
+    def split(self, s):
+        return "B.split(" + s + ")"
+
+    def replace(self, a, b):
+        return "B.replace(" + a + b + ")"
+
+    def upper(self):
+        return "B.upper"
+
+    def startswith(self, p):
+        return "B.startswith(" + p + ")"
+
+    def join(self, xs):
+        return "B.join"
+
+    def format(self, a):
+        return "B.format(" + a + ")"
+
+    def ljust(self, n):
+        return "B.ljust"
+
+
+# One list holding BOTH shapes: the loop variable has no static class, so every
+# call below is dispatched on the runtime tag.
+items = [Box("b"), "a-b-c"]
+
+for it in items:
+    print(it.find("b"))
+    print(it.index("b"))
+    print(it.count("b"))
+    print(it.title())
+    print(it.strip())
+    print(it.split("-"))
+    print(it.replace("a", "z"))
+    print(it.upper())
+    print(it.startswith("a"))
+    print(it.format("q"))
+    print(it.ljust(8))
+
+# The optional-window forms of the str rows must still reach the str method
+# through the same collision, and the extra arguments must survive.
+s = items[1]
+print(s.find("b", 1))
+print(s.find("b", 0, 2))
+print(s.count("-", 0, 3))
+
+# A tree walk over a dynamically typed child list — the shape this was found by.
+class Node:
+    def __init__(self, tag, kids):
+        self.tag = tag
+        self.kids = kids
+
+    def find(self, t):
+        hits = 0
+        if self.tag == t:
+            hits = 1
+        for c in self.kids:
+            hits = hits + c.find(t)
+        return hits
+
+
+tree = Node("a", [Node("b", []), Node("a", [Node("a", [])])])
+print(tree.find("a"))

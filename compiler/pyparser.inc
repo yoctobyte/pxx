@@ -3096,6 +3096,35 @@ begin
   end;
 end;
 
+{ Can this str method be called with exactly `argCount` explicit arguments?
+
+  PyStrMethodFinish ERRORS on an arity its row does not accept, which is right
+  when the source really did write a str method call — but the runtime
+  string/user-class dispatch builds a str arm SPECULATIVELY beside a class arm,
+  and there the same arity is legitimately a class call (`n.find(a, b, c, d)` on
+  a class whose `find` takes four). It asks here first and drops the arm instead
+  of failing the compile.
+
+  The wantArgs encodings are PyStrMethodInfo's; kept in the same file and
+  immediately below it so the two cannot drift apart unnoticed. }
+function PyStrMethodArityOk(const mname: AnsiString; argCount: Integer): Boolean;
+var aPName: AnsiString; aTk: TTypeKind; aWant: Integer;
+begin
+  Result := False;
+  if not PyStrMethodInfo(mname, aPName, aTk, aWant) then Exit;
+  if aWant >= 0 then begin Result := (argCount = aWant); Exit; end;
+  case aWant of
+    -1, -8: Result := (argCount >= 0) and (argCount <= 2);   { split / rsplit }
+    -2, -3: Result := (argCount = 1) or (argCount = 2);      { rjust / find-with-start }
+    -4:     Result := True;                                  { encode — arguments discarded }
+    -5:     Result := (argCount = 0) or (argCount = 1);      { strip family }
+    -6:     Result := (argCount >= 0) and (argCount <= 8);   { format }
+    -7:     Result := (argCount = 2) or (argCount = 3);      { replace }
+    -9:     Result := (argCount >= 1) and (argCount <= 3);   { find/index/count window }
+    -10:    Result := (argCount = 0) or (argCount = 1);      { expandtabs }
+  end;
+end;
+
 { Does ANY user class declare this method? (Records excluded — the closed-world
   dispatch below skips them too.) }
 function PyAnyClassDeclaresMeth(const mname: AnsiString): Boolean;
@@ -3109,16 +3138,37 @@ begin
   end;
 end;
 
-{ str methods whose NAME is also a common object method: `title` is str.title()
-  and tkinter's window title, `count` is str.count() and a container's. On a
-  VARIANT receiver a declared class method wins for these — `root.title("x")` is
-  what real code means, and the str spelling is reached anyway whenever the
-  receiver is statically a string. Every other str method keeps str-first
-  priority, which is what the dynamically-typed corpus relies on. }
+{ A str method NAME that some user class also declares as a method — so on a
+  VARIANT receiver the frontend cannot know which is meant, and must not choose.
+
+  This used to be a hardcoded list of exactly two names, `title` and `count`,
+  each added when a real program hit it (tkinter's `root.title("x")`, a
+  container's `count`). Returning True sent the call down the class-dispatch
+  path and simply GAVE UP the str spelling; returning False sent it down the
+  str-first path, whose "not a string tag" arm RAISES AttributeError. So every
+  name was wrong for one of the two receivers, and which names were wrong for
+  which was decided by whichever bug got reported first. `find` and `index` were
+  next (a tree walker's `c.find(t)` raised AttributeError naming a method the
+  class plainly declares), with `split`, `strip`, `format`, `encode`, `replace`
+  and `join` queued behind them.
+
+  It is now the general predicate, because the CALLER no longer has to choose:
+  PyParseVariantMethod's runtime dispatcher grows a `pyvar_is_strtag(recv)` arm
+  that reaches the str method, so a genuine string receiver keeps str-first
+  priority at RUN time — which is what CPython does and what the frontend cannot
+  do at compile time. See the str arm at the end of that function.
+
+  `encode` is the one exclusion: its row SKIPS its arguments rather than parsing
+  them (the -4 case), because `errors="replace"` is a keyword, not an
+  expression. The class path parses arguments as expressions, so it cannot
+  produce a chain for that row; it keeps the old str-first behaviour. }
 function PyStrMethodLosesToClass(const mname: AnsiString): Boolean;
+var lcPName: AnsiString; lcTk: TTypeKind; lcWant: Integer;
 begin
-  Result := (CaseEqual(mname, 'title') or CaseEqual(mname, 'count')) and
-            PyAnyClassDeclaresMeth(mname);
+  Result := False;
+  if not PyStrMethodInfo(mname, lcPName, lcTk, lcWant) then Exit;
+  if lcWant = -4 then Exit;                  { .encode — arguments are skipped, not parsed }
+  Result := PyAnyClassDeclaresMeth(mname);
 end;
 
 { A name that is BOTH a type name and a builtin conversion call. }
@@ -5710,11 +5760,13 @@ begin
   Result := callNode;
 end;
 
+function PyStrMethodFinish(const mname: AnsiString;
+                           argHead, lastArg, argCount: Integer): Integer; forward;
+
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;
     procIdx, callNode, argNode, lastArg, i, k, wantArgs: Integer;
-    padNode, nFmtArgs: Integer;
 begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
@@ -5785,6 +5837,36 @@ begin
     else Break;
   end;
   Expect(tkRParen, ')');
+  Result := PyStrMethodFinish(mname, argNode, lastArg, i);
+end;
+
+{ Resolve a str method's ARITY-SUFFIXED pylib proc and build the call.
+
+  Split out of PyParseStrMethod (2026-08-09,
+  bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver) so
+  that the runtime string/user-class dispatch in PyParseVariantMethod can build
+  the SAME call from arguments it has already parsed. The str-method table maps
+  one pylib proc name per ARITY ('' / '_from' / '_range' / '_chars' / '2' / 'n')
+  because FindProc resolves by bare name and never consults overloads, so this
+  resolution is not a detail a second caller could reasonably re-derive — a
+  duplicate of it is exactly the kind of second mechanism that drifts.
+
+    argHead  = the head AN_ARG (its Left is the receiver string)
+    lastArg  = the tail AN_ARG of that chain
+    argCount = the number of EXPLICIT arguments (receiver excluded) }
+function PyStrMethodFinish(const mname: AnsiString;
+                           argHead, lastArg, argCount: Integer): Integer;
+var pname: AnsiString;
+    retTk: TTypeKind;
+    procIdx, callNode, argNode, i, k, wantArgs: Integer;
+    padNode, nFmtArgs: Integer;
+begin
+  if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
+    Error('Nil Python: unsupported str method .' + mname + '()');
+  procIdx := FindProc(pname);
+  if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  argNode := argHead;
+  i := argCount;
   if wantArgs = -1 then
   begin
     { optional-argument form: split(), split(sep) and split(sep, maxsplit) are
@@ -5964,7 +6046,9 @@ begin
   ASTLeft[callNode] := argNode;
   LastExprTk := retTk;
   Result := callNode;
+  Result := callNode;
 end;
+
 
 { A `[` may follow a non-lvalue factor when the value is subscriptable in
   Python: a str (including a literal), a list, or a dict. ParseFactor asks
@@ -9822,7 +9906,10 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     smArg1, smArg2, smRaiseCall, smIfNode, smPairNode: Integer;
     vtTmpSym, vtAsgn, vtGuardArg, vtGuardCall, vtNotNode, vtNameArg,
     vtArg1, vtArg2, vtRaiseCall, vtIfNode, vtPairNode: Integer;
+    smArmPossible, smArmBuilt: Boolean;
 begin
+  smArmPossible := False;
+  smArmBuilt := False;
   { A receiver that came from an optional module which did not resolve — the
     name itself, or anything assigned from it. Checked BEFORE class dispatch:
     otherwise a same-named method on an unrelated class captures the call
@@ -10197,6 +10284,34 @@ begin
   vtGuardCall := AllocNode(AN_CALL);
   ASTIVal[vtGuardCall] := i; ASTTk[vtGuardCall] := Ord(tyBoolean);
   ASTLeft[vtGuardCall] := vtGuardArg;
+  { A STRING receiver is legitimate here when the method name is also a str
+    method — the dispatcher grows a `pyvar_is_strtag` arm for exactly that at
+    the end of this function. This guard runs as a HOISTED statement, i.e.
+    BEFORE any arm is evaluated, so leaving it objtag-only made the str arm
+    unreachable: `it.upper()` over `["hello"]` in a program that also has a
+    class declaring `upper` raised AttributeError before the ternary ran. That
+    is the whole reason the str/class collision could not simply be dispatched.
+
+    Widened by NAME only, because the arity that decides whether the str arm is
+    actually built is not known until the argument list is parsed, further
+    below. When the arm turns out not to fit, the raise is restored there — see
+    the `smArmBuilt` fixup after the arms. }
+  smArmPossible := PyStrMethodInfo(mname, smPName, smTk, smArgs) and (smArgs <> -4);
+  if smArmPossible then
+  begin
+    i := FindProc('pyvar_is_strtag');
+    if i < 0 then Error('Nil Python: pylib (pyvar_is_strtag) not loaded');
+    smArg1 := AllocNode(AN_ARG); ASTLeft[smArg1] := PyMakeIdent(vtTmpSym);
+    smGuardCall := AllocNode(AN_CALL);
+    ASTIVal[smGuardCall] := i; ASTTk[smGuardCall] := Ord(tyBoolean);
+    ASTLeft[smGuardCall] := smArg1;
+    smNotNode := AllocNode(AN_BINOP);
+    ASTIVal[smNotNode] := Ord(tkOr);
+    ASTLeft[smNotNode] := vtGuardCall;
+    ASTRight[smNotNode] := smGuardCall;
+    ASTTk[smNotNode] := Ord(tyBoolean);
+    vtGuardCall := smNotNode;
+  end;
   vtNotNode := AllocNode(AN_NOT);
   ASTLeft[vtNotNode] := vtGuardCall; ASTTk[vtNotNode] := Ord(tyBoolean);
 
@@ -10326,6 +10441,66 @@ begin
   if (hitCi >= 0) and (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) and
      (not ProcArityMatches(mpi, i + 1)) then
   begin
+    { …unless the argument count fits the STR row of the same name. `s.find("b",
+      1)` is Python's optional-start form and perfectly valid, but the class
+      whose `find` took one argument is what got this call here, so the check
+      above rejected the program at COMPILE time. Only the str spelling can be
+      meant at this arity, so build it alone, behind the same tag guard the
+      str-first path uses: a receiver that is not a string raises AttributeError
+      at run time rather than the whole file failing to compile. }
+    if smArmPossible and PyStrMethodArityOk(mname, i) and
+       (i <= High(argExprs) + 1) then
+    begin
+      k := FindProc('pyvar_is_strtag');
+      if k < 0 then Error('Nil Python: pylib (pyvar_is_strtag) not loaded');
+      smArg1 := AllocNode(AN_ARG); ASTLeft[smArg1] := PyMakeIdent(vtTmpSym);
+      smGuardCall := AllocNode(AN_CALL);
+      ASTIVal[smGuardCall] := k; ASTTk[smGuardCall] := Ord(tyBoolean);
+      ASTLeft[smGuardCall] := smArg1;
+      smNotNode := AllocNode(AN_NOT);
+      ASTLeft[smNotNode] := smGuardCall; ASTTk[smNotNode] := Ord(tyBoolean);
+
+      k := FindProc('pydynattr_no_method');
+      if k < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
+      smNameArg := AllocNode(AN_STR_LIT);
+      ASTSOffset[smNameArg] := PyStoredName(mname);
+      ASTSLen[smNameArg] := Length(mname);
+      ASTTk[smNameArg] := Ord(tyString);
+      smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
+      smArg1 := AllocNode(AN_ARG); ASTLeft[smArg1] := PyMakeIdent(vtTmpSym);
+      ASTRight[smArg1] := smArg2;
+      smRaiseCall := AllocNode(AN_CALL);
+      ASTIVal[smRaiseCall] := k; ASTTk[smRaiseCall] := Ord(tyUnknown);
+      ASTLeft[smRaiseCall] := smArg1;
+      smIfNode := AllocNode(AN_IF);
+      ASTLeft[smIfNode] := smNotNode;
+      smPairNode := AllocNode(AN_PAIR);
+      ASTLeft[smPairNode] := smRaiseCall; ASTRight[smPairNode] := -1;
+      ASTRight[smIfNode] := smPairNode;
+      PyHoistStmt(smIfNode);
+
+      k := FindProc('pystr_of');
+      if k < 0 then Error('Nil Python: pylib (pystr_of) not loaded');
+      unboxArg := AllocNode(AN_ARG);
+      ASTLeft[unboxArg] := PyMakeIdent(vtTmpSym);
+      unboxCall := AllocNode(AN_CALL);
+      ASTIVal[unboxCall] := k;
+      ASTTk[unboxCall] := Ord(tyAnsiString);
+      ASTLeft[unboxCall] := unboxArg;
+      dself := AllocNode(AN_ARG);
+      ASTLeft[dself] := unboxCall;
+      lastArg := dself;
+      for k := 0 to i - 1 do
+      begin
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := argExprs[k];
+        ASTRight[lastArg] := argNode;
+        lastArg := argNode;
+      end;
+      Result := PyStrMethodFinish(mname, dself, lastArg, i);
+      LastExprTk := IntToTypeKind(ASTTk[Result]);
+      Exit;
+    end;
     k := Procs[mpi].ParamCount - 1;      { explicit params, Self dropped }
     while (k > 0) and (k < MAX_PROC_PARAMS) and
           ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do Dec(k);
@@ -10506,6 +10681,126 @@ begin
       LastExprTk := IntToTypeKind(ASTTk[tern]);
       Result := tern;
     end;
+
+  { THE STRING ARM — `pyvar_is_strtag(recv) ? <str method> : <everything above>`.
+
+    A str-method name that a user class also declares (`find`, `index`, `count`,
+    `title`, `split`, ...) is undecidable in the frontend: the receiver is a
+    variant, and only its RUNTIME tag says whether `c.find(t)` means str.find or
+    the class's own find. Both previous answers were a compile-time guess, and
+    each was wrong for one of the two receivers — a tree walker's `c.find(t)`
+    raised AttributeError naming a method its class plainly declares, while the
+    two names hardcoded the other way (`title`, `count`) silently lost the str
+    spelling for a receiver that really was a string.
+
+    So the choice moves to run time, as one more arm of the dispatcher already
+    built above — the same machine that tells TPyList.pop from a user class's
+    pop. Added LAST, which makes it the OUTERMOST test: a genuine string still
+    gets str-first priority, which is the property the dynamically-typed corpus
+    relies on and the one that makes this change safe.
+
+    The arguments are the ones already parsed into argExprs, shared with the
+    other arms — so they are parsed once and evaluated once, which is what made
+    the frontend two-branch version (parse the argument list twice, or teach
+    PyParseStrMethod to not parse) not worth building.
+    bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver }
+  if smArmPossible and (i <= High(argExprs) + 1) then
+  begin
+    { receiver: pystr_of(recv) — the same rendering the str-first path uses, and
+      it is only ever reached when the tag says the value IS a string. }
+    k := FindProc('pystr_of');
+    if k < 0 then Error('Nil Python: pylib (pystr_of) not loaded');
+    unboxArg := AllocNode(AN_ARG);
+    ASTLeft[unboxArg] := baseNode;
+    unboxCall := AllocNode(AN_CALL);
+    ASTIVal[unboxCall] := k;
+    ASTTk[unboxCall] := Ord(tyAnsiString);
+    ASTLeft[unboxCall] := unboxArg;
+
+    dself := AllocNode(AN_ARG);
+    ASTLeft[dself] := unboxCall;
+    lastArg := dself;
+    for k := 0 to i - 1 do
+    begin
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := argExprs[k];
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    end;
+    { PyStrMethodFinish resolves the arity-suffixed pylib proc ('' / '_from' /
+      '_range' / '_chars' / ...) — the same resolution PyParseStrMethod uses,
+      shared rather than re-derived. It ERRORS on an arity the row does not
+      accept, which would be a hard failure on a program the class arm can
+      compile, so the arity is checked first and the arm is simply dropped when
+      it does not fit: `n.find(a, b, c, d)` on a class whose find takes four is
+      a class call, not a str call. }
+    if PyStrMethodArityOk(mname, i) then
+    begin
+      dcall := PyStrMethodFinish(mname, dself, lastArg, i);
+
+      k := FindProc('pyvar_is_strtag');
+      if k < 0 then Error('Nil Python: pylib (pyvar_is_strtag) not loaded');
+      unboxArg := AllocNode(AN_ARG);
+      ASTLeft[unboxArg] := baseNode;
+      condN := AllocNode(AN_CALL);
+      ASTIVal[condN] := k;
+      ASTTk[condN] := Ord(tyBoolean);
+      ASTLeft[condN] := unboxArg;
+
+      pairN := AllocNode(AN_PAIR);
+      ASTLeft[pairN] := dcall;
+      ASTRight[pairN] := Result;
+      tern := AllocNode(AN_TERNARY);
+      ASTLeft[tern] := condN;
+      ASTRight[tern] := pairN;
+      { Same rule as the class arms: the type of the WHOLE chain. A str method
+        returning Integer (`find`) beside a class method returning a string is a
+        genuinely dynamic expression, and typing it from either arm alone is how
+        a value gets silently stringified to nothing. }
+      if IntToTypeKind(ASTTk[dcall]) <> IntToTypeKind(ASTTk[Result]) then
+        ASTTk[tern] := Ord(tyVariant)
+      else
+        ASTTk[tern] := ASTTk[dcall];
+      LastExprTk := IntToTypeKind(ASTTk[tern]);
+      Result := tern;
+      smArmBuilt := True;
+    end;
+  end;
+  { The objtag guard above was widened to let a STRING receiver through on the
+    promise of a str arm. If no arm was built after all — the argument count
+    does not fit the str row, so the call can only have meant the class method —
+    that promise is unkept and a string receiver would reach the hard cast. Put
+    the raise back for exactly that case, so the widening can never turn a clean
+    AttributeError into a wild dereference. }
+  if smArmPossible and (not smArmBuilt) then
+  begin
+    k := FindProc('pyvar_is_strtag');
+    if k < 0 then Error('Nil Python: pylib (pyvar_is_strtag) not loaded');
+    smArg1 := AllocNode(AN_ARG); ASTLeft[smArg1] := PyMakeIdent(vtTmpSym);
+    smGuardCall := AllocNode(AN_CALL);
+    ASTIVal[smGuardCall] := k; ASTTk[smGuardCall] := Ord(tyBoolean);
+    ASTLeft[smGuardCall] := smArg1;
+
+    k := FindProc('pydynattr_no_method');
+    if k < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
+    smNameArg := AllocNode(AN_STR_LIT);
+    ASTSOffset[smNameArg] := PyStoredName(mname);
+    ASTSLen[smNameArg] := Length(mname);
+    ASTTk[smNameArg] := Ord(tyString);
+    smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
+    smArg1 := AllocNode(AN_ARG); ASTLeft[smArg1] := PyMakeIdent(vtTmpSym);
+    ASTRight[smArg1] := smArg2;
+    smRaiseCall := AllocNode(AN_CALL);
+    ASTIVal[smRaiseCall] := k; ASTTk[smRaiseCall] := Ord(tyUnknown);
+    ASTLeft[smRaiseCall] := smArg1;
+
+    smIfNode := AllocNode(AN_IF);
+    ASTLeft[smIfNode] := smGuardCall;
+    smPairNode := AllocNode(AN_PAIR);
+    ASTLeft[smPairNode] := smRaiseCall; ASTRight[smPairNode] := -1;
+    ASTRight[smIfNode] := smPairNode;
+    PyHoistStmt(smIfNode);
+  end;
 end;
 
 { A bare tuple display — `return a, b` or `x = 1, 2` — built from an ALREADY
