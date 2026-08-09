@@ -85,3 +85,33 @@ exactly ONCE, by rewriting the node the grammar already built instead of
 re-parsing it, and pins that with a side-effecting key. So `del` is no longer an
 example of the same trade — it is a worked example of avoiding it, and the same
 node-rewrite approach may apply here.
+
+## 2026-08-09 — FIXED for the direct form (sole-A confirmed)
+
+The base and the index are bound to hidden temps (`PyEvalOnce`) before the read
+is built, so each is evaluated once. That also pins Python's evaluation order —
+base, index, value — and makes the pre-existing index-chain CLONE harmless:
+cloning an IDENT duplicates a read of a temp, not the expression behind it. The
+clone itself has to stay; its own comment explains why (the setter appends its
+value to that chain, and sharing it made the value an argument of the read, a
+cycle that hung the compiler).
+
+Verified against CPython for `+=`, `-=` and `*=` through a side-effecting index,
+on a dict and on a list, plus the plain non-side-effecting forms and the
+`counts[w] = counts.get(w, 0) + 1` counter idiom as controls.
+
+**Every case COUNTS THE CALLS rather than checking the result** — the stored
+value was always correct, so a test asserting `e == {"n": 1}` passes against the
+broken compiler. That is the whole reason this bug survived.
+
+## Residue: the NESTED form, unchanged from pinned
+
+`g[ka()]["b"] += 1` still evaluates `ka()` twice. The outer subscript's base is
+the INNER subscript's result and takes a different route to the augmented path.
+Measured identical under `stable_linux_amd64/default/pinned`, so it is residue
+rather than a regression, and it is deliberately not pinned by the new test.
+
+Worth doing with the `parser.inc` carve-out
+(`task-a-carve-nilpy-selectors-out-of-parser-inc`) rather than as another guard:
+the chained and direct subscript paths disagreeing about evaluation order is the
+same two-paths-one-concept shape that ticket exists to remove.

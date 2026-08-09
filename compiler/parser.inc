@@ -5034,6 +5034,23 @@ begin
             augRead := -1;
             if (augBin <> tkEOF) or augPow then
             begin
+              { EVALUATE THE BASE AND THE INDEX ONCE. The read and the write both
+                reference them, and an AST node used in two places is EMITTED
+                twice — so `e[key()] += 1` called key() TWICE where CPython calls
+                it once. The stored value was right, which is why only a
+                SIDE-EFFECTING index could observe it.
+
+                Binding to hidden temps first also pins Python's evaluation
+                order (base, then index, then the value), and makes the clone
+                below harmless: cloning an IDENT duplicates a read of a temp,
+                not the expression that produced it.
+                bug-nilpy-augmented-subscript-evaluates-its-index-twice }
+              if PyExprMode then
+              begin
+                node := PyEvalOnce(node);
+                if margIdx >= 0 then
+                  ASTLeft[margIdx] := PyEvalOnce(ASTLeft[margIdx]);
+              end;
               { the read is built HERE, over a CLONE of the index arguments: the
                 setter appends its value to margIdx's chain, and sharing that
                 chain with the reader made the value an argument of the read —

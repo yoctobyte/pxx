@@ -1,0 +1,66 @@
+# bug-nilpy-augmented-subscript-evaluates-its-index-twice
+#
+# `e[key()] += 1` called key() TWICE where CPython calls it once. The STORED
+# VALUE was always correct, so only a SIDE-EFFECTING index can observe this —
+# which is why every case here counts its calls rather than checking the result.
+# A test that only asserted `e == {"n": 1}` passes against the broken compiler.
+#
+# Cause: the read and the write both reference the base and the index, and an
+# AST node used in two places is EMITTED twice. The index chain was already
+# CLONED for a separate reason (the setter appends its value to it, and sharing
+# the chain made the value an argument of the read — a cycle that hung the
+# compiler), and cloning an expression duplicates its side effects.
+#
+# Fixed by binding the base and the index to hidden temps FIRST. That also pins
+# Python's evaluation order (base, index, value) and makes the clone harmless:
+# cloning an IDENT duplicates a read of a temp, not the expression behind it.
+#
+# NOT asserted, and unchanged from pinned: a NESTED augmented subscript
+# `g[ka()]["b"] += 1` still evaluates `ka()` twice. The outer subscript's base is
+# the inner subscript's result, and it takes a different route. Residue, not a
+# regression — recorded on the ticket rather than pinned here.
+#
+# Expectations are CPython's own output.
+
+calls = []
+def key():
+    calls.append(1)
+    return "n"
+
+idx = []
+def i0():
+    idx.append(1)
+    return 0
+
+e = {"n": 0}
+e[key()] += 1
+print(e, len(calls))
+
+xs = [10]
+xs[i0()] += 5
+print(xs, len(idx))
+
+# other augmented operators through a side-effecting index
+calls2 = []
+def k2():
+    calls2.append(1)
+    return "n"
+d2 = {"n": 8}
+d2[k2()] -= 3
+d2[k2()] *= 2
+print(d2, len(calls2))
+
+# plain (non-side-effecting) forms must be unchanged
+p = {"x": 1}
+p["x"] += 1
+p["x"] *= 3
+ys = [1, 2]
+ys[0] += 10
+ys[-1] += 100
+print(p, ys)
+
+# a counter idiom, the common real shape
+counts = {}
+for w in ["a", "b", "a"]:
+    counts[w] = counts.get(w, 0) + 1
+print(sorted(counts.items()))
