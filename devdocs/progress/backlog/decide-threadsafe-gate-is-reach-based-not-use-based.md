@@ -2,8 +2,38 @@
 track: U
 prio: 45
 type: decide
+status: resolved
+resolved: 2026-08-09
 summary: "Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one"
 ---
+
+## DECIDED 2026-08-09 — a conditional define, not a reachability pass
+
+**User's call.** None of the four options as framed. Instead: give the compiler
+one `PXX_THREADSAFE` conditional define, and have `classes` declare `TThread`
+inside `{$IFDEF PXX_THREADSAFE}`. A threaded build gets `TThread` from
+`uses Classes` exactly as on FPC; a non-threaded build never parses `palthread`,
+so the `__pxxclone` gate never fires. Filed as
+[[feature-a-pxx-threadsafe-conditional-define]] (urgent, Track A); the Track B
+half lands after the next pin.
+
+This is better than option 2 on every axis I had weighed it on — it needs no
+call-graph, no DCE, and no change to the gate itself, which stays exactly as
+strict as it is today.
+
+**Also from the user, and it belongs in the record because my framing missed
+it:** the reasons `--threadsafe` stays opt-in are NOT mainly code size and
+speed, which is how I had presented the trade-off. They are microcontroller
+targets where neither matters, and single-threaded applications where the whole
+question is moot. That was settled long ago. So the measured 14% was never the
+crux, and option 3 was never really live.
+
+**One correction to the option-2 write-up, worth keeping:** gating on the
+EXISTING `PXX_TS_HARDLOCK` / `PXX_TS_SOFTLOCK` defines would not have been the
+same thing. Those say which lock IMPLEMENTATION is in use, not that threading is
+enabled — neither covers all targets alone, and gating a declaration on one
+would be a workaround wearing an ifdef. Hence a new define that means what it
+says.
 
 # Should the `--threadsafe` gate be use-based rather than reach-based?
 

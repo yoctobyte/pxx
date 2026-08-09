@@ -5,11 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:7 backlog:211 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1568 rejected:31`
+`urgent:1 unfinished:11 blocked:7 backlog:211 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1568 rejected:31`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
+
+## urgent (1) — jump the queue
+
+- `feature-a-pxx-threadsafe-conditional-define` [A]
 
 ## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
@@ -35,8 +39,9 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 188, ranked
+## Ready — top 30 of 189, ranked
 
+- `[p 75] [A]` feature-a-pxx-threadsafe-conditional-define
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
@@ -66,6 +71,5 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-est-mem-from-measurement
-- `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 
-_158 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_159 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
