@@ -110,4 +110,4 @@ top half of that file pins is untouched.
 Matches CPython byte for byte. Self-host fixedpoint byte-identical.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 27fb84f42.
