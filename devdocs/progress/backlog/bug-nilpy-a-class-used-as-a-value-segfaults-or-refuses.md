@@ -2,6 +2,7 @@
 track: N
 prio: 60
 type: bug
+blocked-by: decide-nilpy-class-as-value-dispatch-strategy
 ---
 
 # A class used as a VALUE: SEGFAULT from a container, compile errors from a name
@@ -160,3 +161,36 @@ likewise boxed as a plain integer, so a callable and a class reference are
 indistinguishable by tag). When that lands, retire
 `test/test_nilpy_class_as_value_fail.npy` — making the shape merely PARSE
 without making it correct would resurrect the segfault.
+
+## 2026-08-09, Track A+N — the recorded plan does not work; escalated to Track U
+
+This ticket (and the two below it) concludes that what is needed is **a distinct
+variant tag**. That is necessary and **not sufficient**, which had not been
+measured. Measured at HEAD `3e7a6b792` with `PXXDBG=n.ctorargs`:
+
+```python
+class A:
+    def __init__(self, v): self.v = v      # A trial=0 [0]kind=1,tk=1   INTEGER
+class B:
+    def __init__(self, s): self.s = s      # B trial=0 [0]kind=2,tk=4   ANSISTRING
+```
+
+**NilPy ctor parameters are statically INFERRED per class from the call sites**,
+so two classes of the same arity have different ABIs. `handlers = {"a": A,
+"b": B}` then `handlers[k](x)` cannot go through one code pointer however well
+the value is tagged. A tag lets you RECOVER the class; it does nothing about
+CALLING it.
+
+Same reason `AN_METACLASS_NEW` does not generalise: it reads instance size and
+VMT from the RTTI blob at run time (dynamic class), but lowers its arguments via
+`IRLowerCallArg(cpi, ...)` against a **statically known ctor proc index**
+(static signature). That split is the whole problem in one line.
+
+So the fix is a design fork, not an implementation detail — filed as
+[[decide-nilpy-class-as-value-dispatch-strategy]] with the three options
+(compile-time candidate dispatch / RTTI-driven runtime marshaller / uniform
+variant ctor ABI), their costs, and a recommendation. This ticket stays open and
+correctly `blocked-by` that decision rather than being half-built in a direction
+that may be wrong.
+
+The named refusal already landed, so the segfault stays gone in the meantime.

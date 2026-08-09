@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:219 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1553 rejected:30`
+`unfinished:11 blocked:6 backlog:220 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1553 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -37,8 +37,8 @@ _none — no lane is locked._
 ## Ready — top 30 of 200, ranked
 
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-delitem-dunder
+- `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing

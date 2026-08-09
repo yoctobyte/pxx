@@ -73,3 +73,29 @@ real libraries, which is the mission target.
 
 `make test-nilpy` green + the rows above as a `.npy` test with CPython's own
 output as the expectation.
+
+## 2026-08-09, Track A+N — split in two; the six-shim half is the BUILTIN half
+
+Scoped against [[bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses]], and
+the two halves of this ticket turn out to have different root causes:
+
+- **User-class rows** (`A = B`, then `A()` / `isinstance(x, A)`) are the same
+  problem as that ticket, and it is now blocked on
+  [[decide-nilpy-class-as-value-dispatch-strategy]] — measured: NilPy ctor
+  params are statically inferred per class, so a variant tag alone can never
+  make `cls(...)` callable.
+- **Builtin-type rows** (`t = str`, `f(str)`, `[str, int]`, `(str,)`) are a
+  SEPARATE representation question. `str`/`int`/`bytes` are not user classes and
+  have no RTTI blob, so they need a payload space of their own — a small type
+  code — whatever is decided about user classes.
+
+That split matters for [[feature-nilpy-six-and-warnings-shims]]: every one of
+its blocked names (`text_type = str`, `binary_type = bytes`,
+`string_types = (str,)`) is a BUILTIN type, so the six shim turns entirely on the
+builtin half and **not** on the user-class decision. The builtin half is also the
+smaller one — a type code plus `isinstance`, `==`, `repr` and call-as-conversion
+over it, with no ABI problem at all, because `str(x)` / `int(x)` are conversions
+the frontend already emits rather than user ctors.
+
+Recommend doing the builtin half first and independently. It unblocks the
+library campaign's stated top lever without waiting on the Track U decision.

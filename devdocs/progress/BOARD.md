@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (219)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -49,7 +49,7 @@ _none_
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
-| bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses | N | 60 | bug | A class used as a VALUE: SEGFAULT from a container, compile errors from a name | — |
+| bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses | N | 60 | bug | A class used as a VALUE: SEGFAULT from a container, compile errors from a name | decide-nilpy-class-as-value-dispatch-strategy |
 | bug-nilpy-calling-a-non-callable-segfaults | N | 55 | bug | Calling a non-callable SEGFAULTS instead of raising TypeError | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-curried-lambda-fails-at-runtime | N | 40 | bug | A lambda whose body is another lambda dies at RUN time | — |
@@ -99,6 +99,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
+| decide-nilpy-class-as-value-dispatch-strategy | U | 60 | decide | A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values. | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
@@ -432,8 +433,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-test-nilpy-test-nilpy-delitem-dunder
+- [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -640,6 +641,7 @@ _none_
 - **3** — feature-web-track-w-bootstrap
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
+- **1** — decide-nilpy-class-as-value-dispatch-strategy
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-inline-asm-xmm-operands
