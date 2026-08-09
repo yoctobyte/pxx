@@ -4749,7 +4749,17 @@ begin
   begin
     Next;                          (* set *)
     Expect(tkLParen, '(');
-    PyParseBoolExpr;
+    { A bare generator expression argument — `set(t.kind for t in toks)`. This
+      arm hand-rolls its argument instead of going through the shared call-arg
+      loop, so it was the ONE builtin that did not take a genexpr: list, tuple,
+      dict, sorted, sum, min, max, any and all all did, which is what made the
+      gap read as a genexpr limitation rather than as set()'s own.
+      Same two lines as the shared loop, and they must stay the same two.
+      feature-nilpy-generator-expression-arg }
+    if PyBareGenExprAhead then
+      CurASTNode := PyParseCompExprValue(False)
+    else
+      PyParseBoolExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
     Result := AllocNode(AN_CALL);

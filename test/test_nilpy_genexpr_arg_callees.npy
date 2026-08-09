@@ -1,0 +1,78 @@
+# feature-nilpy-generator-expression-arg — `set(x for x in xs)` was the one hole
+#
+# A bare generator expression worked as an argument to list, tuple, dict,
+# sorted, sum, min, max, any and all — and failed to PARSE for `set`, with
+# "Expected: ), but got: for". Nine of ten working is what made this read as a
+# general genexpr limitation rather than as set()'s own.
+#
+# Cause: `set(...)` hand-rolls its argument (it lowers to pylib's pyset_of and
+# needs the result stamped with the SET kind) instead of going through the
+# shared call-argument loop, and that hand-rolled copy never learned the
+# genexpr check the shared loop has. A second parser for one concept, disagreeing
+# silently — the failure mode devdocs/dev/normalise-dont-special-case.md is
+# about.
+#
+# So this test sweeps EVERY builtin that takes an iterable, not just `set`: the
+# point is that they agree, and a tenth callee added later with its own argument
+# parsing should fail here rather than in someone's program.
+#
+# The set cases assert SORTED output — CPython's set iteration order is not
+# specified, and pinning it would make this test about hashing rather than about
+# parsing.
+#
+# Also covered: a genexpr with an `if` filter (the filter's expression sits
+# between the loop variable and the closer, which is where the original
+# ate-the-closer bug lived), a genexpr over a method call, and a nested one.
+#
+# Expectations are CPython's own output.
+
+xs = [1, 2, 3, 2]
+words = ["bb", "a", "ccc", "a"]
+
+print(list(x for x in xs))
+print(tuple(x for x in xs))
+print(sorted(x for x in xs))
+print(sum(x for x in xs))
+print(min(x for x in xs), max(x for x in xs))
+print(any(x > 2 for x in xs), all(x > 0 for x in xs))
+print(dict((x, x * 2) for x in xs))
+
+# the one that failed
+print(sorted(set(x for x in xs)))
+print(sorted(set(w for w in words)))
+print(len(set(x for x in xs)))
+
+# with an `if` filter — the shape whose closer used to be eaten
+print(sorted(set(x for x in xs if x > 1)))
+print(sorted(set(w for w in words if len(w) > 1)))
+
+# over a derived value rather than the loop variable itself
+print(sorted(set(len(w) for w in words)))
+print(sorted(set(w.upper() for w in words)))
+
+# empty result, and a single-element one
+print(sorted(set(x for x in xs if x > 99)))
+print(sorted(set(x for x in xs if x == 3)))
+
+# set() with an ordinary iterable argument still works (the non-genexpr arm)
+print(sorted(set(xs)))
+print(sorted(set(words)))
+print(sorted(set("hello")))
+print(set())
+
+
+# a genexpr over a method call's result, inside a class
+class Bag:
+    def __init__(self, items):
+        self.items = items
+
+    def kinds(self):
+        return self.items
+
+
+b = Bag(["x", "y", "x"])
+print(sorted(set(k for k in b.kinds())))
+print(sorted(set(k.upper() for k in b.kinds() if k != "y")))
+
+# nested: a genexpr whose iterable is itself built by one
+print(sorted(set(y for y in (z * 2 for z in xs))))
