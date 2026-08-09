@@ -20,11 +20,13 @@
 # A hand-written __repr__ WINS over the generated one (Custom), the same rule
 # the generated __eq__ follows.
 #
-# NOT asserted: a `str` field's DEFAULT. `s: str = "t"` silently defaults to ''
-# — a separate, pre-existing bug in argument lowering, confirmed against the
-# pinned binary and filed as bug-nilpy-dataclass-str-field-default-is-dropped.
-# Every default here is therefore int/float/bool, which are correct. Pinning
-# today's wrong string-default answer in THIS test would freeze the bug.
+# A `str` field's DEFAULT is now asserted too (`Mixed.s`). It used to default
+# silently to '' while the int/float/bool defaults beside it were correct, and
+# this test deliberately carried NO string default while that was true rather
+# than pinning the wrong answer — bug-nilpy-dataclass-str-field-default-is-
+# dropped, fixed 2026-08-09. That is why the string default appears LAST in
+# Mixed: the bug consumed trailing string slots, so a trailing one is the case
+# that regresses first.
 #
 # Expectations are CPython's own output.
 
@@ -59,7 +61,7 @@ class Mixed:
     i: int
     f: float
     b: bool
-    s: str
+    s: str = "dflt"
 
 
 @dataclass
@@ -88,8 +90,9 @@ print(Nested(P(7, 8), 9))
 # no fields at all
 print(Empty())
 
-# every scalar kind in one line
+# every scalar kind in one line, given and defaulted
 print(Mixed(1, 2.5, True, "s"))
+print(Mixed(1, 2.5, True))
 
 # a hand-written __repr__ wins
 print(Custom(4))

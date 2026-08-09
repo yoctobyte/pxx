@@ -6,5 +6,6 @@ Named(name='bob', n=2)
 Nested(inner=P(x=7, y=8), n=9)
 Empty()
 Mixed(i=1, f=2.5, b=True, s='s')
+Mixed(i=1, f=2.5, b=True, s='dflt')
 CUSTOM
 True False True

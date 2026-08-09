@@ -2,7 +2,6 @@
 track: N
 prio: 45
 type: bug
-blocked-by: decide-sole-a-guard-for-unattended-sessions
 ---
 
 # @dataclass: a `str` field's DEFAULT is silently dropped (becomes '')
@@ -87,3 +86,35 @@ Extend `test/test_nilpy_dataclass_repr.npy`, which deliberately uses **no**
 string defaults today and says why — pinning the wrong answer there would have
 frozen this bug. Add a `str` default to its `Mixed` class and regenerate
 `.expected` from CPython.
+
+## 2026-08-09 — FIXED, and the earlier recon's four dead ends were all correct
+
+`PyClassCreate` had a loop that filled every still-unsupplied STRING parameter
+with a HARDCODED EMPTY LITERAL (`SOffset := 0; SLen := 0`), and it ran **before**
+the dataclass-default loop. So it consumed the slot, and the default was never
+consulted. Moving it to run LAST — after the dataclass defaults, filling only
+what remains — is the whole fix.
+
+**That is why the earlier session could prove three separate default-builders
+were NOT in the path and still not find it.** `PyDcDefaultNode`, `PyClsAttrNode`
+and `DefaultArgValueNode` were each markered with a distinctive `AN_INT_LIT` and
+each failed to fire — all three answers were correct, because by then the
+argument already existed. The eliminations were sound; the missing question was
+"who filled this slot BEFORE any of them ran?"
+
+The generalisable version, worth more than the fix: **when every candidate
+producer is proved absent, stop looking for a producer and ask what CONSUMED the
+slot.** The `n.ctorargs` probe showed an argument present with a plausible shape,
+which reads as "someone built it wrongly" and not as "someone built it first".
+
+Also confirmed by the same probe: the explicit and defaulted arguments are
+*both* `AN_STR_LIT` with `tk=4`, so the node's type tag was never the difference
+— an earlier hypothesis that cost a build to eliminate.
+
+Verified against CPython: defaults given and omitted, several string defaults in
+one class, a string default before and after other kinds, an EMPTY string
+default (which must stay empty), and a hand-written `__init__` with a string
+default as the control. `test/test_nilpy_dataclass_repr.npy` was also extended
+with the string default its own header promised to add once this was fixed —
+placed LAST in the class, since trailing string slots are what the bug consumed.
+`gate.sh quick` GREEN.

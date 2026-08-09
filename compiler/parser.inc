@@ -2649,7 +2649,17 @@ begin
     exprNode := AllocNode(AN_STR_LIT);
     ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + k];
     ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + k];
-    ASTTk[exprNode] := Ord(tyString);
+    { Tag the literal with the PARAMETER's own string kind. tyString is the
+      FROZEN inline-length kind; a parameter declared tyAnsiString is the
+      managed refcounted one, and a frozen literal handed to it arrived as the
+      EMPTY string. That is why a @dataclass `s: str = "t"` silently defaulted
+      to '' while the int/float/bool defaults beside it were all correct —
+      which is exactly what made the class look like defaults work.
+      bug-nilpy-dataclass-str-field-default-is-dropped }
+    if Procs[mpi].Params[k].TypeKind = tyAnsiString then
+      ASTTk[exprNode] := Ord(tyAnsiString)
+    else
+      ASTTk[exprNode] := Ord(tyString);
   end
   else if ProcParamDefaultIsFloat[mpi * MAX_PROC_PARAMS + k] then
   begin

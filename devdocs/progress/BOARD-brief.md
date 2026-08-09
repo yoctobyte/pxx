@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:219 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1543 rejected:30`
+`unfinished:11 blocked:6 backlog:218 experimental:20 rainy-day:33 done-followup:3 decided:51 done:1544 rejected:30`
 
 ## Held now (working/ — do not touch these files)
 
@@ -36,7 +36,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 199, ranked
 
-- `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 2)
+- `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [A]` feature-a-abi-oracle

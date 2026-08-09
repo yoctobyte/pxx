@@ -5308,21 +5308,6 @@ begin
       nArgs := 1;
     end;
   end;
-  if ctorMi >= 0 then
-    while (nArgs < Procs[ctorPi].ParamCount - 1) and
-          (nArgs + 1 < MAX_PROC_PARAMS) and
-          (Procs[ctorPi].Params[nArgs + 1].TypeKind in [tyString, tyAnsiString]) do
-    begin
-      valNode := AllocNode(AN_STR_LIT);
-      ASTSOffset[valNode] := 0;
-      ASTSLen[valNode] := 0;
-      ASTTk[valNode] := Ord(tyString);
-      argNode := AllocNode(AN_ARG);
-      ASTLeft[argNode] := valNode;
-      ASTRight[lastArg] := argNode;
-      lastArg := argNode;
-      Inc(nArgs);
-    end;
   if (ci < PY_MAX_DC_FIELDS) and PyDcClassIsDc[ci] then
   begin
     { locate the class's first default-table entry }
@@ -5340,6 +5325,30 @@ begin
         Inc(nArgs);
       end;
   end;
+  { Any STRING parameter still unsupplied gets an empty literal. This runs LAST,
+    AFTER the dataclass defaults above — it used to run BEFORE them and filled
+    every trailing string slot with '', so a @dataclass `s: str = "t"` silently
+    defaulted to the empty string while the int/float/bool defaults beside it
+    were all correct. It also meant PyDcDefaultNode was never reached for a str
+    field at all, which is what made this so hard to localise: three separate
+    default-builders could each be proved NOT to be in the path, because the
+    slot had already been consumed here.
+    bug-nilpy-dataclass-str-field-default-is-dropped }
+  if ctorMi >= 0 then
+    while (nArgs < Procs[ctorPi].ParamCount - 1) and
+          (nArgs + 1 < MAX_PROC_PARAMS) and
+          (Procs[ctorPi].Params[nArgs + 1].TypeKind in [tyString, tyAnsiString]) do
+    begin
+      valNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[valNode] := 0;
+      ASTSLen[valNode] := 0;
+      ASTTk[valNode] := Ord(tyString);
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := valNode;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(nArgs);
+    end;
   Result := node;
   { PXXDBG=n.ctorargs — every construction's slot kinds and types. This is the
     probe that disproved the recorded root cause of
