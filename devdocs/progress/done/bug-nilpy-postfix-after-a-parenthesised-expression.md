@@ -58,4 +58,4 @@ arm is unchanged by construction (the guard only removes the PyExprMode case)
 and the self-host exercises it heavily.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 8070feee2.
