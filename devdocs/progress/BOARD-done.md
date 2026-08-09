@@ -1419,6 +1419,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-uses-alias-as | P | 50 | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
 | feature-value-bearing-expressions-for-c | A | 50 | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
 | feature-warn-oversized-stack-frame | A | 50 | feature | Warn on oversized stack locals / stack frames | — |
+| feature-web-ticket-flow-graphs | W | 25 | feature | Track W (website) — filed-vs-solved ticket flow graphs, per track | feature-web-track-w-bootstrap |
 | feature-xtensa-asm-emitter | S | 50 | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | feature-xtensa-class-instantiation | S | 50 | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
 | feature-xtensa-stack-args-over-6-words | S | 65 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |

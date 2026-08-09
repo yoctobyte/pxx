@@ -1,0 +1,38 @@
+{
+ "_comment": [
+  "Windows where the filing rate says something about US, not about the code.",
+  "Read by tools/ticket_flow.py and shaded on the website's ticket-flow charts.",
+  "",
+  "Add a window whenever a deliberate campaign, an import, or any other",
+  "bookkeeping event moves the curve. An unmarked one makes the chart read as",
+  "'the code got much worse, then much better' when nothing of the sort",
+  "happened -- which is worse than not publishing the chart at all.",
+  "",
+  "kind: 'sweep'  a deliberate bulk-discovery campaign. Real bugs, found",
+  "               because we went looking; the filing rate is a measure of",
+  "               attention, not of quality.",
+  "kind: 'import' bookkeeping. Tickets written down in bulk for work that",
+  "               already existed; nothing was discovered that day.",
+  "",
+  "tracks: which lanes the window applies to; omit or use '*' for all.",
+  "Dates are inclusive, YYYY-MM-DD."
+ ],
+ "sweeps": [
+  {
+   "from": "2026-06-26",
+   "to": "2026-06-26",
+   "kind": "import",
+   "tracks": "*",
+   "label": "board created",
+   "note": "The day devdocs/progress/ was founded: 398 of the board's tickets were written down at once, for work that had been in flight since 2026-05-24. Nothing was discovered on this date. Every 'filed' curve starts with this cliff and it means bookkeeping, not defects."
+  },
+  {
+   "from": "2026-07-28",
+   "to": "2026-08-02",
+   "kind": "sweep",
+   "tracks": ["N"],
+   "label": "CPython differential sweep",
+   "note": "Deliberate bulk discovery: Nil-Python run against CPython and every divergence filed. Peaked at 47 tickets on 2026-08-02. The bugs are real; the RATE is a measure of how hard we looked, so the fall afterwards is not the code improving."
+  }
+ ]
+}
