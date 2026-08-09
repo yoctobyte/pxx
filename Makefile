@@ -8124,6 +8124,13 @@ lib-test: pxx-stable-check
 	/tmp/crtl_inttypes; test "$$?" = "42"
 	# clock(): plausible CPU microseconds with a NON-NEGATIVE delta between
 	# readings — the property the __pxx_clock Int64-cast workaround protected.
+	# The rounding CONTRACT: Pascal ties-to-even, C half-away-from-zero, and the
+	# RoundTo family. The three frontends disagree BY DESIGN, each matching its
+	# own reference — pinned so nobody "harmonises" them.
+	$(PXX_STABLE) -Fulib/rtl test/lib_rounding_contract.pas /tmp/lib_rounding_contract
+	test "$$(/tmp/lib_rounding_contract | tail -n 1)" = "ROUNDING OK"
+	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_lround.c /tmp/cmath_lround
+	test "$$(/tmp/cmath_lround)" = "$$(printf '0.5 lround=1 llround=1 lrint=0\n1.5 lround=2 llround=2 lrint=2\n2.5 lround=3 llround=3 lrint=2\n3.5 lround=4 llround=4 lrint=4\n-0.5 lround=-1 llround=-1 lrint=0\n-1.5 lround=-2 llround=-2 lrint=-2\n-2.5 lround=-3 llround=-3 lrint=-2\n2.7 lround=3 llround=3 lrint=3\n-2.7 lround=-3 llround=-3 lrint=-3\n0.0 lround=0 llround=0 lrint=0')"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_clock_monotonic.c /tmp/crtl_clock_monotonic
 	/tmp/crtl_clock_monotonic; test "$$?" = "42"
 	# poll() over a SET (not a loop over a per-handle poll), and the LINKAGE that

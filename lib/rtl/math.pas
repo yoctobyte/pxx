@@ -60,6 +60,32 @@ function Max(a, b: Double): Double;
 function DegToRad(d: Double): Double;
 function RadToDeg(r: Double): Double;
 
+{ ---- FPC's RoundTo family ----
+  Both formulas are FPC's OWN, read off rtl/objpas/math.pp rather than derived,
+  because the obvious derivation gives different answers:
+
+    RoundTo:        RV := IntPower(10, digits);  Round(value / RV) * RV
+    SimpleRoundTo:  RV := IntPower(10, -digits); Int(value*RV +/- 0.5) / RV
+
+  RoundTo DIVIDES by 10^digits where the natural reading is to multiply by
+  10^-digits, and that is not cosmetic: 2.675 / 0.01 is 267.50000000000006 while
+  2.675 * 100 is 267.49999999999997, so the first rounds to 2.68 and the second
+  to 2.67. FPC prints 2.68. Measured, not reasoned.
+
+  The two differ only in the tie rule — RoundTo inherits Round's nearest-even,
+  SimpleRoundTo is half-away-from-zero — which is exactly why FPC ships both,
+  and why `SimpleRoundTo(0.125, -2)` is 0.13 where `RoundTo(0.125, -2)` is 0.12.
+
+  NO Extended overloads: Extended is aliased to Double here and this RTL targets
+  Single + Double only (feature-extended-type-support). }
+type
+  TRoundToRange = -37..37;
+
+function RoundTo(const AValue: Double; const Digits: TRoundToRange): Double;
+function SimpleRoundTo(const AValue: Double; const Digits: TRoundToRange): Double;
+function RoundTo(const AValue: Single; const Digits: TRoundToRange): Single;
+function SimpleRoundTo(const AValue: Single; const Digits: TRoundToRange): Single;
+
 { ---- Python `math` module surface ----
   NilPy's `import math` resolves ordinary names straight against THIS unit,
   case-insensitively, so a Python spelling with no Pascal counterpart under that
@@ -685,6 +711,33 @@ end;
 function Hypot(x, y: Double): Double;
 begin
   Result := Sqrt(x * x + y * y);
+end;
+
+{ ---- FPC's RoundTo family (see the interface note for why these formulas) ---- }
+
+function RoundTo(const AValue: Double; const Digits: TRoundToRange): Double;
+var rv: Double;
+begin
+  rv := IntPower(10.0, Digits);
+  Result := Round(AValue / rv) * rv;
+end;
+
+function SimpleRoundTo(const AValue: Double; const Digits: TRoundToRange): Double;
+var rv: Double;
+begin
+  rv := IntPower(10.0, -Digits);
+  if AValue < 0.0 then Result := Int((AValue * rv) - 0.5) / rv
+  else Result := Int((AValue * rv) + 0.5) / rv;
+end;
+
+function RoundTo(const AValue: Single; const Digits: TRoundToRange): Single;
+begin
+  Result := RoundTo(Double(AValue), Digits);
+end;
+
+function SimpleRoundTo(const AValue: Single; const Digits: TRoundToRange): Single;
+begin
+  Result := SimpleRoundTo(Double(AValue), Digits);
 end;
 
 { ---- Python `math` module surface (see the interface note) ---- }

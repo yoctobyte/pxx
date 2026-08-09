@@ -89,3 +89,51 @@ this ticket, so the next person to find the disagreement cannot "fix" it.
 ## Log
 - 2026-08-09 — filed. Defaults verified correct against fpc, gcc and CPython;
   only the surrounding APIs are missing.
+
+## 2026-08-09 (Track B): three of four done; SetRoundMode is not ours to fake
+
+**Done and gated:**
+
+- `RoundTo` / `SimpleRoundTo` (+ `TRoundToRange`, Single overloads) in
+  `lib/rtl/math.pas`, byte-identical to FPC on all 20 measured rows.
+- `lround` / `llround` in `lib/crtl`, identical to gcc.
+- **The regression test this ticket calls "the useful part":**
+  `test/lib_rounding_contract.pas` pins the Pascal side and the RoundTo family,
+  `test/cmath_lround.c` pins the C side, and both headers say plainly that the
+  three frontends disagree BY DESIGN so the next person cannot "harmonise" them.
+
+Both formulas were read off FPC's `rtl/objpas/math.pp`, not derived, and that
+mattered: `RoundTo` DIVIDES by `IntPower(10, digits)` where the natural reading
+is to multiply by `10^-digits`. Not cosmetic — `2.675 / 0.01` is
+`267.50000000000006` while `2.675 * 100` is `267.49999999999997`, so the first
+gives **2.68** and the second **2.67**. FPC says 2.68.
+
+No Extended overloads, deliberately: Extended is aliased to Double and this RTL
+targets Single + Double only ([[feature-extended-type-support]]).
+
+## `SetRoundMode` / `GetRoundMode`: the primitive exists, but not for Pascal
+
+This is the one item left, and the ticket's own framing ("a matter of writing
+the control word") is right but incomplete. What is actually there:
+
+- `compiler/cparser.inc` already emits `__pxx_fesetround` / `__pxx_fegetround`
+  as raw machine stubs, flipping the **MXCSR RC bits [14:13]** — with the note
+  that pxx does all double arithmetic in SSE, so MXCSR is the only rounding
+  state that matters and there is no x87 use.
+- `lib/crtl/include/fenv.h` exposes them to C. quickjs's `js_dtoa` already
+  rides `fesetround`.
+
+Two reasons it cannot simply be wrapped from Pascal today:
+
+1. **The intrinsic is C-frontend only** — nothing in `parser.inc` or `lexer.inc`
+   knows `__pxx_fesetround`, so Pascal has no way to reach it.
+2. **Off x86-64 it is an accepted no-op returning 0** (the
+   `EmitCReturnZeroStub` path, which i386 also takes). A Pascal `SetRoundMode`
+   built on it would silently do nothing on four of five targets — a
+   mode-setter that does not set the mode, which is worse than not having one.
+
+So the remaining work is a Track A/C item — expose the intrinsic to the Pascal
+frontend, and implement it for real on the targets that claim it — with the
+Pascal `TFPURoundingMode` wrapper landing here afterwards. Filed as
+[[feature-a-expose-rounding-mode-intrinsic-to-pascal]].
+

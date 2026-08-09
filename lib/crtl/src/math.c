@@ -826,6 +826,14 @@ double nearbyint(double x) { return rint(x); }
 long lrint(double x) { return (long)rint(x); }
 long long llrint(double x) { return (long long)rint(x); }
 
+/* lround/llround ride round(), which is half-away-from-zero and mode-INDEPENDENT
+   — that is the whole difference from lrint/llrint above, which follow the
+   current rounding mode. Declared but unimplemented until now, while their
+   lrint twins existed: an odd pair to split, since round() returning a double
+   the caller must cast is exactly the friction lround exists to remove. */
+long lround(double x) { return (long)round(x); }
+long long llround(double x) { return (long long)round(x); }
+
 /* frexp: x = m * 2^e with 0.5 <= |m| < 1. Loop form (no bit reinterpret — the C
    `*(unsigned long*)&double` punning path is unreliable here). */
 double frexp(double x, int *e) {

@@ -1,5 +1,4 @@
 ---
-blocked-by: decide-may-agents-fetch-thirdparty-sources-as-oracles
 summary: "The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script"
 type: feature
 track: B
@@ -54,7 +53,16 @@ A differential harness exists and runs; a documented set of scripts agrees with
 the reportlab oracle on extracted text and glyph positions within a stated
 tolerance; divergences are either fixed or ticketed with the measurement.
 
-## Blocked 2026-08-09 (Track B): the oracle is not on this box
+## UNBLOCKED 2026-08-09 — the policy question was answered
+
+The user's call: a library named in project documentation may be fetched, via
+`tools/install_lib_candidates.sh`. reportlab is named right here, so it clears
+the bar. What remains is adding it as a pinned candidate (the tool's list is
+otherwise all C) and then doing the differential work as written.
+
+The original block, for the record:
+
+## Was blocked 2026-08-09 (Track B): the oracle is not on this box
 
 This ticket is a DIFFERENTIAL one — its whole content is "compare against real
 reportlab" — and neither `reportlab` nor `pdfplumber` is installed here

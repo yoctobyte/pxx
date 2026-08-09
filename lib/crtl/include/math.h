@@ -44,6 +44,11 @@ extern double rint(double x);
 extern double nearbyint(double x);
 extern long lrint(double x);
 extern long long llrint(double x);
+/* lround/llround: round() then convert. NOT lrint — lrint follows the current
+   rounding mode, lround is always half-away-from-zero, and splitting the pair
+   was the odd part of the previous state (lrint existed, lround did not). */
+extern long lround(double x);
+extern long long llround(double x);
 extern double sqrt(double x);
 extern double cbrt(double x);
 extern double sin(double x);

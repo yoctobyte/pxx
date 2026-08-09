@@ -44,7 +44,7 @@ lives in git, not in a timestamp._
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (217)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -107,17 +107,16 @@ lives in git, not in a timestamp._
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | decide-ismultithread-runtime-flag-vs-compile-time-mode | U | 55 | decide | Delphi/FPC do not detect threading at compile time at all — they always emit the lock and skip it at runtime on a global IsMultiThread boolean. Measured here: the branch costs +5% over an unlocked refcount where an unconditional lock costs +276%. That dissolves the auto-detect question and would let TThread live in Classes unconditionally | — |
-| decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
 | decide-nilpy-class-as-value-dispatch-strategy | U | 60 | decide | A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values. | — |
 | decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
-| decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
+| feature-a-expose-rounding-mode-intrinsic-to-pascal | A | 30 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
@@ -149,7 +148,7 @@ lives in git, not in a timestamp._
 | feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
-| feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | decide-may-agents-fetch-thirdparty-sources-as-oracles |
+| feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
@@ -341,7 +340,7 @@ lives in git, not in a timestamp._
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (51)
+## decided (53)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -360,6 +359,7 @@ lives in git, not in a timestamp._
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
+| decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
 | decide-nilpy-and-or-return-operand-or-bool | U | 40 | decide | decide: should NilPy's `and` / `or` return an OPERAND, as Python does? | — |
 | decide-nilpy-arithmetic-dunder-scope | U | 60 | decide | Decide: how far does NilPy follow Python's arithmetic/ordering dunder protocol? | — |
 | decide-nilpy-bigint-vs-64bit-cells | U | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
@@ -391,6 +391,7 @@ lives in git, not in a timestamp._
 | decide-scope-hiding-vs-flat-overload-set | U | 60 | decide | One rule explains four separate symptoms: a declaration should HIDE a same-named one from an outer/earlier scope unless marked `overload`. pxx behaves as if everything were `overload` — one flat set, first-in-chain wins. Decide whether to adopt hiding, and which marker carries it: any {$mode}, --strict-overload/{$MIMIC FPC}, or the default | — |
 | decide-t-notification-transport-poll-not-webhooks | U | 60 | decide | How Track T's findings reach an agent or a human: polling, never webhooks. 60s is the baseline; adaptive backoff is allowed but the daemon must not grow a time-based one. | — |
 | decide-t-queue-scope-2026-08-03 | T | 60 | decide | User calls on four standing assumptions in the Track T queue: borg's watcher, the arm oracles, who may pin, and when the NilPy fuzzer earns its keep | — |
+| decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |
 | decide-track-t-autopin-criteria | U | 55 | decide | What criteria justify Track T auto-pinning a stable binary? | — |
 | decide-two-track-model-dev-and-regression-testing | T | 60 | decide | DECIDED: two operational tracks — development, and regression testing | — |
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
@@ -478,7 +479,6 @@ lives in git, not in a timestamp._
 - [p 55] [T] feature-t-shard-the-uforth-ans-suite-per-word-set
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 50] [U] decide-may-agents-fetch-thirdparty-sources-as-oracles (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [N] bug-nilpy-list-sort-method-missing
@@ -508,7 +508,6 @@ lives in git, not in a timestamp._
 - [p 45] [T] bug-t-the-full-tier-no-longer-fits-its-deadline
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
-- [p 45] [U] decide-threadsafe-gate-is-reach-based-not-use-based
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
 - [p 45] [A] feature-dynamic-compiler-tables
@@ -521,6 +520,7 @@ lives in git, not in a timestamp._
 - [p 45] [A] feature-emission-size-dce
 - [p 45] [S] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
+- [p 45] [B] feature-lib-reportlab-fidelity-vs-oracle
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
@@ -595,6 +595,7 @@ lives in git, not in a timestamp._
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [U] decide-progress-should-decide-slugs-auto-tag-track-u
 - [p 30] [D] docs-publish-the-three-language-rounding-table
+- [p 30] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
@@ -646,7 +647,6 @@ lives in git, not in a timestamp._
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
-- **1** — decide-may-agents-fetch-thirdparty-sources-as-oracles
 - **1** — decide-nilpy-class-as-value-dispatch-strategy
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-representation
