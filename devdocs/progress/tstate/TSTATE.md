@@ -3,11 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 8d14h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `0d6de0cbeae1` | 2026-08-09T08:17:03Z | GREEN (native) | 141.7s | `4939f47ab883` GREEN |
+| plexus | `0d6de0cbeae1` | 2026-08-09T08:30:09Z | RED (full) | 752.9s | `0d6de0cbeae1` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- none
+- **test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy** — test/test_nilpy_str_isnumeric_istitle.npy test/test_nilpy_str_isnumeric_istitle.expected +1 (plexus): bad `0d6de0cbeae1`, last good `4939f47ab883`, 14 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
