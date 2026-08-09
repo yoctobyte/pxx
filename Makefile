@@ -1126,6 +1126,10 @@ test-nilpy: $(COMPILER)
 	# unannotated parameter matches neither, so it read a dict as a list.
 	./$(COMPILER) test/test_nilpy_dict_update_variant.npy /tmp/test_nilpy_dictupdv26
 	/tmp/test_nilpy_dictupdv26 | diff -u test/test_nilpy_dict_update_variant.expected -
+	# `a |= <set>` silently did nothing (the desugar used the general or-token and
+	# never reached the set path). In place, like +=/extend -- aliases must see it.
+	./$(COMPILER) test/test_nilpy_set_augmented_union.npy /tmp/test_nilpy_setaug26
+	/tmp/test_nilpy_setaug26 | diff -u test/test_nilpy_set_augmented_union.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

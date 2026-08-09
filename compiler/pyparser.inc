@@ -16721,6 +16721,25 @@ begin
       if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
       Exit;
     end;
+    { `s |= other` on a SET, the same shape as `+=`/extend directly above and
+      for the same reason: CPython's `|=` MUTATES, so an alias taken before the
+      statement must see the new elements — a rebind would not do.
+      Without this the desugar below built an AN_BINOP with the token
+      PyAugBinTok gives for `|=`, which is the general or-operator, so it never
+      reached the set path the plain `a = a | b` spelling goes through — and the
+      set silently stayed EMPTY. Two spellings of one operation answering
+      differently, which is the tell.
+      `|` is the only one done here: `&=` and `^=` REMOVE elements and have no
+      in-place primitive yet, so they keep today's behaviour rather than gaining
+      a second half-right path.
+      bug-nilpy-set-augmented-union-does-nothing }
+    if (augTk = tkOr) and (PyNodeListCi(PyMakeIdent(symIdx)) >= 0) then
+    begin
+      Result := PyCallMeth1(PyNodeListCi(PyMakeIdent(symIdx)), 'setupdate',
+                            PyMakeIdent(symIdx), CurASTNode);
+      if Result < 0 then Error('Nil Python: pylib TPyList.setupdate not loaded');
+      Exit;
+    end;
     { a USER class instance: __iadd__, else __add__ and rebind (Python's rule).
       Checked after the TPyList case, which has its own in-place meaning. }
     node := PyAugClassDunder(symIdx, augTk, CurASTNode);

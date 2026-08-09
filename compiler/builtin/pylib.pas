@@ -105,6 +105,12 @@ type
       NilPy backs `set` with TPyList (see PyAnnTypeAt), and this is the whole
       set contract the corpus uses — `s.add(x)` then `x in s`. }
     function add(const v: Variant): TPyList;
+    { set.update / `s |= other` — add every element of `other` that is not
+      already present, IN PLACE. In place, not a rebind, because CPython's `|=`
+      mutates: an alias taken before the statement must see the new elements,
+      exactly as `+=` on a list extends rather than rebinding.
+      bug-nilpy-set-augmented-union-does-nothing }
+    function setupdate(other: TPyList): Variant;
     { NOT spelled `get`: Python lists have no .get, and sharing the name with
       TPyDict.get made every `.get(...)` on a dynamically-typed receiver
       ambiguous across classes. Internal accessor only — indexing goes through
@@ -2991,6 +2997,15 @@ function TPyList.add(const v: Variant): TPyList;
 begin
   if not pycontains(Self, v) then append(v);
   Result := Self;
+end;
+
+function TPyList.setupdate(other: TPyList): Variant;
+var i: Integer;
+begin
+  Result := pynone;                  { Python's set.update returns None }
+  if (Self = nil) or (other = nil) then Exit;
+  for i := 0 to other.count - 1 do
+    Self.add(other.at(i));
 end;
 
 function TPyList.at(i: Integer): Variant;

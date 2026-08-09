@@ -75,3 +75,36 @@ and a loop-dependent RHS, `&=` and `^=` on sets, `|=` on INTEGERS (which must
 stay bitwise — the control that keeps a set-specific fix from breaking the
 numeric case), the plain `a = a | b` spelling, and a file mixing `|=` with list
 and int `+=` accumulators.
+
+## FIXED (2026-08-09, claude-AN) — `|=` only
+
+`a |= <set>` now mutates in place and matches CPython.
+
+Fixed the way `+=` on a list already is: an in-place method call
+(`TPyList.setupdate`, mirroring `extend`) chosen in the augmented-assign
+lowering BEFORE the generic desugar, so it never reaches the wrong token.
+
+**In place, not a rebind**, and that is the part worth stating: CPython's `|=`
+MUTATES, so an alias taken before the statement must see the new elements. A
+rebind would have passed every other assertion in the test — the `alias` line is
+the only one that can tell them apart, and its `rebind` twin pins that the plain
+`a = a | b` spelling still does NOT affect its alias.
+
+The integer control is the other one that matters: `n |= 2` must stay bitwise
+(7), which is what keeps a set-specific arm from capturing the numeric case.
+
+### Deliberately still open: `&=` and `^=`
+
+They REMOVE elements and there is no in-place primitive for that yet, so they
+keep today's (wrong) behaviour rather than gaining a second half-right path.
+The ticket stays OPEN for them, and the `normalise-dont-special-case` answer in
+the section above — route the augmented desugar through the same operator
+lowering the plain form uses — is still the right shape for finishing it. What
+changed is that `|=`, the common one and the one real code accumulates with, no
+longer silently loses data.
+
+### The SEGFAULT row is a different bug
+
+The "mixing `|=` with `+=` segfaults" row was NOT this. Reduced separately to a
+name reused as an assignment target and then as a for-loop target, and filed as
+[[bug-nilpy-name-assigned-from-a-call-then-reused-as-a-loop-target-segfaults]].

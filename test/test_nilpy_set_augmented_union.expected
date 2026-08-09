@@ -1,0 +1,12 @@
+loop      [1, 2]
+const rhs [9]
+no loop   [5]
+in def    [3, 4]
+alias     [1, 2] [1, 2] True
+rebind    [1, 2] [1] False
+dedup     [1, 2, 3]
+dedup ip  [1, 2, 3]
+int       7
+list +=   [1, 2]
+int +=    3
+realworld ['x', 'y']

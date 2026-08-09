@@ -1,0 +1,83 @@
+# bug-nilpy-set-augmented-union-does-nothing
+#
+# `a |= set(...)` in a loop left the set EMPTY, while `a = a | set(...)` was
+# correct — two spellings of one operation answering differently.
+#
+# PyAugBinTok maps `|=` to the general or-operator token and the desugar built
+# an AN_BINOP with it directly, so it never reached the set path the plain
+# spelling goes through.
+#
+# Fixed the same way `+=` on a list is: an IN-PLACE method call, mirroring
+# extend. In place and not a rebind because CPython's `|=` MUTATES — an alias
+# taken before the statement must see the new elements, which the `alias` line
+# below is what pins. A rebind would pass every other line here.
+#
+# The INTEGER control is the one that keeps a set-specific fix honest: `n |= 2`
+# must stay bitwise (7), not become a set operation.
+#
+# `&=` and `^=` are deliberately NOT fixed here: they REMOVE elements and have
+# no in-place primitive yet, so they keep today's behaviour rather than gaining
+# a second half-right path. Recorded in the ticket, not pinned here.
+#
+# Expectations are CPython's own output.
+
+a = set()
+for i in [1, 2]:
+    a |= set([i])
+print("loop     ", sorted(a))
+
+b = set()
+for i in [1, 2]:
+    b |= set([9])
+print("const rhs", sorted(b))
+
+c = set()
+c |= set([5])
+print("no loop  ", sorted(c))
+
+
+def in_def():
+    s = set()
+    for i in [3, 4]:
+        s |= set([i])
+    return sorted(s)
+
+
+print("in def   ", in_def())
+
+# CPython's |= MUTATES: the alias must see it
+al = set([1])
+alias = al
+al |= set([2])
+print("alias    ", sorted(al), sorted(alias), al is alias)
+
+# ...and the plain spelling REBINDS, so its alias must not
+rb = set([1])
+rbalias = rb
+rb = rb | set([2])
+print("rebind   ", sorted(rb), sorted(rbalias), rb is rbalias)
+
+print("dedup    ", sorted(set([1, 2]) | set([2, 3])))
+d = set([1, 2])
+d |= set([2, 3])
+print("dedup ip ", sorted(d))
+
+# controls: |= on INTEGERS stays bitwise, and other augmented ops are untouched
+n = 5
+n |= 2
+print("int      ", n)
+xs = []
+for i in [1, 2]:
+    xs += [i]
+print("list +=  ", xs)
+t = 0
+for i in [1, 2]:
+    t += i
+print("int +=   ", t)
+
+# the shape it was found in: dict values -> keys -> union
+cfg = {"a": {"x": "1"}, "b": {"y": "2"}}
+allkeys = set()
+for sec in cfg.values():
+    allkeys |= set(sec.keys())
+print("realworld", sorted(allkeys))
