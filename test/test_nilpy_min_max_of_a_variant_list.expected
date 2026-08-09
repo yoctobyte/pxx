@@ -1,0 +1,14 @@
+static     5 1
+two-arg    2 1 1.5
+string     c a
+loop elem  2 1
+loop elem  4 3
+enumerate  0 2 1
+enumerate  1 4 3
+parameter  (7, 2)
+dict value 9 4 1
+nested     2 3
+objects    V3 V1
+obj elem   V3 V1
+floats     1.5 0.5
+strs       b a

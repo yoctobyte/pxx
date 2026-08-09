@@ -1,0 +1,67 @@
+# bug-nilpy-min-max-of-a-variant-list-reads-it-as-a-string
+#
+# `for row in grid: max(row)` raised "max() arg is an empty sequence", while
+# `sum(row)`, `len(row)` and `sorted(row)` on the SAME value were all correct.
+#
+# A loop element is a VARIANT, and the only single-argument min/max overload in
+# pylib took an AnsiString — so a variant holding a LIST was read as a string,
+# came out empty, and raised. The two-argument forms (`max(a, b)`) and a
+# statically-typed list (`max(xs)`) both had exact matches and always worked,
+# which is what kept this out of every API sweep: it needs the value to arrive
+# as a variant.
+#
+# Found by running a realistic grid program against CPython.
+#
+# Every route to a variant is asserted, because they reach it differently: a
+# loop element, an enumerate element, a function parameter, a dict value, and a
+# nested subscript. The STRING case is asserted too — max("abc") must still
+# iterate characters, which is the overload the list was being stolen by.
+#
+# The user-object case pins that comparison goes through pyvar_gt, so a list of
+# instances honours __lt__/__gt__ exactly as sorted() does rather than comparing
+# handles.
+#
+# Expectations are CPython's own output.
+
+
+class V:
+    def __init__(self, n):
+        self.n = n
+
+    def __lt__(self, o):
+        return self.n < o.n
+
+    def __repr__(self):
+        return "V" + str(self.n)
+
+
+xs = [1, 5, 3]
+print("static    ", max(xs), min(xs))
+print("two-arg   ", max(1, 2), min(1, 2), max(1.5, 0.5))
+print("string    ", max("abc"), min("abc"))
+
+grid = [[1, 2], [4, 3]]
+for row in grid:
+    print("loop elem ", max(row), min(row))
+
+for i, row in enumerate(grid):
+    print("enumerate ", i, max(row), min(row))
+
+
+def viaparam(v):
+    return (max(v), min(v))
+
+
+print("parameter ", viaparam([7, 2]))
+
+d = {"a": [4, 9], "b": [1]}
+print("dict value", max(d["a"]), min(d["a"]), max(d["b"]))
+print("nested    ", max(grid[0]), min(grid[1]))
+
+objs = [V(3), V(1), V(2)]
+print("objects   ", max(objs), min(objs))
+for o in [objs]:
+    print("obj elem  ", max(o), min(o))
+
+print("floats    ", max([1.5, 0.5]), min([1.5, 0.5]))
+print("strs      ", max(["b", "a"]), min(["b", "a"]))

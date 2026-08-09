@@ -1134,6 +1134,10 @@ test-nilpy: $(COMPILER)
 	# list() wrapper kept the module binding's type -- len() read a pointer.
 	./$(COMPILER) test/test_nilpy_module_name_rebound_in_a_block.npy /tmp/test_nilpy_modrebind26
 	/tmp/test_nilpy_modrebind26 | diff -u test/test_nilpy_module_name_rebound_in_a_block.expected -
+	# min()/max() of a VARIANT holding a list read it as a STRING and raised
+	# "empty sequence" -- the only single-arg overload took an AnsiString.
+	./$(COMPILER) test/test_nilpy_min_max_of_a_variant_list.npy /tmp/test_nilpy_minmaxvar26
+	/tmp/test_nilpy_minmaxvar26 | diff -u test/test_nilpy_min_max_of_a_variant_list.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

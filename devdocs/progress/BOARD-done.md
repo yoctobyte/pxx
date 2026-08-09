@@ -588,6 +588,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-method-result-copied-to-var-undefined | N | 60 | bug | NilPy: `x = obj.method()` immediately followed by `y = x` leaves x undefined | — |
 | bug-nilpy-method-returning-a-fresh-string-leaks | N | 55 | bug | A METHOD returning a freshly built string leaks it; the same def does not | — |
 | bug-nilpy-method-returning-str-garbage | N | 75 | bug | NilPy: a method returning `str` returns garbage | — |
+| bug-nilpy-min-max-of-a-variant-list-reads-it-as-a-string | N | 50 | bug | `max()` of a VARIANT holding a list read it as a string | — |
 | bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising | N | 55 | bug | NilPy: a missing __add__/__sub__/__mul__/__truediv__/__neg__ ABORTS COMPILATION; CPython raises a catchable TypeError, so try/except around it cannot even build | — |
 | bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror | N | 65 | bug | Reading an attribute that does not exist yields None — and on None it can yield a STRING | — |
 | bug-nilpy-missing-builtins-step-slicing-range-into-list | N | 45 | bug | NilPy survey: step slicing (x[::2]), list(range(...)), pow(), str.index/expandtabs, sorted(d.keys()) all fail to COMPILE — 13 of 133 method-surface cases | — |

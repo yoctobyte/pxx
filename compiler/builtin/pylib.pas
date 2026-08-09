@@ -1065,6 +1065,20 @@ function min(a: Double; b: Double): Double; overload;
 function max(const a: Variant; const b: Variant): Variant; overload;
 function max(a: Int64; b: Int64): Int64; overload;
 function max(a: Double; b: Double): Double; overload;
+{ min()/max() of ONE argument that is a VARIANT — a loop element, a dict value,
+  an unannotated parameter. Without these the only single-argument overload in
+  this unit was the AnsiString one, so a variant holding a LIST was read as a
+  STRING: `for row in grid: max(row)` raised "max() arg is an empty sequence"
+  while `sum(row)`, `len(row)` and `sorted(row)` on the same value were all
+  correct. Dispatches on the runtime tag, and compares with pyvar_gt so a list
+  of user objects honours __gt__/__lt__ exactly as sorted() does.
+  Declared HERE in the top block rather than beside the implementation: a
+  forward declaration dropped into the middle of the implementation section
+  disturbs this unit's resolution order, and unrelated long-standing forward
+  uses (PySliceBounds, PyVarText) started failing when it was.
+  bug-nilpy-min-max-of-a-variant-list-reads-it-as-a-string }
+function max(const v: Variant): Variant; overload;
+function min(const v: Variant): Variant; overload;
 { `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
   rather than one variant-taking function so the ordinary call path resolves
   them by argument type, like min/max (feature-nilpy-missing-builtins). }
@@ -1780,7 +1794,7 @@ begin
     tag := pyvartag(v);
     if tag = 0 then Continue;         { None: DELETE the character }
     if tag = 6 then                   { a string replacement, possibly >1 char }
-      Result := Result + PyVarText(PPyVarRec(@v))
+      Result := Result + VariantToStr(v)   { not PyVarText — see pystr_startswith_any }
     else
       Result := Result + Chr(pyvar_to_int(v) and 255);
   end;
@@ -2155,7 +2169,7 @@ begin
       for k := 0 to TPyList(o).count - 1 do
       begin
         e := TPyList(o).at(k);
-        if pystr_startswith(s, PyVarText(PPyVarRec(@e))) then
+        if pystr_startswith(s, VariantToStr(e)) then
         begin
           Result := True;
           Exit;
@@ -2165,8 +2179,14 @@ begin
     end;
     Exit;
   end;
-  { not a sequence: an ordinary single prefix }
-  Result := pystr_startswith(s, PyVarText(p));
+  { not a sequence: an ordinary single prefix.
+    VariantToStr, NOT PyVarText: PyVarText is defined ~3000 lines below and a
+    forward use in this unit does not fail to compile — it links to a plausible
+    wrong address (project_bodyless_procaddr_links_to_entry_minus_one). These
+    three sites were added earlier the same night and passed their tests by
+    luck; adding an unrelated forward declaration later made the compiler
+    finally reject them, which is how the latent bug surfaced. }
+  Result := pystr_startswith(s, VariantToStr(v));
 end;
 
 function pystr_endswith_any(const s: AnsiString; const v: Variant): Boolean;
@@ -2182,7 +2202,7 @@ begin
       for k := 0 to TPyList(o).count - 1 do
       begin
         e := TPyList(o).at(k);
-        if pystr_endswith(s, PyVarText(PPyVarRec(@e))) then
+        if pystr_endswith(s, VariantToStr(e)) then
         begin
           Result := True;
           Exit;
@@ -2192,7 +2212,7 @@ begin
     end;
     Exit;
   end;
-  Result := pystr_endswith(s, PyVarText(p));
+  Result := pystr_endswith(s, VariantToStr(v));   { see startswith's note }
 end;
 
 function pystr_startswith_from(const s, pre: AnsiString; a: Integer): Boolean;
@@ -4329,6 +4349,56 @@ begin
     if s[i] > best then best := s[i];
   Result := best;
 end;
+function max(const v: Variant): Variant; overload;
+var o: TObject; i: Integer; e: Variant; n: Integer;
+begin
+  if pyvartag(v) = 6 then
+  begin
+    { a str iterates its CHARACTERS, as the AnsiString overload above does.
+      VariantToStr rather than PyVarText: PyVarText is defined ~1000 lines
+      BELOW here, and a forward use in this unit links to a plausible wrong
+      address rather than failing to compile. }
+    Result := max(VariantToStr(v));
+    Exit;
+  end;
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('max() argument is not iterable');
+  o := TObject(pyvarobj(v));
+  if (o = nil) or (not (o is TPyList)) then
+    raise TypeError.Create('max() argument is not iterable');
+  n := TPyList(o).count;
+  if n = 0 then raise ValueError.Create('max() arg is an empty sequence');
+  Result := TPyList(o).at(0);
+  for i := 1 to n - 1 do
+  begin
+    e := TPyList(o).at(i);
+    if pyvar_gt(e, Result) then Result := e;
+  end;
+end;
+
+function min(const v: Variant): Variant; overload;
+var o: TObject; i: Integer; e: Variant; n: Integer;
+begin
+  if pyvartag(v) = 6 then
+  begin
+    Result := min(VariantToStr(v));   { see max's note on PyVarText }
+    Exit;
+  end;
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('min() argument is not iterable');
+  o := TObject(pyvarobj(v));
+  if (o = nil) or (not (o is TPyList)) then
+    raise TypeError.Create('min() argument is not iterable');
+  n := TPyList(o).count;
+  if n = 0 then raise ValueError.Create('min() arg is an empty sequence');
+  Result := TPyList(o).at(0);
+  for i := 1 to n - 1 do
+  begin
+    e := TPyList(o).at(i);
+    if pyvar_gt(Result, e) then Result := e;
+  end;
+end;
+
 
 function min(const s: AnsiString): AnsiString;
 var i: Integer; best: Char;
