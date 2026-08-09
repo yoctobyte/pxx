@@ -7981,7 +7981,7 @@ lib-test: pxx-stable-check
 	# Canary for a change in ANOTHER lane: a Pascal RTL name that collides with
 	# a libc one silently hijacks it in every C program (pxxcio does `uses math`).
 	$(PXX_STABLE) test/cmath_no_pascal_hijack.c /tmp/cmath_no_pascal_hijack
-	test "$$(/tmp/cmath_no_pascal_hijack)" = "$$(printf 'pow=1024 1.41421\nlog=1.386294361 log10=3.000000000 log2=3.000000000\nexp=2.718281828\natan2=0.785398163\ncopysign=-3 3\nisnan=1 0\nisinf=1 0\nnan=1\nhypot=5.000000000 fmod=1\nsqrt=1.414213562 ceil=-2 floor=-3')"
+	test "$$(/tmp/cmath_no_pascal_hijack)" = "$$(printf 'pow=1024 1.41421\nlog=1.386294361 log10=3.000000000 log2=3.000000000\nexp=2.718281828\natan2=0.785398163 0.463647609 1.107148718\ncopysign=-3 3\nisnan=1 0\nisinf=1 0\nnan=1 1\nhypot=5.000000000 fmod=1\nsqrt=1.414213562 ceil=-2 floor=-3')"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.
 	# The output is identical either way — the property that separates a futex
 	# mutex from the spinlock it replaced is CPU TIME, so assert that: three

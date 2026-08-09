@@ -65,13 +65,18 @@ function RadToDeg(r: Double): Double;
   case-insensitively, so a Python spelling with no Pascal counterpart under that
   name simply does not exist (feature-rtl-math-surface-gaps measured 16).
 
-  THREE NAMES ARE DELIBERATELY ABSENT — `pow`, `log` and `copysign` — and adding
-  them is a trap that measures as a C REGRESSION rather than a Pascal one:
+  FOUR NAMES ARE DELIBERATELY ABSENT — `pow`, `log`, `copysign` and `atan2` —
+  and adding them is a trap that measures as a C REGRESSION rather than a Pascal
+  one:
   `pxxcio` is auto-pulled into every C program and does `uses math`, so every
   name here is in scope for C name resolution and a Pascal `Pow`/`Log`/
   `CopySign` HIJACKS libc's. Measured: gcc gives pow(2,10) = 1024, and with a
   `Pow` in this unit a C program answered 1; `copysign(3,-1)` answered 0.785398,
-  which is atan2's result. Filed as
+  which is atan2's result. `Atan2` was added anyway and DID ship broken for one
+  commit — test/cmath_trig_family_b385.c went red with atan2(0.5,1) answering
+  atan(1) — because the first canary only checked atan2(1,1), whose arguments
+  are symmetric, so a swapped or ignored argument is invisible in it. The canary
+  uses asymmetric arguments now. Filed as
   bug-c-pascal-math-names-hijack-libc-through-pxxcio; NilPy gets intercepts for
   those three instead. `trunc` is absent for a different reason — Python's
   returns an int, the same contract mismatch that made math.floor/ceil
@@ -85,7 +90,6 @@ function Inf: Double;
 function NaN: Double;
 function IsNan(x: Double): Boolean;
 function IsInf(x: Double): Boolean;
-function Atan2(y, x: Double): Double;
 function Degrees(r: Double): Double;
 function Radians(d: Double): Double;
 function IsClose(a, b: Double): Boolean;
@@ -726,11 +730,6 @@ end;
 function IsInf(x: Double): Boolean;
 begin
   Result := (x > 1.7976931348623157e308) or (x < -1.7976931348623157e308);
-end;
-
-function Atan2(y, x: Double): Double;
-begin
-  Result := ArcTan2(y, x);
 end;
 
 function Degrees(r: Double): Double;

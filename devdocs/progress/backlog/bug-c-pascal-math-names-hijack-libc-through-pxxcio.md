@@ -23,9 +23,19 @@ summary: "pxxcio is auto-pulled into EVERY C program and does `uses math`, so ev
 | `pow(2.0, 0.5)` | `1.41421` | **`1`** |
 | `log(4.0)` | `1.386294361` | **`1.098612289`** |
 | `copysign(3.0, -1.0)` | `-3` | **`0.785398`** — that is `atan2(1,1)` |
-| `atan2`, `isnan`, `isinf`, `nan`, `log10`, `log2`, `exp`, `sqrt`, `hypot`, `fmod` | | all still correct |
+| `atan2(0.5, 1.0)` | `0.463647609` | **`0.785398163`** — that is `atan2(1,1)` |
+| `isnan`, `isinf`, `nan`, `log10`, `log2`, `exp`, `sqrt`, `hypot`, `fmod` | | all still correct |
 
 No warning, no error. The C program compiles and prints wrong numbers.
+
+**`atan2` shipped broken for one commit** before this was caught, and the way it
+escaped is worth recording: the first canary written for this bug checked only
+`atan2(1.0, 1.0)`, whose arguments are SYMMETRIC and whose answer (pi/4) is also
+`atan(1)` — so a hijacked, argument-swapped or argument-ignoring `atan2` passes
+it. `test/cmath_trig_family_b385.c` (in `make test`, not `lib-test`) caught it,
+which is Track T's whole purpose. The canary now uses asymmetric arguments.
+A test for a substitution bug must use inputs whose answers DIFFER under the
+substitution — a degenerate input tests nothing.
 
 ## The mechanism
 

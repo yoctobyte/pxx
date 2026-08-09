@@ -5,7 +5,7 @@ type: bug
 summary: "math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program"
 ---
 
-# `math.trunc`, `math.log(x, base)`, `math.pow` and `math.copysign` need `pymath_*` intercepts
+# `math.trunc`, `math.log(x, base)`, `math.pow`, `math.copysign` and `math.atan2` need `pymath_*` intercepts
 
 - **Type:** bug — Track N (`compiler/pyparser.inc`, the `PyStdlibCallProc` table)
 - **Opened:** 2026-08-09
@@ -64,11 +64,12 @@ code branches on this value (`int(math.log(n, 10))` differs by one) — the same
 test `devdocs/dev/nilpy-semantics-divergences.md` applies to
 `isinstance(t, list)`.
 
-## 3. `pow` and `copysign` cannot live in the Pascal RTL either
+## 3. `pow`, `copysign` and `atan2` cannot live in the Pascal RTL either
 
 Added there, they hijack libc's in every C program —
 [[bug-c-pascal-math-names-hijack-libc-through-pxxcio]], measured: `pow(2,10)`
-answered 1, `copysign(3,-1)` answered atan2's result. So even though they are
+answered 1, `copysign(3,-1)` answered atan2's result, and `atan2(0.5,1)`
+answered `atan2(1,1)`. So even though they are
 plain float functions with no contract mismatch, an intercept is the only route
 that works until that bug is fixed. `Power` and the sign-bit logic are already
 in `lib/rtl/math.pas` under non-colliding names for the intercepts to call.

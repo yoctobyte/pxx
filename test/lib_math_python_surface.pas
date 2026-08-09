@@ -8,12 +8,15 @@
   FOUR names from the sweep are deliberately absent and are NOT oversights
   (bug-n-math-trunc-and-log-need-frontend-intercepts):
 
-  - `pow`, `log`, `copysign` — adding these to lib/rtl/math.pas MEASURES AS A C
-    REGRESSION. pxxcio is auto-pulled into every C program and does `uses math`,
+  - `pow`, `log`, `copysign`, `atan2` — adding these to lib/rtl/math.pas
+    MEASURES AS A C REGRESSION. pxxcio is auto-pulled into every C program and does `uses math`,
     so every name in that unit is in scope for C name resolution and a Pascal
     Pow/Log/CopySign hijacks libc's: gcc says pow(2,10) = 1024, and with `Pow`
     there a C program said 1, while copysign(3,-1) answered 0.785398 — atan2's
-    result. bug-c-pascal-math-names-hijack-libc-through-pxxcio.
+    result. `atan2` was added anyway and shipped broken for one commit
+    (cmath_trig_family_b385 red), because the first canary only checked
+    atan2(1,1) — symmetric arguments, so a swapped or ignored argument is
+    invisible. bug-c-pascal-math-names-hijack-libc-through-pxxcio.
   - `trunc` — CPython returns an INT (-2, not -2.0). A Double->Double Trunc here
     would resolve ahead of everything and hand every caller the wrong type
     quietly, which is worse than the honest "undefined variable". It wants a
@@ -93,8 +96,10 @@ begin
   { --- angles --- }
   CheckStr(FloatToStr(Degrees(Pi)), '180', 'math.degrees(pi)');
   Check(Abs(Radians(180.0) - 3.141592653589793) < 1e-15, 'math.radians(180)');
-  Check(Abs(Atan2(1.0, 1.0) - 0.7853981633974483) < 1e-15, 'math.atan2(1, 1)');
   Check(Abs(Radians(Degrees(1.25)) - 1.25) < 1e-15, 'radians/degrees round trip');
+  { atan2 is NOT here — see the header. ArcTan2 is the Pascal spelling and does
+    not collide with anything in C. }
+  Check(Abs(ArcTan2(0.5, 1.0) - 0.4636476090008061) < 1e-15, 'ArcTan2(0.5, 1)');
 
   { --- isclose, Python's defaults --- }
   Check(IsClose(1.0, 1.0), 'isclose(1, 1)');
