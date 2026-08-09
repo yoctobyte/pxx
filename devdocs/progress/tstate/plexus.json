@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-09T03:40:32Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e5b75caf3372d45608a6b6595af6df8bdc48b30d",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-09T03:44:19Z",
    "fixed": [],
    "new_red": [],
@@ -408,6 +400,16 @@
    "sha": "0df2b14318f540457ac087f6705ba2cccb2689c5",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-09T12:49:14Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/cmath_trig_family_b385.c"
+   ],
+   "sha": "93d6232f05d164054d5570e717155b29c8bfdd94",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -3129,7 +3131,7 @@
   "test-core#src:test/cmath_round_trunc_b140.c": "pass",
   "test-core#src:test/cmath_sign_bits.c": "pass",
   "test-core#src:test/cmath_sqrt_correctly_rounded_b240.c": "pass",
-  "test-core#src:test/cmath_trig_family_b385.c": "pass",
+  "test-core#src:test/cmath_trig_family_b385.c": "fail",
   "test-core#src:test/cmulti_d.c": "pass",
   "test-core#src:test/cmulti_decl_ptr_b30.c": "pass",
   "test-core#src:test/cmultidim_float_global_b205.c": "pass",
@@ -4875,11 +4877,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-09T12:42:06Z",
-  "sha": "0df2b14318f540457ac087f6705ba2cccb2689c5",
+  "date": "2026-08-09T12:49:14Z",
+  "sha": "93d6232f05d164054d5570e717155b29c8bfdd94",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 147.6
+  "verdict": "RED",
+  "wall": 146.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4926,6 +4928,19 @@
     "954727cee6680daf514fcd5bb929814a1ca3c522"
    ],
    "src": "test/test_nilpy_delitem_dunder.npy test/test_nilpy_delitem_dunder.expected"
+  },
+  {
+   "bad": "93d6232f05d164054d5570e717155b29c8bfdd94",
+   "good": "0df2b14318f540457ac087f6705ba2cccb2689c5",
+   "job": "test-core#src:test/cmath_trig_family_b385.c",
+   "name": "test-core#518",
+   "opened": "2026-08-09T12:49:14Z",
+   "range": [
+    "239268238363d4c7f90b0246b43aecab8a9cfeda",
+    "6fdf3b71f40d2ee7f68fc7052149fb3af0e7298b",
+    "93d6232f05d164054d5570e717155b29c8bfdd94"
+   ],
+   "src": "test/cmath_trig_family_b385.c"
   }
  ],
  "pin_shadow": {
