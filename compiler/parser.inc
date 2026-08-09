@@ -7902,6 +7902,29 @@ begin
         CurASTNode := node;
         continue;
       end;
+      { A CHAINED subscript whose base is now a VARIANT — `f()[0][0]`,
+        `g()["k"]["j"]`. The first subscript of a container-returning call
+        yields a variant, and this loop had no arm for indexing one: it fell
+        through to the raw array index below, which silently produced the
+        FIRST subscript's value again (`f()[0][0]` gave ['a', 1] instead of
+        'a'), or None, or SEGFAULTED for a dict of dicts.
+
+        PyMakeSuffixIndex is the same dispatcher a named receiver uses, so the
+        chained spelling and `x = f(); x[0][0]` now agree by construction
+        rather than by two paths happening to match — which is the failure this
+        function's own header already records twice for other cases.
+        bug-nilpy-subscript-of-a-call-result-ignores-the-index }
+      if PyExprMode and (tk = tyVariant) then
+      begin
+        Next;                     { consume '[' }
+        PyParseBoolExpr;
+        node := PyMakeSuffixIndex(node, CurASTNode);
+        Expect(tkRBrack, ']');
+        tk := IntToTypeKind(ASTTk[node]);
+        recId := ASTRight[node];
+        CurASTNode := node;
+        continue;
+      end;
       dfCi := -1;
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;
@@ -8058,12 +8081,47 @@ begin
     node := sub;
     tk := tyUInt8;
   end
+  else if PyExprMode and (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) then
+  begin
+    { NilPy indexes a str-returning call the same way it indexes a NAMED str:
+      0-based, negative from the end, and slices allowed. It used to fall into
+      the Pascal arm below, whose AN_INDEX is 1-BASED with neither — so
+      `f()[1]` yielded character 0, `f()[-1]` yielded nothing, and `f()[1:2]`
+      did not compile. Silent, and `f()[0]` was "correct", which is how it
+      survived (bug-nilpy-subscript-of-a-call-result-ignores-the-index).
+
+      No hidden temp is needed on this path: pystr_at and the slice builder take
+      the string as an ARGUMENT, so the call is evaluated exactly once by
+      construction — which is also the property the Pascal arm needs its temp
+      for. }
+    if PySliceBracketAt(TokPos - 1) then
+    begin
+      Next;
+      if CurTok.Kind = tkColon then
+        node := PyParseSliceTail(node, -1)
+      else
+      begin
+        PyParseBoolExpr;
+        node := PyParseSliceTail(node, CurASTNode);
+      end;
+      tk := IntToTypeKind(ASTTk[node]);
+    end
+    else
+    begin
+      Next;
+      PyParseBoolExpr;
+      node := PyMakeStrIndex(node, CurASTNode);
+      Expect(tkRBrack, ']');
+      tk := tyChar;
+    end;
+  end
   else if (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) then
   begin
     { Index a STRING-returning call: `Uppercase(s)[2]` (ftpsend's permission
       chars). AN_INDEX needs an addressable base, so materialise the result
       into a hidden temp first and yield `(tmp := call, tmp[i])` via AN_COMMA
-      (evaluate-left-yield-right). }
+      (evaluate-left-yield-right). PASCAL ONLY — the NilPy arm above handles
+      that dialect's 0-based/negative/slice semantics. }
     Next;
     prevTok := AllocVar('', tyAnsiString);   { hidden temp (sym idx) }
     tmpN := AllocNode(AN_IDENT);

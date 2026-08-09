@@ -2,7 +2,6 @@
 track: N
 prio: 60
 type: bug
-blocked-by: decide-sole-a-guard-for-unattended-sessions
 ---
 
 # Subscripting a CALL RESULT: a string ignores the index, a chain drops the second
@@ -98,3 +97,30 @@ same defect class as this ticket, in the same function, recorded twice already.
 `parser.inc` is a Track A file under the sole-A guard, which this unattended
 session cannot clear — so this is filed and left. Sixth ticket behind
 `decide-sole-a-guard-for-unattended-sessions`.
+
+## 2026-08-09 — FIXED (sole-A confirmed by the user, so parser.inc was in scope)
+
+Both halves, and both by routing to the builders a NAMED receiver already uses
+rather than by teaching the chained path its own rules:
+
+- a str-returning call now takes the NilPy arm (`PyMakeStrIndex` /
+  `PyParseSliceTail`) instead of falling into the Pascal one, whose `AN_INDEX`
+  is 1-based with no negatives and no slices. That arm is now explicitly marked
+  PASCAL ONLY. No hidden temp is needed on the NilPy path: `pystr_at` and the
+  slice builder take the string as an ARGUMENT, so the call is evaluated exactly
+  once by construction — which is the property the Pascal arm needs its temp for.
+- a CHAINED subscript whose base has become a variant now goes through
+  `PyMakeSuffixIndex`, the same dispatcher a named receiver uses. Previously the
+  loop had no arm for a variant base and fell through to the raw array index,
+  which returned the FIRST subscript's value again, or None, or segfaulted.
+
+The test asserts every case BOTH as `f()[...]` and as `x = f(); x[...]`, because
+this family is one path learning what the other already knew — the failure mode
+`ParseClassRecordSelectors`' own header already records twice for other cases.
+
+Verified against CPython, including three-deep chaining, slice-then-index,
+index-then-method, builtin callees, and the `sorted(ds, key=lambda ...)[0]["a"]`
+shape that crashed. The realistic CSV program that found this now matches end to
+end. `gate.sh quick` GREEN — and the self-host fixedpoint is the meaningful
+signal here since both new arms are `PyExprMode`-guarded, leaving the Pascal
+path untouched.
