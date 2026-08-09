@@ -99,4 +99,4 @@ the eight genuine findings were separated by hand. Worth fixing before it is
 wired into a tier, since a lint that cries wolf gets ignored.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit b31c0da03.
