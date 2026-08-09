@@ -52,3 +52,35 @@ next layer, which is the point of doing it.
 `make lib-test`, plus re-running the 48-file scan and recording the new counts
 on `feature-nilpy-thirdparty-libraries-as-targets` (the scan is a few lines of
 shell; the ranked-walls table there is the format to update).
+
+## Measured surface, 2026-08-09 — every `six` name html5lib/tinycss2 actually import
+
+Not a guess at `six`'s API: this is `grep "from six" ` over the real sources, so
+the shim can be scoped to exactly this and nothing else.
+
+| name | import sites | what it is on Python 3 |
+| --- | --- | --- |
+| `text_type` | **8** | `str` |
+| `PY3` | 2 | `True` |
+| `binary_type` | 1 | `bytes` |
+| `string_types` | 1 | `(str,)` |
+| `unichr` | 1 | `chr` (imported as `from six import unichr as chr`) |
+| `viewkeys` | 1 | `d.keys()` |
+| `with_metaclass` | 1 | **metaclass machinery — the hard one** |
+
+Plus three sites importing from **`six.moves`**, which is a different problem:
+`urllib_parse` (sanitizer), `http_client` and `urllib` (`_inputstream`). Those
+are stdlib re-exports, so they need `urllib`/`http.client` to exist at all — not
+part of this shim.
+
+**So the split is 12 trivial import sites against 2 hard ones.** Six of the
+seven names above are one-line aliases; `with_metaclass` appears exactly once,
+in `html5parser.py`. That single file is what decides whether the shim gets
+html5lib's parser or only its periphery — worth looking at `html5parser.py`'s
+use of it before choosing between implementing, no-opping, and REFUSING by name.
+
+`viewkeys` is a small trap worth naming: it is a FUNCTION (`viewkeys(d)`), not a
+method, so aliasing it to `dict.keys` needs the unbound-method-as-a-value
+support that `feature-nilpy-str-surface-gaps-2026-08-09` records as missing
+(`sorted(xs, key=str.lower)` fails the same way). A one-line `def viewkeys(d):
+return d.keys()` sidesteps that entirely.
