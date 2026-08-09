@@ -1,0 +1,14 @@
+# feature-nilpy-staticmethod-and-classmethod — the @classmethod half is NOT done
+#
+# @staticmethod landed; @classmethod did not. It must keep refusing itself BY
+# NAME rather than being quietly treated as a static: `cls` would then bind to
+# the DECLARING class, so `Sub.make()` would build a Base — a wrong object, at
+# run time, with no diagnostic. A named compile error is strictly better.
+#
+# This test exists so that "make it parse" cannot land without also making it
+# correct: implementing @classmethod must retire this file, exactly as
+# implementing starred unpacking retired its two refusal tests.
+class C:
+    @classmethod
+    def make(cls, v):
+        return cls(v)

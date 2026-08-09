@@ -65,3 +65,64 @@ others is worse than fixing none" risk already documented on
 `make test-nilpy` + self-host byte-identical, plus a static method and a class
 method called through the class and through an instance, and a class method in
 a subclass.
+
+## 2026-08-09 — @staticmethod IMPLEMENTED; @classmethod still refused, by name
+
+The 2026-07-31 recon called this a dedicated pass over "every self-as-param-0
+site". It turned out to be one idea plus two sites, because the recon was
+looking for the wrong shape.
+
+### The idea: do not remove the receiver, OCCUPY it
+
+`UMthIsStatic` is Pascal's `class procedure` flag, and every call path in
+`parser.inc` that consults it — including the `PyExprMode` arm — already passes
+the CLASS as parameter 0. That is what makes the metaclass idiom work. So the
+two conventions line up if the static method is registered **with a hidden
+receiver at slot 0**, the slot the dispatch already fills, rather than teaching
+those paths a third convention. Nothing in `parser.inc` or `ir*.inc` changed.
+
+The body cannot see it: the parameter is named `$clsrecv`, and the implicit-self
+handling everywhere is keyed on the literal NAME `self` at position 0 — which is
+why the recon's list of `'self'` sites did not actually need editing. A static
+method simply never declares one.
+
+It also takes **no virtual slot**: dispatch does not go through the VMT, and
+handing it one desynchronises a subclass's override numbering.
+
+### Both traps in this area fired, and both were silent
+
+1. **First attempt made it a `tyClass` receiver.** The call site builds an
+   `AN_CLASSREF` for the argument, which reached `IRLowerAddress` and produced
+   `IR_UNSUPPORTED` (kind 46). `tyPointer` is the right kind. Loud, at least —
+   `--strict-ir` is what made it loud rather than a miscompile.
+2. **The pre-pass and the real parse disagreed on the `def` token index.**
+   `PyIsStaticMethodAt(TokPos - 3)` should be `TokPos - 4`: `TokPos` sits one
+   PAST `CurTok`, which is why the neighbouring `@property` check is `TokPos-2`
+   when `CurTok` is the name; with `(` already consumed the tokens run
+   `[def][name][(][CurTok]`. Off by one, so only the pre-pass saw the decorator
+   and the two passes registered DIFFERENT signatures. **Not an error** — the
+   exact silent ABI mismatch `PyPropAccessorPrefixAt`'s own comment warns about,
+   reproduced within an hour of reading that warning.
+
+### @classmethod is NOT done and now refuses BY NAME
+
+It needs a real `cls` receiver carrying the RUNTIME class. Treating it as a
+static would bind `cls` to the DECLARING class, so `Sub.make()` would build a
+`Base` — wrong object, run time, no diagnostic. It gets its own message saying
+so instead of the generic "unsupported decorator", which reads like a parser
+limitation.
+
+`test/test_nilpy_classmethod_fail.npy` pins that refusal, so "make it parse"
+cannot land without making it correct.
+
+### Verified
+`test/test_nilpy_staticmethod.npy` against CPython's own output: class- and
+instance-reached calls, a static called from an instance method, a subclass
+OVERRIDING a static, arity 0/1/2, annotated and unannotated parameters, a static
+beside `@property` and `__init__`, a static calling another static, and a class
+whose only member is a static. `gate.sh quick` GREEN (self-host fixedpoint +
+testmgr quick).
+
+### Remaining
+The @classmethod half. Retitle/refile as `feature-nilpy-classmethod` when picked
+up; retire the refusal test then.

@@ -1,0 +1,108 @@
+# feature-nilpy-staticmethod-and-classmethod (the @staticmethod half)
+#
+# `@staticmethod` was rejected outright: "unsupported decorator inside class".
+# 6 of the neuzelaar corpus's 168 files use it.
+#
+# The implementation is one idea: Python's static method declares no receiver,
+# but `UMthIsStatic` is Pascal's `class procedure` flag, and every call path
+# that consults it already passes the CLASS as parameter 0. So the method is
+# registered WITH a hidden receiver at slot 0 — the slot the dispatch already
+# fills — instead of teaching those paths a third calling convention. The body
+# cannot see it: it is not named `self`, so nothing can bind to it.
+#
+# The receiver is injected by BOTH the member pre-pass and the real method
+# parse, which ask the same PyIsStaticMethodAt independently. Getting the token
+# index wrong in one of them is not an error — it silently registers two
+# DIFFERENT signatures — and that is exactly what happened first (TokPos is one
+# past CurTok, so the `def` sits four back, not three). Every shape below is
+# therefore a call ACROSS that boundary.
+#
+# Asserted: reached through the CLASS and through an INSTANCE (Python allows
+# both and they are different resolution paths); called from inside another
+# method of the same class; a subclass that OVERRIDES a static (it takes no
+# virtual slot, so the two must not share one); arity 0, 1 and 2; annotated and
+# unannotated parameters; a static beside a @property and beside __init__ in
+# one class; and a static that calls another static.
+#
+# NOT asserted: @classmethod, which is deliberately still refused BY NAME —
+# its `cls` receiver is not modelled, and binding it to the declaring class
+# would be silently wrong in a subclass. Refusing beats a wrong answer.
+#
+# Expectations are CPython's own output.
+
+
+class F:
+    def __init__(self, v):
+        self.v = v
+
+    @staticmethod
+    def helper(n):
+        return n + 1
+
+    @staticmethod
+    def two(a, b):
+        return a * b
+
+    @staticmethod
+    def none():
+        return "no-args"
+
+    @staticmethod
+    def chained(n):
+        return F.helper(n) * 10
+
+    def use(self):
+        return F.helper(self.v)
+
+
+# through the CLASS
+print(F.helper(4), F.two(3, 5), F.none())
+
+# a static calling another static
+print(F.chained(2))
+
+# from inside an instance method
+print(F(10).use())
+
+# through an INSTANCE — Python allows it, and it is a different lookup
+f = F(1)
+print(f.helper(7), f.two(2, 4))
+
+
+# a subclass OVERRIDING a static: it takes no virtual slot, so the two must
+# stay independent rather than sharing one
+class G(F):
+    @staticmethod
+    def helper(n):
+        return n + 100
+
+
+print(G.helper(1), F.helper(1))
+print(G(5).use())   # F.use names F.helper explicitly, so it stays F's
+
+
+# annotated parameters, and a static living beside a @property
+class H:
+    def __init__(self):
+        self._x = 7
+
+    @staticmethod
+    def s(a: int) -> int:
+        return a + 1
+
+    @property
+    def p(self):
+        return self._x * 6
+
+
+print(H.s(1), H().p, H().s(5))
+
+
+# a class whose ONLY member is a static
+class Utils:
+    @staticmethod
+    def double(n: int) -> int:
+        return n * 2
+
+
+print(Utils.double(21))

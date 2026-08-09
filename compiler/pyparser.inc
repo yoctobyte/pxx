@@ -304,6 +304,7 @@ function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { compreh
 { PyMakeTruthy is forward-declared in parser.inc (included FIRST): the bool()
   arm there calls it too, and FPC rejects a second forward. }
 function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
+function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in parser.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
 { PyCallMeth1 is forward-declared in parser.inc (included before this file),
@@ -19372,6 +19373,29 @@ begin
     Result := '__prop_set_';
 end;
 
+{ Is the `def` at defIdx decorated `@staticmethod`?
+
+  Deliberately the same backward scan as PyPropAccessorPrefixAt above, and for
+  the same reason its comment gives: BOTH the class-member pre-pass and the real
+  method parse ask independently, and a disagreement between them is a silent
+  ABI mismatch rather than an error. One function, asked twice.
+
+  `@classmethod` is NOT accepted here. It needs a metaclass `cls` receiver
+  rather than merely dropping the instance one, and half-implementing it would
+  bind `cls` to the compile-time class instead of the runtime one — wrong for a
+  subclass, and silently wrong. It stays refused BY NAME.
+  feature-nilpy-staticmethod-and-classmethod }
+function PyIsStaticMethodAt(defIdx: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := defIdx - 1;
+  while (i >= 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(i);
+  if i < 1 then Exit;
+  Result := (Tokens[i - 1].Kind = tkAt) and
+            (LowerCase(GetTokenStr(i)) = 'staticmethod');
+end;
+
 function PyMethodName(const name: AnsiString): AnsiString;
 begin
   if name = '__init__' then Result := 'create' else Result := name;
@@ -20676,6 +20700,22 @@ begin
         name := PyPropAccessorPrefixAt(i) + origName;
       isCtor := name = 'create';
       nparams := 0;
+      { @staticmethod: a HIDDEN receiver at slot 0. Python's static method
+        declares no receiver, but UMthIsStatic is Pascal's `class procedure`
+        flag, and every call path that consults it passes the CLASS as
+        parameter 0 (that is what makes the metaclass idiom work). So the two
+        line up exactly if the parameter list is given the slot the dispatch
+        already fills — rather than teaching those paths a third convention.
+
+        The body never reads it: it is not named `self`, so nothing in the
+        method can bind to it. Both passes inject it, and they must agree —
+        a disagreement here is a silent ABI mismatch, not an error, which is
+        the whole reason PyIsStaticMethodAt is one function asked twice. }
+      if PyIsStaticMethodAt(i) and (not isCtor) then
+      begin
+        pnames[0] := '$clsrecv'; ptypes[0] := tyPointer;
+        nparams := 1;
+      end;
       for k := 0 to 15 do begin pdefHas[k] := False; pdefIsBool[k] := False; end;
       j := i + 3;
       mStarIdx := -1; mKwIdx := -1;
@@ -20932,10 +20972,22 @@ begin
       end
       else
         AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, procIdx);
+      { @staticmethod: no receiver. UMthIsStatic is the SAME flag Pascal's
+        `class procedure` sets, and parser.inc's call paths already consult it
+        (including the PyExprMode arm), so marking it here is the whole of the
+        dispatch change — `C.s(1)` and `inst.s(1)` both stop passing an
+        instance. Nothing needs to suppress a `self` parameter, because a
+        static method simply does not declare one and the self handling is
+        keyed on the literal NAME at position 0. }
+      if (not fieldsOnly) and (not isCtor) and PyIsStaticMethodAt(methodStart) then
+        UMthIsStatic[UMthCount - 1] := True;
       if not fieldsOnly then
       begin
         mmi := UMthCount - 1;
-        if not isCtor then
+        { A static method is not dispatched through the VMT, so it takes no
+          virtual slot — handing it one would consume a slot the subclass's
+          override numbering then disagrees about. }
+        if (not isCtor) and (not UMthIsStatic[mmi]) then
         begin
           { An OVERRIDE takes the slot the parent already assigned to that name,
             so a base-typed reference to a subclass instance dispatches to the
@@ -21316,6 +21368,20 @@ begin
   isCtor := name = 'create';
   Expect(tkLParen, '(');
   nparams := 0;
+  { the same hidden receiver the member pre-pass injected — see its note.
+
+    TokPos-4, not -3: TokPos sits ONE PAST CurTok (which is why the property
+    check above is TokPos-2 when CurTok is the name). Here `(` is already
+    consumed, so CurTok is the first parameter token and the tokens run
+    [def][name][(][CurTok] — putting `def` four back. Off by one, only the
+    pre-pass saw the decorator, and the two passes registered DIFFERENT
+    signatures: exactly the silent ABI mismatch this pairing is warned about. }
+  if PyIsStaticMethodAt(TokPos - 4) and (not isCtor) then
+  begin
+    pnames[0] := '$clsrecv'; ptypes[0] := tyPointer; pcis[0] := -1;
+    psigs[0] := -1;
+    nparams := 1;
+  end;
   while CurTok.Kind <> tkRParen do
   begin
     { `*` / `*args` / `**kwargs` — mirrors the member pre-pass above; the two
@@ -22284,21 +22350,37 @@ begin
         the decorator and parse the def that follows. }
       Next;
       if CurTok.Kind <> tkIdent then
-        Error('Nil Python: unsupported decorator inside class (only @property and @<name>.setter)');
+        Error('Nil Python: unsupported decorator inside class (only @property, '
+              + '@<name>.setter and @staticmethod)');
       propName := CurTok.SVal;
       Next;
       if CurTok.Kind = tkDot then
       begin
         Next;
         if (CurTok.Kind <> tkIdent) or (LowerCase(CurTok.SVal) <> 'setter') then
-          Error('Nil Python: unsupported decorator inside class (only @property and @<name>.setter)');
+          Error('Nil Python: unsupported decorator inside class (only @property, '
+                + '@<name>.setter and @staticmethod)');
         Next;
       end
-      else if LowerCase(propName) <> 'property' then
-        Error('Nil Python: unsupported decorator inside class (only @property and @<name>.setter)');
+      { @staticmethod is consumed here exactly as @property is: the member
+        pre-pass already registered the method and set UMthIsStatic, so this
+        only has to step over the decorator and parse the def.
+
+        @classmethod is named in its own right rather than falling into the
+        generic message, because "unsupported decorator" reads like a parser
+        limitation when the real answer is that its `cls` receiver is not
+        modelled yet. }
+      else if LowerCase(propName) = 'classmethod' then
+        Error('Nil Python: @classmethod is not supported yet — its `cls` '
+              + 'receiver is not modelled, and binding it to the declaring '
+              + 'class would be silently wrong in a subclass. @staticmethod works.')
+      else if (LowerCase(propName) <> 'property') and
+              (LowerCase(propName) <> 'staticmethod') then
+        Error('Nil Python: unsupported decorator inside class (only @property, '
+              + '@<name>.setter and @staticmethod)');
       PySkipNewlines;
       if CurTok.Kind <> tkFunction then
-        Error('Nil Python: @property must be followed by a def');
+        Error('Nil Python: @property/@staticmethod must be followed by a def');
       PyParseMethod(ci);
       PySkipNewlines;
     end
