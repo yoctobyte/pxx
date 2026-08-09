@@ -55,3 +55,45 @@ print(f8())
 f9 = lambda x: x + 1
 print(f9(41))
 
+
+# --- step 2 of that ticket, deferred there and taken now:
+# bug-nilpy-curried-lambda-fails-at-runtime
+#
+# `lambda a: lambda b: a + b` was rejected by this same predicate twice — no
+# call anywhere in the outer body, and the inner `:` outside its token set — so
+# it fell to the pyeval closure, which has no `lambda` keyword and died at RUN
+# time with "pyeval: name not defined: lambda". The predicate's justification
+# for requiring a call ("a call-less body already works through pyeval, and
+# lifting it would be a behaviour change for no gain") does not hold where the
+# interpreter cannot run the body at all.
+#
+# Relaxed ONLY for a body that begins with `lambda`, so every other call-less
+# body keeps its existing route.
+#
+# The open question the ticket recorded — whether the capture scan sees the
+# INNER lambda's free variables — is answered by the two-step and reuse cases
+# below: `a` is the outer's parameter and survives being partially applied,
+# stored, and called twice.
+
+add = lambda a: lambda b: a + b
+print(add(3)(4))
+
+held = add(10)
+print(held(5), held(1))
+
+three = lambda a: lambda b: lambda c: a + b + c
+print(three(1)(2)(3))
+
+pair = lambda a: lambda b: str(a) + "," + str(b)
+print(pair("x")("y"))
+
+def apply2(fn, x, y):
+    return fn(x)(y)
+print(apply2(lambda a: lambda b: a - b, 10, 4))
+
+# CONTROLS: the two shapes that already worked must be unchanged
+def outer(a):
+    return lambda b: a + b
+print(outer(1)(2))
+inc = lambda a: a + 1
+print(inc(41))

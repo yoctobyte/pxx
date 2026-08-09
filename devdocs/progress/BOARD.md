@@ -40,7 +40,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (215)
+## backlog (214)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,7 +56,6 @@ _none_
 | bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked | N | 60 | bug | `tuple(v)`, `sorted(v)`, `bytes(v)`, `reversed(v)`, `sum(v)` SEGFAULT when v is a variant holding a string — overload resolution binds a TPyList parameter and inserts an unchecked pyvarobj unwrap, so a string handle is reinterpreted as an object | — |
 | bug-nilpy-calling-a-non-callable-segfaults | N | 55 | bug | Calling a non-callable SEGFAULTS instead of raising TypeError | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
-| bug-nilpy-curried-lambda-fails-at-runtime | N | 40 | bug | A lambda whose body is another lambda dies at RUN time | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-def-returning-a-precreated-global-has-no-return-type | N | 35 | bug | `rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
@@ -387,9 +386,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1565)
+## done (1566)
 
-1565 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1566 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -529,7 +528,6 @@ _none_
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [N] feature-nilpy-multi-arg-callback-bridges (unblocks 1)
 - [p 40] [N] bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword
-- [p 40] [N] bug-nilpy-curried-lambda-fails-at-runtime
 - [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder

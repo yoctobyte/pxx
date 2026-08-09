@@ -6224,12 +6224,32 @@ end;
   tuple are shapes the capture scan has not been measured against), and a body
   with no call at all. }
 function PyLambdaBodyIsLiftable(bStart, bEnd: Integer): Boolean;
-var i, depth: Integer; sawCall: Boolean;
+var i, depth: Integer; sawCall, nestedLambda: Boolean;
 begin
   Result := False;
   if bEnd - bStart < 3 then Exit;
   depth := 0;
   sawCall := False;
+  { A CURRIED lambda — `lambda a: lambda b: a + b`. Two separate clauses of this
+    predicate rejected it: there is no call anywhere in the outer body, and the
+    inner `:` is not in the flat-expression token set below.
+
+    Both were written for a world where "not liftable" means "handled by the
+    pyeval closure instead", i.e. a slow path rather than a wrong one. That is
+    false for this shape: pyeval has no `lambda` keyword, so the inner lambda's
+    source text reaches it and the program DIES with
+    "pyeval: name not defined: lambda". The requirement's own justification —
+    "a body without a call already works through the pyeval closure, and lifting
+    it would be a behaviour change for no gain" — does not hold where the
+    interpreter cannot run the body at all.
+
+    Relaxed only for a body that BEGINS with `lambda`, so every other call-less
+    body keeps its existing route and this cannot become a broad behaviour
+    change. `lambda` lexes as a tkIdent here, which is also why PyLambdaTokText
+    can render it back out.
+    bug-nilpy-curried-lambda-fails-at-runtime }
+  nestedLambda := (Tokens[bStart].Kind = tkIdent) and
+                  CaseEqual(GetTokenStr(bStart), 'lambda');
   for i := bStart to bEnd - 1 do
   begin
     if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then
@@ -6244,16 +6264,18 @@ begin
     else if depth = 0 then
     begin
       { a flat expression: the callee chain, literals, and the operators
-        PyLambdaTokText knows how to write back out }
-      if not (Tokens[i].Kind in [tkIdent, tkDot, tkInteger, tkString,
+        PyLambdaTokText knows how to write back out — plus the inner lambda's
+        own `:` and `,` when this body IS a lambda }
+      if not ((Tokens[i].Kind in [tkIdent, tkDot, tkInteger, tkString,
                                  tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod,
                                  tkAmp, tkPipe, tkXor, tkShl, tkShr, tkLogNot,
                                  tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
                                  tkAnd, tkOr, tkNot, tkIn,
-                                 tkIf, tkElse, tkNil, tkTrue, tkFalse]) then Exit;
+                                 tkIf, tkElse, tkNil, tkTrue, tkFalse]) or
+              (nestedLambda and (Tokens[i].Kind in [tkColon, tkComma]))) then Exit;
     end;
   end;
-  Result := sawCall and (depth = 0);
+  Result := (sawCall or nestedLambda) and (depth = 0);
 end;
 
 procedure PyParseLambdaStub;

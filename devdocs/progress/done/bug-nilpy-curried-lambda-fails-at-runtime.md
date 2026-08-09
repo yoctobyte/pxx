@@ -3,13 +3,14 @@ prio: 40
 track: N
 type: bug
 blocked-by: []
+status: done
 ---
 
 # A lambda whose body is another lambda dies at RUN time
 
 - **Type:** bug (NilPy) — **Track N**
 - **Found:** 2026-08-09 by a differential sweep of closures and nested defs.
-- **Owner:** —
+- **Owner:** agent-AN
 
 ```python
 add = lambda a: lambda b: a + b
@@ -73,3 +74,64 @@ fails". Whichever: the currying idiom is common in argument-adapter code
 (`add(3)(4)`) and in two steps (`f = add(3); f(4)`), the inner lambda capturing
 the outer's parameter, a three-level curry, and the two shapes that already work
 as controls.
+
+## FIXED 2026-08-09 — route 1, and the open question is answered
+
+### Two clauses rejected it, not one
+
+The ticket identified the "body must contain a CALL" requirement. Measured,
+`PyLambdaBodyIsLiftable` rejected `lambda a: lambda b: a + b` **twice**: there is
+no call anywhere in the outer body, *and* the inner `:` is not in the
+flat-expression token set the predicate walks — so it would have exited on the
+colon before the `sawCall` test was even consulted. Both had to go.
+
+### The relaxation is narrow on purpose
+
+`nestedLambda` = the body's FIRST token is `lambda`. Only then are `tkColon` and
+`tkComma` accepted at depth 0, and only then does `sawCall` stop being required.
+Every other call-less body keeps its existing pyeval route, so this cannot become
+a broad behaviour change — which matters, because the requirement's stated
+justification is exactly that lifting a call-less body would be one.
+
+That justification is what does not hold here, and the ticket had the reason
+right: *"a body without a call already works through the pyeval closure"* is
+false for this shape. pyeval has no `lambda` keyword, so the interpreter cannot
+run the body at all and the program DIES. "Not liftable" normally means a slower
+route; here it meant no route.
+
+### The open question, answered by measurement
+
+> **Still open:** whether the capture scan sees the INNER lambda's free
+> variables (here `a`, the outer's parameter).
+
+**It does.** Not asserted from reading the scan — asserted from behaviour that
+could not work otherwise:
+
+- `held = add(10)` then `held(5)`, `held(1)` → `15`, `11`. The outer parameter
+  survives being partially applied, STORED, and called twice.
+- `three = lambda a: lambda b: lambda c: a + b + c`; `three(1)(2)(3)` → `6`.
+  Two levels of capture, so the scan is not merely handling one.
+- A curried lambda passed as an ARGUMENT and applied inside a def → correct.
+- A string-returning one (`str(a) + "," + str(b)`) → correct, so it is not
+  integer-only.
+
+All diffed against CPython.
+
+### Route 2 is still worth having
+
+Teaching pyeval the `lambda` keyword would remove the whole class of "falls back
+to the interpreter and then fails" rather than this one shape. Route 1 was taken
+because it is narrow and the failure is a hard crash today; route 2 remains open
+under [[feature-nilpy-lambda-compiled-closure]].
+
+### Gate
+
+Extended `test_nilpy_lambda_expression_body.npy` — the test of the ticket that
+DEFERRED this as "step 2", so the two now sit together and the same predicate has
+one test. Covers `add(3)(4)`, the two-step form, three-level currying, a
+string-returning curry, a curried lambda passed as an argument, and the two
+shapes that already worked as controls. Matches CPython byte for byte; self-host
+fixedpoint byte-identical.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.
