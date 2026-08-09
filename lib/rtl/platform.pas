@@ -159,6 +159,10 @@ function PalNanosleep(sec, nsec: Int64): Integer;
 function PalRealtime(var sec, nsec: Int64): Integer;
 function PalUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 function PalMmapAnon(len: Int64): Pointer;
+{ Anonymous mapping with an EXPLICIT protection, for callers that need
+  executable pages (PROT_READ|WRITE|EXEC = 7). PalMmapAnon stays read/write. }
+function PalMmapAnonProt(len: Int64; prot: Integer): Pointer;
+function PalMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
 function PalMunmap(addr: Pointer; len: Int64): Integer;
 
 function PalSocket(domain, kind, proto: Integer): Integer;
@@ -474,6 +478,16 @@ end;
 function PalUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 begin
   Result := PalBackendUtimes(path, atimeSec, mtimeSec);
+end;
+
+function PalMmapAnonProt(len: Int64; prot: Integer): Pointer;
+begin
+  Result := PalBackendMmapAnonProt(len, prot);
+end;
+
+function PalMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
+begin
+  Result := PalBackendMprotect(addr, len, prot);
 end;
 
 function PalMmapAnon(len: Int64): Pointer;

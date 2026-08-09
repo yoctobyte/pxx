@@ -12,9 +12,27 @@
 #include <stddef.h>
 #include <errno.h>
 
+extern void *__pxx_mmap_anon_prot(long length, int prot);
+extern int __pxx_mprotect(void *addr, long length, int prot);
+extern int __pxx_munmap(void *addr, long length);
+
+/* ANONYMOUS mappings are real now, over the PAL. That is what a JIT needs:
+   tcc -run maps pages, writes code into them and jumps in, which the old
+   MAP_FAILED stub made impossible.
+
+   FILE-BACKED mmap is still refused with MAP_FAILED, deliberately. sqlite is
+   the only in-tree caller and its mmap I/O is off by default
+   (SQLITE_MAX_MMAP_SIZE = 0), so it falls back to ordinary read/write — which
+   also sidesteps the 32-bit mmap2 page-offset ABI. A wrong file mapping would
+   be a silent data bug; a refusal is a fallback. */
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
-  (void)addr; (void)length; (void)prot; (void)flags; (void)fd; (void)offset;
-  return MAP_FAILED;
+  void *p;
+  (void)addr; (void)offset;
+  if (!(flags & MAP_ANONYMOUS) || fd != -1) return MAP_FAILED;
+  p = __pxx_mmap_anon_prot((long)length, prot);
+  /* the raw syscall returns -errno in the top page on failure */
+  if ((unsigned long)p >= (unsigned long)-4095L) return MAP_FAILED;
+  return p;
 }
 
 /* LFS alias: sqlite's os_unix.c imports mmap64 under _LARGEFILE64_SOURCE. Same
@@ -24,16 +42,16 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off_t offse
 }
 
 int munmap(void *addr, size_t length) {
-  (void)addr; (void)length;
-  return 0;
+  if (!addr) return 0;
+  return __pxx_munmap(addr, (long)length) < 0 ? -1 : 0;
 }
 
-/* No-op success: pairs with the stub mmap above (nothing is ever really
-   mapped). tcc's protect_pages calls it; real exec-page support needs the
-   PAL-backed mmap first. */
+/* Real now — tcc's protect_pages needs it to flip written code pages to
+   executable. A no-op success here used to be honest only because nothing was
+   ever really mapped; with anonymous mmap live it would be a lie. */
 int mprotect(void *addr, size_t length, int prot) {
-  (void)addr; (void)length; (void)prot;
-  return 0;
+  if (!addr) return 0;
+  return __pxx_mprotect(addr, (long)length, prot) < 0 ? -1 : 0;
 }
 
 /* Flushing a mapping nothing ever created is vacuously done — no-op success,

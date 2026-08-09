@@ -535,3 +535,38 @@ declared-but-unimplemented crtl function (`atexit`) and this silent-NULL
 Not faked in the meantime: a lazily-populated `environ` cannot work without the
 hook, and a `#define environ (__pxx_environ())` macro would break every
 `extern char **environ;` declaration in real code.
+
+### tcc, third gap FIXED: anonymous `mmap`/`mprotect` were no-op stubs
+
+Suspect #1 on [[feature-c-corpus-tcc]]'s list — *"mmap/mprotect are stubs (mmap
+returns MAP_FAILED) — tcc_relocate needs real anonymous exec mappings"* — was
+real, and is now fixed.
+
+- PAL gained `PalMmapAnonProt(len, prot)` and `PalMprotect(addr, len, prot)`.
+  `PalMmapAnon` stays RW-only so its existing callers are untouched;
+  `SYS_mprotect` added to all five posix arch tables. The ESP backend refuses
+  both, which is the honest answer: no MMU, code runs from flash or IDF-owned
+  IRAM, so a fake pointer would be a wrong answer rather than a missing feature.
+- crtl's `mmap` now serves ANONYMOUS requests over the PAL and still refuses
+  file-backed ones with `MAP_FAILED` — sqlite is the only in-tree caller, its
+  mmap I/O is off by default, and it falls back to read/write. `mprotect` and
+  `munmap` are real.
+
+Verified with the JIT shape — map RW, write machine code, `mprotect` to R+X,
+call it — identical to gcc, and pinned as `test/cmman_jit_exec_pages.c` in
+`make lib-test`.
+
+**`tcc -run` works as a result:**
+
+```
+$ tcc -run ret7.c     -> exit 7
+$ tcc -run say.c      -> exit 3
+```
+
+The program genuinely executes. **One narrow gap remains**: its stdout is never
+flushed. `puts("x")` alone prints nothing, while `puts("x"); fflush(stdout);`
+and `write(1, ...)` both print. So the JIT'd program's buffered output is lost
+at exit — plausibly the same missing init/fini hook as `atexit` and `environ`
+([[feature-c-entry-stub-must-run-finalizers]]), which would make that ONE
+entry-stub change unblock three separate gaps. Not yet confirmed; recorded as
+the next thing to check rather than asserted.

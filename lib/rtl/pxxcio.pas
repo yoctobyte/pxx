@@ -104,6 +104,9 @@ function __pxx_fchown(fd, owner, group: Integer): Integer;
 function __pxx_isatty(fd: Integer): Integer;
 function __pxx_ioctl(fd: Integer; req: NativeInt; argp: Pointer): Integer;
 function __pxx_poll(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
+function __pxx_mmap_anon_prot(length: Int64; prot: Integer): Pointer;
+function __pxx_mprotect(addr: Pointer; length: Int64; prot: Integer): Integer;
+function __pxx_munmap(addr: Pointer; length: Int64): Integer;
 function __pxx_getuid: Integer;
 function __pxx_getgid: Integer;
 function __pxx_getegid: Integer;
@@ -493,6 +496,23 @@ function __pxx_poll(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
   reusing the per-handle PalPoll. }
 begin
   Result := PalPollSet(fds, nfds, timeoutMs);
+end;
+
+function __pxx_mmap_anon_prot(length: Int64; prot: Integer): Pointer;
+{ C's mmap for the ANONYMOUS case, which is what a JIT needs: tcc -run maps
+  pages, writes code in and jumps. File-backed mmap stays refused in crtl. }
+begin
+  Result := PalMmapAnonProt(length, prot);
+end;
+
+function __pxx_mprotect(addr: Pointer; length: Int64; prot: Integer): Integer;
+begin
+  Result := PalMprotect(addr, length, prot);
+end;
+
+function __pxx_munmap(addr: Pointer; length: Int64): Integer;
+begin
+  Result := PalMunmap(addr, length);
 end;
 
 function __pxx_getuid: Integer;

@@ -58,6 +58,8 @@ function PalBackendNanosleep(sec, nsec: Int64): Integer;
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 function PalBackendMmapAnon(len: Int64): Pointer;
+function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
+function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
 function PalBackendIgnoreSignal(sig: Integer): Integer;
 
@@ -125,7 +127,7 @@ const
   SYS_sendto=44; SYS_recvfrom=45; SYS_ppoll=271;
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
-  SYS_mmap = 9; SYS_munmap = 11; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
+  SYS_mmap = 9; SYS_munmap = 11; SYS_mprotect = 10; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
   SYS_fchmodat = 268; SYS_umask = 95;
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
@@ -144,7 +146,7 @@ const
   SYS_ppoll=309;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
-  SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
+  SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
   SYS_fchmodat = 306; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
@@ -161,7 +163,7 @@ const
   SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
-  SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
+  SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
@@ -178,7 +180,7 @@ const
   SYS_sendto=290; SYS_recvfrom=292; SYS_ppoll=336;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
-  SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
+  SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
   SYS_fchmodat = 333; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
@@ -199,7 +201,7 @@ const
   SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
-  SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
+  SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
@@ -670,6 +672,20 @@ function PalBackendMmapAnon(len: Int64): Pointer;
 begin
   { mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0); 32-bit = mmap2, page-offset 0 }
   Result := Pointer(__pxxrawsyscall(SYS_mmap, 0, len, 3, 34, -1, 0));
+end;
+
+{ Anonymous mmap with an EXPLICIT protection, for callers needing executable
+  pages — a JIT writes code then runs it. PalBackendMmapAnon stays RW-only so
+  its existing callers are untouched. }
+function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
+begin
+  { MAP_PRIVATE|MAP_ANONYMOUS = 34; 32-bit uses mmap2 with a page offset of 0 }
+  Result := Pointer(__pxxrawsyscall(SYS_mmap, 0, len, prot, 34, -1, 0));
+end;
+
+function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_mprotect, Int64(addr), len, prot, 0, 0, 0));
 end;
 
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;

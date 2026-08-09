@@ -8153,6 +8153,10 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_rounding_contract | tail -n 1)" = "ROUNDING OK"
 	# longjmp usable as a VALUE, not only as a call — C 7.13 requires it to be a
 	# real function, and tcc passes it as a function pointer.
+	# anonymous mmap gives REAL pages and mprotect really flips them executable —
+	# the JIT shape tcc -run needs. Both used to be no-op stubs.
+	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmman_jit_exec_pages.c /tmp/cmman_jit_exec_pages
+	/tmp/cmman_jit_exec_pages; test "$$?" = "42"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/crtl_longjmp_as_value.c /tmp/crtl_longjmp_as_value
 	/tmp/crtl_longjmp_as_value; test "$$?" = "42"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_lround.c /tmp/cmath_lround

@@ -54,6 +54,8 @@ function PalBackendNanosleep(sec, nsec: Int64): Integer;
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 function PalBackendMmapAnon(len: Int64): Pointer;
+function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
+function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
@@ -606,6 +608,21 @@ end;
 function PalBackendMmapAnon(len: Int64): Pointer;
 begin
   Result := Pointer(-1);
+end;
+
+{ ESP has no MMU and no anonymous mapping to hand out — same refusal as
+  PalBackendMmapAnon above. A JIT is not a thing here: code runs from flash or
+  from IRAM the IDF allocates, neither of which this call can produce, so
+  answering with a fake pointer would be a wrong answer rather than a missing
+  feature. }
+function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
+begin
+  Result := Pointer(-1);
+end;
+
+function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
