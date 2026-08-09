@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (211)
+## backlog (215)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -61,6 +61,7 @@ _none_
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
+| bug-nilpy-enumerate-with-start-fails-in-a-for-header | N | 45 | bug | `for i, v in enumerate(xs, 1):` — the start offset works everywhere EXCEPT a for header | — |
 | bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
 | bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
@@ -159,6 +160,7 @@ _none_
 | feature-nilpy-hasattr-per-instance-assigned-tracking | N | 40 | feature | hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit. | — |
 | feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition | N | 30 | feature | NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on every test. A provably-constant container build is loop-invariant and should be hoisted to a variable once — what a person would write by hand — while everything else keeps being folded into the condition. | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nilpy-iter-and-next-over-a-container | N | 35 | feature | `iter(xs)` is undefined — the explicit iterator protocol | — |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
@@ -166,6 +168,7 @@ _none_
 | feature-nilpy-multi-arg-callback-bridges | N | 35→40 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
+| feature-nilpy-percent-format-with-a-mapping | N | 30 | feature | `"%(k)s" % {...}` — the mapping form of %-formatting | — |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
 | feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep | N | 30 | feature | Ordinary Python forms NilPy diagnoses cleanly but does not accept. print(sep=) and str.format() with 3+ (and 0) placeholders are DONE (2026-08-08); ten rows remain: enumerate(str), type(x) other than .__name__, a non-name lambda default, dict(x=1), .update(b=2), extended-slice assign, self.__class__.__name__, nested unpacking, bare tuple, two-for comprehension | — |
@@ -177,6 +180,7 @@ _none_
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
 | feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
+| feature-nilpy-with-multiple-context-managers | N | 35 | feature | `with A() as a, B() as b:` — only one context manager per `with` | — |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-accumulator-value-tracker | O | 58→60 | feature | The register-value scaffold two -O passes are blocked on: a single choke point for every write to the accumulator, so a 'rax currently holds symbol S' fact can be maintained without a silent-miscompile risk. Today rax is written from hundreds of scattered raw EmitB sites. | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
@@ -478,6 +482,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 3)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
+- [p 45] [N] bug-nilpy-enumerate-with-start-fails-in-a-for-header
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
@@ -560,7 +565,9 @@ _none_
 - [p 35] [S] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [A] feature-nilpy-arc-cross-parity
+- [p 35] [N] feature-nilpy-iter-and-next-over-a-container
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod
+- [p 35] [N] feature-nilpy-with-multiple-context-managers
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
@@ -579,6 +586,7 @@ _none_
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-match-statement
+- [p 30] [N] feature-nilpy-percent-format-with-a-mapping
 - [p 30] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 30] [N] feature-nilpy-walrus-operator
