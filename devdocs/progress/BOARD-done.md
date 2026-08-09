@@ -524,6 +524,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-discarded-string-result-leaks | N | 50 | bug | A call whose managed-string result is DISCARDED leaks it | — |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
 | bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class | N | 40 | bug | SILENT->CRASH: with two classes declaring the same field name, a call through a dynamically-typed receiver hard-casts to whichever class the scan found FIRST — the field offset is read from the wrong layout, no diagnostic | — |
+| bug-nilpy-enumerate-with-start-fails-in-a-for-header | N | 45 | bug | `for i, v in enumerate(xs, 1):` — the start offset works everywhere EXCEPT a for header | — |
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
 | bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one | N | 65 | bug | A returned closure reads GARBAGE for its captures unless it takes exactly one argument | — |
 | bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory | N | 75 | bug | `f.write()` silently writes nothing, and once a "w" open exists, `print(f.read())` dumps RTTI MEMORY to stdout | — |

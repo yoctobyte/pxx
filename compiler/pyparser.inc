@@ -13240,6 +13240,7 @@ end;
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
                        forTokIdx: Integer): Integer;
 var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
+    enumStartNode, enumStartSym: Integer;   { `enumerate(xs, START)` }
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN, savedHoist, innerHoist: Integer;
@@ -13334,6 +13335,20 @@ begin
     Tokens[itemsDot].Kind := tkDot;
     TokPos := itemsDot + 4;
     Next;
+  end;
+  { `enumerate(xs, START)` — the second argument. It was implemented for the
+    EXPRESSION form (`list(enumerate(ys, 1))` has always been right) and this
+    for-header path, which parses its iterable separately, never learned it: the
+    `)` was demanded immediately and the comma was a syntax error.
+    bug-nilpy-enumerate-with-start-fails-in-a-for-header }
+  enumStartNode := -1;
+  if enumMode and (CurTok.Kind = tkComma) then
+  begin
+    contNode := CurASTNode;      { PyParseBoolExpr below overwrites it }
+    Next;
+    PyParseBoolExpr;
+    enumStartNode := CurASTNode;
+    CurASTNode := contNode;
   end;
   if enumMode then Expect(tkRParen, ')');
   if filtIdx >= 0 then Tokens[filtIdx].Kind := tkIf;   { un-hide the filter }
@@ -13602,6 +13617,19 @@ begin
   ASTLeft[node] := PyMakeIdent(cSym);
   ASTRight[node] := contNode;
   seq := PySeqAppend(seq, node);
+  { The start is bound to a hidden local BEFORE the loop, not spliced into the
+    per-iteration index expression. Python evaluates it once, and an AST node
+    used in two places is EMITTED twice here — so reusing the expression node
+    would both re-evaluate a call and duplicate its code. }
+  enumStartSym := -1;
+  if enumStartNode >= 0 then
+  begin
+    enumStartSym := AllocVar(PyHiddenName('es'), tyInt64);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(enumStartSym);
+    ASTRight[node] := enumStartNode;
+    seq := PySeqAppend(seq, node);
+  end;
   { the dict form's parallel VALUE list — enumerate has no second container, and
     reading vSym/vListNode there took an UNINITIALISED node index, which landed
     in the retained-inline AST region and surfaced as "could not lower AST node
@@ -13684,10 +13712,19 @@ begin
   end;
   if enumMode then
   begin
-    { i := __py_i ; v := __py_c[__py_i] }
+    { i := __py_i (+ START) ; v := __py_c[__py_i] }
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);
-    ASTRight[node] := PyMakeIdent(iSym);
+    if enumStartSym >= 0 then
+    begin
+      ASTRight[node] := AllocNode(AN_BINOP);
+      ASTIVal[ASTRight[node]] := Ord(tkPlus);
+      ASTLeft[ASTRight[node]] := PyMakeIdent(iSym);
+      ASTRight[ASTRight[node]] := PyMakeIdent(enumStartSym);
+      ASTTk[ASTRight[node]] := Ord(tyInt64);
+    end
+    else
+      ASTRight[node] := PyMakeIdent(iSym);
     bodyNode := PySeqAppend(bodyNode, node);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(sym2);

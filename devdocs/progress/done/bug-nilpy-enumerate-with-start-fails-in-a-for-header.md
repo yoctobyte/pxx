@@ -40,3 +40,24 @@ than fixing `enumerate` alone and leaving the next one to be reported.
 with and without a start, in a `for` header and in expression position, with
 tuple-unpacking and single-name targets, plus the neighbouring builtins in a
 `for` header with their optional arguments.
+
+## 2026-08-09 — FIXED
+
+The for header now takes the second argument. The start is bound to a hidden
+local BEFORE the loop rather than spliced into the per-iteration index, for two
+reasons that both bite here: Python evaluates it once, and an AST node used in
+two places is EMITTED twice in this frontend. `enumerate(ys, bump())` in the test
+counts its own calls, so a per-iteration re-evaluation fails loudly.
+
+**The ticket's wider ask came back clean.** Every neighbouring iterable builtin
+was checked in a for header with its optional arguments — `sorted(reverse=)`,
+`sorted(key=)`, `range` with a step, `reversed`, `zip`, a slice and `.items()` —
+and all were already correct. `enumerate` was the only one. They are in the test
+anyway, so the next builtin to lose an optional argument in a for header fails
+there rather than in someone's program.
+
+The test asserts the for-header and expression forms SIDE BY SIDE for the same
+values: testing only the header would pass against a fix that broke the
+expression form, and testing only the expression form is what let this survive.
+
+Verified against CPython, `gate.sh quick` GREEN.

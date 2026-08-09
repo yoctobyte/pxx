@@ -1,0 +1,93 @@
+# bug-nilpy-enumerate-with-start-fails-in-a-for-header
+#
+# `for i, v in enumerate(xs, 1):` was a SYNTAX ERROR while
+# `list(enumerate(xs, 1))` had always been correct. A `for` header parses its
+# iterable on a separate path from an ordinary expression, and that path never
+# learned the second argument — it demanded the `)` immediately.
+#
+# So this test asserts the two forms SIDE BY SIDE for the same values. Testing
+# only the for header would have passed against a fix that broke the expression
+# form, and testing only the expression form is what let this survive.
+#
+# The start is bound to a hidden local BEFORE the loop rather than spliced into
+# the per-iteration index: Python evaluates it once, and an AST node used in two
+# places is emitted twice in this frontend. `enumerate(ys, len(xs))` and
+# `enumerate(ys, bump())` are the cases that pin it — the second counts its own
+# calls, so a per-iteration re-evaluation fails loudly instead of quietly
+# costing time.
+#
+# Controls: the ONE-argument form in both positions (it must not regress), a
+# start of 0 and a NEGATIVE start, and the neighbouring iterable builtins in a
+# for header with their optional arguments — sorted(reverse=), sorted(key=),
+# range with a step, reversed, zip, a slice and .items(). Those were all already
+# correct; they are here so that the next builtin to lose an optional argument
+# in a for header fails in this file rather than in someone's program.
+#
+# Expectations are CPython's own output.
+
+xs = [3, 1, 2]
+ys = ["a", "b", "c"]
+
+# the bug: for header, with a start
+for i, v in enumerate(ys, 1):
+    print("start1", i, v)
+
+# the same values through the expression form
+print(list(enumerate(ys, 1)))
+
+# a larger start, and a start of 0
+for i, v in enumerate(ys, 10):
+    print("start10", i, v)
+print(list(enumerate(ys, 10)))
+
+for i, v in enumerate(ys, 0):
+    print("start0", i, v)
+
+# a NEGATIVE start
+for i, v in enumerate(ys, -2):
+    print("startneg", i, v)
+print(list(enumerate(ys, -2)))
+
+# a start that is an EXPRESSION, not a literal
+for i, v in enumerate(ys, len(xs)):
+    print("startexpr", i, v)
+
+
+# a start with a SIDE EFFECT: it must be evaluated exactly once
+calls = []
+
+
+def bump():
+    calls.append(1)
+    return 100
+
+
+for i, v in enumerate(ys, bump()):
+    print("startcall", i, v)
+print("bump called", len(calls), "time(s)")
+
+# --- controls: the one-argument form, both positions ---
+for i, v in enumerate(ys):
+    print("plain", i, v)
+print(list(enumerate(ys)))
+
+# --- controls: an empty container with a start binds nothing ---
+for i, v in enumerate([], 5):
+    print("never", i, v)
+print(list(enumerate([], 5)))
+
+# --- controls: the neighbouring builtins in a for header ---
+for v in sorted(xs, reverse=True):
+    print("sortrev", v)
+for v in sorted(ys, key=len):
+    print("sortkey", v)
+for i in range(0, 6, 2):
+    print("range3", i)
+for v in reversed(xs):
+    print("rev", v)
+for a, b in zip(xs, ys):
+    print("zip", a, b)
+for v in sorted(xs)[1:]:
+    print("slice", v)
+for k, v in sorted({"b": 2, "a": 1}.items()):
+    print("items", k, v)

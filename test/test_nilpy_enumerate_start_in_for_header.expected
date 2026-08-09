@@ -1,0 +1,46 @@
+start1 1 a
+start1 2 b
+start1 3 c
+[(1, 'a'), (2, 'b'), (3, 'c')]
+start10 10 a
+start10 11 b
+start10 12 c
+[(10, 'a'), (11, 'b'), (12, 'c')]
+start0 0 a
+start0 1 b
+start0 2 c
+startneg -2 a
+startneg -1 b
+startneg 0 c
+[(-2, 'a'), (-1, 'b'), (0, 'c')]
+startexpr 3 a
+startexpr 4 b
+startexpr 5 c
+startcall 100 a
+startcall 101 b
+startcall 102 c
+bump called 1 time(s)
+plain 0 a
+plain 1 b
+plain 2 c
+[(0, 'a'), (1, 'b'), (2, 'c')]
+[]
+sortrev 3
+sortrev 2
+sortrev 1
+sortkey a
+sortkey b
+sortkey c
+range3 0
+range3 2
+range3 4
+rev 2
+rev 1
+rev 3
+zip 3 a
+zip 1 b
+zip 2 c
+slice 2
+slice 3
+items a 1
+items b 2
