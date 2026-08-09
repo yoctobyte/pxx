@@ -1,0 +1,93 @@
+# feature-nilpy-with-multiple-context-managers
+#
+# `with A() as a, B() as b:` was a syntax error; only one manager per `with`.
+#
+# The lowering is NESTING, and that is not an approximation: Python DEFINES the
+# comma form as `with A() as a:` containing `with B() as b:`. So the parser
+# recurses on the comma and every property follows for free — in particular
+# __exit__ ORDER (innermost first) and the exception path, which a flattened
+# lowering would have to get right by hand.
+#
+# The order is the whole reason this test prints from __enter__ and __exit__
+# rather than just checking the bound values: two managers that never print
+# would pass a lowering that exits them in the wrong order, or not at all.
+#
+# The bug this cost an hour: `bodyNode := PyParseWithTail;` — a BARE own-function
+# name READS Result in this dialect instead of recursing. It compiled, recursed
+# not at all, handed back an uninitialised node, and left the remaining managers
+# in the token stream, so the error surfaced as "undefined variable (as)" on the
+# NEXT manager. `PyParseWithTail()` with parens is the fix.
+# (project_bare_funcname_result_partial — this dialect's recorded landmine.)
+#
+# NOT asserted: `return` from inside a `with`, which does NOT run __exit__ —
+# pre-existing, not specific to multiple managers, and filed as
+# bug-nilpy-return-inside-a-with-skips-exit. Asserting today's answer would
+# freeze a silent resource leak. The EXCEPTION path IS asserted, because that
+# one is correct and is the property most likely to break when this is touched.
+#
+# Expectations are CPython's own output.
+
+
+class Ctx:
+    def __init__(self, n):
+        self.n = n
+
+    def __enter__(self):
+        print("enter", self.n)
+        return self
+
+    def __exit__(self, a, b, c):
+        print("exit", self.n)
+        return False
+
+
+# control: one manager, unchanged
+with Ctx(1) as a:
+    print("one", a.n)
+
+# two, and three — exits must run innermost first
+with Ctx(2) as a, Ctx(3) as b:
+    print("two", a.n, b.n)
+
+with Ctx(4) as a, Ctx(5) as b, Ctx(6) as c:
+    print("three", a.n, b.n, c.n)
+
+# an `as`-less manager mixed with a bound one
+with Ctx(7), Ctx(8) as b:
+    print("mixed", b.n)
+
+with Ctx(9) as a, Ctx(10):
+    print("mixed2", a.n)
+
+# the exception path: BOTH must exit, innermost first, and the exception
+# must still propagate
+try:
+    with Ctx(11) as a, Ctx(12) as b:
+        print("before raise", a.n, b.n)
+        raise ValueError("boom")
+except ValueError as e:
+    print("caught", e)
+
+# nesting written out by hand must behave identically to the comma form
+with Ctx(13) as a:
+    with Ctx(14) as b:
+        print("nested", a.n, b.n)
+
+# a manager whose __enter__ returns something OTHER than self, in a comma list
+class Giver:
+    def __enter__(self):
+        print("enter giver")
+        return 99
+
+    def __exit__(self, a, b, c):
+        print("exit giver")
+        return False
+
+
+with Ctx(15) as a, Giver() as g:
+    print("giver", a.n, g)
+
+# a loop inside a multi-manager with
+with Ctx(16) as a, Ctx(17) as b:
+    for i in range(2):
+        print("loop", i, a.n, b.n)

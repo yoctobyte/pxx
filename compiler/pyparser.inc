@@ -12680,11 +12680,18 @@ begin
   ASTLeft[Result] := selfArg;
 end;
 
-function PyParseWith: Integer;
+{ One manager of a `with`, and everything to its right. Split from PyParseWith
+  so the COMMA form can recurse into itself: Python DEFINES
+  `with A() as a, B() as b:` as `with A() as a:` containing `with B() as b:`,
+  so nesting is not an approximation of it — it is the specification. That also
+  gets __exit__ ORDER right for free (innermost first, on the exception path
+  too), which is the part a flattened lowering would get wrong.
+  Entered with `with` (or the preceding comma) already consumed.
+  feature-nilpy-with-multiple-context-managers }
+function PyParseWithTail: Integer;
 var exprNode, node, seq, symIdx, cmCi, cmSym, entNode, exitNode, bodyNode: Integer;
     varName: AnsiString; usesProtocol: Boolean;
 begin
-  Next;                                  { consume `with` }
   PyParseBoolExpr;
   exprNode := CurASTNode;
   seq := -1;
@@ -12754,8 +12761,23 @@ begin
     else if entNode >= 0 then
       seq := PySeqAppend(seq, entNode);   { run __enter__ for its effect }
 
-    Expect(tkColon, ':');
-    bodyNode := PyParseSuite;
+    { a COMMA means more managers: the rest of the list becomes THIS one's body,
+      which is exactly the nesting Python defines. }
+    if CurTok.Kind = tkComma then
+    begin
+      Next;
+      { PARENS: a bare own-function name READS Result in this dialect rather
+        than calling — so `bodyNode := PyParseWithTail;` recursed not at all,
+        silently handed back an uninitialised node, and left the remaining
+        managers in the token stream for the statement loop to choke on.
+        project_bare_funcname_result_partial. }
+      bodyNode := PyParseWithTail();
+    end
+    else
+    begin
+      Expect(tkColon, ':');
+      bodyNode := PyParseSuite;
+    end;
     PyStmtAteBlock := True;
 
     { try/finally so __exit__ runs on the exception path and on break/return
@@ -12805,10 +12827,24 @@ begin
   end
   else
     seq := PySeqAppend(seq, exprNode);   { evaluate for effect }
-  Expect(tkColon, ':');
-  seq := PySeqAppend(seq, PyParseSuite);
+  if CurTok.Kind = tkComma then
+  begin
+    Next;
+    seq := PySeqAppend(seq, PyParseWithTail());   { parens — see the note above }
+  end
+  else
+  begin
+    Expect(tkColon, ':');
+    seq := PySeqAppend(seq, PyParseSuite);
+  end;
   PyStmtAteBlock := True;                 { consumed our own body block }
   Result := seq;
+end;
+
+function PyParseWith: Integer;
+begin
+  Next;                                  { consume `with` }
+  Result := PyParseWithTail;
 end;
 
 { A distinct name per hidden loop temp, so nested for-in loops do not share

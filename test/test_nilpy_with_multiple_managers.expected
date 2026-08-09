@@ -1,0 +1,47 @@
+enter 1
+one 1
+exit 1
+enter 2
+enter 3
+two 2 3
+exit 3
+exit 2
+enter 4
+enter 5
+enter 6
+three 4 5 6
+exit 6
+exit 5
+exit 4
+enter 7
+enter 8
+mixed 8
+exit 8
+exit 7
+enter 9
+enter 10
+mixed2 9
+exit 10
+exit 9
+enter 11
+enter 12
+before raise 11 12
+exit 12
+exit 11
+caught boom
+enter 13
+enter 14
+nested 13 14
+exit 14
+exit 13
+enter 15
+enter giver
+giver 15 99
+exit giver
+exit 15
+enter 16
+enter 17
+loop 0 16 17
+loop 1 16 17
+exit 17
+exit 16

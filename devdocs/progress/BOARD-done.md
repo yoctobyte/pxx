@@ -1254,6 +1254,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-tuple-return | N | 50 | feature | nilpy: return a tuple — `return 1, 2` (and unpack at the call site) | — |
 | feature-nilpy-tuple-unpack | N | 55 | feature | NilPy: sequence unpacking (`a, b = ...`, `for k, v in ...`) | — |
 | feature-nilpy-wire-pyeval-exec | A | 55 | feature | Wire pyeval into NilPy exec() — auto-use triggers an unrelated str-index segfault | — |
+| feature-nilpy-with-multiple-context-managers | N | 35 | feature | `with A() as a, B() as b:` — only one context manager per `with` | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-opt-div0-stub-on-use | O | 25 | feature | x86-64 div-by-zero abort stub is emitted unconditionally, even for division-free programs | — |
