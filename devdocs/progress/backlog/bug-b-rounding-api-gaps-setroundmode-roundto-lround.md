@@ -2,6 +2,7 @@
 track: B
 prio: 35
 type: bug
+blocked-by: feature-a-expose-rounding-mode-intrinsic-to-pascal
 summary: "Per-language rounding DEFAULTS are all correct (Pascal banker's = FPC, C round() half-away = gcc, Python round() = CPython incl. round(2.675,2)=2.67) — but the escape hatches are missing: no SetRoundMode/RoundTo/SimpleRoundTo in lib/rtl/math.pas, no lround/llround in crtl"
 ---
 
