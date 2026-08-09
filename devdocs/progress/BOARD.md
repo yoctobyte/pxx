@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -84,6 +84,7 @@ _none_
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
 | bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler | T | 45 | bug | gate.sh's self-host check compares the hermetic fixedpoint against the LIVE compiler/pascal26, so a concurrent build in the same clone flips it red transiently — testmgr snapshots the binary per run for exactly this reason | — |
+| bug-t-nilpy-isnumeric-red-at-T-not-reproducible-locally | T | 45 | bug | T reports `test_nilpy_str_isnumeric_istitle` RED at full tier; not reproducible locally | — |
 | bug-t-pydiff-cpython-arm-fails-on-a-relative-path | T | 45 | bug | pydiff.py reports a bogus DIFF for any file given as a relative path: run_cpython passes the full relative path while setting cwd to that path's dirname, so CPython exits 2 and every line reads 'cpython: <no line>' | — |
 | bug-t-the-full-tier-no-longer-fits-its-deadline | T | 45 | bug | DOWNGRADED: the 3600s truncation was ONE run inflated by the uforth driver collision, not a permanent size problem — a full tier completed GREEN in 768s once that was fixed. What remains is watching the growth from ~520s to ~768s | — |
 | bug-t-three-network-tests-flake-and-cost-real-debugging-time | T | 45 | bug | lib_net_v6only, lib_sockets and lib_platform_esp each pass or fail run-to-run with the SAME compiler, so a gate.sh lib RED and two cross-sweep A/B deltas in one night were all noise that had to be disproved by hand | — |
@@ -254,6 +255,7 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
+| regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
 | task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -430,6 +432,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-nilpy-test-nilpy-str-isnumeric-istitle
 - [p 60] [U] decide-sole-a-guard-for-unattended-sessions (unblocks 2)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
@@ -488,6 +491,7 @@ _none_
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
+- [p 45] [T] bug-t-nilpy-isnumeric-red-at-T-not-reproducible-locally
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
 - [p 45] [T] bug-t-the-full-tier-no-longer-fits-its-deadline
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
