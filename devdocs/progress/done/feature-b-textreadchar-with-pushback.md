@@ -3,12 +3,13 @@ track: B
 prio: 50
 type: feature
 summary: "lib/rtl/textfile.pas needs TextReadChar(var f; var c) with one-character pushback, so read(f, c) can consume ONE character like FPC instead of a whole line"
+owner: claude-B
 ---
 
 # `TextReadChar` with pushback, so `read(f, c)` means what FPC means
 
 - **Type:** feature — Track B (`lib/rtl/textfile.pas`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Filed by:** Track A, splitting
   `bug-p-read-text-file-into-a-char-segfaults`. Track A owns the lowering and
@@ -52,3 +53,6 @@ loop, and reading across a line boundary (FPC yields the newline as a character)
 `bug-p-read-text-file-into-a-char-segfaults` — once this exists, Track A adds the
 Char arm in `ParseTextReadRest` that routes to it and removes the error. The
 write-side twin (`bug-p-writeln-text-rejects-char`, fixed) shows the arm shape.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

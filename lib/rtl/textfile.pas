@@ -34,6 +34,15 @@ procedure TextWrite(var f: Text; const s: AnsiString);
 procedure TextWriteLn(var f: Text; const s: AnsiString);
 procedure TextReadLn(var f: Text; var s: AnsiString);
 
+{ One character, FPC's `read(f, c)`. Consumes exactly one byte and leaves the
+  cursor on the next, so it interleaves with TextReadLn: `read(f, c)` then
+  `readln(f, s)` gives the REST of the line in s. Line endings are characters
+  like any other — a character loop over "ab\ncd\n" yields a b #10 c d #10, and
+  CR is not swallowed (TextReadLn strips it; this does not, matching FPC on both
+  counts). At and past end of file it yields #26, FPC's EOF marker, without
+  setting an I/O error. }
+procedure TextReadChar(var f: Text; var c: Char);
+
 { FPC System surface: the standard Input/Output text files and Flush.
   PXX text writes go straight to the fd (no RTL-side buffer), so Flush only
   has to exist and accept the file — there is nothing to drain. }
@@ -249,6 +258,50 @@ begin
     end;
   end;
   if LastIOResult = TF_OK then SetIO(TF_OK);
+end;
+
+procedure TextReadChar(var f: Text; var c: Char);
+{ The pushback this needs already exists: Eof reads one byte ahead and parks it
+  in f.Peek, and TextReadLn drains it before touching the fd. Consuming from the
+  same slot is what makes the two agree about where the cursor is — which is the
+  whole point, since a Char arm that read a LINE and took [1] would be right for
+  the first read and silently wrong for every one after it. }
+const
+  TF_EOF_CHAR = 26;   { FPC yields ^Z at and past end of file, with no I/O error }
+var one: array[0..0] of Byte; n: Int64;
+begin
+  if f.HasPeek then
+  begin
+    c := Chr(f.Peek);
+    f.HasPeek := False;
+    SetIO(TF_OK);
+    Exit;
+  end;
+  if f.HitEof then
+  begin
+    c := Chr(TF_EOF_CHAR);
+    SetIO(TF_OK);
+    Exit;
+  end;
+  if f.Handle < 0 then
+  begin
+    SetIO(-1);
+    f.HitEof := True;
+    c := Chr(TF_EOF_CHAR);
+    Exit;
+  end;
+  n := PalRead(f.Handle, @one[0], 1);
+  if n = 1 then
+  begin
+    c := Chr(one[0]);
+    SetIO(TF_OK);
+  end
+  else
+  begin
+    if n < 0 then SetIO(Integer(n)) else SetIO(TF_OK);
+    f.HitEof := True;
+    c := Chr(TF_EOF_CHAR);
+  end;
 end;
 
 procedure Flush(var f: Text);

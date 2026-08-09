@@ -7935,6 +7935,10 @@ lib-test: pxx-stable-check
 	# a hair off a power are NOT flattened onto it.
 	$(PXX_STABLE) -Fulib/rtl test/lib_log_exactness.pas /tmp/lib_log_exactness
 	test "$$(/tmp/lib_log_exactness | tail -n 1)" = "LOGEXACT OK"
+	# TextReadChar (FPC's read(f, c)) consumes ONE character and interleaves with
+	# TextReadLn — expectations measured against FPC, not reasoned about.
+	$(PXX_STABLE) -Fulib/rtl test/lib_textreadchar.pas /tmp/lib_textreadchar
+	test "$$(/tmp/lib_textreadchar | tail -n 1)" = "TEXTREADCHAR OK"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.
 	# The output is identical either way — the property that separates a futex
 	# mutex from the spinlock it replaced is CPU TIME, so assert that: three
