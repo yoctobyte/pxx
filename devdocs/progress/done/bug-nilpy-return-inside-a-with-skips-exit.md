@@ -125,4 +125,4 @@ works for its own reasons is not evidence about the arms beside it.**
 - `tools/gate.sh quick` — GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit b4cb65716.
