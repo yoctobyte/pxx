@@ -4,3 +4,4 @@
 2026-08-09T06:46:35Z	plexus	46b900abaf32e27794bc1c7fb7e2b811bd993ba0	would NOT pin 46b900abaf32 — self-host is not clean (never waivable)
 2026-08-09T07:45:10Z	plexus	4939f47ab88383d90d73899dd02f7248ef01cfe2	would NOT pin 4939f47ab883 — self-host is not clean (never waivable)
 2026-08-09T08:30:09Z	plexus	0d6de0cbeae14acc49cf9a7c6f3d007b61118319	would NOT pin 0d6de0cbeae1 — self-host is not clean (never waivable)
+2026-08-09T10:04:28Z	plexus	29d980110b58b64e9f5ded34d3619ace345aff27	would NOT pin 29d980110b58 — 1 red(s) not in the allowlist: selfhost-fixedpoint#src:compiler/compiler.pas
