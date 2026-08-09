@@ -1,4 +1,5 @@
 ---
+blocked-by: decide-may-agents-fetch-thirdparty-sources-as-oracles
 summary: "The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script"
 type: feature
 track: B
@@ -52,3 +53,17 @@ experience is that plausible-looking output is where the expensive bugs live.
 A differential harness exists and runs; a documented set of scripts agrees with
 the reportlab oracle on extracted text and glyph positions within a stated
 tolerance; divergences are either fixed or ticketed with the measurement.
+
+## Blocked 2026-08-09 (Track B): the oracle is not on this box
+
+This ticket is a DIFFERENTIAL one — its whole content is "compare against real
+reportlab" — and neither `reportlab` nor `pdfplumber` is installed here
+(`pdftotext` is). Writing the harness without the oracle would produce a harness
+that has never once been run against the thing it exists to compare with.
+
+Blocked on [[decide-may-agents-fetch-thirdparty-sources-as-oracles]], the same
+wall [[feature-nilpy-codecs-shim]] hit. Once an oracle is available the ticket
+is ready to go as written — the shape, the comparison level (extracted text plus
+per-glyph positions rather than PDF bytes) and the starting cases are all
+already decided here.
+
