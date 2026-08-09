@@ -39,7 +39,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -149,6 +149,7 @@ _none_
 | feature-nilpy-cpyext-cycle-collector | N | 40 | feature | cpyext: a cycle collector for the extension object model | — |
 | feature-nilpy-cycle-collector | A | 35 | feature | NilPy: collect reference cycles (the reserved half of the GC decision) | feature-nilpy-object-reclamation |
 | feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
+| feature-nilpy-enum-class | N | 40 | feature | `from enum import Enum` — enum classes are not supported | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-hasattr-per-instance-assigned-tracking | N | 40 | feature | hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit. | — |
 | feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition | N | 30 | feature | NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on every test. A provably-constant container build is loop-invariant and should be hoisted to a variable once — what a person would write by hand — while everything else keeps being folded into the condition. | — |
@@ -156,6 +157,7 @@ _none_
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
+| feature-nilpy-match-statement | N | 30 | feature | `match` / `case` — structural pattern matching is not parsed | — |
 | feature-nilpy-multi-arg-callback-bridges | N | 35→40 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
@@ -169,6 +171,7 @@ _none_
 | feature-nilpy-str-surface-gaps-2026-08-09 | N | 25 | feature | str/bytes surface gaps found by the 2026-08-09 differential sweep | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
+| feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-accumulator-value-tracker | O | 58→60 | feature | The register-value scaffold two -O passes are blocked on: a single choke point for every write to the accumulator, so a 'rax currently holds symbol S' fact can be maintained without a silent-miscompile risk. Today rax is written from hundreds of scattered raw EmitB sites. | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
@@ -520,6 +523,7 @@ _none_
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-dataclass-expression-field-default
+- [p 40] [N] feature-nilpy-enum-class
 - [p 40] [N] feature-nilpy-hasattr-per-instance-assigned-tracking
 - [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda
 - [p 40] [N] feature-nilpy-set-needs-runtime-tag-for-display-and-equality
@@ -564,8 +568,10 @@ _none_
 - [p 30] [B] feature-b-tstrings-commatext
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
+- [p 30] [N] feature-nilpy-match-statement
 - [p 30] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
+- [p 30] [N] feature-nilpy-walrus-operator
 - [p 30] [S] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
