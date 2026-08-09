@@ -46,6 +46,7 @@ _none — no lane is locked._
 - `[p 60] [N]` bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [N]` bug-nilpy-open-returns-two-different-classes-by-mode
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [A]` feature-a-abi-oracle
@@ -65,7 +66,6 @@ _none — no lane is locked._
 - `[p 55] [C]` bug-c-pascal-math-names-hijack-libc-through-pxxcio
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
 - `[p 55] [N]` bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument
-- `[p 55] [N]` bug-nilpy-open-returns-two-different-classes-by-mode
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [U]` decide-ismultithread-runtime-flag-vs-compile-time-mode
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions

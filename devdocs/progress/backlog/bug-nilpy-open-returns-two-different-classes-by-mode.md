@@ -1,5 +1,5 @@
 ---
-prio: 55
+prio: 60
 track: N
 type: bug
 blocked-by: []
@@ -25,6 +25,28 @@ A different name for the reader works. The whole file-API matrix, measured at
 | append, then read (different names) | ok |
 | read inside a def / write inside a def | ok |
 | `readlines()`, iteration, `with`, default mode | ok |
+
+## The SILENT half — the same root, and worse (measured 2026-08-09)
+
+The compile error above is the polite symptom. When the reused name's other
+binding is an APPEND rather than a read, nothing is reported and the write is
+simply **lost**:
+
+```python
+f = open(p, "a")
+f.write("two\n")
+f.close()
+print(rd(p))        # CPython 'one\ntwo\n';  pxx 'one\n' — no error, no diagnostic
+
+f = open(p, "r")    # the other binding of `f`, further down
+for ln in f: ...
+```
+
+The name widened to the read class, so `.write` resolved to `TPyList.write`,
+which silently does nothing to the file. A log that stops recording, with a
+zero exit status. That is what raises this from "annoying refusal" to a
+data-loss bug, and it is why the repair should be the one-class one below
+rather than anything that makes the two classes coexist more smoothly.
 
 ## Cause
 

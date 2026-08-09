@@ -77,7 +77,7 @@ _none_
 | bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later | N | 50 | bug | A name bound in a block by a METHOD CALL is "undefined" in a later assignment | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
-| bug-nilpy-open-returns-two-different-classes-by-mode | N | 55 | bug | `open()` returns two different classes by mode, so reusing the name breaks | — |
+| bug-nilpy-open-returns-two-different-classes-by-mode | N | 60 | bug | `open()` returns two different classes by mode, so reusing the name breaks | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | — |
@@ -438,6 +438,7 @@ _none_
 - [p 60] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [A] feature-a-abi-oracle
@@ -457,7 +458,6 @@ _none_
 - [p 55] [C] bug-c-pascal-math-names-hijack-libc-through-pxxcio
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument
-- [p 55] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [U] decide-ismultithread-runtime-flag-vs-compile-time-mode
 - [p 55] [U] decide-sole-a-guard-for-unattended-sessions
