@@ -312,6 +312,10 @@ function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
   signature is a genuine duplicate FPC rejects even though PXX tolerates it
   (regression-fpc-seed-drift-b1976-stale). }
 function PyParseFor: Integer; forward;
+{ Defined further down, beside the comprehension machinery that was its first
+  caller; PyParseTry now renames an `except ... as` binder with it too, and that
+  sits EARLIER in this include — the FPC seed build needs the forward. }
+procedure PyRenameIdentRange(lo, hi: Integer; const oldName, newName: AnsiString); forward;
 { PyBareGenExprAhead is likewise forward-declared in parser.inc now (same
   duplicate-forward issue as PyCallMeth1 above). }
 { Called from the bytes membership/slice paths ~3900 lines before its body.
@@ -12901,8 +12905,9 @@ function PyParseTry: Integer;
 var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Integer;
     actionSeq, handlerVar, ci, recId: Integer;
     elseSeq, elseFlag, elsePair, elseIf: Integer;
-    handlerName, className: AnsiString;
+    handlerName, className, hidName: AnsiString;
     excRecs: array[0..15] of Integer; nExc, ei: Integer;   { except (A, B, ...) tuple }
+    hidLo, hidHi, hidDepth: Integer;   { the handler suite, for the binder rename }
 begin
   Inc(GenTryDepth);
   Next;                                { `try` }
@@ -12981,6 +12986,39 @@ begin
         if CurTok.Kind <> tkIdent then Error('Nil Python: except ... as: expected a name');
         handlerName := CurTok.SVal;
         Next;
+        { Python SCOPES the binder to the handler — it is deleted when the
+          handler ends — so `except ValueError as e:` must not leave a
+          class-typed `e` behind for the rest of the module to collide with.
+          It did: AllocVar created a second symbol under the user's spelling
+          that then WON for every later reference, so an ordinary later
+          `e = STOCK[k]` stored a dict into an exception-typed slot and reading
+          it back SIGSEGV'd — with `e` an utterly ordinary name to reuse.
+
+          Same treatment a comprehension's loop variable already gets: bind a
+          HIDDEN name and re-spell the references inside the handler's own
+          suite (PyRenameIdentRange). Derived from the suite's INDENT token
+          INDEX and nothing else, so a trial parse that renames and a real
+          parse that renames again compute the SAME name and the second pass is
+          a no-op — the comprehension names have to be idempotent for exactly
+          this reason.
+          bug-nilpy-except-as-binder-leaks-and-collides-with-a-later-name }
+        hidLo := TokPos - 1;
+        while (hidLo < TokCount) and (Tokens[hidLo].Kind in [tkColon, tkNewline]) do
+          Inc(hidLo);
+        if (hidLo < TokCount) and (Tokens[hidLo].Kind = tkIndent) then
+        begin
+          hidHi := hidLo + 1;
+          hidDepth := 1;
+          while (hidHi < TokCount) and (hidDepth > 0) do
+          begin
+            if Tokens[hidHi].Kind = tkIndent then Inc(hidDepth)
+            else if Tokens[hidHi].Kind = tkDedent then Dec(hidDepth);
+            Inc(hidHi);
+          end;
+          hidName := '__py_exc' + PyIntLiteralText(hidLo);
+          PyRenameIdentRange(hidLo, hidHi, handlerName, hidName);
+          handlerName := hidName;
+        end;
         handlerVar := AllocVar(handlerName, tyClass);
         Syms[handlerVar].RecName := recId;   { the first listed class }
         SymSyncTypeRef(handlerVar);

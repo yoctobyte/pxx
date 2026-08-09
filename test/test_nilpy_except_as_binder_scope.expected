@@ -1,0 +1,14 @@
+sold 1
+no such item
+caught boom
+B rope 1
+B torch 2
+dict now 7
+int now 6
+handler 1 v1
+handler 2 v2
+inner sees inner
+outer sees outer
+def caught in def
+def list 2
+done

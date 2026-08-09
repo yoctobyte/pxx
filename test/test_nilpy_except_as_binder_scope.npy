@@ -1,0 +1,70 @@
+# Python SCOPES an `except ... as e` binder to the handler. NilPy allocated a
+# second symbol under the user's spelling that then WON for every later
+# reference, so an ordinary later `e = <dict>` stored into an exception-typed
+# slot and reading it back SIGSEGV'd -- with `e` an utterly ordinary name to
+# reuse for a table entry.
+# bug-nilpy-except-as-binder-leaks-and-collides-with-a-later-name
+# Every expectation is CPython's own output.
+
+STOCK = {"rope": {"count": 1}, "torch": {"count": 2}}
+
+
+def sell(item):
+    if item not in STOCK:
+        raise KeyError(item)
+    return STOCK[item]["count"]
+
+
+for item in ["rope", "shield"]:
+    try:
+        print("sold", sell(item))
+    except KeyError:
+        print("no such item")
+
+try:
+    raise ValueError("boom")
+except ValueError as e:
+    print("caught", e)
+
+# the collision: the SAME name, now an ordinary table entry
+for k in sorted(STOCK):
+    e = STOCK[k]
+    print("B", k, e["count"])
+
+# a plain reassignment of the binder name at module level
+e = {"count": 7}
+print("dict now", e["count"])
+e = 5
+print("int now", e + 1)
+
+# a handler that binds and USES the exception, twice, with the same name
+for bad in [1, 2]:
+    try:
+        raise ValueError("v%d" % bad)
+    except ValueError as e:
+        print("handler", bad, e)
+
+# nested handlers, inner shadowing the outer's spelling (a KeyError is
+# avoided here on purpose: a user-raised KeyError's str() loses CPython's
+# repr quotes, which is bug-nilpy-exception-str-and-repr-diverge-from-cpython)
+try:
+    try:
+        raise ValueError("inner")
+    except ValueError as e:
+        print("inner sees", e)
+        raise RuntimeError("outer")
+except RuntimeError as e:
+    print("outer sees", e)
+
+# inside a def, the same shapes
+def f():
+    try:
+        raise ValueError("in def")
+    except ValueError as e:
+        print("def caught", e)
+    e = [1, 2]
+    print("def list", len(e))
+
+
+f()
+print("done")
