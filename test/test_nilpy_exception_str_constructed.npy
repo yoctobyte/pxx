@@ -9,11 +9,14 @@
 # constructed one while leaving the caught one alone is exactly the kind of
 # divergence that produced the bug.
 #
-# NOT asserted, and filed separately as
-# bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored: an Exception
-# subclass that defines its OWN __str__ still has it IGNORED (a third route,
-# which short-circuits before the dunder lookup — pinned does the same, so it is
-# not a consequence of this fix). Pinning today's answer would freeze it.
+# The user-__str__ case was parked here as "NOT asserted, filed separately" and
+# is now fixed and asserted at the bottom
+# (bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored). It was not one
+# short-circuit but THREE copies of the same Exception-then-dunder decision —
+# print(), str() and the f-string's pystr_of — each with the Exception/.msg arm
+# FIRST. Fixing one moved print(e) and left str(e) and f-strings wrong, which is
+# why they are now one routine (PyClassStrNode) and why every route is asserted
+# below rather than the one that was reported.
 #
 # NOT asserted either: KeyError, whose message is stored already repr'd and so
 # cannot be rendered correctly from a Message alone until `e.args` exists — see
@@ -36,3 +39,35 @@ try:
 except Exception as e:
     print(str(e), type(e).__name__)
 print("msg: " + str(ValueError("concat")))
+
+# --- a user __str__ / __repr__ on an Exception subclass, through EVERY route.
+# The routes must agree; disagreeing routes are what this whole file is about.
+
+class WithStr(Exception):
+    def __str__(self):
+        return "CUSTOM-STR"
+
+class WithRepr(Exception):
+    def __repr__(self):
+        return "CUSTOM-REPR"
+
+class Sub(WithStr):
+    pass
+
+ws = WithStr("ignored")
+print("str  ", str(ws))
+print("print", ws)
+print("fstr ", f"{ws}")
+print("pct  ", "%s" % ws)
+print("inherited", str(Sub("ignored")))
+print("repr ", repr(WithRepr("ignored")))
+try:
+    raise WithStr("ignored")
+except WithStr as e:
+    print("caught", str(e))
+
+# CONTROL: an exception declaring NEITHER dunder still renders its message, so
+# the reordering did not cost the .msg fallback this file's top half pins.
+class NoDunder(Exception):
+    pass
+print("nodunder", str(NoDunder("plain")), "|", "%s" % NoDunder("plain"))

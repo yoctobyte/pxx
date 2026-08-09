@@ -6,3 +6,11 @@ x | Exception('x') | x
 caught ValueError('caught')
 mine MyErr
 msg: concat
+str   CUSTOM-STR
+print CUSTOM-STR
+fstr  CUSTOM-STR
+pct   CUSTOM-STR
+inherited CUSTOM-STR
+repr  CUSTOM-REPR
+caught CUSTOM-STR
+nodunder plain | plain

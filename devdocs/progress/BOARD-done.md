@@ -734,6 +734,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin | N | 45 | bug | `def len(x)` shadows the builtin for a STRING argument but not for a list/dict — the container call still reaches pylib's len and prints its answer silently. Residue of bug-nilpy-user-def-does-not-shadow-a-pylib-builtin, which fixed 14 of 15 builtins. | — |
 | bug-nilpy-user-def-loses-to-pylibs-variant-overload-at-the-same-arity | N | 30 | bug | A NilPy `def min(x, y, z)` compiles but is silently NOT called — pylib's all-Variant 3-arg min outranks it, so the program gets the builtin's answer | — |
 | bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver | N | 55 | bug | A user method named `find`/`index` raises AttributeError when the receiver has no static class | — |
+| bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored | N | 45 | bug | A user `__str__` on an Exception subclass is ignored | — |
 | bug-nilpy-void-def-assigned-and-called-crashes | N | 55 | bug | NilPy: a `-> None` def assigned to a name, then called directly, segfaults | — |
 | bug-nilpy-wide-int-literal-and-unsigned-mask-not-promoted | A | 55 | bug | NilPy: wide int literals + the `& 0xFFFF...` unsigned-mask idiom don't promote to bignum | — |
 | bug-nilpy-with-statement-skips-enter-and-exit | N | 70 | bug | NilPy: `with` is desugared to a plain assignment — the context-manager protocol is deliberately not modelled, so a user __enter__/__exit__ silently never runs | — |

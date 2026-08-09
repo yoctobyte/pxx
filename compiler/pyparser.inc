@@ -12001,6 +12001,44 @@ begin
   ASTLeft[Result] := arg0;
 end;
 
+{ Render a CLASS-typed value as text the way Python does: a user-declared
+  `__str__` (or `__repr__`) wins, and only a class descended from Exception that
+  declares NEITHER falls back to reading its `.msg` field. Returns -1 when
+  neither applies, so the caller keeps its own behaviour.
+
+  ONE routine because this decision had THREE copies — `PyReprContainer` for
+  `print`, and two sites in `parser.inc` for `str()` and for the f-string's
+  `pystr_of` — and all three had the SAME bug: the Exception/msg arm sat first,
+  so a user `__str__` on an exception subclass was never consulted and the
+  CONSTRUCTOR ARGUMENT was printed instead. Fixing one site moved `print(e)` and
+  left `str(e)` and f-strings wrong, which is what three mechanisms for one
+  concept always costs (devdocs/dev/normalise-dont-special-case.md).
+  bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored }
+function PyClassStrNode(node, argCi: Integer): Integer;
+var mmi, excCi, fieldNode: Integer;
+begin
+  PyClassStrNode := -1;
+  if (node < 0) or (argCi < 0) then Exit;
+  mmi := FindUMeth(argCi, '__str__');
+  if mmi < 0 then mmi := FindUMeth(argCi, '__repr__');
+  if mmi >= 0 then
+  begin
+    PyClassStrNode := PyCallMeth1(argCi, PyRawName(UMthNOff[mmi], UMthNLen[mmi]),
+                                  node, -1);
+    Exit;
+  end;
+  excCi := FindUClass('Exception');
+  if (excCi >= 0) and ((argCi = excCi) or IsSubclassOf(argCi, excCi)) then
+  begin
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := node;
+    ASTSOffset[fieldNode] := PyStoredName('msg');
+    ASTSLen[fieldNode] := 3;
+    ASTTk[fieldNode] := Ord(tyAnsiString);
+    PyClassStrNode := fieldNode;
+  end;
+end;
+
 { Wrap a TPyList / TPyDict expression in the pylib repr call, so it prints as
   Python spells a container. Anything else is returned unchanged. }
 function PyReprContainer(n: Integer): Integer;
@@ -12031,28 +12069,14 @@ begin
   { print(e) of an Exception (or subclass) shows its message, like Python's
     str(e) — read the `msg` field instead of the instance pointer
     (feature-nilpy-exception-message). }
-  excCi := FindUClass('Exception');
   argCi := rec - REC_UCLASS_BASE;
-  if (excCi >= 0) and ((argCi = excCi) or IsSubclassOf(argCi, excCi)) then
+  { __str__/__repr__ if the class declares one, else an Exception's .msg — the
+    single PyClassStrNode decision, shared with str() and the f-string path.
+    Checked before the pylib containers so a user class can override even those. }
+  fieldNode := PyClassStrNode(n, argCi);
+  if fieldNode >= 0 then
   begin
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := n;
-    ASTSOffset[fieldNode] := PyStoredName('msg');
-    ASTSLen[fieldNode] := 3;
-    ASTTk[fieldNode] := Ord(tyAnsiString);
     Result := fieldNode;
-    Exit;
-  end;
-  { A class that defines `__str__` is rendered BY IT — Python's own rule, and
-    what makes a shim class printable at all: without it `str(Path("a/b"))`
-    printed the instance POINTER, silently. Checked before the pylib containers
-    so a user class can override even those. }
-  mmi := FindUMeth(argCi, '__str__');
-  if mmi < 0 then mmi := FindUMeth(argCi, '__repr__');
-  if mmi >= 0 then
-  begin
-    Result := PyCallMeth1(argCi, PyRawName(UMthNOff[mmi], UMthNLen[mmi]), n, -1);
-    if Result < 0 then Result := n;
     Exit;
   end;
   listCi := FindUClass('TPyList');

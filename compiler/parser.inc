@@ -910,6 +910,7 @@ function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil P
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyNotSubscriptableNode(ci: Integer): Integer; forward; { Nil Python: run-time TypeError for a class with no __getitem__ (pyparser.inc) }
+function PyClassStrNode(node, argCi: Integer): Integer; forward; { Nil Python: __str__/__repr__ else an Exception's .msg (pyparser.inc) }
 function PyIsSliceBase(n: Integer): Boolean; forward;
 function PySliceBracketAt(i: Integer): Boolean; forward; { Nil Python: is the bracket group at i a SLICE? (pyparser.inc) }
 function PyParseSliceTail(baseNode, loNode: Integer): Integer; forward; { Nil Python x[a:b], from the ':' (pyparser.inc) }
@@ -10390,35 +10391,18 @@ begin
           atRecv := ResolveNodeRec(CurASTNode);
           if atRecv >= REC_UCLASS_BASE then
           begin
-            atFld := FindUClass('Exception');
-            if (atFld >= 0) and (((atRecv - REC_UCLASS_BASE) = atFld)
-                or IsSubclassOf(atRecv - REC_UCLASS_BASE, atFld)) then
+            { __str__/__repr__ if declared, else an Exception's .msg — the one
+              PyClassStrNode decision. This site used to test Exception FIRST
+              and read .msg unconditionally, so a user __str__ on an exception
+              subclass never ran and an f-string rendered the constructor
+              argument instead
+              (bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored). }
+            atDflt := PyClassStrNode(CurASTNode, atRecv - REC_UCLASS_BASE);
+            if atDflt >= 0 then
             begin
-              atDflt := AllocNode(AN_FIELD);
-              ASTLeft[atDflt] := CurASTNode;
-              ASTSOffset[atDflt] := PyStoredName('msg');
-              ASTSLen[atDflt] := 3;
-              ASTTk[atDflt] := Ord(tyAnsiString);
               Expect(tkRParen, ')');
               CurASTNode := atDflt; LastExprTk := tyAnsiString;
               Exit;
-            end;
-            { a class with `__str__` renders through it, the same rule the
-              print path uses (PyReprContainer) — `str(Path("a/b"))` printed
-              the instance POINTER without this }
-            atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__str__');
-            if atFld < 0 then atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__repr__');
-            if atFld >= 0 then
-            begin
-              atDflt := PyCallMeth1(atRecv - REC_UCLASS_BASE,
-                                    PyRawName(UMthNOff[atFld], UMthNLen[atFld]),
-                                    CurASTNode, -1);
-              if atDflt >= 0 then
-              begin
-                Expect(tkRParen, ')');
-                CurASTNode := atDflt; LastExprTk := tyAnsiString;
-                Exit;
-              end;
             end;
             procIdx := -1;
             if atRecv - REC_UCLASS_BASE = FindUClass('TPyList') then
@@ -11204,37 +11188,27 @@ begin
           atRecv := ResolveNodeRec(CurASTNode);
           if atRecv >= REC_UCLASS_BASE then
           begin
-            atFld := FindUClass('Exception');
-            if (atFld >= 0) and (((atRecv - REC_UCLASS_BASE) = atFld)
-                or IsSubclassOf(atRecv - REC_UCLASS_BASE, atFld)) then
+            { __str__/__repr__ if declared, else an Exception's .msg — the one
+              PyClassStrNode decision, shared with print() and the f-string
+              path. This site tested Exception FIRST, so a user __str__ on an
+              exception subclass was skipped and str(e) returned the
+              constructor argument
+              (bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored).
+              An exception declaring NEITHER dunder still reads .msg, so
+              str(ValueError("x")) is unchanged. }
+            atDflt := PyClassStrNode(CurASTNode, atRecv - REC_UCLASS_BASE);
+            if atDflt >= 0 then
             begin
-              atDflt := AllocNode(AN_FIELD);
-              ASTLeft[atDflt] := CurASTNode;
-              ASTSOffset[atDflt] := PyStoredName('msg');
-              ASTSLen[atDflt] := 3;
-              ASTTk[atDflt] := Ord(tyAnsiString);
+              if IntToTypeKind(ASTTk[atDflt]) = tyAnsiString then
+              begin
+                Expect(tkRParen, ')');
+                CurASTNode := atDflt; LastExprTk := tyAnsiString;
+                Exit;
+              end;
               CurASTNode := atDflt;
             end
             else
             begin
-              { a class that defines `__str__` renders through it — Python's own
-                rule, and what makes a shim class printable. Without it
-                `str(Path("a/b"))` returned the instance POINTER, silently.
-                The print path has the same hook (PyReprContainer). }
-              atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__str__');
-              if atFld < 0 then atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__repr__');
-              if atFld >= 0 then
-              begin
-                atDflt := PyCallMeth1(atRecv - REC_UCLASS_BASE,
-                                      PyRawName(UMthNOff[atFld], UMthNLen[atFld]),
-                                      CurASTNode, -1);
-                if atDflt >= 0 then
-                begin
-                  Expect(tkRParen, ')');
-                  CurASTNode := atDflt; LastExprTk := tyAnsiString;
-                  Exit;
-                end;
-              end;
               { ...and a pylib CONTAINER renders as its Python repr. print() has
                 gone through PyReprContainer all along; str() had no arm for a
                 list/dict/bytes handle, so it fell through to the numeric path
