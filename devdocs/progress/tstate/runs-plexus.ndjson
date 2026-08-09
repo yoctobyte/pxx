@@ -425,3 +425,4 @@
 {"date": "2026-08-09T13:15:06Z", "fixed": ["test-core#src:test/cmath_trig_family_b385.c"], "full": false, "new_red": [], "sha": "c397e9f969bd8b9622c6c3371cc895d73ee5aea9", "tier": "native", "verdict": "GREEN", "wall": 148.9}
 {"date": "2026-08-09T13:19:07Z", "fixed": [], "full": false, "new_red": [], "sha": "d56295b8ba9a56ef29277372389fd644e52af089", "tier": "native", "verdict": "GREEN", "wall": 158.9}
 {"date": "2026-08-09T13:22:04Z", "fixed": [], "full": false, "new_red": [], "sha": "ef3e53d81abcbfc009df33d84f2bffb577f42ede", "tier": "native", "verdict": "GREEN", "wall": 142.7}
+{"date": "2026-08-09T13:25:57Z", "fixed": [], "full": false, "new_red": [], "sha": "9f353cc203a3dda1c87a693846827459dc92bbaa", "tier": "native", "verdict": "GREEN", "wall": 142.8}
