@@ -210,4 +210,4 @@ per-fix bar (quick + fixedpoint) is met, and unpushed work is work T cannot see.
 The whole-table measurement above was taken by hand against this build.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit e88702d0c.
