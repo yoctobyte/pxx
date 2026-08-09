@@ -1122,6 +1122,10 @@ test-nilpy: $(COMPILER)
 	# assignment's RHS. Both found by running a realistic program vs CPython.
 	./$(COMPILER) test/test_nilpy_repr_of_variant_object.npy /tmp/test_nilpy_reprvar26
 	/tmp/test_nilpy_reprvar26 | diff -u test/test_nilpy_repr_of_variant_object.expected -
+	# dict.update(<variant>) SEGFAULTED -- two typed overloads, and an
+	# unannotated parameter matches neither, so it read a dict as a list.
+	./$(COMPILER) test/test_nilpy_dict_update_variant.npy /tmp/test_nilpy_dictupdv26
+	/tmp/test_nilpy_dictupdv26 | diff -u test/test_nilpy_dict_update_variant.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

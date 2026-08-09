@@ -1,0 +1,7 @@
+mapping  [('host', 'example.com'), ('port', '80')]
+empty    [('host', 'localhost'), ('port', '80')]
+literal  [('host', 'localhost'), ('port', '8080')]
+pairs    [('a', 1), ('b', 2)]
+loop     ['empty:localhost', 'web:example.com']
+static   [('host', 'localhost'), ('k', 'v'), ('port', '80')]
+static2  [('x', 1)]

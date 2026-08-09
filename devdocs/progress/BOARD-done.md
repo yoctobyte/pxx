@@ -519,6 +519,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-dict-from-pairs-and-bytes-decode-segfault | N | 70 | bug | NilPy: `dict([(\"a\",1)])[\"a\"]` and `\"abc\".encode().decode()` both SEGFAULT (exit 139, core dumped) on ordinary one-liners | bug-a-overload-resolution-ignores-class-identity |
 | bug-nilpy-dict-insert-lookup-linear-not-hashed | N | 45 | bug | NilPy: dict insert/lookup is O(N), not O(1) — quadratic build, drives uforth O(N²) | — |
 | bug-nilpy-dict-method-on-a-literal-receiver-not-found | N | 35 | bug | `{\"a\":1}.items()` fails with 'TPyDict has no method .items()' — the dict-literal receiver is not resolved, though the same call works through a variable or a method result | — |
+| bug-nilpy-dict-update-with-a-variant-argument-segfaults | N | 50 | bug | `dict.update(<variant>)` SEGFAULTED | — |
 | bug-nilpy-dict-views-and-result-alias | N | 75 | bug | nilpy: d.values()/d.keys() jumped to address 0, and a local named `result` aliased the function result | — |
 | bug-nilpy-discarded-string-result-leaks | N | 50 | bug | A call whose managed-string result is DISCARDED leaks it | — |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |

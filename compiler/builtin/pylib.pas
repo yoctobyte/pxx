@@ -259,6 +259,14 @@ type
       merges them. The mode picks which, which is why they share a name. }
     function update(l: TPyList): Variant;   { None, see TPyList.remove }
     function update(d: TPyDict): Variant; overload;
+    { ...and a VARIANT argument, which is what an unannotated PARAMETER is.
+      Neither typed overload can be chosen for one, and the pair was resolved to
+      the TPyList arm — so `def f(sec): m.update(sec)` read a TPyDict as a
+      TPyList and SEGFAULTED. `m.update({"k": v})` with a literal was fine,
+      because a literal has a static type to match on.
+      Dispatches on the runtime tag and delegates to whichever typed arm the
+      value actually is. bug-nilpy-dict-update-with-a-variant-argument-segfaults }
+    function update(const v: Variant): Variant; overload;
     { dict.copy() — a SHALLOW copy, like TPyList.copy: a new dict holding the
       same key/value pairs, so storing into the copy leaves the original alone
       while a mutable VALUE stays shared. }
@@ -4368,6 +4376,21 @@ begin
       end;
     end;
   end;
+end;
+
+function TPyDict.update(const v: Variant): Variant;
+var o: TObject;
+begin
+  Result := pynone;
+  if Self = nil then Exit;
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
+  o := TObject(pyvarobj(v));
+  if o = nil then Exit;
+  if o is TPyDict then Result := Self.update(TPyDict(o))
+  else if o is TPyList then Result := Self.update(TPyList(o))
+  else
+    raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
 end;
 
 { CPython's Counter.update(mapping) ADDS the mapping's values; a plain dict's

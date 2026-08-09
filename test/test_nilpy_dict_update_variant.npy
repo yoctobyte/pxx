@@ -1,0 +1,60 @@
+# bug-nilpy-dict-update-with-a-variant-argument-segfaults
+#
+# `def f(sec): m.update(sec)` SEGFAULTED. TPyDict.update has two typed overloads
+# -- update(TPyList) for an iterable of pairs and update(TPyDict) for a mapping
+# -- and an unannotated PARAMETER is a VARIANT, which matches neither. It
+# resolved to the TPyList arm and read a TPyDict as a list.
+#
+# `m.update({"k": v})` with a LITERAL was always fine, because a literal has a
+# static type to match on. That is what kept this out of every API sweep: it
+# needs the value to arrive through a parameter.
+#
+# Found by running a realistic config reader against CPython, where the shape is
+# the ordinary `merged = dict(DEFAULTS); merged.update(section)`.
+#
+# Both argument kinds are asserted through a parameter -- a MAPPING and an
+# iterable of PAIRS -- since the fix dispatches on the runtime tag and sending
+# both down the same arm would still pass a mapping-only test.
+#
+# Expectations are CPython's own output.
+
+DEFAULTS = {"host": "localhost", "port": "80"}
+
+
+def merged(sec):
+    m = dict(DEFAULTS)
+    m.update(sec)
+    return m
+
+
+def from_pairs(pairs):
+    m = {}
+    m.update(pairs)
+    return m
+
+
+cfg = {"web": {"host": "example.com"}, "empty": {}}
+
+r = merged(cfg["web"])
+print("mapping ", sorted(r.items()))
+r2 = merged(cfg["empty"])
+print("empty   ", sorted(r2.items()))
+r3 = merged({"port": "8080"})
+print("literal ", sorted(r3.items()))
+r4 = from_pairs([("a", 1), ("b", 2)])
+print("pairs   ", sorted(r4.items()))
+
+# the loop shape it was found in
+out = []
+for name in sorted(cfg.keys()):
+    sec = merged(cfg[name])
+    out.append(name + ":" + sec["host"])
+print("loop    ", out)
+
+# controls: the statically-typed spellings that always worked
+m = dict(DEFAULTS)
+m.update({"k": "v"})
+print("static  ", sorted(m.items()))
+d2 = {}
+d2.update([("x", 1)])
+print("static2 ", sorted(d2.items()))
