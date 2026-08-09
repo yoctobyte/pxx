@@ -150,4 +150,4 @@ identical output on x86-64, aarch64 and arm32 (qemu) and riscv32, and
 
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 1aae986ce.
