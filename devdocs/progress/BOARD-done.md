@@ -621,6 +621,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-none-equals-zero-is-true | N | 65 | bug | `0 == None` is True, and `None == 0` does not parse | — |
 | bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse | N | 65 | bug | NilPy: a `nonlocal` write through an ESCAPED closure segfaults (re-measured 2026-08-06 — it used to be a parse error). The write itself faults; read-only captures and the list-cell workaround are fine. | — |
 | bug-nilpy-nonlocal-write-never-reaches-the-enclosing-scope | N | 80 | bug | `nonlocal x` — the write never reaches the enclosing function | — |
+| bug-nilpy-nosetitem-error-does-not-name-the-class | N | 25 | bug | `obj[k] = v` on a class with no __setitem__ raises 'object does not support item assignment (no __setitem__)' where CPython names the class — the sibling read error already names it | — |
 | bug-nilpy-not-on-object-always-true | N | 80 | bug | `not <object>` was TRUE for every live object — silently wrong answers | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
 | bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf | N | 50 | bug | Numeric builtin gaps: `float("inf")`, variadic `min`/`max`, `sum(x, start)` | — |

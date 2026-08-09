@@ -98,12 +98,11 @@ print("ro-read", r["x"])
 try:
     r["x"] = 2
     print("ro-write NO-RAISE")
-except TypeError:
-    # the LABEL only, not the message: PyNoSetitemError does not name the class
-    # ("object does not support item assignment (no __setitem__)"), where CPython
-    # says "'ReadOnly' object ...". Behaviour is what this pins; the wording is
-    # filed as bug-nilpy-nosetitem-error-does-not-name-the-class.
-    print("ro-write TypeError")
+except TypeError as e:
+    # the full MESSAGE now: PyNoSetitemError names the class exactly as CPython
+    # does, so the write half no longer reads worse than the read half
+    # (bug-nilpy-nosetitem-error-does-not-name-the-class).
+    print("ro-write", e)
 
 bo = Both()
 bo["a"] = 5
@@ -113,5 +112,5 @@ pl = Plain()
 try:
     pl["q"] = 3
     print("neither-write NO-RAISE")
-except TypeError:
-    print("neither-write TypeError")
+except TypeError as e:
+    print("neither-write", e)

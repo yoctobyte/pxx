@@ -5022,19 +5022,31 @@ begin
 end;
 
 { `obj[i] = v` where obj's class defines `__getitem__` but not `__setitem__`
-  -- CPython's own error shape ("does not support item assignment"). }
-procedure PyNoSetitemError;
+  -- CPython's own error shape, class name and all:
+  `'ReadOnly' object does not support item assignment`.
+
+  It used to say "object does not support item assignment (no __setitem__)",
+  naming the DUNDER instead of the class — implementation-facing, and backwards
+  for a diagnostic a user meets while debugging a write. Its own sibling on the
+  READ side already named the class, so the two halves of one feature disagreed
+  and the worse-reading half was the one a write reached
+  (bug-nilpy-nosetitem-error-does-not-name-the-class). }
+procedure PyNoSetitemError(const cls: AnsiString);
 begin
-  raise TypeError.Create('object does not support item assignment (no __setitem__)');
+  if cls = '' then
+    raise TypeError.Create('object does not support item assignment');
+  raise TypeError.Create('''' + cls + ''' object does not support item assignment');
 end;
 
 { `del obj[i]` where obj's class defines no `__delitem__` -- CPython's own error
   shape. A raise rather than a compile error, so a try/except around it builds,
   same reasoning as PyNoSetitemError above.
   bug-nilpy-delitem-dunder-not-supported }
-procedure PyNoDelitemError;
+procedure PyNoDelitemError(const cls: AnsiString);
 begin
-  raise TypeError.Create('object does not support item deletion (no __delitem__)');
+  if cls = '' then
+    raise TypeError.Create('object does not support item deletion');
+  raise TypeError.Create('''' + cls + ''' object does not support item deletion');
 end;
 
 function pyvar_to_int(const v: Variant): Int64;

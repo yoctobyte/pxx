@@ -910,6 +910,7 @@ function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil P
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
 function PyMakeSuffixIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python x[i] on a non-lvalue (pyparser.inc) }
 function PyNotSubscriptableNode(ci: Integer): Integer; forward; { Nil Python: run-time TypeError for a class with no __getitem__ (pyparser.inc) }
+function PyClassErrCallNode(const procName: AnsiString; ci: Integer): Integer; forward; { Nil Python: a run-time error call naming the class (pyparser.inc) }
 function PyClassStrNode(node, argCi: Integer): Integer; forward; { Nil Python: __str__/__repr__ else an Exception's .msg (pyparser.inc) }
 function PyIsSliceBase(n: Integer): Boolean; forward;
 function PySliceBracketAt(i: Integer): Boolean; forward; { Nil Python: is the bracket group at i a SLICE? (pyparser.inc) }
@@ -5208,12 +5209,8 @@ begin
             getter-bearing arm raises for a missing setter. }
           Expect(tkAssign, ':=');
           if PyExprMode then PyParseBoolExpr else ParseExpr;
-          prevTok := FindProc('PyNoSetitemError');
-          if prevTok < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
-          node := AllocNode(AN_CALL);
-          ASTIVal[node] := prevTok;
-          ASTTk[node] := Ord(tyInteger);
-          ASTLeft[node] := -1;
+          node := PyClassErrCallNode('PyNoSetitemError', mci);
+          if node < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
           Result := node; Exit;
         end
         else if (FindUMeth(mci, '__getitem__') >= 0) or
@@ -5263,12 +5260,8 @@ begin
                 Error() -- same reasoning as PyNotContainerError /
                 PyNotCallableError above. The value is still parsed/
                 evaluated first, matching Python's left-to-right order. }
-              prevTok := FindProc('PyNoSetitemError');
-              if prevTok < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
-              node := AllocNode(AN_CALL);
-              ASTIVal[node] := prevTok;
-              ASTTk[node] := Ord(tyInteger);
-              ASTLeft[node] := -1;
+              node := PyClassErrCallNode('PyNoSetitemError', mci);
+              if node < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
               Result := node; Exit;
             end;
             node := PyCallMeth2(mci, '__setitem__', node, keyNode, CurASTNode);

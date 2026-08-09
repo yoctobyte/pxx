@@ -7442,6 +7442,44 @@ begin
   ASTLeft[PyNotSubscriptableNode] := a0;
 end;
 
+{ A run-time error call that NAMES THE CLASS — PyNoSetitemError /
+  PyNoDelitemError, whose messages are CPython's
+  `'C' object does not support item assignment` / `... item deletion`.
+
+  Split out rather than inlined at the four call sites for the reason the
+  messages needed fixing in the first place: the READ refusal
+  (PyNotSubscriptableNode, just above) already passed the class name and the
+  write and delete refusals did not, so one feature's halves disagreed about how
+  they read. One builder is how they stay agreed.
+  bug-nilpy-nosetitem-error-does-not-name-the-class }
+function PyClassErrCallNode(const procName: AnsiString; ci: Integer): Integer;
+var procIdx, a0, lit: Integer;
+begin
+  PyClassErrCallNode := -1;
+  procIdx := FindProc(procName);
+  if procIdx < 0 then Exit;
+  a0 := AllocNode(AN_ARG);
+  lit := AllocNode(AN_STR_LIT);
+  if ci >= 0 then
+  begin
+    ASTSOffset[lit] := PyStoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
+    ASTSLen[lit] := UClsNLen[ci];
+  end
+  else
+  begin
+    { no class in hand (a variant receiver): the runtime prints the message
+      without a name rather than inventing one }
+    ASTSOffset[lit] := PyStoredName('');
+    ASTSLen[lit] := 0;
+  end;
+  ASTTk[lit] := Ord(tyString);
+  ASTLeft[a0] := lit; ASTRight[a0] := -1;
+  PyClassErrCallNode := AllocNode(AN_CALL);
+  ASTIVal[PyClassErrCallNode] := procIdx;
+  ASTTk[PyClassErrCallNode] := Ord(tyInteger);
+  ASTLeft[PyClassErrCallNode] := a0;
+end;
+
 { The sequence KIND a receiver NODE is, or '' when it is not a sequence (a dict,
   or a variant that may hold one at run time). }
 function PyIndexSeqKind(baseNode: Integer): AnsiString;
@@ -17073,12 +17111,8 @@ begin
           Error('Nil Python: __delitem__ could not be called');
         Exit;
       end;
-      symIdx := FindProc('PyNoDelitemError');
-      if symIdx < 0 then Error('Nil Python: pylib (PyNoDelitemError) not loaded');
-      Result := AllocNode(AN_CALL);
-      ASTIVal[Result] := symIdx;
-      ASTTk[Result] := Ord(tyInteger);
-      ASTLeft[Result] := -1;
+      Result := PyClassErrCallNode('PyNoDelitemError', delCi);
+      if Result < 0 then Error('Nil Python: pylib (PyNoDelitemError) not loaded');
       Exit;
     end;
     ci := FindUClass('TPyDict');

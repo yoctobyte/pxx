@@ -6,6 +6,6 @@ a
 wo-write k=1
 wo-read 'WriteOnly' object is not subscriptable
 ro-read r:x
-ro-write TypeError
+ro-write 'ReadOnly' object does not support item assignment
 both 5
-neither-write TypeError
+neither-write 'Plain' object does not support item assignment
