@@ -67,4 +67,4 @@ so it is pinned rather than merely passing.
 
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 52fed49f1.
