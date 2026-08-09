@@ -44,12 +44,23 @@ performance: the program dies.
 
 ## Two routes
 
-1. **Extend the lift predicate to a lambda-bodied lambda.** The predicate's own
-   constraint is that the body is reconstructed as SOURCE from its token span by
-   `PyLambdaTokText`, and an unrenderable token is a hard error rather than a
-   fallback — so the first question is whether `PyLambdaTokText` can render a
-   nested `lambda` at all, and the second is whether the capture scan sees the
-   INNER lambda's free variables (here `a`, which is the outer's parameter).
+1. **Extend the lift predicate to a lambda-bodied lambda.** Two of the three
+   questions are already answered, by reading rather than guessing:
+
+   - **`PyLambdaTokText` CAN render it.** `lambda` lexes as a `tkIdent` in
+     NilPy (the parser tests it with `CaseEqual(GetTokenStr(j+1), 'lambda')`),
+     and `tkIdent` renders as its own text. So the unrenderable-token hazard
+     that gates this predicate is not what stops the nested case.
+   - **The predicate's "body must contain a CALL" requirement is what stops
+     it.** `lambda a: lambda b: a + b` has no call anywhere in the outer body,
+     so it is never lifted and falls to the interpreter — which is where the
+     error comes from. That requirement exists because "a body without a call
+     already works through the pyeval closure, and lifting it would be a
+     behaviour change for no gain" — an assumption that is simply false for
+     this shape, since pyeval cannot run it at all.
+   - **Still open:** whether the capture scan sees the INNER lambda's free
+     variables (here `a`, the outer's parameter). That is the part the done
+     ticket said had not been measured.
 2. **Teach `pyeval` the `lambda` keyword**, so the interpreted path stops being
    a dead end. Wider, and it helps every other shape that falls back.
 
