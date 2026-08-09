@@ -95,3 +95,9 @@ not.
 on real IDF, then implement option 2 in the PAL so every language gets it right,
 remembering the `PalPollSet` pass-through above.
 
+**Root fix, added 2026-08-09:** [[feature-pal-esp-posix-fd-semantics]] replaces
+the `FILE*`-as-handle design with direct POSIX fds, at which point both handles
+live in one namespace and a single `close()` is simply correct. That ticket
+subsumes option 2 here, and makes option 1 a workaround for something already
+scheduled to change. Do that one first.
+

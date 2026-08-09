@@ -118,3 +118,34 @@ several land on the always-refused list above. They are honest on ESP — the PA
 returns unsupported rather than faking — but a C program ported to ESP will hit
 them. Worth knowing before anyone reads the crtl gap-batch tickets as "crtl is
 now complete for every target": it is complete for the **hosted** targets.
+
+## 2026-08-09 (Track B): this is also the ROOT FIX for the close() dispatch bug
+
+[[bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file]] exists only because of
+the design this ticket proposes to replace. On IDF today a file handle IS a
+`FILE*` from `fopen` cast to Integer, while a socket handle is a small lwip VFS
+fd — two disjoint namespaces sharing one `Integer`, which is why crtl's single
+`close(int fd)` cannot dispatch and why that ticket's "option 2, unify in the
+PAL" is hard.
+
+Move the ESP file backend onto direct POSIX `open`/`read`/`write`/`close` as
+proposed here and the dispatch problem **disappears** rather than being solved:
+both handles become real VFS fds in one namespace, and one `close()` is correct
+for both. So the close ticket's option 2 is really "do this ticket", and its
+option 1 (an fd registry in crtl) is a workaround for a design that is already
+scheduled to change.
+
+Worth doing in this order rather than the other way round.
+
+Noted while defanging the close bug's worst symptom (it now refuses a
+non-pointer handle instead of `fclose`-ing an lwip fd). That mitigation is
+independent and stays useful until this lands.
+
+## Cannot be completed on this box
+
+The acceptance above requires "an ESP-IDF link/run smoke on C3 and S3, not only
+host `--platform=esp` unsupported-path tests" — correctly, since the whole point
+is real VFS behaviour. There is no ESP32 here, so the implementation can be
+written and the riscv32/xtensa objects built, but the ticket cannot be CLOSED
+without a device.
+
