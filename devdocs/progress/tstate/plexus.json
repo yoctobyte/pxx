@@ -4917,18 +4917,11 @@
  "open_regressions": [
   {
    "bad": "954727cee6680daf514fcd5bb929814a1ca3c522",
-   "good": "29d980110b58b64e9f5ded34d3619ace345aff27",
+   "good": "8784709050ae5f8a211a7935ed868be6450d43c0",
    "job": "test-nilpy#src:test/test_nilpy_delitem_dunder.npy",
    "name": "test-nilpy#303",
    "opened": "2026-08-09T10:56:27Z",
    "range": [
-    "9865e6fbe3f69c8d4fb65973e2248a325ae9b421",
-    "08bff74852baacec3d2621928ef715c41e8b4349",
-    "c3f66685177e438b3368e73642e78e64f91bc5f4",
-    "924cf91156538aa600e4e1a796223b1b50faf948",
-    "315ae3e9d82f5a14105fc74e49ddb5f73975531d",
-    "25200feae38d965eb3d3490cfc3494adedccc751",
-    "8784709050ae5f8a211a7935ed868be6450d43c0",
     "31a5b72145d5d0ab16faccb68cc3c69af2f6fa42",
     "c5cb110a5bfa68fc9e96d2333d8bf997bc4132dc",
     "e779f3d6203b6216e4c160491ed05e37f2f838db",

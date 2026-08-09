@@ -7,7 +7,7 @@
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-nilpy#src:test/test_nilpy_delitem_dunder.npy** — test/test_nilpy_delitem_dunder.npy test/test_nilpy_delitem_dunder.expected (plexus): bad `954727cee668`, last good `29d980110b58`, 15 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_delitem_dunder.npy** — test/test_nilpy_delitem_dunder.npy test/test_nilpy_delitem_dunder.expected (plexus): bad `954727cee668`, last good `8784709050ae`, 8 commit(s) in range
 - **optdiff#shard1/12** — tools/optdiff.sh (plexus): bad `dcfe7a6f8f0f`, last good `29d980110b58`, 95 commit(s) in range
 - **optdiff#shard2/12** — tools/optdiff.sh (plexus): bad `dcfe7a6f8f0f`, last good `29d980110b58`, 95 commit(s) in range
 
