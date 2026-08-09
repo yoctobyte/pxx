@@ -1498,6 +1498,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
 | regression-test-core-csocket-loopback-b88 | B | 70 | regression | csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since | — |
 | regression-test-core-cstatic-init-cast | T | 70 | regression | regression: test-core#src:test/cstatic_init_cast.c red at 6995a1a0d618 (auto-filed by twatch) | — |
+| regression-test-core-csystem-libs-granular-libc-b113 | T | 70 | regression | regression: test-core#src:test/csystem_libs_granular_libc_b113.c red at b39ac8f02003 (auto-filed by twatch) | — |
 | regression-test-core-facade-and-paths | T | 70 | regression | regression: test-core#src:examples/tk/facade_and_paths.npy red at d64a5d6a97b4 (auto-filed by twatch) | — |
 | regression-test-core-test-algol-skeleton | T | 70 | regression | regression: test-core#src:test/test_algol_skeleton.alg red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |

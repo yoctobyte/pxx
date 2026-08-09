@@ -45,7 +45,7 @@ lives in git, not in a timestamp._
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (224)
+## backlog (223)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -265,7 +265,6 @@ lives in git, not in a timestamp._
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-test-core-csystem-libs-granular-libc-b113 | T | 70 | regression | regression: test-core#src:test/csystem_libs_granular_libc_b113.c red at b39ac8f02003 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -406,9 +405,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1586)
+## done (1587)
 
-1586 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1587 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (31)
 
@@ -450,7 +449,6 @@ lives in git, not in a timestamp._
 
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
 - [urgent p 70] [P] bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
-- [p 70] [T] regression-test-core-csystem-libs-granular-libc-b113
 - [p 65] [O] bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)

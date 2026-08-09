@@ -43,24 +43,41 @@ defaulted-parameter path is never taken. Pascal-direct went 25/25 -> **0/30**,
 and the harness's `text_fonts` and `positions` cases now pass consistently and
 match reportlab to 0.000029 pt.
 
-## Residual, still open
+## Residual, still open — and my earlier measurements of it were WORTHLESS
 
-`tools/reportlab_diff.py`'s `many_fonts` case still fails inside the harness,
-while the same five fonts run 0/30 clean from both Pascal and NilPy when written
-to a SHORT output path. With a 55-character path it reproduces at 1/30. So there
-is a second, rarer corruption that is sensitive to the output path length, not
-to the font count. Prio dropped to 30: the common paths are fixed and the
-remaining trigger is narrow, but it is real and should not be closed.
+**Correcting this ticket again.** It previously said the residual was "sensitive
+to the output path length, not to the font count", citing 0/30 clean runs from
+Pascal and NilPy with a short path against 1/30 with a long one. That reasoning
+does not hold, and the method was the problem.
 
-**One more raw-string call found and fixed, though it was NOT the residual:**
-`pdf_save(doc, outPath)` passed an `AnsiString` straight to a `const char *`.
-My earlier sweep for exactly this defect MISSED it because the grep excluded
-`pdf_save` by name — the sibling check was run with a filter that hid one of the
-siblings. Fixed (`PChar(outPath)`), and it is correct on its own terms, but the
-long-path case still reproduces at 1/40, so the residual is elsewhere. Every
-remaining call to the C backend now passes only numbers.
+The crash rate is **ASLR-sensitive and varies enormously between loops of the
+SAME binary**: 4/50 in one run of a loop and 13/20 in the next, with the binary
+verified byte-identical (`md5sum` equal; the compiler's executable output is
+deterministic — only `.map` files differ between compiles). So **a 0/N run
+proves nothing here**, and every "0/30 clean" I recorded was luck being read as
+evidence. Path length, font count and compile-then-run all looked causal for the
+same reason and none of them survived a control.
 
-Next tool per the playbook: `-dPXX_OBJTRACE` with `grep <addr>`, and a long-path
-Pascal-direct repro to try to make it deterministic the way the ctor one was.
+What IS solid:
 
-## Original repro
+- **One consistent signature**, every catch:
+  ```
+  SIGSEGV in __crtl_utoa (out=0x7c7c7c7c7c7c7c5a, v=0xFFFFFFFFFFFFFFFF,
+                          base=0x7C7C7C46, upper=0x46464646)
+  #1..#N  0x7c7c7c7c7c7c7c7c in ?? ()
+  ```
+  The whole stack is overwritten with `0x7c` (`'|'`), and the garbage arguments
+  decode to `0x46464646` (`'FFFF'`). Text is being written over the stack, and
+  the fault lands in printf formatting only because that is what runs next.
+- It survives the constructor fix (which was a real and separate bug), so it is
+  a second defect with the same *shape*: something writing formatted characters
+  past a buffer.
+- `lib/vendor/pdfgen` driven from C is still clean, so the Pascal layer remains
+  the place to look.
+
+**How to measure it properly next time:** fix the binary, run at least 100
+iterations, and compare rates only between runs of the SAME executable in the
+SAME session — and never treat a zero as a fix. `setarch -R` to disable ASLR
+would make the rate stable enough to bisect against.
+
+Next tool per the playbook: `-dPXX_OBJTRACE` with `grep <addr>`.
