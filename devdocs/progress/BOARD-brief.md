@@ -38,10 +38,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-nilpy-in-over-objects-ignores-eq` [N]
 - `compat-pascal-write-fixed-huge-magnitude-differs-from-fpc` [A] — blocked-by: decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - `feature-b-crtl-last-seven-unimplemented-declarations` [B] — blocked-by: feature-c-entry-stub-must-run-finalizers
-- `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
+- `feature-lib-tkinter-callable-options-with-args` [B]
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 205, ranked
+## Ready — top 30 of 207, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 70] [P]` bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
@@ -74,4 +74,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 
-_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -3,7 +3,6 @@ summary: "nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, 
 type: feature
 track: N
 prio: 50
-blocked-by: [feature-nilpy-star-args-kwargs]
 ---
 
 # nilpy: a tkinter façade (object API + callbacks)
@@ -66,3 +65,13 @@ does mean the Canvas surface above is load-bearing, not decorative.
 `make test-nilpy` green with a `.npy` GUI case under xvfb (widget with a
 `command=` callback that fires, and a Canvas drawing), + `--tier quick` +
 self-host byte-identical.
+
+## Unblocked 2026-08-09 (Track B): the blocker is satisfied in practice
+
+Swept as part of checking whether Track B's blocked tickets were still really
+blocked — the pattern this session kept hitting is that they were not. The
+capability this ticket waited on was MEASURED working on the current pin (v252);
+the evidence is recorded on the blocker itself, which Track N still owns
+formally closing.
+
+`blocked-by` removed here so the ticket stops hiding from `progress.sh ready`.

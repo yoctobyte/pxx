@@ -2,7 +2,6 @@
 summary: "Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code"
 type: feature
 prio: 40
-blocked-by: [feature-nilpy-tk-binding, feature-nilpy-break-continue]
 ---
 
 # Landmark demo — a minimal IDE in Nil-Python (`import tk`)
@@ -50,3 +49,13 @@ functionality, an order of magnitude less code.
   minimalism showcase (Tk, `ttk` for a modern-enough look).
 - Not a compiler/frontend change — a gap the app hits (NilPy feature, tk surface) is filed
   to the owning lane (N / B), not fixed under E.
+
+## Unblocked 2026-08-09 (Track B): the blocker is satisfied in practice
+
+Swept as part of checking whether Track B's blocked tickets were still really
+blocked — the pattern this session kept hitting is that they were not. The
+capability this ticket waited on was MEASURED working on the current pin (v252);
+the evidence is recorded on the blocker itself, which Track N still owns
+formally closing.
+
+`blocked-by` removed here so the ticket stops hiding from `progress.sh ready`.

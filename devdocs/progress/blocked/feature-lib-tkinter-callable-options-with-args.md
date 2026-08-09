@@ -2,7 +2,6 @@
 track: B
 prio: 40
 type: feature
-blocked-by: [feature-nilpy-multi-arg-callback-bridges]
 ---
 
 # tkinter façade: a callable option that receives Tk's OWN arguments
@@ -79,3 +78,13 @@ ready and would have been handed to a Track B agent who cannot edit
 `compiler/builtin/pylib.pas`. The bridges have their own ticket —
 [[feature-nilpy-multi-arg-callback-bridges]] — and it is now the recorded edge,
 so priority propagates to it and this surfaces only once it lands.
+
+## Unblocked 2026-08-09 (Track B): the blocker is satisfied in practice
+
+Swept as part of checking whether Track B's blocked tickets were still really
+blocked — the pattern this session kept hitting is that they were not. The
+capability this ticket waited on was MEASURED working on the current pin (v252);
+the evidence is recorded on the blocker itself, which Track N still owns
+formally closing.
+
+`blocked-by` removed here so the ticket stops hiding from `progress.sh ready`.

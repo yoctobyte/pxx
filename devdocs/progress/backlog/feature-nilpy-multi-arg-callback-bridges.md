@@ -62,3 +62,19 @@ the frontend bugs.
 `make test-nilpy` green + self-host byte-identical, plus a `.npy` that hands a
 def, a lambda and a bound method to a library routine which calls each with two
 and with three arguments, diffed against CPython.
+
+## Measured satisfied 2026-08-09 (by Track B, pinned v252)
+
+The shape this ticket exists for — a callable receiving more than one of its own
+arguments, including the hard case of a BOUND METHOD:
+
+```python
+class C:
+    def add(self, a, b): return a + b
+def call2(f): return f(4, 5)
+print(call2(C().add))      # 9
+```
+Also plain functions (`call(cb)` with `cb(a,b)` -> 5) and multi-arg lambdas
+(`lambda a, b: a*b` -> 12). Evidence only — Track N owns closing this. Found
+sweeping Track B's blocked tickets;
+[[feature-lib-tkinter-callable-options-with-args]] listed this as its blocker.

@@ -160,3 +160,14 @@ and now stops at `import tempfile` (line 64). `settings.py` cleared `getF`/`getI
 and now stops at `import tkinter as tk` (line 2, the module body — the def-shell
 pre-pass used to fail before the body was ever reached), i.e. `import X as Y`
 aliasing is its next wall, ahead of the façade itself.
+
+## Measured satisfied 2026-08-09 (by Track B, pinned v252)
+
+```python
+def f(*args):      -> f(1,2,3) == 3
+def f(**kw):       -> f(a=1,b=2) == 2, and kw["x"] reads by name
+def f(a, *rest):   -> f(1,2,3) == "1:2"    (mixed positional + *args)
+```
+All accepted and correct. Evidence only — Track N owns closing this. Found
+sweeping Track B's blocked tickets; [[feature-nilpy-tkinter-facade]] listed this
+as its blocker.

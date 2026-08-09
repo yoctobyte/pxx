@@ -43,7 +43,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | decide-float-fixed-output-exact-or-fpc-17-digit-cap |
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | feature-c-entry-stub-must-run-finalizers |
-| feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
+| feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
 ## backlog (224)
@@ -137,7 +137,7 @@ lives in git, not in a timestamp._
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
+| feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
 | feature-dns-esp-backend | S | 35 | feature | DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend | — |
@@ -162,7 +162,7 @@ lives in git, not in a timestamp._
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
-| feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
+| feature-nilpy-break-continue | B | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | bug-n-str-encode-and-bytes-decode-ignore-the-encoding |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
@@ -181,7 +181,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
 | feature-nilpy-match-statement | N | 30 | feature | `match` / `case` — structural pattern matching is not parsed | — |
 | feature-nilpy-methods-on-int-and-float | N | 35 | feature | No methods on `int` or `float` — `x.bit_length()`, `x.is_integer()`, `x.hex()` | — |
-| feature-nilpy-multi-arg-callback-bridges | N | 35→40 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
+| feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
@@ -194,7 +194,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-str-format-named-keyword-fields | N | 25 | feature | `"{name} is {age}".format(name=..., age=...)` — named fields not supported | — |
 | feature-nilpy-str-surface-gaps-2026-08-09 | N | 25 | feature | str/bytes surface gaps found by the 2026-08-09 differential sweep | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
-| feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | feature-nilpy-star-args-kwargs |
+| feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | — |
 | feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-accumulator-value-tracker | O | 58→60 | feature | The register-value scaffold two -O passes are blocked on: a single choke point for every write to the accumulator, so a 'rax currently holds symbol S' fact can be maintained without a silent-miscompile risk. Today rax is written from hundreds of scattered raw EmitB sites. | — |
@@ -491,6 +491,7 @@ lives in git, not in a timestamp._
 - [p 55] [T] feature-t-shard-the-uforth-ans-suite-per-word-set
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
+- [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [A] bug-a-nd-array-function-result-indexes-the-wrong-slot
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
@@ -554,8 +555,6 @@ lives in git, not in a timestamp._
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
 - [p 40] [C] feature-c-entry-stub-must-run-finalizers (unblocks 1)
-- [p 40] [A] feature-nilpy-break-continue (unblocks 1)
-- [p 40] [N] feature-nilpy-multi-arg-callback-bridges (unblocks 1)
 - [p 40] [A] bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc
 - [p 40] [N] bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword
 - [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
@@ -567,6 +566,8 @@ lives in git, not in a timestamp._
 - [p 40] [S] feature-a-promoint-variant-esp-targets
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
+- [p 40] [E] feature-demo-nilpy-ide
+- [p 40] [B] feature-nilpy-break-continue
 - [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-dataclass-expression-field-default
 - [p 40] [N] feature-nilpy-enum-class
@@ -597,6 +598,7 @@ lives in git, not in a timestamp._
 - [p 35] [A] feature-nilpy-arc-cross-parity
 - [p 35] [N] feature-nilpy-iter-and-next-over-a-container
 - [p 35] [N] feature-nilpy-methods-on-int-and-float
+- [p 35] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
@@ -670,10 +672,7 @@ lives in git, not in a timestamp._
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-c-entry-stub-must-run-finalizers
 - **1** — feature-inline-asm-xmm-operands
-- **1** — feature-nilpy-break-continue
-- **1** — feature-nilpy-multi-arg-callback-bridges
 - **1** — feature-nilpy-object-reclamation
-- **1** — feature-nilpy-star-args-kwargs
 - **1** — feature-nilpy-tkinter-facade
 - **1** — feature-opt-accumulator-value-tracker
 - **1** — feature-os-targets-bsd-mac

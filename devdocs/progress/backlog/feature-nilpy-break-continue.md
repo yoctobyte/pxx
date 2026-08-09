@@ -48,3 +48,17 @@ running = 0`) that are un-Pythonic and error-prone.
 Found alongside a NilPy `str + str` concatenation gap (also rejected) — that likely
 belongs to [[feature-nilpy-collections-and-string-methods]]; verify and fold there rather
 than duplicating.
+
+## Measured satisfied 2026-08-09 (by Track B, pinned v252)
+
+```python
+for i in range(5):          while i < 6:
+    if i == 1: continue         i = i + 1
+    if i == 3: break            if i == 2: continue
+    print(i)                    if i == 5: break
+                                n = n + i
+```
+Both loop kinds accept `break` and `continue` and produce CPython's answers
+(`0`, and `n = 8`). Evidence only — Track N owns closing this. Found while
+sweeping Track B's blocked tickets for stale blockers;
+[[feature-demo-nilpy-ide]] listed this as a blocker.
