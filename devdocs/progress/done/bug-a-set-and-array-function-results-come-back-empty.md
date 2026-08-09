@@ -79,4 +79,4 @@ The 30-row parameter × aggregate matrix that found this now matches FPC exactly
 self-host shows) GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit b09c4eab1.
