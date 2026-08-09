@@ -1,0 +1,74 @@
+# bug-nilpy-exception-str-and-repr-diverge-from-cpython (the KeyError half)
+#
+# Every missing-key lookup raised the FIXED text `key not found`. The key is the
+# entire content of a KeyError — without it the exception says nothing, and any
+# "which key?" question had to be answered by adding a print.
+#
+# The message is built with pyvar_repr, not pystr_of, and that is not a detail:
+# CPython's KeyError is the ONE builtin exception whose str() is the REPR of its
+# argument, so a missing STRING key reports 'nope' WITH the quotes while a
+# missing INT key reports 7 without them. Using the repr matches CPython for
+# free rather than approximating it — which is why both key kinds are asserted
+# here, and why a str-based fix would pass the int case and fail the str one.
+#
+# All four raise sites are covered — subscript read, pop, del and a Counter-mode
+# dict's non-counting sibling — because they were four separate calls to one
+# keyless helper, and a fix that reached only the subscript would look complete.
+#
+# NOT asserted: repr(e) of an exception, which is still the default object repr
+# (`<__main__.KeyError object at 0x...>` where CPython prints
+# `KeyError('nope')`). Same ticket, separate half, still open — pinning today's
+# address-bearing answer would freeze it and would not even be stable run to run.
+#
+# Expectations are CPython's own output.
+
+d = {"a": 1, 2: "b", "": 0}
+
+# subscript read: hit and miss, string keys and int keys
+for k in ["nope", "a"]:
+    try:
+        print("read", d[k])
+    except KeyError as e:
+        print("read miss:", str(e))
+
+try:
+    print("int", d[2])
+except KeyError as e:
+    print("int miss:", str(e))
+
+try:
+    print(d[7])
+except KeyError as e:
+    print("intmiss:", str(e))
+
+# the EMPTY string is a real key, and a real miss looks different from it
+print("empty", d[""])
+try:
+    print(d["x"])
+except KeyError as e:
+    print("strmiss:", str(e))
+
+# pop
+try:
+    d.pop("gone")
+except KeyError as e:
+    print("pop:", str(e))
+
+# del
+try:
+    del d[99]
+except KeyError as e:
+    print("del:", str(e))
+
+# a key with characters the repr has to handle
+try:
+    print(d["a b'c"])
+except KeyError as e:
+    print("quoted:", str(e))
+
+# control: pop and get with defaults still do NOT raise
+print(d.pop("gone", "dflt"), d.get("gone", "dflt2"))
+
+# control: a successful del leaves the rest intact
+del d["a"]
+print(sorted(str(k) for k in d))

@@ -3691,9 +3691,23 @@ begin
 end;
 
 procedure PyKeyError;
-{ RAISE — see PyIndexError. }
+{ RAISE — see PyIndexError. The keyless form, for callers with no key to hand. }
 begin
   raise KeyError.Create('key not found');
+end;
+
+procedure PyKeyError(const k: Variant); overload;
+{ The same, naming the KEY — which is the entire content of a KeyError. The
+  fixed text 'key not found' said nothing: every real "which key?" question had
+  to be answered by adding a print.
+
+  pyvar_repr, not pystr_of, and that is not a detail: CPython's KeyError is the
+  one builtin exception whose str() is the REPR of its argument, so a missing
+  string key reports 'nope' WITH the quotes. Using the repr here makes the
+  message match CPython's for free, and keeps an int key unquoted the way
+  CPython does. }
+begin
+  raise KeyError.Create(pyvar_repr(k));
 end;
 
 constructor TPyDict.Create;
@@ -3924,7 +3938,7 @@ begin
       Result := 0;
       exit;
     end;
-    PyKeyError;
+    PyKeyError(k);
   end;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
@@ -4022,7 +4036,7 @@ var
 begin
   Result := pynone;   { Python's in-place mutators return None }
   i := indexof(k);
-  if i < 0 then PyKeyError;
+  if i < 0 then PyKeyError(k);
   for j := i to FLen - 2 do
   begin
     src := PPyVarRec(NativeInt(FKeys) + (j + 1) * 16);
@@ -4078,7 +4092,7 @@ function TPyDict.pop(const k: Variant): Variant;
 var i: Integer; src, dst: PPyVarRec;
 begin
   i := indexof(k);
-  if i < 0 then PyKeyError;
+  if i < 0 then PyKeyError(k);
   src := PPyVarRec(NativeInt(FVals) + i * 16);
   dst := PPyVarRec(@Result);
   PyVarSlotInit(dst, src);

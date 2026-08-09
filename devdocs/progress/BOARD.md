@@ -61,7 +61,7 @@ _none_
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
-| bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr, and KeyError's `str()` drops its quotes | — |
+| bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
 | bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |

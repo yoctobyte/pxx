@@ -1,0 +1,11 @@
+read miss: 'nope'
+read 1
+int b
+intmiss: 7
+empty 0
+strmiss: 'x'
+pop: 'gone'
+del: 99
+quoted: "a b'c"
+dflt dflt2
+['', '2']

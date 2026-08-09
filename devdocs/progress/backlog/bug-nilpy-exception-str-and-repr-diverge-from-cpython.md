@@ -4,7 +4,7 @@ prio: 40
 type: bug
 ---
 
-# Exception `repr()` is the default object repr, and KeyError's `str()` drops its quotes
+# Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09)
 
 ```python
 try:
@@ -55,3 +55,25 @@ so these three are the residue.
 `make test-nilpy` + self-host byte-identical, CPython-diffed over `str`/`repr`
 of KeyError, ValueError, a bare `Exception`, a user-defined subclass, the
 zero-argument and multi-argument forms, and a real missing-key lookup.
+
+## 2026-08-09 — items 2 and 3 FIXED; item 1 (repr) still open
+
+A missing key now reports the KEY. All four raise sites went through one keyless
+`PyKeyError`, so they all had the key in scope and all four now pass it.
+
+The message is built with **`pyvar_repr`, not `pystr_of`**, which fixes item 2
+at the same time and for free: CPython's KeyError is the one builtin exception
+whose `str()` is the REPR of its argument, so a missing string key now reports
+`'nope'` with the quotes and a missing int key reports `7` without them. A
+str-based fix would have passed the int case and failed the str one — which is
+why `test/test_nilpy_keyerror_names_the_key.npy` asserts both kinds, plus an
+empty-string key, a key containing a quote, and all four raise sites.
+
+**Item 1 is untouched:** `repr(e)` on any exception is still the default object
+repr (`<__main__.KeyError object at 0x...>` where CPython prints
+`KeyError('nope')`). The test says so and deliberately does not pin it — the
+current answer contains an address and is not even stable run to run.
+
+The @dataclass `__repr__` generator that landed the same day is the shape that
+half wants: class name, parenthesised arguments. It would need `e.args`, which
+is its own open item.
