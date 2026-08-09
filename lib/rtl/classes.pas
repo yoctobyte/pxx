@@ -91,6 +91,16 @@ type
   { ---- TStream: abstract byte stream + TMemoryStream concrete ---- }
   TSeekOrigin = (soBeginning, soCurrent, soEnd);
 
+const
+  { Delphi's older names for the same three values, which is what most existing
+    code writes (FPC accepts both, and Ord() agrees: 0, 1, 2). Aliases rather
+    than a second enum, so a Seek written either way is the same call. }
+  soFromBeginning = soBeginning;
+  soFromCurrent   = soCurrent;
+  soFromEnd       = soEnd;
+
+type
+
   TStream = class
   protected
     function GetSize: Int64; virtual;

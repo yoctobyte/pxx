@@ -28,6 +28,19 @@ procedure Close(var f: Text);
 procedure CloseFile(var f: Text);
 procedure Erase(var f: Text);
 function Eof(var f: Text): Boolean;
+
+{ True when the next character is a line terminator, or at end of file — FPC's
+  Eoln, the companion to reading a character at a time. Measured against FPC:
+
+    'ab'#10'c'#10   ->  a b EOLN c EOLN, and EOLN again at end of file
+    'a'#13#10'b'#10 ->  a EOLN b EOLN        { CR counts, and Readln eats both }
+    'xy'            ->  x y, then EOLN because the file ended
+
+  So CR answers True here even though TextReadChar hands it back as an ordinary
+  character — both of those are FPC's behaviour, measured, not inferred from
+  each other. Non-destructive: it uses the same one-byte lookahead Eof does, so
+  the cursor does not move. }
+function Eoln(var f: Text): Boolean;
 function IOResult: Integer;
 
 procedure TextWrite(var f: Text; const s: AnsiString);
@@ -188,6 +201,16 @@ begin
     f.HitEof := True;
     Result := True;
   end;
+end;
+
+function Eoln(var f: Text): Boolean;
+begin
+  { Eof does the lookahead and parks the byte in f.Peek, so asking it first
+    both answers the end-of-file case and guarantees Peek is loaded. }
+  if Eof(f) then
+    Result := True
+  else
+    Result := (f.Peek = 10) or (f.Peek = 13);
 end;
 
 function IOResult: Integer;

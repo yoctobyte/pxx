@@ -40,7 +40,7 @@ _none_
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | feature-nilpy-multi-arg-callback-bridges |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (220)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -112,7 +112,6 @@ _none_
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
-| feature-b-rtl-missing-fpc-surface-2026-08 | B | 35 | feature | Missing FPC surface found by the differential probe (Eoln, TSeekOrigin, Sorted, IncMonth) | — |
 | feature-b-tstrings-commatext | B | 30 | feature | TStrings.CommaText / DelimitedText are missing | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-finalizers | C | 40 | feature | The C entry stub is `call main; exit_group(retval)`, so a plain `return` from main skips __pxx_run_finalizers entirely — which is why crtl cannot implement atexit without looking implemented and silently skipping handlers on the commonest exit path | — |
@@ -392,9 +391,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1553)
+## done (1554)
 
-1553 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1554 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -570,7 +569,6 @@ _none_
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
-- [p 35] [B] feature-b-rtl-missing-fpc-surface-2026-08
 - [p 35] [S] feature-c-esp-conformance-coverage
 - [p 35] [S] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture

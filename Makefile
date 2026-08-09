@@ -7944,6 +7944,11 @@ lib-test: pxx-stable-check
 	# cthreads shim. Expectations are FPC's own output for the same program.
 	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas /tmp/lib_fpc_thread_surface
 	test "$$(/tmp/lib_fpc_thread_surface | tail -n 1)" = "FPCTHREAD OK"
+	# FPC surface the differential probe found missing: Eoln, the legacy
+	# TSeekOrigin names, IncMonth's end-of-month clamp. Expectations measured
+	# against an FPC build, per the ticket's method note.
+	$(PXX_STABLE) -Fulib/rtl test/lib_fpc_surface_2026_08.pas /tmp/lib_fpc_surface
+	test "$$(/tmp/lib_fpc_surface | tail -n 1)" = "FPCSURFACE OK"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.
 	# The output is identical either way — the property that separates a futex
 	# mutex from the spinlock it replaced is CPU TIME, so assert that: three

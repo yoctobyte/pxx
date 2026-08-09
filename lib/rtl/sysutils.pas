@@ -426,6 +426,22 @@ function DayOfWeek(DateTime: TDateTime): Integer;
 { Gregorian leap-year test (FPC SysUtils.IsLeapYear). }
 function IsLeapYear(Year: Word): Boolean;
 
+{ Shift a date by NumberOfMonths whole months, clamping the day to the target
+  month's length — the clamp is the whole point and the part worth reading off
+  an FPC build rather than deriving. FPC, measured:
+
+    IncMonth(2026-01-31,  1) = 2026-02-28    { clamped }
+    IncMonth(2026-01-31,  2) = 2026-03-31    { NOT Feb28+1mo — see below }
+    IncMonth(2024-01-31,  1) = 2024-02-29    { leap }
+    IncMonth(2026-03-31, -1) = 2026-02-28
+    IncMonth(2026-12-31,  1) = 2027-01-31
+
+  The second line is the one an implementation gets wrong: the clamp applies to
+  the ORIGINAL day against the FINAL month, so it never compounds. Adding two
+  months to the 31st lands on the 31st, not on the 28th that adding one month at
+  a time would give. The time-of-day fraction is preserved. }
+function IncMonth(const DateTime: TDateTime; NumberOfMonths: Integer): TDateTime;
+
 { FPC-style date/time formatting, the subset real code uses (Synapse's RFC-822
   / ISO-8601 / message-id renderers are the driving consumers): tokens
   yyyy yy mm m dd d hh h nn n ss s zzz z (case-insensitive), "..." and '...'
@@ -2720,6 +2736,35 @@ end;
 function IsLeapYear(Year: Word): Boolean;
 begin
   Result := ((Year mod 4 = 0) and (Year mod 100 <> 0)) or (Year mod 400 = 0);
+end;
+
+function IncMonth(const DateTime: TDateTime; NumberOfMonths: Integer): TDateTime;
+var
+  y, m, d: Word;
+  total, ny, nm: Int64;
+  maxDay: Word;
+  frac: TDateTime;
+begin
+  DecodeDate(DateTime, y, m, d);
+  { Months since year 0, so the arithmetic is one number and the year rolls out
+    of it. Pascal's div/mod truncate toward zero, which is wrong for negative
+    totals (a date before year 0 is not reachable through Word years, but the
+    same trap bites any large negative NumberOfMonths), so floor them by hand. }
+  total := Int64(y) * 12 + Int64(m) - 1 + NumberOfMonths;
+  ny := total div 12;
+  nm := total mod 12;
+  if nm < 0 then
+  begin
+    nm := nm + 12;
+    ny := ny - 1;
+  end;
+  nm := nm + 1;
+  maxDay := MonthDays[IsLeapYear(Word(ny))][Integer(nm)];
+  if d > maxDay then d := maxDay;
+  { Keep the time-of-day: Trunc/Frac split rather than re-encoding it, so no
+    rounding is introduced by a round trip through EncodeTime. }
+  frac := DateTime - Trunc(DateTime);
+  Result := EncodeDate(Word(ny), Word(nm), d) + frac;
 end;
 
 function DayOfWeek(DateTime: TDateTime): Integer;
