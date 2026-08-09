@@ -8224,6 +8224,31 @@ lib-test: pxx-stable-check
 	else \
 	  echo "=== lib-test cross: qemu-user not present, skipping cross-arch PAL net ==="; \
 	fi
+	# dynlibs under the opt-in libc profile. The RUN is x86-64 + i386 (the two
+	# targets this box has a runtime loader for); for arm32/aarch64 the ELF is
+	# checked STATICALLY instead, which is what the open item actually doubts —
+	# that the per-target interpreter and the libc import come out right. A
+	# missing sysroot is a host gap, not a pxx one, so it must not read as a pass.
+	@echo "=== lib-test: dynlibs (opt-in -dPXX_DYNLIB_LIBC) ==="
+	$(PXX_STABLE) -dPXX_DYNLIB_LIBC -Fulib/rtl test/test_dynlib.pas /tmp/lib_dynlib
+	test "$$(/tmp/lib_dynlib)" = "$$(printf 'strlen: 5\nunloaded: TRUE')"
+	@for arch in i386 arm32 aarch64; do \
+	  $(PXX_STABLE) --target=$$arch -dPXX_DYNLIB_LIBC -Fulib/rtl test/test_dynlib.pas /tmp/lib_dynlib_$$arch >/dev/null || { echo "dynlib compile FAIL on $$arch"; exit 1; }; \
+	  case $$arch in \
+	    i386)    want=/lib/ld-linux.so.2 ;; \
+	    arm32)   want=/lib/ld-linux.so.3 ;; \
+	    aarch64) want=/lib/ld-linux-aarch64.so.1 ;; \
+	  esac; \
+	  got=$$(strings -a /tmp/lib_dynlib_$$arch | grep -m1 "^/lib.*ld-"); \
+	  test "$$got" = "$$want" || { echo "dynlib $$arch interpreter: got '$$got' want '$$want'"; exit 1; }; \
+	  readelf -d /tmp/lib_dynlib_$$arch 2>/dev/null | grep -q "NEEDED.*libc.so.6" || { echo "dynlib $$arch: no NEEDED libc.so.6"; exit 1; }; \
+	  echo "  dynlib $$arch: interpreter + libc import ok (static)"; \
+	done
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  test "$$(qemu-i386 /tmp/lib_dynlib_i386)" = "$$(printf 'strlen: 5\nunloaded: TRUE')" \
+	    && echo "  dynlib i386: dlopen/dlsym/dlclose RUN ok under qemu" \
+	    || { echo "dynlib i386 run FAIL"; exit 1; }; \
+	else echo "  dynlib i386: qemu-i386 absent, run not verified"; fi
 	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_platform_esp
 	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nsendto=-38\nrecvfrom=-38\npoll=-38\nsockerr=-38\nsockname=-38\nacceptip=-38\nunsupported=-38')"
 	@echo "=== lib-test: esptimer (ESP-IDF timer callback surface) compiles to a riscv32 object with esp_timer imports ==="

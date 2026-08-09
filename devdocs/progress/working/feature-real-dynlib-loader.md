@@ -1,13 +1,12 @@
 ---
 prio: 45  # auto
-blocked-by: [bug-pascal-procvar-in-value-context-takes-address-instead-of-calling]
 ---
 
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
 
 - **Type:** feature / design decision (runtime infrastructure)
-- **Status:** backlog
-- **Owner:** trackB-agent
+- **Status:** working
+- **Owner:** claude-B
   the link-libc profile / loader-vs-link decision)
 - **Opened:** 2026-06-24
 - **Found-by:** Synapse recon ([[feature-synapse-compile-check]]) — `dynlibs`
@@ -241,3 +240,36 @@ how every Delphi-family dynamic-binding layer is written). This ticket's
 blocked-by now points at that, which is its ONLY remaining external blocker.
 
 Item (b), other-target run verification, is unchanged.
+
+## 2026-08-09 (Track B): blocker cleared, item (b) as far as this box allows
+
+**The blocker is gone.** `bug-pascal-procvar-in-value-context-takes-address-instead-of-calling`
+is in `done/`, and it was this ticket's only remaining external one. Re-tested
+the idiom it broke — a proc var bound from `GetProcedureAddress` and CALLED in a
+value context, which is how every Delphi-family dynamic-binding layer is written
+— and it works.
+
+**Item (b), other-target verification** — done to the limit of this machine:
+
+| target | compiles | interpreter | `NEEDED libc.so.6` | RUN |
+| --- | --- | --- | --- | --- |
+| x86-64 | yes | `/lib64/ld-linux-x86-64.so.2` | yes | **yes** |
+| i386 | yes | `/lib/ld-linux.so.2` | yes | **yes** (qemu) |
+| arm32 | yes | `/lib/ld-linux.so.3` | yes | host has no loader |
+| aarch64 | yes | `/lib/ld-linux-aarch64.so.1` | yes | host has no loader |
+
+arm32/aarch64 cannot RUN here: `/usr/arm-linux-gnueabi` and
+`/usr/aarch64-linux-gnu` contain binutils only — no `ld-linux*`, no libc — so
+qemu dies at the interpreter. That is a host gap, not a pxx one, and it must not
+be allowed to read as a pass.
+
+So lib-test asserts what IS checkable per target: the emitted interpreter string
+matches that architecture's and `libc.so.6` is imported. That is precisely what
+item (b) doubted — the extern/dynsym emission being target-independent — and the
+dynamic section backs it up: 72 bytes of relocations, three 24-byte entries, for
+exactly `dlopen`/`dlsym`/`dlclose`, all three names in the string table.
+
+**Remaining:** item (d), Synapse SSL/TLS end to end, and a real arm/aarch64 run
+on a box with those sysroots (or a container). Neither is a decision — both are
+work.
+
