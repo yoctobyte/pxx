@@ -130,4 +130,4 @@ actually suppresses `PXXRecordRelease` on an x86-64 threaded build.
 
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 76c929e40.
