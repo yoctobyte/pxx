@@ -119,4 +119,4 @@ name reused as an assignment target and then as a for-loop target, and filed as
 [[bug-nilpy-name-assigned-from-a-call-then-reused-as-a-loop-target-segfaults]].
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 3c70e0534.
