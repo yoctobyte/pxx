@@ -68,4 +68,4 @@ changes, which is consistent with the self-host converging.
 GREEN.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit a77caaad0.
