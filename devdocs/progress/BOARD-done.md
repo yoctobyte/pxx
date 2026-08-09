@@ -1332,6 +1332,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-rtl-environment-variables | B | 45 | feature | No access to environment variables anywhere in the RTL | — |
 | feature-rtl-environment-write-side | B | 40 | feature | The environment's write side — SetEnvironmentVariable, and the child sees it | — |
 | feature-rtl-image-bitmap-library | B | 50 | feature | RTL image bitmap library | — |
+| feature-rtl-ln-exp-are-a-ulp-off-port-the-crtl-dd-core | B | 35 | feature | lib/rtl's Ln/Exp are plain-double series and land ~1 ulp off; lib/crtl already has a correctly-rounded double-double log/exp core, so the Pascal RTL is the second, worse mechanism for the same concept | — |
 | feature-rtl-math-surface-gaps | B | 30 | feature | `math` surface gaps — 16 names missing, all LOUD | — |
 | feature-rtl-month-day-name-arrays | B | 55 | feature | RTL: ShortMonthNames / LongMonthNames / day-name arrays — lib-test's synapse step is red on them | — |
 | feature-rtl-terminal-raw-mode | B | 50 | feature | Terminal raw mode and unbuffered input support (libc-free) | — |

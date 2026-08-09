@@ -180,48 +180,296 @@ begin
   Result := g + r / (2.0 * g);
 end;
 
-function Exp(x: Double): Double;
-{ e^x = 2^k * e^r, r = x - k*ln2, Taylor for e^r. Scale in a LOCAL (res). }
-var term, sum, r, res: Double; k, kc, i: Integer;
-begin
-  k := Trunc(x / 0.69314718055994530942);
-  r := x - k * 0.69314718055994530942;
-  term := 1.0; sum := 1.0;
-  for i := 1 to 40 do
-  begin
-    term := term * r / i;
-    sum := sum + term;
+{ ================= double-double kernel =================
+
+  lib/crtl/src/math.c has had a correctly-rounded log/exp core since the C
+  runtime needed one; this unit had a plain-double atanh series that landed
+  ~1 ulp off on every value and needed a SnapLog special case to hit exact
+  powers at all (bug-rtl-log10-is-inexact-for-powers-of-ten). Two mechanisms
+  for one concept, and this is the port that removes the worse one — same
+  algorithm, same constants, in Pascal.
+
+  A TDd carries hi + lo with |lo| <= ulp(hi)/2, so the pair holds ~106 bits.
+  Every operation below is an error-free transformation: the rounding error of
+  a double operation is computed exactly and kept in lo. Constants come from
+  BIT PATTERNS rather than decimal literals so accuracy does not depend on the
+  literal parser. }
+
+type
+  TDd = record
+    Hi: Double;
+    Lo: Double;
   end;
-  res := sum;
-  kc := k;
-  while kc > 0 do begin res := res * 2.0; kc := kc - 1; end;
-  while kc < 0 do begin res := res / 2.0; kc := kc + 1; end;
-  Result := res;
+
+function DdBits(b: Int64): Double;
+begin
+  Result := PSqrtDouble(@b)^;
+end;
+
+{ |a| >= |b| assumed — one operation fewer than the general 2Sum. }
+function DdFast2Sum(a, b: Double): TDd;
+begin
+  Result.Hi := a + b;
+  Result.Lo := b - (Result.Hi - a);
+end;
+
+function Dd2Sum(a, b: Double): TDd;
+var bb: Double;
+begin
+  Result.Hi := a + b;
+  bb := Result.Hi - a;
+  Result.Lo := (a - (Result.Hi - bb)) + (b - bb);
+end;
+
+{ Dekker two-product, no FMA. Exact while |a|,|b| < 2^995. }
+function Dd2Prod(a, b: Double): TDd;
+var sa, sb, ah, al, bh, bl: Double;
+begin
+  sa := 134217729.0 * a;        { 2^27 + 1 split }
+  sb := 134217729.0 * b;
+  ah := sa - (sa - a); al := a - ah;
+  bh := sb - (sb - b); bl := b - bh;
+  Result.Hi := a * b;
+  Result.Lo := ((ah * bh - Result.Hi) + ah * bl + al * bh) + al * bl;
+end;
+
+function DdAdd(a, b: TDd): TDd;
+var s: TDd;
+begin
+  s := Dd2Sum(a.Hi, b.Hi);
+  s.Lo := s.Lo + a.Lo + b.Lo;
+  Result := DdFast2Sum(s.Hi, s.Lo);
+end;
+
+function DdAddD(a: TDd; b: Double): TDd;
+var s: TDd;
+begin
+  s := Dd2Sum(a.Hi, b);
+  s.Lo := s.Lo + a.Lo;
+  Result := DdFast2Sum(s.Hi, s.Lo);
+end;
+
+function DdMul(a, b: TDd): TDd;
+var p: TDd;
+begin
+  p := Dd2Prod(a.Hi, b.Hi);
+  p.Lo := p.Lo + a.Hi * b.Lo + a.Lo * b.Hi;
+  Result := DdFast2Sum(p.Hi, p.Lo);
+end;
+
+function DdMulD(a: TDd; b: Double): TDd;
+var p: TDd;
+begin
+  p := Dd2Prod(a.Hi, b);
+  p.Lo := p.Lo + a.Lo * b;
+  Result := DdFast2Sum(p.Hi, p.Lo);
+end;
+
+function DdDivD(a: TDd; b: Double): TDd;
+var p: TDd; q1, q2: Double;
+begin
+  q1 := a.Hi / b;
+  p := Dd2Prod(q1, b);
+  q2 := ((a.Hi - p.Hi) - p.Lo + a.Lo) / b;
+  Result := DdFast2Sum(q1, q2);
+end;
+
+function DdDiv(a, b: TDd): TDd;
+var p, e, q: TDd; q1, q2, q3: Double;
+begin
+  q1 := a.Hi / b.Hi;
+  p := DdMulD(b, q1);
+  e := DdAdd(a, DdMulD(p, -1.0));
+  q2 := e.Hi / b.Hi;
+  p := DdMulD(b, q2);
+  e := DdAdd(e, DdMulD(p, -1.0));
+  q3 := e.Hi / b.Hi;
+  q := DdFast2Sum(q1, q2);
+  Result := DdAddD(q, q3);
+end;
+
+{ ln2 as a double-double: 0x1.62e42fefa39efp-1 and its tail. }
+function DdLn2: TDd;
+begin
+  Result.Hi := DdBits($3FE62E42FEFA39EF);
+  Result.Lo := DdBits($3C7ABC9E3B39803F);
+end;
+
+{ x * 2^e, exactly. Built from constructed powers of two rather than a loop:
+  e reaches +-1074 on the subnormal paths, and 1074 iterations on the exp hot
+  path is not acceptable. Stepped so no intermediate overflows or flushes on
+  the way to a representable answer. }
+function DdLdexp(x: Double; e: Integer): Double;
+var r: Double;
+begin
+  r := x;
+  while e > 1023 do
+  begin
+    r := r * DdBits($7FE0000000000000);   { 2^1023 }
+    e := e - 1023;
+  end;
+  while e < -1022 do
+  begin
+    r := r * DdBits($0010000000000000);   { 2^-1022 }
+    e := e + 1022;
+  end;
+  if e <> 0 then
+    r := r * DdBits(Int64(e + 1023) shl 52);
+  Result := r;
+end;
+
+{ Round half to EVEN — the IEEE default, and what C's rint does under it. }
+function DdRint(x: Double): Double;
+var t, f, a: Double;
+begin
+  a := Abs(x);
+  if a >= 4503599627370496.0 then begin Result := x; Exit; end;  { >= 2^52: integral }
+  t := Floor(a);
+  f := a - t;
+  if f > 0.5 then t := t + 1.0
+  else if f = 0.5 then
+  begin
+    if t - 2.0 * Floor(t / 2.0) <> 0.0 then t := t + 1.0;   { ties to even }
+  end;
+  if x < 0.0 then Result := -t else Result := t;
+end;
+
+{ log(x) as a double-double; x finite and > 0.
+  Normalize x = 2^e * m with m in [sqrt2/2, sqrt2), so z = (m-1)/(m+1) has
+  |z| <= 0.1716 and 18 odd terms reach ~2^-88; then add e*ln2 in dd. This is
+  what makes the exact cases fall out STRUCTURALLY — log2(2^n) = n needs no
+  snapping when e*ln2 is carried exactly and the series contributes zero. }
+function DdLogD(x: Double): TDd;
+var
+  b, mb: Int64;
+  e, i: Integer;
+  xx, m: Double;
+  md, z, z2, s, t, num, den: TDd;
+begin
+  xx := x;
+  b := PSqrtInt64(@xx)^;
+  if (b shr 52) = 0 then
+  begin
+    xx := xx * DdBits($4350000000000000);          { subnormal: through 2^54 }
+    b := PSqrtInt64(@xx)^;
+    e := Integer(b shr 52) - 1023 - 54;
+  end
+  else
+    e := Integer(b shr 52) - 1023;
+  mb := (b and $000FFFFFFFFFFFFF) or $3FF0000000000000;
+  m := DdBits(mb);                                 { [1, 2) }
+  if m > DdBits($3FF6A09E667F3BCD) then            { > sqrt2: halve }
+  begin
+    m := m * 0.5;
+    e := e + 1;
+  end;
+  md.Hi := m;
+  md.Lo := 0.0;
+  { z = (m-1)/(m+1); m-1 is Sterbenz-exact, m+1 exact since m < 2 }
+  num := DdAddD(md, -1.0);
+  den := DdAddD(md, 1.0);
+  z := DdDiv(num, den);
+  z2 := DdMul(z, z);                               { z^2 <= 0.02944 }
+  t.Hi := 1.0; t.Lo := 0.0;
+  s := DdDivD(t, 37.0);
+  for i := 17 downto 0 do                          { Horner over the odd terms }
+  begin
+    s := DdMul(s, z2);
+    s := DdAdd(s, DdDivD(t, Double(2 * i + 1)));
+  end;
+  s := DdMul(DdMulD(z, 2.0), s);
+  Result := DdAdd(DdMulD(DdLn2, Double(e)), s);
+end;
+
+{ Round a dd (|lo| <= ulp(hi)/2, hi roughly in [0.5, 3)) times 2^k to a double
+  with ONE effective rounding, subnormal- and overflow-correct. For normal and
+  overflow results fl(hi+lo) is already the correctly rounded 53-bit value and
+  the power-of-two scale is exact. Subnormal results cannot go that way — the
+  scale would round a second time — so they are rebuilt integrally: shift until
+  the result's ulp is 1, round to an integer with ties-to-even using the EXACT
+  dd residual, then scale back (n * 2^-1074 is exact). }
+function DdScale(v: TDd; k: Integer): Double;
+var
+  d, r, ih, il, n0: Double;
+  g: TDd;
+  sh: Integer;
+begin
+  d := v.Hi + v.Lo;
+  if d = 0.0 then begin Result := d; Exit; end;
+  if k > 1100 then k := 1100;
+  if k < -1140 then k := -1140;
+  r := DdLdexp(d, k);
+  if (r > 1.7976931348623157e308) or (r < -1.7976931348623157e308)
+     or (Abs(r) >= DdBits($0010000000000000)) then    { Inf, or >= DBL_MIN }
+  begin
+    Result := r;
+    Exit;
+  end;
+  sh := k + 1074;
+  ih := DdLdexp(v.Hi, sh);                { exact }
+  il := DdLdexp(v.Lo, sh);                { exact }
+  n0 := DdRint(ih);
+  g := Dd2Sum(ih - n0, il);               { ih-n0 is Sterbenz-exact }
+  if (g.Hi > 0.5) or ((g.Hi = 0.5) and ((g.Lo > 0.0) or
+       ((g.Lo = 0.0) and (FMod(n0, 2.0) <> 0.0)))) then
+    n0 := n0 + 1.0
+  else if (g.Hi < -0.5) or ((g.Hi = -0.5) and ((g.Lo < 0.0) or
+       ((g.Lo = 0.0) and (FMod(n0, 2.0) <> 0.0)))) then
+    n0 := n0 - 1.0;
+  Result := DdLdexp(n0, -1074);           { exact subnormal rebuild }
+end;
+
+{ Shared exp reduction: a = k*ln2 + r with |r| <= ln2/2; returns e^r as a dd in
+  [0.7, 1.42] by a 22-term Taylor (0.347^22/22! ~ 2^-98), and k through kOut. }
+function DdExpCore(a: TDd; var kOut: Integer): TDd;
+var kd: Double; i: Integer; r, sres, p, ln2: TDd;
+begin
+  ln2 := DdLn2;
+  kd := DdRint(a.Hi * DdBits($3FF71547652B82FE));   { 1/ln2 }
+  kOut := Trunc(kd);
+  p := Dd2Prod(kd, ln2.Hi);                        { exact product }
+  r := Dd2Sum(a.Hi, -p.Hi);
+  r.Lo := r.Lo + ((-p.Lo - kd * ln2.Lo) + a.Lo);
+  { FULL 2sum, not fast2sum: near x = k*ln2 the exact difference r.Hi can be
+    SMALLER than the correction r.Lo, so fast2sum's |a| >= |b| precondition
+    fails. }
+  r := Dd2Sum(r.Hi, r.Lo);
+  sres.Hi := 1.0; sres.Lo := 0.0;
+  for i := 22 downto 1 do                          { Horner: s = 1 + (r/i)*s }
+  begin
+    sres := DdMul(DdDivD(r, Double(i)), sres);
+    sres := DdAddD(sres, 1.0);
+  end;
+  Result := sres;
+end;
+
+function Exp(x: Double): Double;
+{ Correctly rounded, over the double-double kernel: reduce x = k*ln2 + r with
+  ln2 carried to ~106 bits, Taylor e^r, then one rounding on the way out. The
+  old plain-double version was ~1 ulp off (exp(1) came back as
+  2.7182818284590446 against libm's 2.718281828459045). }
+var a, sres: TDd; k: Integer;
+begin
+  if x <> x then begin Result := x; Exit; end;                { NaN }
+  if x > 710.0 then begin Result := DdLdexp(1.0, 1024) * 2.0; Exit; end;   { +Inf }
+  if x < -746.0 then begin Result := DdBits(1) * 0.5; Exit; end;           { +0 }
+  a.Hi := x;
+  a.Lo := 0.0;
+  sres := DdExpCore(a, k);
+  Result := DdScale(sres, k);
 end;
 
 function Ln(x: Double): Double;
-{ x = m*2^e, m in [1,2); ln(m) via atanh series t=(m-1)/(m+1). }
-var m, t, term, sum, p, z: Double; e, i: Integer;
+{ Correctly rounded, over the double-double kernel above. }
+var z: Double; r: TDd;
 begin
   { FPC-faithful IEEE: Ln(0) = -Inf, Ln(negative) = NaN (C log() binds here). }
+  if x <> x then begin Result := x; Exit; end;
   if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
   if x = 0.0 then begin z := 0.0; Result := -1.0 / z; Exit; end;
-  e := 0;
-  m := x;
-  while m >= 2.0 do begin m := m / 2.0; e := e + 1; end;
-  while m < 1.0 do begin m := m * 2.0; e := e - 1; end;
-  t := (m - 1.0) / (m + 1.0);
-  p := t * t;
-  term := t;
-  sum := 0.0;
-  i := 1;
-  while i <= 99 do
-  begin
-    sum := sum + term / i;
-    term := term * p;
-    i := i + 2;
-  end;
-  Result := 2.0 * sum + e * 0.69314718055994530942;
+  if x > 1.7976931348623157e308 then begin Result := x; Exit; end;   { +Inf }
+  r := DdLogD(x);
+  Result := r.Hi + r.Lo;
 end;
 
 function Sin(x: Double): Double;
@@ -369,62 +617,65 @@ begin
   Result := 1.0 / Sin(x);
 end;
 
-function SnapLog(r, x, base: Double): Double;
-{ Exact powers of the base must land ON the integer exponent. Ln is a series
-  expansion here, so Ln(1000)/Ln(10) comes out a hair BELOW 3 and the standard
-  digit-count idiom int(log10(n))+1 is wrong for nearly every power of ten (and
-  right for 1e5 by luck, so a spot check passes). Fix: round the raw quotient to
-  the nearest integer k, rebuild base^k, and return k exactly when the rebuild
-  lands back on x.
+{ Log10 / Log2 / LogN over the double-double log.
 
-  The rebuild is compared with a tolerance of ~|k|/4 ulps: wide enough to cover
-  the |k| roundings the reconstruction itself costs, and narrow enough to be
-  harmless — a deviation of m ulps in x moves the true log by m*eps/Ln(base)
-  while one ulp of the result k is ~eps*|k|, so anything this snaps was already
-  within half an ulp of k. Negative k rebuilds as 1/base^|k| (a single rounding,
-  hence still the nearest double); if base^|k| overflows, nothing is snapped. }
-var k, i: Integer; p, d, kd: Double;
-begin
-  Result := r;
-  if r <> r then Exit;                              { NaN: log of a negative }
-  if (r > 1.0e15) or (r < -1.0e15) then Exit;       { +/-Inf: log of 0 }
-  if r >= 0.0 then k := Trunc(r + 0.5) else k := Trunc(r - 0.5);
-  kd := k;
-  if Abs(r - kd) > 1.0e-6 then Exit;                { nowhere near an integer }
-  if k = 0 then
-  begin
-    if x = 1.0 then Result := 0.0;
-    Exit;
-  end;
-  i := Abs(k);
-  p := 1.0;
-  while i > 0 do
-  begin
-    p := p * base;
-    i := i - 1;
-  end;
-  if (p <> p) or (p > 1.0e308) or (p = 0.0) then Exit;
-  if k < 0 then p := 1.0 / p;
-  d := Abs(x - p);
-  if d <= (0.5 + 0.25 * Abs(kd)) * 2.220446049250313e-16 * p then Result := kd;
-end;
+  SnapLog USED TO LIVE HERE: the old plain-double Ln landed a hair below the
+  integer for exact powers, so Log10(1000) was 2.9999999999999996 and
+  Trunc(Log10(n)) + 1 — the digit-count idiom — was wrong for nearly every power
+  of ten (bug-rtl-log10-is-inexact-for-powers-of-ten). It rounded the quotient
+  and snapped when base^k reproduced x.
 
+  It is gone because the dd core does not need it. The exact cases now fall out
+  STRUCTURALLY: for x = base^k the series contributes zero and the answer is
+  k*ln(base) carried to ~106 bits, divided by the same constant to the same
+  precision. Deleting the special case rather than keeping it beside the fix is
+  the point (devdocs/dev/normalise-dont-special-case.md).
+
+  The multiply is by a DOUBLE-DOUBLE 1/ln10 resp. 1/ln2, not a plain division of
+  the rounded log: dividing a correctly-rounded Ln by a rounded constant is a
+  second rounding, and it measured as 1 ulp off libm on Log10(3), Log10(0.3) and
+  Log2(7) while Ln itself was already bit-identical. }
 function Log10(x: Double): Double;
+var r, c: TDd; z: Double;
 begin
-  Result := SnapLog(Ln(x) / 2.30258509299404568402, x, 10.0);
+  if x <> x then begin Result := x; Exit; end;
+  if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
+  if x = 0.0 then begin z := 0.0; Result := -1.0 / z; Exit; end;
+  if x > 1.7976931348623157e308 then begin Result := x; Exit; end;
+  c.Hi := DdBits($3FDBCB7B1526E50E);        { 1/ln10 }
+  c.Lo := DdBits($3C695355BAAAFAD3);
+  r := DdMul(DdLogD(x), c);
+  Result := r.Hi + r.Lo;
 end;
 
 function Log2(x: Double): Double;
+var r, c: TDd; z: Double;
 begin
-  Result := SnapLog(Ln(x) / 0.69314718055994530942, x, 2.0);
+  if x <> x then begin Result := x; Exit; end;
+  if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
+  if x = 0.0 then begin z := 0.0; Result := -1.0 / z; Exit; end;
+  if x > 1.7976931348623157e308 then begin Result := x; Exit; end;
+  c.Hi := DdBits($3FF71547652B82FE);        { 1/ln2 }
+  c.Lo := DdBits($3C7777D0FFDA0D24);
+  r := DdMul(DdLogD(x), c);
+  Result := r.Hi + r.Lo;
 end;
 
 function LogN(base, x: Double): Double;
-var r: Double;
+{ NOTE the argument order — base FIRST, as in FPC. Python's math.log(x, base) is
+  the other way round, which is why NilPy needs its own intercept rather than
+  binding to this (bug-n-math-trunc-and-log-need-frontend-intercepts). }
+var r: TDd; z: Double;
 begin
-  r := Ln(x) / Ln(base);
-  if (base > 0.0) and (base <> 1.0) then r := SnapLog(r, x, base);
-  Result := r;
+  if (x <> x) or (base <> base) then begin Result := x + base; Exit; end;
+  if (x <= 0.0) or (base <= 0.0) or (base = 1.0) then
+  begin
+    { same IEEE edges as Ln, computed rather than special-cased }
+    Result := Ln(x) / Ln(base);
+    Exit;
+  end;
+  r := DdDiv(DdLogD(x), DdLogD(base));
+  Result := r.Hi + r.Lo;
 end;
 
 function Hypot(x, y: Double): Double;
@@ -539,10 +790,101 @@ begin
 end;
 
 function Power(base, exponent: Double): Double;
-{ base^exponent = exp(exponent * ln(base)), base > 0. }
+{ base^exponent over the double-double kernel, with IEEE's pow() edge cases.
+
+  It used to be `Exp(exponent * Ln(base))` in plain doubles, which rounds three
+  times (Ln, the product, Exp) — Power(3, 7) came out one ulp above 2187 where
+  libm gives it EXACTLY, and 2^0.5 and 1.5^2.5 were a ulp off too. Carrying
+  y*log(x) as a dd fixes all three: the product keeps its low bits instead of
+  losing them before the exponential.
+
+  The old version also answered 0.0 for every base <= 0, which is wrong for the
+  cases IEEE defines: (-2)^3 is -8, 0^0 is 1, and a negative base with a
+  non-integer exponent is a domain error (NaN), not zero. }
+var
+  ax, ay, r: Double;
+  w, p: TDd;
+  k: Integer;
+  yint, yodd, neg: Boolean;
 begin
-  if base <= 0.0 then begin Result := 0.0; Exit; end;
-  Result := Exp(exponent * Ln(base));
+  if exponent = 0.0 then begin Result := 1.0; Exit; end;     { incl. NaN base }
+  if base = 1.0 then begin Result := 1.0; Exit; end;         { incl. NaN exponent }
+  if (base <> base) or (exponent <> exponent) then
+  begin Result := base + exponent; Exit; end;                { NaN }
+  ay := Abs(exponent);
+  { integer exponent? anything >= 2^53 is necessarily an even integer }
+  yint := (ay >= 9007199254740992.0) or (DdRint(exponent) = exponent);
+  yodd := yint and (ay < 9007199254740992.0) and (FMod(exponent, 2.0) <> 0.0);
+  if base = 0.0 then
+  begin
+    if exponent < 0.0 then
+    begin
+      if yodd then Result := 1.0 / base else Result := 1.0 / (base * base);
+      Exit;
+    end;
+    if yodd then Result := base else Result := 0.0;          { keeps -0 for odd y }
+    Exit;
+  end;
+  if ay > 1.7976931348623157e308 then                        { |y| = Inf }
+  begin
+    if base = -1.0 then begin Result := 1.0; Exit; end;
+    ax := Abs(base);
+    if ax < 1.0 then
+    begin
+      if exponent > 0.0 then Result := 0.0 else Result := ay;
+    end
+    else
+    begin
+      if exponent > 0.0 then Result := ay else Result := 0.0;
+    end;
+    Exit;
+  end;
+  if Abs(base) > 1.7976931348623157e308 then                 { |x| = Inf }
+  begin
+    if base > 0.0 then
+    begin
+      if exponent > 0.0 then Result := base else Result := 0.0;
+      Exit;
+    end;
+    if exponent > 0.0 then
+    begin
+      if yodd then Result := base else Result := -base;
+      Exit;
+    end;
+    if yodd then Result := DdBits($8000000000000000) else Result := 0.0;
+    Exit;
+  end;
+  neg := False;
+  ax := base;
+  if base < 0.0 then
+  begin
+    if not yint then
+    begin
+      { negative base to a non-integer power: domain error }
+      Result := (base - base) / (base - base);
+      Exit;
+    end;
+    neg := yodd;
+    ax := -base;
+  end;
+  w := DdLogD(ax);
+  p := Dd2Prod(w.Hi, exponent);
+  p.Lo := p.Lo + w.Lo * exponent;
+  w := DdFast2Sum(p.Hi, p.Lo);
+  if w.Hi > 710.0 then
+  begin
+    r := DdLdexp(1.0, 1024) * 2.0;
+    if neg then Result := -r else Result := r;
+    Exit;
+  end;
+  if w.Hi < -746.0 then
+  begin
+    r := DdBits(1) * 0.5;
+    if neg then Result := -r else Result := r;
+    Exit;
+  end;
+  r := DdScale(DdExpCore(w, k), k);
+  if neg then Result := -r else Result := r;
 end;
 
 function IntPower(base: Double; n: Integer): Double;

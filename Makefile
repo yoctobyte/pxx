@@ -7972,6 +7972,12 @@ lib-test: pxx-stable-check
 	# degrees/radians, copysign's sign-bit rule, isclose, factorial, comb.
 	$(PXX_STABLE) -Fulib/rtl test/lib_math_python_surface.pas /tmp/lib_math_python_surface
 	test "$$(/tmp/lib_math_python_surface | tail -n 1)" = "MATHPY OK"
+	# Ln/Log10/Log2/Exp/Power correctly rounded, asserted on the BITS (a digit
+	# comparison would measure our float formatter as much as the function).
+	# The Log10 cases at the end are ones where GLIBC is the wrong one — verified
+	# against 60-digit arithmetic — so do not "fix" them to match CPython.
+	$(PXX_STABLE) -Fulib/rtl test/lib_math_correctly_rounded.pas /tmp/lib_math_correctly_rounded
+	test "$$(/tmp/lib_math_correctly_rounded | tail -n 1)" = "MATHROUND OK"
 	# Canary for a change in ANOTHER lane: a Pascal RTL name that collides with
 	# a libc one silently hijacks it in every C program (pxxcio does `uses math`).
 	$(PXX_STABLE) test/cmath_no_pascal_hijack.c /tmp/cmath_no_pascal_hijack

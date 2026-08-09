@@ -1,13 +1,17 @@
 { Log10/Log2/LogN must land exactly on the integer for exact powers of the base.
 
-  Ln here is a series expansion, so the raw Ln(x)/Ln(base) quotient comes out a
-  hair BELOW the integer — Log10(1000) was 2.9999999999999996, which makes the
+  Ln USED to be a series expansion whose Ln(x)/Ln(base) quotient came out a hair
+  BELOW the integer — Log10(1000) was 2.9999999999999996, which made the
   universal digit-count idiom Trunc(Log10(n)) + 1 wrong for nearly every power
   of ten, and right for 1e5 by luck (bug-rtl-log10-is-inexact-for-powers-of-ten).
+  That was first fixed by a SnapLog special case; the double-double port then
+  DELETED SnapLog, because the dd core hits the integers structurally. This test
+  did not change across that swap, which is the point of having it: it pins the
+  behaviour, not the mechanism.
 
   The decimal powers below are spelled as LITERALS, not built by multiplying:
-  the fix reconstructs base^k to decide whether to snap, so building the inputs
-  the same way would test that code against itself. Powers of two are built by
+  the original fix reconstructed base^k to decide whether to snap, so building
+  the inputs the same way would have tested that code against itself. Powers of two are built by
   doubling, which is exact in IEEE and independent of any decimal rounding.
 
   The negative half matters as much as the positive: a value a hair off a power
