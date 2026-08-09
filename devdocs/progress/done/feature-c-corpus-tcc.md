@@ -216,3 +216,47 @@ cmp g2 p2.
 
 ## Log
 - 2026-07-07 — resolved, commit 116230b1.
+
+## 2026-08-09 (Track B): the `-c` wall is CLEARED — and it was suspect #2
+
+The wall recorded above — *"tcc -v works; `tcc_bin -c hello.c` SEGFAULTS"* — no
+longer reproduces. Verified end to end against the pinned compiler:
+
+```
+$ pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/tcc tcc.c -> tcc_bin
+$ ./tcc_bin -v
+tcc version 0.9.28rc (x86_64 Linux)
+$ ./tcc_bin -c -I.../include -o hello.o hello.c     # a loop summing 1..10
+$ gcc -o hello_linked hello.o && ./hello_linked
+sum=55
+```
+
+So a **pxx-built tcc compiles C to a valid object file**, and gcc links it into a
+working binary.
+
+**It was suspect #2 on that list**: *"struct jmp_buf passed BY VALUE where tcc
+treats jmp_buf as array→pointer (main_jb into _tcc_setjmp)"*. The mechanism was
+narrower than "needs the array-typedef fix", though: `lib/crtl` declared
+`longjmp` as a function-like MACRO only, so tcc's
+`setjmp(_tcc_setjmp(s1, jb, f, longjmp))` — which passes `longjmp` as a function
+POINTER — hit an undeclared identifier. Real `longjmp`/`_longjmp`/`siglongjmp`
+functions now exist (`lib/crtl/src/setjmp.c`), forwarding to `__pxx_longjmp`.
+By-value is safe because `longjmp` only READS the buffer. C 7.13 required this
+anyway: setjmp may be a macro, longjmp shall be a function.
+
+**Suspect #3 answered.** The list asked of `environ`: *"resolved how? verify"*.
+It is NOT resolved — the build emits
+
+```
+warning: undeclared identifier 'environ' used as value (treated as 0)
+```
+
+so `char **envp = environ;` silently becomes NULL. Recorded as a live crtl gap on
+[[feature-crtl-implement-libc-assumptions]]. It did not stop `-c` from working,
+but anything reading the environment through it gets nothing.
+
+**Still open:** the second recorded wall, linking — `tcc: error: file
+'libtcc1.a' not found`. That is tcc's own runtime archive, a bootstrap artefact
+it builds from `lib/*.c`; the `-c` path above deliberately sidesteps it. Suspect
+#1 (mmap/mprotect stubs for `tcc_relocate`) is untested and only matters for
+`-run`.

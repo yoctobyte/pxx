@@ -494,3 +494,23 @@ skips the copy.
 "main function not found", which is correct for a library TU. Regression test
 `test/crtl_longjmp_as_value.c` in `make lib-test` checks both spellings (through
 a function pointer, and as an ordinary call); `crtl_setjmp_oracle` still passes.
+
+### tcc, second gap: `environ` is undeclared (silently 0)
+
+With the `longjmp` fix in, `tcc.c` builds and runs, but emits:
+
+```
+warning: undeclared identifier 'environ' used as value (treated as 0)
+```
+
+`char **envp = environ;` therefore becomes NULL rather than the environment
+block. POSIX declares `extern char **environ;` in `<unistd.h>`; crtl does not.
+
+This is the "header symbol real code assumes" class this ticket collects, and it
+is the WORST shape of it — not a link error but a silent zero, so a program that
+walks the environment simply sees none. `feature-c-corpus-tcc`'s own suspect list
+asked "environ is referenced — resolved how? verify"; the answer is that it is
+not.
+
+Needs the PAL to expose the environment block (the entry stub already receives
+`envp`), then `extern char **environ` in `<unistd.h>` bound to it.
