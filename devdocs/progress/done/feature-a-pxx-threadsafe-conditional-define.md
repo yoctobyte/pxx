@@ -195,4 +195,4 @@ on case, a define set unconditionally would pass. Full gate + `make stabilize`
 + `make pin`, since Track B is waiting on it reaching `$(PXX_STABLE)`.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 538e59141.
