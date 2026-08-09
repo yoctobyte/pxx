@@ -405,3 +405,4 @@
 {"date": "2026-08-09T10:25:10Z", "fixed": [], "full": false, "new_red": [], "sha": "e779f3d6203b6216e4c160491ed05e37f2f838db", "tier": "native", "verdict": "GREEN", "wall": 146.5}
 {"date": "2026-08-09T10:31:41Z", "fixed": [], "full": false, "new_red": [], "sha": "380779b4ef36615d012c8f53913782e249f8878c", "tier": "native", "verdict": "GREEN", "wall": 145.0}
 {"date": "2026-08-09T10:42:48Z", "fixed": [], "full": false, "new_red": [], "sha": "954727cee6680daf514fcd5bb929814a1ca3c522", "tier": "native", "verdict": "GREEN", "wall": 145.5}
+{"date": "2026-08-09T10:56:27Z", "fixed": [], "full": true, "new_red": ["test-nilpy#src:test/test_nilpy_delitem_dunder.npy", "test-nilpy#src:test/test_nilpy_from_import_as_alias.npy"], "sha": "954727cee6680daf514fcd5bb929814a1ca3c522", "tier": "full", "verdict": "RED", "wall": 786.2}

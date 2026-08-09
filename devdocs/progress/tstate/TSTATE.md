@@ -2,15 +2,16 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg **QUIET 8d16h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `954727cee668` | 2026-08-09T10:42:48Z | GREEN (native) | 145.5s | `29d980110b58` GREEN |
+| borg **QUIET 8d17h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
+| plexus | `954727cee668` | 2026-08-09T10:56:27Z | RED (full) | 786.2s | `954727cee668` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- none
+- **test-nilpy#src:test/test_nilpy_delitem_dunder.npy** — test/test_nilpy_delitem_dunder.npy test/test_nilpy_delitem_dunder.expected (plexus): bad `954727cee668`, last good `29d980110b58`, 15 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_from_import_as_alias.npy** — test/test_nilpy_from_import_as_alias.npy test/test_nilpy_from_import_as_alias.expected (plexus): bad `954727cee668`, last good `29d980110b58`, 15 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 8d16h): bad `b1976742df2c`, 1 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** (borg, quiet 8d17h): bad `b1976742df2c`, 1 commit(s) in range

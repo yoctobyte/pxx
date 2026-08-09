@@ -5,3 +5,4 @@
 2026-08-09T07:45:10Z	plexus	4939f47ab88383d90d73899dd02f7248ef01cfe2	would NOT pin 4939f47ab883 — self-host is not clean (never waivable)
 2026-08-09T08:30:09Z	plexus	0d6de0cbeae14acc49cf9a7c6f3d007b61118319	would NOT pin 0d6de0cbeae1 — self-host is not clean (never waivable)
 2026-08-09T10:04:28Z	plexus	29d980110b58b64e9f5ded34d3619ace345aff27	would NOT pin 29d980110b58 — 1 red(s) not in the allowlist: selfhost-fixedpoint#src:compiler/compiler.pas
+2026-08-09T10:56:27Z	plexus	954727cee6680daf514fcd5bb929814a1ca3c522	would NOT pin 954727cee668 — 2 red(s) not in the allowlist: test-nilpy#src:test/test_nilpy_delitem_dunder.npy, test-nilpy#src:test/test_nilpy_from_import_as_alias.npy
