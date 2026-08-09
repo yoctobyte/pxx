@@ -59,7 +59,12 @@ def main():
               "an entry with no ticket is refused", "the anti-dumping-ground rule")
 
         def shadow(auth, st, tier="full"):
-            tw.pin_shadow(clone, "devtest", st, "a" * 40, {"tier": tier}, auth)
+            # `now` matters: the self-host check asks about THIS RUN, not the
+            # merged map, so a caller that omits it is asserting "this run
+            # produced nothing" — which correctly refuses. Here the run
+            # produced exactly `auth`.
+            tw.pin_shadow(clone, "devtest", st, "a" * 40, {"tier": tier},
+                          auth, auth)
             return st.get("pin_shadow", {})
 
         print("\nthe streak, and what breaks it")
@@ -109,6 +114,28 @@ def main():
         check(not st_n["pin_shadow"]["qualifies"],
               "NO live self-host evidence refuses",
               "all() over an empty set is True — that must not read as clean")
+
+        print("\nthe opt-tier stale key resolves itself, without special-casing")
+        OLDO = "selfhost-fixedpoint#src:compiler/compiler.pas"
+        NEWO = "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh"
+        # The real plexus case: the dead key's last speaker was an OPT run, and
+        # opt is disjoint from full's coverage — so a full run cannot tell it
+        # from a genuine opt red, and a genuine opt red MUST block a pin.
+        st_t = {"jobs": {OLDO: "fail", NEWO: "pass"},
+                "job_tier": {OLDO: "opt", NEWO: "full"}}
+        nw = {NEWO: "pass"}
+        tw.pin_shadow(clone, "devtest", st_t, "e" * 40, {"tier": "full"},
+                      dict(st_t["jobs"], **nw), nw)
+        check(not st_t["pin_shadow"]["qualifies"],
+              "a full run REFUSES while it cannot tell",
+              "a real opt red must block; refusing is correct here")
+        dead = tw.orphan_keys(st_t, {"optdiff#shard1/8": "pass"}, "opt")
+        check(dead == {OLDO}, "an OPT run proves it gone", "only opt covers opt")
+        st_t["jobs"] = {k: v for k, v in st_t["jobs"].items() if k not in dead}
+        tw.pin_shadow(clone, "devtest", st_t, "i" * 40, {"tier": "full"},
+                      dict(st_t["jobs"], **nw), nw)
+        check(st_t["pin_shadow"]["qualifies"],
+              "the next full run then qualifies", "resolves itself once pruned")
 
         print("\nshadow mode moves nothing")
         touched = [p for p in ("stable_linux_amd64", "compiler")

@@ -1033,8 +1033,18 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
     # `all()` over an empty set is True, and "no self-host evidence" must never
     # read as "self-host is clean": require at least one LIVE selfhost job, and
     # require it to pass.
-    live_sh = {j: s for j, s in authoritative.items()
-               if j.startswith(SELFHOST_SEL_PREFIX) and j not in orphans}
+    # Ask about THIS RUN, not the merged map. The merged map carries whatever
+    # any tier last said, and a stale selfhost key recorded under `opt`
+    # (`selfhost-fixedpoint#src:compiler/compiler.pas`, from before the job's
+    # src changed) cannot be recognised as an orphan during a full run —
+    # `opt` is disjoint from full's coverage, so the tier rule correctly
+    # refuses to call it gone. It blocked four consecutive shadow verdicts.
+    #
+    # The honest question is simply "did the self-host job pass in the run we
+    # are judging?", and every tier that may qualify a pin contains that job.
+    # `now` cannot be stale, so this cannot be poisoned by history.
+    live_sh = {j: s for j, s in (now or {}).items()
+               if j.startswith(SELFHOST_SEL_PREFIX)}
     selfhost_ok = bool(live_sh) and all(s in PASSLIKE for s in live_sh.values())
     qualifies = not unexpected and selfhost_ok
     prev = st.get("pin_shadow") or {}
@@ -1305,6 +1315,24 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
                        "new_red": new_red, "fixed": fixed}])[-HISTORY_CAP:]
+    # PRUNE keys this run PROVED do not exist. Same predicate gone_keys uses to
+    # close a regression — "a run whose tier covers this job's tier did not
+    # produce it" — so if that confidence is enough to close a ledger entry it
+    # is enough to drop a map entry. Without this the map only grows: a renamed
+    # job leaves its last status behind forever, and the auto-pin work found out
+    # the hard way that a permanent stale `fail` is a permanent veto.
+    #
+    # Tier coverage is what makes this safe. A full run does not contain `opt`
+    # jobs, so their verdicts are untouched here and are pruned (or refreshed)
+    # by the next opt run instead.
+    dead = orphan_keys(st, now, report["tier"])
+    if dead:
+        print("twatch: dropping %d job key(s) no tier produces any more: %s"
+              % (len(dead), ", ".join(sorted(dead)[:5])), flush=True)
+        st["jobs"] = {k: v for k, v in st["jobs"].items() if k not in dead}
+        st["job_tier"] = {k: v for k, v in (st.get("job_tier") or {}).items()
+                          if k not in dead}
+        authoritative = {k: v for k, v in authoritative.items() if k not in dead}
     # Shadow only — records the pin it WOULD have made, moves nothing.
     pin_shadow(clone, host, st, sha, report, authoritative, now)
     save_state(clone, host, st)
