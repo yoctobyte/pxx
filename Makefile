@@ -7987,6 +7987,12 @@ lib-test: pxx-stable-check
 	# cthreads shim. Expectations are FPC's own output for the same program.
 	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas /tmp/lib_fpc_thread_surface
 	test "$$(/tmp/lib_fpc_thread_surface | tail -n 1)" = "FPCTHREAD OK"
+	# TThread reached through `uses Classes` — FPC's own uses line, no {$IFDEF FPC}
+	# split. The non-threaded half of the bargain (classes still building WITHOUT
+	# --threadsafe) is asserted by every other classes test above, which do not
+	# pass the flag.
+	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_classes_tthread.pas /tmp/lib_classes_tthread
+	test "$$(/tmp/lib_classes_tthread | tail -n 1)" = "CLASSESTHREAD OK"
 	# FPC surface the differential probe found missing: Eoln, the legacy
 	# TSeekOrigin names, IncMonth's end-of-month clamp. Expectations measured
 	# against an FPC build, per the ticket's method note.

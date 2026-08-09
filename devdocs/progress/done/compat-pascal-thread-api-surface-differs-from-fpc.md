@@ -102,3 +102,45 @@ Regression test: `test/lib_fpc_thread_surface.pas`, in `make lib-test`.
 
 ## Log
 - 2026-08-09 — resolved, commit e7edfade2.
+
+## Item 1 CLOSED 2026-08-09 — TThread is in Classes
+
+Track A landed [[feature-a-pxx-threadsafe-conditional-define]] and pinned it
+(v252), so the escalated item is done too:
+
+```pascal
+uses sysutils, platform{$ifdef PXX_THREADSAFE}, palthreadobj{$endif};
+
+{$ifdef PXX_THREADSAFE}
+type
+  TThread       = palthreadobj.TThread;
+  TThreadMethod = palthreadobj.TThreadMethod;
+  TThreadID     = palthreadobj.TThreadID;
+  TThreadFunc   = palthreadobj.TThreadFunc;
+{$endif}
+```
+
+Aliases rather than redeclarations, because pxx's `uses` is not transitive and
+the names have to be re-exported for a program that mentions only `Classes`.
+
+**The whole ticket's thesis, tested end to end.** `test/lib_classes_tthread.pas`
+has FPC's own uses line — `uses cthreads, Classes, SysUtils, SyncObjs;` — with
+no `{$IFDEF FPC}` split anywhere, subclasses `TThread`, overrides `Execute`,
+guards a counter with `TCriticalSection` and reads `t.WaitFor`. The SAME source
+(minus `{$threadsafe on}`, which FPC does not need) was compiled on FPC 3.2.2:
+
+```
+pxx: counter=8000 waitfor=99
+FPC: counter=8000 waitfor=99
+```
+
+All four of the ticket's items now hold, and the uses clause that motivated the
+ticket — every thread probe needing an ifdef split before it would build on both
+sides — is gone.
+
+The one remaining difference is that pxx still needs `--threadsafe` where FPC
+needs nothing. That is not this ticket: it is
+[[decide-ismultithread-runtime-flag-vs-compile-time-mode]], which would remove
+the flag requirement (and this ifdef with it) by tracking multithreadedness at
+runtime the way FPC and Delphi actually do.
+

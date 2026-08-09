@@ -19,7 +19,32 @@ unit classes;
 
 interface
 
-uses sysutils, platform;   { CompareStr for Sort; PAL file API for TFileStream }
+uses sysutils, platform{$ifdef PXX_THREADSAFE}, palthreadobj{$endif};
+  { CompareStr for Sort; PAL file API for TFileStream. palthreadobj ONLY under
+    PXX_THREADSAFE — see the TThread note below. }
+
+{$ifdef PXX_THREADSAFE}
+type
+  { TThread where FPC and Delphi code looks for it: `uses Classes`, not
+    `uses palthreadobj` (compat-pascal-thread-api-surface-differs-from-fpc).
+
+    CONDITIONAL, and it has to be. palthreadobj reaches palthread, which
+    contains __pxxclone, and the parser errors on that identifier unless the
+    thread-safe runtime is selected — so an unconditional `uses palthreadobj`
+    here would break EVERY `uses classes` program that never spawns a thread.
+    Measured before it was written: a TStringList-only program failed to
+    compile. Gating on PXX_THREADSAFE means a threaded build gets TThread from
+    Classes exactly as on FPC, and a non-threaded build never parses palthread.
+
+    An ALIAS, not a redeclaration: pxx's `uses` is not transitive, so the name
+    has to be re-exported here for a program that names only Classes. Verified
+    that an alias carries full class semantics across units — a program using
+    only the aliasing unit can subclass through it and override a virtual. }
+  TThread = palthreadobj.TThread;
+  TThreadMethod = palthreadobj.TThreadMethod;
+  TThreadID = palthreadobj.TThreadID;
+  TThreadFunc = palthreadobj.TThreadFunc;
+{$endif}
 
 type
   { FPC declares these in Classes. Real classes, not aliases: code catches them by type and
