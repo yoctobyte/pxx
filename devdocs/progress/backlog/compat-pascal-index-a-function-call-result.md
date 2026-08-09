@@ -120,3 +120,32 @@ call branch, which is the densest function in the file with many early `Exit`s,
 and a mis-placed postfix loop there changes expression parsing everywhere. It
 wants a session with room to gate properly, not a tail-end patch. The two cases
 above are the actual scope, and the lowering they need already exists.
+
+## 2026-08-09 — one more row, and it narrows Gap 1
+
+A **string**-returning call indexed directly already works; only the array kinds
+fail to parse. Measured at `9f01b58e3`:
+
+```pascal
+function MkStr: AnsiString; begin MkStr := 'abc'; end;
+function MkDyn: TIntArr;    begin SetLength(MkDyn, 3); MkDyn[1] := 8; end;
+function MkFix: TArr3;      begin MkFix[1] := 2; end;
+
+WriteLn(MkStr[2]);   { FPC b   pxx b   — works }
+WriteLn(MkDyn[1]);   { FPC 8   pxx: unexpected token }
+WriteLn(MkFix[1]);   { FPC 2   pxx: unexpected token }
+```
+
+So the suffix machinery is reachable from a call result already — `PySubscriptableSuffix`
+/ the `[` loop in ParseFactor accept a call whose static type is a string — and
+what is missing is the ARRAY arm of the same test, not the whole path. That
+should make Gap 1 considerably smaller than the ticket assumed.
+
+`MkFix` (a FIXED array result) additionally needs
+[[bug-a-set-and-array-function-results-come-back-empty]]'s hidden-destination
+work, which landed 2026-08-09 — before that, an indexed fixed-array call result
+would have read a register holding element 0.
+
+Found while running a dynamic-array/pointer FPC differential for Track A; the
+rest of that surface (SetLength, Copy detaching, alias semantics, 2-D dyn,
+records, New/Dispose, nil, empty) matches FPC exactly.
