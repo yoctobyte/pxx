@@ -72,4 +72,4 @@ sweep found `K(1, b=5, z=6)` refused with "K has no field or constructor
 parameter named 'z'" although `__init__` declares `**kw`.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit f37ae57d6.
