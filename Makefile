@@ -1117,6 +1117,11 @@ test-nilpy: $(COMPILER)
 	# so a hand-written dict literal works as a table too.
 	./$(COMPILER) test/test_nilpy_str_translate.npy /tmp/test_nilpy_strtrans26
 	/tmp/test_nilpy_strtrans26 | diff -u test/test_nilpy_str_translate.expected -
+	# repr() of a VARIANT holding a user instance was '' (two variant reprs, only
+	# one knew about objects); and a tuple-unpack target was undefined in a later
+	# assignment's RHS. Both found by running a realistic program vs CPython.
+	./$(COMPILER) test/test_nilpy_repr_of_variant_object.npy /tmp/test_nilpy_reprvar26
+	/tmp/test_nilpy_reprvar26 | diff -u test/test_nilpy_repr_of_variant_object.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

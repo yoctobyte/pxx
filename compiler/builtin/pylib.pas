@@ -9515,17 +9515,15 @@ end;
 
 function pyrepr_of(const v: Variant): AnsiString; overload;
 begin
-  { A STRING payload gains quotes -- and so does a CHAR, which is tag 5 and was
-    missing here. Python has no character type: `s[0]` is a str of length 1 and
-    reprs with quotes like any other, so `{s[0]: 1}` printed `{a: 1}` where
-    CPython prints `{'a': 1}`
-    (bug-nilpy-char-vs-string-literal-ordering-compares-an-address). }
-  if (pyvartag(v) = 6) or (pyvartag(v) = 5) then
-  begin
-    Result := PyReprQuote(VariantToStr(v));
-    Exit;
-  end;
-  Result := pystr_of(v);
+  { ONE implementation, and it is pyvar_repr's. This is the hole an f-string's
+    `!r` lowers to (PyFStrSwapLastCall swaps pystr_of( for pyrepr_of(), and it
+    used to quote a string and hand everything else to pystr_of — which answers
+    '' for a user instance, so `f"{obj!r}"` printed nothing while `repr([obj])`
+    printed it correctly.
+    The string/char quoting that used to live here now lives at pyvar_repr's
+    tail, so the two cannot drift.
+    bug-nilpy-repr-of-a-variant-holding-an-object-is-empty }
+  Result := pyvar_repr(v);
 end;
 
 { repr() — see the interface. Each forwards to the pyrepr_of overload that
@@ -9559,7 +9557,17 @@ end;
 
 function repr(const v: Variant): AnsiString; overload;
 begin
-  Result := pyrepr_of(v);
+  { pyvar_repr, NOT pyrepr_of. Two variant reprs exist and only one knows about
+    objects: pyvar_repr handles None, callables, the pylib containers and a USER
+    class's __repr__, then falls back to pyrepr_of for scalars and strings.
+    pyrepr_of on its own quotes a string and hands everything else to pystr_of,
+    which answers '' for a user instance — so `repr(xs[0])` on a list ELEMENT
+    printed nothing while `repr(xs)` printed the elements correctly, because the
+    container path goes through pyvar_repr.
+    pyvar_repr is now the single implementation and pyrepr_of(Variant) forwards
+    to it, so either name works here; this one is spelled out.
+    bug-nilpy-repr-of-a-variant-holding-an-object-is-empty }
+  Result := pyvar_repr(v);
 end;
 
 function repr(l: TPyList): AnsiString; overload;
@@ -10768,7 +10776,19 @@ begin
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
     if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
-  Result := pyrepr_of(v);
+  { the scalar/string tail, INLINE rather than delegating to pyrepr_of. The two
+    used to call each other in the wrong direction — pyrepr_of was the entry
+    point everything reached and it knew nothing about objects, while pyvar_repr
+    knew about objects and then handed the rest back. Now pyvar_repr is the ONE
+    implementation and pyrepr_of(Variant) forwards to it, which is what makes
+    an f-string's `!r` hole render a user instance instead of ''.
+    A STRING and a CHAR gain quotes: Python has no character type, so `s[0]`
+    reprs like any other one-character str.
+    bug-nilpy-repr-of-a-variant-holding-an-object-is-empty }
+  if (pyvartag(v) = 6) or (pyvartag(v) = 5) then
+    Result := PyReprQuote(VariantToStr(v))
+  else
+    Result := pystr_of(v);
 end;
 
 function pyvar_print_of(const v: Variant): AnsiString;

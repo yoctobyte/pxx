@@ -1,0 +1,12 @@
+unpack len  2 1
+unpack sort 2
+static      R9
+element     R1
+bound       R1
+container   [R1, R2]
+comprehend  ['R1', 'R2']
+fstring     R1 R1
+parameter   R1
+scalars     'a' 1 1.5 True None
+fstr scalar 'a' 1 None
+nested      [1, 'a'] {'k': 'v'}

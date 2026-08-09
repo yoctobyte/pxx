@@ -17399,6 +17399,41 @@ begin
       PyBlkIntNameKind := Syms[si].TypeKind;
 end;
 
+{ Is `i` the start of a TUPLE-UNPACK TARGET LIST — `a, b[, c] =` — made only of
+  plain identifiers separated by commas and terminated by a single '='? Answers
+  the '=' position in `tupEnd`.
+
+  Identifiers ONLY, deliberately: `d[k], x = ...` and `obj.f, y = ...` are legal
+  Python but bind through a subscript or a field rather than declaring a module
+  name, and this scan exists purely to declare names. Anything else in the run
+  makes it answer False and the statement is left alone, exactly as before.
+  bug-nilpy-tuple-unpacked-name-undefined-in-a-later-assignment }
+function PyTupleTargetRun(i: Integer; var tupEnd: Integer): Boolean;
+var k: Integer; wantIdent: Boolean;
+begin
+  PyTupleTargetRun := False;
+  tupEnd := -1;
+  k := i;
+  wantIdent := True;
+  while k < MainProgramTokCount do
+  begin
+    if wantIdent then
+    begin
+      if Tokens[k].Kind <> tkIdent then Exit;
+      wantIdent := False;
+    end
+    else if Tokens[k].Kind = tkComma then wantIdent := True
+    else if Tokens[k].Kind = tkAssign then
+    begin
+      tupEnd := k;
+      PyTupleTargetRun := True;
+      Exit;
+    end
+    else Exit;
+    Inc(k);
+  end;
+end;
+
 { `name = <integer arithmetic>` as the shape of a statement, read from TOKENS.
 
   The module pre-pass may not trial-parse a right-hand side that sits inside a
@@ -17476,6 +17511,7 @@ var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     pendingDefClass: Boolean;
     blkJ: Integer; blkTk: TTypeKind; blkName: AnsiString;
     blkRec: Integer;   { class rec for a `name = Cls(...)` inside a block }
+    tupEnd: Integer;   { the '=' of a tuple-unpack target list }
     blkSrcVar: Boolean;   { an augmented assign whose SOURCE is a variant }
 begin
   PyLocalCount := 0;
@@ -17876,6 +17912,48 @@ begin
         Next;
         PyParseStatement;
         i := TokPos - 1;      { the statement's terminating token }
+        continue;
+      end
+      { A TUPLE-UNPACK target list, `a, b = <expr>`. The arm above requires the
+        token after the name to be '=', and here it is a COMMA, so the targets
+        were never registered at all — and then a LATER bare assignment whose
+        RHS reads one of them (`c = a`) got trial-parsed against a symbol table
+        that had never heard of it and died with "undefined variable (a)".
+        `len(a)` was fine, because only a bare assignment's RHS is trial-parsed;
+        that asymmetry is what made the shape hard to guess from the message.
+
+        `rows, errs = parse(text)` followed by anything that assigns from
+        `rows` is an ordinary Python shape, so this is worth registering even
+        though the RHS cannot be typed here: the elements of an arbitrary
+        unpack have no token-visible types, and trial-parsing the RHS is the
+        thing this pre-pass must not do at a name it cannot yet see.
+
+        tyVariant is therefore the honest answer AND the conservative one — it
+        widens rather than asserts, and the real parse still types the binding
+        properly when it runs. What matters is only that the name RESOLVES, so
+        the later trial parse gets that far.
+        bug-nilpy-tuple-unpacked-name-undefined-in-a-later-assignment }
+      else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkComma) and
+              ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent,
+                                                         tkDedent, tkSemicolon])) and
+              PyTupleTargetRun(i, tupEnd) then
+      begin
+        bodyIx := i;
+        while bodyIx < tupEnd do
+        begin
+          if Tokens[bodyIx].Kind = tkIdent then
+          begin
+            blkName := GetTokenStr(bodyIx);
+            if PyProgSym(blkName) < 0 then
+            begin
+              PyNoteLocalType(blkName, tyVariant, REC_NONE);
+              si := AllocVar(blkName, tyVariant);
+            end;
+          end;
+          Inc(bodyIx);
+        end;
+        i := tupEnd;          { the '=' — the RHS is deliberately not parsed }
         continue;
       end
       else if (depth = 0) and

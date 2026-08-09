@@ -1,0 +1,65 @@
+# bug-nilpy-repr-of-a-variant-holding-an-object-is-empty
+# bug-nilpy-tuple-unpacked-name-undefined-in-a-later-assignment
+#
+# Both found by running a REALISTIC program (a record parser with classes,
+# exceptions and sorting) against CPython rather than by sweeping an API
+# surface — which is the point: each needed a combination to show up.
+#
+# 1. repr() of a VARIANT holding a user instance answered ''. `repr(obj)` on a
+#    statically class-typed local was correct and `repr([obj])` was correct, so
+#    only the element/parameter/variant spelling was wrong — and silently.
+#    Two variant reprs existed and only one knew about objects: pyvar_repr
+#    handled them and then handed the rest to pyrepr_of, while pyrepr_of was the
+#    entry point everything actually reached. The layering is now one way, so
+#    they cannot drift.
+#    The f-string `!r` hole is the case that proves it: it lowers straight to
+#    pyrepr_of, so fixing only `repr()` would have left `f"{obj!r}"` empty.
+#
+# 2. `a, b = f()` then `c = a` was "undefined variable (a)". The module pre-pass
+#    only registered `ident =` targets, so a tuple-unpack target list was never
+#    declared; a LATER bare assignment's RHS is trial-parsed and died on it.
+#    `len(a)` was fine, because only a bare assignment's RHS gets trial-parsed —
+#    that asymmetry is why the message was hard to place.
+#
+# Expectations are CPython's own output.
+
+
+class R:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "R" + str(self.v)
+
+
+def pair():
+    return [R(1), R(2)], ["err"]
+
+
+# --- 2: the tuple-unpack target must be usable in a later assignment RHS ---
+rows, errs = pair()
+alias = rows
+print("unpack len ", len(alias), len(errs))
+best = sorted(rows, key=lambda r: -r.v)
+print("unpack sort", best[0].v)
+
+# --- 1: repr through every route to the same object ---
+first = rows[0]
+print("static     ", repr(R(9)))
+print("element    ", repr(rows[0]))
+print("bound      ", repr(first))
+print("container  ", repr(rows))
+print("comprehend ", [repr(r) for r in rows])
+print("fstring    ", f"{rows[0]!r}", f"{first!r}")
+
+
+def via_param(o):
+    return repr(o)
+
+
+print("parameter  ", via_param(rows[0]))
+
+# controls: repr of everything else is unchanged
+print("scalars    ", repr("a"), repr(1), repr(1.5), repr(True), repr(None))
+print("fstr scalar", f"{'a'!r}", f"{1!r}", f"{None!r}")
+print("nested     ", repr([1, "a"]), repr({"k": "v"}))
