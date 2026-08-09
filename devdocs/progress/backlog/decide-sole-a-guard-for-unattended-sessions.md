@@ -68,3 +68,29 @@ is exactly how a shared-file collision gets rationalised.
 Skipped all four, took non-shared work, and left each ticket with the fix site
 located to the line so an attended session can land them quickly. Nothing is
 lost but latency.
+
+## 2026-08-09 — the blocked list is now SIX, and two of them crash
+
+Adding evidence rather than re-arguing the fork. Tickets that are diagnosed to
+the line and cannot be written from an unattended Track N session because the
+fix is in `parser.inc`:
+
+| ticket | prio | symptom |
+| --- | --- | --- |
+| `bug-nilpy-subscript-of-a-call-result-ignores-the-index` | 60 | `f()[1]` on a str yields char 0; `f()[0][0]` drops the second index; `g()["k"]["j"]` **SEGFAULTS** |
+| `bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses` | 60 | `for cls in [A]: cls(3)` **SEGFAULTS** |
+| `bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor` | 55 | wrong object |
+| `bug-nilpy-list-sort-method-missing` | 50 | missing method |
+| `bug-nilpy-subscript-read-without-getitem-yields-garbage` | 35 | garbage value |
+| `bug-nilpy-augmented-subscript-evaluates-its-index-twice` | 30 | double side effect |
+
+What changed since this was filed: the top two are now the highest-priority open
+NilPy bugs, they are both **silent-then-crashing** rather than merely wrong, and
+both were found by compiling ORDINARY programs (a CSV parser; a class registry)
+rather than by probing. The queue's own `next --track N` offered one of them as
+the top item and had to be marked `blocked-by` this decision to stop it
+resurfacing.
+
+None of this argues for a particular answer — a wrong call about concurrent
+Track A edits is worse than a delay. It is here so the cost of the current
+default is visible when the fork is settled.

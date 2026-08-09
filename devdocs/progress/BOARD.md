@@ -78,7 +78,7 @@ _none_
 | bug-nilpy-return-inside-a-with-skips-exit | N | 55 | bug | `return` inside a `with` does not run `__exit__` | — |
 | bug-nilpy-set-comprehension-over-range-does-not-deduplicate | N | 55 | bug | A set comprehension over `range()` does not deduplicate | — |
 | bug-nilpy-startswith-endswith-ignore-a-tuple-argument | N | 40 | bug | `startswith`/`endswith` with a TUPLE of prefixes silently answered False | — |
-| bug-nilpy-subscript-of-a-call-result-ignores-the-index | N | 60 | bug | Subscripting a CALL RESULT: a string ignores the index, a chain drops the second | — |
+| bug-nilpy-subscript-of-a-call-result-ignores-the-index | N | 60 | bug | Subscripting a CALL RESULT: a string ignores the index, a chain drops the second | decide-sole-a-guard-for-unattended-sessions |
 | bug-nilpy-subscript-read-without-getitem-yields-garbage | N | 35 | bug | A subscript READ on a class with no `__getitem__` yields a silent wrong value | — |
 | bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver | N | 55 | bug | A user method named `find`/`index` raises AttributeError when the receiver has no static class | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
@@ -435,9 +435,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-test-nilpy-test-nilpy-str-isnumeric-istitle
-- [p 60] [U] decide-sole-a-guard-for-unattended-sessions (unblocks 2)
+- [p 60] [U] decide-sole-a-guard-for-unattended-sessions (unblocks 3)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-subscript-of-a-call-result-ignores-the-index
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [A] feature-a-abi-oracle
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -640,10 +639,10 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **3** — decide-nilpy-runtime-dunder-dispatch-strategy
+- **3** — decide-sole-a-guard-for-unattended-sessions
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **3** — feature-web-track-w-bootstrap
-- **2** — decide-sole-a-guard-for-unattended-sessions
 - **1** — decide-float-fixed-output-exact-or-fpc-17-digit-cap
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-parallel-capture-semantics

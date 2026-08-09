@@ -2,6 +2,7 @@
 track: N
 prio: 60
 type: bug
+blocked-by: decide-sole-a-guard-for-unattended-sessions
 ---
 
 # Subscripting a CALL RESULT: a string ignores the index, a chain drops the second
@@ -78,3 +79,22 @@ a str-, list-, tuple-, dict- and bytes-returning call; the same chained two deep
 argument-taking defs; a builtin call (`sorted`, `list`, `split`) in the same
 positions; and the via-a-name spellings as controls. Assert the ELEMENT, never
 just that it runs — every one of these bugs returns a plausible value.
+
+## Recon 2026-08-09 — in parser.inc, BLOCKED on the sole-A guard
+
+A subscript on a chained base is handled in `ParseClassRecordSelectors`
+(`compiler/parser.inc:7421`), whose `tkLBrack` arm at **:7879** dispatches a
+default property, a NilPy slice, and an array index. It is guarded by
+`PyExprMode` in several places, so NilPy genuinely goes through it — and there is
+no arm for indexing an ANSISTRING result, which matches the measured symptom
+(the index is not applied at all rather than applied wrongly).
+
+The function's own header comment is worth reading first when this is picked up:
+it already had to learn `PyEvalOnce` because `f(args).m()` re-emitted the
+receiver and ran it twice, and it notes "ParseLValueAST's suffix loop has always
+dispatched this; the chained loop never did" about a different case. That is the
+same defect class as this ticket, in the same function, recorded twice already.
+
+`parser.inc` is a Track A file under the sole-A guard, which this unattended
+session cannot clear — so this is filed and left. Sixth ticket behind
+`decide-sole-a-guard-for-unattended-sessions`.

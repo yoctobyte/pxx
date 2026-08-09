@@ -34,12 +34,11 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 202, ranked
+## Ready — top 30 of 201, ranked
 
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-str-isnumeric-istitle
-- `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 2)
+- `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 3)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-subscript-of-a-call-result-ignores-the-index
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 - `[p 55] [N]` feature-nilpy-corpus-uforth
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
+- `[p 55] [A]` feature-pascal-type-helpers
 
-_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_171 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
