@@ -15,6 +15,8 @@ unit palthread;
 
 interface
 
+uses palfutex;
+
 type
   { A thread body: receives the opaque argument passed to PalThreadCreate. Runs on
     the cloned thread; returning from it exits the thread. }
@@ -54,18 +56,10 @@ function PalThreadCreate(var h: TThreadHandle; entry: TThreadEntry; arg: Pointer
 { Block until the thread exits, then release its stack. Idempotent once joined. }
 procedure PalThreadJoin(var h: TThreadHandle);
 
-{ Sleep while addr^ still equals expected (FUTEX_WAIT). Returns the raw syscall
-  result. Used to build mutexes/events on top. }
-function PalFutexWait(addr: Pointer; expected: Integer): Integer;
-
-{ Wake up to count waiters blocked on addr (FUTEX_WAKE). count = high value wakes
-  all. Returns the number woken (raw syscall result). }
-function PalFutexWake(addr: Pointer; count: Integer): Integer;
-
-{ PalFutexWait bounded by a RELATIVE timeout in nanoseconds (ns < 0 = wait
-  unbounded). Returns the raw syscall result: 0 woken, -ETIMEDOUT (-110) on
-  expiry, -EAGAIN when addr^ <> expected. Backs pthread_cond_timedwait. }
-function PalFutexWaitTimeout(addr: Pointer; expected: Integer; ns: Int64): Integer;
+{ PalFutexWait / PalFutexWake / PalFutexWaitTimeout moved to `palfutex`, which
+  depends on nothing: waiting on a word must not inherit __pxxclone's
+  --threadsafe gate. `uses` is not transitive, so a caller that wants them needs
+  its own `uses palfutex` — this unit re-exports nothing. }
 
 { Kernel thread id of the caller (gettid). }
 function PalThreadSelf: Int64;
@@ -77,9 +71,6 @@ const
     PARENT_SETTID|CHILD_CLEARTID make TidWord a race-free join handshake. }
   PXX_CLONE_THREAD = $350F00;
 
-  FUTEX_WAIT = 0;
-  FUTEX_WAKE = 1;
-
   PROT_NONE     = 0;        { guard page: no access }
   PROT_RW       = 3;        { PROT_READ or PROT_WRITE }
   MAP_ANON_PRIV = $22;      { MAP_PRIVATE or MAP_ANONYMOUS }
@@ -89,7 +80,6 @@ const
   SYS_mmap     = 9;
   SYS_munmap   = 11;
   SYS_mprotect = 10;
-  SYS_futex    = 202;
   SYS_gettid   = 186;
 {$else}
 {$ifdef CPUI386}
@@ -99,7 +89,6 @@ const
   SYS_mmap     = 192;
   SYS_munmap   = 91;
   SYS_mprotect = 125;
-  SYS_futex    = 240;
   SYS_gettid   = 224;
 {$else}
 {$ifdef CPUAARCH64}
@@ -107,7 +96,6 @@ const
   SYS_mmap     = 222;
   SYS_munmap   = 215;
   SYS_mprotect = 226;
-  SYS_futex    = 98;
   SYS_gettid   = 178;
 {$else}
 {$ifdef CPUARM}
@@ -116,7 +104,6 @@ const
   SYS_mmap     = 192;
   SYS_munmap   = 91;
   SYS_mprotect = 125;
-  SYS_futex    = 240;
   SYS_gettid   = 224;
 {$else}
   { Other targets trip the __pxxclone compile-error before these matter; define
@@ -124,36 +111,11 @@ const
   SYS_mmap     = -1;
   SYS_munmap   = -1;
   SYS_mprotect = -1;
-  SYS_futex    = -1;
   SYS_gettid   = -1;
 {$endif}
 {$endif}
 {$endif}
 {$endif}
-
-function PalFutexWait(addr: Pointer; expected: Integer): Integer;
-begin
-  Result := Integer(__pxxrawsyscall(SYS_futex, Int64(addr), FUTEX_WAIT, expected, 0, 0, 0));
-end;
-
-function PalFutexWaitTimeout(addr: Pointer; expected: Integer; ns: Int64): Integer;
-var
-  ts: array[0..1] of NativeInt;   { struct timespec: tv_sec then tv_nsec, word-wide }
-begin
-  if ns < 0 then
-  begin
-    Result := PalFutexWait(addr, expected);
-    Exit;
-  end;
-  ts[0] := NativeInt(ns div 1000000000);
-  ts[1] := NativeInt(ns mod 1000000000);
-  Result := Integer(__pxxrawsyscall(SYS_futex, Int64(addr), FUTEX_WAIT, expected, Int64(@ts[0]), 0, 0));
-end;
-
-function PalFutexWake(addr: Pointer; count: Integer): Integer;
-begin
-  Result := Integer(__pxxrawsyscall(SYS_futex, Int64(addr), FUTEX_WAKE, count, 0, 0, 0));
-end;
 
 function PalThreadSelf: Int64;
 begin

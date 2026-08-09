@@ -15,7 +15,8 @@ Pin: landed at **v98**.
         |
   lib/rtl/palthreadobj.pas   TThread class (subclass + override Execute)
   lib/rtl/palsync.pas        TMutex, TEvent, TRTLCriticalSection, RunOnce
-  lib/rtl/palthread.pas      PalThreadCreate/Join, PalFutex*, PalThreadSelf
+  lib/rtl/palthread.pas      PalThreadCreate/Join, PalThreadSelf   [--threadsafe]
+  lib/rtl/palfutex.pas       PalFutexWait/Wake/WaitTimeout         (no deps)
         |
   compiler intrinsics        __pxxclone (trampoline)  +  __pxxatomic_xchg/cas/add
         |
@@ -53,6 +54,26 @@ the child tid into a futex word at clone time and clears it + futex-wakes on exi
 baked at parse time. x86-64 emits a 32-bit lock-prefixed rmw (`xchg` / `lock
 cmpxchg` / `lock xadd`) returning the **old** value. These are the substrate for the
 futex mutex (CAS fast path) and atomic counters.
+
+## Why `palfutex` is its own unit
+
+Waiting on a word and *creating a thread* are different privileges. `PalFutex*`
+used to live in `palthread`, and reaching that unit at all fails to compile
+without `--threadsafe` (it holds `__pxxclone`, and the default heap/ARC/console
+runtime is not thread-safe). That gate is right for thread creation and wrong for
+a futex wait, which needs no thread-safe heap and no threads to compile.
+
+The cost was structural rather than cosmetic: `syncobjs.TCriticalSection` had to
+be a **spinlock**, because `uses syncobjs` must not start demanding
+`--threadsafe` — Synapse's `ssfpc.inc` is exactly the caller that would break,
+and it does no threading. `palatomic` is a separate unit for the same reason.
+
+So the three syscall wrappers live in a dependency-free `palfutex`, `palsync`
+uses that instead of `palthread`, and `TCriticalSection` is a real blocking
+mutex. Measured on the thread-critical-section shape (three waiters blocked
+0.6 s): 1.73 s of user CPU burnt spinning before, 0.00 s after, same wall clock
+and the same 8000 answer. `uses` is not transitive, so every `PalFutex*` caller
+carries its own `uses palfutex` — `palthread` re-exports nothing.
 
 ## Sync primitives (`palsync`)
 

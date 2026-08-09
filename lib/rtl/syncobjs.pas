@@ -10,33 +10,29 @@ unit syncobjs;
   2000 guarded increments each summed to 7403 instead of 8000
   (tools/fpc_diff_probe.sh, thread-critical-section).
 
-  WHY A SPINLOCK AND NOT palsync's FUTEX MUTEX: palsync uses palthread, and
-  palthread contains __pxxclone, so anything reaching it fails to compile
-  without --threadsafe. `uses syncobjs` must not start demanding that flag —
-  Synapse's ssfpc.inc is exactly the kind of caller that would break, and it
-  does no threading. The atomic intrinsics need no unit at all, so the lock here
-  costs nothing in dependencies.
-
-  The trade-off, stated plainly: an uncontended Acquire is one CAS, the same as
-  any mutex. Under contention this SPINS rather than sleeping, so a waiter burns
-  CPU while the holder runs, and on an oversubscribed box a waiter can spin
-  through its whole timeslice. That is a performance property, not a correctness
-  one — and it is unambiguously better than the no-op it replaces. Splitting the
-  futex helpers out of palthread into their own unit would let this become a
-  proper blocking mutex: bug-b-futex-helpers-are-trapped-behind-pxxclone.
+  It was a SPINLOCK until 2026-08-09, because palsync's futex mutex was only
+  reachable through palthread, and palthread contains __pxxclone — so `uses
+  syncobjs` would have started demanding --threadsafe, breaking callers that do
+  no threading at all (Synapse's ssfpc.inc). Splitting the futex wrappers into a
+  dependency-free `palfutex` removed that wall
+  (bug-b-futex-helpers-are-trapped-behind-pxxclone), so this is now Drepper's
+  3-state futex mutex: uncontended lock/unlock is still a single atomic with no
+  syscall, but a waiter now SLEEPS in the kernel instead of burning its
+  timeslice while the holder runs.
 
   NOT RECURSIVE, matching FPC: TCriticalSection there initialises a default
   pthread mutex, which on glibc is not recursive either. Re-entering from the
-  same thread hangs. Detecting that needs an owner thread id, which needs
-  gettid, which lives in palthread — the same wall. }
+  same thread hangs. Detecting that needs an owner thread id, which needs gettid
+  — that one does still live in palthread, behind the __pxxclone gate. }
 
 interface
+
+uses palsync;
 
 type
   TCriticalSection = class
   private
-    FLock: Integer;   { 0 = free, 1 = held. The futex-word shape, so the
-                        upgrade to a blocking mutex is a body change only. }
+    FLock: TMutex;   { 0 free | 1 locked | 2 locked+waiters — the futex word }
   public
     constructor Create;
     procedure Acquire;
@@ -50,23 +46,17 @@ implementation
 
 constructor TCriticalSection.Create;
 begin
-  FLock := 0;
+  MutexInit(FLock);
 end;
 
 procedure TCriticalSection.Acquire;
 begin
-  { Test-and-test-and-set: the plain read in the inner loop keeps the cache line
-    shared while waiting, instead of every waiter fighting for it exclusively
-    with a CAS per iteration. }
-  while __pxxatomic_cas(@FLock, 0, 1) <> 0 do
-    while FLock <> 0 do
-      ;
+  MutexLock(FLock);
 end;
 
 procedure TCriticalSection.Release;
-var ignore: Int64;
 begin
-  ignore := __pxxatomic_xchg(@FLock, 0);
+  MutexUnlock(FLock);
 end;
 
 procedure TCriticalSection.Enter;
@@ -81,7 +71,7 @@ end;
 
 function TCriticalSection.TryEnter: Boolean;
 begin
-  Result := __pxxatomic_cas(@FLock, 0, 1) = 0;
+  Result := MutexTryLock(FLock);
 end;
 
 end.

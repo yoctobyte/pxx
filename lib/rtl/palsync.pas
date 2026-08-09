@@ -2,7 +2,13 @@
 unit palsync;
 { M2 libc-free synchronisation primitives (meta-multithreading). A futex-backed
   mutex built on the atomic intrinsics (__pxxatomic_cas/xchg) + PalFutexWait/Wake
-  from the M1 thread PAL. No libc — pure Linux futex syscalls.
+  from `palfutex`. No libc — pure Linux futex syscalls.
+
+  It deliberately does NOT use palthread: that unit holds __pxxclone, and
+  reaching it demands --threadsafe, which would spread from here to every
+  `uses syncobjs` — including callers that do no threading at all (Synapse's
+  ssfpc.inc). Blocking on a word needs no thread creation, so it must not
+  inherit thread creation's gate. bug-b-futex-helpers-are-trapped-behind-pxxclone.
 
   TMutex is Drepper's 3-state futex mutex ("Futexes Are Tricky"): it spins through
   no syscall at all in the uncontended fast path, and only enters the kernel
@@ -13,7 +19,7 @@ unit palsync;
 
 interface
 
-uses palthread;
+uses palfutex;
 
 type
   PMutex = ^TMutex;

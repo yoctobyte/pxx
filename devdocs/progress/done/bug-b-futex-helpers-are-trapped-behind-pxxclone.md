@@ -3,12 +3,13 @@ summary: "PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wa
 type: bug
 track: B
 prio: 35
+owner: claude-B
 ---
 
 # The futex helpers are trapped behind `__pxxclone`
 
 - **Type:** bug (structural) — Track B (`lib/rtl`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** implementing `TCriticalSection` for real
   ([[bug-b-criticalsection-was-a-no-op-stub]]) and, before that,
@@ -62,3 +63,6 @@ Current `PalFutex*` callers: `palthread`, `palthreadobj`, `palpthread`,
 Track B: `tools/gate.sh lib`. Also rebuild the threading demos and re-run
 `tools/fpc_diff_probe.sh`'s `thread-*` cases — `thread-critical-section` is the
 one that proves the lock still excludes.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

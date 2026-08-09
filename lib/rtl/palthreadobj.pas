@@ -18,7 +18,7 @@ unit palthreadobj;
 
 interface
 
-uses palthread, palsync;
+uses palfutex, palthread, palsync;
 
 type
   { A method pointer (TMethod shape): built by `@obj.Method` / `@Self.Method`.

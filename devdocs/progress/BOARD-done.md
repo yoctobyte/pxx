@@ -126,6 +126,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-floattostrsig-caps-at-15-significant-digits | B | 65 | bug | `FloatToStrSig` caps at 15 significant digits, so no double round-trips | — |
 | bug-b-format-delphi-spec-parity | B | 50 | bug | SysUtils.Format parsed printf's spec, not Delphi's | — |
 | bug-b-format-fixed-overflows-int64-and-loses-digits | B | 65 | bug | SILENT: sysutils Format('%.2f') scales through Int64 — wrong last digit from \|v\| ~9e13 and outright garbage (-92233720368547758.-8, minus sign INSIDE the fraction) from ~9.2e16. FPC is correct throughout. Reachable at ordinary magnitudes: cents, byte counts, nanosecond timestamps | — |
+| bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-b-o-directory-wrong-value-on-arm | B | 70 | bug | PAL_OPEN_DIRECTORY used the x86 value on every target, so the entire directory-listing surface was dead on arm32 and aarch64 — and opening a regular FILE with the flag wrongly SUCCEEDED there | — |
 | bug-b-pos-empty-substr-returns-1 | B | 50 | bug | SysUtils.Pos returned 1 for an empty substring | — |
 | bug-b-sscanf-scanset-and-percent-n-unsupported | B | 45 | bug | sscanf did not implement %[...] or %n — %[^,] abandoned the whole scan with the destination untouched, and %n left the caller's counter at whatever it held | — |

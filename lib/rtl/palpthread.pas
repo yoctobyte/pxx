@@ -14,7 +14,7 @@ unit palpthread;
 
 interface
 
-uses palsync, palthread;
+uses palfutex, palsync, palthread;
 
 { pthread_mutex_t == TMutex (a single futex word; zeroed = free). }
 procedure __pxx_pmutex_init(m: PMutex);

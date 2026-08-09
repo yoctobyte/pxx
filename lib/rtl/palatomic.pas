@@ -3,11 +3,15 @@ unit palatomic;
 { FPC's InterLocked* atomic counter family, over the __pxxatomic_* intrinsics.
 
   WHY ITS OWN UNIT rather than palsync, where the intrinsics are already used:
-  palsync `uses palthread`, and palthread contains __pxxclone, so anything that
-  reaches it fails to compile without --threadsafe. An atomic counter needs no
-  thread support to COMPILE — plenty of code uses InterLockedIncrement for a
-  refcount in a program that never spawns anything — so it must not drag the
-  thread gate in. This unit has no dependencies at all.
+  an atomic counter needs no thread support to COMPILE — plenty of code uses
+  InterLockedIncrement for a refcount in a program that never spawns anything —
+  so it must not drag the __pxxclone / --threadsafe gate in. When this unit was
+  written, palsync `uses palthread` and so did drag it in; that has since been
+  fixed by splitting the futex wrappers into `palfutex`
+  (bug-b-futex-helpers-are-trapped-behind-pxxclone), so palsync is now
+  gate-free too. Staying separate is still the right shape — a refcount bump
+  has no business pulling in mutexes, events and condvars — but it is now a
+  layering choice rather than a workaround. This unit has no dependencies.
 
   FPC declares these in the `system` unit, so real code calls them with no
   `uses` line. Here they need `uses palatomic` until they are reachable the way

@@ -30,7 +30,7 @@ unit palparallel;
 
 interface
 
-uses palthread;
+uses palfutex, palthread;
 
 type
   { The loop-body ABI. ctx = opaque caller state; [lo..hi] = the inclusive

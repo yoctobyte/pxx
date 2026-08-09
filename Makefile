@@ -7935,6 +7935,20 @@ lib-test: pxx-stable-check
 	# a hair off a power are NOT flattened onto it.
 	$(PXX_STABLE) -Fulib/rtl test/lib_log_exactness.pas /tmp/lib_log_exactness
 	test "$$(/tmp/lib_log_exactness | tail -n 1)" = "LOGEXACT OK"
+	# TCriticalSection: excludes under contention AND blocks rather than spins.
+	# The output is identical either way — the property that separates a futex
+	# mutex from the spinlock it replaced is CPU TIME, so assert that: three
+	# waiters queued behind a 0.6s hold burnt 1.73s of user CPU as a spinlock and
+	# 0.00s as a futex mutex. 1s is far above the noise and far below a regression.
+	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_criticalsection_blocking.pas /tmp/lib_cs_blocking
+	test "$$(/tmp/lib_cs_blocking)" = "$$(printf 'count=8000\nCSBLOCK OK')"
+	@if command -v /usr/bin/time >/dev/null 2>&1; then \
+	  u=$$(/usr/bin/time -f '%U' /tmp/lib_cs_blocking 2>&1 >/dev/null | tail -n 1); \
+	  awk -v u="$$u" 'BEGIN { if (u+0 > 1.0) { print "FAIL: TCriticalSection waiters burnt " u "s of user CPU — spinning, not blocking"; exit 1 } \
+	                          else print "  lib-test: TCriticalSection waiters blocked (user CPU " u "s)" }'; \
+	else \
+	  echo "  lib-test: /usr/bin/time absent, skipping the TCriticalSection spin check"; \
+	fi
 	$(PXX_STABLE) test/lib_sysutils.pas /tmp/lib_sysutils
 	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
 	# regex engine: 61 checks whose expectations are CPython's re output for the
