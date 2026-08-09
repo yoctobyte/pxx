@@ -114,3 +114,18 @@ Track A's usual: `make test` + self-host fixedpoint (byte-identical). The define
 is additive and inert until something gates on it, so the risk is a name
 collision, nothing more. Worth one probe asserting `{$ifdef PXX_THREADSAFE}` is
 false by default and true under `--threadsafe`, on x86-64 and one 32-bit target.
+
+## Note 2026-08-09: a design that may make this ifdef unnecessary later
+
+Do this one anyway — it is one `PasDefine` and it unblocks `TThread` in
+`Classes` now. But the follow-up question ("could the compiler auto-detect
+threading?") led to measuring what Delphi and FPC actually do, and the answer is
+that they do not detect anything: `IsMultiThread` is a RUNTIME boolean, set when
+a thread is created, and the lock primitives branch on it. Measured, the branch
+costs +5% over an unlocked refcount where an unconditional lock costs +276%.
+
+If pxx adopts that ([[decide-ismultithread-runtime-flag-vs-compile-time-mode]]),
+`TThread` goes into `Classes` unconditionally and this ifdef comes back out.
+That is not a reason to wait — the define is cheap, useful on its own, and
+removing it later is trivial.
+
