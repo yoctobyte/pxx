@@ -35,7 +35,7 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 198, ranked
+## Ready — top 30 of 197, ranked
 
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-delitem-dunder
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
@@ -68,4 +68,4 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 
-_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_167 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

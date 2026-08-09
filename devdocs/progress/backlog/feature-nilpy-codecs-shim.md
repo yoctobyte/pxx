@@ -2,6 +2,7 @@
 track: B
 prio: 40
 type: feature
+blocked-by: decide-may-agents-fetch-thirdparty-sources-as-oracles
 ---
 
 # `import codecs` — the next wall for the compile-real-libraries campaign
@@ -46,3 +47,21 @@ in a browser engine.
 
 `make lib-test` + compiling `webencodings/__init__.py` as source, and its own
 upstream `tests.py` as the differential oracle once it runs.
+
+## Blocked 2026-08-09 (Track B): the sources it must be scoped against are not here
+
+This ticket's own instruction is the blocker — *"worth scoping against the real
+usage in `webencodings/__init__.py` and `x_user_defined.py` before writing
+anything, rather than aiming at the whole module"* — and `webencodings` is not
+installed on this box, nor vendored in the repo. Neither are `tinycss2` or
+`html5lib`.
+
+Writing a `mimic_codecs` without that scoping means guessing at which of
+`codecs`' surface matters, which is how a shim ends up quietly approximating —
+the exact thing `devdocs/dev/python-compat-tiers.md` forbids for T1 shims.
+
+Blocked on [[decide-may-agents-fetch-thirdparty-sources-as-oracles]], which is
+the same wall [[feature-lib-reportlab-fidelity-vs-oracle]] hit: a differential
+or scoped-against-real-usage ticket needs the real thing present, and putting it
+there is the user's call, not an agent's.
+
