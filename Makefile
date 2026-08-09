@@ -8019,6 +8019,19 @@ lib-test: pxx-stable-check
 	/tmp/lib_collections >/dev/null
 	$(PXX_STABLE) test/test_math.pas /tmp/lib_math
 	/tmp/lib_math >/dev/null
+	# nilsh — the portable-userland shell (feature-demo-portable-userland phase 1).
+	# Applet dispatch + real pipes in NilPy. It is plain Python, so CPython is the
+	# oracle: the SAME source must print the same session under python3, which is
+	# the cross-runtime half of the thesis the demo exists to show.
+	$(PXX_STABLE) examples/shell/nilsh.npy /tmp/lib_nilsh
+	test "$$(/tmp/lib_nilsh | tail -n 1)" = "nilsh: unknown applet: nosuch"
+	@if command -v python3 >/dev/null 2>&1; then \
+	  python3 examples/shell/nilsh.npy > /tmp/lib_nilsh_cpy.txt 2>&1; \
+	  /tmp/lib_nilsh > /tmp/lib_nilsh_pxx.txt 2>&1; \
+	  diff /tmp/lib_nilsh_cpy.txt /tmp/lib_nilsh_pxx.txt >/dev/null \
+	    && echo "  lib-test: nilsh output identical to CPython" \
+	    || { echo "FAIL: nilsh diverges from CPython"; diff /tmp/lib_nilsh_cpy.txt /tmp/lib_nilsh_pxx.txt | head -10; exit 1; }; \
+	else echo "  lib-test: python3 absent, skipping the nilsh CPython diff"; fi
 	# Log10/Log2/LogN land exactly on the integer for exact powers of the base
 	# (Trunc(Log10(n)) + 1 is the digit-count idiom everyone writes), and values
 	# a hair off a power are NOT flattened onto it.

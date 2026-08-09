@@ -115,3 +115,60 @@ byte-identical) since they touch shared frontend/RTL.
   blocker for argv, the job table and `a | b`), no stdin/readline surface, and
   `import sysutils` tripping "array of const requires builtinheap".
 
+## 2026-08-09 (Track B): phase 1 LANDED — every listed blocker was already gone
+
+The 2026-07-20 log said phase 1 was gated on a Track A re-pin past `c6505149`
+and that there was "nothing to do here until `make pin` moves". The pin is v252
+now, so the first thing was to re-run the stated check:
+
+```
+$ $(PXX_STABLE) examples/shell/shell0.npy && ./shell0
+applets: echo wc upper rev help
+hello portable userland
+...
+```
+
+It prints the canned session correctly. **Blocker cleared.**
+
+Then every OTHER gap the ticket lists was re-measured rather than assumed, and
+all of them are gone too:
+
+| listed gap | state on the current pin |
+| --- | --- |
+| `list` + `append` (argv, job table) | **works** |
+| `dict` | **works** |
+| `str.split` | **works** |
+| `str.join` | **works** |
+| `str.strip` | **works** |
+| `import sysutils` tripping "array of const requires builtinheap" | **works** |
+| no stdin/`sys` surface | `import sys` **works** |
+
+So [[feature-nilpy-collections-and-string-methods]] — recorded here as "the hard
+blocker; file/advance this first" — is satisfied in practice.
+
+## `examples/shell/nilsh.npy` — phase 1
+
+Written the way this ticket always wanted it, now that the language allows it:
+argv as a LIST, parsing by `split()`, applets as functions with the
+`(argv, stdin) -> stdout` signature. Roughly half the size of `shell0.npy`,
+which had to hand-roll a character scanner for tokens.
+
+**Pipes are real**, which was the phase-1 goal: `a | b | c` runs each stage and
+feeds its output to the next. The session exercises a three-stage pipe
+(`echo alpha beta | cat | upper`). That applet signature is deliberately the
+shape a FreeRTOS stream buffer slots into for phase 3 — blocking reads give
+backpressure without hand-coded yields.
+
+Applets: `echo cat wc head tail grep upper rev help` — the set this ticket lists,
+minus `ls`/`ps`, which want the VFS and a task table respectively (phase 2/3).
+
+**It is plain Python, so CPython is the oracle**, and `make lib-test` now asserts
+that the SAME source prints byte-identical output under `python3` and under pxx.
+That is the cross-runtime half of the thesis, checked rather than claimed.
+
+`shell0.npy` is kept beside it as the phase-0 record of what the language could
+not do yet.
+
+**Next:** phase 2 wants a VFS for `ls`/`cat <file>`; phase 3 is the ESP cross.
+Neither is blocked by the frontend any more.
+

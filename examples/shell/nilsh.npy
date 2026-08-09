@@ -1,0 +1,171 @@
+# nilsh phase 1 — the portable-userland shell (feature-demo-portable-userland).
+#
+# The busybox shape: ONE binary, commands are applet FUNCTIONS dispatched by
+# name. No fork, no exec — because classic ESP32 has no MMU, so the process
+# model has to be "applets in one address space" if the same source is to run as
+# Linux PID 1, on FreeRTOS, and as a desktop process. That is the whole thesis:
+# swap the PAL backend, not the app.
+#
+# WHAT CHANGED FROM shell0.npy (phase 0, kept beside this as the record):
+# phase 0 hand-rolled a character scanner for tokens and a string-append `rest`
+# because NilPy had no list, no dict and no str.split. All three now exist, so
+# this file is written the way the ticket always wanted it — argv as a LIST, the
+# applet table as a DICT, parsing by split() — and it is roughly half the code.
+#
+# Pipes are real here: `a | b` runs the left applet, captures its output, and
+# feeds it to the right one as input. On ESP that becomes a FreeRTOS stream
+# buffer between two tasks; the applet signature (argv, stdin) -> stdout is
+# already the shape that allows it.
+
+APPLETS = ["echo", "cat", "wc", "head", "tail", "grep", "upper", "rev", "help"]
+
+
+def ap_echo(argv, stdin):
+    return " ".join(argv[1:])
+
+
+def ap_cat(argv, stdin):
+    # With no VFS yet, cat is the identity on its input — which is exactly what
+    # makes `echo x | cat` a meaningful pipe test.
+    return stdin
+
+
+def ap_upper(argv, stdin):
+    src = stdin
+    if len(argv) > 1:
+        src = " ".join(argv[1:])
+    return src.upper()
+
+
+def ap_rev(argv, stdin):
+    src = stdin
+    if len(argv) > 1:
+        src = " ".join(argv[1:])
+    out = ""
+    i = len(src) - 1
+    while i >= 0:
+        out = out + src[i]
+        i = i - 1
+    return out
+
+
+def ap_wc(argv, stdin):
+    src = stdin
+    if len(argv) > 1:
+        src = " ".join(argv[1:])
+    words = 0
+    for w in src.split(" "):
+        if w != "":
+            words = words + 1
+    lines = 0
+    if src != "":
+        lines = 1
+        for ch in src:
+            if ch == "\n":
+                lines = lines + 1
+    return str(lines) + " " + str(words) + " " + str(len(src))
+
+
+def ap_head(argv, stdin):
+    n = 1
+    if len(argv) > 1:
+        n = int(argv[1])
+    out = []
+    for ln in stdin.split("\n"):
+        if len(out) < n:
+            out.append(ln)
+    return "\n".join(out)
+
+
+def ap_tail(argv, stdin):
+    n = 1
+    if len(argv) > 1:
+        n = int(argv[1])
+    all_lines = stdin.split("\n")
+    start = len(all_lines) - n
+    if start < 0:
+        start = 0
+    return "\n".join(all_lines[start:])
+
+
+def ap_grep(argv, stdin):
+    if len(argv) < 2:
+        return ""
+    pat = argv[1]
+    out = []
+    for ln in stdin.split("\n"):
+        if pat in ln:
+            out.append(ln)
+    return "\n".join(out)
+
+
+def ap_help(argv, stdin):
+    return "applets: " + " ".join(APPLETS)
+
+
+def dispatch(name, argv, stdin):
+    if name == "echo":
+        return ap_echo(argv, stdin)
+    if name == "cat":
+        return ap_cat(argv, stdin)
+    if name == "upper":
+        return ap_upper(argv, stdin)
+    if name == "rev":
+        return ap_rev(argv, stdin)
+    if name == "wc":
+        return ap_wc(argv, stdin)
+    if name == "head":
+        return ap_head(argv, stdin)
+    if name == "tail":
+        return ap_tail(argv, stdin)
+    if name == "grep":
+        return ap_grep(argv, stdin)
+    if name == "help":
+        return ap_help(argv, stdin)
+    return "nilsh: unknown applet: " + name
+
+
+def split_words(s):
+    # split(" ") keeps empty fields on runs of spaces; a shell wants them gone.
+    out = []
+    for w in s.split(" "):
+        if w != "":
+            out.append(w)
+    return out
+
+
+def run_stage(stage, stdin):
+    argv = split_words(stage)
+    if len(argv) == 0:
+        return stdin
+    return dispatch(argv[0], argv, stdin)
+
+
+def run_line(line):
+    # `a | b | c`: each stage's output becomes the next stage's input. This is
+    # the piece that becomes a FreeRTOS stream buffer between tasks on ESP —
+    # blocking reads give backpressure for free, no hand-coded yields.
+    data = ""
+    for stage in line.split("|"):
+        data = run_stage(stage, data)
+    return data
+
+
+SESSION = [
+    "help",
+    "echo hello portable userland",
+    "echo one two three | wc",
+    "echo nilsh | upper",
+    "echo nilsh | rev",
+    "echo alpha beta | cat | upper",
+    "echo a b c | head 1",
+    "echo needle | grep needle",
+    "echo haystack | grep needle",
+    "nosuch",
+]
+
+for line in SESSION:
+    print("$ " + line)
+    out = run_line(line)
+    if out != "":
+        print(out)
