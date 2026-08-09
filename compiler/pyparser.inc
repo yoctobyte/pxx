@@ -10739,16 +10739,45 @@ end;
   Closing it also makes the call EXACTLY arity-matched, which is why
   ProcArityMatches needs no special case for the star parameter: by the time it
   runs, there is no short call left to accept. }
-procedure PyFillDefaultsUpTo(mpi, upTo: Integer; var nextSlot, posHead, posLast: Integer);
-var argNode: Integer;
+procedure PyFillDefaultsUpTo(mpi, upTo: Integer; var nextSlot, posHead, posLast: Integer;
+                             kwChain: Integer);
+var argNode, q: Integer; bound: Boolean;
 begin
-  while (nextSlot < upTo) and (nextSlot < MAX_PROC_PARAMS) and
-        ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextSlot] do
+  while (nextSlot < upTo) and (nextSlot < MAX_PROC_PARAMS) do
   begin
+    { A slot that a MATCHED KEYWORD argument in this same call already binds
+      must be SKIPPED, not filled. Filling it injected the parameter's DEFAULT
+      as a positional and the user's own `b=7` then landed on the same slot, so
+      `def f(a, b=2, *rest)` called as `f(1, b=7)` was rejected with "got
+      multiple values for parameter 'b'" — valid Python refused, and only when
+      the def also had a star parameter (`f(a, b=2)` alone was always fine).
+      That is the ordinary `def f(a, b=None, **kw)` shape.
+      Advance nextSlot anyway: the slot IS accounted for, just by the keyword
+      rather than by a default.
+      bug-nilpy-keyword-arg-collides-with-a-star-defs-default-filler }
+    bound := False;
+    q := kwChain;
+    while q >= 0 do
+    begin
+      if (ASTIVal[q] - 1) = nextSlot then begin bound := True; Break; end;
+      q := ASTRight[q];
+    end;
+    if bound then
+    begin
+      Inc(nextSlot);
+      Continue;
+    end;
+    if not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextSlot] then Break;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := DefaultArgValueNode(mpi, nextSlot);
     ASTRight[argNode] := -1;
-    ASTIVal[argNode] := 0;              { positional }
+    { an EXPLICIT slot, like the containers below, and for the same reason: as
+      soon as the loop can SKIP a keyword-bound slot, a positional filler no
+      longer sits at the index its position implies. `f(a=1)` on
+      `def f(a, b=2, *rest)` skipped slot 0, then filled slot 1's default as a
+      positional — which PyBindKwArgs counted as slot 0, colliding with the
+      keyword. }
+    ASTIVal[argNode] := nextSlot + 1;
     if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
     posLast := argNode;
     Inc(nextSlot);
@@ -10823,9 +10852,14 @@ begin
       ASTLeft[mtCall] := mtSelf;
       PyHoistStmt(mtCall);
     end;
-    PyFillDefaultsUpTo(mpi, si, nKept, posHead, posLast);
+    PyFillDefaultsUpTo(mpi, si, nKept, posHead, posLast, kwHead);
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := PyMakeIdent(listSym);
+    { an EXPLICIT slot, so the container lands at the star parameter's index
+      however many positionals precede it. Counting on the positional order
+      alone breaks the moment a keyword binds one of the slots in between —
+      the filler above no longer emits a node for those. }
+    ASTIVal[argNode] := si + 1;
     if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
     posLast := argNode;
     nKept := si + 1;
@@ -10833,9 +10867,10 @@ begin
   if ki >= 0 then
   begin
     if dictSym < 0 then dictSym := PyNewContainerTemp('TPyDict', 'kwargs');
-    PyFillDefaultsUpTo(mpi, ki, nKept, posHead, posLast);
+    PyFillDefaultsUpTo(mpi, ki, nKept, posHead, posLast, kwHead);
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := PyMakeIdent(dictSym);
+    ASTIVal[argNode] := ki + 1;        { explicit slot, as for *args above }
     if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
     posLast := argNode;
     nKept := ki + 1;

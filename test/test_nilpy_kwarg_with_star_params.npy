@@ -1,0 +1,59 @@
+# bug-nilpy-keyword-arg-collides-with-a-star-defs-default-filler
+#
+# `def f(a, b=2, *rest): ...` called as `f(1, b=7)` was REJECTED —
+# "f got multiple values for parameter 'b'" — for a call CPython accepts. The
+# same def WITHOUT the star parameter was always fine, which is what made the
+# shape hard to guess from the message.
+#
+# Cause: to place the packed *args container at its parameter index, the packer
+# fills the intervening defaulted slots positionally. It filled `b`'s default
+# too, and the user's own `b=7` then landed on the already-occupied slot.
+#
+# The fix skips a slot a matched keyword already binds, and gives BOTH the
+# filled defaults and the packed containers an EXPLICIT slot index — because
+# once a slot can be skipped, a node's position in the chain no longer implies
+# its parameter index. `f(a=1)` is the case that proves the second half: it
+# skips slot 0, and with a positional filler slot 1's default was counted as
+# slot 0 and collided all over again.
+#
+# `def f(a, b=None, **kwargs)` called as `f(x, b=1)` is an ordinary shape, so
+# all four combinations of star/kwargs are covered, and the receiver forms too:
+# a plain def, a constructor and a method go through different call paths.
+#
+# NOT asserted: `i(1, 2, 3, 4, c=9)` where a positional and a keyword really do
+# hit the same slot. CPython raises TypeError there and so should we — pxx
+# currently refuses it at COMPILE time rather than run time, which is a
+# difference in WHEN, not in whether. Left alone rather than pinned.
+#
+# Expectations are CPython's own output.
+
+
+def f(a, b=2, *rest, **kw):
+    return (a, b, rest, sorted(kw.items()))
+
+
+def g(a, b=2, *rest):
+    return (a, b, rest)
+
+
+def h(a, b=2, **kw):
+    return (a, b, sorted(kw.items()))
+
+
+def plain(a, b=2):
+    return (a, b)
+
+
+print("star+kw   ", f(1), f(1, 3), f(1, 3, 4, 5), f(1, 3, 4, x=6, y=7))
+print("kw binds b", f(1, b=9), f(1, b=9, z=1))
+print("kw binds a", f(a=1), f(a=1, b=2))
+print("star only ", g(1), g(1, 3), g(1, 3, 4), g(1, b=9))
+print("kwargs    ", h(1), h(1, b=9), h(1, b=9, z=2), h(a=1, b=9))
+print("no star   ", plain(1), plain(1, 3), plain(1, b=3), plain(a=1, b=3))
+
+
+def three(a, b=1, c=2, *rest, **kw):
+    return (a, b, c, rest, sorted(kw.items()))
+
+
+print("skip mid  ", three(1), three(1, c=9), three(1, 2, 3, 4), three(1, c=9, z=8))

@@ -1088,6 +1088,10 @@ test-nilpy: $(COMPILER)
 	# `0 ** 0.5` HUNG (PyMathLn's normalising loop never terminates for x <= 0).
 	./$(COMPILER) test/test_nilpy_pow_domain.npy /tmp/test_nilpy_powdomain26
 	/tmp/test_nilpy_powdomain26 | diff -u test/test_nilpy_pow_domain.expected -
+	# `f(1, b=7)` on a def that also has *rest/**kw was rejected as "multiple
+	# values for parameter 'b'" -- the star packer filled b's default first.
+	./$(COMPILER) test/test_nilpy_kwarg_with_star_params.npy /tmp/test_nilpy_kwstar26
+	/tmp/test_nilpy_kwstar26 | diff -u test/test_nilpy_kwarg_with_star_params.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26
