@@ -76,4 +76,4 @@ unchanged in the same file.
 
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 9f01b58e3.
