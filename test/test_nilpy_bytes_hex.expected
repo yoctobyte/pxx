@@ -1,0 +1,9 @@
+literal  01ff00
+encoded  616263
+empty    []
+frombyte 0aab
+padding  01 0f 10
+case     abcdef
+len      6
+var      deadbeef
+param    0010

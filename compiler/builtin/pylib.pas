@@ -382,13 +382,17 @@ type
     procedure put(i: Integer; v: Integer);
     { bytearray.extend / .append — uforth builds output buffers byte by byte }
     procedure extend(src: TPyBytes);
-    { NO .append here on purpose: TPyList.append already exists, and a second
-      class declaring the name makes EVERY `.append(...)` on a dynamically
-      typed receiver ambiguous — the same collision TPyList.get caused. Python
-      does have bytearray.append, so if a corpus needs it the answer is runtime
-      dispatch on the receiver's class, not another method on this class.
-      (filed as feature-nilpy-runtime-method-dispatch-on-variant) }
+    { bytearray.append. This comment used to say "NO .append here on purpose",
+      because a second class declaring the name made every `.append(...)` on a
+      dynamically typed receiver ambiguous — and then the method was added
+      anyway, leaving the two contradicting each other.
+      Settled 2026-08-09: the receiver's class is now decided at RUN time
+      (feature-nilpy-runtime-method-dispatch-on-variant), with TPyList as the
+      fallback arm, so the collision this warned about is handled rather than
+      avoided. }
     procedure append(v: Integer);
+    { bytes.hex() — the lowercase two-digit-per-byte form, '' for empty. }
+    function hex: AnsiString;
     { bytes.find(sub[, start]) — index of the sub-bytes at/after start (0), or -1. }
     function find(sub: TPyBytes): Integer; overload;
     function find(sub: TPyBytes; start: Integer): Integer; overload;
@@ -10657,6 +10661,24 @@ end;
 { CPython bytes repr: b'...' with printable ASCII kept, \t \n \r named, the
   rest as \xHH. Like CPython, the quote flips to double quotes when the data
   contains a single quote but no double quote. }
+function TPyBytes.hex: AnsiString;
+const HexD = '0123456789abcdef';
+var k, v: Integer; p: PByte;
+begin
+  Result := '';
+  if (Self = nil) or (Self.FLen <= 0) then Exit;
+  SetLength(Result, Self.FLen * 2);
+  p := PByte(Self.FData);
+  for k := 0 to Self.FLen - 1 do
+  begin
+    v := PByte(NativeInt(p) + k)^;
+    { LOWERCASE, and always two digits — CPython's bytes.hex() pads, so
+      b'\x01'.hex() is '01' and not '1'. }
+    Result[k * 2 + 1] := HexD[(v shr 4) + 1];
+    Result[k * 2 + 2] := HexD[(v and 15) + 1];
+  end;
+end;
+
 function pybytes_repr(b: TPyBytes): AnsiString;
 var i, c: Integer; q: Char; hasSq, hasDq: Boolean;
 const HexD: array[0..15] of Char = ('0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f');

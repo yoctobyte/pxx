@@ -1,0 +1,30 @@
+# feature-nilpy-str-surface-gaps-2026-08-09 — the bytes.hex() row.
+#
+# `b.hex()` was "TPyBytes has no method hex".
+#
+# The two things worth pinning are the ones a hand-rolled version gets wrong:
+# hex() ZERO-PADS to two digits per byte (b'\x01'.hex() is '01', not '1') and it
+# is LOWERCASE. An empty bytes gives '' rather than anything else.
+#
+# Round-tripped through .encode() as well as from bytes literals and bytes([..]),
+# since those reach TPyBytes by different routes.
+#
+# Expectations are CPython's own output.
+
+print("literal ", b"\x01\xff\x00".hex())
+print("encoded ", "abc".encode().hex())
+print("empty   ", "[" + bytes([]).hex() + "]")
+print("frombyte", bytes([10, 171]).hex())
+print("padding ", bytes([1]).hex(), bytes([15]).hex(), bytes([16]).hex())
+print("case    ", bytes([171, 205, 239]).hex())
+print("len     ", len(bytes([1, 2, 3]).hex()))
+
+b = b"\xde\xad\xbe\xef"
+print("var     ", b.hex())
+
+
+def f(v):
+    return v.hex()
+
+
+print("param   ", f(b"\x00\x10"))

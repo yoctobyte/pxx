@@ -22,7 +22,7 @@ work, and bundling them buries the one that matters.
 
 | call | error |
 | --- | --- |
-| `b.hex()` on bytes | `TPyBytes has no method hex` |
+| ~~`b.hex()`~~ | **DONE 2026-08-09** — `TPyBytes.hex`, pinned by `test/test_nilpy_bytes_hex.npy` |
 | `str.maketrans(a, b)` | `unsupported str method .maketrans()` |
 | `s.translate(table)` | `unsupported str method .translate()` |
 | ~~`s.isascii()`~~ | **DONE 2026-08-09** — `pystr_isascii`, pinned by `test/test_nilpy_str_isascii.npy` |
@@ -43,7 +43,9 @@ with maxsplit, `splitlines`, `find`/`rfind`/`index`/`rindex` with windows,
   needed. The one non-obvious part, now pinned: CPython answers **True** for the
   EMPTY string, the opposite of the `isspace`/`isdigit`/`isalpha` siblings, so
   inheriting their shape would have been wrong in exactly one place.
-- `hex()` on bytes is equally small and pairs with `bytes.fromhex`.
+- ~~`hex()` on bytes~~ **done**. `bytes.fromhex` is still missing and is its
+  natural pair. The two details a hand-rolled version gets wrong, now pinned:
+  it ZERO-PADS to two digits per byte and it is LOWERCASE.
 - `maketrans`/`translate` go together and want a decision about what the
   translation table IS (CPython's is a dict keyed by ordinal). The 1:1
   byte-mapping form covers essentially all real use; the deleting and
