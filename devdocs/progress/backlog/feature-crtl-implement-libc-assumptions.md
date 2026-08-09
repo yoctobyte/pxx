@@ -563,10 +563,29 @@ $ tcc -run ret7.c     -> exit 7
 $ tcc -run say.c      -> exit 3
 ```
 
-The program genuinely executes. **One narrow gap remains**: its stdout is never
-flushed. `puts("x")` alone prints nothing, while `puts("x"); fflush(stdout);`
-and `write(1, ...)` both print. So the JIT'd program's buffered output is lost
-at exit — plausibly the same missing init/fini hook as `atexit` and `environ`
-([[feature-c-entry-stub-must-run-finalizers]]), which would make that ONE
-entry-stub change unblock three separate gaps. Not yet confirmed; recorded as
-the next thing to check rather than asserted.
+The program genuinely executes. **One narrow gap remains, and it is NOT what I
+first guessed.**
+
+I recorded it as "stdout is never flushed … plausibly the same init/fini hook as
+atexit and environ". **That is disproven**: crtl's `puts` does not buffer at all
+— `lib/crtl/src/stdio.c` calls `__pxx_write(1, s, n)` directly. There is no
+buffer to flush, so the finalizer hook has nothing to do with it.
+
+What is actually true, measured:
+
+| under `tcc -run` | result |
+| --- | --- |
+| `write(1, "x", 1)` | **prints** |
+| `puts` / `printf` / `fputs` / `fwrite` | **silent**, every one |
+| `puts(...)` return value | **success** — it reports the byte count |
+| a genuinely undefined symbol | `tcc: error: unresolved reference to '...'` |
+| output redirected to a file | 0 bytes (so not a tty/pipe buffering artefact) |
+
+So symbol resolution is NOT silently failing (undefined symbols do error), and
+the resolved function RETURNS success while emitting nothing. Both `write` and
+`puts` bottom out on the same `__pxx_write`, so the difference is not the write
+path itself. Something about which `puts` the JIT'd code binds to is the next
+thing to look at — `nm` the host binary and check whether `libtcc1.a` or the
+ELF symtab offers a second definition.
+
+Recorded rather than guessed at a second time.
