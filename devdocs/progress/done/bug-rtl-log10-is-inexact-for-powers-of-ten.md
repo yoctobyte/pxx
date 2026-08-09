@@ -2,6 +2,8 @@
 track: B
 prio: 55
 type: bug
+status: done
+owner: claude-B
 ---
 
 # `Log10` is inexact for powers of ten — `int(log10(n))` is off by one
@@ -74,3 +76,6 @@ bit operators, big-int literals, `bin`/`oct`/`hex`, `math.pi`, `sqrt`, `sin`,
 `make lib-test` + a test asserting `math.log10` and `int(math.log10(n))` for
 every power of ten from 1 to 1e15, `log2` for every power of two in range, and
 a handful of non-power values against CPython.
+
+## Log
+- 2026-08-09 — resolved, commit PENDING-COMMIT.

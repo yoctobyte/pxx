@@ -336,19 +336,62 @@ begin
   Result := 1.0 / Sin(x);
 end;
 
+function SnapLog(r, x, base: Double): Double;
+{ Exact powers of the base must land ON the integer exponent. Ln is a series
+  expansion here, so Ln(1000)/Ln(10) comes out a hair BELOW 3 and the standard
+  digit-count idiom int(log10(n))+1 is wrong for nearly every power of ten (and
+  right for 1e5 by luck, so a spot check passes). Fix: round the raw quotient to
+  the nearest integer k, rebuild base^k, and return k exactly when the rebuild
+  lands back on x.
+
+  The rebuild is compared with a tolerance of ~|k|/4 ulps: wide enough to cover
+  the |k| roundings the reconstruction itself costs, and narrow enough to be
+  harmless — a deviation of m ulps in x moves the true log by m*eps/Ln(base)
+  while one ulp of the result k is ~eps*|k|, so anything this snaps was already
+  within half an ulp of k. Negative k rebuilds as 1/base^|k| (a single rounding,
+  hence still the nearest double); if base^|k| overflows, nothing is snapped. }
+var k, i: Integer; p, d, kd: Double;
+begin
+  Result := r;
+  if r <> r then Exit;                              { NaN: log of a negative }
+  if (r > 1.0e15) or (r < -1.0e15) then Exit;       { +/-Inf: log of 0 }
+  if r >= 0.0 then k := Trunc(r + 0.5) else k := Trunc(r - 0.5);
+  kd := k;
+  if Abs(r - kd) > 1.0e-6 then Exit;                { nowhere near an integer }
+  if k = 0 then
+  begin
+    if x = 1.0 then Result := 0.0;
+    Exit;
+  end;
+  i := Abs(k);
+  p := 1.0;
+  while i > 0 do
+  begin
+    p := p * base;
+    i := i - 1;
+  end;
+  if (p <> p) or (p > 1.0e308) or (p = 0.0) then Exit;
+  if k < 0 then p := 1.0 / p;
+  d := Abs(x - p);
+  if d <= (0.5 + 0.25 * Abs(kd)) * 2.220446049250313e-16 * p then Result := kd;
+end;
+
 function Log10(x: Double): Double;
 begin
-  Result := Ln(x) / 2.30258509299404568402;
+  Result := SnapLog(Ln(x) / 2.30258509299404568402, x, 10.0);
 end;
 
 function Log2(x: Double): Double;
 begin
-  Result := Ln(x) / 0.69314718055994530942;
+  Result := SnapLog(Ln(x) / 0.69314718055994530942, x, 2.0);
 end;
 
 function LogN(base, x: Double): Double;
+var r: Double;
 begin
-  Result := Ln(x) / Ln(base);
+  r := Ln(x) / Ln(base);
+  if (base > 0.0) and (base <> 1.0) then r := SnapLog(r, x, base);
+  Result := r;
 end;
 
 function Hypot(x, y: Double): Double;

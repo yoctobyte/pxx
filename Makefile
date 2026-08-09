@@ -7930,6 +7930,11 @@ lib-test: pxx-stable-check
 	/tmp/lib_collections >/dev/null
 	$(PXX_STABLE) test/test_math.pas /tmp/lib_math
 	/tmp/lib_math >/dev/null
+	# Log10/Log2/LogN land exactly on the integer for exact powers of the base
+	# (Trunc(Log10(n)) + 1 is the digit-count idiom everyone writes), and values
+	# a hair off a power are NOT flattened onto it.
+	$(PXX_STABLE) -Fulib/rtl test/lib_log_exactness.pas /tmp/lib_log_exactness
+	test "$$(/tmp/lib_log_exactness | tail -n 1)" = "LOGEXACT OK"
 	$(PXX_STABLE) test/lib_sysutils.pas /tmp/lib_sysutils
 	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
 	# regex engine: 61 checks whose expectations are CPython's re output for the

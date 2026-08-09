@@ -847,6 +847,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-riscv32-string-literal-to-class-field | A | 55 | bug | riscv32: storing a string LITERAL into a class field gives an empty string | — |
 | bug-rtl-floattostr-caps-at-six-decimals-and-zeroes-small-values | B | 35 | bug | `FloatToStr` keeps SIX decimal places, so it loses 9 digits FPC keeps — and returns `0` below 5e-7 | — |
+| bug-rtl-log10-is-inexact-for-powers-of-ten | B | 55 | bug | `Log10` is inexact for powers of ten — `int(log10(n))` is off by one | — |
 | bug-rtti-offset-static-array | A | 50 | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
 | bug-selfhost-multifn-ifelse-miscompile | R | 50 | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | 50 | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |

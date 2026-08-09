@@ -78,7 +78,6 @@ _none_
 | bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver | N | 55 | bug | A user method named `find`/`index` raises AttributeError when the receiver has no static class | — |
 | bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored | N | 45 | bug | A user `__str__` on an Exception subclass is ignored | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
-| bug-rtl-log10-is-inexact-for-powers-of-ten | B | 55 | bug | `Log10` is inexact for powers of ten — `int(log10(n))` is off by one | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
 | bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler | T | 45 | bug | gate.sh's self-host check compares the hermetic fixedpoint against the LIVE compiler/pascal26, so a concurrent build in the same clone flips it red transiently — testmgr snapshots the binary per run for exactly this reason | — |
@@ -220,6 +219,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-inline-asm-xmm-operands |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
+| feature-rtl-ln-exp-are-a-ulp-off-port-the-crtl-dd-core | B | 35 | feature | lib/rtl's Ln/Exp are plain-double series and land ~1 ulp off; lib/crtl already has a correctly-rounded double-double log/exp core, so the Pascal RTL is the second, worse mechanism for the same concept | — |
 | feature-rtl-math-surface-gaps | B | 30 | feature | `math` surface gaps — 16 names missing, all LOUD | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-est-mem-from-measurement | T | 55 | feature | testmgr estimates the selfhost job at 1200 MB; measured peak RSS is 156 MB. An 8x error in one class means none of them were measured — it both under-packs big boxes and will exclude small ones | — |
@@ -390,9 +390,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1547)
+## done (1548)
 
-1547 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1548 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (30)
 
@@ -451,7 +451,6 @@ _none_
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-return-inside-a-with-skips-exit
 - [p 55] [N] bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver
-- [p 55] [B] bug-rtl-log10-is-inexact-for-powers-of-ten
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [U] decide-sole-a-guard-for-unattended-sessions
 - [p 55] [A] feature-a-declaration-phase
@@ -581,6 +580,7 @@ _none_
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
+- [p 35] [B] feature-rtl-ln-exp-are-a-ulp-off-port-the-crtl-dd-core
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-nilpy-dataclass-keyword-arguments-do-not-parse
