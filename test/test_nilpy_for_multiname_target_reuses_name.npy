@@ -1,0 +1,69 @@
+# A MULTI-NAME `for` target at module scope whose names are ALREADY bound
+# kept the earlier binding's slot, and the unpacked element -- always a
+# variant -- was stored into it: an empty value, a TypeError, or SIGSEGV,
+# depending on what the earlier binding was. Every prior binding kind
+# reproduced, INCLUDING a binding of the same type.
+# bug-nilpy-multi-name-for-target-reuses-a-module-name-and-reads-garbage
+# Every expectation is CPython's own output.
+
+PAIRS = [("t", ["x", "y"])]
+
+a1 = 3
+for k, a1 in PAIRS:
+    print(",".join(a1))
+
+a2 = "hello"
+for k, a2 in PAIRS:
+    print(",".join(a2))
+
+a3 = ["p"]
+for k, a3 in PAIRS:
+    print(",".join(a3))
+
+a4 = set(["q"])
+for k, a4 in PAIRS:
+    print(",".join(a4))
+
+# the binding survives the loop
+print(a3)
+
+# a fresh name already worked, and must keep working
+for k, fresh in PAIRS:
+    print(",".join(fresh))
+
+# three names, all previously bound
+b1 = 0
+b2 = 0
+b3 = 0
+for b1, b2, b3 in [("p", "q", "r")]:
+    print(b1 + b2 + b3)
+
+# enumerate: the first name is the INDEX and must stay an int, so an
+# ordinary arithmetic counter is not widened to a variant
+i = 0
+total = 0
+for i, w in enumerate(["aa", "bbb"]):
+    total = total + i * len(w)
+print(total, i * 10)
+
+# .items() over a dict, with both names previously bound
+key = 0
+val = 0
+d = {"one": 1}
+for key, val in d.items():
+    print(key, val + 1)
+
+# the shape this was found in: build tuples in one loop, unpack with the
+# SAME names in the next
+rows = []
+for n in ["ann", "bo"]:
+    rows.append((n, sorted(set([n, "zz"]))))
+for n, who in rows:
+    print(n, ",".join(who))
+
+# inside a def it always worked -- guard it
+def f():
+    c = ["p"]
+    for k, c in PAIRS:
+        print("fn", ",".join(c))
+f()

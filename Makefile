@@ -1350,6 +1350,9 @@ test-nilpy: $(COMPILER)
 	@# a `for` target reused after a non-string binding (and the reverse order)
 	./$(COMPILER) test/test_nilpy_for_variable_reuse.npy /tmp/test_nilpy_for_var_reuse26
 	test "$$(/tmp/test_nilpy_for_var_reuse26)" = "$$(printf 'a\nZ\na\nZ\na\nZ\na\nZ\na\nb\n5\n1.5\nTrue\n1\n2')"
+	@# a MULTI-name `for` target whose names are already bound at module scope
+	./$(COMPILER) test/test_nilpy_for_multiname_target_reuses_name.npy /tmp/test_nilpy_for_multiname26
+	test "$$(/tmp/test_nilpy_for_multiname26)" = "$$(printf 'x,y\nx,y\nx,y\nx,y\n[%s]\nx,y\npqr\n3 10\none 2\nann ann,zz\nbo bo,zz\nfn x,y' "'x', 'y'")"
 	@# a missing attribute raises AttributeError instead of answering None
 	./$(COMPILER) test/test_nilpy_missing_attribute_raises.npy /tmp/test_nilpy_missattr26
 	test "$$(/tmp/test_nilpy_missattr26)" = "$$(printf 'caught foo\ncaught upper\ncaught nope\ncaught getx\nTrue\nFalse\n1\ndef\n42\nAB')"

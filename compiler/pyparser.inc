@@ -18249,6 +18249,41 @@ begin
   end;
 end;
 
+{ Is `i` the start of a FOR TARGET LIST — `a` or `a, b[, c]` — terminated by
+  `in`? Answers the name COUNT in `cnt` and the `in` position in `inIdx`.
+
+  Identifiers only, like PyTupleTargetRun and for the same reason: a NESTED
+  (`for n, (p, q) in …`) or STARRED target is refused by the real parser with
+  its own diagnostic, and this scan exists purely to note names.
+  bug-nilpy-multi-name-for-target-reuses-a-module-name-and-reads-garbage }
+function PyForTargetRun(i: Integer; var cnt, inIdx: Integer): Boolean;
+var k: Integer; wantIdent: Boolean;
+begin
+  PyForTargetRun := False;
+  cnt := 0;
+  inIdx := -1;
+  k := i;
+  wantIdent := True;
+  while k < MainProgramTokCount do
+  begin
+    if wantIdent then
+    begin
+      if Tokens[k].Kind <> tkIdent then Exit;
+      Inc(cnt);
+      wantIdent := False;
+    end
+    else if Tokens[k].Kind = tkComma then wantIdent := True
+    else if Tokens[k].Kind = tkIn then
+    begin
+      inIdx := k;
+      PyForTargetRun := True;
+      Exit;
+    end
+    else Exit;
+    Inc(k);
+  end;
+end;
+
 { `name = <integer arithmetic>` as the shape of a statement, read from TOKENS.
 
   The module pre-pass may not trial-parse a right-hand side that sits inside a
@@ -18327,6 +18362,7 @@ var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     blkJ: Integer; blkTk: TTypeKind; blkName: AnsiString;
     blkRec: Integer;   { class rec for a `name = Cls(...)` inside a block }
     tupEnd: Integer;   { the '=' of a tuple-unpack target list }
+    forCnt, forIn: Integer;   { a for target list: name count, and the `in` }
     blkSrcVar: Boolean;   { an augmented assign whose SOURCE is a variant }
 begin
   PyLocalCount := 0;
@@ -18809,8 +18845,50 @@ begin
               ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent,
                                                          tkDedent, tkSemicolon])) and
               (i + 2 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent) and
-              (Tokens[i + 2].Kind = tkIn) then
+              PyForTargetRun(i + 1, forCnt, forIn) then
       begin
+        { A MULTI-NAME target — `for k, v in …`, whatever the iterable. Unlike
+          the single-name case below this needs no look at the iterable at all:
+          unpacking yields VARIANT slots whatever the container is, so the
+          element type is a property of the target list rather than of what is
+          being iterated, and the arm stays a pure token peek.
+
+          Without it the names kept whatever type an ORDINARY assignment
+          elsewhere in the module gave them, and PyParseForIn's
+          `symIdx := PyProgSym(name)` bound a variant element into that fixed
+          slot: `a = ["p"]` followed by `for k, a in pairs:` read an empty value
+          and then SIGSEGV'd. Every prior binding kind reproduced, including a
+          binding of the SAME type — the slot is wrong because it is not a
+          variant, not because the two types disagree.
+          bug-nilpy-multi-name-for-target-reuses-a-module-name-and-reads-garbage }
+        if forCnt > 1 then
+        begin
+          { `enumerate(...)` is the one exception: its FIRST name is the index,
+            so noting it a variant would widen an ordinary arithmetic loop
+            counter. Same guarded token peek the `range` arm below uses —
+            trusted only while nothing has shadowed the name. }
+          if (forIn + 2 < MainProgramTokCount) and
+             (Tokens[forIn + 1].Kind = tkIdent) and
+             (GetTokenStr(forIn + 1) = 'enumerate') and
+             (Tokens[forIn + 2].Kind = tkLParen) and
+             (PyFindModuleConstraint('enumerate') < 0) and
+             (PyProgSym('enumerate') < 0) then
+            forElemTk := tyInt64
+          else
+            forElemTk := tyVariant;
+          bodyIx := i + 1;
+          while bodyIx < forIn do
+          begin
+            if Tokens[bodyIx].Kind = tkIdent then
+            begin
+              PyNoteLocalType(GetTokenStr(bodyIx), forElemTk, REC_NONE);
+              forElemTk := tyVariant;   { only the first name can be an index }
+            end;
+            Inc(bodyIx);
+          end;
+          i := forIn;       { the `in` — the iterable is scanned as usual }
+          continue;
+        end;
         { `for name in ITER:` at module level: fold the loop TARGET's element
           type into the SAME whole-program widening table a bare assignment
           feeds via PyNoteLocalType. Without this, a name already bound to a
