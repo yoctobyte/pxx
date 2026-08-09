@@ -34,10 +34,10 @@ _none — no lane is locked._
 - `feature-lib-tkinter-callable-options-with-args` [B] — blocked-by: feature-nilpy-multi-arg-callback-bridges
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 199, ranked
+## Ready — top 30 of 200, ranked
 
-- `[p 60] [U]` decide-sole-a-guard-for-unattended-sessions (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [N]` bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [A]` feature-a-abi-oracle
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -57,6 +57,7 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-user-method-named-like-a-str-method-raises-on-a-variant-receiver
 - `[p 55] [B]` bug-rtl-log10-is-inexact-for-powers-of-ten
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
+- `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
@@ -65,6 +66,5 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
-- `[p 55] [T]` feature-t-est-mem-from-measurement
 
-_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

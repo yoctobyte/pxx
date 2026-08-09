@@ -4417,6 +4417,33 @@ begin
             { Class identifier used as a value (metaclass / class reference):
               `TForm1` passed to CreateForm etc. Yields the runtime address of
               the class's RTTI blob (PClassRTTI), resolved post-EmitRTTI. }
+            { NilPy REFUSES this by name instead of miscompiling it. The blob
+              address is untagged, so boxing it into a variant makes it an
+              ordinary INTEGER: `for cls in [A]: cls(3)` compiled clean and then
+              SEGFAULTED (jumping to the RTTI blob), `print(cls)` showed a bare
+              number where CPython shows `<class '__main__.A'>`, and
+              `cls = A; cls(3).v` failed with "a pointer has no members".
+
+              Measured, not assumed: in PyExprMode this site is reached ONLY by
+              the broken shapes. `isinstance(x, A)`, `except A:` and `A(...)`
+              construction each have their own intercept and never arrive here,
+              so refusing costs none of them.
+
+              A refusal is the whole fix the ticket asks for at this stage — a
+              segfault from ordinary valid Python is the worst outcome
+              available, and this replaces it with a diagnostic naming the class
+              and the workaround. Supporting it for real needs a distinct
+              variant tag for a class reference, which is also what
+              bug-nilpy-calling-a-non-callable-segfaults needs.
+              bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses }
+            if PyExprMode then
+              Error('Nil Python: the class ' + fieldName + ' cannot be used as a '
+                + 'VALUE yet (stored in a variable, list or dict, or passed as '
+                + 'an argument) — only construction ' + fieldName + '(...), '
+                + 'isinstance(x, ' + fieldName + ') and `except ' + fieldName
+                + ':` are supported. Wrap it in a function that constructs it '
+                + '(`def make(n): return ' + fieldName + '(n)`) and pass that '
+                + 'instead');
             node := AllocNode(AN_CLASSREF);
             ASTIVal[node] := ci;
             ASTTk[node] := Ord(tyPointer);

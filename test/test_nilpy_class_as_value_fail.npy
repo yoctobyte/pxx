@@ -1,0 +1,33 @@
+# bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
+#
+# A class used as an ordinary VALUE — bound to a name, put in a list or dict,
+# passed as an argument — used to COMPILE CLEAN and then SEGFAULT:
+#
+#     for cls in [A]:
+#         x = cls(3)        # SIGSEGV
+#
+# The class travelled through the container as its untagged RTTI-blob address,
+# so boxing it into a variant made it an ordinary INTEGER (`print(cls)` showed a
+# bare number where CPython shows `<class '__main__.A'>`) and calling it jumped
+# to the blob. A segfault from ordinary valid Python is the worst outcome
+# available, so it is now REFUSED BY NAME until class references are real values.
+#
+# Measured before refusing, because a blanket refusal would have been wrong:
+# `isinstance(x, A)`, `except A:` and `A(...)` construction each have their own
+# intercept and never reach this site, so none of them pays for it. That is
+# asserted positively in test_nilpy_instance_named_like_its_class.npy and the
+# other class tests, which must keep compiling.
+#
+# This file pins the REFUSAL. When class references become first-class values
+# (which needs a distinct variant tag — the same thing
+# bug-nilpy-calling-a-non-callable-segfaults needs), this test must be RETIRED,
+# exactly as implementing starred unpacking retired its two refusal tests.
+# Making it merely PARSE without making it correct would resurrect a segfault.
+class A:
+    def __init__(self, v):
+        self.v = v
+
+
+for cls in [A]:
+    x = cls(3)
+    print(x.v)

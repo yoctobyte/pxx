@@ -2,7 +2,6 @@
 track: N
 prio: 60
 type: bug
-blocked-by: decide-sole-a-guard-for-unattended-sessions
 ---
 
 # A class used as a VALUE: SEGFAULT from a container, compile errors from a name
@@ -128,3 +127,36 @@ reference and a callable are indistinguishable by tag — see
 `bug-nilpy-calling-a-non-callable-segfaults` for the measurement and for the
 guard I built, found inert, and reverted. Both tickets therefore want the same
 thing: **a distinct callable/classref variant tag.**
+
+## 2026-08-09 — the SEGFAULT is gone: refused by name (sole-A confirmed)
+
+The ticket said a named refusal is a complete and worthwhile fix on its own, and
+that is what landed. `parser.inc`'s class-identifier-as-a-value site now errors
+in `PyExprMode`, naming the class and the workaround, instead of emitting an
+untagged RTTI-blob address that becomes an ordinary integer in a variant.
+
+**Measured before refusing, because a blanket refusal would have been wrong.**
+An `Error` probe at that exact site showed which shapes reach it in PyExprMode:
+
+| shape | reaches the site? |
+| --- | --- |
+| `isinstance(x, A)` | no — own intercept |
+| `except A:` | no — own intercept |
+| `A(...)` construction | no — own intercept |
+| `c = A` | **yes** |
+| `for c in [A]` | **yes** |
+
+So in NilPy this site is reached ONLY by the broken shapes, and refusing costs
+none of the working ones. That measurement is what made a two-line refusal safe;
+guessing at contexts would not have been.
+
+The three programs that segfaulted now stop at compile time with a diagnostic,
+and every class test in the suite still compiles and matches.
+
+**Still OPEN — this ticket stays open for the FEATURE.** Supporting a class
+reference for real needs a distinct variant tag, which is the same thing
+`bug-nilpy-calling-a-non-callable-segfaults` needs (a def's code address is
+likewise boxed as a plain integer, so a callable and a class reference are
+indistinguishable by tag). When that lands, retire
+`test/test_nilpy_class_as_value_fail.npy` — making the shape merely PARSE
+without making it correct would resurrect the segfault.
