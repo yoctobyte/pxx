@@ -26,3 +26,6 @@ diff: test/test_nilpy_relative_import.expected: No such file or directory
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-09 — auto-closed by the plexus watcher: `test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy` passes at 29d980110b58 (tier full); it was red at e3b8023ef736. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
