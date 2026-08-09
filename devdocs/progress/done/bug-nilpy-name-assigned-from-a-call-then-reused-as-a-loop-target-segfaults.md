@@ -155,4 +155,4 @@ Closed as a duplicate of the broader ticket rather than resolved on its own, so
 the narrowing above stays findable.
 
 ## Log
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 43bf98c4e.
