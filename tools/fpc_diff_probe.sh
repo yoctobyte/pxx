@@ -1998,12 +1998,15 @@ begin
   Lock.Free;
 end.
 P
-# [known] TWICE OVER: pxx's WaitFor is a procedure where FPC's returns
-# LongWord (compat-pascal-thread-api-surface-differs-from-fpc), and reading a
-# procedure's non-existent result silently yields garbage instead of erroring
-# (bug-p-procedure-method-in-an-expression-yields-garbage). The second is why
-# this case reports a VALUE divergence rather than a compile failure.
-probe thread-returnvalue-and-terminate known <<'P'
+# WAS [known] TWICE OVER and is now green: pxx's WaitFor was a procedure where
+# FPC's returns LongWord, and reading a procedure's non-existent result silently
+# yields garbage instead of erroring
+# (bug-p-procedure-method-in-an-expression-yields-garbage), which is why this
+# reported a VALUE divergence rather than a compile failure. WaitFor is now
+# `function WaitFor: LongWord` returning ReturnValue
+# (compat-pascal-thread-api-surface-differs-from-fpc), so the tag comes off —
+# a stale `known` lets a fixed case regress without failing the run.
+probe thread-returnvalue-and-terminate <<'P'
 {$threadsafe on}
 uses {$IFDEF FPC} cthreads, Classes, {$ELSE} palthreadobj, {$ENDIF} SysUtils;
 type
@@ -2033,6 +2036,14 @@ end.
 P
 # [known] BeginThread / TThreadID do not exist in the RTL
 # (compat-pascal-thread-api-surface-differs-from-fpc).
+# [known], but the REASON changed 2026-08-09: BeginThread / EndThread /
+# TThreadID / WaitForThreadTerminate / CloseThread now exist and match FPC
+# (compat-pascal-thread-api-surface-differs-from-fpc, verified on x86-64, i386,
+# arm32 and aarch64). What is left is the uses-clause wart — FPC has them in
+# `system`, pxx needs an explicit `uses palthreadobj`, exactly like
+# bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc. Adding palthreadobj
+# to the {$ELSE} arm below would make it pass and would hide that wart, so the
+# probe deliberately keeps FPC's own uses line.
 probe thread-beginthread known <<'P'
 {$threadsafe on}
 uses {$IFDEF FPC} cthreads, {$ENDIF} SysUtils;

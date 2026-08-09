@@ -126,14 +126,18 @@ type
   result needs a mutex, and palsync (M2) is built ON palthread (M1). Putting an
   FPC-surface layer here keeps M1 raw. }
 type
-  { FPC: PtrUInt, 8 bytes on 64-bit. Here it carries the kernel tid, the same
-    value TThread.ThreadID reports, so the two APIs agree about identity —
-    FPC's is a pthread_t, which is opaque, so nothing portable can tell. }
-  TThreadID = Int64;
+  { FPC's TThreadID is PtrUInt and its thread body returns PtrInt — pointer-wide,
+    so 4 bytes on i386/arm32 and 8 on x86-64/aarch64. Spelled the same way here
+    rather than pinned to Int64: a 32-bit caller that declares `var h: TThreadID`
+    from portable source must get the size FPC gives it, and a kernel tid fits in
+    32 bits regardless. The value is the kernel tid, the same one
+    TThread.ThreadID reports, so the two APIs agree about identity (FPC's is an
+    opaque pthread_t, so nothing portable can tell the difference). }
+  TThreadID = PtrUInt;
 
   { FPC's thread body shape: takes the opaque argument, returns the thread's
     result. `function(p: Pointer): PtrInt`. }
-  TThreadFunc = function(p: Pointer): Int64;
+  TThreadFunc = function(p: Pointer): PtrInt;
 
 { Spawn f(p) on a new thread. Returns its TThreadID, or 0 on failure. The
   thread's result is kept until CloseThread, so WaitForThreadTerminate can
@@ -142,7 +146,7 @@ function BeginThread(f: TThreadFunc; p: Pointer): TThreadID;
 
 { End the CALLING thread with the given result. Returning from the body does
   the same thing; this is the early-exit form. }
-procedure EndThread(exitCode: Int64);
+procedure EndThread(exitCode: PtrInt);
 
 { Block until the thread ends and return its result. FPC's timeoutMs is
   accepted and IGNORED — the underlying join is unbounded, and silently
@@ -150,7 +154,7 @@ procedure EndThread(exitCode: Int64);
   caller that passes a timeout gets a correct (late) result rather than a
   plausible wrong one. 0 means "no timeout" in FPC and is the only value with
   identical behaviour here. }
-function WaitForThreadTerminate(id: TThreadID; timeoutMs: Int64): Int64;
+function WaitForThreadTerminate(id: TThreadID; timeoutMs: Int64): PtrInt;
 
 { Release the bookkeeping for a finished thread. Safe to call once per
   BeginThread; after it, the id is no longer known. }
@@ -516,7 +520,7 @@ type
     Handle:   TThreadHandle;
     Body:     TThreadFunc;
     Arg:      Pointer;
-    Res:      Int64;
+    Res:      PtrInt;
     Tid:      Int64;
     NextSlot: PThreadSlot;
   end;
@@ -551,11 +555,11 @@ function FindSlot(id: TThreadID): PThreadSlot;
 var s: PThreadSlot;
 begin
   Result := nil;
-  if id <= 0 then Exit;
+  if id = 0 then Exit;              { TThreadID is UNSIGNED: 0 is the only refusal }
   s := SlotHead;
   while s <> nil do
   begin
-    if (s^.Handle.Tid = id) or (s^.Tid = id) then
+    if (TThreadID(s^.Handle.Tid) = id) or (TThreadID(s^.Tid) = id) then
     begin
       Result := s;
       Break;
@@ -598,23 +602,23 @@ begin
     Result := 0;
     Exit;
   end;
-  Result := s^.Handle.Tid;
+  Result := TThreadID(s^.Handle.Tid);
 end;
 
-procedure EndThread(exitCode: Int64);
+procedure EndThread(exitCode: PtrInt);
 var
   s: PThreadSlot;
   tid: Int64;
 begin
   tid := PalThreadSelf;
   MutexLock(SyncLock);
-  s := FindSlot(tid);
+  s := FindSlot(TThreadID(tid));
   if s <> nil then s^.Res := exitCode;
   MutexUnlock(SyncLock);
   PalThreadExit;
 end;
 
-function WaitForThreadTerminate(id: TThreadID; timeoutMs: Int64): Int64;
+function WaitForThreadTerminate(id: TThreadID; timeoutMs: Int64): PtrInt;
 var
   s: PThreadSlot;
 begin
@@ -623,7 +627,7 @@ begin
   s := FindSlot(id);
   MutexUnlock(SyncLock);
   if s = nil then Exit;                    { unknown or already closed }
-  if PalThreadSelf <> id then              { a self-join would deadlock }
+  if TThreadID(PalThreadSelf) <> id then   { a self-join would deadlock }
     PalThreadJoin(s^.Handle);
   Result := s^.Res;
 end;
@@ -635,10 +639,10 @@ begin
   MutexLock(SyncLock);
   s := SlotHead;
   prev := nil;
-  if id > 0 then
+  if id <> 0 then
     while s <> nil do
     begin
-      if (s^.Handle.Tid = id) or (s^.Tid = id) then Break;
+      if (TThreadID(s^.Handle.Tid) = id) or (TThreadID(s^.Tid) = id) then Break;
       prev := s;
       s := s^.NextSlot;
     end
@@ -653,7 +657,7 @@ begin
   { Join before releasing: the handle lives IN the slot, and the kernel clears
     its TidWord at thread exit, so freeing an unjoined slot hands the kernel a
     dangling write. PalThreadJoin is idempotent once joined. }
-  if PalThreadSelf <> id then PalThreadJoin(s^.Handle);
+  if TThreadID(PalThreadSelf) <> id then PalThreadJoin(s^.Handle);
   FreeMem(s);
 end;
 

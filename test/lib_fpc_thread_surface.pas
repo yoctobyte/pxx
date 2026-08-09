@@ -10,7 +10,11 @@
     r := t.WaitFor                       ->  77   (FPC: function WaitFor: LongWord)
     BeginThread + WaitForThreadTerminate ->  55
     EndThread(88) early exit             ->  rc=88, the line after it NOT reached
-    SizeOf(TThreadID)                    ->  8
+    SizeOf(TThreadID)                    ->  8 on x86-64
+
+  TThreadID is checked against POINTER size rather than a literal 8: FPC's is
+  PtrUInt, so on i386/arm32 its answer is 4 and a hardcoded 8 would be asserting
+  x86-64 rather than asserting FPC.
 
   `uses cthreads` is here for its own sake: on FPC it installs the C thread
   manager and portable sources open with it, so it has to exist and compile.
@@ -46,19 +50,19 @@ begin
 end;
 
 { FPC's low-level body shape: takes the opaque arg, returns the thread result. }
-function Body(p: Pointer): Int64;
+function Body(p: Pointer): PtrInt;
 begin
   Result := 55;
 end;
 
-function EarlyBody(p: Pointer): Int64;
+function EarlyBody(p: Pointer): PtrInt;
 begin
   EndThread(88);
   reached := 1;              { must NOT run — EndThread does not return }
   Result := 0;
 end;
 
-function ArgBody(p: Pointer): Int64;
+function ArgBody(p: Pointer): PtrInt;
 begin
   Result := PInteger(p)^ * 2;
 end;
@@ -67,7 +71,7 @@ var
   t:   TW;
   r:   LongWord;
   id:  TThreadID;
-  rc:  Int64;
+  rc:  PtrInt;
   arg: Integer;
 begin
   failures := 0;
@@ -84,7 +88,7 @@ begin
   t.Free;
 
   { --- BeginThread / WaitForThreadTerminate / CloseThread --- }
-  Check(SizeOf(TThreadID) = 8, 'SizeOf(TThreadID) = 8');
+  Check(SizeOf(TThreadID) = SizeOf(Pointer), 'TThreadID is pointer-wide, like FPC PtrUInt');
   id := BeginThread(@Body, nil);
   Check(id > 0, 'BeginThread returns a thread id');
   rc := WaitForThreadTerminate(id, 0);
