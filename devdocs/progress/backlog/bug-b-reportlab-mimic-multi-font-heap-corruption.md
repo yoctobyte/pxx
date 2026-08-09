@@ -51,6 +51,29 @@ $ pxx -dPXX_HEAP_DEBUG -Fulib/pcl repro.py && ./repro   # 10 runs
   `canvas.Canvas("out.pdf")` segfaulted deterministically in the constructor, so
   no multi-font document ever got far enough to hit this.
 
+## Narrowed further, same day — it needs BOTH ingredients
+
+| case | crashes |
+| --- | --- |
+| 4 `setFont` calls, NO `drawString` | **0 / 12** |
+| 1 font, 4 `drawString` calls | **0 / 12** |
+| 4 fonts, one `drawString` after each | **2 / 12** |
+
+So neither switching fonts nor drawing text is sufficient alone: the corruption
+needs text drawn AFTER a font switch, repeatedly. That points at the interaction
+between `pdf_set_font`'s new font object and the `pdf_add_text` that follows it,
+not at either operation on its own.
+
+**Both exonerations re-verified over many runs**, since a single clean run is
+worth nothing for an intermittent fault:
+
+- `lib/vendor/pdfgen` driven from C with the same 4 fonts + 4 texts:
+  **0 / 25 crashes pxx-compiled, 0 / 25 gcc-compiled**. The vendored writer and
+  the C frontend are both clear; the fault is in the Pascal layer.
+- `realloc` under pdfgen's exact growth pattern (double a buffer 8 times with
+  interleaved allocations, 200 rounds, contents verified): **0 mismatches** on
+  both gcc and pxx. Not the allocator's grow path.
+
 ## Where to look first
 
 Every `AnsiString` passed to the C backend now goes through `PChar()` (that was
