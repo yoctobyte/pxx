@@ -1,0 +1,51 @@
+# bug-nilpy-exception-str-and-repr-diverge-from-cpython — the repr() half
+#
+# `repr(ValueError("v"))` printed `<__main__.ValueError object at 0x...>` where
+# CPython prints `ValueError('v')`. That is what lands in a log line or a `%r`,
+# and an address there is useless — it is also not stable run to run, so nothing
+# could pin it.
+#
+# TWO things are deliberately NOT asserted here, and both are recorded rather
+# than guessed:
+#
+# 1. KEYERROR. It cannot be rendered correctly from a Message alone. CPython's
+#    KeyError is the one builtin whose str() is repr(arg), and PyKeyError stores
+#    the message ALREADY REPR'D so that str() matches — so quoting it again
+#    gives KeyError("'nope'"), and not quoting it gives KeyError(k) for a
+#    user-constructed KeyError("k"). Both are wrong in opposite cases and which
+#    one you hit depends on who raised it, so neither ships: KeyError keeps the
+#    address form until `e.args` exists. An address is obviously unhelpful; a
+#    wrongly quoted key would look authoritative.
+#
+# 2. `str()` of a CONSTRUCTED-but-never-raised exception — `str(ValueError("v"))`
+#    still gives the address form, while a CAUGHT one gives its message. Two
+#    different paths, a separate pre-existing gap, filed on the same ticket.
+#    Asserting today's answer would freeze it.
+#
+# The empty-message case is asserted as `ValueError()`, the zero-argument form.
+# `ValueError('')` is indistinguishable from `ValueError()` given a single
+# Message field, and the zero-argument spelling is far the commoner — that
+# approximation is stated on the ticket too.
+#
+# A USER-DEFINED subclass is covered because it takes the same path as the
+# builtins and is what application code raises.
+#
+# Expectations are CPython's own output.
+
+class MyErr(Exception):
+    pass
+
+for e in [ValueError("v"), TypeError("t"), MyErr("m"), Exception("x"), IndexError("i")]:
+    print(repr(e))
+print(repr(ValueError()))
+print(repr(MyErr()))
+print("%r" % ValueError("pct"))
+print([ValueError("in-list"), TypeError("t2")])
+try:
+    raise ValueError("boom")
+except ValueError as e:
+    print(repr(e), str(e))
+try:
+    raise MyErr("custom")
+except MyErr as e:
+    print(repr(e), str(e))

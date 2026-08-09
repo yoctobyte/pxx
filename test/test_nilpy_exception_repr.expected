@@ -1,0 +1,11 @@
+ValueError('v')
+TypeError('t')
+MyErr('m')
+Exception('x')
+IndexError('i')
+ValueError()
+MyErr()
+ValueError('pct')
+[ValueError('in-list'), TypeError('t2')]
+ValueError('boom') boom
+MyErr('custom') custom

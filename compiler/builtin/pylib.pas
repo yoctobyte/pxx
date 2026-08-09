@@ -11111,6 +11111,36 @@ begin
     callers below pass wantRepr = True. }
   if not wantRepr then mi := PyFindDunder(cls, '__str__');
   if mi = nil then mi := PyFindDunder(cls, '__repr__');
+  { An EXCEPTION with no __repr__ of its own: CPython prints `ValueError('v')`,
+    not an address. That is what appears in a log or a `%r`, and an address there
+    is useless. Only for repr() — str(e) is the message, which already works.
+
+    TWO documented approximations, because a pxx Exception carries a single
+    Message string rather than Python's `args` tuple:
+
+      - an EMPTY message renders as `ValueError()`, the zero-argument form.
+        `ValueError('')` is indistinguishable from `ValueError()` here and takes
+        the same rendering; the zero-argument spelling is much the commoner.
+    KEYERROR IS DELIBERATELY EXCLUDED and keeps the address form. It cannot be
+    rendered correctly from a Message alone: CPython's KeyError is the one
+    builtin whose str() is repr(arg), and PyKeyError stores the message ALREADY
+    REPR'D so that str() matches. Quoting that again gives
+    `KeyError("'nope'")`; not quoting it gives `KeyError(k)` for a
+    user-constructed `KeyError("k")`. Both are wrong, in opposite cases, and
+    which one you hit depends on who raised it — so neither is shipped. The real
+    fix is `e.args`, which is its own open item; guessing here would be worse
+    than the address, because an address is obviously unhelpful while a wrongly
+    quoted key looks authoritative.
+    bug-nilpy-exception-str-and-repr-diverge-from-cpython }
+  if (mi = nil) and wantRepr and (o is Exception) and (not (o is KeyError)) then
+  begin
+    if Exception(o).Message = '' then
+      outS := TObject(o).ClassName + '()'
+    else
+      outS := TObject(o).ClassName + '(' + pyrepr_of(Exception(o).Message) + ')';
+    PyUserObjStr := True;
+    Exit;
+  end;
   if mi = nil then
   begin
     { No dunder: CPython's DEFAULT object repr, `<__main__.Cls object at 0x..>`.
