@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 60
+prio: 25
 type: bug
 summary: "str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim"
 ---
@@ -40,6 +40,29 @@ substitutes U+FFFD where CPython reports invalid input.
 **It looks right on ASCII**, which is why it has survived — `"hi".encode(x)` is
 2 bytes for every x, and most test strings are ASCII. The first non-ASCII
 character is where it goes wrong, silently.
+
+## PRIORITY CALL (user, 2026-08-09): low — and here is why that is right
+
+Filed at 60 on pattern-match ("silent wrong bytes" = the worst class). Lowered
+to 25 on the user's steer: *divergence is not an issue as long as the result is
+correct; as long as applications work as expected, the internal encoding does
+not matter.*
+
+The distinction that makes that correct, and which the original write-up buried:
+
+- **Internally we are CONSISTENT.** A pxx program doing `s.encode('latin-1')`
+  and later `.decode('latin-1')` round-trips perfectly, because both sides
+  ignore the argument the same way. Self-contained programs are unaffected.
+- **The failure is at the BOUNDARY**, when bytes leave the program: written to a
+  file declared latin-1, put on a socket, handed to a C library. Another reader
+  sees mojibake (`hÃ©`).
+- **utf-8 is already correct**, and it is what essentially all modern code uses.
+  Being wrong needs a non-utf-8 encoding AND a non-ASCII character AND a
+  boundary crossing.
+
+So applications work as expected because they are on the correct path already.
+Re-raise if a real target actually hits it — the html5lib/webencodings stack is
+the obvious candidate, since encoding handling is what those libraries ARE.
 
 ## Why it matters beyond the shim
 

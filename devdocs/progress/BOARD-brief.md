@@ -43,7 +43,6 @@ _none — no lane is locked._
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
-- `[p 60] [N]` bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [N]` bug-nilpy-open-returns-two-different-classes-by-mode
@@ -71,5 +70,6 @@ _none — no lane is locked._
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
 _168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
