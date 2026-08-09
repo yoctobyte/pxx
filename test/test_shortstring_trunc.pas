@@ -2,13 +2,24 @@ program test_shortstring_trunc;
 { `string[N]` TRUNCATES an oversized source to N — assignment, concatenation,
   record/class field, deref field, managed source — and never writes past the
   slot (the neighbour stays intact).
-  bug-pascal-shortstring-no-truncation-buffer-overrun. }
+  bug-pascal-shortstring-no-truncation-buffer-overrun.
+
+  Every row below used the INLINE spelling (`a: string[4]`), which is why it
+  went on passing while the TYPE-ALIAS spelling (`TS4 = string[4]`) truncated at
+  DEFAULT_STR_CAP instead of N — the alias table dropped the capacity. The alias
+  rows at the end are that sibling
+  (bug-a-string-n-type-alias-loses-its-capacity). }
 type
   TR = record
     s: string[4];
     guard: Int64;
   end;
   PR = ^TR;
+  TS4 = string[4];              { the ALIAS spelling of the same type }
+  TRA = record
+    s: TS4;
+    guard: Int64;
+  end;
 var
   a: string[4];
   b: string[4];
@@ -16,6 +27,8 @@ var
   r: TR;
   p: PR;
   ms: AnsiString;
+  al: TS4;
+  ra: TRA;
 begin
   { local assignment truncates; neighbour intact }
   b := 'BBBB';
@@ -49,4 +62,15 @@ begin
   r.s := ms;
   writeln(r.s, ' ', Length(r.s));
   if r.guard = 12345 then writeln('mguard-ok') else writeln('mguard-CLOBBERED');
+
+  { the same two shapes declared through a TYPE ALIAS }
+  al := 'aaaaaaaaaaaaaaaa';
+  writeln(al, ' ', Length(al));
+  ra.guard := 999;
+  ra.s := 'bbbbbbbbbbbb';
+  writeln(ra.s, ' ', Length(ra.s));
+  if ra.guard = 999 then writeln('aguard-ok') else writeln('aguard-CLOBBERED');
+  al := 'ab';
+  al := al + 'cdef';
+  writeln(al, ' ', Length(al));
 end.

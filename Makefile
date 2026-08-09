@@ -4108,7 +4108,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_shortstring.pas /tmp/test_shortstring26
 	test "$$(/tmp/test_shortstring26)" = "$$(printf 'hello world\n11\nApple\nBanana\nCherry\narr0-ok\narr1-ok')"
 	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_shortstring_trunc26
-	test "$$(/tmp/test_shortstring_trunc26)" = "$$(printf 'aaaa 4\nb-ok\nabcdefgh 8\nabcdefgh 8\nxxxx 4\nguard-ok\nyyyy 4\npguard-ok\nzzzz 4\nmguard-ok')"
+	test "$$(/tmp/test_shortstring_trunc26)" = "$$(printf 'aaaa 4\nb-ok\nabcdefgh 8\nabcdefgh 8\nxxxx 4\nguard-ok\nyyyy 4\npguard-ok\nzzzz 4\nmguard-ok\naaaa 4\nbbbb 4\naguard-ok\nabcd 4')"
 	./$(COMPILER) test/test_not_ord_bitwise.pas /tmp/test_not_ord_bitwise26
 	test "$$(/tmp/test_not_ord_bitwise26)" = "$$(printf '%s\n' -2 -2 158 254 254 254 -2)"
 	./$(COMPILER) test/test_record_cast_field_offset.pas /tmp/test_record_cast_fo26

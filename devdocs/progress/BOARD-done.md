@@ -87,6 +87,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-set-and-shortstring-value-params-alias-the-caller | A | 55 | bug | A by-value `set` or `string[N]` parameter aliases the caller's variable | — |
 | bug-a-static-array-of-managed-whole-assign-loses-data | A | 80 | bug | b := a on a static array with managed elements copies NOTHING — every element comes out empty, silently; elementwise copy and the same array inside a record both work | — |
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
+| bug-a-string-n-type-alias-loses-its-capacity | A | 60 | bug | A `string[N]` TYPE ALIAS loses its capacity, so nothing truncates | — |
 | bug-a-threadsafe-plus-heap-debug-hangs-at-runtime | A | 40 | bug | A program built with BOTH --threadsafe and -dPXX_HEAP_DEBUG hangs at runtime; either flag alone is fine. The two debugging modes the runtime offers cannot be combined, which is exactly when you would want both | — |
 | bug-a-threadsafe-self-host-exceeds-max-globfix-by-121 | A | 75 | bug | The --threadsafe self-compile needs 65657 global fixups against a fixed cap of 65536 — over by 121. A GATED test-core job is red on master, and `make compiler/pascal26` is green, so the normal build masks it completely | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |

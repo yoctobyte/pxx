@@ -2821,6 +2821,7 @@ var
   AliasPtrBaseTk : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base TTypeKind ordinal }
   AliasPtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base record/class id }
   AliasProcSig : array[0..MAX_TYPEALIAS-1] of Integer;  { procedural-type alias: signature proc index (Procs[] entry, BodyAddr=-1); -1 = not a proc type }
+  AliasStrCap : array[0..MAX_TYPEALIAS-1] of Integer; { named frozen-string alias (T = string[N]): the capacity N, which the alias table used to DROP — so a variable of the alias truncated at DEFAULT_STR_CAP instead of N (bug-a-string-n-type-alias-loses-its-capacity). 0 = not one. }
   AliasIsSub : array[0..MAX_TYPEALIAS-1] of Boolean; { named SUBRANGE alias (T = lo..hi): bounds retained for {$R+}. BSS-false default keeps every other Register*Alias site honest without touching them (feature-pascal-range-checks-r-plus). }
   AliasSubLo : array[0..MAX_TYPEALIAS-1] of Int64;
   AliasSubHi : array[0..MAX_TYPEALIAS-1] of Int64;

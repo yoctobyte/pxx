@@ -22274,6 +22274,10 @@ begin
               begin
                 LastTypeRecId := AliasElemRec[aliasIdx];
                 LastTypeProcSig := AliasProcSig[aliasIdx];  { method-pointer record carries a call signature }
+                { …and a frozen-string alias hands back its capacity, so Alloc*
+                  stamps SymStrCap and the store clamps at N }
+                if AliasStrCap[aliasIdx] > 0 then
+                  LastTypeStrCap := AliasStrCap[aliasIdx];
                 if AliasIsSub[aliasIdx] then
                 begin
                   { named subrange: hand the retained bounds to Alloc* for

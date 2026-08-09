@@ -182,6 +182,10 @@ begin
   Inc(AliasCount);
 end;
 
+{ Defined further down this include; RegisterGeneralAlias below needs it to
+  recognise a frozen-string alias, and the FPC seed build wants the forward. }
+function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
+
 procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
@@ -196,6 +200,17 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;
+  { A frozen-string alias keeps its CAPACITY. ParseTypeKind has just run for the
+    right-hand side, so LastTypeStrCap holds the N of `T = string[N]`; without
+    carrying it here the alias resolved to the KIND alone and every variable and
+    record field declared through it truncated at DEFAULT_STR_CAP instead of N —
+    while the identical INLINE declaration truncated correctly, which is what
+    made it look like string[N] worked.
+    bug-a-string-n-type-alias-loses-its-capacity }
+  if TypeIsFrozenString(IntToTypeKind(tk)) then
+    AliasStrCap[AliasCount] := LastTypeStrCap
+  else
+    AliasStrCap[AliasCount] := 0;
   Inc(AliasCount);
 end;
 
