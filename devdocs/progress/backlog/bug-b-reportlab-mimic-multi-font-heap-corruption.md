@@ -81,3 +81,66 @@ SAME session — and never treat a zero as a fix. `setarch -R` to disable ASLR
 would make the rate stable enough to bisect against.
 
 Next tool per the playbook: `-dPXX_OBJTRACE` with `grep <addr>`.
+
+## 2026-08-09 (Track B): re-measured — it is NOT multi-font and NOT the heap
+
+Went back to this with the differential harness and measured instead of
+trusting the title. Both halves of that title are wrong.
+
+**Not multi-font.** Crash rate over 12 runs of each harness case:
+
+| case | fonts | rate |
+| --- | --- | --- |
+| `positions` | 1 | 7/12 ok |
+| `text_fonts` | 4 | 6/12 ok |
+| `many_fonts` | 5 | **9/12 ok** |
+
+Flat, and the *most* fonts is the *best*. Varying `drawString` count 1..8 with a
+single font is likewise flat (~18/20 at every count). Neither font count nor
+string count is the variable.
+
+**Not the heap — it is a stack overrun.** Caught under gdb (fault site is
+consistently `rip=0x5c458e`):
+
+```
+mov %cl,(%rax)        <- unguarded byte store, SIGSEGV
+rax = 0x00007ffffffff000   <- the stack GUARD PAGE
+rbp = 0x00007fffffffccb0
+```
+
+The store address is `rbp-0x3c + index`, and the 32-bit index at `rbp-0x6c` had
+run to **0x238c = 9100** (visible in the stack dump as `0x0000238c00000000`,
+with `0x238d` next to it). So something walks a byte-write loop up the stack
+from a small frame-local until it hits the guard page. The bytes going in are
+ASCII digits and `0x7c`. That is a stack overrun, not heap corruption — which
+also explains why `-dPXX_HEAP_DEBUG` only ever showed it as a rate, never as a
+poisoned heap block.
+
+**Minimal repro is three lines and has no text or fonts in it at all:**
+
+```python
+from reportlab.pdfgen import canvas
+c = canvas.Canvas("out.pdf")
+c.showPage()          # <- remove this line and it is 20/20 clean
+c.save()
+```
+
+`showPage()` is the trigger: `save()` alone is **20/20 ok**, `showPage()+save()`
+is **16/20**, and adding `setFont` (still no text) is **17/20** — i.e. the same
+rate, so `setFont` adds nothing. Every earlier variable was noise on top of this.
+
+**Ruled out along the way** (each measured, not argued):
+
+- crtl `strncpy` — correctly bounded, so `force_locale`'s `strncpy(buf, .., 31)`
+  in the vendored `pdfgen.c` cannot overrun;
+- crtl float formatting — `snprintf("%f %g %.10f")` over the exact A4 constants
+  and 1e-300 is **20/20 clean** and digit-correct;
+- `__crtl_vformat` — every buffer write is guarded by `if (o + 1 < cap)`.
+
+**A `-g` build does not crash** (0 in 60 runs) — the layout shift hides it. That
+is what blocks naming the exact routine, since pxx emits no symbol table so the
+frame is `?? ()`. Next step is to symbolize without perturbing layout: a map
+file, or `PXXDBG=a.ir` on the `showPage` path in `mimic_reportlab_pdfgen.pas`.
+
+**Retitle when picked up** — the slug still says `multi-font-heap-corruption`
+and both halves are now disproven. Left in place only so existing links resolve.

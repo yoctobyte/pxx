@@ -121,3 +121,18 @@ when the crash is fixed; until then it is a probe you run
 exactly. `text_fonts` and `many_fonts` cannot complete until the heap bug is
 fixed.
 
+## 2026-08-09 (Track B): harness re-run — and it re-diagnosed the blocker
+
+Re-ran all three cases. `text_fonts` matches reportlab at **worst delta 0.000029
+pt** (pdftotext's own print precision), confirming the fidelity work holds. The
+other two are gated purely by the crash, not by any measured divergence.
+
+The re-run also corrected the crash's diagnosis — see
+[[bug-b-reportlab-mimic-multi-font-heap-corruption]]. It is a **stack** overrun
+triggered by `showPage()`, reproducible in three lines with no fonts or text,
+and is neither multi-font nor heap-related as previously recorded. Which case
+"passes" on any given run is just the crash rate, so the earlier per-case notes
+(`positions` matches / `text_fonts` cannot complete) were sampling noise and
+should not be read as fidelity results.
+
+Still deliberately NOT wired into `make lib-test` while the crash is live.
