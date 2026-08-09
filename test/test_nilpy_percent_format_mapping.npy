@@ -1,0 +1,66 @@
+# feature-nilpy-percent-format-with-a-mapping
+#
+# `"%(k)s" % {...}` raised `unsupported format character "("` — the `%(` reached
+# the conversion switch as the character `(`. Positional %-formatting was
+# already complete (a CPython sweep matched %s/%d/%.2f, %x/%o, %e/%g, sign
+# flags, thousands separators and `*` width), so the mapping form was the one
+# remaining spelling — and it is the one logging and templating code uses,
+# because the format string can be reordered without touching the arguments.
+#
+# The key is parsed BEFORE the flags (`%(name)-10s`), and a mapping placeholder
+# consumes NO positional argument — so the positional counter must not advance.
+# That is what the repeated-key case pins: `"%(k)s %(k)s"` reads one key twice,
+# which a counter-advancing implementation would get wrong on the second.
+#
+# A missing key raises KeyError NAMING the key, as CPython does. That works
+# because the dict fetch already raises a proper KeyError since
+# bug-nilpy-exception-str-and-repr-diverge-from-cpython — so this case also
+# guards that fix from the other direction.
+#
+# Controls: every flag/width/precision combination through a mapping key (the
+# spec grammar is shared with the positional path and must be reached
+# identically), a literal `%%` beside a mapping key, and the positional forms
+# themselves, which must not regress.
+#
+# Expectations are CPython's own output.
+
+d = {"k": "v", "n": 42, "f": 3.14159, "s": "text"}
+
+# the basic form
+print("%(k)s" % d)
+print("%(n)d %(k)s" % d)
+
+# a key used TWICE — no positional counter may advance
+print("%(k)s %(k)s" % d)
+print("%(n)d %(k)s %(n)d" % d)
+
+# keys out of declaration order
+print("%(f).3f %(n)d %(k)s" % d)
+
+# flags, width and precision through a mapping key
+print("%(n)5d|" % d)
+print("%(k)-5s|" % d)
+print("%(n)05d" % d)
+print("%(n)+d" % d)
+print("%(f).2f" % d)
+print("%(n)x %(n)o" % d)
+print("%(s)10s|" % d)
+
+# a literal %% beside a mapping key
+print("100%% %(k)s" % d)
+
+# a missing key raises KeyError naming the key
+try:
+    print("%(missing)s" % d)
+except KeyError as e:
+    print("KeyError:", e)
+
+# --- controls: the positional forms must not regress ---
+print("%s and %d" % ("a", 1))
+print("%s" % "plain")
+print("%.2f" % 1.5)
+print("%-6s|%6s|" % ("l", "r"))
+print("%+d %05d" % (7, 7))
+print("%x %o %e" % (255, 8, 1234.5))
+print("%s" % [1, 2])
+print("%d%%" % 50)

@@ -8858,9 +8858,11 @@ end;
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
 var i, width, prec, argi, nargs: Integer;
     zero, leftAlign, hasPrec, alt: Boolean;
-    outS, spec: AnsiString;
+    outS, spec, mapKey: AnsiString;
     conv, signCh: Char;
     lst: TPyList;
+    dct: TPyDict;
+    hasMapKey: Boolean;
     cur: Variant;
 begin
   { TUPLE OR SINGLE VALUE — Python's rule: a tuple is a sequence of arguments, a
@@ -8873,6 +8875,15 @@ begin
     if TObject(pyvarobj(args)) is TPyList then
       if TPyList(pyvarobj(args)).FKind = PYSEQ_TUPLE then lst := TPyList(pyvarobj(args));
   if lst <> nil then nargs := lst.count else nargs := 1;
+  { MAPPING form — `"%(k)s" % {...}`. The right-hand side is a dict and each
+    placeholder names its key instead of consuming the next positional
+    argument, which is why logging and templating code uses it: the format
+    string can be reordered without touching the arguments.
+    Previously `%(` reached the conversion switch as the character `(` and
+    raised `unsupported format character "("`. }
+  dct := nil;
+  if PPyVarRec(@args)^.VType = 7 then
+    if TObject(pyvarobj(args)) is TPyDict then dct := TPyDict(pyvarobj(args));
   outS := '';
   argi := 0;
   i := 1;
@@ -8890,6 +8901,21 @@ begin
       outS := outS + '%';
       Inc(i);
       Continue;
+    end;
+    { the KEY comes first, before the flags — `%(name)-10s` }
+    hasMapKey := False;
+    mapKey := '';
+    if (i <= Length(fmt)) and (fmt[i] = '(') then
+    begin
+      if dct = nil then
+        raise TypeError.Create('format requires a mapping');
+      Inc(i);
+      while (i <= Length(fmt)) and (fmt[i] <> ')') do
+      begin mapKey := mapKey + fmt[i]; Inc(i); end;
+      if i > Length(fmt) then
+        raise ValueError.Create('incomplete format key');
+      Inc(i);                      { past the ')' }
+      hasMapKey := True;
     end;
     leftAlign := False;
     zero := False;
@@ -8985,7 +9011,15 @@ begin
     conv := fmt[i];
     Inc(i);
     { the argument this placeholder consumes }
-    if lst <> nil then
+    if hasMapKey then
+    begin
+      { fetch RAISES KeyError naming the key, which is what CPython does for a
+        missing mapping key — and it now names it properly (see
+        bug-nilpy-exception-str-and-repr-diverge-from-cpython). A mapping
+        placeholder consumes no positional argument, so argi is left alone. }
+      cur := dct.fetch(mapKey);
+    end
+    else if lst <> nil then
     begin
       if argi >= nargs then
         raise TypeError.Create('not enough arguments for format string');
@@ -8997,7 +9031,7 @@ begin
         raise TypeError.Create('not enough arguments for format string');
       cur := args;
     end;
-    Inc(argi);
+    if not hasMapKey then Inc(argi);
     { translate into the {}-spec grammar and reuse its formatter }
     spec := '';
     if leftAlign then spec := '<';
