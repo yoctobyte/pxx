@@ -7980,6 +7980,10 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_math_correctly_rounded | tail -n 1)" = "MATHROUND OK"
 	# Canary for a change in ANOTHER lane: a Pascal RTL name that collides with
 	# a libc one silently hijacks it in every C program (pxxcio does `uses math`).
+	# nan(tag): positive quiet NaN carrying the tag as its payload, base 0 —
+	# "077" is octal and "0x10" is hex, the rows a decimal-only parser misses.
+	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_nan_payload.c /tmp/cmath_nan_payload
+	test "$$(/tmp/cmath_nan_payload)" = "$$(printf 'empty      7FF8000000000000\n1          7FF8000000000001\n12345      7FF8000000003039\n0x10       7FF8000000000010\nabc        7FF8000000000000\n077        7FF800000000003F\nbig        7FF8000000000001')"
 	$(PXX_STABLE) test/cmath_no_pascal_hijack.c /tmp/cmath_no_pascal_hijack
 	test "$$(/tmp/cmath_no_pascal_hijack)" = "$$(printf 'pow=1024 1.41421\nlog=1.386294361 log10=3.000000000 log2=3.000000000\nexp=2.718281828\natan2=0.785398163 0.463647609 1.107148718\ncopysign=-3 3\nisnan=1 0\nisinf=1 0\nnan=1 1\nhypot=5.000000000 fmod=1\nsqrt=1.414213562 ceil=-2 floor=-3')"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.

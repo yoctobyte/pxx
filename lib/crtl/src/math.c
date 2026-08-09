@@ -936,7 +936,24 @@ int signbit(double x) {
   return (int)(*(unsigned long long *)&x >> 63);
 }
 
-double nan(const char *tag) { (void)tag; return 0.0 / 0.0; }
+/* nan(tag): a POSITIVE quiet NaN carrying tag's value as its payload.
+ *
+ * Was `(void)tag; return 0.0 / 0.0;` — wrong twice, and the header three files
+ * over already documents half of it: on x86 `0.0 / 0.0` sets the SIGN BIT, so
+ * printf rendered this as "-nan" where every other libc prints "nan". That is
+ * exactly why the NAN macro in <math.h> spells its bits out explicitly; the
+ * FUNCTION kept the mistake the macro's comment describes.
+ *
+ * The other half is the payload. glibc parses tag as an integer with base 0 —
+ * so "12345" is decimal, "0x10" is hex, "077" is OCTAL (63), and an unparseable
+ * tag is 0 — then keeps its low 51 bits, below the quiet bit. Verified against
+ * gcc on all six shapes plus a payload past 2^51, which wraps. */
+double nan(const char *tag) {
+  unsigned long long bits = 0x7ff8000000000000ULL;
+  if (tag && tag[0])
+    bits |= strtoull(tag, (char **)0, 0) & 0x0007ffffffffffffULL;
+  return crtl_bits2d(bits);
+}
 
 /* NaN is the only value unequal to itself (float compares are IEEE-unordered
    since b232). Body here keeps callers libc-free — the bare extern otherwise

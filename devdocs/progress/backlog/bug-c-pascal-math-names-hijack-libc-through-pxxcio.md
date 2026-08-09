@@ -73,11 +73,38 @@ Track B's workaround for now is to simply not add those names, which costs
 ([[bug-n-math-trunc-and-log-need-frontend-intercepts]] carries them as
 frontend intercepts instead) — a real feature loss to dodge a resolution bug.
 
+## The diagnostic already exists — it just does not fire on the dangerous case
+
+Found while fixing crtl's `nan()` (2026-08-09). Adding a PARAMLESS Pascal `NaN`
+next to C's one-argument `nan(const char *)` produces:
+
+```
+warning: C declaration of 'nan' does not match the Pascal routine 'NaN' which
+takes 0 parameter(s), not 1 — binding to the C declaration, not the Pascal
+routine
+```
+
+So the compiler already notices the collision, already knows which side the C
+caller meant, and already does the right thing — **when the arities differ.**
+
+Every silent case in this ticket is a SAME-ARITY collision: `Pow(x,y)` against
+`pow(double,double)`, `Log(x)` against `log(double)`, `CopySign(x,y)` against
+`copysign(double,double)`, `Atan2(y,x)` against `atan2(double,double)`. Same
+count, so no warning, and the Pascal routine silently wins.
+
+That narrows the fix considerably: the machinery to detect and correctly resolve
+these is present, and the rule it applies on arity mismatch ("bind to the C
+declaration, not the Pascal routine") is exactly the rule that should apply
+unconditionally for a name declared in a crtl header. Direction 1 below is
+therefore mostly a matter of dropping the arity precondition — not new analysis.
+
 ## Directions
 
 1. **C resolution should prefer crtl over Pascal units** for any name declared
    in a crtl header — the C program asked for `<math.h>`'s `pow`, so `<math.h>`'s
-   `pow` should win, and a Pascal unit should never be consulted for it.
+   `pow` should win, and a Pascal unit should never be consulted for it. This is
+   already what happens on an arity mismatch (see above); the precondition is
+   the bug.
 2. **Or `pxxcio` should not export its dependencies' namespaces into C** — it
    needs `math` for its own bodies, not on behalf of its callers.
 3. Failing either, an explicit deny-list is a bad third option: it needs
