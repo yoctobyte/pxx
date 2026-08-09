@@ -634,6 +634,27 @@ def gone_keys(st, now, tier):
             if k not in now and jt.get(k, tier) in cov}
 
 
+def orphan_keys(st, now, tier):
+    """Job-map keys that no longer EXIST, judged the way gone_keys judges.
+
+    Same predicate as gone_keys — "a run whose tier covers this job's tier did
+    not produce it, so it is gone" — but over the whole persisted job map
+    rather than only the keys an open regression happens to name.
+
+    The map is never pruned, on purpose: a full run contains no `opt` jobs, so
+    dropping absent keys would evict verdicts a later opt run still owns. The
+    cost is that a renamed job leaves its last status behind forever. Harmless
+    for reporting, NOT harmless for auto-pin: `selfhost-fixedpoint#src:compiler/
+    compiler.pas` sat `fail` in plexus.json long after the job's src became
+    `tools/selfhost_fixedpoint.sh` and started passing under the new key, and a
+    red that no run can ever clear would have blocked every future pin.
+    """
+    cov = covered_tiers(tier)
+    jt = st.get("job_tier", {})
+    return {k for k in (st.get("jobs") or {})
+            if k not in now and jt.get(k, tier) in cov}
+
+
 def reg_open(r, fixed, authoritative, gone=frozenset()):
     """Is this ledger entry still an open regression after the latest run?
 
@@ -978,7 +999,7 @@ def load_pin_allowlist(clone):
     return out, bad
 
 
-def pin_shadow(clone, host, st, sha, report, authoritative):
+def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
     """Would this sha have qualified for an automatic pin? LOG ONLY.
 
     Deliberately never touches `pinned`, `make pin`, or `stable_linux_amd64/**`
@@ -990,12 +1011,31 @@ def pin_shadow(clone, host, st, sha, report, authoritative):
     for ln in bad:
         print("twatch: pin-allowlist entry ignored (no ticket named): %s" % ln,
               flush=True)
-    reds = sorted(j for j, s in authoritative.items() if s not in PASSLIKE)
+    # Orphans do not count. A key the map still carries but no run can produce
+    # any more is unclearable by construction, so letting one block a pin means
+    # never pinning again — see orphan_keys.
+    orphans = orphan_keys(st, now, report.get("tier")) if now is not None else set()
+    reds = sorted(j for j, s in authoritative.items()
+                  if s not in PASSLIKE and j not in orphans)
+    if orphans:
+        stale_red = sorted(j for j in orphans
+                           if authoritative.get(j) not in PASSLIKE)
+        if stale_red:
+            print("twatch: [pin shadow] ignoring %d stale red key(s) no run can "
+                  "produce any more: %s" % (len(stale_red), ", ".join(stale_red[:3])),
+                  flush=True)
     unexpected = [j for j in reds if j not in allow]
     # The one property that can never be waived: a compiler that cannot
     # reproduce itself must not become anyone's ground, allowlist or not.
-    selfhost_ok = all(s in PASSLIKE for j, s in authoritative.items()
-                      if j.startswith(SELFHOST_SEL_PREFIX))
+    # Orphans are excluded here too — the stale
+    # `selfhost-fixedpoint#src:compiler/compiler.pas` key would otherwise fail
+    # this check forever while the live key passes under its new src. But
+    # `all()` over an empty set is True, and "no self-host evidence" must never
+    # read as "self-host is clean": require at least one LIVE selfhost job, and
+    # require it to pass.
+    live_sh = {j: s for j, s in authoritative.items()
+               if j.startswith(SELFHOST_SEL_PREFIX) and j not in orphans}
+    selfhost_ok = bool(live_sh) and all(s in PASSLIKE for s in live_sh.values())
     qualifies = not unexpected and selfhost_ok
     prev = st.get("pin_shadow") or {}
     streak = (int(prev.get("streak") or 0) + 1) if qualifies else 0
@@ -1266,7 +1306,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                        "verdict": report["verdict"], "tier": report["tier"],
                        "new_red": new_red, "fixed": fixed}])[-HISTORY_CAP:]
     # Shadow only — records the pin it WOULD have made, moves nothing.
-    pin_shadow(clone, host, st, sha, report, authoritative)
+    pin_shadow(clone, host, st, sha, report, authoritative, now)
     save_state(clone, host, st)
     # uncapped run archive (host.json history is capped): one ndjson line per
     # run — the web UI's history/regression-frequency source

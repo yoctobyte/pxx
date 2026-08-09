@@ -87,6 +87,29 @@ def main():
         check("pin_shadow" not in st_n,
               "a narrower tier is not evaluated at all", "only %s qualifies" % tw.PIN_TIER)
 
+        print("\nan orphaned key must not block a pin forever")
+        OLD = "selfhost-fixedpoint#src:compiler/compiler.pas"
+        NEW = "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh"
+        OPT = "optdiff#shard1/8"
+        # The real plexus shape: the job's `src` changed, so the old key sits at
+        # `fail` in a map that is never pruned while the live key passes. A red
+        # no run can produce again would block every future pin.
+        st_o = {"jobs": {OLD: "fail", NEW: "pass", OPT: "pass"},
+                "job_tier": {OLD: "full", NEW: "full", OPT: "opt"}}
+        check(tw.orphan_keys(st_o, {NEW: "pass"}, "full") == {OLD},
+              "the dead key is an orphan, the opt job is not",
+              "a full run never contains opt jobs")
+        tw.pin_shadow(clone, "devtest", st_o, "c" * 40, {"tier": "full"},
+                      {OLD: "fail", NEW: "pass", OPT: "pass"}, {NEW: "pass"})
+        check(st_o["pin_shadow"]["qualifies"],
+              "an orphaned red does not block", "it is unclearable by construction")
+        st_n = {"jobs": {OLD: "pass"}, "job_tier": {OLD: "full"}}
+        tw.pin_shadow(clone, "devtest", st_n, "d" * 40, {"tier": "full"},
+                      {OLD: "pass"}, {})
+        check(not st_n["pin_shadow"]["qualifies"],
+              "NO live self-host evidence refuses",
+              "all() over an empty set is True — that must not read as clean")
+
         print("\nshadow mode moves nothing")
         touched = [p for p in ("stable_linux_amd64", "compiler")
                    if os.path.exists(os.path.join(root, p))]
