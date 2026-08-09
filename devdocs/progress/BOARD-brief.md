@@ -5,16 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:3 working:1 unfinished:11 blocked:7 backlog:224 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1585 rejected:31`
+`urgent:2 working:1 unfinished:11 blocked:7 backlog:224 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1586 rejected:31`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-real-dynlib-loader` [B] — owner: claude-B
 
-## urgent (3) — jump the queue
+## urgent (2) — jump the queue
 
 - `bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory` [P]
-- `regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c` [B]
 - `task-t-pin-fast-track-t-owns-verification` [T]
 
 ## unfinished (11) — parked mid-flight; re-claim, do not duplicate
@@ -41,11 +40,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-lib-tkinter-callable-options-with-args` [B]
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 207, ranked
+## Ready — top 30 of 206, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 70] [P]` bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
-- `[p 70] [B]` regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c
 - `[p 70] [T]` regression-test-core-csystem-libs-granular-libc-b113
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
@@ -73,5 +71,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
-_177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

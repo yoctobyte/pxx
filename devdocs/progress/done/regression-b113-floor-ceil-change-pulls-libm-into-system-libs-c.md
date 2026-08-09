@@ -65,3 +65,45 @@ already exists in that commit — the C `floor`/`ceil` want the float-returning
 one), or make the mismatch rule prefer the Pascal routine when a float-returning
 sibling exists. The first is smaller and keeps the "binding to the C
 declaration" rule honest.
+
+## FIXED 2026-08-09 (Track B — my regression, my fix)
+
+Root cause confirmed, and it is narrower than the ticket guessed. **`sqrt` is not
+involved:** the only dynamic symbols in the failing binary were `floor` and
+`ceil`.
+
+```
+$ strings -a b113 | grep -xE "floor|ceil|sqrt"
+ceil
+floor
+```
+
+`lib/crtl` **declared** `floor`/`ceil` with no definition and let them bind to
+the Pascal `Math.Floor`/`Ceil`. That worked only while those returned `Double`.
+Making them FPC-faithful broke the signature match, the frontend fell back to
+the C declaration exactly as documented, and that is a real libm import.
+
+Fixed by the ticket's preferred direction — giving the C shim real bodies —
+which is also the honest split: C's `floor`/`ceil` return `double` over the whole
+double range, FPC's return `Integer` with a 64-bit pair alongside. Two languages,
+two contracts, each now implemented where it belongs instead of one borrowing
+the other's.
+
+`(long long)` round-trips are guarded past 2^52, where they are undefined and
+every double is already integral.
+
+**Signed zero was the trap.** A first cut returned `0` for `ceil(-0.5)` where C
+requires `-0.0`; `floor(-0.0)` is the same question. `trunc()`'s `(long long)`
+round trip loses the sign bit, and `x < 0.0` cannot see it because `-0.0` is not
+less than zero — so both now consult the sign BIT. Caught by diffing against gcc,
+not by reasoning.
+
+Verified: `libc.so.6` present and `libm.so.6` ABSENT on the exact test input;
+`floor`/`ceil` byte-identical to gcc across ±2.7, ±2.0, ±0.5, ±0.0, ±1e300 and
+NaN; all ten crtl math tests still pass; `tools/gate.sh lib` GREEN.
+
+**Lesson worth keeping:** I anticipated this collision class and wrote
+`test/cmath_no_pascal_hijack.c` for it — and that canary PASSED throughout,
+because it asserts VALUES and the values stayed right. The regression was in
+LINKAGE. A canary for "does the wrong thing get bound" has to check what got
+bound, not only what it returned.

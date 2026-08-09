@@ -1449,6 +1449,7 @@ should not read it to find out what to do. Grep it freely._
 | meta-track-w-collision-windows-vs-website | A | 45 | meta | Track letter W is claimed by TWO lanes — Windows and Website | — |
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
+| regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c | B | 70 | regression | NEW-RED: `--system-libs=c` now links libm — the Floor/Ceil result-type change | — |
 | regression-cascade-25678cbdd57c | T | 90 | regression | regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch) | — |
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |

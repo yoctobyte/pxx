@@ -46,12 +46,15 @@ typedef struct { double hi, lo; } crtl_dd;
 double fabs(double x);
 double rint(double x);
 double ldexp(double x, int e);
-double floor(double x);
 int isinf(double x);
 double fmod(double x, double y);   /* binds to the Pascal routine */
 double sqrt(double x);             /* binds to the Pascal routine */
 
 static double crtl_bits2d(unsigned long long b) { return *(double *)&b; }
+
+/* sign BIT, which is not the same question as x < 0.0: -0.0 is not less than
+   zero yet must round to -0.0. */
+static int crtl_signbit_d(double x) { return (int)(*(unsigned long long *)&x >> 63); }
 
 /* |a| >= |b| assumed */
 static crtl_dd crtl_fast2sum(double a, double b) {
@@ -806,6 +809,40 @@ double fabs(double x) { return x < 0.0 ? -x : x; }
    other loop-form helpers here. */
 double trunc(double x) {
   return (double)(long long)x;
+}
+/* floor/ceil have real bodies here now. They used to be DECLARED with no
+   definition, binding instead to the Pascal Math.Floor/Ceil, which worked only
+   while those returned Double. Making them FPC-faithful (Integer, with
+   Floor64/Ceil64 alongside) broke the signature match, the frontend fell back to
+   the C declaration as it is documented to, and that is a real libm import — so
+   `--system-libs=c` started pulling libm.so.6 and
+   test/csystem_libs_granular_libc_b113.c went red
+   (regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c).
+
+   Defining them in crtl is the honest fix: C's floor/ceil return double for the
+   whole double range, which is a different contract from FPC's Integer-returning
+   pair, and each language should get its own. The |x| >= 2^52 guard matters
+   because the (long long) cast in trunc() is undefined past that, and every
+   double that large is already integral. */
+double floor(double x) {
+  double t;
+  if (x != x || x > 9007199254740992.0 || x < -9007199254740992.0) return x;
+  t = trunc(x);
+  if (x < 0.0 && t != x) t -= 1.0;
+  /* Sign of zero is OBSERVABLE and C preserves it: ceil(-0.5) is -0.0, not 0.0,
+     and floor(-0.0) is -0.0. trunc()'s (long long) round trip loses it, so put
+     it back. gcc printed "-0" where a first cut printed "0" — caught by the
+     differential, not by reasoning. */
+  if (t == 0.0 && (x < 0.0 || crtl_signbit_d(x))) t = -0.0;
+  return t;
+}
+double ceil(double x) {
+  double t;
+  if (x != x || x > 9007199254740992.0 || x < -9007199254740992.0) return x;
+  t = trunc(x);
+  if (x > 0.0 && t != x) t += 1.0;
+  if (t == 0.0 && (x < 0.0 || crtl_signbit_d(x))) t = -0.0;
+  return t;
 }
 double round(double x) {
   if (x >= 0.0) return (double)(long long)(x + 0.5);
