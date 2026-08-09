@@ -64,4 +64,4 @@ project is visible, squatters watch for exactly this gap.
 - 2026-07-12 — opened. Domain is `pxxc.org`, registered but not live. Blocker restated: not the
   name, but the site. Variant registration split out as a do-now item — it does not depend on the
   site and it decays with time.
-- 2026-08-09 — resolved, commit PENDING-COMMIT.
+- 2026-08-09 — resolved, commit 995720011.
