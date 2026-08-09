@@ -1520,6 +1520,8 @@ def range_note(reg):
 
 
 SRC_RE = re.compile(r"^- \*\*Test source:\*\* (.+)$", re.M)
+# the stub's repro line names the job selector it was filed for
+JOB_RE = re.compile(r"--job '([^']+)'")
 
 
 def stub_sources(pdir):
@@ -1556,7 +1558,9 @@ def stub_sources(pdir):
                 continue                         # somebody's analysis, not a stub
             m = SRC_RE.search(body)
             if m:
-                out.setdefault(m.group(1).strip(), fn[:-3])
+                jm = JOB_RE.search(body)
+                tgt = jm.group(1).split("#")[0] if jm else ""
+                out.setdefault(m.group(1).strip(), (fn[:-3], tgt))
     return out
 
 
@@ -1681,8 +1685,15 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # two things to close. Key the filing on the source; closing still
         # keys on the job, which is what close_stub_tickets already does.
         src = (j.get("src") or "").strip()
-        owner = by_src.get(src) if src else None
-        if owner and owner != slug:
+        owner, owner_tgt = (by_src.get(src) or (None, None)) if src else (None, None)
+        # Dedupe ACROSS TARGETS only. The case this exists for is one TEST FILE
+        # reached by two different targets (test/x.npy under both test-core and
+        # test-nilpy) — one bug, one ticket. SHARDS of a single target are not
+        # that: `optdiff#shard1/12` and `optdiff#shard4/6` merely share
+        # `tools/optdiff.sh` as their `src`, because that is the DRIVER, not the
+        # program under test. Suppressing on it silently swallowed two real -O3
+        # miscompiles on 2026-08-09 (cmath_sign_bits rc 42 vs 1).
+        if owner and owner != slug and owner_tgt and owner_tgt != job.split("#")[0]:
             print("twatch: %s is red too, but %s already covers %s — not "
                   "filing a second stub for one source" % (job, owner, src),
                   flush=True)
@@ -1749,7 +1760,7 @@ takes it from the repro line.*
         filed.append(rel)
         if src:
             # so a sibling job on the same source, later in THIS batch, sees it
-            by_src[src] = slug
+            by_src[src] = (slug, job.split("#")[0])
     if filed:
         clone.publish("tstate-ticket(%s): %s" %
                       (host, ", ".join(os.path.basename(p) for p in filed)),

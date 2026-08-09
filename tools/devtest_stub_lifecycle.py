@@ -121,12 +121,42 @@ def main():
         check(stubs_in(pdir, "done") == [],
               "and nothing moved to done/")
 
+        print("3b. SHARDS of one target are not one bug — each files its own")
+        # optdiff shards all carry `tools/optdiff.sh` as their src, because that
+        # is the DRIVER, not the program under test. Deduping on it swallowed
+        # two real -O3 miscompiles on 2026-08-09.
+        SH_SRC = "tools/optdiff.sh"
+        st_s = {"host": "devtest", "last": None, "jobs": {},
+                "open_regressions": [
+                    {"job": "optdiff#shard1/12", "src": SH_SRC, "bad": SHA_RED,
+                     "good": "0" * 40, "range": [SHA_RED], "opened": tw.utcnow()},
+                    {"job": "optdiff#shard2/12", "src": SH_SRC, "bad": SHA_RED,
+                     "good": "0" * 40, "range": [SHA_RED], "opened": tw.utcnow()}],
+                "history": [], "job_tier": {}}
+        rep_s = {"tier": "opt", "wall": 9.0, "verdict": "RED",
+                 "compiler_sha256": "abc",
+                 "jobs": [{"name": "optdiff#01", "sel": "optdiff#shard1/12",
+                           "src": SH_SRC, "cls": "opt", "status": "fail",
+                           "advisory": False, "log": None},
+                          {"name": "optdiff#02", "sel": "optdiff#shard2/12",
+                           "src": SH_SRC, "cls": "opt", "status": "fail",
+                           "advisory": False, "log": None}]}
+        before_n = len(stubs_in(pdir, "backlog"))
+        tw.file_stub_tickets(clone, "devtest", st_s, SHA_RED,
+                             ["optdiff#shard1/12", "optdiff#shard2/12"], rep_s)
+        got = len(stubs_in(pdir, "backlog")) - before_n
+        check(got == 2, "two shards -> TWO stubs, not one (got %d) — same src, "
+                        "same target means independent findings" % got)
+
         print("4. everything green -> the stub closes with its evidence")
         rep_green = report({owner_job: "pass", other_job: "pass"})
         tw.close_stub_tickets(clone, "devtest",
                               [{"job": owner_job, "src": SRC, "bad": SHA_RED}],
                               SHA_FIX, rep_green)
-        check(stubs_in(pdir, "backlog") == [], "stub left backlog/")
+        # the two optdiff shard stubs from 3b are still open and SHOULD be —
+        # only the healed one moves
+        check(before[0] not in stubs_in(pdir, "backlog"),
+              "the healed stub left backlog/")
         done = stubs_in(pdir, "done")
         check(done == before, "stub landed in done/ (%s)" % (done or "none"))
         if done:
