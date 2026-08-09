@@ -29,7 +29,38 @@ begin name := 'PXX_TS_HARDLOCK'; PasDefine(name); end;
 
 so this is one more unconditional-on-`ThreadSafeMode` `PasDefine`.
 
-## Why the two existing defines are NOT it
+## The name: `PXX_THREADSAFE`, not `THREADSAFE`
+
+Prefixed deliberately (user, 2026-08-09): a bare `THREADSAFE` is exactly the
+identifier an application programmer would `{$DEFINE}` in their own code, and a
+collision there would silently change what the RTL declares.
+
+It also matches the existing convention, which turns out to be a clean split.
+The UNPREFIXED defines are precisely the FPC-compatibility ones — `CPU64`,
+`CPUX86_64`, `CPUARM`, `LINUX`, `FPC`, `ENDIAN_LITTLE` — names FPC itself
+defines, so portable source can test them. Everything pxx invents carries the
+prefix: `PXX`, `PXX_MANAGED_STRING`, `PXX_VERSION`, `PXX_PLATFORM_*`,
+`PXX_HAS_*`, `PXX_ESP_*`, `PXX_TS_*`. This define is pxx's own invention, so it
+takes the prefix.
+
+## Do NOT reuse `PXX_HAS_THREADS` either
+
+It already exists, it is tempting, and it is a different axis. `PXX_HAS_THREADS`
+is a PLATFORM CAPABILITY — set for posix, absent for ESP-bare — answering "can
+this target do threads at all". It says nothing about whether THIS BUILD enabled
+the thread-safe runtime. A posix build with no `--threadsafe` has
+`PXX_HAS_THREADS` defined and must still not parse `palthread`.
+
+So the three near-misses, all of which would compile and all of which would be
+wrong:
+
+| define | actually means | why it is not this |
+| --- | --- | --- |
+| `PXX_TS_HARDLOCK` | x86-64's codegen BSS spinlock is in use | per-target; absent on 32-bit `--threadsafe` builds |
+| `PXX_TS_SOFTLOCK` | the Pascal-level spinlock is in use | per-target; absent on x86-64 |
+| `PXX_HAS_THREADS` | the platform is capable of threads | true without `--threadsafe` |
+
+## Why the two existing lock defines are NOT it
 
 `PXX_TS_HARDLOCK` and `PXX_TS_SOFTLOCK` answer **which lock implementation is in
 use** — the x86-64 codegen-emitted BSS spinlock, versus the Pascal-level
