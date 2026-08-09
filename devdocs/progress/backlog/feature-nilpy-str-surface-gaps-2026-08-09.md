@@ -23,8 +23,8 @@ work, and bundling them buries the one that matters.
 | call | error |
 | --- | --- |
 | ~~`b.hex()`~~ | **DONE 2026-08-09** — `TPyBytes.hex`, pinned by `test/test_nilpy_bytes_hex.npy` |
-| `str.maketrans(a, b)` | `unsupported str method .maketrans()` |
-| `s.translate(table)` | `unsupported str method .translate()` |
+| ~~`str.maketrans(a, b)`~~ | **DONE 2026-08-09** — `pystr_maketrans`, pinned by `test/test_nilpy_str_translate.npy` |
+| ~~`s.translate(table)`~~ | **DONE 2026-08-09** — `pystr_translate`, same test |
 | ~~`s.isascii()`~~ | **DONE 2026-08-09** — `pystr_isascii`, pinned by `test/test_nilpy_str_isascii.npy` |
 
 ## Second sweep, 2026-08-09 (formatting / sorting / float repr)
@@ -71,10 +71,14 @@ with maxsplit, `splitlines`, `find`/`rfind`/`index`/`rindex` with windows,
 - ~~`hex()` on bytes~~ **done**. `bytes.fromhex` is still missing and is its
   natural pair. The two details a hand-rolled version gets wrong, now pinned:
   it ZERO-PADS to two digits per byte and it is LOWERCASE.
-- `maketrans`/`translate` go together and want a decision about what the
-  translation table IS (CPython's is a dict keyed by ordinal). The 1:1
-  byte-mapping form covers essentially all real use; the deleting and
-  multi-character forms are the long tail.
+- ~~`maketrans`/`translate`~~ **done**, and the "decision about what the table
+  IS" answered by taking CPython's exactly: a dict keyed by the ORDINAL. That
+  was the right call rather than an internal representation, because it makes a
+  HAND-WRITTEN dict literal a valid table and makes printing one match CPython —
+  both asserted. The deleting (`None`) and multi-character forms turned out to
+  be three lines, not a long tail, so all three value shapes are supported.
+  Still missing from this family: `bytes.maketrans` and `str.translate` with a
+  `str`-typed table (the two-argument legacy form).
 - Anything here touching a codepoint model should wait for
   [[bug-nilpy-encode-ignores-the-codec]], which parks the same question.
 

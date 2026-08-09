@@ -1333,6 +1333,17 @@ function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Inte
   "all characters are ascii" is vacuously true where "is a digit" is not.
   feature-nilpy-str-surface-gaps-2026-08-09 }
 function pystr_isascii(const s: AnsiString): Boolean;
+{ str.maketrans(frm, to) — CPython's table is a DICT keyed by the ORDINAL of
+  each source character, valued by the ordinal of its replacement. Modelled
+  exactly, so `print(str.maketrans("lo","01"))` shows `{108: 48, 111: 49}` like
+  CPython and a hand-written dict literal works as a table too.
+  feature-nilpy-str-surface-gaps-2026-08-09 }
+function pystr_maketrans(const frm: AnsiString; const t: AnsiString): TPyDict;
+{ str.translate(table) — map each byte through the table. A missing key leaves
+  the character alone; an INT value is a replacement ordinal, a STRING value is
+  substituted whole (CPython allows a multi-character replacement), and None
+  DELETES the character. }
+function pystr_translate(const s: AnsiString; t: TPyDict): AnsiString;
 function pystr_isspace(const s: AnsiString): Boolean;
 { CPython: "".isdigit()/.isalpha()/.isupper()/.islower() are all FALSE — the
   all-quantifier does not hold vacuously for any of them. }
@@ -1716,6 +1727,44 @@ begin
   for i := 1 to Length(s) do
     if Ord(s[i]) > 127 then begin Result := False; Exit; end;
 end;
+function pystr_maketrans(const frm: AnsiString; const t: AnsiString): TPyDict;
+var d: TPyDict; i, n: Integer;
+begin
+  d := TPyDict.Create;
+  n := Length(frm);
+  { CPython raises when the two arguments differ in length; matching that keeps
+    a silently truncated table from being built. }
+  if n <> Length(t) then
+    raise ValueError.Create(
+      'the first two maketrans arguments must have equal length');
+  for i := 1 to n do
+    d.store(Ord(frm[i]), Ord(t[i]));
+  Result := d;
+end;
+
+function pystr_translate(const s: AnsiString; t: TPyDict): AnsiString;
+var i: Integer; k, v: Variant; tag: Int64;
+begin
+  Result := '';
+  if t = nil then begin Result := s; Exit; end;
+  for i := 1 to Length(s) do
+  begin
+    k := Ord(s[i]);
+    if not pydictcontains(t, k) then
+    begin
+      Result := Result + s[i];        { absent: unchanged }
+      Continue;
+    end;
+    v := t.fetch(k);
+    tag := pyvartag(v);
+    if tag = 0 then Continue;         { None: DELETE the character }
+    if tag = 6 then                   { a string replacement, possibly >1 char }
+      Result := Result + PyVarText(PPyVarRec(@v))
+    else
+      Result := Result + Chr(pyvar_to_int(v) and 255);
+  end;
+end;
+
 
 function pyvartag(const v: Variant): Int64;
 begin

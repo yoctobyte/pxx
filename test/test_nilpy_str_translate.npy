@@ -1,0 +1,41 @@
+# feature-nilpy-str-surface-gaps-2026-08-09 — str.maketrans / str.translate.
+#
+# Both were "unsupported str method". They go together: the table one builds is
+# the table the other consumes.
+#
+# CPython's table is a DICT keyed by the ORDINAL of each source character, and
+# that is modelled exactly rather than approximated — so printing a table shows
+# `{108: 48, 111: 49}` like CPython, and a HAND-WRITTEN dict literal works as a
+# table too. Approximating it with an internal representation would have made
+# the first of those print something else and the second not work at all, so
+# both are asserted.
+#
+# translate's three value shapes are all asserted, because they are easy to miss
+# and each is used: an INT is a replacement ordinal, a STRING is substituted
+# whole (CPython allows multi-character), and None DELETES the character. A key
+# that is absent leaves the character alone.
+#
+# maketrans raises when its two arguments differ in length, as CPython does —
+# without that a silently truncated table gets built, which is the kind of
+# quiet wrong answer this whole sweep is looking for.
+#
+# Expectations are CPython's own output.
+
+print("table  ", str.maketrans("lo", "01"))
+print("apply  ", "hello".translate(str.maketrans("lo", "01")))
+t = str.maketrans("a", "b")
+print("var    ", "banana".translate(t))
+print("literal", "abc".translate({97: 120}))
+print("delete ", "abc".translate({97: None}))
+print("multi  ", "abc".translate({97: "XY"}))
+print("absent ", "xyz".translate({97: 98}))
+print("empty  ", "".translate({97: 98}), "[" + "abc".translate({}) + "]")
+print("param  ", "aaa".translate(str.maketrans("a", "z")))
+def f(s, tb):
+    return s.translate(tb)
+print("indef  ", f("hello", str.maketrans("l", "L")))
+try:
+    str.maketrans("ab", "c")
+    print("mismatch", "NO ERROR")
+except ValueError:
+    print("mismatch", "ValueError")

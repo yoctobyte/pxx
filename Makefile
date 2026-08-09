@@ -1113,6 +1113,10 @@ test-nilpy: $(COMPILER)
 	# set.symmetric_difference / set.isdisjoint / dict.fromkeys(seq, value)
 	./$(COMPILER) test/test_nilpy_set_dict_gaps.npy /tmp/test_nilpy_setdictgaps26
 	/tmp/test_nilpy_setdictgaps26 | diff -u test/test_nilpy_set_dict_gaps.expected -
+	# str.maketrans / str.translate -- CPython's ordinal-keyed dict table exactly,
+	# so a hand-written dict literal works as a table too.
+	./$(COMPILER) test/test_nilpy_str_translate.npy /tmp/test_nilpy_strtrans26
+	/tmp/test_nilpy_strtrans26 | diff -u test/test_nilpy_str_translate.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26

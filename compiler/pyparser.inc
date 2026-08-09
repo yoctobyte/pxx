@@ -2973,6 +2973,10 @@ begin
     begin pname := 'pystr_isspace'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'isascii') then
     begin pname := 'pystr_isascii'; retTk := tyBoolean; end
+  else if CaseEqual(mname, 'translate') then
+    { one argument, the table — a dict rather than a string, which the generic
+      argument parse handles without a special case }
+    begin pname := 'pystr_translate'; retTk := tyAnsiString; wantArgs := 1; end
   else if CaseEqual(mname, 'isdigit') then
     begin pname := 'pystr_isdigit'; retTk := tyBoolean; end
   else if CaseEqual(mname, 'isalpha') then
@@ -5646,7 +5650,7 @@ begin
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
       + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
-      + 'isdigit, isalpha, isalnum, isupper, islower, isascii, format, '
+      + 'isdigit, isalpha, isalnum, isupper, islower, isascii, translate, format, '
       + 'join, split, rsplit, partition, rpartition, splitlines, replace, '
       + 'count, rfind, title, capitalize, '
       + 'swapcase, casefold, ljust, rjust, center, zfill, removeprefix, '
@@ -7784,6 +7788,9 @@ begin
     songformatter uses `list(dict.fromkeys(xs))`, the standard order-preserving
     dedupe. }
   else if dotted = 'dict.fromkeys' then Result := 'pydict_fromkeys'
+  { str.maketrans — a STATIC method, reaching the same table for the same
+    reason dict.fromkeys does: the base name is a type rather than a module. }
+  else if dotted = 'str.maketrans' then Result := 'pystr_maketrans'
   { math.floor/math.ceil must NOT reach the RTL Math unit's own Floor/Ceil
     (Double->Double, correct for the Pascal frontend, wrong for Python's int
     contract) -- intercepted here by name, ahead of the ordinary qualified-
@@ -7807,7 +7814,8 @@ begin
   if TokPos < 1 then Exit;
   base := LowerCase(GetTokenStr(TokPos - 1));
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
-     (base <> 'select') and (base <> 'dict') and (base <> 'math') then Exit;
+     (base <> 'select') and (base <> 'dict') and (base <> 'math') and
+     (base <> 'str') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));

@@ -1,0 +1,11 @@
+table   {108: 48, 111: 49}
+apply   he001
+var     bbnbnb
+literal xbc
+delete  bc
+multi   XYbc
+absent  xyz
+empty    [abc]
+param   zzz
+indef   heLLo
+mismatch ValueError
