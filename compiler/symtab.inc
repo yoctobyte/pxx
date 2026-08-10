@@ -8531,6 +8531,19 @@ begin
     end
     else if ASTKind[ASTLeft[node]] = AN_INDEX then
       Result := ResolveNodeRec(ASTLeft[node])
+    else if (ASTKind[ASTLeft[node]] = AN_CALL) or
+            (ASTKind[ASTLeft[node]] = AN_VIRTUAL_CALL) or
+            (ASTKind[ASTLeft[node]] = AN_CLASS_VIRTUAL_CALL) or
+            (ASTKind[ASTLeft[node]] = AN_INTF_CALL) or
+            (ASTKind[ASTLeft[node]] = AN_CALL_IND) then
+      { An array-returning call indexed directly: `MkR[i].field`. ProcRetRecId
+        of an array-of-record result already holds the ELEMENT record, which is
+        what the index yields — so the ordinary call arm answers it. Every OTHER
+        base kind had a case here and a call did not, so this fell to REC_NONE,
+        the field lookup found nothing, and the `.field` was applied at OFFSET 0:
+        `MkR[1].b` and `MkR[1].c` both answered `MkR[1].a`, silently.
+        bug-a-indexing-a-function-call-result-drops-the-field-selector }
+      Result := ResolveNodeRec(ASTLeft[node])
     else if ASTKind[ASTLeft[node]] = AN_ADDR then
       { `(&X)[i]` indexes a pointer to X, so the element record is X's own record. }
       Result := ResolveNodeRec(ASTLeft[ASTLeft[node]])

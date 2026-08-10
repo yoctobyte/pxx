@@ -8175,7 +8175,23 @@ begin
   end
   else if ((tk = tyClass) or (tk = tyRecord)) and (CurTok.Kind in [tkDot, tkLBrack]) then
     { Member access on a class/record-returning call result: f(args).field[…]. }
-    node := ParseClassRecordSelectors(node, ProcRetRecId[procIdx], tk);
+    node := ParseClassRecordSelectors(node, ProcRetRecId[procIdx], tk)
+  else if ((ProcRetFixedArrBytes[procIdx] > 0) or ProcRetIsDynArray[procIdx]) and
+          (CurTok.Kind = tkLBrack) then
+    { Indexing an ARRAY-returning call directly, `MkArr[1]`, when the element is
+      not a record. The record-element spelling arrives through the arm above
+      (Procs[].RetType is the ELEMENT kind, so an array OF RECORDS reads as
+      tyRecord there) and works; this one has no addressable base to index —
+      lowering answers IR_UNSUPPORTED — and reached the statement parser as a
+      stray `[`, i.e. `unexpected token` pointing at the wrong place.
+      Say what is actually unsupported instead. Making it WORK means
+      materialising the result into a hidden temp shaped like the array and
+      indexing that, the way the AnsiString arm above already does with
+      AN_COMMA — which also brings the N-D spelling `MkArr2[i,j]` with it,
+      since a shaped temp carries the dim spans.
+      bug-a-indexing-a-function-call-result-drops-the-field-selector }
+    Error('cannot index the result of an array-returning function directly — '
+          + 'assign it to a variable first');
   CurASTNode := node;
   LastExprTk := tk;
 end;

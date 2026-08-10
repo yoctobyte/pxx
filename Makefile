@@ -2199,6 +2199,12 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_aggret26 | head -11 | tail -1)" = "arr 3d    105 106 115 116 125 126 205 206 215 216 225 226"
 	test "$$(/tmp/test_aggret26 | head -12 | tail -1)" = "arr str   aa bb cc"
 	test "$$(/tmp/test_aggret26 | head -13 | tail -1)" = "arr rec   1 2 3 4"
+	# indexing the CALL directly and then selecting a field: ResolveNodeRec had
+	# a case for every AN_INDEX base kind except a CALL, so the selector was
+	# applied at offset 0 and every field answered the first one.
+	./$(COMPILER) test/test_index_call_result_field.pas /tmp/test_idxcall26
+	test "$$(/tmp/test_idxcall26 | tail -1)" = "INDEX CALL RESULT FIELD OK"
+	test "$$(/tmp/test_idxcall26 | head -2 | tail -1)" = "on call   1 2 3 4 5 6"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed
