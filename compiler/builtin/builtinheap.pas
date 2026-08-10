@@ -112,7 +112,7 @@ procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
   instances created by NilPy code paths are refcounted like AnsiString handles.
-  The instance pointer is base+16 of its own heap block, rc at [inst-16] — the
+  The instance pointer is base+PXX_HDR_SIZE of its own heap block, rc at [inst-16] — the
   same protocol as the string handles above. Pascal-created instances are NOT
   in this scheme; only allocations routed through PXXObjAlloc are. A headered
   instance is recognized at runtime by PXX_OBJ_MAGIC in the word at [inst-8]:
@@ -1052,7 +1052,7 @@ end;
 {$endif}
 
 { Managed-string constructor: allocate a [refcount:8][length:8][data][nul]
-  block and copy len bytes from src. Returns the data pointer (base+16) or
+  block and copy len bytes from src. Returns the data pointer (base+PXX_HDR_SIZE) or
   nil for an empty string. Called from the emitted runtime shim
   (AnsiStrFromLiteralAddr); the shim holds the heap lock in threadsafe mode.
   Raw pointers only — this code IS the string runtime, so it must not use
@@ -1589,7 +1589,7 @@ begin
 end;
 
 { NilPy object-reclamation primitives. An instance allocated here lives at
-  base+16 of its own heap block: [rc:8][spare:8][instance data...], so the
+  base+PXX_HDR_SIZE of its own heap block: [kind:8][rc:8][spare:8][instance data...], so the
   refcount sits at [inst-16] exactly like a managed string's — the same
   retain/release idiom (and the same threadsafe atomic) applies. The spare
   word at [inst-8] is reserved (zero); note it is NOT the RTTI backlink —
