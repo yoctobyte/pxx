@@ -1,7 +1,8 @@
 ---
 track: U
-prio: 60
+prio: 5
 type: decide
+blocked-by: []
 summary: "A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values."
 ---
 
@@ -198,3 +199,9 @@ should be re-filed into N in that case — U holds open questions, not work.
 **Do not implement Option A or B off the analysis above without first
 establishing why the def route does not apply.** That analysis was written
 without noticing the def path existed.
+
+## SUPERSEDED 2026-08-10
+
+Re-filed as ordinary Track N work: **[[feature-nilpy-class-as-a-value]]**.
+Nothing here needs a human decision — the trigger is missing, not the design.
+Kept only as the record of how the wrong framing arose. Prio dropped to 5.
