@@ -1,5 +1,7 @@
 ---
 prio: 55
+status: resolved
+resolved: 2026-08-10
 track: U
 type: decide
 blocked-by: []
@@ -121,4 +123,38 @@ So the cost the ticket was built on — shared-file bugs waiting indefinitely �
 did not materialise. Attended sessions cleared them within a day. That is the
 strongest argument for doing nothing beyond the standing grant.
 
-**Pending only the user's confirmation to resolve as option 2.**
+## RESOLVED 2026-08-10 — option 2, and leave the coarse rule alone
+
+**User's call.** A standing grant in the launch prompt. No lock file, no
+file-level coordination mechanism.
+
+The decisive point is not the fork as framed, it is that the existing rule is
+already working:
+
+> "i make sure only one agent runs on track A. on rare occasions i screw up.
+> there were no cases with irrecoverable damage." — user
+
+> "tracks are both tags and basically the main choices are: A (compiler) or B
+> (library work, doesn't touch compiler work). that has been working fine for,
+> idk, about 6 weeks now?" — user
+
+So the operative lane split is **A (touches the compiler) vs B (does not)**, it
+has run for ~6 weeks, and the failure mode when it slips has been recoverable
+every time. That is a stronger argument for doing nothing than any coordination
+design.
+
+### Noted, NOT filed as work
+
+The user observes that ideally several agents could share Track A when their
+files are disjoint — "as long as they only touch lexer+parser and don't have to
+touch other parts". That is true and the lane is more separable than one lock
+implies, but it is a solution to a problem that has not cost anything yet.
+Revisit only if concurrent-A demand actually appears; do not build it
+speculatively.
+
+### The residual risk, accepted
+
+Rare human error at launch (two agents told they are sole-A). Recoverable in
+every instance so far, and `git pull --rebase` plus the self-host fixedpoint
+catches the damaging shape early.
+
