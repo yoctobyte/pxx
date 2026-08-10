@@ -3,6 +3,8 @@ summary: "Two units exporting the same routine: FPC takes the LAST in the uses c
 type: bug
 track: P
 prio: 60
+status: working
+owner: claude-ACPN
 ---
 
 # `uses a, b` — pxx picks the first unit's routine, FPC picks the last

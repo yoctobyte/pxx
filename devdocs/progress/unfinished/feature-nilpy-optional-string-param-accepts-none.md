@@ -83,3 +83,77 @@ than patch blind.
 
 Not fixed. Recon only — see above for what changed and what still needs
 locating.
+
+## 2026-08-10 — REMEASURED: the symptom changed, and got WORSE
+
+The repro above no longer produces the recorded error. It **compiles**, and
+then answers wrongly with no diagnostic at all:
+
+```
+CPython : a none
+pxx     : a None
+```
+
+Probed one level down (`print` inside `g`):
+
+| | `g("a")` | `g(None)` |
+| --- | --- | --- |
+| CPython `x is None` | False | **True** |
+| pxx `x is None` | False | **False** |
+| CPython `x == None` | False | **True** |
+| pxx `x == None` | False | **False** |
+
+So the argument arrives, the overload now matches — that half of the ticket is
+fixed — but **a None passed to an `Optional[str]` parameter does not compare
+equal to None inside the callee**, by either `is` or `==`. The `if x is None`
+branch never runs, `return x` returns the None, and it prints as `None`.
+
+**Controlled:** byte-identical on `stable_linux_amd64/default/pinned`, so this
+is pre-existing and NOT a consequence of the 2026-08-10 overload-selection work
+(`PyPickOverloadByArgTypes`) landing the same day. The old "no overload matches
+these arguments" error is simply gone; whatever removed it left the value
+mis-typed rather than mis-matched.
+
+This changes the ticket's priority shape: a loud compile error became a **silent
+wrong answer**, which is the failure class `devdocs/dev/debugging-playbook.md`
+calls the expensive one. Both `is` and `==` failing together points at the
+argument's runtime TAG on entry — the None is presumably arriving as a typed
+null (the old error named `Pointer`) rather than as a None-tagged variant, so
+the tag test fails. **Measure the tag on entry (`pyvartag`) before changing
+anything** — that is one probe and it settles the direction.
+
+Still parked; re-filed measurement only, no code changed.
+
+### The tag probe — one measurement, root identified
+
+```python
+def g(x: Optional[str]) -> str:
+    print("  tag:", pyvartag(x))
+g("a")    ->  tag: 6
+g(None)   ->  tag: 6          <-- should be 0
+n = None; pyvartag(n) -> 0
+```
+
+**The None is converted to a STRING at the call site.** It arrives inside `g`
+tagged VT_STRING (6), identical to `"a"`, while a bare `None` is VT_EMPTY (0).
+Nothing inside the callee is wrong: `is None` and `== None` correctly answer
+False about a value that genuinely is no longer None by the time they see it.
+
+So this is an ARGUMENT-COERCION bug, not a comparison bug. `Optional[str]`
+evidently lowers the parameter to the plain `str` arm, and the call converts the
+argument to it — which is also the tidiest explanation for how the old "no
+overload matches" error disappeared without anyone fixing None handling: the
+argument now converts instead of failing to match, and converting is exactly
+what destroys the None.
+
+**The fix therefore belongs at the Optional lowering / argument conversion, not
+at the `is None` test.** An `Optional[T]` parameter has to stay a variant (or
+otherwise keep its tag) rather than collapse to `T`; anything that fixes
+`is None` inside the callee without fixing the tag would be papering over a
+value that arrived wrong.
+
+Note the interaction to check when this is picked up: an `Optional[str]`
+parameter that stays a variant changes which overload it is, so re-run it
+against `PyPickOverloadByArgTypes` (landed 2026-08-10) — a variant parameter now
+exactly matches a variant argument, which is likely to be what makes the
+matching work honestly rather than by conversion.
