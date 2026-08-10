@@ -24,6 +24,24 @@ type
     smashing the caller's frame. A plain PROCEDURE was fine, which is what let
     it survive; hence both shapes below.
     bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory }
+  { FLOAT literal defaults, at all FOUR parameter parsers (free routine, class
+    method, interface method, record method). None of them accepted a float: the
+    token matched no arm and fell through to the INTEGER const folder, which
+    returned without consuming it — so the error landed on the NEXT parameter as
+    a bare "unexpected token" and pointed at innocent code. The four parsers now
+    share one ParseParamDefaultValue.
+    bug-p-float-literal-default-in-a-parameter-list-fails-to-parse }
+  TFRec = record
+    procedure RM(d: Double = 1.25);
+  end;
+  IFDflt = interface
+    procedure IM(d: Double = 2.25);
+  end;
+  TFDflt = class(TInterfacedObject, IFDflt)
+    constructor Create(d: Double = 3.25);
+    procedure CM(d: Double = 4.25);
+    procedure IM(d: Double = 2.25);
+  end;
   TVarDflt = class
     FV: Integer;
     constructor Create(const nm: AnsiString; const v: Variant = 7);
@@ -81,6 +99,15 @@ begin
   FV := v;
 end;
 
+var seenF: Double;
+procedure TFRec.RM(d: Double); begin seenF := d; end;
+constructor TFDflt.Create(d: Double); begin seenF := d; end;
+procedure TFDflt.CM(d: Double); begin seenF := d; end;
+procedure TFDflt.IM(d: Double); begin seenF := d; end;
+procedure FreeF(d: Double = 5.25); begin seenF := d; end;
+{ a float default into a VARIANT parameter — the boxing arm, cf. the ctor case }
+procedure VarF(const v: Variant = 6.25); begin seenF := v; end;
+
 var lastPV: Integer;
 { the same shape as a plain procedure — this arm always worked }
 procedure PVarDflt(const nm: AnsiString; const v: Variant = 7);
@@ -92,6 +119,9 @@ var
   b: TBase;
   d: TDer;
   vd: TVarDflt;
+  fr: TFRec;
+  fc: TFDflt;
+  fi: IFDflt;
 begin
   total := 0; okc := 0;
 
@@ -131,6 +161,16 @@ begin
   vd := TVarDflt.Create('a');           { used to smash the stack }
   Check('ctor-variant-default', vd.FV, 7);
   vd.Free;
+
+  { float defaults — compared in hundredths so the integer Check harness serves }
+  FreeF();            Check('float-free-routine', Round(seenF * 100), 525);
+  FreeF(9.5);         Check('float-free-explicit', Round(seenF * 100), 950);
+  fr.RM();            Check('float-record-method', Round(seenF * 100), 125);
+  fc := TFDflt.Create();  Check('float-ctor', Round(seenF * 100), 325);
+  fc.CM();            Check('float-class-method', Round(seenF * 100), 425);
+  fi := fc;
+  fi.IM();            Check('float-interface-method', Round(seenF * 100), 225);
+  VarF();             Check('float-default-into-variant', Round(seenF * 100), 625);
 
   writeln('total ok ', okc, ' / ', total);
 end.

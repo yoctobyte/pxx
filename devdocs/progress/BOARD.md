@@ -84,8 +84,8 @@ lives in git, not in a timestamp._
 | bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | — |
 | bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack | O | 65 | bug | optdiff finds -O3 changing observable behaviour in two C tests — cmath_sign_bits returns rc 42 against the baseline's rc 1, and cmath_no_pascal_hijack's output differs at equal rc | — |
-| bug-p-float-literal-default-in-a-parameter-list-fails-to-parse | P | 55 | bug | A FLOAT literal as a parameter's default value (`d: Double = 2.5`) does not parse — the const evaluator never consumes the token, so the error surfaces on the NEXT parameter (or the closing paren) as a bare 'unexpected token'. Integer defaults on the same Double parameter are fine, and the runtime machinery (ProcParamDefaultIsFloat) already exists | — |
-| bug-p-string-literal-default-in-a-parameter-list-is-not-a-constant | P | 55 | bug | A STRING literal as a parameter's default value (`s: AnsiString = 'a'`) is rejected with 'not a constant'. The storage (ProcParamDefaultIsStr/SOff/SLen) and the call-site rebuild both already exist and are used by NilPy — only the Pascal declaration parser never accepts the literal. Sibling of the float-literal case | — |
+| bug-p-integer-default-on-a-string-parameter-is-accepted-and-segfaults | P | 60 | bug | `procedure R(s: AnsiString = 1)` compiles clean and SEGFAULTS on the omitted argument — the bare ordinal is handed to the callee as a string. FPC rejects the declaration outright. A silent-acceptance corruption bug, same family as the ctor-variant one: no diagnostic, and the crash is wherever the string is first touched | — |
+| bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable | P | 50 | bug | `P;` on a free routine whose parameters are ALL defaulted fails with 'undefined variable (P)'. FPC accepts it, `P()` works, and the paren-less form already works for METHODS (`b.G`) and for routines with no parameters at all — so it is the free-routine path alone that never tries the defaults fill | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
@@ -406,9 +406,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1598)
+## done (1599)
 
-1598 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1599 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (32)
 
@@ -456,6 +456,7 @@ lives in git, not in a timestamp._
 - [p 60] [C] bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address
 - [p 60] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- [p 60] [P] bug-p-integer-default-on-a-string-parameter-is-accepted-and-segfaults
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [U] decide-own-language-first-name-resolution
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -473,8 +474,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument
-- [p 55] [P] bug-p-float-literal-default-in-a-parameter-list-fails-to-parse
-- [p 55] [P] bug-p-string-literal-default-in-a-parameter-list-is-not-a-constant
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [U] decide-ismultithread-runtime-flag-vs-compile-time-mode
 - [p 55] [U] decide-sole-a-guard-for-unattended-sessions
@@ -500,6 +499,7 @@ lives in git, not in a timestamp._
 - [p 50] [N] bug-nilpy-list-sort-method-missing
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
 - [p 50] [N] bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
+- [p 50] [P] bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-vla-via-alloca

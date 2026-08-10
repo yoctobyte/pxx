@@ -23066,6 +23066,57 @@ begin
   Result := idx;
 end;
 
+{ THE parser for a parameter's declared default value, `= <literal>`. CurTok is
+  on the token AFTER the `=`; on return every out-parameter is set and the
+  default's tokens are consumed.
+
+  There are four parameter parsers in this file (free routine, class method,
+  interface/forward method, record method) and each used to carry its own copy
+  of this. The copies drifted exactly as `normalise-dont-special-case` predicts:
+  sets were taught to two of them, floats to none, and the record-method copy
+  still carries a comment claiming "the same two shapes the other parameter
+  parsers take" — which stopped being true when the third shape landed. A FLOAT
+  default (`d: Double = 2.5`) therefore matched no arm anywhere, fell through to
+  the integer ConstEval, and was returned WITHOUT CONSUMING THE TOKEN — so the
+  error surfaced on the NEXT parameter as a bare "unexpected token" and pointed
+  at innocent code (bug-p-float-literal-default-in-a-parameter-list-fails-to-parse).
+
+  Shapes, in the order they are recognised:
+    string literal  isStr,   soff/slen locate the text
+    float literal   isFloat, val holds the IEEE 754 BITS (what tkFloat lexes to,
+                             and what ProcParamDefaultIsFloat documents)
+    set expression  isSet,   val holds the baked 32-byte mask's Data[] offset
+    otherwise       ordinal, val holds the folded Int64 }
+procedure ParseParamDefaultValue(var val: Int64; var isStr, isFloat, isSet: Boolean;
+                                 var soff, slen: Integer);
+begin
+  val := 0; isStr := False; isFloat := False; isSet := False; soff := 0; slen := 0;
+  if CurTok.Kind = tkString then
+  begin
+    soff := Tokens[TokPos-1].SOffset;
+    slen := Tokens[TokPos-1].SLen;
+    isStr := True;
+    Next;
+  end
+  else if CurTok.Kind = tkFloat then
+  begin
+    val := CurTok.IVal;   { StrToDoubleBits — already the IEEE bits }
+    isFloat := True;
+    Next;
+  end
+  else if (CurTok.Kind = tkLBrack) or
+          ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
+  begin
+    { `Options: TFormatOptions = []` or `= DefaultFormat` (fpjson's FormatJSON is
+      both). A set is a 32-byte mask, not an ordinal, so bake it and keep the
+      Data[] offset; the call rebuilds an AN_SET_CONST_REF from it. }
+    val := BakeSetConst;
+    isSet := True;
+  end
+  else
+    val := ConstEval;
+end;
+
 { FPC hint directives — `deprecated ['msg']`, `platform`, `experimental`,
   `unimplemented`, `library` — may trail a const value, a type declaration, or a
   routine header. They only drive an optional compiler warning, so pxx parses and
@@ -23995,12 +24046,13 @@ var
   ptRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   pRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
   rmHasDef, rmStrDef, rmArr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  rmFloatDef, rmSetDef: array[0..MAX_PROC_PARAMS-1] of Boolean;
   rmIsArr: Boolean;
   rmValDef: array[0..MAX_PROC_PARAMS-1] of Int64;
   rmSOffDef, rmSLenDef: array[0..MAX_PROC_PARAMS-1] of Integer;
   rmDefVal: Int64;
   rmDefSOff, rmDefSLen: Integer;
-  rmDefIsStr: Boolean;
+  rmDefIsStr, rmDefIsFloat, rmDefIsSet: Boolean;
   curTk, retTk: TTypeKind;
   rmSawStatic: Boolean;
   rmMandatory: Integer;
@@ -24008,9 +24060,11 @@ begin
   for k := 0 to MAX_PROC_PARAMS - 1 do
   begin
     rmHasDef[k] := False; rmStrDef[k] := False; rmArr[k] := False;
+    rmFloatDef[k] := False; rmSetDef[k] := False;
     rmValDef[k] := 0; rmSOffDef[k] := 0; rmSLenDef[k] := 0;
   end;
-  rmDefVal := 0; rmDefSOff := 0; rmDefSLen := 0; rmDefIsStr := False;
+  rmDefVal := 0; rmDefSOff := 0; rmDefSLen := 0;
+  rmDefIsStr := False; rmDefIsFloat := False; rmDefIsSet := False;
   { A record CONSTRUCTOR fills a fresh receiver rather than returning anything, so it
     registers exactly like a procedure whose Self is the record. Only the CALL differs. }
   isCtor := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor');
@@ -24085,28 +24139,21 @@ begin
         { a const record/variant param goes by reference, as everywhere else }
         pRef[k] := byref or (sawConst and ((curTk = tyRecord) or (curTk = tyVariant)));
       end;
-      { default value: `Normalize: Boolean = False` (typshrdh.inc's TRect.Contains). Same
-        two shapes the other parameter parsers take — a string literal, or a folded ordinal. }
+      { default value: `Normalize: Boolean = False` (typshrdh.inc's TRect.Contains).
+        Every shape, via the one shared parser — this site used to know only two
+        of them. }
       if CurTok.Kind = tkEq then
       begin
         Next;
-        if CurTok.Kind = tkString then
-        begin
-          rmDefSOff := Tokens[TokPos-1].SOffset;
-          rmDefSLen := Tokens[TokPos-1].SLen;
-          rmDefIsStr := True;
-          Next;
-        end
-        else
-        begin
-          rmDefVal := ConstEval;
-          rmDefIsStr := False;
-        end;
+        ParseParamDefaultValue(rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
+                               rmDefSOff, rmDefSLen);
         for k := startIdx to nP - 1 do
         begin
           rmHasDef[k] := True;
           rmValDef[k] := rmDefVal;
           rmStrDef[k] := rmDefIsStr;
+          rmFloatDef[k] := rmDefIsFloat;
+          rmSetDef[k] := rmDefIsSet;
           rmSOffDef[k] := rmDefSOff;
           rmSLenDef[k] := rmDefSLen;
         end;
@@ -24177,6 +24224,8 @@ begin
       ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
       ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := rmValDef[i];
       ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := rmStrDef[i];
+      ProcParamDefaultIsFloat[mpi * MAX_PROC_PARAMS + i] := rmFloatDef[i];
+      ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + i] := rmSetDef[i];
       ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := rmSOffDef[i];
       ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := rmSLenDef[i];
     end;
@@ -24594,13 +24643,14 @@ var
   mPDefaultVal: array[0..MAX_PROC_PARAMS-1] of Int64;
   mPDefaultIsStr: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPDefaultIsSet: array[0..MAX_PROC_PARAMS-1] of Boolean;   { twin of mPDefaultIsStr, for SET defaults }
+  mPDefaultIsFloat: array[0..MAX_PROC_PARAMS-1] of Boolean; { ...and for FLOAT defaults (`d: Double = 2.5`): mPDefaultVal holds the IEEE bits }
   mDefaultIsSet: Boolean;
   mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
   mPDefaultSOff: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPDefaultSLen: array[0..MAX_PROC_PARAMS-1] of Integer;
   mHasDefault: Boolean;
   mDefaultVal: Int64;
-  mDefaultIsStr: Boolean;
+  mDefaultIsStr, mDefaultIsFloat: Boolean;
   mDefaultSOff, mDefaultSLen: Integer;
 begin
   Next;
@@ -24801,27 +24851,13 @@ begin
               end;
               { Default value: `n: Integer = 5` — mirror ParseSubroutine. }
               mHasDefault := False; mDefaultVal := 0;
-              mDefaultIsStr := False; mDefaultIsSet := False; mDefaultSOff := 0; mDefaultSLen := 0;
+              mDefaultIsStr := False; mDefaultIsFloat := False; mDefaultIsSet := False;
+              mDefaultSOff := 0; mDefaultSLen := 0;
               if CurTok.Kind = tkEq then
               begin
                 Next;
-                if CurTok.Kind = tkString then
-                begin
-                  mDefaultSOff := Tokens[TokPos-1].SOffset;
-                  mDefaultSLen := Tokens[TokPos-1].SLen;
-                  mDefaultIsStr := True;
-                  Next;
-                end
-                else if (CurTok.Kind = tkLBrack) or
-                        ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
-                begin
-                  { a SET default (`Options: TFormatOptions = DefaultFormat`) -- see the
-                    plain-routine path: bake the mask, keep its Data[] offset }
-                  mDefaultVal := BakeSetConst;
-                  mDefaultIsSet := True;
-                end
-                else
-                  mDefaultVal := ConstEval;
+                ParseParamDefaultValue(mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                                       mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                 mHasDefault := True;
               end;
               { `const` record/variant param = by-ref, matching ParseSubroutine
@@ -24831,7 +24867,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPConst[i] := mSawConst; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsFloat[i] := mDefaultIsFloat; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -24846,8 +24882,8 @@ begin
           Eat(tkSemicolon);
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           mFullName := tname; AppendChar(mFullName, '.');
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
@@ -24870,6 +24906,7 @@ begin
               ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
               ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
               ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsStr[i];
+              ProcParamDefaultIsFloat[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsFloat[i];
               ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsSet[i];
               ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := mPDefaultSOff[i];
               ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := mPDefaultSLen[i];
@@ -25259,6 +25296,7 @@ begin
                 mHasDefault := False;
                 mDefaultVal := 0;
                 mDefaultIsStr := False;
+                mDefaultIsFloat := False;
                 mDefaultIsSet := False;
                 mDefaultSOff := 0;
                 mDefaultSLen := 0;
@@ -25300,21 +25338,8 @@ begin
                   if CurTok.Kind = tkEq then
                   begin
                     Next;
-                    if CurTok.Kind = tkString then
-                    begin
-                      mDefaultSOff := Tokens[TokPos-1].SOffset;
-                      mDefaultSLen := Tokens[TokPos-1].SLen;
-                      mDefaultIsStr := True;
-                      Next;
-                    end
-                    else if (CurTok.Kind = tkLBrack) or
-                            ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
-                    begin
-                      mDefaultVal := BakeSetConst;
-                      mDefaultIsSet := True;
-                    end
-                    else
-                      mDefaultVal := ConstEval;
+                    ParseParamDefaultValue(mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                                           mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                     mHasDefault := True;
                   end;
                 end;
@@ -25337,6 +25362,7 @@ begin
                   mPDefault[i] := mHasDefault;
                   mPDefaultVal[i] := mDefaultVal;
                   mPDefaultIsStr[i] := mDefaultIsStr;
+                  mPDefaultIsFloat[i] := mDefaultIsFloat;
                   mPDefaultIsSet[i] := mDefaultIsSet;
                   mPDefaultSOff[i] := mDefaultSOff;
                   mPDefaultSLen[i] := mDefaultSLen;
@@ -25423,6 +25449,7 @@ begin
                   ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
                   ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
                   ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsStr[i];
+                  ProcParamDefaultIsFloat[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsFloat[i];
                   ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsSet[i];
                   ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := mPDefaultSOff[i];
                   ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := mPDefaultSLen[i];
@@ -27126,11 +27153,12 @@ var
   pdefault  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param has a default value (`b: Integer = 10`) }
   pdefaultval : array[0..MAX_PROC_PARAMS-1] of Int64;  { the constant-folded default ordinal }
   pdefaultisstr : array[0..MAX_PROC_PARAMS-1] of Boolean;  { ...or a string literal (`s: string = ''`) }
+  pdefaultisfloat : array[0..MAX_PROC_PARAMS-1] of Boolean;  { ...or a FLOAT literal (`d: Double = 2.5`): pdefaultval holds its IEEE 754 bits }
   pdefaultisset : array[0..MAX_PROC_PARAMS-1] of Boolean;  { ...or a SET (`o: TOpts = []`): pdefaultval holds the baked mask's Data[] offset }
   pdefaultsoff : array[0..MAX_PROC_PARAMS-1] of Integer;
   pdefaultslen : array[0..MAX_PROC_PARAMS-1] of Integer;
   hasDefault : Boolean; defaultVal : Int64;
-  defaultIsStr : Boolean;
+  defaultIsStr, defaultIsFloat : Boolean;
   defaultIsSet : Boolean; defaultSOff, defaultSLen : Integer;
   pNDims    : array[0..MAX_PROC_PARAMS-1] of Integer;
   pDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
@@ -27286,7 +27314,8 @@ begin
       isByRef := False;
       isConst := False;
       hasDefault := False; defaultVal := 0;
-      defaultIsStr := False; defaultIsSet := False; defaultSOff := 0; defaultSLen := 0;
+      defaultIsStr := False; defaultIsFloat := False; defaultIsSet := False;
+      defaultSOff := 0; defaultSLen := 0;
       if (CurTok.Kind = tkVar) or
          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
       begin
@@ -27425,26 +27454,8 @@ begin
       if CurTok.Kind = tkEq then
       begin
         Next;
-        if CurTok.Kind = tkString then
-        begin
-          defaultSOff := Tokens[TokPos-1].SOffset;
-          defaultSLen := Tokens[TokPos-1].SLen;
-          defaultIsStr := True;
-          Next;
-        end
-        else if (CurTok.Kind = tkLBrack) or
-                ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
-        begin
-          { A SET default: `Options: TFormatOptions = []` or `= DefaultFormat` (fpjson's
-            FormatJSON is both). A set is a 32-byte mask, not an ordinal, so bake the
-            expression and keep its Data[] OFFSET in defaultVal; the call rebuilds an
-            AN_SET_CONST_REF from it. Accepts a full set expression, same as a set
-            constant's initialiser. }
-          defaultVal := BakeSetConst;
-          defaultIsSet := True;
-        end
-        else
-          defaultVal := ConstEval;
+        ParseParamDefaultValue(defaultVal, defaultIsStr, defaultIsFloat,
+                               defaultIsSet, defaultSOff, defaultSLen);
         hasDefault := True;
       end;
       end;  { close the typed (has-colon) branch }
@@ -27466,6 +27477,7 @@ begin
         pdefault[i] := hasDefault;
         pdefaultval[i] := defaultVal;
         pdefaultisstr[i] := defaultIsStr;
+        pdefaultisfloat[i] := defaultIsFloat;
         pdefaultisset[i] := defaultIsSet;
         pdefaultsoff[i] := defaultSOff;
         pdefaultslen[i] := defaultSLen;
@@ -27815,6 +27827,7 @@ begin
       pdefault[i] := pdefault[i-1];
       pdefaultval[i] := pdefaultval[i-1];
       pdefaultisstr[i] := pdefaultisstr[i-1];
+      pdefaultisfloat[i] := pdefaultisfloat[i-1];
       pdefaultisset[i] := pdefaultisset[i-1];
       pdefaultsoff[i] := pdefaultsoff[i-1];
       pdefaultslen[i] := pdefaultslen[i-1];
@@ -27885,6 +27898,7 @@ begin
     pdefault[0] := False;
     pdefaultval[0] := 0;
     pdefaultisstr[0] := False;
+    pdefaultisfloat[0] := False;
     pdefaultisset[0] := False;
     pdefaultsoff[0] := 0;
     pdefaultslen[0] := 0;
@@ -28031,6 +28045,7 @@ begin
             ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := pdefault[i];
             ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
             ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+            ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + i] := pdefaultisfloat[i];
             ProcParamDefaultIsSet[procIdx * MAX_PROC_PARAMS + i] := pdefaultisset[i];
             ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
             ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
@@ -28255,6 +28270,7 @@ begin
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + i] := pdefaultisfloat[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsSet[procIdx * MAX_PROC_PARAMS + i] := pdefaultisset[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];

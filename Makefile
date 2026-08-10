@@ -3128,7 +3128,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_hint_sizeof26)" = "total ok 8 / 8"
 	# FPC-compat: default parameter values on class/interface methods + constructors (fgl's TFPSList.Create shape)
 	./$(COMPILER) test/test_default_params_methods.pas /tmp/test_default_params_methods26
-	test "$$(/tmp/test_default_params_methods26 | tail -1)" = "total ok 15 / 15"
+	test "$$(/tmp/test_default_params_methods26 | tail -1)" = "total ok 22 / 22"
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas /tmp/test_generic_class_methods26
 	test "$$(/tmp/test_generic_class_methods26 | tail -1)" = "total ok 5 / 5"
