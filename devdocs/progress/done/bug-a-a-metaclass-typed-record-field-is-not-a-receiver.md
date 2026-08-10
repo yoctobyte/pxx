@@ -70,4 +70,4 @@ method and then cannot lower it (`IR_UNSUPPORTED`, kind 8). Filed as
 [[bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver]].
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit bc977325f.
