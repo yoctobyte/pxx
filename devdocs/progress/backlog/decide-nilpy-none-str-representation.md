@@ -246,3 +246,53 @@ refcount pinning — rather than spread across a type-promotion policy.
 
 If E survives items 1-5 above, take E. If the `= nil` audit turns up sites that
 genuinely need nil-means-empty, fall back to A scoped to `Optional[str]`.
+
+## CORRECTION 2026-08-10 — the bit guards the COLLAPSE, not the lifetime
+
+The "IMMORTAL bit" framing above is stronger than what is needed, and stronger
+than what the user proposed. Corrected by the user:
+
+> "well it could still be freed if it goes out of scope, just not when it's
+> zero'd" — user
+
+So the semantics are **not** "never free this block". Lifetime stays completely
+ordinary: refcounted, freed at scope exit like any other string. What the bit
+prevents is the **empty-collapse** — the rule that a zero-length string becomes
+`nil`.
+
+That collapse is the actual source of the whole bug. `PXXStrFromLit`
+(builtinheap.pas:1064) is the visible one:
+
+```pascal
+if len <= 0 then begin Result := nil; Exit; end;
+```
+
+A block tagged with the bit is exempt: it stays a real handle with length 0,
+so `is None` (which reads the meta word) and `""` stop sharing a representation
+— while `Length`, `=`, printing and every other consumer keep working on an
+honest length-0 block.
+
+**This is simpler than what I wrote, and strictly better:**
+
+- **No pinning, no immortality.** The refcount risk item disappears entirely
+  rather than being solved — there is no shared canonical block whose premature
+  free would be a use-after-free in the string runtime.
+- **No special case in release at all.** The change is at the string-PRODUCING
+  sites (the `len <= 0` collapse), not in the retain/release blobs. That is a
+  smaller and much safer surface than the six-backend refcount path.
+
+### One thing to confirm before implementing
+
+Which blocks carry the bit, and who sets it. Two readings, both coherent:
+
+1. **None only** — `None` is a length-0 block tagged NONE; ordinary empty
+   strings keep collapsing to nil, and `"" is None` is False because
+   `PXXHdrMeta(nil) = LEGACY <> NONE`. Smallest change; empty-vs-nil stays as
+   it is today for Pascal.
+2. **Empty too** — zero-length results stop collapsing generally, so `""` is
+   also a real block. Fixes more (any place that distinguishes them), but
+   re-opens the `= nil` audit that reading 1 avoids.
+
+Reading 1 is the cheaper one and appears to be what is meant. Confirm before
+building, because it decides whether the `len <= 0` sites change at all or only
+the None constructor gains a tagged allocation.
