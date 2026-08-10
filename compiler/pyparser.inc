@@ -6290,7 +6290,7 @@ var i, depth: Integer; sawCall, nestedLambda: Boolean;
 begin
   Result := False;
   { REVERTED 2026-08-10 together with the sawCall relaxation below — see there. }
-  if bEnd - bStart < 3 then Exit;
+  if bEnd - bStart < 1 then Exit;
   depth := 0;
   sawCall := False;
   { A CURRIED lambda — `lambda a: lambda b: a + b`. Two separate clauses of this
@@ -6338,30 +6338,36 @@ begin
               (nestedLambda and (Tokens[i].Kind in [tkColon, tkComma]))) then Exit;
     end;
   end;
-  { The lift is gated on the body containing a CALL. Widening it to every flat
-    expression was tried on 2026-08-10 and REVERTED the same day.
+  { Every flat expression body is lifted (COMPILED), not just one containing a
+    call. A lifted body runs as native code; an unlifted one is re-walked by
+    pyeval's tree-walker on every call:
 
-    The perf case for widening is real and stands — a lifted body runs
-    compiled, an unlifted one is re-walked by the tree-walker per call
-    (1.0 us vs 6.9 us over 200k calls; CPython does either in 0.1 us). What it
-    ran into is that the LIFT PATH DOES NOT ENFORCE ARITY, and the pyeval
-    closure does (pyclosure_setarity). So widening silently traded a correct
-    TypeError for a wrong answer, and in one shape for a SEGFAULT:
+      200k calls through map()   per call
+      lifted (native)              1.0 us
+      pyeval source closure        6.9 us     6.9x
+      CPython, either form         0.1 us     (we lost to an INTERPRETER by 69x)
 
-        f = lambda x: x
-        f(1, 2)   -> pinned TypeError; lifted: returns 1
-        f()       -> pinned TypeError; lifted: SEGFAULT
+    A call was never the typical lambda body, so the old `sawCall` requirement
+    caught the most ordinary lambdas in the language: `lambda r: r[1]` (a
+    subscript — THE Python sort-key idiom), `lambda v: -v`, `lambda x: x * 2`.
+    Its stated justification was "a call-less body already works through the
+    pyeval closure, and lifting it would be a behaviour change for no gain":
+    premise true, conclusion false.
 
-    caught by test/test_nilpy_lambda_arity.npy. The arity hole is PRE-EXISTING
-    in the lift path (on pinned, `lambda x: abs(x)` — already lifted because it
-    contains a call — silently drops the extra argument too); widening merely
-    made far more lambdas reach it.
+    Widening this ALONE was tried and reverted the same day (88eb07f9d) — the
+    lift path did not enforce arity while the closure path did, so it traded
+    correct TypeErrors for a wrong answer and, given too few arguments, a
+    SEGFAULT. That is fixed first, in PyBoundFnArityBad; this relands on top of
+    it. Do not widen further (multi-parameter lambdas, gated on nParams <= 1 in
+    PyParseLambdaStub) without checking the same class of question: what does
+    the OLD path enforce that the new one must too?
 
-    So the order is: give the bound-fn call path the arity range it already has
-    the fields for (TBoundFnObj.NOwn/NDef), THEN widen. Tracked as
-    bug-nilpy-lifted-lambda-does-not-enforce-arity, which
-    bug-nilpy-every-lambda-is-interpreted-instead-of-compiled is blocked on. }
-  Result := (sawCall or nestedLambda) and (depth = 0);
+    The depth-0 token scan above remains the real gate, so a body still has to
+    be a flat expression built from tokens the lifter handles; anything it
+    rejects keeps the pyeval closure, which stays the correctness fallback and
+    the last resort for shapes only the interpreter can run.
+    bug-nilpy-every-lambda-is-interpreted-instead-of-compiled }
+  Result := (depth = 0);
 end;
 
 procedure PyParseLambdaStub;
@@ -6387,6 +6393,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     lamSyms: array[0..MAX_PROC_PARAMS-1] of Integer;
     lamRecs: array[0..MAX_PROC_PARAMS-1] of Integer;
     newPi, bindPi, varBindPi: Integer;
+    lamManagedCap: Boolean;   { a capture the lifter cannot take -> do not lift }
 begin
   Next;                                { consume `lambda` }
   params := '';
@@ -6468,6 +6475,7 @@ begin
     lamSyms[0] := -1;
     lamRecs[0] := REC_NONE;
     lamN := 1;
+    lamManagedCap := False;
     { the `key=key` defaults first: Python's own idiom for pinning a value }
     for i := 0 to dcCount - 1 do
     begin
@@ -6530,7 +6538,22 @@ begin
         end;
         if not (Syms[capSym].Kind in [skLocal, skParam]) then Continue;
         if Syms[capSym].IsArray or (Syms[capSym].TypeKind = tyRecord) then Continue;
-        if (Syms[capSym].TypeKind = tyAnsiString) or (Syms[capSym].TypeKind = tyString) then Continue;
+        if (Syms[capSym].TypeKind = tyAnsiString) or (Syms[capSym].TypeKind = tyString) then
+        begin
+          { A managed STRING cannot ride a bound slot (it holds an Int64, and a
+            borrowed handle there would outlive its owner) — so this name simply
+            is not captured. Skipping it QUIETLY meant the lifted body then
+            referenced a name that is not in its scope: "undefined variable (s)"
+            for `lambda x: s + x` over an enclosing string local. Pre-existing
+            for a body containing a call (which was already lifted), and widened
+            to every flat body when the sawCall gate went.
+            Refuse the lift instead: the pyeval closure captures by VALUE and
+            handles this shape correctly, so falling back is both correct and
+            the behaviour these lambdas had before.
+            bug-nilpy-lifted-lambda-cannot-capture-a-managed-string }
+          lamManagedCap := True;
+          Continue;
+        end;
         if lamN >= PY_MAX_CAPS then Break;
         lamNames[lamN] := nm;
         lamTypes[lamN] := Syms[capSym].TypeKind;
@@ -6550,7 +6573,7 @@ begin
       WriteLn;
     end;
 
-    if PyPendLamCount < PY_MAX_NESTED then
+    if (not lamManagedCap) and (PyPendLamCount < PY_MAX_NESTED) then
     begin
       Inc(PyLamSeq);
       { A FUNCTION returning a variant — the ABI every bridge that invokes a
@@ -6601,7 +6624,16 @@ begin
         returned f(3)'s answer silently
         (bug-nilpy-a-lambda-call-is-not-arity-checked). }
       defPi := FindProc('pyboundfn_setdefaults');
-      if (dcCount > 0) and (defPi >= 0) then
+      { Emitted even when dcCount = 0. `base` is the caller-side index where the
+        defaulted params begin, which is exactly the count of REQUIRED caller
+        arguments — so this call is also how a lifted lambda declares its legal
+        arity, and NDefBase = -1 (pyboundfn_new's default) means "unchecked".
+        Without it a defaults-free lambda stayed unchecked and a wrong-argument
+        call was not a TypeError but a wrong answer, or a crash.
+        NOwn cannot serve: a zero-parameter lambda is lifted under a DUMMY own
+        parameter, so `lambda: 42` and `lambda x: x` both have NOwn = 1.
+        bug-nilpy-lifted-lambda-does-not-enforce-arity }
+      if defPi >= 0 then
       begin
         varMask := 0;
         for j := 0 to dcCount - 1 do

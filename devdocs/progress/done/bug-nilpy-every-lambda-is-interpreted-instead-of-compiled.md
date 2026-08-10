@@ -176,3 +176,37 @@ Gate: self-host fixedpoint converged, `tools/gate.sh quick` GREEN.
 
 ## Log
 - 2026-08-10 — resolved, commit 9445b7ab3.
+
+## 2026-08-10, later the same day — REVERTED, then RELANDED
+
+The resolution above was pushed as 9445b7ab3 and **reverted hours later**
+(88eb07f9d), then relanded once its real blocker was fixed. Recording the whole
+arc, because the failure mode is the interesting part.
+
+**What the resolution above missed.** Widening the gate does not just make
+lambdas faster — it moves them onto a *different path*, and the two paths did
+not enforce the same things. The pyeval closure checks arity
+(`pyclosure_setarity`); the lift does not. So:
+
+    f = lambda x: x
+    f(1, 2)   correct TypeError  ->  silently returned 1
+    f()       correct TypeError  ->  SEGFAULT
+
+**Why it got pushed.** Every check done at the time passed: 16 shapes
+byte-identical to CPython, identical to `pinned`, and `gate.sh quick` GREEN. The
+test that catches it, `test/test_nilpy_lambda_arity.npy`, is not in the quick
+tier, and correctness sweeps of *working* code never exercise the error cases
+where the difference lived.
+
+**The lesson, now recorded as a rule:** when a change routes constructs onto a
+different existing path, diffing outputs is not enough — ask what the OLD path
+enforced that the new one may not (arity, raising, refcounting, finalization,
+diagnostics), and run the whole affected TEST FAMILY, not just the gate. That
+sweep is ~60 tests and under a minute; it is "run your repro", not
+gate-widening. It caught a second, pre-existing bug on the reland
+([[bug-nilpy-lifted-lambda-cannot-capture-a-managed-string]]).
+
+**Relanded** on top of [[bug-nilpy-lifted-lambda-does-not-enforce-arity]], which
+gives the bound-fn path the arity range it always had the fields for. The perf
+result is unchanged from the measurement above (1.46 s -> 0.41 s over 200k
+calls); what changed is that wrong-arity calls now raise on both routes.

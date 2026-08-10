@@ -2077,7 +2077,12 @@ begin
   o^.NBound := n;
   o^.A0Var := a0var;
   o^.NOwn := 1;   { the historic assumption; pyboundfn_setown overrides it }
-  o^.NDef := 0; o^.NDefBase := 0; o^.DefVarMask := 0;   { no defaulted params unless told }
+  { NDefBase = -1 means ARITY UNCHECKED. Only the lambda lifter calls
+    pyboundfn_setdefaults, so every other bound-fn user — nested defs, the
+    callback bridges — keeps the lenient behaviour its comment relies on.
+    Read only when NDef > 0 elsewhere, so -1 is inert there.
+    bug-nilpy-lifted-lambda-does-not-enforce-arity }
+  o^.NDef := 0; o^.NDefBase := -1; o^.DefVarMask := 0;   { no defaulted params unless told }
   o^.BKindMask := 0;
   for i := 0 to 19 do o^.Bound[i] := 0;
   pyboundfn_new := Pointer(o);
@@ -2506,6 +2511,30 @@ begin
   lo := Closures[c].ReqN;
   hi := Closures[c].TotN;
   PyClosureArityBad := (n < lo) or (n > hi);
+end;
+
+function PyBoundFnArityBad(o: Pointer; n: Int64; var lo, hi: Int64): Boolean;
+{ The bound-fn twin of PyClosureArityBad. A LIFTED lambda enforced nothing,
+  while the pyeval closure handling the same construct raised correctly — so
+  `lambda x: x` called with two arguments answered 1 instead of raising, and
+  called with none it SEGFAULTED. Which of the two paths a lambda took was
+  decided by whether its body happened to contain a call.
+
+  The legal range is NDefBase .. NDefBase + NDef: NDefBase is the caller-side
+  index where defaulted params begin, i.e. the count of REQUIRED arguments, and
+  each defaulted param widens the range by one. NDefBase < 0 = unchecked, which
+  is every bound-fn the lambda lifter did not build. }
+var b: PBoundFnObj;
+begin
+  PyBoundFnArityBad := False;
+  lo := 0; hi := 0;
+  if o = nil then Exit;
+  if not pyboundfn_is(o) then Exit;
+  b := PBoundFnObj(o);
+  if b^.NDefBase < 0 then Exit;                   { unchecked }
+  lo := b^.NDefBase;
+  hi := b^.NDefBase + b^.NDef;
+  PyBoundFnArityBad := (n < lo) or (n > hi);
 end;
 
 procedure PyRaiseArity(n, lo, hi: Int64);
@@ -4222,6 +4251,7 @@ begin
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
+  if PyBoundFnArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -4245,6 +4275,7 @@ begin
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
+  if PyBoundFnArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -4269,6 +4300,7 @@ begin
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
+  if PyBoundFnArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
@@ -4293,6 +4325,7 @@ begin
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
+  if PyBoundFnArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
   if o <> nil then
   begin
     if pyclosure_is(o) then
