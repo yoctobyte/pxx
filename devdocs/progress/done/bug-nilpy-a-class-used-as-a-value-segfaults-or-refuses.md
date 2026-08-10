@@ -259,4 +259,4 @@ Also still open, and its own ticket's business:
 `make test-nilpy`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 9ab1f8902.
