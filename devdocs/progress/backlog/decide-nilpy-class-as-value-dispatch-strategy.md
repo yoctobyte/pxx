@@ -119,3 +119,82 @@ is decided here. Worth deciding together, but it does not block: the `six` shim'
 blocked names (`text_type = str`, `binary_type = bytes`, `string_types = (str,)`)
 are all BUILTIN types, so that half turns on the builtin-type-code question, not
 on this one.
+
+---
+
+## CORRECTION 2026-08-10 — this is not a new problem; NilPy already solved it for DEFS
+
+Everything above frames the argument ABI as an open three-way design fork. It is
+not. **The identical problem — inferred, per-callee, mutually incompatible
+argument ABIs — already exists for functions, and the frontend already solved it
+and shipped it.** The options section argues *against* the uniform-variant route
+on "two mechanisms for one concept" grounds; that is the route NilPy actually
+took for defs, and it took it in the way that avoids that smell.
+
+Measured at HEAD (`8adc552b5`), both programs run correctly today:
+
+```python
+def fa(v): return v + 1        # inferred: v Integer
+def fb(s): return s + "!"      # inferred: s AnsiString
+table = {"a": fa, "b": fb}     # one dict, DIFFERENT parameter ABIs
+table["a"](10)  # 11    OK
+table["b"]("y") # y!    OK
+```
+
+```python
+def fa(v): return v + 1
+fa(3)      # direct   OK
+g = fa
+g(10)      # indirect OK   <- SAME entry point, not a second one
+```
+
+The mechanism is **`PyDefUsedAsValue`** (pyparser.inc ~19469). It scans the
+module for the def's name used as a bare value; if found, that def is compiled
+with **variant parameters and a variant result** (pyparser.inc:21991 states it
+in as many words: *"PyDefUsedAsValue normalises a def: variant result, variant
+parameters"*). Every `Callable[...]` site then marshals the same way whichever
+def it receives.
+
+Note what it does NOT do: it does not add a second entry point. It normalises
+the def's ONE entry, selected by the use-as-value scan — which is exactly why
+the direct call `fa(3)` and the indirect `g(10)` both work with one conversion
+path. Option C above proposed a *second* all-variant entry and was then
+(correctly) criticised for creating two conversion semantics. That criticism
+does not apply to what the def path actually does.
+
+**There is no `PyClassUsedAsValue`.** The class path simply never got the
+treatment its sibling has had for a long time.
+
+### What this leaves genuinely open
+
+The decision is much smaller than the options above suggest. Of the three
+pieces:
+
+- **recovering WHICH class** — needs the tag (tag 11). Unchanged, uncontroversial.
+- **dynamic instance size + VMT** — **already solved**; that is precisely what
+  `AN_METACLASS_NEW` does today.
+- **the argument ABI** — the only open piece, and it has a working precedent to
+  copy (`PyClassUsedAsValue` -> normalise the ctor's params/result to variants)
+  rather than a design to invent.
+
+So the real question is no longer "A, B or C" but: **is there any reason the
+ctor cannot follow the same normalisation a def gets?** Candidate reasons worth
+checking before committing — none yet investigated:
+
+- a ctor is reached through `AN_METACLASS_NEW`'s allocate-then-call shape, not
+  a plain indirect call, so the normalised ctor has to be callable from that
+  path too;
+- `__init__` has the implicit `self` receiver, and the bound-method history
+  above (`bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter`)
+  shows the receiver is exactly where the procedural-type marshalling ran out of
+  room before;
+- inherited / overridden `__init__` across a hierarchy, where the def case has
+  no analogue.
+
+If none of those bites, this stops being a Track U decision at all and becomes
+ordinary Track N work: "give classes the `PyDefUsedAsValue` treatment". It
+should be re-filed into N in that case — U holds open questions, not work.
+
+**Do not implement Option A or B off the analysis above without first
+establishing why the def route does not apply.** That analysis was written
+without noticing the def path existed.
