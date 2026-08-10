@@ -3,6 +3,8 @@ track: A
 prio: 55
 type: feature
 summary: "A NilPy `import X` finds X.py only as a SIBLING of the importing file; the fall-through chain looks for units (.pas) only, so a .py module shipped in lib/** is unreachable. Blocks shipping any NilPy-written library, starting with tkhtmlview"
+status: done
+owner: claude-ACPN
 ---
 
 # a `.py` module shipped in `lib/**` cannot be imported
@@ -73,3 +75,47 @@ untouched either way** — it is Python's own semantics and it is load-bearing
 The probe above importing from `lib/pcl/`; `make test-nilpy` green (the suite
 has multi-module tests that rely on sibling-first — those must not move);
 self-host byte-identical; `import re` still reaching `lib/rtl/re.pas`.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-10)
+
+A NilPy `import` now falls back to `<root>/<name>.py` then `.npy` across the
+user search roots (`-Fu`/`-I`) and the shipped `lib/rtl` / `lib/pcl` roots.
+
+**Placed LAST among the real lookups**, after every `.pas`/`.pp`/`.c`/`.h` probe
+and before only the `mimic_` shim mapping — the conservative arm of the ticket's
+one design question:
+
+- after `.pas`, so **no program that compiles today can change resolution**. A
+  NilPy library cannot silently shadow a same-named Pascal unit, and replacing
+  one stays an explicit swap (delete the `.pas`).
+- before the shim, because a module we actually ship should beat a `mimic_`
+  substitution for the same name.
+
+The sibling-first probe is untouched — it is Python's own rule and load-bearing
+(its own comment records the `tk.npy` incident).
+
+### Measured — all three at once, because they are one ordering decision
+
+| | before | after |
+| --- | --- | --- |
+| `.py` in `lib/pcl/`, imported from elsewhere | `import: no unit named zzprobe` | `from-lib-pcl` |
+| same name as a SIBLING of the importer | `from-sibling` | `from-sibling` |
+| `import re` → `lib/rtl/re.pas` | `bbnbnb` | `bbnbnb` |
+
+The sibling row is the one that proves Python's precedence survived; the `re`
+row proves a Pascal unit still wins its own lookup.
+
+**Regression test:** `test/test_nilpy_import_py_from_library_path.npy` with
+`test/nilpylib/zzlibmod.py`, wired into `make test-nilpy` via `-Futest/nilpylib`.
+It asserts the library import **and** `import re` in the SAME file deliberately —
+they are one ordering decision, and separate tests would let one regress while
+the other passes.
+
+**Gate:** `tools/gate.sh quick` GREEN (self-host fixedpoint + testmgr quick +
+FPC seed canary), `make test-nilpy` green, self-host byte-identical.
+
+**Unblocks** [[feature-b-tkhtmlview-in-nilpy]], which was scoped as "pure Track
+B" and was not, purely because of this. It is now.

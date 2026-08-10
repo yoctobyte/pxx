@@ -1,0 +1,20 @@
+# A NilPy module shipped in a LIBRARY ROOT must be importable.
+#
+# The sibling probe (Python's own rule: the importing file's directory wins)
+# always worked; when it missed, the rest of the search chain resolved UNITS
+# (.pas/.pp/.c/.h) and never .py, so a NilPy module placed in a library
+# directory was unreachable — "import: no unit named zzlibmod". That blocked
+# shipping ANY library written in NilPy.
+#
+# The library lookup is deliberately LAST among the real lookups, so no program
+# that compiles today changes resolution: a NilPy module never silently shadows
+# a same-named Pascal unit. `import re` still reaching lib/rtl/re.pas is the
+# guard for that, and it is here rather than in a separate test because the two
+# rules are one ordering decision.
+# feature-nilpy-import-a-py-module-from-the-library-path
+from zzlibmod import greet, VALUE
+import re
+
+print(greet("x"))
+print(VALUE + 1)
+print(re.sub("a", "b", "banana"))

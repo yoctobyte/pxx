@@ -1435,6 +1435,10 @@ test-nilpy: $(COMPILER)
 	# close()/readlines() on a read-mode handle (still a TPyList under the read-slurp model)
 	./$(COMPILER) test/test_nilpy_file_close_readlines.npy /tmp/test_nilpy_file_closerl26
 	test "$$(/tmp/test_nilpy_file_closerl26)" = "$$(printf '3\none\ntwo\nthree')"
+	# a NilPy module shipped in a LIBRARY ROOT is importable, and a Pascal unit
+	# of a different name still wins its own lookup (import re -> lib/rtl/re.pas)
+	./$(COMPILER) -Futest/nilpylib test/test_nilpy_import_py_from_library_path.npy /tmp/test_nilpy_pylibpath26
+	test "$$(/tmp/test_nilpy_pylibpath26)" = "$$(printf 'lib:x\n42\nbbnbnb')"
 	# a dynamically-typed receiver picks its candidate class by ARITY when the
 	# argument count settles it (songformatter's `var.get()`)
 	./$(COMPILER) test/test_nilpy_variant_method_pick_by_arity.npy /tmp/test_nilpy_arity26
@@ -3520,6 +3524,8 @@ test-core: $(COMPILER)
 	/tmp/cptr_array_decay_stride_b6126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_array_decay_addr_b378.c /tmp/cfloat_array_decay_addr_b37826
 	/tmp/cfloat_array_decay_addr_b37826; test "$$?" = "42"
+	./$(COMPILER) test/cfinalizers_on_main_return_b379.c /tmp/cfinalizers_main_b37926
+	/tmp/cfinalizers_main_b37926; test "$$?" = "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c /tmp/cfield_2d_row_decay_b6226
 	/tmp/cfield_2d_row_decay_b6226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_shadow_local_b151.c /tmp/ctypedef_shadow_local_b15126

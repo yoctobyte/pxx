@@ -1,5 +1,4 @@
 ---
-blocked-by: feature-c-entry-stub-must-run-finalizers
 summary: "The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED"
 type: feature
 track: B
@@ -199,3 +198,20 @@ Order of operations for whoever takes this:
 Note the ticket's own scope line stays honest: the **environ** half
 ([[bug-...-environ]] direction) is NOT solved by this — it needs an *init*
 phase, and what landed is the *fini* phase.
+### Added by Track A, 2026-08-10 — one fact Track B's note does not have
+
+**The hook is INERT today.** No auto-pulled unit has a `finalization` section
+(checked `pxxcio`, `builtinheap`), so `__pxx_run_finalizers` walks an empty list
+and all 385 C tests are differentially identical to `pinned`. That is why the
+landed change is observably a no-op and why the pin carrying it will look like
+nothing changed.
+
+Consequence for step 3: once the handler table exists, **if handlers do not
+fire, suspect crtl's registration, not the stub** — the stub's call is verified
+present (byte pattern, resolved rel32) and verified to execute (the reverted
+`pxxcio` probe). That is the one debugging step this ordering makes confusing,
+so it is written down.
+
+Track B's reading of the pin dependency is correct and supersedes Track A's
+original "UNBLOCKED" framing, which understated it: the code blocker is gone,
+the pin is not.

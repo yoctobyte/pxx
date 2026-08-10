@@ -1058,6 +1058,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
+| feature-c-entry-stub-must-run-finalizers | C | 40 | feature | The C entry stub is `call main; exit_group(retval)`, so a plain `return` from main skips __pxx_run_finalizers entirely — which is why crtl cannot implement atexit without looking implemented and silently skipping handlers on the commonest exit path | — |
 | feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
 | feature-c-gcc-oracle-differential-probe | B | 50 | feature | tools/gcc_diff_probe.sh — the gcc-oracle differential over crtl's EXISTING functions (the C mirror of fpc_diff_probe.sh), with a --target cross mode; found 6 bugs on its first two runs | — |
 | feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
@@ -1278,6 +1279,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-function-values | N | 70 | feature | NilPy: a def as a VALUE (procedure pointer) | — |
 | feature-nilpy-generator-expression-arg | N | 45 | feature | NilPy: a generator expression as a call argument | — |
 | feature-nilpy-hex-bin-oct-over-a-big-int | N | 55 | feature | hex/bin/oct take Int64, so they stop matching the moment every NilPy int is promotable — they need a PXXPromoToBase in promocore plus a frontend lowering, NOT a pylib overload (a PromoInt parameter cannot reach the runtime) | decide-nilpy-int-promotion-costs-10x-on-ordinary-loops |
+| feature-nilpy-import-a-py-module-from-the-library-path | A | 55 | feature | A NilPy `import X` finds X.py only as a SIBLING of the importing file; the fall-through chain looks for units (.pas) only, so a .py module shipped in lib/** is unreachable. Blocks shipping any NilPy-written library, starting with tkhtmlview | — |
 | feature-nilpy-keyword-args | N | 65 | feature | NilPy: keyword arguments at call sites | — |
 | feature-nilpy-lambda | N | 40 | feature | NilPy: real lambda expressions (function values) | — |
 | feature-nilpy-len-of-str | N | 50 | feature | NilPy: len() on a str (only TPyList is accepted today) | — |

@@ -29542,6 +29542,7 @@ var
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
   guardIdx: Integer;   { CompiledUnits key — see the note at its assignment }
   isPyUnit, savedPyExprMode: Boolean;
+  pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
   savedNestedComments: Boolean;
   unitNeedsText: Boolean;
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
@@ -30021,6 +30022,60 @@ begin
     ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+  end;
+
+  { A NilPy module SHIPPED IN A LIBRARY ROOT. The sibling probe far above is
+    Python's own rule (the importing file's directory wins), but when it misses,
+    the rest of the chain resolves UNITS — `.pas` / `.pp` / `.c` / `.h` — and
+    never `.py`. So a NilPy module placed in `lib/**` was unreachable: the
+    identical file imported fine as a sibling and failed from `lib/pcl/` with
+    "no unit named ...". That is what blocks shipping any library written in
+    NilPy (feature-nilpy-import-a-py-module-from-the-library-path).
+
+    Deliberately LAST among the real lookups, and before the mimic_ shim
+    mapping only:
+
+      - after every `.pas` lookup, so no program that compiles today can change
+        resolution — a NilPy library does not silently shadow a same-named
+        Pascal unit, and replacing one is an explicit swap (delete the .pas).
+        The ordering here carries more subtlety than it looks
+        (bug-nilpy-stdlib-name-binds-pascal-unit);
+      - before the shim, because a module we actually ship should beat a
+        mimic_ substitution for the same name.
+
+    The sibling-first rule above is untouched — it is load-bearing (see the
+    `tk.npy` note there). }
+  if (Length(UnitContent) = 0) and isNilPy and (not isPath) then
+  begin
+    pyRootIdx := 0;
+    while (Length(UnitContent) = 0) and (pyRootIdx < PasUnitDirCount) do
+    begin
+      ConcatThree(PasUnitDirs[pyRootIdx], lo, '.py', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) = 0 then
+      begin
+        ConcatThree(PasUnitDirs[pyRootIdx], lo, '.npy', path);
+        LoadFile(path, UnitContent);
+      end;
+      Inc(pyRootIdx);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(rtldir, lo, '.py', path);   LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(rtldir, lo, '.npy', path);  LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(lcldir, lo, '.py', path);   LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(lcldir, lo, '.npy', path);  LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) > 0 then isPyUnit := True;
   end;
 
   { NilPy SHIM MAPPING. A Python module we implement ourselves lives under OUR
