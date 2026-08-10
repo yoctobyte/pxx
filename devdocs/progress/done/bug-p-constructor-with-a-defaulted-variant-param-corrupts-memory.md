@@ -84,7 +84,7 @@ Worth a regression test in `test/` pinning constructor × defaulted managed
 parameter, since a plain procedure passing is exactly what let this survive.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 2266bd523.
 
 ## Resolution (2026-08-10)
 
