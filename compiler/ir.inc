@@ -956,6 +956,79 @@ begin
   IRPromoCall4 := IRAppendCall(cpi, g0, -1, Ord(retTk));
 end;
 
+{ The OBJECT link of the variant-comparison chain below, in exactly the shape
+  PXXPromoVarCmpTry already uses one link up: call a TRY that answers
+  0 = not handled / 1 = False / 2 = True, and when it declines, run the
+  comparison that was going to run anyway — untouched.
+
+  Why a try and not a replacement, which is what the first three cuts were:
+  `IR_VAR_BINOP` is not a routine to be swapped out. On x86-64 it is INLINE
+  emitted code (EmitVarBinOp) carrying its own None-equality arm, its own
+  char/string arms and its own numeric double-dispatch; builtinheap's
+  PXXVarBinOp is a DIFFERENT implementation of the same operator for the other
+  backends. Substituting either one for the whole fallback broke, in order:
+  promotable ints, `is` vs `==`, char-vs-string, and `0 == None`. A try that
+  declines cannot regress a case it never sees, and every non-object comparison
+  now emits byte-for-byte the instruction it emitted before.
+
+  What it buys: `a == xs[0]` reaches a user `__eq__`. The compile-time dunder
+  arms key on both operands' STATIC class, so the dunder worked for two named
+  locals and silently compared payloads the moment either side was a container
+  element, a for-in variable or an unannotated parameter — which is where
+  objects normally live in Python
+  (bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant).
+
+  `is` declines too: it lowers to the SAME tkEq node and is told apart only by
+  PY_BINOP_IDENTITY, the marker the by-contents arms above already consult. }
+function IRPyVarEqTry(left, right, item, node: Integer): Integer;
+var cpi, g0, g1, g2, varIdx, elseLabel, endLabel, trySym: Integer;
+begin
+  IRPyVarEqTry := -1;
+  if not isNilPy then Exit;
+  if (item <> Ord(tkEq)) and (item <> Ord(tkNeq)) then Exit;
+  if (node >= 0) and (ASTSLen[node] = PY_BINOP_IDENTITY) then Exit;
+  cpi := FindProc('pyvar_eqv');
+  if cpi < 0 then Exit;
+
+  trySym := AllocVar('', tyInteger);
+  g0 := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyPointer));
+  g1 := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyPointer));
+  g2 := IRAppend(IR_ARG,
+          IRAppend(IR_CONST_INT, -1, -1, -1, Ord(item = Ord(tkNeq)), Ord(tyInt64)),
+          -1, -1, 0, Ord(tyInt64));
+  IRB[g0] := g1; IRB[g1] := g2;
+  IRAppend(IR_STORE_SYM, trySym, IRAppendCall(cpi, g0, -1, Ord(tyInt64)),
+           -1, 0, Ord(tyInteger));
+
+  varIdx := AllocVar('', tyBoolean);
+  elseLabel := IRNewLabel;
+  endLabel := IRNewLabel;
+  IRAppend(IR_JUMP_IF_FALSE, elseLabel,
+           IRAppend(IR_LOAD_SYM, trySym, -1, -1, 0, Ord(tyInteger)), -1, 0, 0);
+  IRAppend(IR_STORE_SYM, varIdx,
+           IRAppend(IR_BINOP,
+                    IRAppend(IR_LOAD_SYM, trySym, -1, -1, 0, Ord(tyInteger)),
+                    IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                    Ord(tkMinus), 0, Ord(tyInteger)), -1, 0, Ord(tyBoolean));
+  IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+  IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+  IRAppend(IR_STORE_SYM, varIdx,
+           IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean)),
+           -1, 0, Ord(tyBoolean));
+  IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+  IRPyVarEqTry := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+end;
+
+{ …and the plain fallback, wrapped so both call sites read the same. }
+function IRPyVarEqFallback(left, right, item, node: Integer): Integer;
+var r: Integer;
+begin
+  r := IRPyVarEqTry(left, right, item, node);
+  if r >= 0 then IRPyVarEqFallback := r
+  else IRPyVarEqFallback := IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean));
+end;
+
+
 { A fresh promo temp slot, zeroed so its tag starts INLINE. }
 function IRPromoTempSlot(var symOut: Integer): Integer;
 var tmpSym: Integer;
@@ -6974,7 +7047,7 @@ begin
           else if item = Ord(tkGt) then promoOp := 5
           else if item = Ord(tkGe) then promoOp := 6;
           if FindProc('PXXPromoVarCmpTry') < 0 then
-            Result := IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean))
+            Result := IRPyVarEqFallback(left, right, item, node)
           else
           begin
             { r: 0 = not handled, 1 = False, 2 = True }
@@ -6996,7 +7069,7 @@ begin
             IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
             IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
             IRAppend(IR_STORE_SYM, varIdx,
-                     IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean)),
+                     IRPyVarEqFallback(left, right, item, node),
                      -1, 0, Ord(tyBoolean));
             IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
             Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));

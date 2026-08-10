@@ -716,6 +716,12 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_parentcall26 | diff -u test/test_nilpy_parent_call_after_instantiation.expected -
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy /tmp/test_nilpy_class_attr_hoist_leak26
 	/tmp/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
+	# `__eq__` was SKIPPED as soon as one operand was a VARIANT — the dunder worked
+	# with two named locals and `a == xs[0]` compared payloads, silently False. `==`
+	# now routes to pyvar_eqv, the router over the equality `in`/count/index already
+	# used. Includes the scalar/container regression half. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_eq_dunder_variant_operand.npy /tmp/test_nilpy_eq_dunder_variant26
+	/tmp/test_nilpy_eq_dunder_variant26 | diff -u test/test_nilpy_eq_dunder_variant_operand.expected -
 	# a CLASS used as a VALUE — `cls = A`, a two-class registry, a subclass whose
 	# base is a value, a class passed as an argument, a *args ctor, and print(cls).
 	# Refused before (and a segfault before the refusal): the blob address rode as a

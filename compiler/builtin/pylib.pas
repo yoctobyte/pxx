@@ -578,6 +578,11 @@ function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
 function PyCallableStr(const v: Variant): AnsiString;
 function PyClassRefStr(const v: Variant): AnsiString;
+{ `==`/`!=` TRY for two variant slots by address, in PXXPromoVarCmpTry's
+  protocol (0 = not handled, 1 = False, 2 = True). Answers only when an OBJECT
+  is involved, so a user __eq__ is reached; declines everything else. Must stay
+  in the interface — ir.inc calls it by name. }
+function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
   Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
@@ -3626,6 +3631,15 @@ begin
         Mutually recursive with pydict_eq, which is why that one is
         forward-declared. }
       Result := pydict_eq(TPyDict(pl), TPyDict(ql))
+    else if (pl is TPyBytes) and (ql is TPyBytes) then
+      { …and two BYTES by contents — the third of this unit's containers, and
+        the arm that was missing while list and dict had theirs. `b"ab" ==
+        b"ab"` answered False (identity) where CPython says True, and
+        `b"ab" in [b"ab"]` with it. pybytes_eq already existed; only this line
+        was absent. The sibling-of-a-double-case check
+        (devdocs/dev/normalise-dont-special-case.md) found it the moment `==`
+        started routing here. }
+      Result := pybytes_eq(TPyBytes(pl), TPyBytes(ql))
     else
       { Neither is one of this unit's containers, so they may be USER class
         instances with an `__eq__`. Identity above already settled the equal
@@ -3665,6 +3679,41 @@ begin
   end
   else
     Result := p^.Payload = q^.Payload;
+end;
+
+{ A `TRY` for `==` / `!=` on two variant SLOTS, taken by address and answering
+  in PXXPromoVarCmpTry's exact protocol: **0 = not handled**, 1 = False,
+  2 = True. It is one more link in that same chain in ir.inc, and deliberately
+  nothing more.
+
+  It handles ONE case: an OBJECT (tag 7) on either side, which it answers with
+  PyVarEq — the only equality in this unit that reaches a user `__eq__` (via
+  PyUserObjEq) and compares lists/dicts/tuples by CONTENT. Everything else
+  returns 0 and the caller's own comparison runs completely unchanged
+  (bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant).
+
+  "Answer nothing you were not asked" is the whole design, and it was learned
+  by breaking three things that were not asked. Earlier cuts REPLACED the
+  fallback, on the assumption that PyVarEq covers what it covered. It does not:
+  it wants equal tags outside the numeric family (a CHAR against a
+  one-character STRING went False), and the fallback is not even a routine — on
+  x86-64 `IR_VAR_BINOP` is INLINE-EMITTED code with its own None arm, so
+  `0 == None` became True when the call went to builtinheap's PXXVarBinOp
+  instead. A try that declines cannot regress a case it never sees.
+
+  The PROMOTABLE-INT family never reaches here — PXXPromoVarCmpTry runs first
+  and answers before this. }
+function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
+var eq: Boolean;
+begin
+  if (PPyVarRec(a)^.VType <> 7) and (PPyVarRec(b)^.VType <> 7) then
+  begin
+    Result := 0;                      { not ours — the caller's own compare stands }
+    Exit;
+  end;
+  eq := PyVarEq(PPyVarRec(a), PPyVarRec(b));
+  if neq <> 0 then eq := not eq;
+  if eq then Result := 2 else Result := 1;
 end;
 
 { Does this variant hold the given pylib container? k: 1=list, 2=dict,

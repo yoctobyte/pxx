@@ -1,0 +1,40 @@
+static  : True
+subscr  : True True
+both    : True False
+dictget : True
+forin   : True True
+ne      : False True
+arg     : True False
+annot   : True True
+noeq    : False True True
+mix 0 True False
+mix 1 False True
+mix 2 True False
+mix 3 True False
+mix 4 True False
+mix 5 True False
+mix 6 False True
+crosstag: True True
+member  : True 1 0
+bytes 0 True False
+bytes 1 True False
+bytes 2 True False
+bytesx  : False True 1
+bytesmix: False False True
+promo   : True False True False True
+promo2  : True False False
+is      : False True True True
+isparam : True False
+char 0 False False False True
+char 1 True False False False
+char 2 False True False True
+char 3 False False True True
+charstr : True True True
+none False False True
+none False False True
+none False False True
+none False False True
+none False False True
+none False False True
+none True True False
+nonenone: True False

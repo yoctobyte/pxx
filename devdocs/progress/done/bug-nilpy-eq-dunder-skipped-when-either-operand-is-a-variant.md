@@ -4,8 +4,8 @@ prio: 55
 type: bug
 blocked-by: []   # decided 2026-08-08: option B
 summary: "`a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False."
-status: backlog
-owner: ""
+status: done
+owner: claude-AN
 ---
 
 # `__eq__` is skipped as soon as one operand is a variant
@@ -196,3 +196,127 @@ dunder works with two named locals and fails the moment one side is a container
 element, which is the shape real code writes.
 
 No code changed.
+
+## Resolution (2026-08-10)
+
+The 08-10 note above asked the right question — *"what route does membership
+use, and can `==` be pointed at the same one instead of building a second"* —
+and the answer is yes, in about twenty lines. But **the first cut put it in the
+wrong place, and that is the part worth recording.**
+
+### Cause, confirmed
+
+Every dunder arm in `parser.inc`'s comparison block is guarded on
+`IntToTypeKind(ASTTk[left]) = tyClass` **and** the same for the right. A variant
+has no static class, so `a == xs[0]` matched none of them and fell through to
+the generic variant compare — `IR_VAR_BINOP`, which compares tag and payload and
+knows nothing about user classes.
+
+Two equalities for one concept, and the one the `==` operator used was the one
+that could not see a dunder: `PyVarEq` in pylib is a complete Python `==`
+(int-family cross-tag, int-vs-float, strings and containers by content, and
+`PyUserObjEq` for a user `__eq__`) and was reachable only from container methods.
+
+### The wrong place, and how it was caught
+
+The first cut added a fourth compile-time arm in `parser.inc` that diverted
+variant-vs-variant comparisons to a pylib router. Every repro passed — the
+ticket's cases, `!=`, annotated and unannotated dunders, identity fallback,
+scalars and containers through variants, `== None` — and `tools/gate.sh quick`
+was **GREEN**.
+
+`make test-nilpy` was not. `test_nilpy_int_promotion_default` failed on one
+line: `2**64 == 2**64` had become **False**.
+
+`PXXDBG=a.ir` on the old compiler shows why, and shows it in one dump: the
+variant comparison was never a bare `IR_VAR_BINOP`. It is a **try-chain** —
+`PXXPromoVarCmpTry(left, right, op)` answers 0 = not handled / 1 = False /
+2 = True, and only its "not handled" branch reaches `IR_VAR_BINOP`. The new arm
+sat in front of the whole chain and stole the promotable-int family with it.
+
+That is [[project_nilpy_static_vs_variant_operand_paths_diverge]]'s shape from
+the other side, and the lesson is the one
+`feedback_widening_a_lowering_needs_a_family_sweep_not_a_wider_gate` records:
+moving a lowering to a different path silently drops what the old path enforced,
+outputs matched, and quick was green.
+
+### Where it actually belongs
+
+`ir.inc`'s `IRPyVarEqFallback` — the **fallback arm of that existing chain**, not
+a rival to it. The promo try still runs first and answers first; only when it
+says "not handled" does `==` / `!=` go to pylib's `pyvar_eqv` (`PyVarEq` by
+another name, taking the two variant slots by address exactly as
+`PXXPromoVarCmpTry` takes them). Ordering operators keep `IR_VAR_BINOP`
+untouched, and `!=` is the negation.
+
+So the final change is: **one link of an existing chain re-pointed**, plus a name
+in pylib's interface. No new arm, no second equality.
+
+### Four misses, one mistake, and the shape that ends it
+
+With the fix in the right *place*, `make test-nilpy` failed three more times,
+each on something the change had no business touching:
+
+| run | what broke | why |
+| --- | --- | --- |
+| 2 | `dst is not src` over variant params | `is` lowers to the SAME tkEq node and is told apart only by `PY_BINOP_IDENTITY` — the marker the by-contents arms already consult, and the new one did not |
+| 3 | `expr[j] == " "` (a tokeniser loop) | `PyVarEq` wants equal tags outside the numeric family, so CHAR vs one-character STRING went False |
+| 4 | `0 == None` → True | **`IR_VAR_BINOP` is not a routine.** On x86-64 it is INLINE-emitted code (`EmitVarBinOp`) with its own None arm, char/string arms and numeric double-dispatch; builtinheap's `PXXVarBinOp` is a DIFFERENT implementation for the other backends. Calling the latter dropped the former's None arm |
+
+All four are one mistake: **replacing a fallback instead of adding a link in
+front of it.** Each fix widened my model of what the old path did and the model
+was still wrong the next run.
+
+The shape that ends it is the one `PXXPromoVarCmpTry` was already using, one
+link up the same chain: a **TRY** answering `0 = not handled / 1 = False /
+2 = True`. `pyvar_eqv` handles exactly one case — an OBJECT (tag 7) on either
+side — and declines everything else, so every non-object comparison emits
+byte-for-byte the instruction it emitted before. A try that declines cannot
+regress a case it never sees; a replacement has to enumerate them, and four runs
+proved I could not.
+
+`is` declines through the same door (the `PY_BINOP_IDENTITY` check sits in the
+try's guard, not in a separate arm).
+
+### The sibling it exposed
+
+With `==` routing through `PyVarEq`, `b"ab" == b"ab"` was still False — that
+routine had content arms for `TPyList` and `TPyDict` and **none for
+`TPyBytes`**, though `pybytes_eq` had existed all along. One line, found by the
+sibling-of-a-double-case check the moment the operator started arriving there
+(`devdocs/dev/normalise-dont-special-case.md`). Fixed here rather than filed:
+it is the same routine, the same concept, and leaving it would have meant
+shipping a route that is right for two of three containers.
+
+### Measured, all against CPython
+
+Before: `a == b` True, `a == xs[0]` False, `xs[0] == a` False,
+`xs[0] == ys[0]` False, for-in False, `a != xs[0]` True.
+After: every one matches CPython.
+
+`test/test_nilpy_eq_dunder_variant_operand.npy` (`.expected` generated by
+CPython), wired into `make test-nilpy`: subscript / for-in / dict-get /
+function-argument operands in both orders, `!=`, an ANNOTATED `other` parameter
+beside an unannotated one, a class WITHOUT `__eq__` keeping identity comparison,
+the membership family this route came from, and three regression blocks that
+exist because of the above — **bytes** by content, **promotable ints**, **`is` / `is not`** over variant
+parameters, and **char-vs-string** — the last three because cuts one, two and
+three broke exactly them.
+
+Gate: `tools/gate.sh quick` GREEN + `make test-nilpy` green.
+
+### What this closes and what it does not
+
+Closes the last item on the equality surface: the 08-10 measurement showed
+membership, `count`, `index` and `remove` already dispatched and `==` did not.
+It does NOT build option B's general dispatcher — it did not need to, because
+the run-time route already existed and only had to be reached. The broad build
+stays where [[decide-nilpy-runtime-dunder-dispatch-strategy]] parked it.
+
+Found while gating, filed not fixed:
+[[bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys]] — a class defining BOTH
+`__hash__` and `__eq__` is stored under a key the dict then cannot find, while
+`k1 == k2` answers True right beside it. Pre-existing at `pinned`.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

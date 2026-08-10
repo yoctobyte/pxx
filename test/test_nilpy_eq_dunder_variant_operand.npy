@@ -1,0 +1,139 @@
+# `__eq__` was SKIPPED as soon as one operand was a VARIANT.
+#
+# The frontend's dunder dispatch keys on the operands' STATIC class, so it could
+# only fire between two named locals: `a == b` ran the dunder and `a == xs[0]`
+# compared PAYLOADS and answered False for two equal objects, silently. A
+# container element, a for-in variable, an unannotated parameter and a
+# `.get()` result are all variants — which is where objects normally live in
+# Python — so the dunder worked in exactly the shape a minimal test uses and
+# failed in the shape real code writes.
+#
+# `==` is now routed to pylib's pyvar_eqv, a ROUTER over the equality the
+# membership family (`in`, count, index, remove) already used to reach a user
+# __eq__. Everything that is not an object still goes to PXXVarBinOp, the
+# operator's existing lowering — hence the scalar/container rows below, which
+# are the regression half of this test, not decoration.
+#
+# Diffed against CPython. bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
+
+
+class V:
+    def __init__(self, v: int):
+        self.v = v
+
+    def __eq__(self, o) -> bool:
+        return self.v == o.v
+
+
+class W:
+    def __init__(self, v: int):
+        self.v = v
+
+    def __eq__(self, o: "W") -> bool:
+        return self.v == o.v
+
+
+class Plain:
+    def __init__(self, v: int):
+        self.v = v
+
+
+a = V(1)
+xs = [V(1)]
+ys = [V(2)]
+d = {"k": V(1)}
+
+print("static  :", a == V(1))
+print("subscr  :", a == xs[0], xs[0] == a)
+print("both    :", xs[0] == [V(1)][0], xs[0] == ys[0])
+print("dictget :", a == d["k"])
+for q in xs:
+    print("forin   :", a == q, q == a)
+print("ne      :", a != xs[0], a != ys[0])
+
+
+def takes(x):
+    return a == x
+
+
+print("arg     :", takes(xs[0]), takes(ys[0]))
+
+# an ANNOTATED `other` parameter dispatches too — the two shapes the dunder can
+# have, and the reason a single fixed call signature would have miscompiled one
+w = W(3)
+ws = [W(3)]
+print("annot   :", w == ws[0], ws[0] == w)
+
+# a class WITHOUT __eq__ keeps Python's identity comparison
+p = Plain(1)
+ps = [Plain(1)]
+print("noeq    :", p == ps[0], p == p, ps[0] == ps[0])
+
+# REGRESSION half: every non-object shape must be unchanged
+nums = [1, 2, "a", None, 1.5, [1, 2], {"x": 1}]
+more = [1, 3, "a", None, 1.5, [1, 2], {"x": 2}]
+for i in range(len(nums)):
+    print("mix", i, nums[i] == more[i], nums[i] != more[i])
+print("crosstag:", nums[0] == 1.0, nums[0] == True)
+
+# the membership family this route came from must still dispatch
+print("member  :", a in xs, xs.count(a), xs.index(a))
+
+# BYTES by content — the third of pylib's containers, whose arm in PyVarEq was
+# missing while list and dict had theirs. Only reachable from `==` once this
+# fix routed the operator here, which is how it was found.
+ba = [b"ab", bytearray(b"cd"), b""]
+bb = [b"ab", bytearray(b"cd"), b""]
+for i in range(len(ba)):
+    print("bytes", i, ba[i] == bb[i], ba[i] != bb[i])
+print("bytesx  :", b"ab" == b"ac", b"ab" in [b"xy", b"ab"], [b"ab"].count(b"ab"))
+print("bytesmix:", b"ab" == "ab", b"ab" == 1, b"" == b"")
+
+# PROMOTABLE INTS must NOT come here — PXXPromoVarCmpTry answers first in the
+# chain. A first cut of this fix replaced the whole chain and regressed these
+# to False, which `make test-nilpy` caught and a repro-only check would not have.
+big = 2 ** 64
+big2 = 2 ** 64
+print("promo   :", big > 5, big < 5, big >= 5, big <= 5, big == 2 ** 64)
+print("promo2  :", big == big2, big != big2, big == 5)
+
+# `is` must stay IDENTITY. It lowers to the SAME tkEq node `==` does and is told
+# apart only by the PY_BINOP_IDENTITY marker; a first cut of this fix ignored
+# the marker in the new fallback and `dst is not src` over two VARIANT
+# parameters started answering by contents — inverting the one thing `is` exists
+# for. The two named locals below always worked; only the variant-parameter
+# shape broke, which is why it needs its own rows.
+l1 = [1]
+l2 = [1]
+l3 = l1
+print("is      :", l1 is l2, l1 is l3, l1 is not l2, l1 == l2)
+
+
+def not_same(dst, src):
+    return dst is not src
+
+
+print("isparam :", not_same(l1, l2), not_same(l1, l3))
+
+# CHAR against a one-character STRING. `expr[j]` is a char-tagged variant and
+# `" "` a string — different tags, which PyVarEq calls unequal and PXXVarBinOp
+# compares lexicographically. This is why pyvar_eqv is a ROUTER: only an OBJECT
+# operand goes to PyVarEq, everything else keeps the fallback it always had.
+# An ordinary tokeniser loop is the shape, and it is what caught the third cut.
+expr = "1 +a"
+for j in range(len(expr)):
+    c = expr[j]
+    print("char", j, c == " ", c == "+", c == "a", c != " ")
+
+strs = ["a", "b"]
+print("charstr :", strs[0] == "a", strs[0] == expr[3], expr[3] == strs[0])
+
+# `x == None` — None equals None and NOTHING else, including a falsy 0/""/[].
+# The x86-64 fallback (IR_VAR_BINOP) carries its own None arm INLINE; a cut that
+# replaced the fallback with a call to builtinheap's PXXVarBinOp lost it and
+# `0 == None` became True. Hence the current shape: a TRY that declines every
+# non-object case and leaves the fallback's own instruction in place.
+vals = [0, 0.0, False, "", [], {}, None]
+for v in vals:
+    print("none", v == None, None == v, v != None)
+print("nonenone:", None == None, None != None)
