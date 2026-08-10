@@ -7123,9 +7123,15 @@ begin
         else if nArrElems > 0 then arrLen := nArrElems
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
                 (baseTk <> tyRecord) and (baseTk <> tyPointer) and
-                TypeIsOrdinal(baseTk) then
+                (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk)) then
         begin
-          flatInitCount := CBraceFlatIntInitCountAt(TokPos, False);
+          { FLOAT base types count here too: `static double a[] = {1.0, 2.0}`.
+            Without the TypeIsFloat arm a float element made the scan reject the
+            list, every arm below missed, and arrLen fell through to 1 — so the
+            array was ALLOCATED one element (sizeof answered 8, the initializer
+            stored only [0], and a[1] read the next global's storage).
+            bug-c-sizeof-a-file-scope-double-array-answers-one-element. }
+          flatInitCount := CBraceFlatIntInitCountAt(TokPos, TypeIsFloat(baseTk));
           if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
         end
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and

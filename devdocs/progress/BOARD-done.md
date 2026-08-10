@@ -262,6 +262,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-scalar-ptr-global-init-silently-skipped | C | 60 | bug | bug: scalar pointer-global initializers silently skipped (null pointer at runtime) | — |
 | bug-c-shift-result-type-battery-00200 | A | 45 | bug | C shift-result-type battery (00200): result type = promoted LEFT operand across all int classes | — |
 | bug-c-signed-arith-shift-right | A | 50 | bug | C signed `>>` is a logical (not arithmetic) shift | — |
+| bug-c-sizeof-a-file-scope-double-array-answers-one-element | C | 70 | bug | sizeof() on a file-scope double[] whose length comes from its initializer answers 8 (one element) instead of the array size — silently, and the int[] case is correct, so nothing looks wrong | — |
 | bug-c-sizeof-array-type-ignores-extent | C | 35 | bug | C `sizeof(int[10])` returns the element size (4), not 40 — sizeof of an array TYPE-NAME ignores the extent (silent wrong value) | — |
 | bug-c-sizeof-array-yields-element-size | C | 50 | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-c-sizeof-expr-no-parens | C | 55 | bug | C `sizeof expr` without parentheses fails to parse | — |
