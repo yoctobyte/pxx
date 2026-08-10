@@ -3,7 +3,7 @@ summary: "NilPy: __repr__/__str__ of a class instance held in a container silent
 type: bug
 track: N
 prio: 45
-blocked-by: [decide-nilpy-runtime-dunder-dispatch-strategy]
+blocked-by: []   # decided 2026-08-08: option B
 ---
 
 # NilPy: dunders don't dispatch when the instance is reached through a container
@@ -121,3 +121,25 @@ knows TPyList/TPyDict/TPyBytes and nothing else.
 
 No fix attempted — same root, same blocker, deliberately not grown a private
 path. Found by a Vec/Mat program diffed against CPython.
+
+## Unblocked 2026-08-10 — and the decision singles THIS one out to do first
+
+[[decide-nilpy-runtime-dunder-dispatch-strategy]] is in `decided/`: **option B**
+(a compile-time-generated switch on class identity, not a reflective lookup),
+with dirty-class detection reusing the existing `PyDynAttrEverAssigned`
+predicate rather than inventing a second notion of "dirty".
+
+The broad strategy is parked to rainy-day — but the decision explicitly names
+this ticket's shape as the piece worth taking first:
+
+> If anyone picks up a piece, the narrow one comes first: pylib's container
+> renderer has no ROUTE to dispatch that already works — measured 2026-08-07,
+> `o.__repr__()` on an untyped parameter and over a heterogeneous list both
+> reach the right class today. That is a HOOK, not a dispatcher, and it is most
+> of the visible pain.
+
+So this is a hook into dispatch that already works, not new dispatch machinery —
+much smaller than the parked strategy, and it is where the visible symptom
+(`print([a, b])` rendering `[, ]`) lives. The standing rule from
+[[decide-nilpy-class-attribute-instance-read-model]] applies: correct or a clear
+error, never silent.

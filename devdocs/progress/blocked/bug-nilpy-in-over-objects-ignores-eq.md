@@ -2,8 +2,9 @@
 track: N
 prio: 50
 type: bug
-status: working
-owner: claude-AN
+status: blocked
+owner: ""
+blocked-by: bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 ---
 
 # `obj in [list of objects]` ignores `__eq__` and compares identity
@@ -96,3 +97,21 @@ fixed-signature wrapper per class, published under a known name.
 
 Returned to `backlog/` with the premise corrected, blocked in practice on the
 sibling above.
+
+## 2026-08-10 — the blocker it describes in prose now has a real edge
+
+This ticket's closing line says it was *"returned to `backlog/` with the premise
+corrected, blocked in practice on the sibling above"* — but the file sat in
+`blocked/` with **no `blocked-by:` in frontmatter**, so the board could not see
+why. That is the same failure mode
+[[feature-lib-tkinter-callable-options-with-args]] recorded on itself: a blocker
+stated in prose is invisible to the ranker, which reads frontmatter.
+
+Added the edge to
+[[bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant]], which is the
+sibling meant. Both `in` and `==` bottom out in pylib's `PyVarEq`, so the same
+dispatch fix serves both and this one should not be worked separately.
+
+Correctly stays in `blocked/`: the sibling is genuinely unfinished. But it now
+inherits the sibling's priority down the dependency edge instead of ranking on
+its own.

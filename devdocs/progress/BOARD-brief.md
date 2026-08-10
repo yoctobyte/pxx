@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:8 blocked:7 backlog:228 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1591 rejected:32`
+`urgent:2 working:1 unfinished:8 blocked:3 backlog:232 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1591 rejected:32`
 
 ## Held now (working/ — do not touch these files)
 
@@ -27,17 +27,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-star-args-kwargs` [N]
 - `feature-pascal-corpus-generics` [P]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (3) — has an unmet blocker; do not claim
 
-- `bug-nilpy-dunders-not-dispatched-through-containers` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
-- `bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant` [N] — blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
-- `bug-nilpy-in-over-objects-ignores-eq` [N]
-- `compat-pascal-write-fixed-huge-magnitude-differs-from-fpc` [A] — blocked-by: decide-float-fixed-output-exact-or-fpc-17-digit-cap
+- `bug-nilpy-in-over-objects-ignores-eq` [N] — blocked-by: bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - `feature-b-crtl-last-seven-unimplemented-declarations` [B] — blocked-by: feature-c-entry-stub-must-run-finalizers
-- `feature-lib-tkinter-callable-options-with-args` [B]
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 209, ranked
+## Ready — top 30 of 213, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 70] [P]` bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
@@ -60,6 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
+- `[p 55] [N]` bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant (unblocks 1)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
@@ -68,6 +65,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [U]` decide-ismultithread-runtime-flag-vs-compile-time-mode
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
-- `[p 55] [E]` feature-demo-portable-userland
 
-_179 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_183 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

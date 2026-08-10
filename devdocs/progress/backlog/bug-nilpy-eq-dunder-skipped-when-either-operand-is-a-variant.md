@@ -2,10 +2,10 @@
 track: N
 prio: 55
 type: bug
-blocked-by: decide-nilpy-runtime-dunder-dispatch-strategy
+blocked-by: []   # decided 2026-08-08: option B
 summary: "`a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False."
-status: working
-owner: claude-A-N
+status: backlog
+owner: ""
 ---
 
 # `__eq__` is skipped as soon as one operand is a variant
@@ -141,3 +141,24 @@ the thing the decision exists to prevent. So: `blocked-by` the decision, which
 also stops it surfacing at the head of the ready queue every session and being
 re-probed. Nothing here is stale; resume from the fix shape above the moment the
 strategy lands.
+
+## Unblocked 2026-08-10 — the postponed decision has landed
+
+[[decide-nilpy-runtime-dunder-dispatch-strategy]] is in `decided/`: **option B**,
+a compile-time-generated switch on class identity, degrading only when
+`PyDynAttrEverAssigned` says the class is dirty. This ticket's own closing line
+was *"resume from the fix shape above the moment the strategy lands"* — it has.
+
+What that changes: the reason this was blocked was that building an `__eq__`-only
+hook would have answered the strategy question by accident, in the shape hardest
+to unpick later. That risk is gone — the answer is now on record, so a fix here
+just has to be the option-B shape rather than a private path for one dunder.
+
+Honest about what is still true: option B's dispatcher does not exist yet, and
+the decision parks the broad build to rainy-day. The cheaper neighbour
+[[bug-nilpy-dunders-not-dispatched-through-containers]] is a HOOK into dispatch
+that already works and the decision names it the piece to take first — expect to
+want that one before this one.
+
+Also cleared here: `status: working` / `owner: claude-A-N`, a stale lock on a
+ticket that has sat in `blocked/` since 2026-08-03.

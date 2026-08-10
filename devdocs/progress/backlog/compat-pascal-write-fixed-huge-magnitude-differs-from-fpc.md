@@ -2,9 +2,9 @@
 track: A
 prio: 40
 type: bug
-blocked-by: decide-float-fixed-output-exact-or-fpc-17-digit-cap
+blocked-by: []   # decided 2026-08-08: KEEP EXACT
 summary: "write(v:w:d) with |v| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form)"
-status: blocked
+status: backlog
 
 ---
 
@@ -147,3 +147,30 @@ fix is the same routing — `StrFloat`'s `v >= 9.2e18` branch wants the exact
 expansion as a string — and it is deliberately NOT done under the bug ticket,
 because *which* form to print past the Int64 range is the parked decision this
 ticket is blocked on. Do it when that resolves.
+
+## Unblocked 2026-08-10 — the decision landed, and it sharpens the target
+
+[[decide-float-fixed-output-exact-or-fpc-17-digit-cap]] is in `decided/`:
+**option 1, KEEP EXACT** (user, 2026-08-08 — *"we are not cripling something we
+do correct and fpc doesn't"*). pxx prints the exact decimal expansion in the
+fixed form and does not adopt FPC's 17-digit cap.
+
+**Read the consequence carefully, because it splits this ticket in two:**
+
+- The **FPC divergence is now expected and correct**, not a defect. A `compat`
+  corpus must special-case it. So the ticket's TITLE — "differs from FPC" — now
+  names the part that is working as intended.
+- What remains is real and is a plain bug: **x86-64 prints debris**
+  (`9223372036854775809.00000` — `cvttsd2si` saturating to the `Int64` limit and
+  printing those digits), and **three backends print three different texts for
+  one program**. The decision makes the target unambiguous: every backend emits
+  the exact expansion the runtime-helper backends already produce.
+
+Worth retitling to something like "write(v:w:d) past 2^63 prints debris on
+x86-64 and disagrees across backends" — the FPC comparison is no longer the
+point. Note the mirroring constraint recorded on the decision: `PXXWriteFloatFixed`
+must keep matching the hand-emitted x86-64 `EmitWriteFloatFixed`, so the fix
+lands in both or neither.
+
+Sibling the decision also unblocks, already in `backlog/`:
+[[bug-a-write-fixed-fraction-digits-past-16-are-invented]].

@@ -88,3 +88,11 @@ the evidence is recorded on the blocker itself, which Track N still owns
 formally closing.
 
 `blocked-by` removed here so the ticket stops hiding from `progress.sh ready`.
+
+## 2026-08-10 — actually MOVED out of blocked/
+
+The 2026-08-09 note above removed `blocked-by` and said the ticket should stop
+hiding from `progress.sh ready` — but the FILE was never moved out of
+`blocked/`, so it went on hiding anyway. `ready` reads the directory, not the
+frontmatter. Moved to `backlog/` now; the unblocking claim above is unchanged
+and is the one that matters.
