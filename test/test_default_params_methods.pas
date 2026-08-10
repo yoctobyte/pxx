@@ -17,6 +17,17 @@ type
   TDer = class(TBase)
     function V(a: Integer; b: Integer = 11): Integer; override;
   end;
+  { A defaulted MANAGED (Variant) parameter on a constructor. The ctor call
+    path used to build its default args with a hand-rolled copy of the shared
+    builder, which never retagged the ordinal as tyInteger — so the boxing was
+    skipped and the callee dereferenced a bare 0 as a 16-byte variant slot,
+    smashing the caller's frame. A plain PROCEDURE was fine, which is what let
+    it survive; hence both shapes below.
+    bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory }
+  TVarDflt = class
+    FV: Integer;
+    constructor Create(const nm: AnsiString; const v: Variant = 7);
+  end;
 
 var
   total, okc: Integer;
@@ -65,9 +76,22 @@ begin
   CF := k + 1;
 end;
 
+constructor TVarDflt.Create(const nm: AnsiString; const v: Variant);
+begin
+  FV := v;
+end;
+
+var lastPV: Integer;
+{ the same shape as a plain procedure — this arm always worked }
+procedure PVarDflt(const nm: AnsiString; const v: Variant = 7);
+begin
+  lastPV := v;
+end;
+
 var
   b: TBase;
   d: TDer;
+  vd: TVarDflt;
 begin
   total := 0; okc := 0;
 
@@ -98,6 +122,15 @@ begin
 
   Check('class-static-default', TBase.CF, 22);
   Check('class-static-explicit', TBase.CF(5), 6);
+
+  PVarDflt('a');
+  Check('proc-variant-default', lastPV, 7);
+  vd := TVarDflt.Create('a', 9);
+  Check('ctor-variant-explicit', vd.FV, 9);
+  vd.Free;
+  vd := TVarDflt.Create('a');           { used to smash the stack }
+  Check('ctor-variant-default', vd.FV, 7);
+  vd.Free;
 
   writeln('total ok ', okc, ' / ', total);
 end.

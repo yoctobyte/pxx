@@ -13707,19 +13707,17 @@ begin
               if not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + (mlastArg + 1)] then
                 Error('not enough arguments to constructor ' + name +
                       '.Create (parameter ' + Procs[mpi].Params[mlastArg + 1].Name + ' has no default)');
-              if ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + (mlastArg + 1)] then
-              begin
-                exprNode := AllocNode(AN_STR_LIT);
-                ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
-                ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
-                ASTTk[exprNode] := Ord(tyString);
-              end
-              else
-              begin
-                exprNode := AllocNode(AN_INT_LIT);
-                ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
-                ASTTk[exprNode] := Ord(Procs[mpi].Params[mlastArg + 1].TypeKind);
-              end;
+              { ONE builder for a declared default, shared with every other call
+                path (DefaultArgValueNode). This site used to hand-roll a
+                str/ordinal pair of its own, which meant it missed everything
+                the shared builder had learned since: float and set defaults,
+                the AnsiString-vs-frozen tagging, and — the one that smashed the
+                stack — retagging a VARIANT parameter's ordinal as tyInteger so
+                IRLowerCallArg BOXES it. Tagged tyVariant the boxing was skipped
+                and the callee dereferenced the bare ordinal 0 as a 16-byte
+                variant slot, corrupting the caller's frame far from the call
+                (bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory). }
+              exprNode := DefaultArgValueNode(mpi, mlastArg + 1);
               argSeq := AllocNode(AN_ARG);
               ASTLeft[argSeq] := exprNode;
               if argsHead = -1 then

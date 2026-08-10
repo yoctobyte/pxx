@@ -3,6 +3,8 @@ track: P
 prio: 70
 type: bug
 summary: "A class CONSTRUCTOR with a defaulted Variant parameter corrupts memory when the caller omits the argument — 12-line repro, 100% reproducible. The identical plain PROCEDURE is fine, and passing the argument explicitly is fine. Silent stack smashing: the crash lands in unrelated code with return addresses overwritten by text"
+status: done
+owner: claude-ACPN
 ---
 
 # A constructor's defaulted `Variant` parameter smashes the stack
@@ -80,3 +82,42 @@ sidestepping it with an explicit-argument overload, registered in
 The repro above printing `tag=1` twice, plus `make test` + self-host fixedpoint.
 Worth a regression test in `test/` pinning constructor × defaulted managed
 parameter, since a plain procedure passing is exactly what let this survive.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-10)
+
+**Root cause: a second mechanism.** The constructor call path
+(`parser.inc`, the `TFoo.Create` arity check) built its default arguments with
+a hand-rolled str/ordinal pair of its own instead of the shared
+`DefaultArgValueNode`. That copy never learned what the shared builder had
+since: float defaults, set defaults, AnsiString-vs-frozen tagging — and the
+one that smashed the stack, **retagging a `Variant` parameter's ordinal as
+`tyInteger` so `IRLowerCallArg` BOXES it**. Tagged `tyVariant`, the boxing was
+skipped and the callee dereferenced the bare ordinal `0` as a 16-byte variant
+slot, corrupting the caller's frame far from the call.
+
+The shared builder had carried that exact retag (with a comment naming the
+same crash for the NilPy path) since a previous fix — the ctor path just never
+went through it. Classic `normalise-dont-special-case`: the second path is the
+one that stays broken.
+
+**Fix:** the ctor site now calls `DefaultArgValueNode(mpi, mlastArg + 1)`; the
+duplicate builder is deleted. The ctor-specific arity diagnostic is kept.
+
+**Regression test:** `test/test_default_params_methods.pas` grew
+`proc-variant-default` / `ctor-variant-explicit` / `ctor-variant-default`
+(12 → 15 checks; Makefile assertion updated). The plain-procedure arm is in
+deliberately — it always passed, and that is what let this survive.
+
+**Gate:** repro prints `tag=1` twice; `tools/gate.sh quick` GREEN (self-host
+fixedpoint + testmgr quick).
+
+**Follow-ups found while testing the neighbouring shapes** (filed separately —
+both are *declaration*-side and pre-existing, unrelated to this fix):
+- [[bug-p-float-literal-default-in-a-parameter-list-fails-to-parse]]
+- [[bug-p-string-literal-default-in-a-parameter-list-is-not-a-constant]]
+
+Track B may revert its explicit-argument workaround in
+`devdocs/dev/track-b-workarounds.md`.
