@@ -292,7 +292,7 @@ end;
   param kinds to marshal variant args to each param's type. Record must be
   reserved by the caller first. }
 procedure EmitMethInfo(mi, miPos: Integer);
-var strIdx, procIdx, arity, p, paramOff: Integer;
+var strIdx, procIdx, arity, p, paramOff, flags: Integer;
     nm: AnsiString;
 begin
   nm := TokSliceStr(UMthNOff[mi], UMthNLen[mi]);
@@ -320,7 +320,11 @@ begin
       PatchDataU64(paramOff + p * 8, Ord(Procs[procIdx].Params[p].TypeKind));
     AddDataPtrFix(miPos + 32, paramOff);
   end;
-  if UMthPub[mi] = 1 then PatchDataU64(miPos + 40, RTTI_METH_FLAG_PUBLISHED);
+  flags := 0;
+  if UMthPub[mi] = 1 then flags := RTTI_METH_FLAG_PUBLISHED;
+  if (procIdx >= 0) and (ProcPyStarIdx[procIdx] >= 0) then
+    flags := flags or ((ProcPyStarIdx[procIdx] + 1) shl RTTI_METH_STARIDX_SHIFT);
+  if flags <> 0 then PatchDataU64(miPos + 40, flags);
 end;
 
 { Fill a FieldInfo record (RTTI_FIELD_SIZE bytes) at fiPos for field fi:

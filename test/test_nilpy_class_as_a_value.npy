@@ -1,0 +1,156 @@
+# A CLASS used as a VALUE: `cls = A; cls(3)`, a two-class registry, a subclass
+# whose base is a value, a class passed as an argument, and a `*args` ctor.
+#
+# Refused with a diagnostic before this (and it SEGFAULTED before the refusal):
+# the class's RTTI blob address was boxed as a plain integer, which is also how
+# a compiled def, a pyeval closure and a lifted bound-fn ride, so `cls(3)`
+# could not tell a class from a function and jumped into the blob. A class
+# value now carries its own variant tag (VT_CLASSREF) and constructs through
+# pyeval's PyClassRefNew, which reflects `create` out of the blob's own method
+# table — so one call site builds A or B according to the value it holds.
+# Diffed against CPython. feature-nilpy-class-as-a-value
+
+
+class A:
+    def __init__(self, v):
+        self.v = v
+
+    def show(self):
+        print("A", self.v)
+
+
+class B:
+    def __init__(self, v):
+        self.v = v * 10
+
+    def show(self):
+        print("B", self.v)
+
+
+class C(A):
+    def __init__(self, v):
+        self.v = v + 100
+
+    def show(self):
+        print("C", self.v)
+
+
+class Z:
+    def __init__(self):
+        self.v = 0
+
+    def show(self):
+        print("Z", self.v)
+
+
+class T2:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def show(self):
+        print("T2", self.a, self.b)
+
+
+class S:
+    def __init__(self, *args):
+        self.n = len(args)
+
+    def show(self):
+        print("S", self.n)
+
+
+def make(k, n):
+    return k(n)
+
+
+cls = A
+o = cls(3)
+o.show()
+
+reg = {"a": A, "b": B, "c": C}
+for k in ["a", "b", "c"]:
+    o = reg[k](7)
+    o.show()
+
+d = C
+o = d(1)
+o.show()
+
+o = make(B, 2)
+o.show()
+
+lst = [A, B]
+for t in lst:
+    o = t(5)
+    o.show()
+    print(isinstance(o, A), isinstance(o, B))
+
+# NOTE: the holder names are deliberately non-colliding — a NilPy name that
+# case-INSENSITIVELY matches a class name is still hijacked by the class lookup
+# (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class), which would
+# confound this test rather than test it.
+kz = Z
+o = kz()
+o.show()
+
+k2 = T2
+o = k2(1, "x")
+o.show()
+
+ks = S
+o = ks(1, 2, 3)
+o.show()
+
+# ordinary construction of a widened class is unaffected
+o = A(11)
+o.show()
+
+# a class VALUE renders as CPython's class object
+print(cls)
+print(str(cls))
+print(f"{cls}")
+
+# the shape test_nilpy_class_as_value_fail.npy pinned as a REFUSAL, and before
+# that segfaulted: a class travelling through a container and constructed from
+# the loop variable. Its header asked for exactly this retirement.
+for cv in [A]:
+    o = cv(3)
+    print(o.v)
+
+
+# --- the two subtleties the widening scan gets wrong if written naively ---
+
+# 1. Only the DERIVED class is named as a value, but the constructor actually
+#    reflected is the BASE's — PyClassRefNew walks the parent chain to find
+#    `create`. Widening only the named class leaves the base specialised on a
+#    raw Int64 reading a boxed variant as an integer.
+class Base:
+    def __init__(self, v):
+        self.v = v
+
+    def show(self):
+        print("v =", self.v)
+
+
+class Derived(Base):
+    def more(self):
+        print("more", self.v)
+
+
+kd = Derived
+o = kd(7)
+o.show()
+o.more()
+
+# 2. The class appears ONLY after a colon, in a dict literal — which is what a
+#    registry looks like. Excluding "preceded by a colon" as an annotation would
+#    silently drop exactly this case.
+class Only:
+    def __init__(self, n):
+        self.n = n
+
+
+tbl = {"x": Only}
+o2 = tbl["x"](5)
+print(o2.n)

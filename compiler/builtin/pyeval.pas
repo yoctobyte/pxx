@@ -68,6 +68,12 @@ function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
   (Word.native) and called as `word.native(vm2)`. pyclosure_is tells a closure
   object apart from a real compiled function address so the field-call site can
   branch. }
+{ Box a class's RTTI blob address as a VT_CLASSREF variant — how a NilPy CLASS
+  used as a VALUE is represented (`cls = A`, `{"a": A}[k](x)`). The AN_CLASSREF
+  lowering calls this BY NAME, so it must stay in the interface. }
+function PyBoxClassRef(p: Pointer): Variant;
+function pyclassref_is(const cb: Variant): Boolean;
+
 function pyclosure_is(p: Pointer): Boolean;
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { The same call, keeping the RESULT — what a key function is for. }
@@ -274,6 +280,13 @@ type
   TVPr3 = procedure(self: Pointer; const a, b, c: Variant);
   TVPr4 = procedure(self: Pointer; const a, b, c, d: Variant);
   TVPr5 = procedure(self: Pointer; const a, b, c, d, e: Variant);
+  { …and the shapes a NilPy `*args` constructor has: the star slot is a TPyList
+    CLASS parameter (a plain pointer), never a Variant, so it cannot ride in a
+    TVPr* slot. Only the star-LAST forms exist, which is all Python allows for
+    a positional `*args`. }
+  TVPrS1 = procedure(self: Pointer; l: TPyList);
+  TVPrS2 = procedure(self: Pointer; const a: Variant; l: TPyList);
+  TVPrS3 = procedure(self: Pointer; const a, b: Variant; l: TPyList);
   { AnsiString-return (e.g. next_token_strict), N Variant args (0..2). }
   TSFn0 = function(self: Pointer): AnsiString;
   TSFn1 = function(self: Pointer; const a: Variant): AnsiString;
@@ -344,6 +357,21 @@ var r: PPyRec;
 begin
   r := PPyRec(@Result);
   r^.VType := 0; r^.Payload := 0;
+end;
+
+{ box a CLASS (its RTTI blob address) as a VT_CLASSREF variant — a NilPy class
+  used as a VALUE. No retain: the payload is a static data address, not a heap
+  block, so the clear/retain emitters must leave tag 11 alone. }
+function PyBoxClassRef(p: Pointer): Variant;
+var r: PPyRec;
+begin
+  r := PPyRec(@Result);
+  r^.VType := 11; r^.Payload := Int64(p);
+end;
+
+function pyclassref_is(const cb: Variant): Boolean;
+begin
+  pyclassref_is := (PPyRec(@cb)^.VType = 11) and (PPyRec(@cb)^.Payload <> 0);
 end;
 
 { box a class/object pointer as a VT_OBJECT variant }
@@ -2555,6 +2583,106 @@ begin
     + pystr_of(n) + ' were given');
 end;
 
+procedure PyClassRefNew(const cb: Variant; nargs: Integer;
+                        const a0, a1, a2, a3: Variant; var res: Variant);
+{ `cls(args)` where `cls` holds a VT_CLASSREF variant — a NilPy class reached as
+  a VALUE. Allocates the DYNAMIC class the blob names (size@InstanceSize), stamps
+  its VMT, and runs its `create` through the blob's own method table, so a value
+  holding A and one holding B each construct their own class from one call site.
+
+  Why the ctor is reflected rather than dispatched through a VMT slot: a NilPy
+  constructor is deliberately given NO virtual slot (pyparser's slot assignment
+  excludes isCtor), so there is no slot number two unrelated classes could agree
+  on. The RTTI method table already carries every method's name AND code address
+  for the host bridge below, which makes the lookup a reuse rather than new
+  machinery.
+
+  The ctor MUST have all-Variant parameters — PyClassUsedAsValue widens it for
+  exactly this reason. Calling one that was not widened would reinterpret a
+  boxed variant as a raw Int64, so a mismatch raises instead: a wrong value here
+  is unrecoverable, and the only way to reach it is a compiler bug.
+
+  Result is a var-out parameter, not a function result: the same Variant-fn-
+  return NRVO corruption PyClosureCall1 is written around. }
+var
+  cls: PClassRTTI;
+  mi: PMethInfo;
+  inst: Pointer;
+  pk: PInt64;
+  i, n, starIdx, nFixed: Integer;
+  av: array[0..3] of Variant;    { the call's arguments, then the ctor's }
+  star: TPyList;
+  vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4;
+  vs1: TVPrS1; vs2: TVPrS2; vs3: TVPrS3;
+begin
+  res := pynone;
+  cls := PClassRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  if cls = nil then Exit;
+  av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
+  n := 0;
+  starIdx := -1;
+  mi := PyFindMethCI(cls, 'create');
+  if mi <> nil then
+  begin
+    n := Integer(mi^.Arity) - 1;             { user args; index 0 is Self }
+    { a `*args` parameter is a PACKED slot, not a pass-through one: the caller
+      owes it a TPyList of every surplus argument. Its index rides in the meth
+      Flags word (RTTI_METH_STARIDX_SHIFT) because nothing else in the reflected
+      signature distinguishes it from an ordinary parameter. }
+    starIdx := Integer((mi^.Flags shr 8) and 255) - 1;
+    if n > 4 then
+      raise TypeError.Create('constructing ' + cls^.NamePtr^ + ' through a '
+        + 'class value supports at most 4 constructor parameters');
+    if starIdx >= 0 then
+    begin
+      nFixed := starIdx - 1;                 { fixed user args before the star }
+      if nargs < nFixed then PyRaiseArity(nargs, nFixed, nFixed);
+      if starIdx > 3 then
+        raise TypeError.Create('constructing ' + cls^.NamePtr^ + ' through a '
+          + 'class value supports at most 2 fixed parameters before *args');
+      star := TPyList.Create;
+      for i := nFixed to nargs - 1 do star.append(av[i]);
+    end
+    else if n <> nargs then PyRaiseArity(nargs, n, n);
+    pk := PInt64(mi^.ParamKinds);
+    if pk <> nil then
+      for i := 1 to n do
+        if (pk[i] <> TK_VARIANT) and (i <> starIdx) then
+          raise TypeError.Create('cannot construct ' + cls^.NamePtr^
+            + ' through a class VALUE: its constructor was not widened to '
+            + 'variant parameters (compiler bug — PyClassUsedAsValue)');
+  end;
+  inst := PXXObjAlloc(NativeInt(cls^.InstanceSize));
+  PPointer(inst)^ := cls^.VMTPtr;            { stamp the dynamic class's VMT }
+  if mi <> nil then
+  begin
+    { through a typed proc VARIABLE, not a cast-and-call — the same shape
+      PyHostCall's trampoline uses below. }
+    if starIdx >= 0 then
+      case starIdx of
+        1: begin vs1 := TVPrS1(mi^.Code); vs1(inst, star); end;
+        2: begin vs2 := TVPrS2(mi^.Code); vs2(inst, av[0], star); end;
+        3: begin vs3 := TVPrS3(mi^.Code); vs3(inst, av[0], av[1], star); end;
+      end
+    else
+      case n of
+        0: begin vp0 := TVPr0(mi^.Code); vp0(inst); end;
+        1: begin vp1 := TVPr1(mi^.Code); vp1(inst, av[0]); end;
+        2: begin vp2 := TVPr2(mi^.Code); vp2(inst, av[0], av[1]); end;
+        3: begin vp3 := TVPr3(mi^.Code); vp3(inst, av[0], av[1], av[2]); end;
+        4: begin vp4 := TVPr4(mi^.Code); vp4(inst, av[0], av[1], av[2], av[3]); end;
+      end;
+  end;
+  { create(rc=1) then the slot's own +1, and no release of the alloc's — the
+    convention every other object-producing site in this unit uses (the list and
+    dict literal arms below). Being consistent matters more than being tight:
+    reclamation is one open design (feature-nilpy-object-reclamation), and an
+    extra release HERE against a convention that keeps the +1 elsewhere is a
+    use-after-free, not a saving. }
+  res := PyBoxObj(inst);
+end;
+
+
 function PyMakeClosure(fnIdx: Integer): Variant;
 var c, i: Integer; r: PPyRec;
 begin
@@ -4248,6 +4376,11 @@ var o: Pointer; aLo, aHi: Int64; f0: TPyCallFn0; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv0(cb); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 0, pynone, pynone, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
@@ -4272,6 +4405,11 @@ var o: Pointer; aLo, aHi: Int64; f1: TPyCallFn1; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv1(cb, a0); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 1, a0, pynone, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
@@ -4297,6 +4435,11 @@ var o: Pointer; aLo, aHi: Int64; f2: TPyCallFn2; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv2(cb, a0, a1); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 2, a0, a1, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
@@ -4322,6 +4465,11 @@ var o: Pointer; aLo, aHi: Int64; f3: TPyCallFn3; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv3(cb, a0, a1, a2); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 3, a0, a1, a2, pynone, Result); Exit; end;
   PyNotCallable(cb);
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);

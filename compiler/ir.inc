@@ -6134,6 +6134,22 @@ begin
     begin
       { class index in IRA; codegen emits the RTTI-blob address (PClassRTTI). }
       Result := IRAppend(IR_CLASSREF, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
+      { ASTRight = 1: a NilPy CLASS used as a VALUE. The blob address alone is
+        an integer, and an integer payload is already how a compiled def, a
+        pyeval closure and a lifted bound-fn all ride — so `cls(3)` could not
+        tell a class from a function and jumped into the blob. Box it under its
+        own tag instead; every downstream site (assignment to a variant, list
+        element, dict value, argument, `cls(...)` through pyvar_callvN) then
+        works with no further site of its own, which is the point of doing it
+        HERE rather than at each of them. feature-nilpy-class-as-a-value }
+      if ASTRight[node] = 1 then
+      begin
+        pathIdx := FindProc('PyBoxClassRef');
+        if pathIdx < 0 then Error('Nil Python: PyBoxClassRef (pyeval) not loaded');
+        Result := IRAppendCall(pathIdx,
+                    IRAppend(IR_ARG, Result, -1, -1, 0, Ord(tyPointer)),
+                    -1, Ord(tyVariant));
+      end;
     end;
 
     AN_METHODREF:

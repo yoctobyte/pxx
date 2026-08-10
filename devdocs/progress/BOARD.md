@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (235)
+## backlog (237)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -58,6 +58,9 @@ lives in git, not in a timestamp._
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses | N | 60 | bug | A class used as a VALUE: SEGFAULT from a container, compile errors from a name | feature-nilpy-class-as-a-value |
+| bug-nilpy-a-fixed-parameter-before-star-args-segfaults | N | 55 | bug | `def __init__(self, tag, *rest)` — a fixed parameter BEFORE `*args` segfaults on ordinary construction. `*args` alone works, so only the mixed shape is broken; no diagnostic, the crash is inside the constructor. | — |
+| bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class | N | 55 | bug | A NilPy CALL through a name that case-insensitively matches a class name is compiled as CONSTRUCTION of that class: `class F` plus `def f(a, b)` makes `f(1, 2)` fail with `Expected: )`. The value-position lookup was made case-sensitive in 2026-08; the call path was not. | — |
+| bug-nilpy-a-method-call-on-a-callable-values-result-is-refused | N | 50 | bug | `g(3).show()` — a selector on the RESULT of calling a callable VALUE is a parse error (`expected expression`). Binding the result first (`o = g(3); o.show()`) works, so only the chained arm is broken. Applies to any callable value: a def taken as a value, and now a class. | — |
 | bug-nilpy-calling-a-non-callable-segfaults | N | 55 | bug | Calling a non-callable SEGFAULTS instead of raising TypeError | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
@@ -161,7 +164,6 @@ lives in git, not in a timestamp._
 | feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | N | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
-| feature-nilpy-class-as-a-value | N | 60 | feature | A class used as a VALUE: `cls = A; cls(3)` | — |
 | feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | bug-n-str-encode-and-bytes-decode-ignore-the-encoding |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
@@ -415,9 +417,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1617)
+## done (1618)
 
-1617 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1618 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (34)
 
@@ -461,8 +463,8 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
-- [p 60] [N] feature-nilpy-class-as-a-value (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [N] bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
@@ -477,6 +479,8 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped
+- [p 55] [N] bug-nilpy-a-fixed-parameter-before-star-args-segfaults
+- [p 55] [N] bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
@@ -501,6 +505,7 @@ lives in git, not in a timestamp._
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [A] bug-a-a-typed-const-array-of-string-n-is-never-initialised
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
+- [p 50] [N] bug-nilpy-a-method-call-on-a-callable-values-result-is-refused
 - [p 50] [N] bug-nilpy-method-chained-on-open-result-fails-to-parse
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
 - [p 50] [N] bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
@@ -693,7 +698,6 @@ lives in git, not in a timestamp._
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-inline-asm-xmm-operands
-- **1** — feature-nilpy-class-as-a-value
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-tkinter-facade
 - **1** — feature-opt-accumulator-value-tracker

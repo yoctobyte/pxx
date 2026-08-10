@@ -4441,16 +4441,25 @@ begin
               variant tag for a class reference, which is also what
               bug-nilpy-calling-a-non-callable-segfaults needs.
               bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses }
-            if PyExprMode then
-              Error('Nil Python: the class ' + fieldName + ' cannot be used as a '
-                + 'VALUE yet (stored in a variable, list or dict, or passed as '
-                + 'an argument) — only construction ' + fieldName + '(...), '
-                + 'isinstance(x, ' + fieldName + ') and `except ' + fieldName
-                + ':` are supported. Wrap it in a function that constructs it '
-                + '(`def make(n): return ' + fieldName + '(n)`) and pass that '
-                + 'instead');
+            { …and that refusal is now LIFTED. The blob address is no longer
+              untagged: under PyExprMode this node lowers to a VT_CLASSREF
+              variant (tag 11), which is what tells `cls(3)` apart from a call
+              through a plain def — both of which would otherwise be an integer
+              payload. ASTRight = 1 is the marker the IR lowering reads; the
+              other AN_CLASSREF builders in this file (isinstance, `except`, a
+              class-method receiver) leave it 0 and keep the raw pointer they
+              need. feature-nilpy-class-as-a-value }
             node := AllocNode(AN_CLASSREF);
             ASTIVal[node] := ci;
+            if PyExprMode then
+            begin
+              ASTRight[node] := 1;
+              ASTTk[node] := Ord(tyVariant);
+              tk := tyVariant;
+              recName := REC_NONE;
+              Result := node;
+              Exit;
+            end;
             ASTTk[node] := Ord(tyPointer);
             tk := tyPointer;
             recName := REC_NONE;

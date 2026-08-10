@@ -9617,6 +9617,142 @@ begin
   end;
 end;
 
+function PyInTypeTestCall(j: Integer): Boolean;
+{ Is token j an argument of an `isinstance(...)` / `issubclass(...)` call? Both
+  name a class WITHOUT it being a value, and both have their own intercept, so a
+  class-as-value scan must not trip on them. Walks back to the `(` that opens the
+  innermost enclosing call and reads the name in front of it. }
+var d, k: Integer;
+begin
+  PyInTypeTestCall := False;
+  d := 0;
+  k := j - 1;
+  while k >= 0 do
+  begin
+    if Tokens[k].Kind = tkRParen then Inc(d)
+    else if Tokens[k].Kind = tkLParen then
+    begin
+      if d = 0 then
+      begin
+        PyInTypeTestCall := (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
+          (CaseEqual(GetTokenStr(k - 1), 'isinstance') or
+           CaseEqual(GetTokenStr(k - 1), 'issubclass'));
+        Exit;
+      end;
+      Dec(d);
+    end
+    else if Tokens[k].Kind in [tkNewline, tkIndent, tkDedent] then Exit;
+    Dec(k);
+  end;
+end;
+
+function PyClassUsedAsValue(const nm: AnsiString): Boolean;
+{ True iff the module mentions the CLASS `nm` as a VALUE — a bare name that is
+  not construction, not the `class` header, not a type test and not an
+  attribute. `cls = A`, `{"a": A}[k]`, `register(A)`.
+
+  The fourth member of the family this file already runs (PyDynAttrEverAssigned,
+  PyDefUsedAsValue, PyMethodUsedAsValue), and deliberately as coarse as they
+  are: a false positive costs BOXING, never correctness, because the widened
+  constructor is still the only one anybody calls. What it buys is the TRIGGER
+  that was missing — NilPy's day-1 rule ("infer a static type where you can,
+  fall back to a variant where you cannot") already had both halves, and no scan
+  looked for a class name in value position, so `cls = A` was refused rather
+  than widened (feature-nilpy-class-as-a-value).
+
+  The excluded shapes each have their own intercept and must not trip it:
+  `A(...)` construction, the `class A:` / `class B(A):` header line,
+  `isinstance(x, A)` and `issubclass(t, A)`, `except A:`, an import line, a
+  `: A` / `-> A` annotation, and `o.A` as an attribute. }
+var j: Integer;
+    atStmtStart, inSkipStmt: Boolean;
+begin
+  PyClassUsedAsValue := False;
+  if nm = '' then Exit;
+  j := 0;
+  atStmtStart := True;
+  inSkipStmt := False;
+  while j < MainProgramTokCount do
+  begin
+    if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+    begin
+      atStmtStart := True;
+      inSkipStmt := False;
+    end
+    else if atStmtStart then
+    begin
+      { whole-statement exclusions: the class header carries its own name AND
+        its base list, `except A:` names a class to match, an import names it
+        to bind }
+      inSkipStmt := (Tokens[j].Kind = tkClass) or (Tokens[j].Kind = tkExcept) or
+                    (Tokens[j].Kind = tkUses) or
+                    ((Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'from'));
+      atStmtStart := False;
+    end;
+    if (not inSkipStmt) and (Tokens[j].Kind = tkIdent) and
+       CaseEqual(GetTokenStr(j), nm) then
+    begin
+      { An ANNOTATION (`x: A`, `-> A`) is deliberately NOT excluded. The obvious
+        exclusion is "preceded by a colon", and it is wrong: a dict literal
+        `{"a": A, "b": B}` — the registry this feature exists for — puts a colon
+        in front of the class too, so the exclusion would silently drop exactly
+        the case that needs the widening, and it would fail at RUN time in
+        PyClassRefNew rather than here. Widening a class that is only annotated
+        costs boxing and nothing else, which is the trade the whole family
+        already makes. }
+      if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
+              ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
+              PyInTypeTestCall(j)) then
+      begin
+        PyClassUsedAsValue := True;
+        Exit;
+      end;
+    end;
+    Inc(j);
+  end;
+end;
+
+function PyClassKinUsedAsValue(ci: Integer): Boolean;
+{ …and the same question over the whole line of descent through ci — the class
+  itself, its ancestors, and its DESCENDANTS.
+
+  The descendant direction is the load-bearing one, and it is the direction a
+  first cut gets backwards. PyClassRefNew reflects `create` by NAME and walks
+  the PARENT chain to find it, so a subclass with no `__init__` of its own is
+  constructed through its BASE's constructor: `class D(A)` with `k = D; k(3)`
+  calls A's. If only D were widened, A's would still be specialised on a raw
+  Int64 and would read a boxed variant as an integer. Ancestors are included for
+  the property the method arm gets free by keying on the method name alone —
+  a base and its override stay in step — and cost only boxing when unneeded. }
+var d, c: Integer;
+    kin: Boolean;
+begin
+  PyClassKinUsedAsValue := True;
+  for d := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[d] then continue;
+    { KINSHIP FIRST, then the token scan. PyClassUsedAsValue walks the whole
+      module, so testing it for every class would make this quadratic in classes
+      times tokens; the parent-chain walk is a handful of comparisons and is
+      false for nearly every pair. }
+    kin := False;
+    c := d;
+    while (c >= 0) and (not kin) do
+    begin
+      if c = ci then kin := True;
+      c := UClsParent[c];
+    end;
+    c := ci;
+    while (c >= 0) and (not kin) do
+    begin
+      if c = d then kin := True;
+      c := UClsParent[c];
+    end;
+    if kin and PyClassUsedAsValue(PyRawName(UClsNOff[d], UClsNLen[d])) then Exit;
+  end;
+  PyClassKinUsedAsValue := False;
+end;
+
 function PyNoClassDeclares(const mname: AnsiString): Boolean;
 { True when no declared class has a method of this name. }
 var ci: Integer;
@@ -22001,6 +22137,21 @@ begin
         for k := 1 to nparams - 1 do
           if (k <> mStarIdx) and (k <> mKwIdx) then ptypes[k] := tyVariant;
       end;
+      { The CONSTRUCTOR arm of the same normalisation. A class reached as a
+        VALUE is constructed through pyeval's PyClassRefNew, which reflects
+        `create` out of the RTTI method table and calls it with boxed args — so
+        every candidate class must present the ONE all-variant signature, the
+        same way a Callable parameter forces one on every def it might receive.
+        Without it the ctor stays specialised on a raw Int64 and the widened
+        call site would hand it a variant to read as an integer.
+
+        `not isCtor` is dropped HERE only: the neighbouring exclusions are about
+        RESULT types (a ctor does not return) and stay. Self (index 0) and the
+        `*args`/`**kwargs` slots are skipped exactly as the method arm skips
+        them (feature-nilpy-class-as-a-value). }
+      if (not fieldsOnly) and isCtor and PyClassKinUsedAsValue(ci) then
+        for k := 1 to nparams - 1 do
+          if (k <> mStarIdx) and (k <> mKwIdx) then ptypes[k] := tyVariant;
       { An aggregate/managed return from a METHOD is not wired up: a managed
         str return segfaults and a hidden-destination return has no caller-side
         destination. Reject with a diagnostic rather than ship the silent

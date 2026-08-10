@@ -170,6 +170,14 @@ const
                             published — the streaming/published ENUMERATION in
                             rtti.pas filters on it, invoke-by-name ignores it. }
   RTTI_METH_FLAG_PUBLISHED = 1;
+  { Bits 8..15 of the same Flags word carry a NilPy `*args` parameter's index
+    PLUS ONE (0 = the method has none). A reflected caller cannot otherwise tell
+    the packed-list slot from an ordinary one, and it is not an ordinary one:
+    the caller must pack the surplus arguments into a TPyList for it rather than
+    pass them through. Read by pyeval's PyClassRefNew, which constructs a class
+    reached as a VALUE (feature-nilpy-class-as-a-value). Lives in Flags rather
+    than a new field so lib/rtl/typinfo.pas's TMethInfo mirror is unchanged. }
+  RTTI_METH_STARIDX_SHIFT = 8;
   RTTI_FIELD_SIZE  = 40;  { name,offset,typeKind,recId,flags — ALL fields (not just
                             published), so field get/set by name reflects any class
                             incl. NilPy-lowered ones (feature-rtti-field-reflection).
@@ -631,6 +639,19 @@ const
     still keys on the object's magic (pyboundfn_is), never on this tag; the tag
     exists so the slot is reclaimed. }
   VT_BOUNDFN_TAG = 10;
+
+  { payload = a class's RTTI blob address — a NilPy CLASS used as a VALUE
+    (`cls = A`, `{"a": A}[k](x)`, `A` passed as an argument). Its own tag rather
+    than a bare integer because that is the whole point: a compiled def, a
+    pyeval closure and a lifted bound-fn all ride as integers here, so an
+    untagged blob address was indistinguishable from a code address and
+    `cls(3)` jumped INTO the RTTI blob (feature-nilpy-class-as-a-value; the
+    same tag confusion bug-nilpy-calling-a-non-callable-segfaults describes).
+
+    The payload is a STATIC data address, never a heap block, so this tag must
+    stay OUT of the variant clear/retain object-tag lists — retaining it would
+    read a refcount header that does not exist. }
+  VT_CLASSREF_TAG = 11;
 
   { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
     match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it

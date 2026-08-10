@@ -1264,6 +1264,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-builtin-exceptions | N | 55 | feature | NilPy: Python's builtin exception classes, and `int(s, base)` that raises | — |
 | feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
 | feature-nilpy-catchable-runtime-errors | N | 55 | feature | nilpy: builtin runtime errors must raise catchable exceptions (int(), division by zero) | — |
+| feature-nilpy-class-as-a-value | N | 60 | feature | A class used as a VALUE: `cls = A; cls(3)` | — |
 | feature-nilpy-class-field-infer-from-ctor | N | 50 | feature | nilpy: infer a class field's type from the ctor parameter assigned to it | — |
 | feature-nilpy-classvar-counter | N | 55 | feature | NilPy: ClassVar storage, next(), counter shim, lambda default_factory | — |
 | feature-nilpy-closure-default-and-remaining | N | 45 | feature | NilPy: remaining uforth walls past ~88% (closure-captured defaults, then exec) | — |

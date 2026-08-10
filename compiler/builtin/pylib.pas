@@ -577,6 +577,7 @@ function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
 function PyCallableStr(const v: Variant): AnsiString;
+function PyClassRefStr(const v: Variant): AnsiString;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
   Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
@@ -10979,6 +10980,20 @@ begin
     Result := '<function at 0x' + hx + '>';
 end;
 
+{ `<class '__main__.A'>` — CPython's str()/repr() of a CLASS OBJECT, which is
+  what a VT_CLASSREF variant holds (feature-nilpy-class-as-a-value). Unlike the
+  function case above the name IS recoverable: the payload is the class's RTTI
+  blob and its first word is the name pointer. `__main__` is spelled literally
+  because a NilPy program IS the main module — a class reached as a value out of
+  an imported module would want that module's name, and nothing records one. }
+function PyClassRefStr(const v: Variant): AnsiString;
+var cls: PClassRTTI; nm: AnsiString;
+begin
+  cls := PClassRTTI(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+  if cls = nil then nm := '?' else nm := '__main__.' + cls^.NamePtr^;
+  Result := '<class ' + Chr(39) + nm + Chr(39) + '>';
+end;
+
 { `__repr__` / `__str__` on a USER class instance that arrives only as a bare
   Variant handle — an element of a list, a dict value, a tuple slot.
 
@@ -11417,6 +11432,8 @@ begin
   { a callable VALUE — see PyCallableStr }
   if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
   begin Result := PyCallableStr(v); Exit; end;
+  { a CLASS reached as a value renders as CPython's class object }
+  if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
@@ -11445,6 +11462,8 @@ var o: TObject; us: AnsiString;
 begin
   if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
   begin Result := PyCallableStr(v); Exit; end;
+  { a CLASS reached as a value renders as CPython's class object }
+  if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
   { a container prints as its repr; every scalar as plain str (no quotes) }
   if pyvartag(v) = 7 then
   begin
@@ -11643,6 +11662,8 @@ begin
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;
   if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
   begin Result := PyCallableStr(v); Exit; end;
+  { a CLASS reached as a value renders as CPython's class object }
+  if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';

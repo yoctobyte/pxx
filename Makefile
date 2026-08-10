@@ -475,8 +475,11 @@ test-nilpy: $(COMPILER)
 	# `parser = Parser(1)` then `parser(2)` must call __call__, not construct.
 	./$(COMPILER) test/test_nilpy_instance_named_like_its_class.npy /tmp/test_nilpy_instname26
 	/tmp/test_nilpy_instname26 | diff -u test/test_nilpy_instance_named_like_its_class.expected -
-	# a class used as a VALUE must REFUSE BY NAME, not compile and segfault.
-	! ./$(COMPILER) test/test_nilpy_class_as_value_fail.npy /tmp/test_nilpy_clsval26 2>&1 | grep -q 'ok:'
+	# RETIRED (feature-nilpy-class-as-a-value): a class used as a VALUE no longer
+	# refuses — it constructs. The program that file pinned as an ERROR is now a
+	# PASSING case inside test_nilpy_class_as_a_value.npy, which is where its
+	# `for cls in [A]` shape lives. Its own header said to retire it when class
+	# references became first-class values, so this is that.
 	# a subscript READ on a class with no __getitem__ raises TypeError at RUN time.
 	./$(COMPILER) test/test_nilpy_not_subscriptable.npy /tmp/test_nilpy_notsub26
 	/tmp/test_nilpy_notsub26 | diff -u test/test_nilpy_not_subscriptable.expected -
@@ -713,6 +716,13 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_parentcall26 | diff -u test/test_nilpy_parent_call_after_instantiation.expected -
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy /tmp/test_nilpy_class_attr_hoist_leak26
 	/tmp/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
+	# a CLASS used as a VALUE — `cls = A`, a two-class registry, a subclass whose
+	# base is a value, a class passed as an argument, a *args ctor, and print(cls).
+	# Refused before (and a segfault before the refusal): the blob address rode as a
+	# plain integer, the same shape a def/closure/bound-fn uses, so `cls(3)` jumped
+	# into the RTTI blob. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_class_as_a_value.npy /tmp/test_nilpy_class_as_a_value26
+	/tmp/test_nilpy_class_as_a_value26 | diff -u test/test_nilpy_class_as_a_value.expected -
 	./$(COMPILER) test/test_nilpy_annotated_class_attribute.npy /tmp/test_nilpy_annotated_class_attribute26
 	/tmp/test_nilpy_annotated_class_attribute26 | diff -u test/test_nilpy_annotated_class_attribute.expected -
 	./$(COMPILER) test/test_nilpy_class_attribute_through_class_name.npy /tmp/test_nilpy_clsattr_byname26
