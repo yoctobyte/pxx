@@ -3,6 +3,7 @@ track: C
 prio: 75
 type: bug
 blocked-by: []
+status: done
 ---
 
 # crtl's auto-pull silently no-ops when pxxcio's `uses` clause has two units
@@ -161,3 +162,121 @@ plus `lib/rtl/pxxcio.pas`: `uses platform, builtinheap, math;` →
 
 Gate for the combined change: `make lib-test`, the gcc differential above, and
 b113 linking libc only.
+
+## RESOLVED 2026-08-10 — the unit count was a coincidence; the bug is real and elsewhere
+
+**The diagnosis above is wrong, and the table is the reason it looked right.**
+"Any third unit works" was never tested with an arbitrary third unit. It was
+tested with `math` and with `math_ext` — and `math`'s first line is
+`uses math_ext`, so both rows are the same unit. Measured today with three
+unrelated third units:
+
+| `uses` clause in pxxcio | result |
+| --- | --- |
+| `platform, builtinheap, math` | 42 ✓ |
+| `platform, builtinheap, math_ext` | 42 ✓ |
+| `platform, builtinheap, bitset` | **SIGSEGV** |
+| `platform, builtinheap, base64` | **SIGSEGV** |
+| `platform, builtinheap, atexit` | **SIGSEGV** |
+
+The unit COUNT is irrelevant. Nothing crosses between the Pascal prelude's units
+and the C preprocessor's include slots, and `CPAutoPullCrtlImpl`'s
+`if CPIncludeLength(depth) = 0 then Exit` was behaving correctly the whole time:
+there IS no `lib/crtl/src/inttypes.c`, so "header-only module" was the truth.
+
+### The actual root cause
+
+`<inttypes.h>` declares `imaxabs`, `imaxdiv`, `strtoimax`, `strtoumax`. All four
+were **implemented in `lib/crtl/src/stdlib.c`**. The crtl auto-pull matches a
+header to its SIBLING impl (`inttypes.h` -> `src/inttypes.c`), so a program that
+includes only `<inttypes.h>` never pulled the file those functions live in. They
+stayed external, and — this is the part that made it a crash rather than a link
+error — the C program then **imported them from glibc**: a DT_NEEDED on
+`libc.so.6` nobody asked for, in a build whose whole premise is libc-free.
+`ldd` on the failing binary shows it; the working one is `not a dynamic
+executable`. glibc HAS all four symbols, so they resolved. `imaxdiv` returns a
+16-byte struct, which SysV returns in rax:rdx while pxx passes a hidden
+destination pointer — hence the `rep movsb` from a null source.
+
+`math` "fixed" it through three unrelated steps: `math` uses `math_ext`, which
+is a C-header import declaring `int abs(int)` / `long labs(long)`; those look
+like unsatisfied libc prototypes, so `CPullCrtlForPrototypes` synthesised
+`#include <stdlib.h>` for the whole program; that pulled `stdlib.c`, which
+happened to contain imaxdiv. Remove `uses math` and the coincidence goes away.
+
+The same coincidence was propping up a second file: `lib/crtl/src/math.c`'s
+`nan()` calls `strtoull` with **no `#include <stdlib.h>`**. It compiled only
+because of that same synthesised include. Dropping `uses math` broke
+`test-core`/`lib-test` (`call to undeclared function: strtoull`) until math.c
+declared what it uses. Two files were riding one accident.
+
+### Fixed
+
+1. **`lib/crtl/src/inttypes.c` (new)** — the four functions moved out of
+   stdlib.c into their header's sibling impl, where the auto-pull looks. The
+   rule the auto-pull encodes is "a header's functions live in its own .c"; a
+   header that breaks it is silently broken, and nothing enforced it.
+2. **`lib/crtl/src/math.c`** — `#include <stdlib.h>`.
+3. **The silence, which was the real ask** — `CWarnImplicitSystemImports`
+   (`cparser.inc`, end of `ParseCProgram`). A C program that did NOT pass
+   `--system-libs` and still has externals bound to `libc.so.6`/`libm.so.6` now
+   says so by name:
+
+   ```
+   warning: crtl does not define imaxabs, imaxdiv, strtoimax, strtoumax — this
+   C program will import them from the system C library at run time, and its
+   ABI need not match pxx's (pass --system-libs=c to do this deliberately, or
+   add the definition to lib/crtl/src)
+   ```
+
+   That is the check the earlier
+   [[bug-a-libcfree-unresolved-extern-silent-zero]] proposed and then dropped,
+   on the conclusion that "a declared extern that stays unresolved always gets a
+   DT_NEEDED and the dynamic loader reports it — never a silent 0". True, and
+   not the dangerous case: the dangerous case is when the loader RESOLVES it,
+   against a libc whose ABI pxx never agreed to. Warning, not error, for the
+   same reason that ticket gave — `-Werror` promotes it. Swept all 383 `test/*.c`:
+   exactly one warns (`c_cross_ns_arity.c`, on `time`, which is a genuine
+   instance of the same class).
+
+### Verified
+
+- The 2-unit repro passes (exit 42), under HEAD *and* under
+  `stable_linux_amd64/default/pinned` — Track B's ground needs no re-pin.
+- Full libm surface vs a `gcc -O1 -lm` oracle, 38 arguments x 33 functions,
+  compared as raw bit patterns: **148 differing results, every one of them
+  present in the `pinned` control too** (before the split: 547, the extra 397
+  being `fmod` and 2 `sqrt`). The pre-existing 148 are filed as
+  [[bug-b-crtl-integral-math-loses-the-sign-of-zero-and-breaks-past-2p63]] (17,
+  real) and the correctly-rounded kernels' known glibc-misround territory (131).
+- `isnan(5.5)` = 0. b113 links libc and **not** libm, exit 7.
+- `gate.sh quick` GREEN, `make lib-test`, `make test-core`.
+
+### Also found, filed, not fixed
+
+- [[bug-c-sizeof-a-file-scope-double-array-answers-one-element]] — the
+  differential probe's `sizeof(ARGS)/sizeof(ARGS[0])` answered 1. Found by the
+  output being 34 lines where gcc's was 8322; a smaller probe would have
+  reported a clean sweep of one argument.
+
+### The lesson worth keeping
+
+The table in this ticket was measured, correct, and pointed at the wrong
+mechanism, because the "control" varied a *label* (third unit present/absent)
+and not the *variable* (which unit). Two of its three rows were the same unit
+wearing different names. A control has to remove the variable, not resemble
+removing it.
+
+### One correction to the banked `sqrt`
+
+The banked version misrounds `sqrt(0x1.fffffffffffffp-1)` to `1.0` where gcc
+says `0x1.fffffffffffffp-1`. `g + r/(2*g)` is itself a rounded add, and here the
+correction lands exactly on a half-ulp boundary, so it rounds to even — away
+from the true root. No extra precision in `r` can move a tie. What shipped adds
+an exact CHOICE between the two neighbouring doubles (compare `|x - c*c|`, both
+computed exactly by the same Dekker residual), which resolves it because sqrt is
+irrational for every non-square and so is never truly at a tie. `fmod` shipped
+as banked, unchanged.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.

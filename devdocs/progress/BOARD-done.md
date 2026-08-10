@@ -168,6 +168,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-const-eval-bitwise-not | C | 50 | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-create-trigger-huge-alloc-oom | A | 50 | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
 | bug-c-cross-double-to-int-conversion | C | 45 | bug | C double→int conversion missing on cross backends (i386/arm32/aarch64/riscv32) | — |
+| bug-c-crtl-auto-pull-depends-on-the-pascal-preludes-unit-count | C | 75 | bug | crtl's auto-pull silently no-ops when pxxcio's `uses` clause has two units | — |
 | bug-c-crtl-fopen-missing | B | 50 | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
 | bug-c-crtl-long-double-math | B | 45 | bug | C crtl: long-double math (ldexpl, ...) missing — blocks tcc | — |
 | bug-c-crtl-missing-getpid | B | 50 | bug | C: crtl `unistd.h` misses `getpid` | — |
@@ -243,6 +244,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-null-pointer-literal-call-arg-sqlite | C | 50 | bug | C: null pointer literal call arg lowers as address in sqlite | — |
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-partial-multidim-array-index | C | 45 | bug | C frontend rejects a partial multi-dimensional array index (g[i][j] on int g[..][..][..]) — valid C, gcc accepts | — |
+| bug-c-pascal-math-names-hijack-libc-through-pxxcio | C | 55 | bug | pxxcio is auto-pulled into EVERY C program and does `uses math`, so every name in lib/rtl/math.pas is in scope for C name resolution — adding a Pascal `Pow` made a C program's pow(2,10) answer 1 instead of 1024, and `CopySign` made copysign(3,-1) answer atan2's result | — |
 | bug-c-plain-char-lost-its-type-identity-not-just-its-signedness | C | 70 | bug | Making plain char follow the psABI turned it into an 8-bit INTEGER, not a signed char: char fields now print as 104 instead of 'h', and _Generic loses its char association. Three gated tests red from one commit | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-pointer-to-multidim-array-declarator | C | 30 | bug | C declarator `int (*p)[A][B]` (pointer to a >=2-D array) not parsed — blocks using a partial multi-dim index that leaves >=2 dims | — |

@@ -8193,6 +8193,53 @@ begin
   Result := CLexAppend(synth);
 end;
 
+{ A C program that asked for NO system libraries must not quietly acquire one.
+
+  Every libc name a C program uses is meant to be satisfied by crtl: either the
+  header's auto-pulled sibling `src/<name>.c`, or (for hand-written prototypes)
+  CPullCrtlForPrototypes above. When neither supplies it, the prototype keeps
+  the DEFAULT soname it was given at declaration time (libc.so.6 / libm.so.6),
+  RegisterExternal hands it a GOT slot, and the ELF writer emits a DT_NEEDED for
+  a library the user never asked for. The build reports `ok:` and the program
+  then runs against GLIBC's implementation of that symbol — which is where this
+  turns from "a link nobody wanted" into a wrong answer, because the two sides
+  agree on the name and not necessarily on the ABI.
+
+  Measured case (bug-c-crtl-auto-pull-depends-on-the-pascal-preludes-unit-count):
+  <inttypes.h>'s imaxdiv/strtoimax were implemented in stdlib.c, so a program
+  including ONLY <inttypes.h> never pulled them. It linked glibc's imaxdiv
+  instead, whose 16-byte struct comes back in rax:rdx where pxx passes a hidden
+  destination pointer — SIGSEGV in a `rep movsb` from a null source, with no
+  diagnostic anywhere in the build.
+
+  A WARNING, not an error, deliberately: the same call was made for the
+  undeclared-identifier decay (bug-a-libcfree-unresolved-extern-silent-zero),
+  where a hard error broke legitimate leniency. `-Werror` promotes it. An
+  explicit `--system-libs=...` for that soname is the user asking for exactly
+  this, and stays silent. }
+procedure CWarnImplicitSystemImports;
+var i, procIdx: Integer; soname, names: AnsiString; n: Integer;
+begin
+  names := '';
+  n := 0;
+  for i := 0 to ExternalCount - 1 do
+  begin
+    procIdx := ExternalProc[i];
+    if (procIdx < 0) or (procIdx >= MAX_PROCS) then continue;
+    soname := Strs[ProcLibrary[procIdx]].Text;
+    if not (CaseEqual(soname, 'libc.so.6') or CaseEqual(soname, 'libm.so.6')) then continue;
+    if CSystemLibSelectedForSoname(soname) then continue;
+    if n > 0 then AppendString(names, ', ');
+    AppendString(names, Procs[procIdx].Name);
+    Inc(n);
+  end;
+  if n = 0 then Exit;
+  Warn('crtl does not define ' + names + ' — this C program will import ' +
+       'them from the system C library at run time, and its ABI need not match ' +
+       'pxx''s (pass --system-libs=c to do this deliberately, or add the ' +
+       'definition to lib/crtl/src)');
+end;
+
 { True for identifiers that may legitimately appear at the top level without
   being a type/typedef the dispatch already recognizes — storage-class and
   function specifiers pxx does not model as type tokens but tolerates by
@@ -8350,8 +8397,11 @@ begin
     RegisterBuiltinTGuid;
     RegisterBuiltinTObject;
     { Hosted riscv32 has no FPU: every float op lowers to the __pxx_* soft-float
-      kernels, and pxxcio `uses math` (Sqrt etc.) pulls float bodies that compile
-      against them. Pull softfloat FIRST, mirroring the Pascal ParseProgram
+      kernels, and any C double op — plus crtl's own libm bodies — compiles
+      against them. (Until 2026-08-10 the reason given here was that pxxcio
+      `uses math` pulled Pascal float bodies; that clause is gone with the
+      C-owns-its-math split, and the pull is still required, so the ordering
+      below is unchanged.) Pull softfloat FIRST, mirroring the Pascal ParseProgram
       epilogue — otherwise those bodies (and any C double op) fail with
       "__pxx_dmul not found". The whole guard now matches the Pascal default-RTL
       pull: hosted riscv32 is INCLUDED (was skipped entirely, leaving riscv32 C
@@ -8364,7 +8414,7 @@ begin
         kernels are unused dead code on arm32. }
       ParseUsesUnit('softfloat');
     { builtinheap BEFORE pxxcio, mirroring the Pascal ParseProgram epilogue.
-      pxxcio's own uses clause is `platform, builtinheap, math` — platform
+      pxxcio's own uses clause is `platform, builtinheap` — platform
       first — and platform has record-returning functions (PalIn6Any etc.).
       The riscv32/xtensa aggregate-result epilogue lowers onto PXXMemMove via
       FindProc, so builtinheap's headers must be registered before any unit
@@ -8514,6 +8564,8 @@ begin
   { Object mode emitted no entry stub, so there is nothing to patch and no
     `main` to demand — see the stub guard above. }
   if callPatch < 0 then Exit;
+
+  CWarnImplicitSystemImports;
 
   mainIdx := FindProc('main');
   if mainIdx < 0 then Error('main function not found');
@@ -8762,8 +8814,11 @@ begin
   if forceSystemExternal then
   begin
     { Explicit system-library routing wins over case-insensitive Pascal fallback
-      (e.g. pxxcio pulls Pascal math.Sqrt, but `--system-libs=m` wants C sqrt
-      to remain an external libm import). Reuse an exact C declaration/definition
+      (e.g. a program's own `uses math` puts Pascal Sqrt in scope, but
+      `--system-libs=m` wants C sqrt to remain an external libm import — pxxcio
+      itself stopped importing math in the 2026-08-10 split, so this no longer
+      fires for every C program, only for one that asks for it).
+      Reuse an exact C declaration/definition
       from an earlier pass if present; never bind to a differently-cased Pascal
       routine here. Matching is by EXACT-CASE NAME, not ProcCaseSensitive:
       a plain C-program compile registers procs under the default

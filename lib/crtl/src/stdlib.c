@@ -262,28 +262,10 @@ long long atoll(const char *s) {
   return strtoll(s, (char **)0, 10);
 }
 
-/* ---- <inttypes.h> greatest-width conversions ------------------------------
-   LP64, so intmax_t is long and these are one-line forwards. They exist as
-   real symbols rather than macros because <inttypes.h> declares them as
-   functions and portable C takes their address. Declaring without defining is
-   how you get a link error a long way from the header that promised them. */
-
-intmax_t imaxabs(intmax_t j) { return j < 0 ? -j : j; }
-
-imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom) {
-  imaxdiv_t r;
-  r.quot = numer / denom;
-  r.rem  = numer - r.quot * denom;
-  return r;
-}
-
-intmax_t strtoimax(const char *nptr, char **endptr, int base) {
-  return (intmax_t)strtol(nptr, endptr, base);
-}
-
-uintmax_t strtoumax(const char *nptr, char **endptr, int base) {
-  return (uintmax_t)strtoul(nptr, endptr, base);
-}
+/* <inttypes.h>'s greatest-width conversions (imaxabs/imaxdiv/strtoimax/
+   strtoumax) used to live here. They now live in their header's sibling impl,
+   src/inttypes.c — a header's functions MUST be in its own .c or the crtl
+   auto-pull cannot find them (see that file's note). */
 
 /* 10^k for 0 <= k <= 22: every value is exactly representable in a double,
    and each step's product is too, so repeated multiplication stays EXACT

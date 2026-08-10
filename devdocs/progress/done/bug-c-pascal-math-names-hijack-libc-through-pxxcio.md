@@ -3,6 +3,7 @@ track: C
 prio: 55
 type: bug
 summary: "pxxcio is auto-pulled into EVERY C program and does `uses math`, so every name in lib/rtl/math.pas is in scope for C name resolution — adding a Pascal `Pow` made a C program's pow(2,10) answer 1 instead of 1024, and `CopySign` made copysign(3,-1) answer atan2's result"
+status: done
 ---
 
 # A Pascal RTL name can hijack a libc function in every C program
@@ -152,3 +153,47 @@ stays as the FALLBACK — it is the pxx interop feature, and making lookup
 case-sensitive was explicitly rejected as defeating it. Companion: *share what
 the machine provides, duplicate what the language specifies.*
 
+
+## RESOLVED 2026-08-10 — Direction 2 shipped: pxxcio no longer exports a namespace
+
+`lib/rtl/pxxcio.pas` is now `uses platform, builtinheap;`. The Pascal `math`
+unit is no longer in scope for C name resolution in every C program, so the
+whole hijack surface is gone — not narrowed, gone: a C program sees crtl's
+`<math.h>` and nothing else unless it asks for something else.
+
+The last four names that were still crossing by collision (`floor`, `ceil`,
+`sqrt`, `fmod`) now have real C bodies in `lib/crtl/src/math.c`. floor/ceil
+landed earlier in `11019fe12`; `sqrt` and `fmod` landed with this change, and
+`sqrt` is deliberately the same algorithm as `lib/rtl/math.pas`'s so the two
+languages still agree bit-for-bit on the one function where that matters.
+
+This was blocked for a day by
+[[bug-c-crtl-auto-pull-depends-on-the-pascal-preludes-unit-count]], whose real
+root cause turned out to be `<inttypes.h>`'s functions living in `stdlib.c` —
+and it was `uses math` that had been accidentally papering over it, via a
+three-step coincidence (`math` -> `math_ext` -> C-imported `abs`/`labs` ->
+`CPullCrtlForPrototypes` synthesises `#include <stdlib.h>` for the whole
+program). `lib/crtl/src/math.c` was riding the same accident for its `strtoull`
+call and now includes `<stdlib.h>` itself. See that ticket for the full write-up
+and the gcc-differential numbers.
+
+**Direction 1 ("C resolution should prefer crtl over Pascal units") is NOT
+shipped and is still worth doing** — it is the general rule, and the user has
+since stated it as a design principle: *own language first — a declaration from
+the caller's own language beats a cross-language match, and that outranks import
+order.* What shipped here removes the one prelude that made every C program a
+victim; a user program that itself does `uses math` can still collide. That is
+why the `__crtl_`-prefixed names for `exp`/`log2`/`log10`/`sin`/`cos`/`tan`/
+`sinh`/`cosh`/`tanh`/`hypot` stay in place, and why math.c's header now says so.
+A Track U `decide-*` on the resolution rule is the next step.
+
+### Verified
+
+- Full libm surface (33 functions x 38 arguments) vs a `gcc -O1 -lm` oracle,
+  compared as raw bit patterns: 148 differences, **every one also present in the
+  `stable_linux_amd64/default/pinned` control**. Before the split: 547.
+- `isnan(5.5)` = 0. `pow(2,10)` = 1024. b113 links libc, not libm, exit 7.
+- `gate.sh quick` GREEN, `make lib-test`, `make test-core`.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.

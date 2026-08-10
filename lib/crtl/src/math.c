@@ -1,26 +1,40 @@
 /* SPDX-License-Identifier: Zlib */
 /*
- * C runtime: math — bridges libm to the Pascal RTL math unit (lib/rtl/math.pas,
- * pulled by pxxcio's `uses math`). Project-owned, libc-free.
+ * C runtime: math — C's OWN libm. Project-owned, libc-free, and as of
+ * 2026-08-10 self-contained: every function <math.h> declares is defined here,
+ * in C, and nothing binds across to the Pascal RTL.
  *
- * KEY (case-insensitive name binding): the C frontend's FindProc is
- * case-insensitive across the C/Pascal namespace, so a C call to `sqrt`/
- * `sin`/`floor`/`ceil`/`fmod`/`sinh`/`cosh`/`tanh`/`hypot` binds
- * DIRECTLY to the matching Pascal routine (Sqrt/Sin/...) with no wrapper —
- * lua's <math.h> extern is enough. So this file defines ONLY:
- *   - the name-mismatch cases, where the C name differs from the Pascal name
- *     and therefore does NOT collide with it: atan2->ArcTan2, asin->ArcSin,
- *     acos->ArcCos, atan->ArcTan;
- *   - the correctly-rounded double-double kernels for log/pow/cbrt (own C
- *     names, no Pascal collision) and __crtl_exp — `exp` DOES collide with
- *     Pascal Exp, so math.h maps it via `#define exp(x) __crtl_exp(x)`;
- *   - fabs (calling Pascal Abs would collide with C int `abs`, so do it inline)
- *     and the pure IEEE ops frexp/ldexp/modf that have no Pascal equivalent.
- * A SAME-name wrapper (`double sqrt(double x){ return Sqrt(x); }`) must NOT be
- * written: `Sqrt` binds case-insensitively back to the C `sqrt` -> infinite
- * recursion. And a same-name DEFINITION next to a visible Pascal twin (a C
- * `double exp(double)` while Pascal Exp is linked) silently breaks the call
- * binding — the argument never arrives (b377). Name it differently + macro.
+ * THAT IS THE POINT, and it is worth saying why, because the file spent most of
+ * its life doing the opposite. The C frontend's FindProc is case-insensitive
+ * across the C/Pascal namespace, so a C call to `sqrt` used to bind DIRECTLY to
+ * Pascal's `Sqrt` with no wrapper, and this file deliberately left those names
+ * undefined to let that happen. The saving was real and the coupling was not
+ * visible from either side: `lib/rtl/pxxcio.pas` is auto-pulled into EVERY C
+ * program and it did `uses math`, so every name in lib/rtl/math.pas was in scope
+ * for C name resolution everywhere, and an ordinary Track B addition to the
+ * Pascal RTL could — and did — silently retarget a libc function. Adding a
+ * Pascal `Pow` made a C program's `pow(2,10)` answer 1; `CopySign` made
+ * `copysign(3,-1)` answer atan2's result. Same arity, so not even a warning.
+ * (bug-c-pascal-math-names-hijack-libc-through-pxxcio.)
+ *
+ * The rule now, per the user's "own language first": C asked <math.h> for
+ * `pow`, so <math.h>'s `pow` answers. crtl owns its math; the Pascal RTL owns
+ * its own; the two are free to diverge where the languages do (C's floor/ceil
+ * return double over the whole range, FPC's return Integer) and to agree where
+ * it matters (sqrt is deliberately the same algorithm as math.pas's, bit for
+ * bit). Shared code is reached only through explicitly prefixed `__pxx_*` PAL
+ * entry points, never by accidental name collision.
+ *
+ * Two naming scars remain from the collision era and must stay:
+ *   - `exp`, `log2`, `log10`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`,
+ *     `hypot` are defined under `__crtl_`-prefixed names and reached through
+ *     function-like macros in <math.h>. A same-name DEFINITION next to a
+ *     visible Pascal twin silently breaks the call binding — the argument never
+ *     arrives (b377) — and while pxxcio no longer imports `math`, a user program
+ *     that does `uses math` itself would resurrect exactly that.
+ *   - never write a wrapper that calls the Pascal twin from its C namesake
+ *     (`double sqrt(double x){ return Sqrt(x); }`): `Sqrt` binds
+ *     case-insensitively back to the C `sqrt` and recurses forever.
  */
 
 /* ====================================================================== */
@@ -40,6 +54,15 @@
 /* Constants are built from bit patterns, not decimal literals, so        */
 /* accuracy does not depend on the literal parser.                        */
 
+/* nan("payload") parses its tag with strtoull. This include used to be absent
+   and the call still compiled, because pxxcio's `uses math` pulled the Pascal
+   math unit, whose C-imported `abs`/`labs` looked like unsatisfied libc
+   prototypes, so CPullCrtlForPrototypes synthesised an <stdlib.h> include for
+   the whole program — three steps of coincidence, none of them visible from
+   here. Dropping `uses math` removed it and math.c stopped compiling. Declare
+   what you use. */
+#include <stdlib.h>
+
 typedef struct { double hi, lo; } crtl_dd;
 
 /* defined further down in this file — the kernels run before them textually */
@@ -47,8 +70,11 @@ double fabs(double x);
 double rint(double x);
 double ldexp(double x, int e);
 int isinf(double x);
-double fmod(double x, double y);   /* binds to the Pascal routine */
-double sqrt(double x);             /* binds to the Pascal routine */
+int isnan(double x);
+double copysign(double x, double y);
+double frexp(double x, int *e);
+double fmod(double x, double y);
+double sqrt(double x);
 
 static double crtl_bits2d(unsigned long long b) { return *(double *)&b; }
 
@@ -847,6 +873,97 @@ double ceil(double x) {
 double round(double x) {
   if (x >= 0.0) return (double)(long long)(x + 0.5);
   return (double)(long long)(x - 0.5);
+}
+
+/* fmod: exact truncated remainder. Scale |y| up under |x| by powers of two and
+   subtract — every subtraction is between numbers within a factor of two
+   (Sterbenz), so each step is EXACT and no rounding accumulates however far
+   apart x and y are in magnitude. A naive `x - trunc(x/y)*y` is not exact and
+   drifts for large x. */
+double fmod(double x, double y) {
+  double ax, ay, s;
+  int ex, ey;
+  if (isnan(x) || isnan(y) || isinf(x) || y == 0.0) { s = 0.0; return s / s; }
+  if (isinf(y)) return x;
+  ax = fabs(x); ay = fabs(y);
+  if (ax < ay) return x;
+  frexp(ax, &ex); frexp(ay, &ey);
+  s = ldexp(ay, ex - ey);
+  if (s > ax) s = ldexp(s, -1);
+  while (s >= ay) {
+    if (ax >= s) ax -= s;
+    s = ldexp(s, -1);
+  }
+  return copysign(ax, x);
+}
+
+/* EXACT residual x - c*c, for any positive c whose square does not overflow.
+   A Dekker split writes c = ch + cl exactly with ch holding the top 26 bits, so
+   ch*ch, ch*cl and cl*cl are each exact and
+   ((ch*ch - c*c) + 2*ch*cl) + cl*cl is exactly the rounding error of c*c.
+   Subtracting that error from (x - c*c) leaves the true residual with no
+   rounding anywhere. This is the whole reason sqrt below can be correctly
+   rounded without wider arithmetic. */
+static double crtl_sqrt_resid(double x, double c) {
+  double s, ch, cl, p, e;
+  s = c * 134217729.0;                           /* Dekker split, 2^27+1 */
+  ch = s - (s - c);
+  cl = c - ch;
+  p = c * c;
+  e = ((ch * ch - p) + 2.0 * ch * cl) + cl * cl;
+  return (x - p) - e;
+}
+
+/* sqrt: Newton from a bit-pattern seed, then ONE correction from an exact
+   residual, then an exact CHOICE between the two neighbouring doubles.
+
+   The last step is not belt-and-braces. `g + r/(2g)` is itself a rounded add,
+   and when the correction lands exactly on a half-ulp boundary that rounding
+   goes to even and can go the wrong way: sqrt(0x1.fffffffffffffp-1) came out
+   1.0 where gcc says 0x1.fffffffffffffp-1, because the true root is a hair
+   BELOW the tie and no amount of precision in `r` moves a tie. sqrt is
+   irrational for every non-square, so a tie is always resolvable — but only by
+   asking which neighbour is actually closer, which the exact residual can
+   answer and the rounded add cannot. Comparing |x - c*c| between the two
+   candidates picks the same winner as comparing |sqrt(x) - c|: to first order
+   the two differ only by the common factor 2*sqrt(x).
+
+   Deliberately the same algorithm as lib/rtl/math.pas's Sqrt: of the functions
+   this file took back from the Pascal binding, this is the one both languages
+   want bit-for-bit, so the two implementations are meant to be read together. */
+double sqrt(double x) {
+  double g, ng, z, p, r, res, nb, r2, r3;
+  unsigned long long bits;
+  int i;
+  if (x < 0.0) { z = 0.0; return z / z; }        /* NaN, like glibc */
+  if (x == 0.0) return x;                        /* keeps -0.0 */
+  if (isnan(x) || isinf(x)) return x;
+  bits = *(unsigned long long *)&x;
+  bits = (bits >> 1) + (1023ULL << 51);          /* halve the exponent field */
+  g = *(double *)&bits;
+  for (i = 0; i < 8; i++) {
+    ng = 0.5 * (g + x / g);
+    if (ng == g) break;
+    g = ng;
+  }
+  p = g * g;
+  if ((p - p) != 0.0) return g;                  /* g*g overflowed near DBL_MAX */
+  r = crtl_sqrt_resid(x, g);
+  res = g + r / (2.0 * g);
+  p = res * res;
+  if ((p - p) != 0.0) return res;
+  r2 = crtl_sqrt_resid(x, res);
+  if (r2 == 0.0) return res;                     /* x is a perfect square */
+  /* Step one ulp toward the true root. res > 0 here, so the bit pattern is
+     monotone in the value and ++/-- IS the neighbour. */
+  bits = *(unsigned long long *)&res;
+  if (r2 > 0.0) bits = bits + 1ULL; else bits = bits - 1ULL;
+  nb = *(double *)&bits;
+  p = nb * nb;
+  if ((p - p) != 0.0) return res;
+  r3 = crtl_sqrt_resid(x, nb);
+  if (fabs(r3) < fabs(r2)) return nb;
+  return res;
 }
 /* rint family: round to nearest, ties to EVEN (the default FE_TONEAREST mode —
    crtl has no fenv, the mode is fixed). quickjs's js_math needs lrint. */
