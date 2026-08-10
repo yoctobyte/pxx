@@ -84,7 +84,7 @@ extended (it is the home for this concept); `tools/gate.sh quick`. If a
 that over a runtime test.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit b91a10bb0.
 
 ## Resolution (2026-08-10)
 
