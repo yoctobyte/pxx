@@ -80,7 +80,7 @@ green. Check the same shape for a `float[]` and for a cast to `double*` /
 `char*`, not only `void*`.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 1a1c18a32.
 
 ## Resolution (2026-08-10)
 
