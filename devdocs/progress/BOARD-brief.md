@@ -34,14 +34,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 218, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
-- `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
+- `[p 60] [N]` feature-nilpy-class-as-a-value (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped
 - `[p 60] [U]` decide-own-language-first-name-resolution
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
 - `[p 60] [A]` feature-inline-asm-xtensa
-- `[p 60] [N]` feature-nilpy-class-as-a-value
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
@@ -63,5 +62,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 - `[p 55] [N]` feature-nilpy-corpus-uforth
+- `[p 55] [N]` feature-nilpy-text-string-kind
 
 _188 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

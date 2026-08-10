@@ -2,7 +2,7 @@
 track: N
 prio: 60
 type: bug
-blocked-by: decide-nilpy-class-as-value-dispatch-strategy
+blocked-by: feature-nilpy-class-as-a-value
 ---
 
 # A class used as a VALUE: SEGFAULT from a container, compile errors from a name
