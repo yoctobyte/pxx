@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | feature-c-entry-stub-must-run-finalizers |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (228)
+## backlog (230)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -121,6 +121,7 @@ lives in git, not in a timestamp._
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
+| feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-finalizers | C | 40 | feature | The C entry stub is `call main; exit_group(retval)`, so a plain `return` from main skips __pxx_run_finalizers entirely — which is why crtl cannot implement atexit without looking implemented and silently skipping handlers on the commonest exit path | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -169,6 +170,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-hasattr-per-instance-assigned-tracking | N | 40 | feature | hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit. | — |
 | feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition | N | 30 | feature | NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on every test. A provably-constant container build is loop-invariant and should be hoisted to a variable once — what a person would write by hand — while everything else keeps being folded into the condition. | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nilpy-import-a-py-module-from-the-library-path | A | 55 | feature | A NilPy `import X` finds X.py only as a SIBLING of the importing file; the fall-through chain looks for units (.pas) only, so a .py module shipped in lib/** is unreachable. Blocks shipping any NilPy-written library, starting with tkhtmlview | — |
 | feature-nilpy-iter-and-next-over-a-container | N | 35 | feature | `iter(xs)` is undefined — the explicit iterator protocol | — |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
@@ -294,7 +296,7 @@ lives in git, not in a timestamp._
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (38)
+## rainy-day (39)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -334,6 +336,7 @@ lives in git, not in a timestamp._
 | idea-ada-frontend-bare-metal-fit | U | 20 | idea | Ada is the least alien frontend on offer — it descends from Pascal, and pxx already has subrange types with {$R+} range checks raising error 201, which is Ada's Constraint_Error semantics with the default inverted. The cheap subset (no allocation, no tasking) is also the subset embedded Ada actually ships | — |
 | idea-cobol-frontend-feasibility-costing | U | 20→25 | idea | COBOL frontend: parser is cheap (grammar is rigid, records map onto Pascal, unstructured flow already proven by BASIC), but it needs a real fixed-point decimal type — Currency is currently a Double — plus PICTURE-edited MOVE and, for full file support, ISAM | — |
 | idea-demo-app-candidates | E | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
+| idea-p-named-parameters-in-the-pascal-dialect | P | 15 | idea | DESIGN SUGGESTION, deliberately parked. Let Pascal calls write `f(name := value)`, reusing the keyword binder NilPy already has. Rejected for now on the grounds that no existing Pascal code can ever use it — the only consumers would be pxx-authored wrappers of Python-shaped APIs, and those can simply BE Python | — |
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 
@@ -462,6 +465,7 @@ lives in git, not in a timestamp._
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
+- [p 55] [A] feature-nilpy-import-a-py-module-from-the-library-path (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
@@ -673,6 +677,7 @@ lives in git, not in a timestamp._
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-c-entry-stub-must-run-finalizers
 - **1** — feature-inline-asm-xmm-operands
+- **1** — feature-nilpy-import-a-py-module-from-the-library-path
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-tkinter-facade
 - **1** — feature-opt-accumulator-value-tracker

@@ -82,3 +82,24 @@ would have caught this the day it landed.
 `printf 'program p;\nuses tkhtmlview;\nbegin end.\n'` compiling; `make
 lib-test` / `make demos` green; ideally the all-units smoke test above. Then
 `pascal26 SongFormatter.py` should build (Track N's half is already in).
+
+## 2026-08-10 — SUPERSEDED: do not fix this file, it is being replaced
+
+The repo owner chose to **rewrite the unit in NilPy** rather than repair the
+Pascal or teach Pascal named parameters:
+[[feature-b-tkhtmlview-in-nilpy]] (blocked on
+[[feature-nilpy-import-a-py-module-from-the-library-path]]).
+
+The alternative — named parameters in the Pascal dialect — is parked at
+[[idea-p-named-parameters-in-the-pascal-dialect]] with the reasoning recorded.
+The decisive argument was that named parameters are not standard Pascal, so no
+existing Pascal code could ever use them; the only consumers would be
+pxx-authored wrappers of Python-shaped APIs, which can simply be Python.
+
+**Explicitly NOT unblocking songformatter with a two-line positional fix**, on
+the owner's call: songformatter is a test case, there is no need to unblock it
+today, and the file is valuable exactly as the thing that surfaced this
+question. Left broken deliberately.
+
+This ticket stays as the measurement record (what is wrong with the file, and
+that it fails identically on `pinned`). The work is on the feature ticket.
