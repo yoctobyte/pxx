@@ -1,0 +1,38 @@
+# A method call on a DYNAMICALLY-TYPED receiver picks its candidate class by
+# ARITY when the argument count settles it.
+#
+# The candidate scan keeps one entry per class declaring the name and takes the
+# first found; a KEYWORD argument could already promote a better one, but a call
+# that writes NO arguments names nothing. So `x.fetch()` took the first class —
+# whose fetch(key) REQUIRES an argument — and was refused outright:
+#   Nil Python: fetch() takes exactly 1 argument(s), got 0
+# The receiver is dynamically typed, so the static pick is a GUESS; one that
+# cannot accept the arity written is a guess already known to be wrong.
+#
+# Real case: songformatter's settings.py does `var.get()` on an untyped
+# parameter. The first class declaring `get` is TPyDict, whose get(key[,
+# default]) needs an argument, so the zero-argument get() every tkinter
+# StringVar/BooleanVar accepts was rejected — naming a class the program never
+# mentions.
+# bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+
+class Store:                    # declared FIRST: fetch REQUIRES an argument
+    def __init__(self):
+        self.d = {"a": 1}
+    def fetch(self, key):
+        return self.d[key]
+
+class Var:                      # declared second: fetch takes none
+    def __init__(self, v):
+        self.v = v
+    def fetch(self):
+        return self.v
+
+def read_no_args(x):            # x is untyped — the pick is by arity alone
+    return x.fetch()
+
+def read_one_arg(x):            # the other arity must still reach Store
+    return x.fetch("a")
+
+print(read_no_args(Var(42)))
+print(read_one_arg(Store()))

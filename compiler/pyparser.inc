@@ -9648,6 +9648,29 @@ begin
     Result := -1;
 end;
 
+{ How many arguments a call written at parenTok passes — top-level commas plus
+  one, and 0 for an empty `()`. parenTok is the '(' token index. Used to tell a
+  candidate method that CAN accept the call from one that provably cannot; a
+  keyword argument identifies a signature only when the call writes one, and
+  `f()` writes nothing. }
+function PyCallArgCountAt(parenTok: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := 0;
+  if (parenTok < 0) or (parenTok >= TokCount) or
+     (Tokens[parenTok].Kind <> tkLParen) then Exit;
+  if (parenTok + 1 < TokCount) and (Tokens[parenTok + 1].Kind = tkRParen) then Exit;
+  Result := 1;
+  k := parenTok + 1; depth := 1;
+  while (k < TokCount) and (depth > 0) do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack] then Dec(depth)
+    else if (depth = 1) and (Tokens[k].Kind = tkComma) then Inc(Result);
+    Inc(k);
+  end;
+end;
+
 function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer;
 { Pick the same-class OVERLOAD a keyword argument names. `Widget.bind(seq,
   script)` and `Widget.bind(seq, callback, add)` are two methods of one name, and
@@ -10218,7 +10241,7 @@ end;
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
-    smPName: AnsiString; smTk: TTypeKind; smArgs: Integer;
+    smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
     { room for a real class hierarchy: songformatter has EIGHT detector classes
       all declaring analyze(), and the cap of three turned that into "too many
@@ -10570,6 +10593,32 @@ begin
       end;
       Inc(k);
     end;
+  end;
+
+  { Same question again, answered by ARITY rather than by a keyword. A keyword
+    only identifies a signature when the call writes one; `var.get()` writes
+    nothing at all, and the first class found declaring `get` is TPyDict, whose
+    get(key[, default]) REQUIRES an argument — so the zero-argument call every
+    tkinter StringVar/BooleanVar accepts was refused outright with
+    "get() takes 1 to 2 arguments, got 0", naming a class the program never
+    mentions. The receiver here is dynamically typed, so the static pick is a
+    GUESS; a candidate that cannot accept the arity written is a guess already
+    known to be wrong, and one that can is strictly better. The demoted
+    candidate stays as a runtime arm exactly as in the keyword case.
+    bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity }
+  if (nDual > 0) and (hitPi >= 0) and (CurTok.Kind = tkLParen) and
+     (not ProcArityMatches(hitPi, PyCallArgCountAt(TokPos - 1) + 1)) then
+  begin
+    smArgN := PyCallArgCountAt(TokPos - 1);
+    for di := 0 to nDual - 1 do
+      if (dualMmis[di] >= 0) and
+         ProcArityMatches(UMthProc_[dualMmis[di]], smArgN + 1) then
+      begin
+        swapCi := hitCi; swapMmi := hitMmi;
+        hitCi := dualCis[di]; hitMmi := dualMmis[di]; hitPi := UMthProc_[hitMmi];
+        dualCis[di] := swapCi; dualMmis[di] := swapMmi;
+        Break;
+      end;
   end;
 
   { Same question, but for OVERLOADS OF ONE CLASS. The candidate scan keeps one

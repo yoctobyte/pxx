@@ -29,11 +29,12 @@ lives in git, not in a timestamp._
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
-## blocked (3)
+## blocked (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant |
+| bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have |
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | feature-c-entry-stub-must-run-finalizers |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
@@ -48,6 +49,7 @@ lives in git, not in a timestamp._
 | bug-a-write-fixed-fraction-digits-past-16-are-invented | A | 35 | bug | SILENT: write(v:w:d) gets the INTEGER part exactly now, but the fraction is still scaled through a Double — 1/3 at :0:30 prints ...333312 where the double's exact tail is ...333314829616256247, so digits 17-18 are wrong and 19+ are zeros presented as digits | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
+| bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have | B | 60 | bug | lib/pcl/tkhtmlview.pas has never compiled: line 171 uses Python-style NAMED ARGUMENTS (`configure(yscrollcommand := bar.set_)`), which this dialect does not have, and calls `bar.set_` where tkinter declares plain `set`. Any NilPy app importing tkhtmlview fails to build — songformatter does | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-signature-mismatch-warns-even-when-crtl-defines-the-symbol | C | 45 | bug | Every C program that includes <math.h> now emits 2-3 'disagrees with the Pascal routine' warnings, for symbols crtl DEFINES itself. The warning describes a resolution that is correct — binding the C declaration — so it is pure noise on every math-using compile | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
@@ -80,7 +82,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
-| bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | — |
 | bug-nilpy-text-mode-read-n-returns-bytes-not-str | N | 50 | bug | `f.read(3)` on a TEXT-mode file returns bytes (`b'one'`) where CPython returns a str (`one`). TPyFile.read(n)'s return type is statically TPyBytes, so it cannot branch on the mode at run time — the fix needs either a mode-carrying text path or a distinct binary class, not a runtime test | — |
 | bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable | P | 50 | bug | `P;` on a free routine whose parameters are ALL defaulted fails with 'undefined variable (P)'. FPC accepts it, `P()` works, and the paren-less form already works for METHODS (`b.G`) and for routines with no parameters at all — so it is the free-routine path alone that never tries the defaults fill | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
@@ -448,9 +449,9 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
+- [p 60] [B] bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have (unblocks 1)
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [U] decide-own-language-first-name-resolution
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -664,6 +665,7 @@ lives in git, not in a timestamp._
 - **3** — feature-port-windows-pe
 - **2** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
 - **1** — bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant

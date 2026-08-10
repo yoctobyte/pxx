@@ -1435,6 +1435,10 @@ test-nilpy: $(COMPILER)
 	# close()/readlines() on a read-mode handle (still a TPyList under the read-slurp model)
 	./$(COMPILER) test/test_nilpy_file_close_readlines.npy /tmp/test_nilpy_file_closerl26
 	test "$$(/tmp/test_nilpy_file_closerl26)" = "$$(printf '3\none\ntwo\nthree')"
+	# a dynamically-typed receiver picks its candidate class by ARITY when the
+	# argument count settles it (songformatter's `var.get()`)
+	./$(COMPILER) test/test_nilpy_variant_method_pick_by_arity.npy /tmp/test_nilpy_arity26
+	test "$$(/tmp/test_nilpy_arity26)" = "$$(printf '42\n1')"
 	# f.write(x) reaches the STRING overload whenever x is a str at RUN time,
 	# not only when it is statically one (overload pick by argument type)
 	./$(COMPILER) test/test_nilpy_write_overload_by_arg_type.npy /tmp/test_nilpy_wovl26

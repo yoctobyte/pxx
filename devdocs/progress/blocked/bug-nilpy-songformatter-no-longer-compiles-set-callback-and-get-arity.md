@@ -2,14 +2,16 @@
 summary: "songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28"
 type: bug
 track: N
+blocked-by: [bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have]
 prio: 60
+status: working
 ---
 
 # songformatter stopped compiling — `set_` callback member, and `get()` arity
 
 - **Type:** bug (Track N — Nil Python frontend; possibly Track B for the Tk facade half)
 - **Filed:** 2026-08-09 by Track D while verifying a docs claim before publishing it.
-- **Owner:** —
+- **Owner:** claude-ACPN
 
 ## What happens
 
@@ -85,3 +87,77 @@ file — split it out if it turns out to be unrelated.
   compiles real-world applications" could go into `docs/**`: the claim is true
   of what the handoff recorded and is NOT reproducible today, so it was kept
   out of the docs and filed here instead.
+
+## Progress (2026-08-10) — TWO independent causes; the N half is fixed
+
+The ticket's framing was a **red herring**, and it is worth recording because it
+is where an investigation naturally starts. It reads as though the module-level
+`def get` / `def set` in `settings.py` collide with the member names. They do
+not: the minimal repro below fails with **no module-level `get` at all**.
+
+```python
+class E:
+    def m(self, var):
+        return var.get()
+```
+→ `Nil Python: get() takes exactly 1 argument(s), got 0`
+
+`settings.py` and `SongFormatter.py` fail for two unrelated reasons.
+
+### 1. `get()` arity — Track N, FIXED
+
+A method call on a **dynamically-typed receiver** picks a candidate class by
+taking the FIRST class declaring the name. A KEYWORD argument could already
+promote a better candidate (`PyParseVariantMethod`), but `var.get()` writes no
+arguments, so nothing settled it — and the first class declaring `get` is
+**TPyDict**, whose `get(key[, default])` REQUIRES one. The zero-argument
+`get()` that tkinter's `StringVar`/`BooleanVar` both declare was refused
+outright, in a diagnostic naming a class the program never mentions.
+
+Fixed by promoting on **arity** beside the existing keyword promotion: when the
+current pick cannot accept the argument count written, and a candidate can, take
+the candidate; the demoted one stays as a runtime arm. The static pick on a
+dynamic receiver is a guess, and one that cannot accept the written arity is a
+guess already known to be wrong.
+
+`settings.py` now compiles standalone. Regression test:
+`test/test_nilpy_variant_method_pick_by_arity.npy` (tkinter-free — two user
+classes declaring one method name at different arities; **fails on `pinned`,
+passes now**).
+
+Note the closed-world behaviour is deliberately unchanged where it is right: if
+NO class declares a zero-argument `get`, the call is still a compile error,
+because no receiver in the program could satisfy it.
+
+### 2. `set_` — NOT this app, and NOT Track N
+
+The `"set_": no such member` error is not in songformatter at all. It is
+**`lib/pcl/tkhtmlview.pas:171`**, reached via `from tkhtmlview import
+HTMLScrolledText`:
+
+```pascal
+  text_.configure(yscrollcommand := bar.set_);
+```
+
+Two defects on one line: Python-style **named arguments**, which this dialect
+does not have (those two lines are the ONLY place in all of `lib/pcl` that
+writes `name := value` in a call), and **`bar.set_`**, where `tkinter.pas`
+declares plain `set`. It fails **identically on `pinned`**, so the unit appears
+never to have compiled.
+
+Filed as [[bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have]] and NOT
+fixed here: `lib/pcl` is Track B's file ownership and a Track B agent is active.
+
+### Answering the ticket's own question
+
+"Either the frontend regressed, or the 07-29 session never compiled this
+module." Neither, quite: the `set_` half fails on the pinned binary too, so it
+is not a regression — `tkhtmlview` was simply never compiled by that session,
+and the handoff overstates how much of the app built.
+
+### Status
+
+**Blocked, not done.** Acceptance is "`SongFormatter.py` builds", which now
+depends only on the Track B unit above. Gate for the half that did land:
+`tools/gate.sh quick` GREEN, `make test-nilpy` exit 0 (zero make errors),
+self-host fixedpoint byte-identical.
