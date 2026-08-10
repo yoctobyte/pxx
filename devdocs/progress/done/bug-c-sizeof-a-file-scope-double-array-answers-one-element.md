@@ -104,4 +104,4 @@ Gate: `make compiler/pascal26` fixedpoint converged, repro matches gcc,
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit b20706651.
