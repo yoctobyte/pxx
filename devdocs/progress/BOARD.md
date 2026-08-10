@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (238)
+## backlog (239)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -259,6 +259,7 @@ lives in git, not in a timestamp._
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| idea-a-auto-enable-threadsafe-by-restarting-the-compile | A | 15 | idea | Auto-enable `--threadsafe` by voiding the compile and restarting | — |
 | idea-adaptive-heap-growth | A | 10 | idea | Adaptive heap growth policy (research / north-star — not scheduled) | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 10 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
@@ -671,6 +672,7 @@ lives in git, not in a timestamp._
 - [p 15] [A] compat-pascal-binop-operand-eval-order
 - [p 15] [N] feature-nilpy-nested-def-as-value
 - [p 15] [P] feature-pascal-corpus-expansion
+- [p 15] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
 - [p 12] [P] task-pascal-conformance-long-tail
 - [p 10] [B] feature-crtl-implement-libc-assumptions
 - [p 10] [A] idea-adaptive-heap-growth
