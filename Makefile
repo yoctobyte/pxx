@@ -2222,6 +2222,14 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_wcw26 | head -3 | tail -1)" = "[    q]"
 	test "$$(/tmp/test_wcw26 | head -6 | tail -1)" = "[q][q]"
 	test "$$(/tmp/test_wcw26 | head -8 | tail -1)" = "   x   y"
+	# a metaclass-typed FIELD as a receiver. The parser recognises a metaclass
+	# receiver from a LIST of base node kinds (variable, cast, array element --
+	# the last added at b328 for this same bug) and a FIELD was never in it.
+	./$(COMPILER) test/test_metaclass_field_receiver.pas /tmp/test_mcfld26
+	test "$$(/tmp/test_mcfld26 | tail -1)" = "METACLASS FIELD RECEIVER OK"
+	test "$$(/tmp/test_mcfld26 | head -4 | tail -1)" = "named   der TDer 7"
+	test "$$(/tmp/test_mcfld26 | head -7 | tail -1)" = "classfld der"
+	test "$$(/tmp/test_mcfld26 | head -8 | tail -1)" = "ctor    B|BD"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed

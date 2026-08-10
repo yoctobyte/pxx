@@ -12,6 +12,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-64bit-named-const-truncated-32bit-targets | A | 80 | bug | 64-bit named constants are truncated to 32 bits on the 32-bit targets | — |
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-a-a-frozen-string-field-in-a-variant-part-is-8-bytes-and-untyped | A | 55 | bug | A `string[N]` field in a record's VARIANT part is 8 bytes and reads as an address | — |
+| bug-a-a-metaclass-typed-record-field-is-not-a-receiver | A | 45 | bug | A metaclass-typed FIELD is not recognised as a receiver | — |
 | bug-a-aarch64-float-field-width-ignored | A | 45 | bug | aarch64 ignores the field WIDTH in writeln(d:w:n) — `writeln(x:10:4)` prints `3.1416` where FPC and x86-64 print `    3.1416`. Pre-existing; the aarch64 emitter never took a width parameter at all | — |
 | bug-a-aarch64-large-double-decimal-formatting | A | 45 | bug | aarch64: writeln(d:0:1) of a large Double prints a wrong integer part — 9007199254740991 comes out as 9007199254740990.4, and QWord-max shifts a whole decimal digit. Not ULP rounding: the digits are wrong | — |
 | bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |

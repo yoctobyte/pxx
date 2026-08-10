@@ -3850,6 +3850,7 @@ var
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
   propRecvNode, propRecvCi: Integer;   { NilPy @property on a VARIANT receiver }
+  mcRec, mcFi: Integer;   { metaclass-typed FIELD as a receiver }
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
@@ -5855,7 +5856,26 @@ begin
           a metaclass VALUE like any `class of T` variable — it fell through to
           the plain-pointer member paths and returned garbage
           (bug-pascal-metaclass-array-element-not-a-receiver, b328). }
-        ci := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec - REC_UCLASS_BASE;
+        ci := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec - REC_UCLASS_BASE
+      else if ASTKind[node] = AN_FIELD then
+      begin
+        { A metaclass-typed FIELD of a record or class (`fld.m.Kind`,
+          `cfg.Factory.Create`). Same omission the array element had at b328,
+          in the same list: a `class of T` VARIABLE, a metaclass CAST and an
+          array ELEMENT were each taught to be a receiver one at a time, and a
+          FIELD never was — so it fell through to the plain-pointer member path
+          and said `a pointer has no members`. The field carries its class in
+          UFldPtrElemTk/UFldPtrElemRec exactly as the symbol does in
+          PtrElemTk/PtrElemRec.
+          bug-a-a-metaclass-typed-record-field-is-not-a-receiver }
+        mcRec := ResolveNodeRec(ASTLeft[node]);
+        mcFi := -1;
+        if mcRec >= REC_UCLASS_BASE then
+          mcFi := FindUField(mcRec - REC_UCLASS_BASE, GetASTIdentName(node));
+        if (mcFi >= 0) and (IntToTypeKind(UFldPtrElemTk[mcFi]) = tyClass) and
+           (UFldPtrElemRec[mcFi] >= REC_UCLASS_BASE) then
+          ci := UFldPtrElemRec[mcFi] - REC_UCLASS_BASE;
+      end;
       if ci >= 0 then
       begin
         { A class-reference OPERATION on a TYPED metaclass (`AClass: TJSONDataClass`):
