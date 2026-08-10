@@ -27,7 +27,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-optional-string-param-accepts-none` [N]
 - `feature-nilpy-star-args-kwargs` [N]
-- `feature-nilpy-text-string-kind` [N] — blocked-by: feature-a-managed-block-kind-word
+- `feature-nilpy-text-string-kind` [N]
 - `feature-pascal-corpus-generics` [P]
 
 ## blocked (7) — has an unmet blocker; do not claim

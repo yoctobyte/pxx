@@ -2,7 +2,7 @@
 track: N
 prio: 55
 type: feature
-blocked-by: feature-a-managed-block-kind-word
+blocked-by: []   # was feature-a-managed-block-kind-word — landed, see Log 2026-08-10
 summary: "Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1)"
 ---
 
@@ -446,3 +446,14 @@ verification** until someone found that line. Now `Ord(High(TTypeKind))`.
 Widen NilPy's `s[i]` from `tyChar` to `tyUCS4Char` and complete the
 `pystr_ofchar` promotion, then the character-aware `len`/slice/find as one
 commit, then `--no-unicode`, then the literal optimisation.
+
+## 2026-08-10 — UNBLOCKED (board maintenance, no code change)
+
+`blocked-by: feature-a-managed-block-kind-word` was still set in frontmatter,
+but that ticket is in `done/`. Cleared the field.
+
+Worth flagging how this hid: a stale `blocked-by` is invisible in two layers at
+once. `unfinished/` is already outside the ranked queue (`ready`/`next` never
+list it), so nobody saw the ticket; and had it been re-filed to `backlog/`, the
+stale blocker would have kept it out of `ready` anyway. Prio-55 work with a
+satisfied blocker was parked twice over.

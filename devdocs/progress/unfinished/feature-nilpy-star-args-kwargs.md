@@ -171,3 +171,34 @@ def f(a, *rest):   -> f(1,2,3) == "1:2"    (mixed positional + *args)
 All accepted and correct. Evidence only — Track N owns closing this. Found
 sweeping Track B's blocked tickets; [[feature-nilpy-tkinter-facade]] listed this
 as its blocker.
+
+## Re-measured 2026-08-10 at HEAD (b17cf2621) — three of the four open items are CLOSED
+
+Probed against CPython rather than read from the notes above. Scope left is much
+smaller than this ticket claims:
+
+| shape | this ticket says | measured at HEAD |
+| --- | --- | --- |
+| `def f(*args)` / `def f(**kw)` / `def f(a, *rest)` | satisfied (v252) | still correct |
+| `def m(self, *args)` in a class | "still refused" | **works** — `c.m(1,2,3)` == 3 |
+| `fixed(*xs)` into ordinary params (rung 3) | "still the open scope" | **works** — `fixed(*[1,2,3])` == 6 |
+| `target(*args, **kwargs)` forwarding | rung 3 | **positional half works** (`fwd(1,2,3)` == 123) |
+| `target(*args, **kwargs)` with a KEYWORD arg | rung 3 | **the only remaining gap** |
+
+The one live failure:
+
+```python
+def target(a, b, c): return a*100 + b*10 + c
+def fwd(*args, **kwargs): return target(*args, **kwargs)
+fwd(1, 2, 3)      # 123 — correct
+fwd(1, 2, c=9)    # CPython 129; pxx: TypeError: forwarded call got 2 arguments, expected 3 to 3
+```
+
+So `**kwargs` is collected correctly at the callee but **not re-expanded into
+named parameters at a forwarded call site** — the keywords are dropped and only
+the positional count is passed on. Note this fails LOUDLY (a runtime TypeError,
+not a wrong answer), which is the right failure mode and part of why the
+priority need not rise.
+
+Retitle-worthy: the remaining work is "`**kwargs` re-expansion at a forwarded
+call site", not "star-args/kwargs".

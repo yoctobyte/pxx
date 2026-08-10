@@ -30,7 +30,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
-| feature-nilpy-text-string-kind | N | 55 | feature | Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1) | feature-a-managed-block-kind-word |
+| feature-nilpy-text-string-kind | N | 55 | feature | Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1) | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
 ## blocked (7)

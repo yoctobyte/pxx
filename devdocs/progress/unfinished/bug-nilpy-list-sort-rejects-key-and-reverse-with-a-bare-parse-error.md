@@ -2,7 +2,7 @@
 track: N
 prio: 50
 type: bug
-status: working
+status: unfinished
 owner: claude-AN
 ---
 
@@ -270,3 +270,31 @@ Also filed from this work: [[decide-nilpy-builtin-keyword-only-parameters]] —
 `sort(*, key=None, reverse=False)` refuses it. Laxness, not a wrong answer, and
 the same latency already exists for `sorted`/`min`/`max`; parked on Track U
 rather than guessed at.
+
+## Re-measured 2026-08-10 at HEAD (b17cf2621) — the title is now wrong on two counts
+
+| shape | measured at HEAD |
+| --- | --- |
+| `xs.sort(reverse=True)` | **works** — `[3,2,1]`, matches CPython |
+| `sorted(ys, key=len)` | **works** |
+| `sorted(xs, reverse=True)` | **works** |
+| `ys.sort(key=len)` | **the only gap** |
+
+And it is no longer a *bare parse error*. The diagnostic is now named and
+accurate:
+
+```
+error: Nil Python: TPyList.sort has no parameter named 'key'
+```
+
+So: `reverse` is done, the error message is fine, and `sorted(key=)` already
+works — meaning the **key machinery exists and simply is not wired to the
+in-place `sort` method**. That is a much smaller job than this ticket describes
+and a strong starting lead.
+
+**Duplicate:** [[bug-nilpy-list-sort-method-missing]] (backlog, prio 50) covers
+exactly this residue — `list.sort(key=...)`, with `sorted()` noted as working.
+Its own text is also stale (it reports `TPyList has no method sort`; the method
+now exists and takes `reverse`). These two should be merged into one ticket
+rather than both surviving; the backlog one is the copy that is actually visible
+to the ranker.

@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 summary: "NilPy: a closure created in a loop captures the loop variable's VALUE at creation, so [f() for f in fs] gives [0, 1, 2] where CPython gives [2, 2, 2] — Python closes over the variable, not the value"
-status: working
+status: unfinished
 owner: claude-A-N
 ---
 
