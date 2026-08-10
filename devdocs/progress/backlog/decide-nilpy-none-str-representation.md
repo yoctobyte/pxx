@@ -176,9 +176,43 @@ wrong value. Here the sentinel is **self-describing** — any consumer can ASK v
 distinguish None from `""` — `is None`, `str()`/`print`, and truthiness. Not
 every string consumer.
 
-**Still true:** this is `compiler/builtin/**`, so it needs stabilize-fast + pin,
-and the canonical None block must never be freed (a pinned refcount or an
-address check in release). Those two are common to E and F.
+**Still true:** this is `compiler/builtin/**`, so it needs stabilize-fast + pin.
+
+#### The IMMORTAL bit — the same META word also solves "never free this" (user)
+
+> "one of those bits could possibly be used for the refcounting fix ('don't free
+> this empty string and nil it')." — user, 2026-08-10
+
+Better than pinning a refcount or special-casing an address: make **immortal a
+property of the block**. One free bit in the meta word (56 are unused above
+`PXX_KIND_MASK = $FF`), and release skips the free when it is set.
+
+**It costs nothing on the hot path.** The x86-64 release blob
+(`EmitAnsiStrReleaseLocked`, ir_codegen.inc) is:
+
+```asm
+test rax, rax          ; nil check
+dec qword [rax-16]     ; refcount
+jnz  done              ; still referenced -> done
+<free path>            ; <-- the immortal test goes HERE
+```
+
+The check sits *after* `jnz done`, so it runs only when the refcount actually
+reached zero — which for an immortal block is rare, and for every ordinary
+string is the free it was going to do anyway. A load of `[rax-24]` plus a test;
+same cache line as the refcount it just wrote.
+
+**Scope is smaller than it looks:** only `ir_codegen.inc` carries an emitted
+AnsiStr release blob; the other backends route through Pascal helpers. So this
+is one asm site plus the helper(s), not six backends.
+
+**It generalises**, which is the real argument. The same bit serves the
+canonical None block, a canonical empty block (if E is ever revisited), interned
+literals, and any other static/constant managed block. "Immortal" stops being a
+per-case hack and becomes a header property with one enforcement point.
+
+That removes option F's last remaining risk item, leaving only the
+stabilize+pin obligation that any `compiler/builtin/**` change carries.
 
 ## Recommendation
 
