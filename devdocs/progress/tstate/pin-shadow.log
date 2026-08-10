@@ -15,3 +15,4 @@
 2026-08-09T17:36:53Z	plexus	0c22cb258ef15654f4563841a84c68cb1eaaebcd	would NOT pin 0c22cb258ef1 — 2 red(s) not in the allowlist: optdiff#shard1/12, optdiff#shard2/12
 2026-08-09T18:30:06Z	plexus	2228129b2c2e4e11edbc7b9314c0f0e724fffb0f	would NOT pin 2228129b2c2e — 2 red(s) not in the allowlist: optdiff#shard1/12, optdiff#shard2/12
 2026-08-09T21:23:33Z	plexus	01a08d88371ed419ac58d487892da07c18c5d0ef	would NOT pin 01a08d88371e — 2 red(s) not in the allowlist: optdiff#shard1/12, optdiff#shard2/12
+2026-08-10T05:45:00Z	plexus	fd3c4872cf1b44e974ad8c3b3f32b94660325a5e	would NOT pin fd3c4872cf1b — 2 red(s) not in the allowlist: optdiff#shard1/12, optdiff#shard2/12
