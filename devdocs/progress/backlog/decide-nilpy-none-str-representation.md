@@ -82,9 +82,66 @@ upward-compatibility rule this is a defect, not a dialect choice — working
 CPython code can observe it — so D is only defensible as an explicit deferral,
 not as a resolution.
 
+### E — a CANONICAL NON-NIL EMPTY STRING (user, 2026-08-10)
+
+> "we overlook the option where we allocate a string, just it's length is zero.
+> now in pascal, we auto-nil such string, but we don't have to?" — user
+
+Correct, and it is one policy line, not a structural fact. `PXXStrFromLit`
+(builtinheap.pas:1062) early-returns nil:
+
+```pascal
+{ ...Returns the data pointer (base+16) or nil for an empty string. }
+if len <= 0 then begin Result := nil; Exit; end;
+```
+
+The layout is `[refcount:8][length:8][data][nul]`. Nothing requires empty to be
+nil. Give `""` a **single canonical static zero-length block**, pinned so it is
+never released, and nil goes back to meaning exactly one thing: None.
+
+**Why this is better shaped than option B.** B gives NONE a distinguished
+non-nil sentinel, so every str consumer must learn to recognise it, and a missed
+site renders the sentinel's bytes — a silent wrong value. E inverts that: nil
+already means "nothing" everywhere, so the None case needs no new knowledge at
+all. And the empty case degrades benignly — a site that checked `s = nil` to
+mean "empty" now falls through and reads a header that honestly says length 0,
+which is the correct answer anyway.
+
+**And it has no promotion boundary.** That is the decisive advantage over A:
+this ticket's own recommendation warns that the boundary — not the
+representation — is where the variant route will go wrong. E has none. It fixes
+local, concat, slice, field and return in one change, for annotated and
+unannotated code alike.
+
+**No per-instance cost:** one shared block, so `s := ''` stays a pointer store.
+
+#### What must be measured before choosing E
+
+1. **The 55 `= nil` comparisons in builtinheap.pas.** Most are "don't deref"
+   guards and get *more* correct under E, but they need reading, not assuming.
+   This is the real work and the honest counterweight to "one line".
+2. **Refcounting the canonical block.** It must never be freed: a pinned
+   refcount, or an address check in release. Get this wrong and it is a
+   use-after-free in the string runtime, i.e. the worst possible blast radius.
+3. **Pascal-side semantics.** Pascal has no None, so nil-vs-empty is harmless
+   there today — but any Pascal code testing `Pointer(s) = nil` to mean empty
+   changes meaning. Grep it; the RTL and the compiler itself are the corpus.
+4. **Self-host + pin.** This is `compiler/builtin/**`, so it needs
+   stabilize-fast + pin, and the compiler binary is built with the changed
+   representation. Expect a full-gate day, not a quick fix.
+5. **Does `s = ''` still compare equal?** The content compare must treat the
+   canonical block and (if any survive) nil as equal-length-zero.
+
+#### Relationship to A
+
+Not mutually exclusive: `Optional[str]` could still be a variant for annotation
+consistency with `decide-nilpy-optional-int-none-vs-zero`, while E fixes the
+unannotated majority. But if E works, A's scope question mostly disappears —
+which is an argument for measuring E FIRST.
+
 ## Recommendation
 
-**A, scoped to `Optional[str]`.** It is the only option whose correctness is
+**Superseded by option E pending measurement — see the note at the end.** (Original: **A, scoped to `Optional[str]`.**) It is the only option whose correctness is
 demonstrated rather than argued, and scoping to Optional keeps the plain-`str`
 performance path out of it. Decide the promotion boundary explicitly and write it
 down, because that boundary — not the representation — is where this will go
@@ -95,3 +152,14 @@ wrong.
 `==` is unaffected: `x == ""` already answers True correctly. It is `is None`
 specifically that conflates, so any fix can be validated by the `is`/`==` pair
 disagreeing the way CPython makes them disagree.
+
+## RECOMMENDATION UPDATED 2026-08-10
+
+Measure **option E** (canonical non-nil empty string) before committing to A.
+E has no promotion boundary, fixes annotated and unannotated code alike, and
+costs one shared block rather than boxing. Its risk is concentrated in a
+readable, finite place — the `= nil` sites in the string runtime and the
+refcount pinning — rather than spread across a type-promotion policy.
+
+If E survives items 1-5 above, take E. If the `= nil` audit turns up sites that
+genuinely need nil-means-empty, fall back to A scoped to `Optional[str]`.
