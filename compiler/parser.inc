@@ -10877,10 +10877,10 @@ begin
       end
       else if isNilPy and (name = 'open') then
       begin
-        { open(path) -> pyopen(path), a TPyList of lines (read-slurp).
-          open(path, mode) -> pyfile_open, a REAL OS file handle (uforth's
-          file words create/write/seek through it). Later positional/keyword
-          args (encoding=...) are skipped either way. }
+        { open(path[, mode]) -> a TPyFile, whatever the mode. The no-mode form
+          goes through pyopen, which is now just pyfile_open(path, 'r') —
+          Python's default mode. Later positional/keyword args (encoding=...)
+          are skipped either way. }
         Next; Expect(tkLParen, '(');
         ParseExpr;
         atRecv := CurASTNode;
@@ -10888,41 +10888,17 @@ begin
         begin
           Next;
           ParseArgExpr;
-          { A TEXT read (`open(p, "r"...)`) is INCLUDE's line iteration — keep
-            the read-slurp TPyList. Any binary/write mode is uforth's file-VFS
-            handle: pyfile_open returns a real TPyFile. Decided on the mode
-            literal so both call shapes work. }
-          if (ASTKind[CurASTNode] = AN_STR_LIT) and
-             (ASTSLen[CurASTNode] >= 1) and
-             (TokChars[ASTSOffset[CurASTNode]] = 'r') and
-             ((ASTSLen[CurASTNode] = 1) or (TokChars[ASTSOffset[CurASTNode]+1] <> 'b')) then
-          begin
-            { drop remaining args, then lower to pyopen(path) }
-            while CurTok.Kind = tkComma do
-            begin
-              Next;
-              atFld := 0;
-              while (CurTok.Kind <> tkEOF) and
-                    not ((atFld = 0) and (CurTok.Kind in [tkComma, tkRParen])) do
-              begin
-                if CurTok.Kind = tkLParen then Inc(atFld)
-                else if CurTok.Kind = tkRParen then Dec(atFld);
-                Next;
-              end;
-            end;
-            Expect(tkRParen, ')');
-            node := AllocNode(AN_ARG);
-            ASTLeft[node] := atRecv;
-            atRecv := AllocNode(AN_CALL);
-            ASTIVal[atRecv] := FindProc('pyopen');
-            if ASTIVal[atRecv] < 0 then Error('Nil Python: pylib (pyopen) not loaded');
-            ASTTk[atRecv] := Ord(tyClass);
-            ASTLeft[atRecv] := node;
-            ASTRight[atRecv] := REC_UCLASS_BASE + FindUClass('TPyList');
-            CurASTNode := atRecv;
-            LastExprTk := tyClass;
-            Exit;
-          end;
+          { ONE class for every mode. A text read used to lower to pyopen and
+            yield a TPyList of lines (the read-slurp model), so `open` answered
+            TPyList or TPyFile depending on the mode STRING — two Pascal classes
+            for one Python type. Binding one name to both widened it to a
+            variant, and then `f.read()` resolved against TPyFile.read(u) and was
+            refused for an arity Python does not have; worse, an append through
+            a name that had widened to the read class dispatched .write to
+            TPyList.write and silently DROPPED the data. TPyFile now carries the
+            read side too — read()/readlines(), and for-in iterates its lines
+            (PyParseForIn) — so the mode no longer picks a type.
+            bug-nilpy-open-returns-two-different-classes-by-mode }
           node := AllocNode(AN_ARG);
           ASTLeft[node] := atRecv;
           atFld := AllocNode(AN_ARG);
@@ -10970,7 +10946,7 @@ begin
         if idx < 0 then Error('Nil Python: pylib (pyopen) not loaded');
         ASTIVal[node] := idx;
         ASTTk[node] := Ord(tyClass);
-        ASTRight[node] := REC_UCLASS_BASE + FindUClass('TPyList');
+        ASTRight[node] := REC_UCLASS_BASE + FindUClass('TPyFile');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
         ASTLeft[node] := argSeq;
         CurASTNode := node;

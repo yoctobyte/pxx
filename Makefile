@@ -1435,6 +1435,10 @@ test-nilpy: $(COMPILER)
 	# close()/readlines() on a read-mode handle (still a TPyList under the read-slurp model)
 	./$(COMPILER) test/test_nilpy_file_close_readlines.npy /tmp/test_nilpy_file_closerl26
 	test "$$(/tmp/test_nilpy_file_closerl26)" = "$$(printf '3\none\ntwo\nthree')"
+	# open() answers ONE class in every mode: reuse of a name across w/a/r, the
+	# silent .write-to-a-widened-read-class data loss, iteration, readlines()
+	./$(COMPILER) test/test_nilpy_open_one_class_every_mode.npy /tmp/test_nilpy_open_one_class26
+	test "$$(/tmp/test_nilpy_open_one_class26)" = "$$(printf '[one\n]\nafter-append:one|two|\niter:one\niter:two\nlines:2')"
 	# a name bound by `with open(...) as f:` reused later for a plain `f = open(...)`
 	./$(COMPILER) test/test_nilpy_with_name_reuse.npy /tmp/test_nilpy_with_name_reuse26
 	test "$$(/tmp/test_nilpy_with_name_reuse26)" = "$$(printf '2\n[one\ntwo\n]')"

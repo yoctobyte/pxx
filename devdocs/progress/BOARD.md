@@ -78,10 +78,10 @@ lives in git, not in a timestamp._
 | bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later | N | 50 | bug | A name bound in a block by a METHOD CALL is "undefined" in a later assignment | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
-| bug-nilpy-open-returns-two-different-classes-by-mode | N | 60 | bug | `open()` returns two different classes by mode, so reusing the name breaks | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | — |
+| bug-nilpy-text-mode-read-n-returns-bytes-not-str | N | 50 | bug | `f.read(3)` on a TEXT-mode file returns bytes (`b'one'`) where CPython returns a str (`one`). TPyFile.read(n)'s return type is statically TPyBytes, so it cannot branch on the mode at run time — the fix needs either a mode-carrying text path or a distinct binary class, not a runtime test | — |
 | bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable | P | 50 | bug | `P;` on a free routine whose parameters are ALL defaulted fails with 'undefined variable (P)'. FPC accepts it, `P()` works, and the paren-less form already works for METHODS (`b.G`) and for routines with no parameters at all — so it is the free-routine path alone that never tries the defaults fill | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -404,9 +404,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1602)
+## done (1603)
 
-1602 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1603 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (32)
 
@@ -450,7 +450,6 @@ lives in git, not in a timestamp._
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [U] decide-own-language-first-name-resolution
@@ -495,6 +494,7 @@ lives in git, not in a timestamp._
 - [p 50] [N] bug-nilpy-list-sort-method-missing
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
 - [p 50] [N] bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
+- [p 50] [N] bug-nilpy-text-mode-read-n-returns-bytes-not-str
 - [p 50] [P] bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build

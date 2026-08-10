@@ -1,0 +1,50 @@
+# open() must answer ONE class whatever the mode. It used to return a TPyList
+# of lines for "r"/no-mode (the read-slurp model) and a TPyFile for everything
+# else, so binding ONE name to both widened it to a variant and broke two ways:
+#
+#   - `f = open(p,"w") ... f = open(p,"r"); f.read()` was a COMPILE ERROR,
+#     because read() resolved against TPyFile.read(u: Int64) and the arity
+#     check refused the ordinary zero-argument read() Python has.
+#   - worse and SILENT: an append through a name that had widened to the read
+#     class dispatched .write to TPyList.write, which does nothing to the file.
+#     The data was lost with a zero exit status.
+#
+# Every read is through the SAME name as an earlier write here — that reuse is
+# the whole point, and a different name for the reader always worked.
+# bug-nilpy-open-returns-two-different-classes-by-mode
+p = "/tmp/pxx_test_open_one_class.txt"
+
+f = open(p, "w")
+f.write("one\n")
+f.close()
+
+f = open(p, "r")
+print("[" + f.read() + "]")
+f.close()
+
+# the silent half: append through the reused name, then read it back
+f = open(p, "a")
+f.write("two\n")
+f.close()
+
+f = open(p, "r")
+print("after-append:" + f.read().replace("\n", "|"))
+f.close()
+
+# iteration over a file yields LINES, keeping the newline
+f = open(p, "r")
+for ln in f:
+    print("iter:" + ln.rstrip("\n"))
+f.close()
+
+# readlines() and the no-mode form (Python's default mode is "r")
+f = open(p)
+print("lines:" + str(len(f.readlines())))
+f.close()
+
+# NOTE: the byte-oriented read(n) is deliberately NOT asserted here. In CPython
+# a TEXT-mode read(n) returns str and only "rb" returns bytes, while TPyFile's
+# read(n) is statically TPyBytes either way — a real divergence, but one about
+# read(n)'s return TYPE rather than about open() answering two classes, and it
+# cannot be fixed by a runtime branch since the return type is static.
+# Filed as bug-nilpy-text-mode-read-n-returns-bytes-not-str.

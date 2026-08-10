@@ -13945,7 +13945,7 @@ end;
 
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
                        forTokIdx: Integer): Integer;
-var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
+var contNode, ci, dictCi, listCi, fileCi, symIdx, cSym, iSym, nSym: Integer;
     enumStartNode, enumStartSym: Integer;   { `enumerate(xs, START)` }
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
@@ -14071,6 +14071,7 @@ begin
   isStr := (contTk = tyString) or (contTk = tyAnsiString);
   listCi := FindUClass('TPyList');
   dictCi := FindUClass('TPyDict');
+  fileCi := FindUClass('TPyFile');
   { A VARIANT container — `for n in num` where num is Any — is unboxed to
     TPyList via pylib pylist_v. The corpus reaches this only under an
     `isinstance(num, list)` guard, so the value really is a list at run time;
@@ -14151,6 +14152,18 @@ begin
       ASTTk[contNode] := Ord(tyClass);
       ASTLeft[contNode] := vListNode;
       ASTRight[contNode] := REC_UCLASS_BASE + listCi;
+      ci := listCi;
+    end;
+    { `for line in f:` over a FILE. CPython iterates a file object by LINE, so
+      read the lines and iterate that list — the same shape the dict arm just
+      below uses to iterate its keys. Without it the loop reached the generic
+      count/at protocol, which a TPyFile does not have, and the error named
+      `count`, a word the user never wrote. This is what lets open() answer ONE
+      class in every mode (bug-nilpy-open-returns-two-different-classes-by-mode). }
+    if (fileCi >= 0) and (ci = fileCi) then
+    begin
+      contNode := PyCallMeth1(fileCi, 'readlines', contNode, -1);
+      if contNode < 0 then Error('Nil Python: pylib (TPyFile.readlines) not loaded');
       ci := listCi;
     end;
     if (PyForExtraCount > 0) and (dictCi >= 0) and (ci = dictCi) then

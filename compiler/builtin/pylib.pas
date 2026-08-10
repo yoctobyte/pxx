@@ -453,7 +453,18 @@ type
   public
     FFd: Int64;
     constructor Create;
-    function read(u: Int64): TPyBytes;
+    function read(u: Int64): TPyBytes; overload;
+    { CPython's `f.read()` with NO argument: everything from the current
+      position to EOF, as TEXT. The read-slurp model gave this to TPyList and
+      TPyFile never had it, which is the whole reason open() answered two
+      different classes by mode (bug-nilpy-open-returns-two-different-classes-by-mode).
+      Text, not TPyBytes, because that is what `print(f.read())` must produce —
+      our strings are byte strings, the same identity TPyFile.write relies on. }
+    function read: AnsiString; overload;
+    { CPython's readlines(): the rest of the file split into lines, each KEEPING
+      its trailing newline, exactly as TPyList's version yielded them so that
+      joining reproduces the file byte for byte. }
+    function readlines: TPyList;
     function readline: TPyBytes;
     function write(b: TPyBytes): Int64; overload;
     { Python's TEXT-mode write takes a str, and that is how every ordinary
@@ -861,7 +872,7 @@ function pyselect_select(const r: Variant; const w: Variant; const x: Variant; c
   line list — iteration and .read() need no live fd, and `with open(...)` can
   treat close as a no-op. Mode/encoding are accepted and ignored (our strings
   are byte strings; latin-1/utf-8 of ASCII is identity). }
-function pyopen(const path: AnsiString): TPyList;
+function pyopen(const path: AnsiString): TPyFile;
 function pyfile_read(l: TPyList): AnsiString;
 { textwrap.dedent: remove the longest run of leading whitespace common to every
   non-blank line. Blank lines are normalised to empty and ignored when
@@ -8595,29 +8606,20 @@ begin
   Result := res;
 end;
 
-function pyopen(const path: AnsiString): TPyList;
-var content, line: AnsiString; ok: Boolean; i, n: Integer;
+{ `open(path)` with no mode. Python's default mode IS "r", so this is now just
+  the two-argument form — it used to slurp the file into a TPyList of lines
+  instead, which is what made open() answer a different CLASS depending on the
+  mode string and cost a data-losing .write dispatch when one name held both
+  (bug-nilpy-open-returns-two-different-classes-by-mode). The read-slurp
+  conveniences it existed for now live on TPyFile itself: read(), readlines(),
+  and for-in over its lines.
+
+  The missing-file behaviour is preserved deliberately: pyfile_open raises
+  FileNotFoundError the same way, which test_nilpy_typeerror_is_catchable
+  depends on catching. }
+function pyopen(const path: AnsiString): TPyFile;
 begin
-  Result := TPyList.Create;
-  content := pyfile_slurp(path, ok);
-  if not ok then
-  begin
-    raise FileNotFoundError.Create(path);
-  end;
-  { split into lines, each KEEPING its trailing newline — Python's file
-    iteration yields lines that way, and uforth strips the '\n' itself }
-  i := 1; n := Length(content); line := '';
-  while i <= n do
-  begin
-    line := line + content[i];
-    if content[i] = #10 then
-    begin
-      Result.append(line);
-      line := '';
-    end;
-    Inc(i);
-  end;
-  if Length(line) > 0 then Result.append(line);   { last line, no trailing NL }
+  Result := pyfile_open(path, 'r');
 end;
 
 function pyfile_read(l: TPyList): AnsiString;
@@ -10799,6 +10801,53 @@ begin
   if got < 0 then got := 0;
   r.FLen := got;
   Result := r;
+end;
+
+{ Read to EOF from the current position. Chunked rather than byte-at-a-time
+  (readline's excuse — "line reads are rare and short" — does not hold for a
+  whole file), and it leaves the position at EOF like CPython. }
+function TPyFile.read: AnsiString;
+var buf: array[0..8191] of Char; got: Int64; res: AnsiString;
+    rlen, rcap, i: Integer;
+begin
+  res := ''; rlen := 0; rcap := 0;
+  while True do
+  begin
+    got := PyPalRead(FFd, @buf[0], 8192);
+    if got <= 0 then Break;
+    if rlen + Integer(got) > rcap then
+    begin
+      rcap := (rlen + Integer(got)) * 2;
+      if rcap < 8192 then rcap := 8192;
+      SetLength(res, rcap);
+    end;
+    for i := 0 to Integer(got) - 1 do
+      res[rlen + i + 1] := buf[i];
+    rlen := rlen + Integer(got);
+  end;
+  SetLength(res, rlen);
+  Result := res;
+end;
+
+function TPyFile.readlines: TPyList;
+var content, line: AnsiString; i, n: Integer;
+begin
+  Result := TPyList.Create;
+  content := Self.read;
+  { each line KEEPS its trailing newline -- Python's file iteration yields them
+    that way, and a final unterminated line is still a line }
+  i := 1; n := Length(content); line := '';
+  while i <= n do
+  begin
+    line := line + content[i];
+    if content[i] = #10 then
+    begin
+      Result.append(line);
+      line := '';
+    end;
+    Inc(i);
+  end;
+  if line <> '' then Result.append(line);
 end;
 
 function TPyFile.readline: TPyBytes;
