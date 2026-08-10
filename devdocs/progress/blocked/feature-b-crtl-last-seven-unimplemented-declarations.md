@@ -114,3 +114,50 @@ recorded as corroboration on
 Regression test: `test/crtl_poll_set.c`, in `make lib-test`, asserting the
 values AND the absence of DT_NEEDED.
 
+## 2026-08-10 (Track B): blocker CONFIRMED by measurement, and the symptom is worse than filed
+
+Re-checked whether this was still really blocked — the pattern this session has
+been that Track B's blocked tickets often were not. **This one is**, and the
+mechanism is now pinned down.
+
+**The symptom is worse than the summary says.** The summary describes `atexit`
+binding silently to libc and growing a `DT_NEEDED`. Measured, it does that AND
+the program then **fails to start**:
+
+```
+ae_pxx: symbol lookup error: ... undefined symbol: atexit
+exit=127          (gcc prints: main done / bye2 / bye1)
+```
+
+So any C program calling `atexit` is dead on arrival, not merely non-self-contained.
+
+**Why Track B cannot finish it.** The C entry stub is `call main(), then
+exit_group(main's return)` — a direct syscall (`compiler/cparser.inc:8371`). It
+never routes through crtl's `exit()`, so a handler list living in crtl could not
+be run on a normal return from `main`.
+
+The obvious Track-B-only escape does not exist either: `lib/rtl/pxxcio.pas` IS
+Track B's file, so a `finalization` section there would have been a legitimate
+hook. **Tested directly — it does not run.** A finalization writing a marker
+produced no output for a C program that returns from `main`:
+
+```
+main done          <- and no FINALIZER-RAN
+```
+
+(`__pxx_run_finalizers` does exist and `EmitFinalizerRunnerBody` wires it, but at
+**Halt sites** only, which a normal return is not.) That is precisely what
+[[feature-c-entry-stub-must-run-finalizers]] is about, so the recorded blocker is
+right.
+
+**Deliberately NOT shipping a partial `atexit`.** Giving crtl a body that runs
+handlers from `exit()` but silently skips them on a return from `main` would
+turn a LOUD failure (won't start) into a SILENT wrong one (cleanup never runs,
+program looks fine) — real C code registers a flush/cleanup handler and then
+returns from main. Per `devdocs/dev/platonic-no-workarounds`, the crash stays
+until the entry stub can run them.
+
+**For whoever takes the Track C ticket:** the whole of this one is `atexit` now,
+and the fix there makes it a few lines here — a handler array, LIFO order,
+`exit()` and the stub both draining it. `test/ae.c`-style repro is three lines
+and gcc's output is the expectation.
