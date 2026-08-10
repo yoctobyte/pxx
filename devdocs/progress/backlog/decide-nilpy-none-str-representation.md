@@ -139,6 +139,47 @@ consistency with `decide-nilpy-optional-int-none-vs-zero`, while E fixes the
 unannotated majority. But if E works, A's scope question mostly disappears —
 which is an argument for measuring E FIRST.
 
+### F — tag None in the META word (user, 2026-08-10) — CHEAPEST, and it composes with work already queued
+
+> "notice that every ansistring also has a 64-bit META tag with plenty free bits
+> to tag as we see fit." — user
+
+Correct, and it is already in the tree. The managed-block header is
+
+```
+[kind:8][refcount:8][length:8][data...]      handle = block + PXX_HDR_SIZE (24)
+PXX_KIND_MASK = $FF          <- only 8 bits used; 56 free
+PXXHdrMeta(p)                <- accessor; returns PXX_KIND_LEGACY for nil
+PXX_KIND_BYTESTR = 1 / PXX_KIND_TEXTSTR = 2 / DYNARRAY = 3 / OBJECT = 4
+```
+
+It was added recently for unicode tagging — reusing AnsiString for other
+stringly types — which is the same kind of purpose. Phase 2 of that work is
+already queued as [[feature-nilpy-text-string-kind]] (N, 55).
+
+**The design:** None is a canonical block tagged `PXX_KIND_NONE` (a new kind, or
+a flag bit in the free 56). `pystr_is_none` reads the meta word instead of
+testing nil.
+
+**Why it beats E:** *empty stays nil, completely unchanged.* `PXXHdrMeta(nil)`
+already answers `PXX_KIND_LEGACY`, which is `<> PXX_KIND_NONE`, so `"" is None`
+becomes False **for free** — no canonical empty block, no refcount pinning of
+one, and **the 55-site `= nil` audit disappears entirely.** Every risk item
+1-3 of option E evaporates.
+
+**Why it beats B:** B's fatal flaw was that a bare sentinel handle must be
+memorised by every consumer, and a missed site renders its bytes as a silent
+wrong value. Here the sentinel is **self-describing** — any consumer can ASK via
+`PXXHdrMeta`, and the ones that do not ask see a length-0 block, which is benign.
+
+**Remaining audit surface, and it is small:** only the places that must
+distinguish None from `""` — `is None`, `str()`/`print`, and truthiness. Not
+every string consumer.
+
+**Still true:** this is `compiler/builtin/**`, so it needs stabilize-fast + pin,
+and the canonical None block must never be freed (a pinned refcount or an
+address check in release). Those two are common to E and F.
+
 ## Recommendation
 
 **Superseded by option E pending measurement — see the note at the end.** (Original: **A, scoped to `Optional[str]`.**) It is the only option whose correctness is
@@ -153,9 +194,17 @@ wrong.
 specifically that conflates, so any fix can be validated by the `is`/`==` pair
 disagreeing the way CPython makes them disagree.
 
-## RECOMMENDATION UPDATED 2026-08-10
+## RECOMMENDATION UPDATED 2026-08-10 (twice)
 
-Measure **option E** (canonical non-nil empty string) before committing to A.
+**Take option F.** Tag None in the META word. It is strictly cheaper than E —
+empty stays nil, so E's `= nil` audit and canonical-empty refcount pinning both
+disappear — and strictly safer than B, because the sentinel is self-describing
+via `PXXHdrMeta` rather than an address every consumer must recognise. It also
+composes with [[feature-nilpy-text-string-kind]], which is already queued and
+touches the same word.
+
+Superseded reasoning kept below. (Previous: measure **option E** before
+committing to A.)
 E has no promotion boundary, fixes annotated and unannotated code alike, and
 costs one shared block rather than boxing. Its risk is concentrated in a
 readable, finite place — the `= nil` sites in the string runtime and the
