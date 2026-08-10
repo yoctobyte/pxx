@@ -10,7 +10,12 @@
 # only thing holding it back. It now accepts any FLAT expression that contains
 # a call, built from tokens the source reconstruction can write back out.
 #
-# f9 is the control: a body with no call at all still takes the old path.
+# f9 was the control: a body with no call at all still took the old path.
+# NO LONGER TRUE as of 2026-08-10 — bug-nilpy-every-lambda-is-interpreted-
+# instead-of-compiled dropped the sawCall requirement entirely, because the
+# "no gain" premise quoted below was measured false (6.9x per call). f9 is now
+# lifted like the rest; its assertion is unchanged and still passes, but it is
+# a plain case here, not a control for the old route.
 # Diffed against CPython (tools/pydiff.py).
 
 def top():
@@ -51,7 +56,7 @@ c = C()
 f8 = lambda: c.m() + 1
 print(f8())
 
-# a body with NO call still goes through the old path
+# a body with NO call — lifted too since 2026-08-10 (see the header note)
 f9 = lambda x: x + 1
 print(f9(41))
 

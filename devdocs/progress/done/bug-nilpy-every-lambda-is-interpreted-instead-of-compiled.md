@@ -3,6 +3,8 @@ track: N
 prio: 60
 type: bug
 summary: "Every NilPy lambda lowers to a pyeval SOURCE closure re-walked by the tree-walker per call — 6.9x slower than the same body as a nested def, and 69x slower than CPython, which is an interpreter. Even a capture-free lambda takes this path; the native pyboundfn lowering is never attempted."
+status: done
+owner: claude-N
 ---
 
 # Every `lambda` is interpreted, not compiled
@@ -95,3 +97,82 @@ The benchmark above showing the lambda per-call cost within ~1x of the `def`
 row, the NilPy suite green, and a `test/` regression asserting a capture-free
 lambda does not embed its body source in the binary (the `strings` check above
 is a cheap, direct oracle for "did it compile or interpret").
+
+## Resolved 2026-08-10 — the lift already existed; it was gated shut
+
+The fix is far smaller than this ticket's "fix direction" assumed. A compiled
+lowering was already built (`feature-nilpy-lambda-compiled-closure`): a lambda
+is lifted to a real proc + `pyboundfn_new`/`_bind`, with the pyeval closure as
+the fallback. It was simply unreachable for ordinary bodies.
+
+`PyLambdaBodyIsLiftable` ended in:
+
+```pascal
+Result := (sawCall or nestedLambda) and (depth = 0);
+```
+
+**A lambda body had to CONTAIN A CALL to be compiled.** Its own comment gave the
+reason: *"a body without a call already works through the pyeval closure, and
+lifting it would be a behaviour change for no gain."* The premise is true — the
+answers were always right — and the conclusion is what the measurement kills.
+A second clause, `if bEnd - bStart < 3`, rejected one- and two-token bodies for
+the same unstated reason.
+
+Because a call was never the typical lambda body, the gate caught the most
+ordinary lambdas in the language: `lambda r: r[1]` (a subscript — THE Python
+sort-key idiom), `lambda v: -v`, `lambda x: x * 2`, ternaries, comparisons.
+
+**Fix:** `Result := (depth = 0)`, and the token floor to `< 1`. The depth-0
+token scan above it is the real gate and is untouched, so a body must still be
+a flat expression built from tokens the lifter handles; anything it rejects
+keeps the pyeval closure. `sawCall`/`nestedLambda` are now informative only.
+
+### Measured, HEAD vs pinned
+
+| 200k calls through `map()` | before | after |
+| --- | --- | --- |
+| `lambda v: -v` total | 1.46 s | **0.41 s** |
+| per call | 6.9 µs | **1.65 µs** |
+
+3.6x faster wall-clock. The residual gap to a plain `def` (1.05 µs/call) is
+bound-fn dispatch versus a direct address, not interpretation.
+
+**Route change proved directly, not inferred.** The interpreted path embeds the
+body's source text in the binary; the compiled path does not. Over the 16-shape
+sweep: `strings <bin> | grep -c '^return '` = **11 before, 0 after**.
+
+**Answers unchanged.** All 16 shapes are byte-identical to CPython, and
+byte-identical between `pinned` and HEAD — this moved the route, not the
+semantics, which is exactly why the cost was invisible for so long.
+
+### Tests
+
+`test/test_nilpy_lambda_callfree_body_is_compiled.npy` (+ `.expected` generated
+from CPython) pins the newly-lifted shapes. Deliberately a NEW file beside the
+20 existing lambda tests.
+
+Honest about what it is: it passes under `pinned` too, so it is **not** a
+control for the route change — both routes give the same answers. It guards the
+LIFT's correctness on shapes that never went through the lift before, which is
+where a regression would land. Compiled-ness itself is asserted by the
+`strings` oracle above, recorded here because it is not expressible as a `.npy`
+assertion.
+
+Also corrected a now-stale comment in
+`test/test_nilpy_lambda_expression_body.npy`, whose `f9` case was documented as
+"the control: a body with no call still takes the old path". Its assertion is
+unchanged and still passes; only the claim about routing was falsified.
+
+### Remaining scope — filed separately
+
+Multi-parameter lambdas (`lambda a, b: a + b`) are **still interpreted**: the
+lift is additionally gated on `nParams <= 1`, because the bound-fn bridge passes
+a single argument. Correct, just slow. See
+[[bug-nilpy-multi-parameter-lambdas-are-still-interpreted]]. The 1-parameter
+case was the right first cut — every `key=`/`map`/`filter` callback is
+1-parameter.
+
+Gate: self-host fixedpoint converged, `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.

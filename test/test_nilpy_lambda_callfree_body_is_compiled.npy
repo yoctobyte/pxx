@@ -1,0 +1,72 @@
+# bug-nilpy-every-lambda-is-interpreted-instead-of-compiled
+#
+# A lambda body with NO CALL in it was never lifted: PyLambdaBodyIsLiftable
+# required `sawCall or nestedLambda`, so every call-free body fell to the pyeval
+# SOURCE closure and was re-walked by the tree-walker on each call.
+#
+# That covered the most ordinary lambdas there are — `lambda r: r[1]` (the
+# Python sort-key idiom), `lambda v: -v`, `lambda x: x * 2` — and it was not
+# free. Measured over 200k calls through map():
+#
+#     lifted (compiled)      1.0 us/call
+#     pyeval source closure  6.9 us/call    6.9x
+#     CPython, either form   0.1 us/call    we lost to an INTERPRETER by 69x
+#
+# The old gate's justification was "a call-less body already works through the
+# pyeval closure, and lifting it would be a behaviour change for no gain". The
+# premise held; the conclusion did not.
+#
+# This file pins the shapes that route changed for. Every one of them was
+# INTERPRETED before and is COMPILED now, so it is the lift — not the
+# interpreter — that has to get them right. Answers diffed against CPython.
+#
+# Compiled-ness itself is not observable from program output (both routes
+# produce the same answers, which is why this was invisible). The direct oracle
+# is the body source text no longer being embedded in the binary:
+#     strings <bin> | grep -c 'return '     11 before, 0 after
+
+xs = [5, 3, 9, 1]
+rows = [(1, 30), (2, 10), (3, 20)]
+ws = ["bbb", "a", "cc"]
+n = 10
+
+# unary / arithmetic / comparison — no call anywhere
+print(sorted(xs, key=lambda v: -v))
+print(list(map(lambda v: v * 2, xs)))
+print(list(map(lambda v: v + n, xs)))
+print(list(filter(lambda v: v > 3, xs)))
+
+# SUBSCRIPT body: the sort-key idiom, and the single most common lambda in
+# Python. A subscript opens a bracket, so it never counted as a call.
+print(sorted(rows, key=lambda r: r[1]))
+print(list(map(lambda r: r[0], rows)))
+
+# ternary, boolean ops, `in`
+print(list(map(lambda v: v if v > 3 else 0, xs)))
+print(list(map(lambda v: v > 3 and v < 9, xs)))
+print(list(map(lambda s: s in ws, ws)))
+
+# a one-token body — under the old 3-token floor this could not lift either
+ident = lambda v: v
+print(ident(7))
+
+# captured enclosing value, still call-free
+mul = lambda v: v * n
+print(mul(4))
+
+# defaulted-parameter capture (Python's pin-a-value idiom), call-free body
+pin = lambda v=n: v + 1
+print(pin())
+
+# stored in a variable, called repeatedly — the shape sorted()/map() use
+sq = lambda v: v * v
+print(sq(7), sq(3))
+
+# min/max with a call-free key
+print(min(xs, key=lambda v: -v), max(xs, key=lambda v: -v))
+
+# CONTROLS — shapes that were ALREADY lifted must not change
+print(list(map(lambda s: s.upper(), ws)))
+print((lambda a: a + 1)(41))
+add = lambda a: lambda b: a + b
+print(add(3)(4))

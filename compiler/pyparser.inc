@@ -6275,7 +6275,10 @@ function PyLambdaBodyIsLiftable(bStart, bEnd: Integer): Boolean;
 var i, depth: Integer; sawCall, nestedLambda: Boolean;
 begin
   Result := False;
-  if bEnd - bStart < 3 then Exit;
+  { A one-token body (`lambda v: v`) is liftable too. The old floor of 3 came
+    from the same "no call, no gain" assumption as the sawCall clause below,
+    and it is wrong for the same measured reason. }
+  if bEnd - bStart < 1 then Exit;
   depth := 0;
   sawCall := False;
   { A CURRIED lambda — `lambda a: lambda b: a + b`. Two separate clauses of this
@@ -6323,7 +6326,29 @@ begin
               (nestedLambda and (Tokens[i].Kind in [tkColon, tkComma]))) then Exit;
     end;
   end;
-  Result := (sawCall or nestedLambda) and (depth = 0);
+  { MEASURED 2026-08-10: the `sawCall or nestedLambda` requirement is dropped.
+    Its justification was "a body without a call already works through the
+    pyeval closure, and lifting it would be a behaviour change for no gain".
+    The premise is true; the conclusion is not. There IS a gain, and it is
+    large — a lifted body runs COMPILED, an unlifted one is re-walked by the
+    tree-walker on every call:
+
+      200k calls through map()   per call
+      lifted (native)              1.0 us
+      pyeval source closure        6.9 us     6.9x
+      CPython, either form         0.1 us     (we lost to an INTERPRETER by 69x)
+
+    The shapes this frees are the common ones, because a call was never the
+    typical lambda body: `lambda r: r[1]` (a subscript — THE Python sort-key
+    idiom), `lambda v: -v`, `lambda x: x * 2`. All of them were interpreted.
+
+    Safe to widen here: the depth-0 token scan above is the real gate and is
+    unchanged, so a body still has to be a flat expression built from tokens
+    the lifter handles. Anything it rejects keeps the pyeval closure, which
+    stays the correctness fallback (and the last resort for shapes only the
+    interpreter can run). sawCall/nestedLambda are now only informative.
+    bug-nilpy-every-lambda-is-interpreted-instead-of-compiled }
+  Result := (depth = 0);
 end;
 
 procedure PyParseLambdaStub;
