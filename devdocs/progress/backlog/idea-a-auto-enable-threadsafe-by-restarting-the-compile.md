@@ -43,6 +43,44 @@ program compiled without the flag pays one extra full compile — and today that
 program does not compile at all, so the comparison is against a hard failure,
 not against a fast build.
 
+## Detect at LEX time, not at lowering — this is what makes it cheap
+
+> "and if we can detect it at lexer time the cost is minimal" — user, 2026-08-10
+
+Correct, and the hook exists. Units are not lexed into private buffers: each one
+is appended into the SAME token array by `LexAppend` (lexer.inc:2331), with
+`MainProgramTokCount` marking the main program's boundary. So a unit's tokens
+are scannable the moment it is lexed — **before it is parsed, lowered or
+emitted**.
+
+So the detector becomes a linear scan of the newly-appended token range after
+each `LexAppend` (and after `LexAll` for the main program), looking for the
+threading signals: `TThread`, `BeginThread`, `parallel` (the `parallel for`
+gate), `__pxxclone`. If one appears and `ThreadSafeMode` is off — restart.
+
+This is mechanically the same shape as NilPy's existing whole-module token scans
+(`PyDefUsedAsValue`, `PyMethodUsedAsValue`, `PyDynAttrEverAssigned`), so it is a
+pattern the codebase already runs, not a new kind of pass. The C frontend has
+the same structure (`clexer.inc` uses `MainProgramTokCount` identically), so the
+hook is available there too.
+
+**The cost changes character.** Detecting at `__pxxclone` lowering means the
+wasted work is a nearly-complete compile. Detecting at lex time means the wasted
+work is *the lexing done so far* — a small fraction of a compile, and the
+restart happens before any IR or codegen exists.
+
+Residual inefficiency, worth stating so nobody is surprised: units are
+DISCOVERED lazily through `uses` during parsing, so a threading signal inside a
+unit pulled in late is still found late — you may have parsed earlier units by
+then. Cheaper than today's failure either way, and it does not affect
+correctness, only how much of the first pass is discarded.
+
+A token scan is also deliberately coarse: it will fire on the identifier
+`TThread` appearing anywhere, including a comment-adjacent mention or a name
+that merely contains it. That is the right trade — a false POSITIVE costs a
+thread-safe build (correct, slightly slower), while a false NEGATIVE is an
+unlocked heap under real concurrency. Bias the scan toward firing.
+
 ## What it would and would not catch
 
 - **Would**: `__pxxclone` reached through any path — including a Pascal unit or
