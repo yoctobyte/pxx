@@ -186,3 +186,109 @@ class KP:
         return self.t
 
 print(KP(1).get(), KP(1, 9).get(), KP(1, 9, [0]).get())
+
+
+# --- NESTED defs on the direct-call path (2026-08-10) ---
+#
+# The last open half of this ticket. A nested def's own non-constant defaults
+# stayed None because PyParseDef switches default evaluation OFF for a nested
+# def (PyDefaultEvalMode := PyNestPrefix = ''): the body is compiled AFTER the
+# enclosing routine's epilogue, so evaluating there would report the enclosing
+# names undefined.
+#
+# They are now evaluated at the `def` STATEMENT instead — where Python
+# evaluates them and the one point the enclosing scope is still live — and the
+# assignment is returned as that statement's own contribution to the enclosing
+# body. It cannot ride the normal def-init queue, which only the MODULE
+# statement loop flushes.
+#
+# On pinned every line below prints None, and the accumulator one dies with
+# "AttributeError: 'NoneType' object has no attribute 'append'" — the silent
+# failure far from the cause that this ticket is named for.
+
+qq = 5
+
+def nd_glob():
+    def inner(b=qq):
+        return b
+    return inner()
+
+def nd_local():
+    z = 9
+    def inner(b=z):
+        return b
+    return inner()
+
+def nd_const():
+    def inner(b=7):
+        return b
+    return inner()
+
+def nd_explicit():
+    def inner(b=qq):
+        return b
+    return inner(99)
+
+def nd_mixed():
+    def inner(b=qq, c=3):
+        return b * 10 + c
+    return inner()
+
+print(nd_glob(), nd_local(), nd_const(), nd_explicit(), nd_mixed())
+
+# re-evaluated on EVERY execution of the def statement, like CPython
+def nd_reeval(n):
+    def inner(b=n * 10):
+        return b
+    return inner()
+
+print(nd_reeval(1), nd_reeval(2), nd_reeval(3))
+
+# the accumulator idiom: SHARED across calls within one execution of the def
+# statement, FRESH for the next one. This is the semantics a naive
+# "evaluate per call" fix would get wrong.
+def nd_acc():
+    def inner(v, bucket=[]):
+        bucket.append(v)
+        return len(bucket)
+    return [inner(1), inner(2), inner(3)]
+
+print(nd_acc(), nd_acc())
+
+# two sibling nested defs must not share one hidden global
+def nd_siblings():
+    a = 1
+    b = 2
+    def f(x=a):
+        return x
+    def g(y=b):
+        return y
+    return f() * 10 + g()
+
+print(nd_siblings())
+
+# deeper nesting, a default that is a CALL, a dict default, an outer PARAMETER
+def nd_deep():
+    y = 4
+    def mid():
+        def bot(b=y):
+            return b
+        return bot()
+    return mid()
+
+def nd_call():
+    def inner(b=len("abcd")):
+        return b
+    return inner()
+
+def nd_dict():
+    def inner(d={"k": 3}):
+        return d["k"]
+    return inner()
+
+def nd_param(p):
+    def inner(b=p + 1):
+        return b
+    return inner()
+
+print(nd_deep(), nd_call(), nd_dict(), nd_param(10))

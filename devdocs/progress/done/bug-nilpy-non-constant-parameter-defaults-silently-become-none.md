@@ -3,7 +3,7 @@ track: N
 prio: 70
 type: bug
 summary: "NESTED-DEF defaults only, as of 2026-08-05. `def inner(b=q)` inside another def still becomes None on the direct-call path; the closure-VALUE path evaluates it. Module-level (e53fa4a3f), METHOD (a87e8a224) and __init__ (e1e43a5e6) halves are all DONE — do not re-derive them from the older sections below."
-status: working
+status: done
 owner: claude-N
 ---
 
@@ -448,3 +448,74 @@ fresh-per-call. Byte-identical to CPython.
    here. `def inner(b=q)` inside a method now evaluates its ENCLOSING method's
    defaults correctly but its own remain None; the route is known
    (`PyQueueNestedDef`, `pyparser.inc:13687`, where the enclosing scope is live).
+
+## Resolved 2026-08-10 — the last half (NESTED defs, direct-call path)
+
+The route the ticket recorded was right, but the reason it had not been taken
+was a second obstacle underneath it.
+
+**Where the defaults are evaluated.** `PyParseDef` gates evaluation with
+`PyDefaultEvalMode := PyNestPrefix = ''` — off for a nested def, because the
+body is compiled AFTER the enclosing routine's epilogue, so `def inner(b=q)`
+would report `q` undefined. Correct as far as it goes. But `PyQueueNestedDef`
+already parses the header at the `def` STATEMENT, where the enclosing scope IS
+live and where Python evaluates defaults — so evaluation belongs there, not in
+the deferred compile. Enabled it around that `PyParseDefHeader` call.
+
+**Two obstacles that only showed up by measuring, not by reading:**
+
+1. **The hidden global was allocated as a LOCAL.** `AllocVar` branches on
+   `CurProc < 0`; running inside the enclosing routine, `$pdef.…` became a local
+   OF THAT ROUTINE, while the nested body — compiled later as its own top-level
+   proc — reads it as a global. Result: `invalid IR symbol reference in
+   store_sym`. Fixed by forcing `CurProc := -1` across the `AllocVar` only. Safe
+   because the two branches are disjoint: the global arm touches `BSSSize`, the
+   local arm `FrameSize`.
+
+2. **The assignment was emitted at MODULE scope.** `PyQueueDefInit`'s comment
+   says "for the enclosing statement stream", which I read as the enclosing
+   ROUTINE. It is not — `PyFlushDefInit` is called only from the module
+   statement loop, so an assignment reading an enclosing local like `z` landed
+   where `z` does not exist. Fixed by capturing the queue around the header
+   parse and returning it as the def statement's own contribution to the
+   enclosing body (`PyQueueNestedDef` previously returned `-1`, i.e. no
+   statement at all).
+
+### Verified against CPython
+
+Byte-identical on: default from a module global, from an enclosing local, a
+constant, an explicit argument overriding it, mixed constant + non-constant,
+a default that is a CALL, a dict literal default, a reference to the enclosing
+def's PARAMETER, two sibling nested defs (which must not share one hidden
+global), and three-deep nesting.
+
+Two semantics a naive fix gets wrong, both pinned:
+- **re-evaluated on every execution of the def statement** —
+  `nd_reeval(1..3)` gives `10 20 30`, not one frozen value.
+- **the accumulator idiom** — `def inner(v, bucket=[])` is SHARED across calls
+  within one execution of the def statement and FRESH for the next.
+
+On `pinned` every one of these prints `None`, and the accumulator case dies with
+`AttributeError: 'NoneType' object has no attribute 'append'` — the silent
+failure far from the cause this ticket is named for.
+
+### Tests
+
+`test/test_nilpy_param_defaults_nonconstant.npy` EXTENDED (not a new file — it
+is this ticket's own test, extended for each half in turn). `.expected`
+regenerated from CPython and confirmed to be **additions only**: no
+pre-existing line changed, so the regeneration cannot have absorbed a
+regression in the earlier halves.
+
+### Still open, unchanged by this
+
+`__init__` defaults — [[bug-nilpy-constructor-parameter-defaults-are-ignored]].
+A different bug: it fires for CONSTANT defaults too and reproduces on pinned.
+
+Gate: self-host fixedpoint converged, `tools/gate.sh quick` GREEN, plus a
+56-test local sweep of every nested/closure/lambda/default/param test (0 bad)
+— run because the previous change this session passed the quick tier and still
+broke a test outside it.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.

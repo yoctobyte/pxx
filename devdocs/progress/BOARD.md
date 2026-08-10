@@ -76,6 +76,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
 | bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
+| bug-nilpy-lifted-lambda-does-not-enforce-arity | N | 60 | bug | A LIFTED lambda called with the wrong argument count does not raise: extra arguments are silently dropped (returns a wrong answer) and a missing one SEGFAULTS. The pyeval closure path enforces arity via pyclosure_setarity; the bound-fn path has the fields (NOwn/NDef) but no check. | — |
 | bug-nilpy-list-sort-method-missing | N | 50 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
 | bug-nilpy-multi-parameter-lambdas-are-still-interpreted | N | 45 | bug | A lambda with 2+ parameters still lowers to a pyeval SOURCE closure and is re-walked per call — the lift is gated on nParams <= 1 because the bound-fn bridge passes one argument. Correct answers, ~7x the per-call cost. | — |
@@ -83,7 +84,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later | N | 50 | bug | A name bound in a block by a METHOD CALL is "undefined" in a later assignment | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
-| bug-nilpy-non-constant-parameter-defaults-silently-become-none | N | 70 | bug | NESTED-DEF defaults only, as of 2026-08-05. `def inner(b=q)` inside another def still becomes None on the direct-call path; the closure-VALUE path evaluates it. Module-level (e53fa4a3f), METHOD (a87e8a224) and __init__ (e1e43a5e6) halves are all DONE — do not re-derive them from the older sections below. | — |
 | bug-nilpy-open-returns-two-different-classes-by-mode | N | 60 | bug | `open()` returns two different classes by mode, so reusing the name breaks | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
@@ -408,9 +408,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1592)
+## done (1593)
 
-1592 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1593 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (32)
 
@@ -453,11 +453,11 @@ lives in git, not in a timestamp._
 
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
 - [urgent p 70] [P] bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
-- [p 70] [N] bug-nilpy-non-constant-parameter-defaults-silently-become-none
 - [p 65] [O] bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [C] bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address
+- [p 60] [N] bug-nilpy-lifted-lambda-does-not-enforce-arity
 - [p 60] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins

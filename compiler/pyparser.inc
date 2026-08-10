@@ -4617,6 +4617,7 @@ function PyEvalParamDefault(var j: Integer; const pname: AnsiString): Integer;
   symbol while ProcParamDefaultSym still pointed at one the pre-pass rolled
   back — a recycled index, i.e. a plausible wrong value. }
 var gname: AnsiString; gsym, valNode, asgn, savedTok, savedHoist, h: Integer;
+    savedCurProc: Integer;
 begin
   Result := -1;
   savedTok := TokPos;
@@ -4649,7 +4650,20 @@ begin
   gsym := FindSym(gname);
   if gsym < 0 then
   begin
+    { Force a BSS GLOBAL even when this runs INSIDE a routine, which it does for
+      a NESTED def: its defaults are evaluated at the `def` statement (the only
+      point the enclosing scope is live), so CurProc is the enclosing routine and
+      AllocVar would otherwise hand back a LOCAL OF THAT ROUTINE. The nested body
+      is compiled later as its own top-level proc and reads the symbol as a
+      global, so a local produced "invalid IR symbol reference in store_sym".
+      Safe as a straight save/restore: the two AllocVar branches are disjoint —
+      the global arm touches only BSSSize, the local arm only FrameSize — so the
+      enclosing frame is untouched.
+      bug-nilpy-non-constant-parameter-defaults-silently-become-none }
+    savedCurProc := CurProc;
+    CurProc := -1;
     gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+    CurProc := savedCurProc;
     Syms[gsym].RecName := ResolveNodeRec(valNode);
     SymSyncTypeRef(gsym);
   end;
@@ -16324,9 +16338,28 @@ var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capC
     capNames: array[0..PY_MAX_CAPS-1] of AnsiString;
     capTypes: array[0..PY_MAX_CAPS-1] of TTypeKind;
     capRecs: array[0..PY_MAX_CAPS-1] of Integer;
+    savedDefInit, defAssigns: Integer;
 begin
   defTok := TokPos - 1;
+  { Evaluate non-constant parameter defaults HERE, at the `def` statement. That
+    is where Python evaluates them, and the one point the enclosing scope is
+    still live: the body is compiled after the enclosing routine's epilogue, so
+    evaluating there reports the enclosing names undefined — which is why
+    PyParseDef switches evaluation off for a nested def, and why these defaults
+    silently stayed None.
+    The queued `$pdef.<nest>.<def>.<param> := <expr>` assignments are taken back
+    out here and returned as this statement's own contribution to the enclosing
+    body (see the Result at the end). They must NOT ride the normal def-init
+    queue: only the MODULE statement loop flushes that, so the assignment would
+    land at module scope, where an enclosing local does not exist.
+    bug-nilpy-non-constant-parameter-defaults-silently-become-none }
+  savedDefInit := PyDefInitHead;
+  PyDefInitHead := -1;
+  PyDefaultEvalMode := True;
   PyParseDefHeader;
+  PyDefaultEvalMode := False;
+  defAssigns := PyFlushDefInit(-1);
+  PyDefInitHead := savedDefInit;
   qname := PyNestedDefQName(defTok, PyHdrName);
   bodyStart := TokPos - 1;
   bodyEnd := PyFindBodyEnd(bodyStart);
@@ -16537,7 +16570,10 @@ begin
     PyPendNestSelf[PyPendNestCount] := CurSelfClass;
     Inc(PyPendNestCount);
   end;
-  Result := -1;
+  { The nested def statement emits no code of its own — but its non-constant
+    parameter defaults do, and they belong here, at the def statement in the
+    enclosing body. -1 when there are none, as before. }
+  Result := defAssigns;
 end;
 
 { ONE store of an unpacking assignment: a plain NAME (created on first
