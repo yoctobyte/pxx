@@ -175,4 +175,4 @@ case was the right first cut — every `key=`/`map`/`filter` callback is
 Gate: self-host fixedpoint converged, `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 9445b7ab3.
