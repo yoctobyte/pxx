@@ -115,3 +115,48 @@ dispatch fix serves both and this one should not be worked separately.
 Correctly stays in `blocked/`: the sibling is genuinely unfinished. But it now
 inherits the sibling's priority down the dependency edge instead of ranking on
 its own.
+
+## 2026-08-10 — MEASURED: `in` and `count` now pass; `==` against a variant does NOT
+
+The 2026-08-04 probe on this ticket, re-run verbatim on the current binary and
+on `pinned` (identical on both, so this predates today's work):
+
+```python
+a = V(1); b = V(1); xs = [V(1)]
+```
+
+| expression | CPython | pxx now | this ticket's model said |
+| --- | --- | --- | --- |
+| `a == b` | True | True | correct already |
+| `a == xs[0]` | True | **False** | broken (still is) |
+| `a in xs` | True | **True** | broken — **now passes** |
+| `xs.count(a)` | 1 | **1** | broken — **now passes** |
+
+**This ticket's own headline repro (`V(1) in [V(1), V(2)]`) now answers `True`.**
+
+### Why that matters more than a status update
+
+Both this ticket and its blocker assert that `in`, `count` and `==`-with-a-
+variant *bottom out in the same `PyVarEq` call*, and therefore that "the same
+dispatch fix serves both and this one should not be worked separately". **The
+measurement contradicts that premise**: two of the three now dispatch `__eq__`
+and the third does not, so they are no longer one mechanism — whatever fixed
+membership did not fix `==`.
+
+That has a concrete consequence: the dependency edge added earlier the same day
+now says this ticket waits on a sibling that no longer gates its symptom.
+
+**Do not close this on the table above, and do not just drop the edge.** The
+honest next step is one measurement, not a decision: find out whether `in`
+reaches `__eq__` through `PyVarEq` at all any more, or through a separate path
+added since. That answer decides whether this is closable as-is, or whether
+`PyVarEq` still has a hole that `in` happens to route around.
+
+The `==`-against-a-variant row is unchanged and remains the real, user-visible
+defect — the dunder works with two named locals and fails the moment one side is
+a container element, which is the shape real code writes. That is the sibling
+[[bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant]] and it is
+correctly still open.
+
+No code changed. Left in `blocked/` deliberately: the edge is not wrong yet,
+only unproven.
