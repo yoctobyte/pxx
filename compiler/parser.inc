@@ -23867,6 +23867,7 @@ function ParseRecordVariantPart(ci: Integer; isPackedRecord: Boolean;
 var
   variantBaseOff, variantMax, branchFieldOff, curOff: Integer;
   arrLen, loVal, hiVal, fRec, fSize, fAlign, nFldNames, fni: Integer;
+  fStrCap: Integer;
   isArr: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -23937,14 +23938,44 @@ begin
       end
       else
       begin fTk := ParseTypeKind; fRec := LastTypeRecId; end;
-      if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
-      fAlign := TypeAlign(fTk);
+      { Frozen strings, exactly as the FIXED part of the record does it a few
+        hundred lines down. This arm was simply absent: a `string[N]` branch got
+        TypeSize(tyFixedString) = 8 bytes and was registered as tyFixedString
+        rather than tyString+UFldStrCap. So the field READ back as an address
+        (`v.s` printed a number) AND the record was undersized — a `case` with a
+        `string[40]` branch measured 16 bytes where it needs 52, so writing the
+        field ran past the end of the record. Silent both ways.
+        bug-a-a-frozen-string-field-in-a-variant-part-is-8-bytes-and-untyped }
+      fStrCap := 0;
+      if fTk = tyString then
+      begin
+        fSize := LOCAL_STR_CAP + 8;
+        fAlign := TARGET_PTR_SIZE;
+      end
+      else if (fTk = tyFixedString) or (fTk = tyShortString) then
+      begin
+        fStrCap := LastTypeStrCap;
+        if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
+        fSize := FrozenStrSlotSize(fTk, fStrCap);
+        fAlign := TARGET_PTR_SIZE;
+      end
+      else
+      begin
+        if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
+        fAlign := TypeAlign(fTk);
+      end;
       if isPackedRecord then fAlign := 1;
       if isArr then fSize := fSize * arrLen;
       for fni := 0 to nFldNames - 1 do
       begin
         branchFieldOff := AlignTo(branchFieldOff, fAlign);
-        AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec);
+        if fStrCap > 0 then
+        begin
+          AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(tyString), fRec);
+          UFldStrCap[UFldCount-1] := fStrCap;
+        end
+        else
+          AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec);
         UFldIsArray[UFldCount-1] := isArr;
         UFldArrLen[UFldCount-1] := arrLen;
         UFldDynDepth[UFldCount-1] := 0;

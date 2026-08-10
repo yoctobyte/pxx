@@ -2205,6 +2205,15 @@ test-threads: $(COMPILER)
 	./$(COMPILER) test/test_index_call_result_field.pas /tmp/test_idxcall26
 	test "$$(/tmp/test_idxcall26 | tail -1)" = "INDEX CALL RESULT FIELD OK"
 	test "$$(/tmp/test_idxcall26 | head -2 | tail -1)" = "on call   1 2 3 4 5 6"
+	# a string[N] field in a record's VARIANT part: the variant-part builder had
+	# no frozen-string arm, so the field was 8 bytes (undersizing the record) and
+	# typed tyFixedString instead of tyString+UFldStrCap (so it read as an
+	# address). Every other branch type was already right.
+	./$(COMPILER) test/test_variant_part_string_field.pas /tmp/test_vpstr26
+	test "$$(/tmp/test_vpstr26 | tail -1)" = "VARIANT PART STRING FIELD OK"
+	test "$$(/tmp/test_vpstr26 | head -1)" = "scalar  1 aa 2"
+	test "$$(/tmp/test_vpstr26 | head -5 | tail -1)" = "trunc   abcdef 6"
+	test "$$(/tmp/test_vpstr26 | head -7 | tail -1)" = "no ovr  22 abcdef"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed
