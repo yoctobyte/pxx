@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:7 blocked:3 backlog:230 experimental:20 rainy-day:39 done-followup:3 decided:53 done:1607 rejected:32`
+`urgent:1 working:1 unfinished:7 blocked:3 backlog:229 experimental:20 rainy-day:39 done-followup:3 decided:53 done:1607 rejected:33`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,10 +31,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-crtl-last-seven-unimplemented-declarations` [B] — blocked-by: feature-c-entry-stub-must-run-finalizers
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 211, ranked
+## Ready — top 30 of 210, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
-- `[p 60] [B]` bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have (unblocks 1)
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [U]` decide-own-language-first-name-resolution
@@ -63,5 +62,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [N]` feature-nilpy-corpus-uforth
 - `[p 55] [N]` feature-nilpy-text-string-kind
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
+- `[p 55] [A]` feature-pascal-type-helpers
 
-_181 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_180 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
