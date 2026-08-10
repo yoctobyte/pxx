@@ -36,11 +36,12 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (234)
+## backlog (235)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver | A | 40 | bug | A metaclass returned from a FUNCTION is not a receiver | — |
+| bug-a-a-typed-const-array-of-string-n-is-never-initialised | A | 50 | bug | A typed const array of `string[N]` is never initialised — silently | — |
 | bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit | A | 40 | bug | A VARIABLE field width is refused for strings/chars, and needs an RTL unit at all | — |
 | bug-a-fixed-array-function-result-faults-on-i386-and-arm32 | A | 45 | bug | A fixed-array function result faults on i386 and arm32 | — |
 | bug-a-for-in-refuses-a-set-constructor-and-a-string-literal | A | 35 | bug | `for x in [...]` and `for c in 'literal'` are refused | — |
@@ -494,6 +495,7 @@ lives in git, not in a timestamp._
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [A] bug-a-a-typed-const-array-of-string-n-is-never-initialised
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [N] bug-nilpy-list-sort-method-missing
 - [p 50] [N] bug-nilpy-method-chained-on-open-result-fails-to-parse
