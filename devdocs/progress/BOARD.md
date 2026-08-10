@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (238)
+## backlog (239)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -116,7 +116,7 @@ lives in git, not in a timestamp._
 | decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-operator-table-keyed-on-one-operand-or-two | U | 40 | decide | Decide: should the operator-overload table be keyed on BOTH operand types? | — |
-| decide-own-language-first-name-resolution | U | 60 | decide | the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it | — |
+| decide-own-language-first-name-resolution | U | 5 | decide | the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | decide-shift-operator-promotion-width | U | 45 | decide | Decide: what width do `shl` / `shr` happen at for a 32-bit operand? | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
@@ -126,6 +126,7 @@ lives in git, not in a timestamp._
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-expose-rounding-mode-intrinsic-to-pascal | A | 30→35 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
 | feature-a-index-an-array-returning-call-directly | A | 40 | feature | Index an array-returning call directly: `MkArr[i]`, `MkR2[i,j].field` | — |
+| feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
@@ -462,7 +463,6 @@ lives in git, not in a timestamp._
 - [p 60] [N] feature-nilpy-class-as-a-value (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [A] bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped
-- [p 60] [U] decide-own-language-first-name-resolution
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
@@ -484,6 +484,7 @@ lives in git, not in a timestamp._
 - [p 55] [U] decide-ismultithread-runtime-flag-vs-compile-time-mode
 - [p 55] [U] decide-sole-a-guard-for-unattended-sessions
 - [p 55] [A] feature-a-declaration-phase
+- [p 55] [A] feature-a-own-language-first-symbol-resolution
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-corpus-uforth
@@ -677,6 +678,7 @@ lives in git, not in a timestamp._
 - [p 10] [A] idea-cross-namespace-ambiguity-warning
 - [p  5] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
 - [p  5] [U] decide-nilpy-class-as-value-dispatch-strategy
+- [p  5] [U] decide-own-language-first-name-resolution
 
 ## Leverage (tickets each one unblocks)
 

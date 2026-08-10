@@ -1,7 +1,8 @@
 ---
 track: U
-prio: 60
+prio: 5
 type: decision
+blocked-by: []
 summary: "the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it"
 ---
 
@@ -102,3 +103,14 @@ naive "own language first" must not break them).
 Worth keeping the two apart in whatever lands: the module half is settled and
 mostly built; the symbol half is what needed a rule, and the measurement above
 says a narrow case rule suffices.
+
+## SUPERSEDED 2026-08-10
+
+The user settled the rule: **if a symbol is defined in more than one language,
+the native language wins** — a hard precedence, outranking import order. And the
+reframing that matters: C reaching into Pascal's math was the design error, not
+the naming. Duplicate per-language implementations are the intended outcome.
+
+Re-filed as work: **[[feature-a-own-language-first-symbol-resolution]]**.
+Kept as the record of the measurement (case-agreement closes the known class)
+and of the module-vs-symbol distinction. Prio dropped to 5.
