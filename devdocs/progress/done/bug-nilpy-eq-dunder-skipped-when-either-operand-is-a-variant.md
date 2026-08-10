@@ -319,4 +319,4 @@ Found while gating, filed not fixed:
 `k1 == k2` answers True right beside it. Pre-existing at `pinned`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 190f9754f.
