@@ -8401,6 +8401,19 @@ begin
       EmitB($8B); EmitB($38);                                                       { mov edi, [rax]  (argc) }
       EmitB($48); EmitB($8D); EmitB($70); EmitB($08);                               { lea rsi, [rax+8] (argv) }
       EmitB($E8); callPatch := CodeLen; EmitI32(0);                                 { call main }
+      { Run registered finalizers before exiting, so a plain `return` from main
+        is not a silent skip. The stub is `call main; exit_group(retval)`, so
+        without this the ONLY exit path C code normally takes bypasses
+        __pxx_run_finalizers entirely — which is why crtl could not implement
+        atexit: handlers would fire for exit() and be silently dropped for
+        `return`, the worse of the two failure modes.
+        EmitCallProc is target-independent and resolves the runner as a forward
+        (EmitFinalizerRunnerBody below emits the body); only saving main's
+        return value across the call is per-target.
+        feature-c-entry-stub-must-run-finalizers }
+      EmitB($50); EmitB($50);            { push rax x2 (value + 16-byte alignment) }
+      EmitCallProc(GetFiniRunnerProc);
+      EmitB($58); EmitB($58);            { pop rax x2 }
       EmitB($89); EmitB($C7);            { mov edi, eax }
       EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
       EmitB($0F); EmitB($05);            { syscall }
@@ -8413,6 +8426,19 @@ begin
       EmitB($51);                                              { push ecx        (arg2 = argv) }
       EmitB($FF); EmitB($30);                                  { push [eax]      (arg1 = argc) }
       EmitB($E8); callPatch := CodeLen; EmitI32(0);            { call main }
+      { Run registered finalizers before exiting, so a plain `return` from main
+        is not a silent skip. The stub is `call main; exit_group(retval)`, so
+        without this the ONLY exit path C code normally takes bypasses
+        __pxx_run_finalizers entirely — which is why crtl could not implement
+        atexit: handlers would fire for exit() and be silently dropped for
+        `return`, the worse of the two failure modes.
+        EmitCallProc is target-independent and resolves the runner as a forward
+        (EmitFinalizerRunnerBody below emits the body); only saving main's
+        return value across the call is per-target.
+        feature-c-entry-stub-must-run-finalizers }
+      EmitB($50);                        { push eax (main's return value) }
+      EmitCallProc(GetFiniRunnerProc);
+      EmitB($58);                        { pop eax }
       EmitB($89); EmitB($C3);            { mov ebx, eax }
       EmitB($B8); EmitI32(252);          { mov eax, 252 (exit_group) }
       EmitB($CD); EmitB($80);            { int 0x80 }
@@ -8429,6 +8455,19 @@ begin
       EmitI32($E59D0000);                 { ldr r0, [sp]  (argc) }
       EmitI32($E28D1004);                 { add r1, sp, #4 (argv) }
       callPatch := CodeLen; EmitI32($EB000000);   { bl main (offset patched) }
+      { Run registered finalizers before exiting, so a plain `return` from main
+        is not a silent skip. The stub is `call main; exit_group(retval)`, so
+        without this the ONLY exit path C code normally takes bypasses
+        __pxx_run_finalizers entirely — which is why crtl could not implement
+        atexit: handlers would fire for exit() and be silently dropped for
+        `return`, the worse of the two failure modes.
+        EmitCallProc is target-independent and resolves the runner as a forward
+        (EmitFinalizerRunnerBody below emits the body); only saving main's
+        return value across the call is per-target.
+        feature-c-entry-stub-must-run-finalizers }
+      EmitI32($E52D0008);                 { str r0, [sp, #-8]! (save retval, 8-align) }
+      EmitCallProc(GetFiniRunnerProc);
+      EmitI32($E49D0008);                 { ldr r0, [sp], #8 }
       EmitI32($E3A070F8);                 { mov r7, #248 (exit_group) }
       EmitI32($EF000000);                 { svc #0 (r0 = exit code) }
     end;
@@ -8444,6 +8483,19 @@ begin
       EmitI32($F94003E0);                 { ldr x0, [sp]  (argc) }
       EmitI32($910023E1);                 { add x1, sp, #8 (argv) }
       callPatch := CodeLen; EmitI32($94000000);   { bl main (offset patched) }
+      { Run registered finalizers before exiting, so a plain `return` from main
+        is not a silent skip. The stub is `call main; exit_group(retval)`, so
+        without this the ONLY exit path C code normally takes bypasses
+        __pxx_run_finalizers entirely — which is why crtl could not implement
+        atexit: handlers would fire for exit() and be silently dropped for
+        `return`, the worse of the two failure modes.
+        EmitCallProc is target-independent and resolves the runner as a forward
+        (EmitFinalizerRunnerBody below emits the body); only saving main's
+        return value across the call is per-target.
+        feature-c-entry-stub-must-run-finalizers }
+      EmitI32($F81F0FE0);                 { str x0, [sp, #-16]! (save retval, 16-align) }
+      EmitCallProc(GetFiniRunnerProc);
+      EmitI32($F84107E0);                 { ldr x0, [sp], #16 }
       EmitI32($D2800BC8);                 { mov x8, #94 (exit_group) }
       EmitI32($D4000001);                 { svc #0 (x0 = exit code) }
     end;
@@ -8458,6 +8510,21 @@ begin
       { auipc+jalr (full range) not JAL (+/-1MB): main can sit past 1MB in a
         large image (cross lua = 1.75MB). Both words patched below. }
       callPatch := CodeLen; rv32_auipc(reg_t0, 0); rv32_jalr(reg_ra, reg_t0, 0);
+      { Run registered finalizers before exiting, so a plain `return` from main
+        is not a silent skip. The stub is `call main; exit_group(retval)`, so
+        without this the ONLY exit path C code normally takes bypasses
+        __pxx_run_finalizers entirely — which is why crtl could not implement
+        atexit: handlers would fire for exit() and be silently dropped for
+        `return`, the worse of the two failure modes.
+        EmitCallProc is target-independent and resolves the runner as a forward
+        (EmitFinalizerRunnerBody below emits the body); only saving main's
+        return value across the call is per-target.
+        feature-c-entry-stub-must-run-finalizers }
+      rv32_addi(reg_sp, reg_sp, -16);     { save retval, keep sp 16-aligned }
+      rv32_sw(reg_a0, reg_sp, 0);
+      EmitCallProc(GetFiniRunnerProc);
+      rv32_lw(reg_a0, reg_sp, 0);
+      rv32_addi(reg_sp, reg_sp, 16);
       rv32_addi(reg_a7, reg_zero, 94);    { a7 = 94 (exit_group) }
       EmitI32($00000073);                 { ecall (a0 = exit code) }
     end;
