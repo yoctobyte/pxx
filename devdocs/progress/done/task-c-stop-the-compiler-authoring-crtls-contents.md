@@ -92,3 +92,13 @@ class, different files, neither touched here.
 
 ## Log
 - 2026-08-10 — resolved, commit 25d2628d2.
+
+## User's call on the ~2-3%, 2026-08-10
+
+> "don't worry compiler speed — correctness above all"
+
+So the cost stands and the change is NOT to be reverted for it. Recorded here
+because the "Measured" section above offers the revert as an option and a future
+session reading only that could take it. Reverting the generated map would put
+the compiler back to hand-authoring 87 of crtl's 312 names, which is the actual
+defect this closed.
