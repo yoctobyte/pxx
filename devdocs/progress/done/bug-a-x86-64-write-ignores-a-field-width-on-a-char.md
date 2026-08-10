@@ -58,4 +58,4 @@ A **variable** field width (`write(x:w)`) is a different, still-open gap —
 [[bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit]].
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 552d93c3d.

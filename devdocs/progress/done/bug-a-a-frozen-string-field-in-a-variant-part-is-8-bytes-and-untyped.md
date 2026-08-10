@@ -77,4 +77,4 @@ instead.
 `tools/gate.sh quick` GREEN, self-host fixedpoint converged in 1 round.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 8393494c7.

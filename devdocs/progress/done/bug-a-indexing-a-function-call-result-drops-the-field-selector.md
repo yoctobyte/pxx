@@ -127,4 +127,4 @@ Follow-up: `feature-a-index-an-array-returning-call-directly`.
   the two tests `pinned` cannot compile. C/NilPy sweep run separately.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 496396a2a.
