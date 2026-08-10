@@ -4,6 +4,8 @@ type: bug
 track: A
 prio: 60
 found-by: claude-B
+status: done
+owner: claude-A
 ---
 
 # Assignment through a pointer returned by a function call is silently dropped
@@ -83,3 +85,35 @@ an array is variable-length.
 going through an `AtExitSlot(i)` helper, with a comment naming this ticket
 (`devdocs/dev/track-b-workarounds.md` lifecycle). Restore the helper here when
 this is fixed — it is the readable form.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-10)
+
+Root cause was **parse-time, not codegen**: `ParseStatementAST`'s
+call-result-selector branch (added by `bug-pascal-statement-call-result-selector`,
+test `_b318`) recognised only `.` as the selector that makes a statement-leading
+function call the *base* of a designator. With `^` and `[` it never fired, so the
+bare `AN_CALL` was emitted and `^ := 111` fell into the default branch that skips
+to the next `;` — no diagnostic, no store. `PXXDBG=a.ast` shows it directly: the
+statement's whole AST is one `AN_CALL`, with no `AN_ASSIGN` anywhere.
+
+That is why the read path was fine (the *expression* parser always handled the
+full chain) and why `t := f(i); t^ := v` was fine — the double case's two arms
+were a parser branch apart, exactly the `normalise-dont-special-case` shape the
+ticket predicted.
+
+Fix: `frDot` now tests `Tokens[...].Kind in [tkDot, tkCaret, tkLBrack]` at both
+sites (bare callee, and after the matching `)`). All three sibling shapes the
+ticket asked about — `f(i)^ := v`, `f(i)^.field := v`, `f(i)^[j] := v` — pass in
+one change, plus `Slot(3)^ := Slot(0)^ + 1` with a call result on both sides.
+
+Test `test/test_stmt_call_result_deref_b387.pas`, wired into `make test`,
+byte-matched against FPC. Gate: `tools/gate.sh quick` GREEN (self-host
+fixedpoint + testmgr quick).
+
+**Track B follow-up (not done here — B owns the file):** `lib/rtl/pxxcio.pas`
+still inlines the slot-address cast at both `atexit` sites instead of using an
+`AtExitSlot(i)` helper. That workaround can now be reverted; see
+`devdocs/dev/track-b-workarounds.md`.

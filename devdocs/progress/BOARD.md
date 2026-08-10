@@ -36,14 +36,13 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (236)
+## backlog (235)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver | A | 40 | bug | A metaclass returned from a FUNCTION is not a receiver | — |
 | bug-a-a-typed-const-array-of-string-n-is-never-initialised | A | 50 | bug | A typed const array of `string[N]` is never initialised — silently | — |
 | bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit | A | 40 | bug | A VARIABLE field width is refused for strings/chars, and needs an RTL unit at all | — |
-| bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped | A | 60 | bug | `Slot(i)^ := v` compiles clean and stores NOTHING — a call result used as an assignment TARGET is dropped. Reading `Slot(i)^` is fine, and so is `t := Slot(i); t^ := v`, so only one arm of the double case is broken. Silent wrong value, no diagnostic. | — |
 | bug-a-fixed-array-function-result-faults-on-i386-and-arm32 | A | 45 | bug | A fixed-array function result faults on i386 and arm32 | — |
 | bug-a-for-in-refuses-a-set-constructor-and-a-string-literal | A | 35 | bug | `for x in [...]` and `for c in 'literal'` are refused | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
@@ -416,9 +415,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1616)
+## done (1617)
 
-1616 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1617 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (34)
 
@@ -464,7 +463,6 @@ lives in git, not in a timestamp._
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
 - [p 60] [N] feature-nilpy-class-as-a-value (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [A] bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa

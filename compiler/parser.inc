@@ -21209,10 +21209,16 @@ begin
           store through the result's member. (bug-pascal-statement-call-result-selector) }
         if (procIdx >= 0) and (si < 0) and Procs[procIdx].IsFunc then
         begin
-          frDot := Tokens[TokPos].Kind = tkDot;
+          { Every selector token counts, not just `.`: `f(i)^ := v`,
+            `f(i)^.fld := v` and `f(i)^[j] := v` are the same statement shape
+            reached through `^`/`[`, and while only `.` was recognised those
+            stores were silently DROPPED — the call was emitted and the rest of
+            the statement skipped to the `;` with no diagnostic
+            (bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped). }
+          frDot := Tokens[TokPos].Kind in [tkDot, tkCaret, tkLBrack];
           if (not frDot) and (Tokens[TokPos].Kind = tkLParen) then
           begin
-            { scan the matching ')' — a '.' right after it makes this a
+            { scan the matching ')' — a selector right after it makes this a
               call-result selector statement }
             i := TokPos; smMai := 0;
             repeat
@@ -21220,7 +21226,7 @@ begin
               else if Tokens[i].Kind = tkRParen then Dec(smMai);
               Inc(i);
             until (smMai = 0) or (Tokens[i].Kind = tkEOF);
-            frDot := Tokens[i].Kind = tkDot;
+            frDot := Tokens[i].Kind in [tkDot, tkCaret, tkLBrack];
           end;
           if frDot then
           begin

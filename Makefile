@@ -2554,6 +2554,11 @@ test-core: $(COMPILER)
 	# was silently retained as a string POINTER -> memory corruption + crash
 	./$(COMPILER) test/test_widechar_to_utf8_b319.pas /tmp/test_widechar_utf8_b31926
 	test "$$(/tmp/test_widechar_utf8_b31926)" = "$$(printf '1=\303\270 len=2\n2=\360\237\214\237 len=4\n3=x\303\251\n4=Abc\n5=\303\270\n6=AB\n7=\n8=TRUE')"
+	# the `^`/`[` arm of the same double case: `Slot(0)^ := 111;` emitted the call and
+	# skipped `^ := 111` to the ';' with NO diagnostic, so the store never happened
+	# (crtl's atexit stored every handler as 0). Read position was always correct.
+	./$(COMPILER) test/test_stmt_call_result_deref_b387.pas /tmp/test_stmt_call_deref_b38726
+	test "$$(/tmp/test_stmt_call_deref_b38726)" = "$$(printf 'a=111\nb=222\nc=333\nd=44\ne=55\nf=112')"
 	# a SELECTOR after a function call used as a STATEMENT was silently dropped —
 	# GetBox.Poke; / GetBox.SetVal(42); / GetBox.Val := 5; / GetBoxAt(0).M(..) all
 	# vanished with no diagnostic (fpjson's RegisterTest registered 0 of 203 tests)
