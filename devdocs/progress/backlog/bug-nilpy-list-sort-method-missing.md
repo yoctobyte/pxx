@@ -279,3 +279,27 @@ Supersedes **`bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-erro
 described this one residue. This copy survived because it was the one visible to
 the ranker and its title is the accurate description of what is actually left.
 That ticket's analysis is preserved in `rejected/`; nothing was discarded.
+
+## 2026-08-10 — do NOT start with the unit move; see the lambda ticket first
+
+Tracing why `TPyList.sort` cannot take `key=` bottoms out somewhere else
+entirely. The chain:
+
+1. `PyCallKey1` (call a Python callable value) must handle a **source closure**,
+   so it has to live in `pyeval`, the tree-walking interpreter.
+2. Therefore every `key=`-taking builtin — `sorted`, `min`, `max`, `map`,
+   `filter` — lives in `pyeval` too.
+3. `pyeval uses pylib`, not the reverse. `TPyList.sort` is a method on a
+   **pylib** class, so it cannot follow them up. Hence no `key=`.
+4. `pyparser.inc`'s cross-unit keyword-overload fallback exists only to paper
+   over the resulting split (its own comment says so).
+
+And step 1 holds only because
+[[bug-nilpy-every-lambda-is-interpreted-instead-of-compiled]] makes **every**
+lambda a source closure — measured 6.9x slower per call than the same body as a
+nested def, and 69x slower than CPython.
+
+Fix that first and closures become rare (runtime-bound defaults only) instead of
+the default for every lambda. The layering cleanup then has a much smaller
+closure arm to carry, and this ticket becomes an ordinary parameter addition
+rather than a builtin-unit refactor requiring a re-pin.

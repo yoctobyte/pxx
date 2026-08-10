@@ -38,7 +38,7 @@ lives in git, not in a timestamp._
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | feature-c-entry-stub-must-run-finalizers |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (232)
+## backlog (233)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | decide-nilpy-none-str-representation |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
+| bug-nilpy-every-lambda-is-interpreted-instead-of-compiled | N | 60 | bug | Every NilPy lambda lowers to a pyeval SOURCE closure re-walked by the tree-walker per call — 6.9x slower than the same body as a nested def, and 69x slower than CPython, which is an interpreter. Even a capture-free lambda takes this path; the native pyboundfn lowering is never attempted. | — |
 | bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
 | bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | — |
 | bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument | N | 55 | bug | `f.write(x)` picks the BYTES overload whenever x is not statically a str | — |
@@ -457,6 +458,7 @@ lives in git, not in a timestamp._
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [C] bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address
+- [p 60] [N] bug-nilpy-every-lambda-is-interpreted-instead-of-compiled
 - [p 60] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
