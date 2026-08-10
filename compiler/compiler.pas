@@ -109,6 +109,10 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include ir_codegen_xtensa.inc}
 {$include ir_codegen.inc}
 {$include asmdisasm_x64.inc}
+{ Generated crtl function -> header map (tools/gen_crtl_map.py). Must precede
+  cparser.inc, whose CCrtlHeaderForName reads it. Regenerate after adding a crtl
+  function; lib-test runs gen_crtl_map.py --check and fails when it is stale. }
+{$include crtl_names.inc}
 {$include cparser.inc}
 {$include bparser.inc}
 {$include pyparser.inc}

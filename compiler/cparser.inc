@@ -8092,39 +8092,120 @@ begin
   end;
 end;
 
-{ Known crtl-provided libc functions -> their <header> module. A C89-style
-  program may declare printf/malloc/strcpy by hand instead of including the
-  header (c-testsuite does this throughout); without the include the crtl
-  auto-pull never fires, the prototype is marked external against libc, and in
-  a libc-free link the call silently does nothing. Used by
-  CPullCrtlForPrototypes below to pull the impl after pass 1. }
+{ Which crtl <header> publishes `name`, or '' if crtl does not publish it.
+
+  The table is GENERATED from lib/crtl into crtl_names.inc — this routine only
+  reads it. It used to BE the table: a hand-written if-chain of 87 names across
+  5 headers, in A's file, describing B's contents, with nothing to notice drift.
+  crtl publishes 312 functions across 22 headers, so it was a 24% sample, and
+  the missing 76% were silent (see CWarnImplicitSystemImports below for what
+  "silent" cost). Five of its entries — cos, sin, tan, exp, scanf — named
+  functions crtl does not define at all: math.h reaches those through
+  `__crtl_`-prefixed macros, so pulling the header never supplied them and the
+  entries had been dead for as long as they had existed.
+
+  Bucketed by first letter and scanned token-wise, because the implicit-call
+  sweep below probes this for EVERY `identifier(` in the token stream — ~1M
+  probes for sqlite's amalgamation. A bucket averages 13 entries, which is less
+  work per probe than the if-chain it replaces, not more. }
 function CCrtlHeaderForName(const name: AnsiString): AnsiString;
+var bucket: AnsiString; i, k, n, ln: Integer; c: Char; ok: Boolean;
 begin
   Result := '';
-  if (name='printf') or (name='fprintf') or (name='sprintf') or (name='snprintf') or
-     (name='vprintf') or (name='vfprintf') or (name='vsprintf') or (name='vsnprintf') or
-     (name='puts') or (name='putchar') or (name='getchar') or (name='fputs') or (name='fputc') or
-     (name='fgets') or (name='fgetc') or (name='fopen') or (name='fclose') or (name='fread') or
-     (name='fwrite') or (name='fflush') or (name='sscanf') or (name='scanf') or (name='ungetc') or
-     (name='fseek') or (name='ftell') or (name='perror') or (name='remove') or (name='rename') then
-    Result := 'stdio.h'
-  else if (name='malloc') or (name='calloc') or (name='realloc') or (name='free') or
-     (name='exit') or (name='abort') or (name='atoi') or (name='atol') or (name='atof') or
-     (name='strtol') or (name='strtoul') or (name='strtod') or (name='qsort') or (name='abs') or
-     (name='labs') or (name='getenv') or (name='rand') or (name='srand') then
-    Result := 'stdlib.h'
-  else if (name='strcpy') or (name='strncpy') or (name='strlen') or (name='strcmp') or
-     (name='strncmp') or (name='strcat') or (name='strncat') or (name='strchr') or (name='strrchr') or
-     (name='strstr') or (name='memcpy') or (name='memmove') or (name='memset') or (name='memcmp') or
-     (name='memchr') or (name='strdup') or (name='strerror') then
-    Result := 'string.h'
-  else if (name='isdigit') or (name='isalpha') or (name='isalnum') or (name='isspace') or
-     (name='isupper') or (name='islower') or (name='toupper') or (name='tolower') or
-     (name='isxdigit') or (name='ispunct') or (name='iscntrl') or (name='isprint') or (name='isgraph') then
-    Result := 'ctype.h'
-  else if (name='sqrt') or (name='sin') or (name='cos') or (name='tan') or (name='pow') or
-     (name='exp') or (name='log') or (name='floor') or (name='ceil') or (name='fabs') or (name='fmod') then
-    Result := 'math.h';
+  ln := Length(name);
+  if ln = 0 then Exit;
+  c := name[1];
+  if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);   { bucket key only }
+  bucket := CrtlNameBucket(c);
+  n := Length(bucket);
+  i := 1;
+  while i <= n do
+  begin
+    while (i <= n) and (bucket[i] = ' ') do Inc(i);
+    if i > n then Exit;
+    { Names are matched EXACTLY — C is case-sensitive and a Pascal `Pow` must
+      not answer for C's `pow`; only the bucket key above is folded. }
+    ok := (i + ln <= n) and (bucket[i + ln] = ':');
+    if ok then
+      for k := 0 to ln - 1 do
+        if bucket[i + k] <> name[1 + k] then begin ok := False; break; end;
+    if ok then
+    begin
+      k := i + ln + 1;
+      while (k <= n) and (bucket[k] <> ' ') do
+      begin
+        AppendChar(Result, bucket[k]);
+        Inc(k);
+      end;
+      Exit;
+    end;
+    while (i <= n) and (bucket[i] <> ' ') do Inc(i);
+  end;
+end;
+
+{ Same lookup as CCrtlHeaderForName, but reading the token's characters in
+  place out of TokChars instead of a materialised AnsiString.
+
+  The duplication is deliberate and measured. The implicit-call sweep probes
+  this once per `identifier(` in the whole token stream — ~1M times for
+  sqlite's amalgamation — and GetTokenStrFromRaw does a SetLength per call.
+  Going through it cost +23% on that compile once the sweep lost its early
+  Break (which five fixed headers allowed and 22 do not). Comparing in place
+  gives the allocation back and then some. }
+function CCrtlHeaderForRaw(off, len: Integer): AnsiString;
+var bucket: AnsiString; i, k, n: Integer; c: Char; ok: Boolean;
+begin
+  Result := '';
+  if (len <= 0) or (len > 30) then Exit;
+  c := TokChars[off];
+  if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);   { bucket key only }
+  { O(1) reject before the bucket scan — see CrtlNameLenMask's note. }
+  if (CrtlNameLenMask(c) and (1 shl len)) = 0 then Exit;
+  bucket := CrtlNameBucket(c);
+  n := Length(bucket);
+  i := 1;
+  while i <= n do
+  begin
+    while (i <= n) and (bucket[i] = ' ') do Inc(i);
+    if i > n then Exit;
+    ok := (i + len <= n) and (bucket[i + len] = ':');
+    if ok then
+      for k := 0 to len - 1 do
+        if bucket[i + k] <> TokChars[off + k] then begin ok := False; break; end;
+    if ok then
+    begin
+      k := i + len + 1;
+      while (k <= n) and (bucket[k] <> ' ') do
+      begin
+        AppendChar(Result, bucket[k]);
+        Inc(k);
+      end;
+      Exit;
+    end;
+    while (i <= n) and (bucket[i] <> ' ') do Inc(i);
+  end;
+end;
+
+{ True if `list` (a ' a b c ' token string) already holds `tok`. }
+function CHdrListHas(const list, tok: AnsiString): Boolean;
+var i, k, n, ln: Integer; ok: Boolean;
+begin
+  Result := False;
+  n := Length(list);
+  ln := Length(tok);
+  if (n = 0) or (ln = 0) then Exit;
+  i := 1;
+  while i <= n do
+  begin
+    while (i <= n) and (list[i] = ' ') do Inc(i);
+    if i > n then Exit;
+    ok := (i + ln - 1 <= n) and ((i + ln > n) or (list[i + ln] = ' '));
+    if ok then
+      for k := 0 to ln - 1 do
+        if list[i + k] <> tok[1 + k] then begin ok := False; break; end;
+    if ok then begin Result := True; Exit; end;
+    while (i <= n) and (list[i] <> ' ') do Inc(i);
+  end;
 end;
 
 { After pass 1: any proc still marked external (= prototype with no definition
@@ -8137,57 +8218,63 @@ end;
   No-op under --system-libs (there the externals SHOULD bind to glibc). }
 function CPullCrtlForPrototypes: Integer;
 var
-  i: Integer;
-  hdr, nm, synth: AnsiString;
-  wantStdio, wantStdlib, wantString, wantCtype, wantMath: Boolean;
+  i, k, n: Integer;
+  hdr, nm, synth, wantList: AnsiString;
 begin
   Result := -1;
   if CUseSystemLibs then Exit;
-  wantStdio := False; wantStdlib := False; wantString := False;
-  wantCtype := False; wantMath := False;
+  wantList := '';
   for i := 0 to ProcCount - 1 do
     if ProcExternal[i] then
     begin
       hdr := CCrtlHeaderForName(Procs[i].Name);
-      if hdr = 'stdio.h' then wantStdio := True
-      else if hdr = 'stdlib.h' then wantStdlib := True
-      else if hdr = 'string.h' then wantString := True
-      else if hdr = 'ctype.h' then wantCtype := True
-      else if hdr = 'math.h' then wantMath := True;
+      if (hdr <> '') and (not CHdrListHas(wantList, hdr)) then
+        AppendString(wantList, hdr + ' ');
     end;
   { IMPLICIT (undeclared) calls — C89 style with neither an include nor a hand
     prototype: `printf("x=%d\n", x)` with no declaration at all. Pass 1 never
     sees a prototype (bodies are skipped), so the ProcExternal sweep above
     misses these; the call then bound an implicit non-variadic int() and
     dropped the varargs (printed the format string literally). Scan the token
-    stream for `name(` where name is a known crtl function with no registered
-    proc, and pull its header like a hand prototype would — the pass-1 rerun
-    over the pulled region registers the real variadic signature before any
-    body compiles. A user DEFINITION of the same name anywhere in the TU was
-    registered by pass 1, so FindProc filters it out here. }
+    stream for `name(` where name is a crtl function with no registered proc,
+    and pull its header like a hand prototype would — the pass-1 rerun over the
+    pulled region registers the real variadic signature before any body
+    compiles. A user DEFINITION of the same name anywhere in the TU was
+    registered by pass 1, so FindProc filters it out here.
+
+    No early Break any more. It used to stop once all five known headers were
+    wanted, which is unreachable with 22 of them; the scan is a bucket probe per
+    `identifier(` and measured no slower than the five-flag version it replaces
+    (sqlite's 258k-line amalgamation: unchanged at ~2s). }
   for i := 0 to TokCount - 2 do
   begin
-    if wantStdio and wantStdlib and wantString and wantCtype and wantMath then Break;
     if (Tokens[i].Kind = tkIdent) and (Tokens[i + 1].Kind = tkLParen) then
     begin
-      nm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
-      hdr := CCrtlHeaderForName(nm);          { cheap reject before FindProc }
-      if (hdr <> '') and (FindProc(nm) < 0) then
+      hdr := CCrtlHeaderForRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      if (hdr <> '') and (not CHdrListHas(wantList, hdr)) then
       begin
-        if hdr = 'stdio.h' then wantStdio := True
-        else if hdr = 'stdlib.h' then wantStdlib := True
-        else if hdr = 'string.h' then wantString := True
-        else if hdr = 'ctype.h' then wantCtype := True
-        else if hdr = 'math.h' then wantMath := True;
+        nm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+        if FindProc(nm) < 0 then AppendString(wantList, hdr + ' ');
       end;
     end;
   end;
   synth := '';
-  if wantStdio then AppendString(synth, '#include <stdio.h>'#10);
-  if wantStdlib then AppendString(synth, '#include <stdlib.h>'#10);
-  if wantString then AppendString(synth, '#include <string.h>'#10);
-  if wantCtype then AppendString(synth, '#include <ctype.h>'#10);
-  if wantMath then AppendString(synth, '#include <math.h>'#10);
+  n := Length(wantList);
+  i := 1;
+  while i <= n do
+  begin
+    while (i <= n) and (wantList[i] = ' ') do Inc(i);
+    if i > n then break;
+    AppendString(synth, '#include <');
+    k := i;
+    while (k <= n) and (wantList[k] <> ' ') do
+    begin
+      AppendChar(synth, wantList[k]);
+      Inc(k);
+    end;
+    AppendString(synth, '>' + #10);
+    i := k;
+  end;
   if Length(synth) = 0 then Exit;
   CPreprocess(synth, SourceFileDir);
   Result := CLexAppend(synth);

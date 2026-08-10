@@ -8014,6 +8014,18 @@ pin:
 # anything broken to a ticket instead of letting this go red.
 lib-test: pxx-stable-check
 	@echo "=== lib-test: library smoke against $(PXX_STABLE) ==="
+	# Structural, and FIRST because it costs ~0.1s and its failure mode is
+	# invisible at run time: a crtl header declaring a function whose definition
+	# no auto-pull from that header reaches. The program links, and the symbol
+	# resolves against GLIBC instead — right name, not necessarily the same ABI.
+	# Bitten twice (<sys/socket.h>, <inttypes.h>), fixed two different ways, and
+	# nothing checked the rule they both satisfy until this.
+	python3 tools/crtl_reachability.py
+	# The crtl function -> header map the compiler reads is GENERATED from these
+	# same files. Fails when a crtl function was added without regenerating —
+	# which would leave it invisible to a C89-style hand prototype, i.e. a glibc
+	# import in a libc-free build. Regenerate with: python3 tools/gen_crtl_map.py
+	python3 tools/gen_crtl_map.py --check
 	$(PXX_STABLE) examples/sudoku/sudoku.pas /tmp/lib_sudoku
 	test "$$(/tmp/lib_sudoku)" = "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
 	$(PXX_STABLE) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/lib_collections
