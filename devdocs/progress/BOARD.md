@@ -57,7 +57,6 @@ lives in git, not in a timestamp._
 | bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
-| bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses | N | 60 | bug | A class used as a VALUE: SEGFAULT from a container, compile errors from a name | feature-nilpy-class-as-a-value |
 | bug-nilpy-a-fixed-parameter-before-star-args-segfaults | N | 55 | bug | `def __init__(self, tag, *rest)` — a fixed parameter BEFORE `*args` segfaults on ordinary construction. `*args` alone works, so only the mixed shape is broken; no diagnostic, the crash is inside the constructor. | — |
 | bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class | N | 55 | bug | A NilPy CALL through a name that case-insensitively matches a class name is compiled as CONSTRUCTION of that class: `class F` plus `def f(a, b)` makes `f(1, 2)` fail with `Expected: )`. The value-position lookup was made case-sensitive in 2026-08; the call path was not. | — |
 | bug-nilpy-a-method-call-on-a-callable-values-result-is-refused | N | 50 | bug | `g(3).show()` — a selector on the RESULT of calling a callable VALUE is a parse error (`expected expression`). Binding the result first (`o = g(3); o.show()`) works, so only the chained arm is broken. Applies to any callable value: a def taken as a value, and now a class. | — |
@@ -87,6 +86,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
+| bug-nilpy-raising-a-variant-segfaults | N | 55 | bug | `raise xs[0]` — raising an exception held in a VARIANT segfaults. `raise E(\"x\")` and `raise e` on a class-typed local both work, so only the variant-operand arm is broken; no diagnostic, and the crash is at the raise. | — |
 | bug-nilpy-text-class-name-binds-the-rtl-file-record | A | 55 | bug | NilPy resolves the class name `Text` to lib/rtl/textfile.pas's `Text = record` (the FILE type) instead of tkinter.Text, in the two positions that record a type by NAME — an instance attribute and a base class. Locals and globals resolve correctly. Blocks any NilPy code that stores or subclasses a Text widget | — |
 | bug-nilpy-text-mode-read-n-returns-bytes-not-str | N | 50 | bug | `f.read(3)` on a TEXT-mode file returns bytes (`b'one'`) where CPython returns a str (`one`). TPyFile.read(n)'s return type is statically TPyBytes, so it cannot branch on the mode at run time — the fix needs either a mode-carrying text path or a distinct binary class, not a runtime test | — |
 | bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable | P | 50 | bug | `P;` on a free routine whose parameters are ALL defaulted fails with 'undefined variable (P)'. FPC accepts it, `P()` works, and the paren-less form already works for METHODS (`b.G`) and for routines with no parameters at all — so it is the free-routine path alone that never tries the defaults fill | — |
@@ -417,9 +417,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1619)
+## done (1620)
 
-1619 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1620 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (34)
 
@@ -464,7 +464,6 @@ lives in git, not in a timestamp._
 
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
@@ -482,6 +481,7 @@ lives in git, not in a timestamp._
 - [p 55] [N] bug-nilpy-a-fixed-parameter-before-star-args-segfaults
 - [p 55] [N] bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
+- [p 55] [N] bug-nilpy-raising-a-variant-segfaults
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - [p 55] [A] feature-a-declaration-phase

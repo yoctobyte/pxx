@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:7 blocked:3 backlog:237 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1619 rejected:34`
+`urgent:1 working:1 unfinished:7 blocked:3 backlog:237 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1620 rejected:34`
 
 ## Held now (working/ — do not touch these files)
 
@@ -35,7 +35,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -53,6 +52,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [N]` bug-nilpy-a-fixed-parameter-before-star-args-segfaults
 - `[p 55] [N]` bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
+- `[p 55] [N]` bug-nilpy-raising-a-variant-segfaults
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - `[p 55] [A]` feature-a-declaration-phase

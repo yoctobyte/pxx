@@ -21083,6 +21083,20 @@ begin
         cur := tyUnknown;
         PyInferLastCi := -1;
       end;
+      { `return B` — the CLASS itself, not an instance of it. Since
+        feature-nilpy-class-as-a-value that expression is a VT_CLASSREF
+        VARIANT, so a tyClass result hands the caller a variant to read as an
+        object pointer — it segfaults at the first use, not at the return.
+        A bare class name with no `(` is the value form; `return B(...)` is
+        construction and keeps tyClass, and a name the def SHADOWS was already
+        cleared to tyUnknown by the block above, so reaching here with tyClass
+        means a genuine class reference. }
+      if (cur = tyClass) and (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) and
+         IsClassType(GetTokenStr(j + 1)) then
+      begin
+        cur := tyVariant;
+        PyInferLastCi := -1;
+      end;
       { `return w` — a bare ident the scanner cannot type: chase the ident's
         ASSIGNMENT earlier in the body and infer from its right-hand side
         (uforth's finalize_definition: `w = self.define_word(...)`, whose

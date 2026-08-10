@@ -2,7 +2,8 @@
 track: N
 prio: 60
 type: bug
-blocked-by: feature-nilpy-class-as-a-value
+status: done
+owner: claude-AN
 ---
 
 # A class used as a VALUE: SEGFAULT from a container, compile errors from a name
@@ -194,3 +195,68 @@ correctly `blocked-by` that decision rather than being half-built in a direction
 that may be wrong.
 
 The named refusal already landed, so the segfault stays gone in the meantime.
+
+## Resolution (2026-08-11)
+
+Closed by [[feature-nilpy-class-as-a-value]] plus two follow-ups found by
+walking this ticket's own list of shapes. Every row it names now matches
+CPython, **except one, which turned out to be a different bug** (below).
+
+| this ticket's shape | now |
+| --- | --- |
+| `for cls in [A]: cls(3)` — the SEGFAULT | works |
+| `cls = A; cls(3).v` — "a pointer has no members" | works |
+| `for cls in [A, B]: cls(1).v` | works |
+| `print(cls)` printing a bare integer | `<class '__main__.A'>` |
+| a class passed as an ARGUMENT | works |
+| a class RETURNED from a def | works — **fixed here** |
+| `raise cls("x")` | **a different bug** — see below |
+
+### The two follow-ups
+
+**A class RETURNED from a def** (`def gives(): return B`). The feature made the
+expression a VT_CLASSREF variant, but `PyInferDefRetTypeScan` still typed a bare
+class-name return as `tyClass` — so the caller read a variant as an object
+pointer and died at the first use, not at the return. A bare class name with no
+`(` is the value form and now infers `tyVariant`; `return B(...)` is
+construction and keeps `tyClass`. The name-shadow clear that sits just above it
+already handles `return b` where the def binds `b`, so reaching the new arm with
+`tyClass` means a genuine class reference.
+
+**An EXCEPTION subclass as a value** (`ke = Err; ke("boom")`). `class
+Err(Exception): pass` has no `__init__` of its own and is constructed through
+the inherited `Exception.Create(const msg: AnsiString)` — a REAL signature, not
+a widening the frontend forgot, so `PyClassRefNew` marshals it as its own shape
+rather than tripping the not-widened guard. That guard now also names the kind
+and position it could not marshal instead of blaming the compiler.
+
+### The one that is NOT this ticket
+
+`raise cls("x")` still segfaults — but the construction is fine now and the
+crash moved to the **raise**. Isolated:
+
+```python
+xs = [E("a")]
+raise xs[0]          # SEGFAULT
+e = E("a"); raise e  # works
+raise E("a")         # works
+```
+
+So it is `raise` with a VARIANT operand, unrelated to classes-as-values and
+pre-existing at `pinned`. Filed as
+[[bug-nilpy-raising-a-variant-segfaults]] with the boundary measured, rather
+than held open here — this ticket is about the class value, and the class value
+works.
+
+Also still open, and its own ticket's business:
+`A.__name__` on a class NAME is "class method not found" —
+[[bug-n-a-type-name-is-not-a-first-class-value]]. `type(x).__name__` works.
+
+### Verified
+
+`test/test_nilpy_class_as_a_value.npy` grew a block per row of the table above,
+`.expected` regenerated from CPython. Gate: `tools/gate.sh quick` GREEN +
+`make test-nilpy`.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

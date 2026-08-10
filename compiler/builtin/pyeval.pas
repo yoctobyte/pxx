@@ -230,6 +230,7 @@ const
     visible to a builtin unit, so the reflection blob's numeric kinds are used raw. }
   TK_DOUBLE  = 19;
   TK_VARIANT = 22;
+  TK_ANSISTR = 23;   { Ord(tyAnsiString) — Exception.Create's one parameter }
 
   { Token kinds — plain integer consts (not an enum) so they are valid `case`
     labels; pxx rejects Ord(enumconst) as a case label. }
@@ -284,6 +285,11 @@ type
     CLASS parameter (a plain pointer), never a Variant, so it cannot ride in a
     TVPr* slot. Only the star-LAST forms exist, which is all Python allows for
     a positional `*args`. }
+  { An EXCEPTION subclass inherits Exception.Create(const msg: AnsiString) and
+    is constructed through it — a class VALUE holding one is the `raise cls(m)`
+    registry shape, so the string arity-1 form has to exist beside the variant
+    ones. }
+  TSPr1 = procedure(self: Pointer; const s: AnsiString);
   TVPrS1 = procedure(self: Pointer; l: TPyList);
   TVPrS2 = procedure(self: Pointer; const a: Variant; l: TPyList);
   TVPrS3 = procedure(self: Pointer; const a, b: Variant; l: TPyList);
@@ -2613,7 +2619,8 @@ var
   av: array[0..3] of Variant;    { the call's arguments, then the ctor's }
   star: TPyList;
   vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4;
-  vs1: TVPrS1; vs2: TVPrS2; vs3: TVPrS3;
+  vs1: TVPrS1; vs2: TVPrS2; vs3: TVPrS3; sp1: TSPr1;
+  strCtor: Boolean;
 begin
   res := pynone;
   cls := PClassRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
@@ -2645,12 +2652,19 @@ begin
     end
     else if n <> nargs then PyRaiseArity(nargs, n, n);
     pk := PInt64(mi^.ParamKinds);
-    if pk <> nil then
+    { `class E(Exception): pass` inherits Exception.Create(const msg:
+      AnsiString) — a REAL signature this must marshal to, not a widening the
+      frontend forgot. Recognised as its own shape rather than folded into the
+      check below, because the check exists to catch exactly the case where the
+      frontend DID forget. }
+    strCtor := (n = 1) and (starIdx < 0) and (pk <> nil) and (pk[1] = TK_ANSISTR);
+    if (pk <> nil) and (not strCtor) then
       for i := 1 to n do
         if (pk[i] <> TK_VARIANT) and (i <> starIdx) then
           raise TypeError.Create('cannot construct ' + cls^.NamePtr^
-            + ' through a class VALUE: its constructor was not widened to '
-            + 'variant parameters (compiler bug — PyClassUsedAsValue)');
+            + ' through a class VALUE: its constructor takes '
+            + pystr_of(pk[i]) + ' at position ' + pystr_of(Int64(i))
+            + ', which this path cannot marshal');
   end;
   inst := PXXObjAlloc(NativeInt(cls^.InstanceSize));
   PPointer(inst)^ := cls^.VMTPtr;            { stamp the dynamic class's VMT }
@@ -2658,7 +2672,12 @@ begin
   begin
     { through a typed proc VARIABLE, not a cast-and-call — the same shape
       PyHostCall's trampoline uses below. }
-    if starIdx >= 0 then
+    if strCtor then
+    begin
+      sp1 := TSPr1(mi^.Code);
+      sp1(inst, pystr_of(av[0]));
+    end
+    else if starIdx >= 0 then
       case starIdx of
         1: begin vs1 := TVPrS1(mi^.Code); vs1(inst, star); end;
         2: begin vs2 := TVPrS2(mi^.Code); vs2(inst, av[0], star); end;

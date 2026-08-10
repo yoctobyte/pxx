@@ -19,3 +19,7 @@ A 11
 v = 7
 more 7
 5
+B 40
+A 7
+typename: A
+exc     : Err boom

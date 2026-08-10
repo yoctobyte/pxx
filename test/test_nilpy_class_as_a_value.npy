@@ -154,3 +154,36 @@ class Only:
 tbl = {"x": Only}
 o2 = tbl["x"](5)
 print(o2.n)
+
+
+# --- the shapes bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses lists ---
+# Its `for cls in [A]` segfault is the `for cv in [A]` case above; these are the
+# rest, each of which was a compile error or a crash when that ticket was filed.
+
+# a class RETURNED from a def. `return B` is the class ITSELF, so the def's
+# result must infer VARIANT — a tyClass result hands the caller a variant to
+# read as an object pointer and it dies at the first use, not at the return.
+def gives():
+    return B
+
+
+def takes(t, n):
+    return t(n)
+
+
+kg = gives()
+o = kg(4)
+o.show()
+o = takes(A, 7)
+o.show()
+print("typename:", type(o).__name__)
+
+# an EXCEPTION subclass reached as a value constructs through the
+# Exception.Create(msg) it inherits — a real signature, marshalled as such
+class Err(Exception):
+    pass
+
+
+ke = Err
+o = ke("boom")
+print("exc     :", type(o).__name__, str(o))
