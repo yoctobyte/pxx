@@ -60,6 +60,37 @@ Affected: `__crtl_exp`, `__crtl_log2`, `__crtl_log10`, `__crtl_sin`,
 That is the visible proof the rule works. (That half is Track C file-ownership —
 `lib/crtl` — so land the compiler rule under A first, then the cleanup.)
 
+## The rule costs no capability — the override already exists
+
+> "plus, programmers, if they insist, can do it anyways.. from pascal, just
+> import 'math.c' and use _those_ functions. there is no conflict." — user
+
+This is what makes the hard precedence safe to adopt. Own-language-first is the
+DEFAULT, not a wall: a programmer who genuinely wants the other language's
+implementation names the file explicitly and gets it.
+
+Already supported today — `parser.inc:29759` recognises a `.c` / `.h` extension
+in a quoted `uses` path and compiles that unit:
+
+```pascal
+uses './math.c';     { C's exp, not Pascal's Exp }
+```
+
+And there is no conflict to arbitrate in that case *because the programmer named
+the unit*. The precedence rule exists to settle an ambiguity; an explicit path
+removes the ambiguity rather than losing to it.
+
+So the full design is: **implicit resolution prefers your own language; explicit
+import overrides it.** Nothing becomes unreachable — it just has to be asked for
+by name, which is the right shape for "I know these two differ and I want that
+one".
+
+Caveat for whoever writes the test: the explicit-path form has a known landmine
+of its own — a `uses './x.c'` whose BASENAME collides with the enclosing unit's
+name is silently dropped with no diagnostic
+(`bug-c-uses-path-basename-collides-with-enclosing-unit-name`). Don't name the
+fixture `math.pas`.
+
 ## Why the `__pxx_*` PAL entries are NOT a counter-example
 
 The earlier U ticket worried that the rule would break the PAL: `__pxx_open`
