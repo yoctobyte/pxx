@@ -2,8 +2,10 @@
 track: B
 prio: 50
 type: feature
-blocked-by: [feature-nilpy-import-a-py-module-from-the-library-path]
+blocked-by: [feature-nilpy-import-a-py-module-from-the-library-path, bug-nilpy-text-class-name-binds-the-rtl-file-record]
 summary: "Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect"
+status: working
+owner: claude-B
 ---
 
 # Rewrite `tkhtmlview` in NilPy
@@ -84,3 +86,56 @@ Measured, with the identical file working as a sibling and failing from
 (its Track N half is already fixed, so this is the last blocker — see
 [[bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity]]).
 Build with `$(PXX_STABLE)`; never rebuild the compiler under Track B.
+
+## 2026-08-10 (Track B) — port ATTEMPTED; blocked at its core, on a second thing
+
+Claimed and started. The prerequisite this ticket already names
+([[feature-nilpy-import-a-py-module-from-the-library-path]]) was re-verified by
+probe first, not read off the board: a `.py` in `lib/pcl/` still fails `import`
+while the identical file as a sibling prints `from-lib-pcl`. So placement is
+still blocked — but that one was known, and it only stops the file from being
+*shipped*, not from being *written*. Development proceeded as a sibling, which
+works.
+
+**A second blocker was found, and this one stops the code itself:**
+[[bug-nilpy-text-class-name-binds-the-rtl-file-record]]. NilPy binds the class
+name `Text` to `lib/rtl/textfile.pas`'s `Text = record` — Pascal's FILE type —
+in exactly the two positions a widget library needs: an instance attribute and a
+base class. `Canvas` and `Scrollbar` in the same positions are fine, which is
+the control that makes it a name collision rather than a façade defect.
+
+**Both candidate designs die on it, which is why this is not writable around:**
+
+- *Frame containing a Text* (the old `.pas`'s shape): the attribute falls back
+  to dynamic, so `self.bar.config(command=self.text.yview)` — the canonical
+  scrollbar wiring — raises `AttributeError` at run time. Direct calls work;
+  passing a bound method as a VALUE does not.
+- *Subclassing Text* (real tkhtmlview's actual shape,
+  `HTMLScrolledText(ScrolledText)` → `Text`): `class H(tk.Text)` inherits the
+  file record, so `H` has no `insert`. `class G(tk.Canvas)` works.
+
+Per the platonic-code rule the natural spelling stays and the ticket is filed;
+**no half-port was committed**. A one-way-wired scrollbar would look finished and
+scroll wrongly, which is the silent-failure trade this repo keeps refusing.
+
+`blocked-by:` now carries both.
+
+### Banked so the port is short once unblocked
+
+- **`from tkinter import Text` is NOT the fix.** It silences the compile error
+  and leaves the attribute dynamic, i.e. it converts a loud failure into the
+  run-time one. Do not reach for it.
+- **A real façade gap was found and FIXED on the way** (Track B, `lib/pcl`,
+  independent of the above): `Text` had no `yview` / `xview` / `yview_scroll` at
+  all, though `Canvas` has carried them since it was written — so the canonical
+  scrolled-**text** pair could never have worked even without the name
+  collision. Verified from Pascal, where a missing method is a hard compile
+  error, with a bogus-method control to prove the check was not blind.
+- **The error message points at the wrong widget.** The failure reads
+  `AttributeError: 'Scrollbar' object has no attribute 'set'` when the offending
+  expression is `self.text.yview` in the other argument of the same statement.
+  `Scrollbar.set` is healthy. Recorded on the bug ticket; expect to lose time to
+  it otherwise.
+- The renderer itself (the 398 lines of entity/whitespace/tag handling) is a
+  straight transliteration and hit **no** gaps — the blockers are all in the
+  three lines that build and wire the widget.

@@ -329,6 +329,16 @@ type
       what "paste, then put the caret at the top" is made of }
     procedure see(const idx: AnsiString);
     procedure mark_set(const markName, idx: AnsiString);
+    { The other half of the scrollbar wiring. A scrolled Text is written
+      `sb.config(command=text.yview)` + `text.configure(yscrollcommand=sb.set)`,
+      and Canvas has carried these since it was written — Text never did, so the
+      canonical scrolled-TEXT pair raised `'Text' object has no attribute
+      'yview'` at the moment Tk first drove the scrollbar. It reached the user as
+      `'Scrollbar' object has no attribute 'set'`, which points at the healthy
+      half of the pair. Found porting tkhtmlview. }
+    procedure yview(const args: AnsiString);
+    procedure yview_scroll(n: Integer; const what: AnsiString);
+    procedure xview(const args: AnsiString);
   end;
 
   { An image Tk can draw on a canvas. THE SUBSET: `PhotoImage(data=<base64
@@ -1623,6 +1633,21 @@ end;
 procedure Text.event_generate(const sequence: AnsiString);
 begin
   TkEval('event generate ' + path + ' ' + sequence);
+end;
+
+procedure Text.yview(const args: AnsiString);
+begin
+  TkEval(path + ' yview ' + args);
+end;
+
+procedure Text.yview_scroll(n: Integer; const what: AnsiString);
+begin
+  TkEval(path + ' yview scroll ' + TkiIntStr(n) + ' ' + what);
+end;
+
+procedure Text.xview(const args: AnsiString);
+begin
+  TkEval(path + ' xview ' + args);
 end;
 
 { ---- Canvas -------------------------------------------------------------- }
