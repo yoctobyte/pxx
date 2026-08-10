@@ -105,9 +105,26 @@ unlocked heap under real concurrency. Bias the scan toward firing.
    model of a build is the kind of thing that surprises someone at 2am. A
    warning line ("threading detected in <unit>, recompiling with --threadsafe")
    costs nothing and keeps the build honest.
-3. **Should it be opt-in** (`--threadsafe=auto`) rather than default? That keeps
-   MCU and size-critical builds from silently gaining lock paths, which is the
-   whole reason the flag is opt-in. Probably yes.
+3. ~~Should it be opt-in (`--threadsafe=auto`) rather than default?~~
+   **DECIDED, user 2026-08-10: yes, `--threadsafe=auto`, and the default stays
+   OFF.**
+
+   > "i sortof agree that threadsafe=auto instead of a default OFF (default
+   > should never be ON) is a good choice" — user
+
+   So the flag is three-state, and auto is *itself* opt-in:
+
+   | invocation | behaviour |
+   | --- | --- |
+   | *(nothing)* | OFF. The gates error exactly as today. |
+   | `--threadsafe=auto` | lex-time detection; restart with threading on if a signal is found |
+   | `--threadsafe` | ON unconditionally, as today |
+
+   The principle behind it, stated by the user and worth keeping: **a flag that
+   changes the runtime model must never default to ON.** Auto-detection is a
+   convenience for someone who has asked for it, not a behaviour that appears
+   under a build that did not. That is what keeps MCU and size-critical builds
+   from silently gaining lock paths.
 4. **Interaction with the MCU targets** — `--threadsafe` is x86-64/i386/
    aarch64/arm32 only (compiler.pas:718). On xtensa/riscv32 the gate must keep
    erroring, not attempt a restart that cannot succeed.
