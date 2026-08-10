@@ -66,7 +66,7 @@ treating them separately.
 in the other eleven shards.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit a3a07dbaf.
 
 ## Resolution (2026-08-10) — already fixed at HEAD by intervening crtl work
 
