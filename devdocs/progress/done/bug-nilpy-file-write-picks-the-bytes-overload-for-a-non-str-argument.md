@@ -68,7 +68,7 @@ tag. Do NOT simply swap the declaration order — that re-breaks the bytes case 
 the same silent way.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 1b9299b1e.
 
 ## Resolution (2026-08-10) — the general repair, not the `_any` fallback
 
