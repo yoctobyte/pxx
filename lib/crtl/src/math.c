@@ -823,7 +823,11 @@ double acos(double x) {
   return w.hi + w.lo;
 }
 
-double fabs(double x) { return x < 0.0 ? -x : x; }
+/* fabs CLEARS the sign bit — it is not `negate if less than zero`. The two
+   differ on exactly one value: -0.0 is not `< 0.0`, so the comparison form
+   returned -0.0 where C requires +0.0. Same lesson as floor/ceil below, applied
+   to the rest of the file this time. */
+double fabs(double x) { return crtl_signbit_d(x) ? -x : x; }
 
 /* trunc/round: Pascal's Trunc/Round are compiler INTRINSICS (lowered inline,
    no linkable symbol), so unlike sqrt/floor/ceil there is nothing for the
@@ -831,10 +835,19 @@ double fabs(double x) { return x < 0.0 ? -x : x; }
    as `undefined symbol` (bug-c-math-round-undefined-symbol). Pure-C impls;
    note C round() is half-AWAY-FROM-ZERO, not Pascal Round's nearest-even.
    The (long long) cast truncates toward zero (verified against the C
-   frontend's double->int64 lowering); |x| >= 2^63 is out of scope, like the
-   other loop-form helpers here. */
+   frontend's double->int64 lowering).
+
+   The |x| >= 2^52 guard and the -0.0 restore are the SAME two corrections
+   floor/ceil carry below, and they belong on every function in this family:
+   past 2^52 the cast is undefined (it answered -2^63 for 1e300) and every
+   double that large is already integral, so the answer is the argument; and
+   the cast round trip drops the sign of zero, which C preserves. */
 double trunc(double x) {
-  return (double)(long long)x;
+  double t;
+  if (x != x || x > 9007199254740992.0 || x < -9007199254740992.0) return x;
+  t = (double)(long long)x;
+  if (t == 0.0 && crtl_signbit_d(x)) t = -0.0;
+  return t;
 }
 /* floor/ceil have real bodies here now. They used to be DECLARED with no
    definition, binding instead to the Pascal Math.Floor/Ceil, which worked only
@@ -870,9 +883,21 @@ double ceil(double x) {
   if (t == 0.0 && (x < 0.0 || crtl_signbit_d(x))) t = -0.0;
   return t;
 }
+/* round: half AWAY FROM ZERO, and mode-independent.
+
+   Compares the fraction against 0.5 rather than casting `x + 0.5`. The additive
+   form has its own rounding bug independent of the sign/range ones: for
+   x = 0.49999999999999994 (the double just below 0.5) the sum rounds UP to
+   exactly 1.0, so the cast answers 1 where C requires 0. Computing x - trunc(x)
+   never adds anything and cannot round. */
 double round(double x) {
-  if (x >= 0.0) return (double)(long long)(x + 0.5);
-  return (double)(long long)(x - 0.5);
+  double t;
+  if (x != x || x > 9007199254740992.0 || x < -9007199254740992.0) return x;
+  t = trunc(x);
+  if (x >= 0.0) { if (x - t >= 0.5) t += 1.0; }
+  else          { if (t - x >= 0.5) t -= 1.0; }
+  if (t == 0.0 && crtl_signbit_d(x)) t = -0.0;
+  return t;
 }
 
 /* fmod: exact truncated remainder. Scale |y| up under |x| by powers of two and
@@ -968,13 +993,18 @@ double sqrt(double x) {
 /* rint family: round to nearest, ties to EVEN (the default FE_TONEAREST mode —
    crtl has no fenv, the mode is fixed). quickjs's js_math needs lrint. */
 double rint(double x) {
-  double f, d;
+  double f, d, t;
+  if (x != x || x > 9007199254740992.0 || x < -9007199254740992.0) return x;
   f = floor(x);
   d = x - f;
-  if (d > 0.5) return f + 1.0;
-  if (d < 0.5) return f;
-  if (fmod(f, 2.0) == 0.0) return f;   /* tie: pick the even neighbour */
-  return f + 1.0;
+  if (d > 0.5) t = f + 1.0;
+  else if (d < 0.5) t = f;
+  else if (fmod(f, 2.0) == 0.0) t = f;   /* tie: pick the even neighbour */
+  else t = f + 1.0;
+  /* rint(-0.5) ties to even = zero, and that zero is NEGATIVE: the result
+     carries the sign of the argument, not of the neighbour it rounded to. */
+  if (t == 0.0 && crtl_signbit_d(x)) t = -0.0;
+  return t;
 }
 double nearbyint(double x) { return rint(x); }
 long lrint(double x) { return (long)rint(x); }
@@ -992,8 +1022,13 @@ long long llround(double x) { return (long long)round(x); }
    `*(unsigned long*)&double` punning path is unreliable here). */
 double frexp(double x, int *e) {
   int n = 0;
-  double a = x < 0.0 ? -x : x;
-  if (x == 0.0) { *e = 0; return 0.0; }
+  double a = fabs(x);
+  /* Zero returns X, not 0.0 — frexp(-0.0) is -0.0, and `return 0.0` dropped the
+     sign for the one input where `x == 0.0` is true but the sign bit is set.
+     NaN and infinity return the argument too, and that exit is not cosmetic:
+     `while (a >= 1.0) a *= 0.5` never terminates for an infinity, so the old
+     code HUNG rather than answering wrongly. */
+  if (x == 0.0 || isnan(x) || isinf(x)) { *e = 0; return x; }
   while (a >= 1.0) { a = a * 0.5; n++; }
   while (a <  0.5) { a = a * 2.0; n--; }
   *e = n;
@@ -1007,10 +1042,21 @@ double ldexp(double x, int e) {
   return x;
 }
 
+/* modf: split into integral and fractional parts, BOTH carrying the sign of x.
+   The old body cast through `long` (not even long long) and rebuilt the sign by
+   negating, which lost -0.0 on every negative input whose fraction vanished and
+   went undefined past 2^63. Riding trunc() inherits its guard and its sign
+   restore, so this function no longer has range logic of its own. */
 double modf(double x, double *ip) {
   double i;
-  if (x < 0.0) i = -(double)((long)(-x)); else i = (double)((long)x);
+  if (isnan(x)) { *ip = x; return x; }
+  if (x > 9007199254740992.0 || x < -9007199254740992.0) {
+    *ip = x;                                   /* already integral (or inf) */
+    return crtl_signbit_d(x) ? -0.0 : 0.0;
+  }
+  i = trunc(x);
   *ip = i;
+  if (x == i) return crtl_signbit_d(x) ? -0.0 : 0.0;
   return x - i;
 }
 

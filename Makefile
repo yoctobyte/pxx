@@ -8173,6 +8173,11 @@ lib-test: pxx-stable-check
 	/tmp/crtl_longjmp_as_value; test "$$?" = "42"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_lround.c /tmp/cmath_lround
 	test "$$(/tmp/cmath_lround)" = "$$(printf '0.5 lround=1 llround=1 lrint=0\n1.5 lround=2 llround=2 lrint=2\n2.5 lround=3 llround=3 lrint=2\n3.5 lround=4 llround=4 lrint=4\n-0.5 lround=-1 llround=-1 lrint=0\n-1.5 lround=-2 llround=-2 lrint=-2\n-2.5 lround=-3 llround=-3 lrint=-2\n2.7 lround=3 llround=3 lrint=3\n-2.7 lround=-3 llround=-3 lrint=-3\n0.0 lround=0 llround=0 lrint=0')"
+	# The integral-part family at the signed-zero and 2^52 boundaries. The
+	# frexp(inf) row is a LIVENESS check — the old body looped forever there, so
+	# a regression shows up as this target hanging, not as a mismatch.
+	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_integral_family.c /tmp/cmath_integral_family
+	test "$$(/tmp/cmath_integral_family)" = "$$(printf 'fabs(-0)=+0\ntrunc(-0.5)=-0\nround(-0)=-0\nrint(-0.5)=-0\nfrexp(-0)=-0 e=0\nmodf(-1) fr=-0 ip=-1\ntrunc(1e300)=+1e+300\nround(-1e300)=-1e+300\nmodf(1e300) fr=+0 ip=+1e+300\nround(0.49999999999999994)=+0\nfrexp(inf)=+inf')"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_clock_monotonic.c /tmp/crtl_clock_monotonic
 	/tmp/crtl_clock_monotonic; test "$$?" = "42"
 	# poll() over a SET (not a loop over a per-handle poll), and the LINKAGE that
