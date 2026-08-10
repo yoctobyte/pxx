@@ -161,3 +161,41 @@ until the entry stub can run them.
 and the fix there makes it a few lines here — a handler array, LIFO order,
 `exit()` and the stub both draining it. `test/ae.c`-style repro is three lines
 and gcc's output is the expectation.
+
+## 2026-08-10 (Track B) — blocker FIXED upstream; this now waits on a PIN, not on code
+
+Track C landed the entry-stub half ([[feature-c-entry-stub-must-run-finalizers]]):
+`EmitCallProc` resolves `__pxx_run_finalizers` as a forward, so it is
+target-independent, and the only per-target work was preserving `main`'s return
+value across the call — wired for all five targets. Proven by giving `pxxcio` a
+temporary finalization section and running a C program that only `return 3`s:
+`main-returns / FINALIZER-RAN / exit=3`. The probe file was reverted; all 385 C
+tests are identical vs pinned.
+
+**So the crtl half is a few lines — but Track B cannot gate it yet.** Track B
+builds with `$(PXX_STABLE)` = `stable_linux_amd64/default/pinned`, and the entry
+stub is emitted by *whichever compiler builds the program*. The fix is not in the
+pinned binary, so an `atexit` written today would be tested against a stub that
+still does not drain handlers, and would appear to fail for a reason that is not
+its own.
+
+This is exactly the partial-`atexit` hazard recorded above, arriving from the
+other side: previously the missing piece was the stub, now it is the pin. **Do
+not ship against an unpinned enabler** — the failure mode is a handler table
+that looks implemented and silently never runs, which is worse than today's loud
+`undefined symbol: atexit`.
+
+Order of operations for whoever takes this:
+
+1. Track A pushes the entry-stub fix and runs `make pin` (`stabilize-fast`, then
+   commit `stable_linux_amd64/**`).
+2. Confirm the pin actually carries it — the three-line `return`-from-main repro
+   with a registered handler, built with `$(PXX_STABLE)`, not with a local HEAD
+   build. Track B never rebuilds the compiler, so the pin IS the ground truth.
+3. Then the crtl work: handler array, LIFO drain, both `exit()` and the stub
+   path. gcc is the expectation; assert **no `DT_NEEDED`** (`readelf -d`), which
+   is the property this whole ticket exists for.
+
+Note the ticket's own scope line stays honest: the **environ** half
+([[bug-...-environ]] direction) is NOT solved by this — it needs an *init*
+phase, and what landed is the *fini* phase.
