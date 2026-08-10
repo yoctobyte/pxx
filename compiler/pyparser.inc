@@ -9706,6 +9706,101 @@ begin
   Result := PyPromoteOverloadByKwAt(ci, mmi, TokPos - 1, mname);
 end;
 
+{ Among a class's SAME-NAME, SAME-ARITY method overloads, the one whose
+  parameter types actually fit the arguments written. Returns -1 to leave the
+  caller's choice alone — which is what happens whenever there is a single
+  candidate, or no candidate scores strictly better than the current pick.
+
+  FindUMethArity resolves by name and arity only, so overloads distinguished
+  PURELY by argument type always collapsed to whichever was DECLARED FIRST.
+  That is the type half of the known landmine whose arity half FindUMethArity
+  fixed: `h.write(t)` for an unannotated `t` took TPyFile.write(TPyBytes) and
+  raised "expected an object argument, got str" for the ordinary Python
+  spelling, with str(...) around it as the only workaround
+  (bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument).
+
+  Scoring is deliberately conservative — an EXACT type-kind equality only, one
+  point per argument. It is not an assignability lattice: the goal is to
+  separate overloads that differ by argument type, not to re-litigate calls
+  that already resolve. A tie keeps the incumbent, so a single-overload call
+  and every previously-working call are bit-for-bit unchanged.
+
+  argsHead is the AN_ARG chain INCLUDING Self at position 0, matching how the
+  caller built it; explicit argument i therefore lines up with parameter i+1. }
+{ How many of the call's arguments EXACTLY match proc pIdx's parameter types.
+  argsHead is the AN_ARG chain INCLUDING Self at 0, so explicit argument i
+  lines up with parameter i+1. Exact type-kind equality only — see the caller. }
+function PyOverloadArgTypeScore(pIdx, argsHead, nExplicit: Integer): Integer;
+var j, an, tk: Integer;
+begin
+  Result := 0;
+  an := ASTRight[argsHead];          { skip Self }
+  j := 1;
+  while (an <> -1) and (j <= nExplicit) do
+  begin
+    if j >= MAX_PROC_PARAMS then Break;
+    if j > Procs[pIdx].ParamCount - 1 then Break;
+    tk := ASTTk[ASTLeft[an]];
+    if tk = Ord(Procs[pIdx].Params[j].TypeKind) then Inc(Result);
+    an := ASTRight[an];
+    Inc(j);
+  end;
+end;
+
+{ Among a class's SAME-NAME, SAME-ARITY method overloads, the one whose
+  parameter types actually fit the arguments written. Returns -1 to leave the
+  caller's choice alone — which is what happens whenever there is a single
+  candidate, or none scores strictly better than the current pick.
+
+  FindUMethArity resolves by name and arity only, so overloads distinguished
+  PURELY by argument type always collapsed to whichever was DECLARED FIRST.
+  That is the type half of the known landmine whose arity half FindUMethArity
+  fixed: `h.write(t)` for an unannotated `t` took TPyFile.write(TPyBytes) and
+  raised "expected an object argument, got str" for the ordinary Python
+  spelling, with str(...) around it as the only workaround
+  (bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument).
+
+  Scoring is deliberately conservative — exact type-kind equality, one point
+  per argument, NOT an assignability lattice. The goal is to separate overloads
+  that differ by argument type, not to re-litigate calls that already resolve.
+  A tie keeps the incumbent, so single-overload calls and every
+  previously-working call are unchanged. }
+function PyPickOverloadByArgTypes(ci: Integer; const mname: AnsiString;
+  nExplicit, argsHead, curMmi: Integer): Integer;
+var base, cnt, curr, i, mpi, sc, bestSc, bestMmi, want: Integer;
+    lo, nm2: AnsiString;
+begin
+  Result := -1;
+  if (argsHead < 0) or (nExplicit <= 0) or (curMmi < 0) then Exit;
+  nm2 := mname;
+  lo := ULower(nm2);
+  want := nExplicit + 1;             { Self at 0 }
+  bestSc := PyOverloadArgTypeScore(UMthProc_[curMmi], argsHead, nExplicit);
+  bestMmi := -1;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr];
+    cnt := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, mname, lo) then
+      begin
+        mpi := UMthProc_[base + i];
+        if ProcArityMatches(mpi, want) then
+        begin
+          sc := PyOverloadArgTypeScore(mpi, argsHead, nExplicit);
+          if sc > bestSc then begin bestSc := sc; bestMmi := base + i; end;
+        end;
+      end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
+  end;
+  Result := bestMmi;
+end;
+
 function PyPromoteProcOverloadByKwAt(procIdx, firstParam, parenTok: Integer): Integer;
 { Generalization of PyPromoteOverloadByKwAt to the free / unit-qualified PROC
   table (Procs[]/ProcCount) rather than one class's UMeth set —
@@ -10045,6 +10140,17 @@ begin
   { pick the overload by the argument count written, then fill the callee's
     remaining DEFAULTED parameters, exactly as the ordinary call path does }
   k := FindUMethArity(ci, mname, n);
+  if k >= 0 then mmi := k;
+  { ...then, among the SAME-ARITY overloads, prefer the one whose parameter
+    TYPES fit the arguments actually written. FindUMethArity resolves by name
+    and arity only, so a set of overloads distinguished purely by argument type
+    always resolved to whichever was DECLARED FIRST — `f.write(t)` on an
+    unannotated parameter took TPyFile.write(TPyBytes) and raised "expected an
+    object argument, got str" for the ordinary Python spelling
+    (bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument).
+    A single-candidate call cannot change here, and a tie keeps the first
+    match, so this only ever moves the case that was already ambiguous. }
+  k := PyPickOverloadByArgTypes(ci, mname, n, selfArg, mmi);
   if k >= 0 then mmi := k;
   mpi := UMthProc_[mmi];
   { ARITY. FindUMethArity FALLS BACK to the plain first-name-match when no

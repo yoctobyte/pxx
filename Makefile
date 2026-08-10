@@ -1435,6 +1435,10 @@ test-nilpy: $(COMPILER)
 	# close()/readlines() on a read-mode handle (still a TPyList under the read-slurp model)
 	./$(COMPILER) test/test_nilpy_file_close_readlines.npy /tmp/test_nilpy_file_closerl26
 	test "$$(/tmp/test_nilpy_file_closerl26)" = "$$(printf '3\none\ntwo\nthree')"
+	# f.write(x) reaches the STRING overload whenever x is a str at RUN time,
+	# not only when it is statically one (overload pick by argument type)
+	./$(COMPILER) test/test_nilpy_write_overload_by_arg_type.npy /tmp/test_nilpy_wovl26
+	test "$$(/tmp/test_nilpy_wovl26)" = "$$(printf 'via-param\nxconcat\nfmt!\nlocal?\ndirect-literal\nbytes-arg')"
 	# open() answers ONE class in every mode: reuse of a name across w/a/r, the
 	# silent .write-to-a-widened-read-class data loss, iteration, readlines()
 	./$(COMPILER) test/test_nilpy_open_one_class_every_mode.npy /tmp/test_nilpy_open_one_class26

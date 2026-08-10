@@ -473,6 +473,17 @@ type
       bytes -- the file was created and left empty, with no error
       (bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory). }
     function write(const s: AnsiString): Int64; overload;
+    { The argument's STATIC type is unknown — `def wr(t): h.write(t)`, an
+      unannotated parameter, a concatenation, a `%` format, anything held in a
+      variant. The call site picks a method overload by name and ARITY, so
+      without a variant-typed entry a dynamic argument landed on whichever
+      overload was declared first (TPyBytes), passed the string's handle as a
+      buffer and raised "expected an object argument, got str" — for the
+      ordinary Python spelling, with `str(...)` around it as the only
+      workaround. Dispatches on the runtime TAG instead, the same shape
+      pystr_startswith_any uses for the same reason.
+      bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument }
+    function write(const v: Variant): Int64; overload;
     procedure seek(pos: Int64); overload;
     procedure seek(pos: Int64; whence: Int64); overload;
     function tell: Int64;
@@ -10877,6 +10888,25 @@ begin
     encode step, matching how pyopen treats latin-1/utf-8 of ASCII as identity }
   if Length(s) = 0 then begin Result := 0; Exit; end;
   Result := PyPalWrite(FFd, @s[1], Length(s));
+end;
+
+function TPyFile.write(const v: Variant): Int64;
+var o: Pointer;
+begin
+  if pyvar_is_strtag(v) then
+    Result := Self.write(pystr_of(v))
+  else if pyvar_is_objtag(v) then
+  begin
+    o := pyvarobj(v);
+    if (o <> nil) and (TObject(o) is TPyBytes) then
+      Result := Self.write(TPyBytes(o))
+    else
+      raise TypeError.Create('write() argument must be str or bytes');
+  end
+  else
+    { an int/float/bool/None argument is a TypeError in CPython too, and saying
+      so beats writing its decimal spelling and looking like it worked }
+    raise TypeError.Create('write() argument must be str or bytes');
 end;
 
 procedure TPyFile.seek(pos: Int64);

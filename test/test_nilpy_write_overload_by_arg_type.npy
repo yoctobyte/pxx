@@ -1,0 +1,67 @@
+# f.write(x) must reach the STRING overload whenever x is a string at run time,
+# not only when it is statically an AnsiString.
+#
+# TPyFile declares write(TPyBytes) FIRST and write(AnsiString) second, and the
+# method call site picked overloads by name and ARITY only — so any argument
+# whose static type was not AnsiString (an unannotated def parameter, a
+# concatenation, a % format, a local holding one) landed on the bytes overload,
+# passed the string's handle as a buffer, and raised
+#   TypeError: expected an object argument, got str
+# for the ordinary Python spelling. str(...) around it was the workaround, and
+# it is not one a user can guess.
+#
+# Every write below goes through a shape whose static type is NOT a str; the
+# direct-literal and the b"..." rows are the controls that already worked and
+# must not move — swapping the declaration order would have broken the second.
+# bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument
+P = "/tmp/pxx_test_write_overload.txt"
+
+def rd():
+    f = open(P)
+    s = f.read()
+    f.close()
+    return s
+
+def wr(t):
+    h = open(P, "w")
+    h.write(t)              # an unannotated parameter — the ordinary case
+    h.close()
+
+wr("via-param")
+print(rd())
+
+def wr_concat(t):
+    h = open(P, "w")
+    h.write("x" + t)        # a concatenation
+    h.close()
+
+wr_concat("concat")
+print(rd())
+
+def wr_fmt(t):
+    h = open(P, "w")
+    h.write("%s!" % t)      # a % format
+    h.close()
+
+wr_fmt("fmt")
+print(rd())
+
+def wr_local(t):
+    s = "%s?" % t           # ...through a local first
+    h = open(P, "w")
+    h.write(s)
+    h.close()
+
+wr_local("local")
+print(rd())
+
+# controls: the two shapes that always resolved correctly
+h = open(P, "w")
+h.write("direct-literal")
+h.close()
+print(rd())
+
+h = open(P, "wb")
+h.write(b"bytes-arg")
+h.close()
+print(rd())

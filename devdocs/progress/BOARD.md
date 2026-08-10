@@ -66,13 +66,13 @@ lives in git, not in a timestamp._
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |
 | bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
 | bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | — |
-| bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument | N | 55 | bug | `f.write(x)` picks the BYTES overload whenever x is not statically a str | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
 | bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
 | bug-nilpy-list-sort-method-missing | N | 50 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
+| bug-nilpy-method-chained-on-open-result-fails-to-parse | N | 50 | bug | `open(p).read().strip()` fails with a bare 'unexpected token'. ONE method off open()'s result parses fine and so does a two-deep chain off any ordinary value — it is specifically the SECOND link of a chain rooted at the open() intrinsic that the parser drops | — |
 | bug-nilpy-multi-parameter-lambdas-are-still-interpreted | N | 45 | bug | A lambda with 2+ parameters still lowers to a pyeval SOURCE closure and is re-walked per call — the lift is gated on nParams <= 1 because the bound-fn bridge passes one argument. Correct answers, ~7x the per-call cost. | — |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later | N | 50 | bug | A name bound in a block by a METHOD CALL is "undefined" in a later assignment | — |
@@ -404,9 +404,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1603)
+## done (1604)
 
-1603 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1604 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (32)
 
@@ -467,7 +467,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
-- [p 55] [N] bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - [p 55] [U] decide-ismultithread-runtime-flag-vs-compile-time-mode
@@ -492,6 +491,7 @@ lives in git, not in a timestamp._
 - [p 50] [A] bug-a-nd-array-function-result-indexes-the-wrong-slot
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [N] bug-nilpy-list-sort-method-missing
+- [p 50] [N] bug-nilpy-method-chained-on-open-result-fails-to-parse
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
 - [p 50] [N] bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
 - [p 50] [N] bug-nilpy-text-mode-read-n-returns-bytes-not-str
