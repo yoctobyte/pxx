@@ -2,7 +2,7 @@
 track: A
 prio: 40
 type: bug
-blocked-by: []
+blocked-by: [decide-shift-operator-promotion-width]
 ---
 
 # `shr` on a 32-bit operand shifts at 32 bits; FPC promotes to 64 first
@@ -43,3 +43,24 @@ this row, with a comment saying so, so neither is blessed by a passing test.
 `-x shr 1` matching FPC for `x: Integer`, without changing the `Int64` row that
 already agrees, and with the C frontend's `>>` (arithmetic on signed, gcc-
 verified) untouched.
+
+## Update 2026-08-10 — the measurement this ticket asked for
+
+> "That wants its own measurement — starting with whether FPC promotes for
+> `shl`, `and`, `or` and `div` in the same way, or only for `shr`."
+
+Done, at `5fb29abbc`. Swept every integer operator against `fpc -O1` in three
+operand forms (constant fold / Integer variable / Int64 control):
+**`and`, `or`, `xor`, `div`, `not`, `+`, `-`, `*` all AGREE**, and the Int64
+row has never disagreed. Only `shl` and `shr` on a 32-bit operand diverge.
+
+`shl` diverges too, and not the same way `shr` does: FPC's `8 shl 40` is
+**2048** — a 32-bit shift with the count masked to 5 bits — while its constant
+fold `1 shl 40` is the full **2^40**. pxx answers **0** for both (64-bit
+compute truncated to 32), which is a silent trap in its own right. So FPC
+widens the operand for `shr` but masks the count for `shl`, and its folder
+disagrees with its own runtime path.
+
+That makes this a semantics choice rather than a fix, so it is now blocked on
+**[[decide-shift-operator-promotion-width]]**, which carries the table, the
+four options and a recommendation.
