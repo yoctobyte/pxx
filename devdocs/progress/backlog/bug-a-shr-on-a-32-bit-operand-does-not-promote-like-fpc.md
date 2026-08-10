@@ -2,7 +2,7 @@
 track: A
 prio: 40
 type: bug
-blocked-by: [decide-shift-operator-promotion-width]
+blocked-by: []
 ---
 
 # `shr` on a 32-bit operand shifts at 32 bits; FPC promotes to 64 first

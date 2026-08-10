@@ -2,8 +2,78 @@
 track: U
 prio: 45
 type: decision
+status: resolved
+resolved: 2026-08-10
 blocked-by: []
 ---
+
+
+## DECIDED 2026-08-10 — native width by default; copy FPC's bugs only under `--strict-fpc`
+
+**User's call.**
+
+> "seems both implementations are wrong. look, it depends on int type. and pascal
+> uses native int unless otherwise specified. so, pxx truncating to 32-bit is
+> wrong (unless we explicitely specified 32 bit). but, i'd also say, let FPC do
+> what they think is wrong or right, and (for now) we do what we think is wrong
+> or right, BUT, in strict_FPC mode we _will_ copy their bugs." — user
+
+### The rule
+
+1. **Default dialect: shifts happen at NATIVE width (64-bit on x86-64), fold and
+   runtime alike, with no truncation of the result.** One rule for `shl` and
+   `shr`, no constant-vs-variable split.
+2. **`--strict-fpc`: reproduce FPC exactly**, asymmetry and all — `shr` widens
+   the operand to 64, `shl` masks the count to 5 bits at 32-bit width, and the
+   constant folder keeps its own 64-bit answer. Explicitly "copy their bugs".
+
+### Why native, and where the principle actually bites
+
+Measured 2026-08-10: `Integer` is **4 bytes in both pxx and FPC** on x86-64
+(`LongInt`=4, `NativeInt`=8, `Int64`=8). So `var a: Integer` IS an explicit
+32-bit specification — the "native unless otherwise specified" principle does not
+override a declared type.
+
+Where it bites is the **untyped literal**: `1 shl 40` has no declared type, so it
+is native, and pxx answering **0** is simply wrong. That is the trap this fixes,
+and it is an everyday bitmask idiom.
+
+For a DECLARED 32-bit operand we still promote rather than truncate, because the
+alternative is a silent wrong value: a 64-bit computation truncated back to 32
+is how `1 shl 40` became 0 in the first place. Widening never loses information;
+truncating does.
+
+### What this costs in FPC agreement — less than expected
+
+| row | FPC | pxx after this change |
+| --- | --- | --- |
+| `1 shl 40` (const) | 1099511627776 | **1099511627776** — agrees |
+| `-8 shr 1` (const) | 9223372036854775804 | **9223372036854775804** — agrees |
+| `-a shr 1` (var, Integer) | 9223372036854775804 | **9223372036854775804** — agrees |
+| `a shl b` (8 shl 40) | 2048 (count masked mod 32) | 2^43 — **diverges** |
+| Int64 operands | — | agrees (unchanged) |
+
+So native width agrees with FPC on three of the four disputed rows. The single
+divergence is FPC's count-masking, which is the wart that its own constant folder
+already contradicts — and `--strict-fpc` reproduces it for anyone who needs it.
+
+### Scope
+
+Only `shl` / `shr` on a 32-bit operand. Measured 2026-08-10: `and`, `or`, `xor`,
+`div`, `not`, `+`, `-`, `*` all already agree with FPC in every operand form, and
+Int64 operands have never disagreed. **Nothing outside the two shift operators
+moves.**
+
+Nothing has to be un-blessed: `test/test_const_precedence.pas` deliberately
+asserts neither answer for this row.
+
+### Now unblocked
+
+[[bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc]] was blocked on this
+and becomes ordinary Track A work — with the note that its title is now slightly
+wrong: the fix is not "promote like FPC", it is "promote to native", which
+happens to agree with FPC on `shr`.
+
 
 # Decide: what width do `shl` / `shr` happen at for a 32-bit operand?
 
