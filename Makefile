@@ -2214,6 +2214,14 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_vpstr26 | head -1)" = "scalar  1 aa 2"
 	test "$$(/tmp/test_vpstr26 | head -5 | tail -1)" = "trunc   abcdef 6"
 	test "$$(/tmp/test_vpstr26 | head -7 | tail -1)" = "no ovr  22 abcdef"
+	# write(c:width) on a Char: x86-64 was the ONLY backend that dropped the
+	# field width (the four cross targets and FPC all pad), so the default
+	# target silently produced ragged columns.
+	./$(COMPILER) test/test_write_char_field_width.pas /tmp/test_wcw26
+	test "$$(/tmp/test_wcw26 | tail -1)" = "WRITE CHAR FIELD WIDTH OK"
+	test "$$(/tmp/test_wcw26 | head -3 | tail -1)" = "[    q]"
+	test "$$(/tmp/test_wcw26 | head -6 | tail -1)" = "[q][q]"
+	test "$$(/tmp/test_wcw26 | head -8 | tail -1)" = "   x   y"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed

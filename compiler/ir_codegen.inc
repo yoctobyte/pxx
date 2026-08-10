@@ -4285,7 +4285,25 @@ begin
         begin
           IREmitNode(valNode);
           if IntToTypeKind(IRTk[node]) = tyChar then
-            EmitwriteChar
+          begin
+            { Field width on a CHAR: `write(c:5)` / `write('a':3)` — a
+              one-character literal IS a Char. x86-64 was the ONLY backend that
+              dropped it: aarch64, arm32, i386 and riscv32 all pad, and FPC
+              pads, so the default target was the odd one out and the output was
+              silently unaligned. Pad to wid-1 spaces first, preserving the
+              character across the syscall (which clobbers rax).
+              bug-a-x86-64-write-ignores-a-field-width-on-a-char }
+            if wid > 1 then
+            begin
+              EmitB($50);                                      { push rax (the char) }
+              EnsureSpaces;
+              EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
+              MovRdxImm(wid - 1);
+              MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+              EmitB($58);                                      { pop rax }
+            end;
+            EmitwriteChar;
+          end
           else if not TypeSigned(IntToTypeKind(IRTk[node])) then
           begin
             if wid > 0 then EmitwriteUIntW(wid) else EmitwriteUInt;
