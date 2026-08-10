@@ -52,6 +52,36 @@ The `not isCtor` there is incidental, not a barrier: it arrived with
 bound methods, where a ctor genuinely is not one. (The other `not isCtor` guards
 nearby are about RETURN types and are legitimate — a ctor does not return.)
 
+## The rule, stated the way the language already works
+
+**If we can prove a static type, specialise. The moment we cannot prove it, the
+class is DIRTY and the parameter is promoted to a variant.** `cls = A` is simply
+a third way of losing the proof, alongside conflicting call sites and `setattr`.
+
+That is not a new rule and not a new mechanism — there is already a FAMILY of
+whole-module token scans that do exactly this, and pyparser.inc's own comments
+contrast them with each other:
+
+| scan | asks | effect |
+| --- | --- | --- |
+| `PyDynAttrEverAssigned` | does anything write `x.nm = ...`, or call `setattr` AT ALL? | attribute access goes dynamic |
+| `PyDefUsedAsValue` | is this def's name used as a bare value? | widen its params + result |
+| `PyMethodUsedAsValue` | is `<something>.nm` read without calling it? | widen its params + result |
+| **`PyClassUsedAsValue`** | **is this class's name used as a bare value?** | **widen its `__init__`** |
+
+Note how coarse the existing ones already are: `PyDynAttrEverAssigned` returns
+True if the token `setattr` appears anywhere in the module, for any name. The
+dirty flag is deliberately blunt, and the cost is boxing, not correctness.
+
+### The closed-world "cost" is not a cost
+
+The superseded U ticket listed "assumes whole-program compilation" as a strike
+against one of its options. It is not a new assumption: all three scans above
+are already whole-module and already load-bearing, and `PyDefUsedAsValue`'s own
+comment discusses the cross-module case explicitly. The genuine edge is
+`eval` on input unknown at compile time — and pxx is a compiler, so that edge is
+out of scope by construction, not by oversight.
+
 ## Plan, in landable stages
 
 1. **`PyClassUsedAsValue(name)`** — mirror `PyDefUsedAsValue`: scan
