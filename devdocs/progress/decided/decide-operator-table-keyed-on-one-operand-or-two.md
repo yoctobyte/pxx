@@ -144,3 +144,20 @@ accident of the lookup key.
 
 Whichever way: `Integer * TVec` must not become reachable while the table is
 keyed on one operand.
+
+### Scope note (user, 2026-08-10) — the Variant case is PASCAL-only in practice
+
+> "nilpy would first need to load a pascal library that uses operator
+> overloads.. it's all a bit niche [...] python has it's own way of operator
+> overloads, so we can sortof safely limit ourselves to pascal and assume python
+> will call nicely statically defined functions that uses those operators."
+
+NilPy does not use this table: its operators go through the dunder protocol
+(`PyFindDunder`), not Pascal `class operator` registration. So a Variant or
+promotable-int operand only reaches the second key when NilPy loads a PASCAL
+unit that overloads operators — a real but niche path.
+
+**Implement for Pascal operands first.** Get exact + record `RecName` matching
+right, keep the `Variant`-accepts-anything fallback because FPC allows the
+declaration, and do NOT build promotable-int or variant-payload ranking on
+speculation. Revisit if a real NilPy-over-Pascal-operators case appears.
