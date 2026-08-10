@@ -37,6 +37,26 @@ class App:
         # produce a garbage Tcl script, which hung the event loop)
         self.bar = tk.Scrollbar(root, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.bar.set)
+        # ...but a PLAIN CALLABLE in the same option gets Tk's OWN arguments.
+        # -yscrollcommand is called with `first last`, two fractions as strings.
+        # This used to Halt(1) at configure time with "a plain callable cannot
+        # receive Tk's scroll arguments yet"
+        # (feature-lib-tkinter-callable-options-with-args).
+        self.scrolled = tk.Canvas(root, width=50, height=50)
+        self.scrolled.configure(yscrollcommand=self.on_scroll)
+        # a LAMBDA in the same position, taking the same two arguments
+        self.scrolled2 = tk.Canvas(root, width=50, height=50)
+        self.scrolled2.configure(
+            yscrollcommand=lambda first, last: print(
+                "lambda scroll ok", first != "", last != ""))
+
+    def on_scroll(self, first, last):
+        # strings, because that is what Tcl has — convert if you want numbers,
+        # exactly as under CPython's tkinter. The ASSERTION is that two
+        # arguments arrived at all; the fractions themselves depend on the
+        # widget geometry the window manager hands out, so printing them would
+        # make the suite environment-sensitive for no extra coverage.
+        print("scroll ok", first != "", last != "")
 
     def on_lifted(self, event):
         print("lifted", event.width, event.height)
@@ -54,3 +74,10 @@ app.text.set("b")
 root.update()
 print("bbox", app.canvas.bbox("all"))
 print("hits", app.hits)
+# force the scrollable canvases to report a scroll position, which is what makes
+# Tk call -yscrollcommand
+app.scrolled.create_rectangle(1, 1, 500, 500)
+app.scrolled.configure(scrollregion="0 0 500 500")
+app.scrolled2.create_rectangle(1, 1, 500, 500)
+app.scrolled2.configure(scrollregion="0 0 500 500")
+root.update()

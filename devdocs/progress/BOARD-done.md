@@ -1214,6 +1214,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
 | feature-lib-reportlab-shim-pdftextobject | B | 45 | feature | reportlab shim: `PDFTextObject.setTextOrigin` (and whatever follows it) | — |
+| feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-lib-tkinter-facade-widening-canvas-items | B | 40 | feature | tkinter façade: item specs, StringVar traces, and what settings.py still needs | — |
 | feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
 | feature-library-test-suite | A+B | 50 | feature | Track B library test suite | — |

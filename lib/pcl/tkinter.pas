@@ -750,6 +750,53 @@ end;
   do yet: it is refused loudly rather than wired to something wrong
   (feature-lib-tkinter-callable-options-with-args). A STRING still passes
   through verbatim, which is the raw Tcl form this unit has always taken. }
+function TkiRegisterRawCallback(const cb: Variant): Integer; forward;
+
+function TkiIsCallable(const v: Variant): Boolean;
+{ The same four-way test pycall_value makes, as a QUESTION rather than a call:
+  a bound method and a plain def both arrive as a {code, receiver} pair (the def
+  with a nil receiver), and a lambda's closure and a lifted bound-fn are pyeval
+  objects. Asked here so an option can tell "callable" from "a number someone
+  passed by mistake" before wiring it to Tk. }
+var p: Pointer;
+begin
+  TkiIsCallable := False;
+  if pycallback_is(v) then begin TkiIsCallable := True; Exit; end;
+  p := Pointer(NativeInt(PPyVarRec(@v)^.Payload));
+  if p = nil then Exit;
+  case pyvartag(v) of
+    8: TkiIsCallable := True;               { {code, receiver} pair }
+    7: TkiIsCallable := pyclosure_is(p) or pyboundfn_is(p);
+    { A plain compiled def arrives as tag 2 — its code ADDRESS boxed as an
+      integer, which is exactly what pycall_value falls through to ("the value
+      IS its code address"). MEASURED, not assumed: pylib's comment says a def
+      reaches pycallback_is as a pair with a nil receiver, and in this position
+      it does not — tag 2, pycallback_is False.
+
+      Which means a def and a plain integer are the SAME representation here, so
+      `yscrollcommand=5` cannot be told apart from a callable and would jump to
+      address 5. The façade cannot diagnose that; only the representation can
+      fix it, and CPython raises TypeError precisely because it keeps the two
+      distinct. Left as-is rather than papered over with a range check, which
+      would reject valid low code addresses and still accept high integers. }
+    2: TkiIsCallable := True;
+  end;
+end;
+
+function TkiOptRawCallback(const name: AnsiString; const v: Variant): AnsiString;
+{ Wire an option to a RAW slot: Tk appends its own arguments to the command
+  prefix, so the script is just `pxxcb <idx>` with no % substitutions. }
+var idx: Integer;
+begin
+  idx := TkiRegisterRawCallback(v);
+  if idx < 0 then
+  begin
+    WriteLn('tkinter: -', name, ': the callback registry is full');
+    Halt(1);
+  end;
+  TkiOptRawCallback := ' -' + name + ' {pxxcb ' + TkiIntStr(idx) + '}';
+end;
+
 function TkiOptScrollCmd(const name: AnsiString; const v: Variant;
                          const subcmd: AnsiString): AnsiString;
 var o: TObject;
@@ -763,19 +810,26 @@ begin
        end;
     8: begin                                  { a bound method: {code, receiver} }
          o := TObject(pybound_recv(v));
+         { A WIDGET method stays wired Tcl-to-Tcl. That is not an optimisation,
+           it is what CPython's tkinter does: `yscrollcommand=sb.set` never
+           calls back into Python, it hands Tk the other widget's subcommand.
+           Keeping that path means the common case has no Python in the loop. }
          if (o <> nil) and (o is Widget) then
            Result := ' -' + name + ' {' + Widget(o).path + ' ' + subcmd + '}'
          else
-         begin
-           WriteLn('tkinter: -', name,
-                   ' needs a widget method or a Tcl script (a plain callable ',
-                   'cannot receive Tk''s scroll arguments yet)');
-           Halt(1);
-         end;
+           Result := TkiOptRawCallback(name, v);
        end;
   else
-    WriteLn('tkinter: -', name, ' takes a widget method or a Tcl script');
-    Halt(1);
+    { Any other callable — a plain def, a lambda, a closure, a bound method of a
+      non-widget object — now goes through the raw dispatcher and receives Tk's
+      own arguments. This used to Halt(1). }
+    if TkiIsCallable(v) then
+      Result := TkiOptRawCallback(name, v)
+    else
+    begin
+      WriteLn('tkinter: -', name, ' takes a callable or a Tcl script');
+      Halt(1);
+    end;
   end;
 end;
 
@@ -933,6 +987,13 @@ var
   { the Tcl `after` id a one-shot slot is armed under, so after_cancel can find
     the slot again; '' when the slot is not a timer }
   gTkCbAfterId: array[0..TKI_MAX_CALLBACKS - 1] of AnsiString;
+  { RAW slot: Tk calls this option with arguments of its OWN, and the handler
+    wants them as they came rather than as an Event. `-yscrollcommand` is called
+    with `first last`, a scrollbar's `-command` with `moveto <frac>` or
+    `scroll <n> units|pages`, `-validatecommand` and a variable trace with their
+    own sets. They arrive as strings, which is what Tcl has — a handler wanting
+    numbers converts, exactly as under CPython's tkinter. }
+  gTkCbRaw: array[0..TKI_MAX_CALLBACKS - 1] of Boolean;
   gTkCbFree: array[0..TKI_MAX_CALLBACKS - 1] of Integer;
   gTkCbFreeCount: Integer;
   gTkCbCount: Integer;
@@ -960,6 +1021,39 @@ end;
 
 procedure TkiReleaseCb(idx: Integer); forward;
 
+procedure TkiCallRaw(const cb: Variant; argc: Integer; argv: PPAnsiChar);
+{ Call a RAW slot with the arguments Tk appended, as strings.
+
+  pyvar_callv0..3 (pyeval) are the bridges, and they cover all four callable
+  shapes — bound method, closure, lifted bound-fn, plain compiled def — which is
+  why the façade does not have to know which one it holds. Arity 0..3 is what
+  they cover, and it is also what NilPy's own dynamic call sites are lowered to.
+
+  Above three arguments we say so and DO NOT call. `-validatecommand` is the
+  real case: Tk offers eight substitutions (%d %i %P %s %S %v %V %W), so a
+  handler wanting all of them is beyond the bridges. Calling with the first
+  three instead would be a silent truncation, which is worse than a refusal —
+  the handler would run and quietly see the wrong arguments. }
+var a0, a1, a2, r: Variant; n: Integer;
+begin
+  n := argc - 2;
+  if n < 0 then n := 0;
+  if n > 0 then a0 := TkCmdArg(argc, argv, 2);
+  if n > 1 then a1 := TkCmdArg(argc, argv, 3);
+  if n > 2 then a2 := TkCmdArg(argc, argv, 4);
+  case n of
+    0: r := pyvar_callv0(cb);
+    1: r := pyvar_callv1(cb, a0);
+    2: r := pyvar_callv2(cb, a0, a1);
+    3: r := pyvar_callv3(cb, a0, a1, a2);
+  else
+    WriteLn('tkinter: this callback option passes ', n,
+            ' arguments; at most 3 are supported, so the handler was NOT run ',
+            '(feature-lib-tkinter-callable-options-with-args)');
+    r := pynone;
+  end;
+end;
+
 function TkiCbDispatch(clientData: Pointer; interp: Pointer;
                        argc: Integer; argv: PPAnsiChar): Integer; cdecl;
 var idx: Integer; ev: Event; evv: Variant;
@@ -967,6 +1061,15 @@ begin
   TkiCbDispatch := 0;                       { TCL_OK }
   idx := TkiStrInt(TkCmdArg(argc, argv, 1));
   if (idx < 0) or (idx >= gTkCbCount) then Exit;
+  if gTkCbRaw[idx] then
+  begin
+    { Tk appended its own arguments to the registered command prefix. Hand them
+      over as they came instead of forcing them through Event, whose fields are
+      the % substitutions of a BINDING and mean nothing here. }
+    TkiCallRaw(gTkCb[idx], argc, argv);
+    TkiReleaseCb(idx);
+    Exit;
+  end;
   if argc <= 2 then
   begin
     { a `-command` callback (or a fired `after` timer): no event argument.
@@ -1032,11 +1135,22 @@ begin
   gTkCb[TkiRegisterCallbackEx] := cb;
   gTkCbOnce[TkiRegisterCallbackEx] := once;
   gTkCbAfterId[TkiRegisterCallbackEx] := '';
+  gTkCbRaw[TkiRegisterCallbackEx] := False;
 end;
 
 function TkiRegisterCallback(const cb: Variant): Integer;
 begin
   TkiRegisterCallback := TkiRegisterCallbackEx(cb, False);
+end;
+
+function TkiRegisterRawCallback(const cb: Variant): Integer;
+{ A permanent slot whose handler receives Tcl's own arguments. Separate from
+  TkiRegisterCallback because the difference is in how the slot is DISPATCHED,
+  not in how it is stored — see gTkCbRaw. }
+begin
+  TkiRegisterRawCallback := TkiRegisterCallbackEx(cb, False);
+  if TkiRegisterRawCallback >= 0 then
+    gTkCbRaw[TkiRegisterRawCallback] := True;
 end;
 
 procedure TkiReleaseCb(idx: Integer);

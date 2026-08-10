@@ -2,6 +2,8 @@
 track: B
 prio: 40
 type: feature
+status: done
+owner: trackB
 ---
 
 # tkinter façade: a callable option that receives Tk's OWN arguments
@@ -96,3 +98,88 @@ hiding from `progress.sh ready` — but the FILE was never moved out of
 `blocked/`, so it went on hiding anyway. `ready` reads the directory, not the
 frontmatter. Moved to `backlog/` now; the unblocking claim above is unchanged
 and is the one that matters.
+
+## 2026-08-10 (Track B): implemented, and the bridges were already there
+
+All three pieces done, entirely in `lib/pcl/tkinter.pas` as the 2026-07-31 note
+predicted — no Track N edit was needed after all.
+
+**The blocker was real but misnamed.** This ticket waited on
+`pycallback_call2/3`, and those still do not exist. What DOES exist, and covers
+the same need better, is **`pyvar_callv0..3`** in `pyeval` — public, and
+explicitly covering all four callable shapes (bound method, closure, lifted
+bound-fn, plain compiled def), because NilPy's own dynamic call sites lower to
+them. So the façade never has to know which kind it is holding.
+
+Worth recording that the 2026-08-09 unblocking reached the right conclusion from
+the wrong evidence: what it measured was a NilPy program calling `f(4, 5)` —
+Python-to-Python — which is a different capability from Pascal-to-Python, the
+one this ticket needs. The conclusion survived only because `pyvar_callv*`
+happened to exist.
+
+**What landed:**
+
+1. `gTkCbRaw[]` — a per-slot flag saying "this handler takes Tcl's own
+   arguments", plus `TkiRegisterRawCallback`.
+2. A dispatcher branch in `TkiCbDispatch`: a raw slot goes to `TkiCallRaw`,
+   which packs `argv[2..]` as string Variants and calls `pyvar_callv0..3` by
+   count, instead of building an `Event` whose fields are a BINDING's %
+   substitutions and mean nothing here.
+3. `TkiOptScrollCmd` now accepts any callable instead of `Halt(1)`. A widget
+   method still wires Tcl-to-Tcl (what CPython does — no Python in the loop);
+   everything else gets a raw slot.
+
+**Above three arguments it refuses and does not call.** `-validatecommand`
+offers eight substitutions, which is past what the bridges cover; calling with
+the first three would be a silent truncation, and a handler running on the wrong
+arguments is worse than one that did not run.
+
+### Measured working
+
+`examples/tk/callbacks.npy` (extended, run under Xvfb — it is compile-only in
+the suite because it needs a display):
+
+```
+scroll 0.0 1.0            <- a BOUND METHOD, two Tk fractions
+lambda scroll 0.0 1.0     <- a LAMBDA, same
+...
+scroll 0.5 0.6            <- after yview moveto 0.5, values track
+lambda scroll 0.25 0.35
+```
+
+A plain `def` was verified the same way. This is the case that used to die at
+configure time with "a plain callable cannot receive Tk's scroll arguments yet".
+
+### One thing measured that contradicts a comment in pylib
+
+A plain def in an option arrives as **tag 2 — its code ADDRESS boxed as an
+integer** — and `pycallback_is` is False for it. pylib's comment above
+`pycallback_call0` says a plain def reaches it "as the same pair with a nil
+receiver"; in this position it does not. `pycall_value` agrees with the
+measurement, not the comment ("a plain compiled def: the value IS its code
+address").
+
+The consequence is worth stating because the façade cannot fix it: a def and a
+plain integer have the SAME representation here, so `yscrollcommand=5` is
+indistinguishable from a callable and would jump to address 5. CPython raises
+TypeError because it keeps the two distinct. Left alone rather than papered over
+with a range check, which would reject valid low addresses and still accept high
+integers. Filed as a note, not a workaround.
+
+### Gate note: the suite ASSERTS this, and caught me breaking it
+
+`lib-test` runs `callbacks.npy` under `xvfb-run` and compares its last six
+lines. Appending scroll output changed that tail, so the first gate run went RED
+— correctly, on my own change. The expectation now covers the new lines.
+
+The assertion deliberately prints `scroll ok True True` rather than the
+fractions: the values depend on the geometry the window manager hands out, so
+asserting them would make the suite environment-sensitive without proving
+anything more than "two arguments arrived", which is the whole feature.
+
+(The RED was also a reminder to read the WHOLE gate log — `tail -5` showed
+`crtl_exp2` as the last echoed command and the real failure was a silent
+`@if` block further down, which sent me looking at the wrong test first.)
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.

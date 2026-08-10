@@ -38,7 +38,7 @@ lives in git, not in a timestamp._
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | feature-c-entry-stub-must-run-finalizers |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (231)
+## backlog (230)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -154,7 +154,6 @@ lives in git, not in a timestamp._
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | — |
-| feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
@@ -406,9 +405,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1596)
+## done (1597)
 
-1596 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1597 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (32)
 
@@ -572,7 +571,6 @@ lives in git, not in a timestamp._
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [E] feature-demo-nilpy-ide
-- [p 40] [B] feature-lib-tkinter-callable-options-with-args
 - [p 40] [N] feature-nilpy-break-continue
 - [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-dataclass-expression-field-default

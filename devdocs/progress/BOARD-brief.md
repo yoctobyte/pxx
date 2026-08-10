@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:8 blocked:3 backlog:231 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1596 rejected:32`
+`urgent:2 working:1 unfinished:8 blocked:3 backlog:230 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1597 rejected:32`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,7 +33,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-crtl-last-seven-unimplemented-declarations` [B] — blocked-by: feature-c-entry-stub-must-run-finalizers
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 212, ranked
+## Ready — top 30 of 211, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 70] [P]` bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
@@ -66,4 +66,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 
-_182 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_181 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

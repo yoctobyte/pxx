@@ -8205,7 +8205,7 @@ lib-test: pxx-stable-check
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/kwargs.npy /tmp/lib_tk_kwargs >/dev/null && \
 	  test "$$(xvfb-run -a /tmp/lib_tk_kwargs | tr -d '\n')" = "get HELLOafter-delete LOvar bkwargs ok" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/callbacks.npy /tmp/lib_tk_callbacks >/dev/null && \
-	  test "$$(xvfb-run -a /tmp/lib_tk_callbacks | tail -n 6)" = "$$(printf 'configure 200 100\nlifted 200 100\ntrace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1')" && \
+	  test "$$(xvfb-run -a /tmp/lib_tk_callbacks | tail -n 6)" = "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
 	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \
