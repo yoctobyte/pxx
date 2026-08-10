@@ -94,3 +94,31 @@ resurfacing.
 None of this argues for a particular answer — a wrong call about concurrent
 Track A edits is worse than a delay. It is here so the cost of the current
 default is visible when the fork is settled.
+
+## USER STANCE 2026-08-10
+
+> "unattended sessions - this will screw up sooner or later. all issues so far
+> were easily recovered [...] track T is up and running, should save us time.
+> and i no longer believe in unattended." — user
+
+That answers the fork: **option 2 (a standing grant in the launch prompt)**, and
+**option 3 (a lock file) is rejected** — it is infrastructure for a mode that is
+not going to be run. The user knows who else is running at launch time; that is
+one sentence, not a subsystem.
+
+### The ticket's own evidence has since evaporated
+
+It argued from four bugs parked in one night for want of permission. Re-checked
+2026-08-10: **three are `done/`**, fixed in ordinary attended sessions —
+`bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor`,
+`bug-nilpy-subscript-read-without-getitem-yields-garbage`,
+`bug-nilpy-augmented-subscript-evaluates-its-index-twice`. The fourth,
+`bug-nilpy-list-sort-method-missing`, is largely fixed too (bare `.sort()` and
+`reverse=` work; only `key=` remains) and has been re-measured and dropped to
+prio 35.
+
+So the cost the ticket was built on — shared-file bugs waiting indefinitely —
+did not materialise. Attended sessions cleared them within a day. That is the
+strongest argument for doing nothing beyond the standing grant.
+
+**Pending only the user's confirmation to resolve as option 2.**

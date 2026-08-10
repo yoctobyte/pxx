@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 50
+prio: 35
 type: bug
 ---
 
@@ -303,3 +303,32 @@ Fix that first and closures become rare (runtime-bound defaults only) instead of
 the default for every lambda. The layering cleanup then has a much smaller
 closure arm to carry, and this ticket becomes an ordinary parameter addition
 rather than a builtin-unit refactor requiring a re-pin.
+
+## RE-MEASURED 2026-08-10 (`4b4663f0c`) — the original symptom is GONE
+
+The reported error was *"TPyList has no method sort"*. That is fixed:
+
+```python
+xs = [3, 1, 2]; xs.sort();              print(xs)   # [1, 2, 3]   matches CPython
+xs.sort(reverse=True);                  print(xs)   # [3, 2, 1]   matches CPython
+```
+
+Both diffed against CPython at HEAD. The method exists and `reverse=` works.
+
+**The residual is `key=` alone:**
+
+```python
+ws = ["bbb", "a", "cc"]; ws.sort(key=len)
+error: Nil Python: TPyList.sort has no parameter named 'key'
+```
+
+Note this is now the SAME class of gap as everything else `key=`-shaped, not a
+missing method: every lambda is an interpreted pyeval source closure, which is
+why the `key=` builtins live in pyeval and a compiled method cannot accept one
+(see `project_nilpy_every_lambda_is_an_interpreted_source_closure`). The
+standalone `sorted(rows, key=...)` FUNCTION works because it is one of those
+pyeval builtins.
+
+So the fix is no longer "wrap sorted()" — it is "let the compiled `sort` method
+reach the pyeval key machinery", which is the general `key=`-on-a-method
+question. Prio dropped 50 -> 35: the everyday spellings work.

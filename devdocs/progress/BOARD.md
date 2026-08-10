@@ -74,7 +74,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
 | bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
-| bug-nilpy-list-sort-method-missing | N | 50 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
+| bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
 | bug-nilpy-method-chained-on-open-result-fails-to-parse | N | 50 | bug | `open(p).read().strip()` fails with a bare 'unexpected token'. ONE method off open()'s result parses fine and so does a two-deep chain off any ordinary value — it is specifically the SECOND link of a chain rooted at the open() intrinsic that the parser drops | — |
 | bug-nilpy-multi-parameter-lambdas-are-still-interpreted | N | 45 | bug | A lambda with 2+ parameters still lowers to a pyeval SOURCE closure and is re-walked per call — the lift is gated on nParams <= 1 because the bound-fn bridge passes one argument. Correct answers, ~7x the per-call cost. | — |
@@ -503,7 +503,6 @@ lives in git, not in a timestamp._
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [A] bug-a-a-typed-const-array-of-string-n-is-never-initialised
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
-- [p 50] [N] bug-nilpy-list-sort-method-missing
 - [p 50] [N] bug-nilpy-method-chained-on-open-result-fails-to-parse
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
 - [p 50] [N] bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
@@ -610,6 +609,7 @@ lives in git, not in a timestamp._
 - [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 35] [N] bug-nilpy-input-has-two-lowerings-one-discards-the-prompt
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
+- [p 35] [N] bug-nilpy-list-sort-method-missing
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
