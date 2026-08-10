@@ -4,6 +4,7 @@ prio: 55
 type: feature
 blocked-by: []   # was feature-a-managed-block-kind-word — landed, see Log 2026-08-10
 summary: "Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1)"
+status: backlog
 ---
 
 # NilPy `str` counts characters, not bytes (phase 2)

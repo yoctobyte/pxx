@@ -2,7 +2,7 @@
 track: N
 prio: 50
 type: bug
-status: unfinished
+status: rejected
 owner: claude-AN
 ---
 
@@ -298,3 +298,14 @@ Its own text is also stale (it reports `TPyList has no method sort`; the method
 now exists and takes `reverse`). These two should be merged into one ticket
 rather than both surviving; the backlog one is the copy that is actually visible
 to the ranker.
+
+## 2026-08-10 — REJECTED as a duplicate, not as invalid
+
+Closed because it and [[bug-nilpy-list-sort-method-missing]] (backlog, prio 50)
+describe the same single remaining gap, `list.sort(key=...)`. That one survives:
+it was the copy the ranker could actually see, and its title matches what is
+left. The measurement table and the "key machinery exists, just isn't wired to
+the method" lead were copied into it before this move, so nothing is lost.
+
+The rejection is bookkeeping. The underlying gap is real and still open — track
+it there.

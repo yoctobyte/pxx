@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:11 blocked:7 backlog:226 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1591 rejected:31`
+`urgent:2 working:1 unfinished:8 blocked:7 backlog:228 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1591 rejected:32`
 
 ## Held now (working/ — do not touch these files)
 
@@ -16,18 +16,15 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory` [P]
 - `task-t-pin-fast-track-t-owns-verification` [T]
 
-## unfinished (11) — parked mid-flight; re-claim, do not duplicate
+## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-nilpy-closure-over-a-loop-variable-captures-by-value` [N]
-- `bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error` [N]
-- `bug-nilpy-non-constant-parameter-defaults-silently-become-none` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-optional-string-param-accepts-none` [N]
 - `feature-nilpy-star-args-kwargs` [N]
-- `feature-nilpy-text-string-kind` [N]
 - `feature-pascal-corpus-generics` [P]
 
 ## blocked (7) — has an unmet blocker; do not claim
@@ -40,10 +37,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-lib-tkinter-callable-options-with-args` [B]
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 207, ranked
+## Ready — top 30 of 209, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 70] [P]` bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
+- `[p 70] [N]` bug-nilpy-non-constant-parameter-defaults-silently-become-none
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -71,6 +69,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
-- `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
-_177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_179 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

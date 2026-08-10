@@ -248,3 +248,34 @@ list element — the split this frontend is repeatedly bitten by
 [[bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error]] in
 `unfinished/` is the parse-error half of this; they should be taken together,
 since the fix above resolves both.
+
+## Re-measured 2026-08-10 at HEAD (486b0e9ec) — scope is smaller than filed
+
+This ticket's own text above is stale: it reports `TPyList has no method sort`.
+The method now **exists** and takes `reverse`. Measured against CPython:
+
+| shape | at HEAD |
+| --- | --- |
+| `xs.sort(reverse=True)` | works — `[3,2,1]` |
+| `sorted(ys, key=len)` | works |
+| `sorted(xs, reverse=True)` | works |
+| `ys.sort(key=len)` | **the only gap** |
+
+and the diagnostic is now named and accurate, not a parse failure:
+
+```
+error: Nil Python: TPyList.sort has no parameter named 'key'
+```
+
+**The lead:** `sorted(key=)` already works, so the key-callback machinery is
+built and merely is not wired to the in-place `sort` method. Start from
+`sorted`'s parameter handling and give `TPyList.sort` the same `key` parameter
+rather than building anything new.
+
+## Merged in 2026-08-10
+
+Supersedes **`bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error`**
+(was in `unfinished/`, prio 50, moved to `rejected/` as a duplicate). Both
+described this one residue. This copy survived because it was the one visible to
+the ranker and its title is the accurate description of what is actually left.
+That ticket's analysis is preserved in `rejected/`; nothing was discarded.
