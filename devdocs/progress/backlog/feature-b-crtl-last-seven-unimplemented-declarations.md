@@ -215,3 +215,34 @@ so it is written down.
 Track B's reading of the pin dependency is correct and supersedes Track A's
 original "UNBLOCKED" framing, which understated it: the code blocker is gone,
 the pin is not.
+
+## 2026-08-10 (Track A) — steps 1 and 2 are DONE: pinned v256, and the pin is verified
+
+Track B's order of operations, executed:
+
+**1. Pinned.** `make stabilize-fast && make pin` → **v256**
+(`44db8460bb761c135b2cc38752c5690160ca56a7e15591e74436ab1e96f441db`),
+`stable_linux_amd64/**` committed.
+
+**2. Confirmed the pin actually carries it** — and deliberately the way Track B
+asked, with `$(PXX_STABLE)` rather than a local HEAD build, because Track B
+never rebuilds the compiler and so the pin IS the ground truth:
+
+```
+$ stable_linux_amd64/default/pinned pinfin.c pinfin     # a C program that only `return 3`s
+main-returns
+PIN-FINALIZER-RAN
+exit=3
+```
+
+(with `pxxcio` given a temporary `finalization` section for the probe; reverted,
+`git status` clean).
+
+So the finalizer drains on the `return`-from-main path **under the pinned
+compiler**, and main's exit code survives the call. The hazard Track B named —
+shipping a handler table against an unpinned enabler, giving an `atexit` that
+looks implemented and silently never runs — no longer applies.
+
+**Step 3 is yours**, unchanged: handler array, LIFO drain, both `exit()` and the
+stub path, gcc as the expectation, and assert no `DT_NEEDED` (`readelf -d`).
+Note the inert-hook caveat above still holds until crtl registers its drain.
