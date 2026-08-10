@@ -2230,6 +2230,14 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_mcfld26 | head -4 | tail -1)" = "named   der TDer 7"
 	test "$$(/tmp/test_mcfld26 | head -7 | tail -1)" = "classfld der"
 	test "$$(/tmp/test_mcfld26 | head -8 | tail -1)" = "ctor    B|BD"
+	# record operator overloads with MIXED operand types. The in-record
+	# signature skip was depth-blind and stopped at the ';' separating parameter
+	# groups; and once it parsed, the operator table turned out to be keyed on
+	# the LEFT operand alone, so TVec+TVec and TVec+Integer collided silently.
+	./$(COMPILER) test/test_op_overload_mixed_operands.pas /tmp/test_opmix26
+	test "$$(/tmp/test_opmix26 | tail -1)" = "OP OVERLOAD MIXED OPERANDS OK"
+	test "$$(/tmp/test_opmix26 | head -3 | tail -1)" = "mul   (3,6)"
+	test "$$(/tmp/test_opmix26 | head -11 | tail -1)" = "pick  (4,6) (3,6)"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed

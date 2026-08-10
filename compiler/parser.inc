@@ -15043,7 +15043,8 @@ begin
     end;
     opci := -1;
     if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
-      opci := FindOpOverload(Ord(op), ASTTk[left], ResolveNodeRec(left));
+      opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
+                              ASTTk[right], ResolveNodeRec(right));
     if opci >= 0 then
       { Overloaded operator on a record/class operand returns its result type. }
       ASTTk[node] := Ord(Procs[opci].RetType)
@@ -15296,7 +15297,8 @@ begin
       ASTQChk[node] := True;
     opci := -1;
     if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
-      opci := FindOpOverload(Ord(op), ASTTk[left], ResolveNodeRec(left));
+      opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
+                              ASTTk[right], ResolveNodeRec(right));
     if opci >= 0 then
       { Overloaded operator on a record/class operand: the node's type is the
         operator's result type, so an inferred target and the aggregate-return
@@ -24320,6 +24322,7 @@ var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
   tdLo, tdHi, tdi, classAlign: Integer;
+  opDepth: Integer;   { paren nesting while skipping a `class operator` signature }
   isArr, fIsDyn: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -24440,8 +24443,22 @@ begin
     if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'operator') then
     begin
-      while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and
-            (CurTok.Kind <> tkEOF) do Next;
+      { Skip to the ';' that ENDS the signature — the one at paren depth 0. A
+        parameter list separates groups with ';' too, so a depth-blind scan
+        stopped inside the parens and left `k: Integer): TVec;` to be parsed as
+        a field. That made every MIXED-TYPE operator a syntax error
+        (`class operator * (const a: TVec; k: Integer): TVec`, i.e. scaling a
+        vector — one of the commonest overloads there is), while the
+        homogeneous `(const a, b: TVec)` form parsed fine because it has no
+        inner ';'. bug-a-a-mixed-type-record-operator-signature-fails-to-parse }
+      opDepth := 0;
+      while ((CurTok.Kind <> tkSemicolon) or (opDepth > 0)) and
+            (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      begin
+        if CurTok.Kind = tkLParen then Inc(opDepth)
+        else if CurTok.Kind = tkRParen then Dec(opDepth);
+        Next;
+      end;
       Eat(tkSemicolon);
       continue;
     end;

@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (233)
+## backlog (234)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -112,6 +112,7 @@ lives in git, not in a timestamp._
 | decide-nilpy-class-as-value-dispatch-strategy | U | 60 | decide | A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values. | — |
 | decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
+| decide-operator-table-keyed-on-one-operand-or-two | U | 40 | decide | Decide: should the operator-overload table be keyed on BOTH operand types? | — |
 | decide-own-language-first-name-resolution | U | 60 | decide | the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | decide-shift-operator-promotion-width | U | 45 | decide | Decide: what width do `shl` / `shr` happen at for a 32-bit operand? | — |
@@ -409,9 +410,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1614)
+## done (1615)
 
-1614 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1615 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (33)
 
@@ -571,6 +572,7 @@ lives in git, not in a timestamp._
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
 - [p 40] [U] decide-default-float-output-format-and-constant-precision
+- [p 40] [U] decide-operator-table-keyed-on-one-operand-or-two
 - [p 40] [D] docs-verify-nil-python-page-against-the-compiler
 - [p 40] [A] feature-a-index-an-array-returning-call-directly
 - [p 40] [S] feature-a-promoint-variant-esp-targets

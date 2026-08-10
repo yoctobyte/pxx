@@ -6824,7 +6824,8 @@ begin
       { Operator overloading: a <op> b on a class/record operand resolves to a
         call to the registered operator proc (lhs, rhs), mirroring the direct
         backend. Args are passed by value (rdi=lhs, rsi=rhs). }
-      cpi := FindOpOverload(Integer(ASTIVal[node]), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
+      cpi := FindOpOverload2(Integer(ASTIVal[node]), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]),
+                             ASTTk[ASTRight[node]], ResolveNodeRec(ASTRight[node]));
       if cpi >= 0 then
       begin
         left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);

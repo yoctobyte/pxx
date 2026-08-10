@@ -4440,6 +4440,49 @@ begin
   end;
 end;
 
+{ Binary-operator lookup that also considers the RIGHT operand.
+
+  The table is keyed on the LEFT operand only, so two overloads of one operator
+  sharing a left type collide and the first registered always wins: with both
+  `TVec + TVec` and `TVec + Integer` declared, `a + 5` called the record/record
+  one and silently produced its answer. Unreachable until the mixed-type
+  SIGNATURE started parsing, which is why it had never been seen.
+
+  Rather than widen the table, disambiguate here: the entry names a proc whose
+  Params already carry the real operand types. Prefer an entry whose SECOND
+  parameter matches the right operand exactly; fall back to the first entry with
+  the right (opKind, leftKind, leftRec), which is exactly the old behaviour and
+  keeps every single-overload program compiling as before.
+  bug-a-a-mixed-type-record-operator-signature-fails-to-parse }
+function FindOpOverload2(opKind, typeKind, recId, rightTk, rightRec: Integer): Integer;
+var i, pi, firstHit: Integer;
+begin
+  Result := -1;
+  firstHit := -1;
+  i := 0;
+  while i < OvrlCount do
+  begin
+    if (OvrlOpKind[i] = opKind) and (OvrlTypeKind[i] = typeKind) and (OvrlRecId[i] = recId) then
+    begin
+      pi := OvrlProcIdx[i];
+      if firstHit < 0 then firstHit := pi;
+      { TParam carries no RecName — the record id lives on the param's SYMBOL. }
+      if (Procs[pi].ParamCount = 2) and
+         (Ord(Procs[pi].Params[1].TypeKind) = rightTk) and
+         (((rightTk <> Ord(tyRecord)) and (rightTk <> Ord(tyClass))) or
+          ((Procs[pi].Params[1].SymIdx >= 0) and
+           (Procs[pi].Params[1].SymIdx < SymCount) and
+           (Syms[Procs[pi].Params[1].SymIdx].RecName = rightRec))) then
+      begin
+        Result := pi;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+  Result := firstHit;
+end;
+
 { ===== Procedure table ===== }
 
 { FNV-1a over the case-folded name. $811C9DC5 / $01000193 are the published
