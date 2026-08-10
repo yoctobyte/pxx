@@ -144,3 +144,31 @@ that is where the requirement actually lives. Reasons not to do it now:
 This ticket's own text agrees splitting is reasonable; half 1 stands alone and
 is done.
 
+## 2026-08-10 (Track B): the Floor/Ceil half is DONE; Currency stays parked
+
+**Half of this ticket has landed** and the ticket did not say so. Verified by
+running it against `$(PXX_STABLE)`:
+
+```
+Floor(2.7)=2            <- Integer, as FPC returns
+Ceil(2.1)=3
+Floor64(1e17)=100000000000000000
+Ceil64(-1e17)=-100000000000000000
+```
+
+`Math.Floor`/`Ceil` return `Integer` and `Floor64`/`Ceil64` exist. (That change
+is also what forced crtl to grow real `floor`/`ceil` bodies, since the C
+declarations had been binding to the Pascal pair — see
+`regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c`.)
+
+**What remains is only the `Currency` half** — FPC's `Currency` is a fixed-point
+4-decimal `Int64`, ours is a `Double`, so a money type cannot represent 0.10
+exactly. That is a representation change tied to the decimal/COBOL work this
+ticket is already `blocked-by`, and it sits in `rainy-day`.
+
+Moved to `rainy-day` to match its blocker rather than idling in `backlog` where
+it reads as available. Related user call the same day (on
+`bug-b-rounding-api-gaps-setroundmode-roundto-lround`): **we are not seeking
+100% FPC float compliance.** Currency is a different argument from tie-rounding
+— exact money is a real need, not bit-parity chasing — so this comes back if a
+money type is wanted, not because FPC does it.

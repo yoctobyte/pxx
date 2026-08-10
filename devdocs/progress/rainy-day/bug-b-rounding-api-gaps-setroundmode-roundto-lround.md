@@ -138,3 +138,44 @@ frontend, and implement it for real on the targets that claim it — with the
 Pascal `TFPURoundingMode` wrapper landing here afterwards. Filed as
 [[feature-a-expose-rounding-mode-intrinsic-to-pascal]].
 
+## 2026-08-10 (Track B): most of it is DONE; the remainder is postponed by the user
+
+**What has landed since this was filed**, verified by running it:
+
+| API | state |
+| --- | --- |
+| `RoundTo` / `SimpleRoundTo` (Double + Single) | present in `lib/rtl/math.pas` |
+| `TRoundToRange` | present |
+| `Floor64` / `Ceil64` | present; `Floor`/`Ceil` return `Integer` (FPC-faithful) |
+| `lround` / `llround` | present in crtl, gcc-verified (`test/cmath_lround.c`) |
+| `SetRoundMode` / `GetRoundMode` | **still absent** — needs the Track A intrinsic this ticket is blocked on |
+
+So the only API genuinely missing is the rounding-MODE pair, which is not
+Track B's to add.
+
+### The tie divergence, and why we are NOT chasing it
+
+`RoundTo(2.675, -2)` answers **2.68** here and **2.67** under FPC. Measured
+cause, not guessed: FPC and pxx agree on every intermediate — `IntPower(10,-2)`
+is 0.01 in both, the quotient prints as 267.5 in both, `Round` of it is 268 in
+both — and still disagree on `RoundTo`. FPC evaluates the expression in **80-bit
+Extended**, where the quotient is 267.4999999999999982 rather than exactly
+267.5. pxx has no Extended.
+
+A double-double version was prototyped (the kernel is already in `math.pas`, and
+`Dd2Prod` makes the scaled value exact). It fixes 2.675 and **breaks 2.665**:
+exact arithmetic says 2.67 there, because 2.665-as-a-double is slightly ABOVE
+the tie, while FPC says 2.66 because it divides by an Extended 0.01 that is
+slightly larger than the true 0.01. So FPC's answer is an artifact of x87
+precision, not the exactly-rounded result — and it is not even stable across
+FPC's own targets, since Extended is 80-bit only on x86.
+
+For the record, since it argues the exact path is the defensible one if this is
+ever revisited: **CPython agrees with exact arithmetic on both** — `round(2.675,
+2)` is 2.67 and `round(2.665, 2)` is 2.67.
+
+**User's call, 2026-08-10: we are not seeking 100% FPC float compliance and not
+hunting the 80-bit bit.** The prototype was reverted rather than landed — it
+trades one mismatch for another and neither direction is worth the complexity
+right now. Postponed with the measurements banked so the next session does not
+re-derive them.
