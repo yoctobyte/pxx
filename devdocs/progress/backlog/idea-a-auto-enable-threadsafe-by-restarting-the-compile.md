@@ -106,28 +106,47 @@ unlocked heap under real concurrency. Bias the scan toward firing.
    warning line ("threading detected in <unit>, recompiling with --threadsafe")
    costs nothing and keeps the build honest.
 3. ~~Should it be opt-in (`--threadsafe=auto`) rather than default?~~
-   **DECIDED, user 2026-08-10: yes, `--threadsafe=auto`, and the default stays
-   OFF.**
+   **DECIDED, user 2026-08-10: AUTO IS THE DEFAULT MODE, and its default
+   OUTCOME is OFF.**
 
-   > "i sortof agree that threadsafe=auto instead of a default OFF (default
-   > should never be ON) is a good choice" — user
-
-   So the flag is three-state, and auto is *itself* opt-in:
+   > "no, auto is the default. and the default choice is OFF. BUT if programmer
+   > decides to force it to off, and tries to use TThread or pthread, we will
+   > simply error with a corresponding error. so, in general, by being auto,
+   > it'll just work and default to OFF if we didnt detect any threading usage."
+   > — user
 
    | invocation | behaviour |
    | --- | --- |
-   | *(nothing)* | OFF. The gates error exactly as today. |
-   | `--threadsafe=auto` | lex-time detection; restart with threading on if a signal is found |
-   | `--threadsafe` | ON unconditionally, as today |
+   | *(nothing)* — **auto** | detect at lex time. Nothing found -> **OFF** (fast, small, today's default build). Threading found -> turn it ON and restart. |
+   | `--threadsafe` / `=on` | forced ON, as today |
+   | `--threadsafe=off` | forced OFF. Using `TThread` / `pthread` / `parallel for` is then a **compile error** naming the conflict — the current gate message, but now attributable to the user's own `=off`. |
 
-   The principle behind it, stated by the user and worth keeping: **a flag that
-   changes the runtime model must never default to ON.** Auto-detection is a
-   convenience for someone who has asked for it, not a behaviour that appears
-   under a build that did not. That is what keeps MCU and size-critical builds
-   from silently gaining lock paths.
+   So no flag is needed in either common case: a single-threaded program
+   silently stays on the small unlocked runtime, and a threaded one silently
+   gets a correct build. `=off` becomes the way to say "I know, and I want the
+   small runtime anyway" — and then the gate error is the right answer, because
+   the user asked for the contradiction.
+
+   The principle, stated by the user and worth keeping: **the default OUTCOME is
+   never ON.** OFF is what you get unless threading is actually detected. Auto
+   is not "on by default" — it is "decide by evidence, and the evidence has to
+   be there."
+
+   **Note this raises the stakes on the detector.** Under `=auto`-by-default a
+   false NEGATIVE silently produces an unlocked heap in a threaded program,
+   where today it produces a hard error. That is the argument for biasing the
+   scan toward firing (above), and for keeping the `__pxxclone` lowering gate as
+   a LAST-RESORT backstop: if lowering reaches thread creation and the mode
+   somehow resolved OFF, that must still fail loudly rather than emit.
+
 4. **Interaction with the MCU targets** — `--threadsafe` is x86-64/i386/
-   aarch64/arm32 only (compiler.pas:718). On xtensa/riscv32 the gate must keep
-   erroring, not attempt a restart that cannot succeed.
+   aarch64/arm32 only (compiler.pas:718). On xtensa/riscv32 auto must resolve to
+   OFF and keep erroring on threading use, never attempt a restart that cannot
+   succeed.
+
+   Worth noting the earlier size worry largely evaporates under this shape: an
+   MCU program that does not use threads is not detected, so it resolves OFF and
+   gains nothing. One that DOES use threads needs the locks anyway.
 
 ## Prior art to not re-litigate
 
