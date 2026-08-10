@@ -110,4 +110,4 @@ Not fixed, found in passing and NOT part of this ticket: subscripting a call
 result directly (`MkR[1,1].b`) is a parse error. Pre-existing.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 5f8e1ccce.
