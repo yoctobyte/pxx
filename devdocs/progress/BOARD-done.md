@@ -510,6 +510,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-class-value-into-variant-local-mistagged | N | 65 | bug | NilPy: storing a class value into a variant-typed local mis-tags it VT_INT64 | — |
 | bug-nilpy-class-with-pass-body-fails-to-parse | N | 50 | bug | NilPy: a class body of only `pass` fails to parse | — |
 | bug-nilpy-closure-capture-assigned-later | N | 60 | bug | A nested def cannot capture a name the enclosing function assigns LATER | — |
+| bug-nilpy-closure-over-a-loop-variable-captures-by-value | N | 45 | bug | NilPy: a closure created in a loop captures the loop variable's VALUE at creation, so [f() for f in fs] gives [0, 1, 2] where CPython gives [2, 2, 2] — Python closes over the variable, not the value | — |
 | bug-nilpy-closure-stored-in-a-callable-field-jumps-through-the-variant-tag | N | 50 | bug | SILENT->CRASH: a lifted CLOSURE stored into a `Callable` field lands as a VARIANT in a POINTER slot, so calling the field jumps to the tag word — PC = 0x0a, literally VT_BOUNDFN_TAG. This is what segfaults uforth now. | — |
 | bug-nilpy-comparison-dunders-not-dispatched | N | 60 | bug | Comparison dunders (`__lt__`/`__eq__`/`__gt__`/…) not dispatched — silent handle comparison | — |
 | bug-nilpy-comparison-return-type-from-operands | N | 70 | bug | An unannotated def returning a COMPARISON typed its result from the operands | — |

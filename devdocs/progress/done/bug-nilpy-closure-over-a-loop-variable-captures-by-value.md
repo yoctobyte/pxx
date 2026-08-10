@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 summary: "NilPy: a closure created in a loop captures the loop variable's VALUE at creation, so [f() for f in fs] gives [0, 1, 2] where CPython gives [2, 2, 2] — Python closes over the variable, not the value"
-status: unfinished
+status: done
 owner: claude-A-N
 ---
 
@@ -149,3 +149,54 @@ managed strings, records, arrays and class instances, and a loop variable over a
 list of objects is exactly a class capture — so the general case will meet the
 class-capture residue already recorded on the cell ticket
 (a `nonlocal` class capture keeps `pyboundfn_bind_obj` and has no writable cell).
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-10) — fixed by the cell machinery, exactly as predicted
+
+The ticket said: *"Take [[bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse]]
+first — it is a hard crash and rated 65 — and this one likely falls out of the
+same cell machinery."* That ticket is in `done/`, and this one did fall out.
+**No code was written for this ticket.**
+
+### Verified against the CPython oracle
+
+The ticket's own repro, verbatim:
+
+```python
+fs = []
+for i in range(3):
+    fs.append(lambda: i)
+print([f() for f in fs])
+```
+
+```
+CPython : [2, 2, 2]
+pxx     : [2, 2, 2]      (was [0, 1, 2])
+```
+
+Plus the neighbouring shapes, all matching CPython:
+
+| shape | CPython | pxx |
+| --- | --- | --- |
+| closure over a `range` loop var | `[2, 2, 2]` | `[2, 2, 2]` |
+| closure over a LIST-literal loop var | `[2, 2, 2]` | `[2, 2, 2]` |
+| closure over a STRING-element loop var | `['b', 'b']` | `['b', 'b']` |
+| `make(i)` factory (was already correct) | `[0, 2, 4]` | `[0, 2, 4]` |
+
+The list-literal and string rows are checked because the loop's iterable is
+lowered differently per element type, and a fix that only covered `range` would
+pass the ticket's repro alone.
+
+**Control:** `stable_linux_amd64/default/pinned` also answers `[2, 2, 2]`, so
+the fix predates today's work rather than coming from it — this is a stale
+ticket being closed on measurement, not a change being credited to this session.
+
+### Still open, deliberately
+
+The ticket's second half — the escape hatch `lambda x=i: x`, which legitimately
+asks for capture-by-value and which NilPy rejects — is NOT fixed by this and
+remains covered by
+[[feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep]]. Closing this
+ticket does not close that gap.
