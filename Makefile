@@ -8274,6 +8274,23 @@ lib-test: pxx-stable-check
 	  test "$$n" = "0" || (echo "FAIL: crtl_poll_set has $$n DT_NEEDED — poll bound to libc"; exit 1); \
 	  echo "  lib-test: crtl_poll_set is self-contained (no DT_NEEDED)"; \
 	else echo "  lib-test: readelf absent, skipping the poll linkage check"; fi
+	# atexit on BOTH exit paths. The `return`-from-main case is the one with
+	# teeth: it leaves through the entry stub's finalizer runner, not through
+	# crtl's exit(), so a handler list kept on the C side would pass the exit()
+	# row here and silently skip the row above it.
+	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_atexit.c /tmp/crtl_atexit
+	test "$$(/tmp/crtl_atexit)"   = "$$(printf 'main-returns\nh3\nh2\nh1')"
+	/tmp/crtl_atexit; test "$$?" = "0"
+	test "$$(/tmp/crtl_atexit e)" = "$$(printf 'via-exit\nchild-exit')"
+	/tmp/crtl_atexit e; test "$$?" = "4"
+	test "$$(/tmp/crtl_atexit x)" = "via-_Exit"
+	/tmp/crtl_atexit x; test "$$?" = "5"
+	test "$$(/tmp/crtl_atexit n)" = "registered ok=100 bad=0"
+	@if command -v readelf >/dev/null 2>&1; then \
+	  n=$$(readelf -d /tmp/crtl_atexit 2>/dev/null | grep -c NEEDED); \
+	  test "$$n" = "0" || (echo "FAIL: crtl_atexit has $$n DT_NEEDED — atexit bound to libc"; exit 1); \
+	  echo "  lib-test: crtl_atexit is self-contained (no DT_NEEDED)"; \
+	else echo "  lib-test: readelf absent, skipping the atexit linkage check"; fi
 	# Payne-Hanek huge-argument trig: sin/cos/tan past 1e8, expected values are
 	# the correctly-rounded doubles judged against 400-digit references.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_trig_huge.c /tmp/crtl_trig_huge

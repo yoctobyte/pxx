@@ -52,6 +52,21 @@ function __pxx_realloc(p: Pointer; n: NativeInt): Pointer;
 { C process exit (exit/abort/_Exit) -> the PAL/RTL terminate path. }
 procedure __pxx_exit(code: Integer);
 
+{ C atexit support. The handler TABLE lives here, in Pascal, and not in
+  lib/crtl/src/stdlib.c, for one reason: a C program's normal exit is a plain
+  `return` from main, which the entry stub turns into
+  `call main; __pxx_run_finalizers; exit_group(retval)` — and that runner walks
+  UNIT FINALIZATION sections, a Pascal-only hook. crtl calls into Pascal (see the
+  unit note above), never the other way round, so a table on the C side could be
+  drained by exit() and would be silently skipped on the return path. Keeping it
+  here lets ONE list serve both.
+  __pxx_atexit records a handler (0 = ok, -1 = full/nil, as C's atexit);
+  __pxx_atexit_run drains it LIFO and is called from crtl's exit() as well as
+  from this unit's finalization, whichever comes first — the drain pops, so the
+  second caller finds it empty. _Exit and abort deliberately do NOT call it. }
+function __pxx_atexit(fn: Pointer): Integer;
+procedure __pxx_atexit_run;
+
 { C time bridge: wall-clock seconds since the Unix epoch (time()) and process
   CPU time in microseconds (clock()), both via a per-arch clock_gettime syscall.
   Libc-free; UTC. Returns 0 on an unsupported target (never asserts). }
@@ -310,6 +325,72 @@ begin
   if n >= 0 then r := __pxxrawsyscall(n, code, 0, 0, 0, 0, 0);
   n := SysExitNr;
   if n >= 0 then r := __pxxrawsyscall(n, code, 0, 0, 0, 0, 0);
+end;
+
+type
+  TPxxAtExitProc = procedure;
+  PPxxCodePtr = ^Pointer;
+
+const
+  { C requires an implementation to accept at least 32 registrations (C99
+    7.20.4.2), but glibc grows without bound, so a fixed cap is an observable
+    divergence from the oracle: 100 registrations answer 0 under gcc and -1 here.
+    The list therefore grows on the shared PXXAlloc heap (the same one malloc
+    rides), starting at this many slots and doubling. }
+  PXX_ATEXIT_INITIAL = 32;
+
+var
+  gAtExitFns: Pointer;      { PXXAlloc'd array of code addresses, gAtExitCap wide }
+  gAtExitCap: Integer;
+  gAtExitCount: Integer;
+
+{ Slot address is spelled inline at both use sites rather than through an
+  AtExitSlot(i) helper, which is what this wants to be: `AtExitSlot(i)^ := fn`
+  compiles and silently stores NOTHING —
+  [[bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped]].
+  Reading through the call result is fine, and so is the cast expression used
+  here; only the call-result-as-assignment-target arm is broken. Restore the
+  helper when that ticket closes. }
+function __pxx_atexit(fn: Pointer): Integer;
+var newCap: Integer; p: Pointer;
+begin
+  if fn = nil then
+  begin
+    Result := -1;
+    Exit;
+  end;
+  if gAtExitCount >= gAtExitCap then
+  begin
+    if gAtExitCap = 0 then newCap := PXX_ATEXIT_INITIAL else newCap := gAtExitCap * 2;
+    p := PXXRealloc(gAtExitFns, newCap * SizeOf(Pointer), SizeOf(Pointer));
+    if p = nil then
+    begin
+      { Out of memory is the ONLY failure now, and C's atexit reports it the
+        same way — nonzero. The existing list is untouched. }
+      Result := -1;
+      Exit;
+    end;
+    gAtExitFns := p;
+    gAtExitCap := newCap;
+  end;
+  PPxxCodePtr(NativeInt(gAtExitFns) + gAtExitCount * SizeOf(Pointer))^ := fn;
+  gAtExitCount := gAtExitCount + 1;
+  Result := 0;
+end;
+
+procedure __pxx_atexit_run;
+var p: TPxxAtExitProc;
+begin
+  { LAST registered runs FIRST (C99 7.20.4.3). Popping as we go is what makes
+    this safe to call twice and safe to re-enter: a handler that itself calls
+    exit() re-enters through crtl's exit(), finds the remaining prefix, and the
+    ones already run are gone rather than running again. }
+  while gAtExitCount > 0 do
+  begin
+    gAtExitCount := gAtExitCount - 1;
+    p := TPxxAtExitProc(PPxxCodePtr(NativeInt(gAtExitFns) + gAtExitCount * SizeOf(Pointer))^);
+    p;
+  end;
 end;
 
 { clock_gettime syscall number per target (mirrors baseunix.pas SysClockGettime).
@@ -624,5 +705,13 @@ begin
   PInt64(nsecOut)^ := ts.Nsec;
   Result := 0;
 end;
+
+finalization
+  { The `return`-from-main path: the C entry stub calls __pxx_run_finalizers
+    before exit_group, and this is the only hook it walks
+    (feature-c-entry-stub-must-run-finalizers, pinned v256). crtl's exit() drains
+    first and leaves the list empty, so this is the branch that carries a plain
+    return — the one a C-side table could not have served. }
+  __pxx_atexit_run;
 
 end.

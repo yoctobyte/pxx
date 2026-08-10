@@ -9,7 +9,7 @@ owner: claude-B
 # crtl: the last declared-but-unimplemented functions
 
 - **Type:** feature (gap) — Track B (`lib/crtl`, `lib/rtl/pxxcio.pas` bridges)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** `tools/crtl_decl_probe.sh`. Was 366 declared / 359 implemented;
   **`chmod`, `umask`, `msync`, `mremap` and `ioctl` landed 2026-08-05**, so it is
@@ -246,3 +246,68 @@ looks implemented and silently never runs — no longer applies.
 **Step 3 is yours**, unchanged: handler array, LIFO drain, both `exit()` and the
 stub path, gcc as the expectation, and assert no `DT_NEEDED` (`readelf -d`).
 Note the inert-hook caveat above still holds until crtl registers its drain.
+
+## 2026-08-10 (Track B) — step 3 DONE: `atexit` ships, gcc-identical on all five targets
+
+The pin carried it, so the crtl half went in as predicted. The last
+declared-but-unimplemented crtl function now has a body.
+
+**Where the table lives, and why it is not in crtl.** In `lib/rtl/pxxcio.pas`
+(Pascal), not `lib/crtl/src/stdlib.c`. The hook the entry stub walks is
+`__pxx_run_finalizers` → **unit finalization sections**, which is Pascal-only,
+and the crtl↔Pascal bridge is one-directional: C resolves bodied Pascal procs
+internally (FindProc), never the reverse. A list on the C side could therefore be
+drained by `exit()` and would be **silently skipped on the return-from-main
+path** — the exact partial-`atexit` hazard this ticket has been refusing to ship
+since 2026-08-05, just arriving from a third direction. One list in Pascal serves
+both paths.
+
+- `__pxx_atexit(fn)` / `__pxx_atexit_run` in `pxxcio.pas`; crtl's
+  `atexit()` is a two-line bridge and `exit()` drains before `__pxx_exit`.
+- `_Exit` and `abort` deliberately do **not** drain (C99 7.20.4.4 / 7.20.4.1).
+- Drain is LIFO and **pops**, which is what makes `exit()` from inside a handler
+  behave: it re-enters, finds the remaining prefix, and never repeats one. gcc
+  agrees exactly, including the exit code (9, from the handler's own `exit`).
+- **Not a fixed cap.** A 64-slot array passed the standard's ≥32 requirement and
+  still diverged from the oracle at 100 registrations (gcc `ok=100`, ours
+  `ok=64 fail=36`), so the list grows on the shared PXXAlloc heap from 32,
+  doubling. OOM is now the only failure.
+
+**Measured vs the gcc oracle**, four programs (return-from-main, `exit()`,
+`_Exit()`, 100 registrations) — **identical output and identical exit codes**,
+`readelf -d` = **0 DT_NEEDED**, which is the property this ticket exists for.
+Cross: **arm32, aarch64 and riscv32 identical too**. Regression test
+`test/crtl_atexit.c` in `make lib-test`, asserting values, exit codes AND the
+absence of DT_NEEDED. `compiler/crtl_names.inc` regenerated (one entry:
+`atexit:stdlib.h`) — `gen_crtl_map.py --check` is what caught that, as designed.
+
+### Two compiler bugs fell out, both filed, neither worked around in spirit
+
+1. [[bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped]]
+   — `Slot(i)^ := v` compiles clean and **stores nothing**; reading `Slot(i)^` is
+   fine and `t := Slot(i); t^ := v` is fine, so only the lvalue arm is broken.
+   This is what made the first heap-backed version segfault, and the first
+   suspicion was `PXXRealloc` (cleared by probing it directly — measure, do not
+   reason). pxxcio inlines the slot cast at both use sites with a comment naming
+   the ticket; restore the `AtExitSlot` helper when it closes.
+2. [[bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped]] — found only
+   because the new test selects its sub-mode from `argv[1]`: on **i386** every C
+   `main` gets garbage argc (a stack address) and a bogus argv, because the stub
+   pushes cdecl order while a CProgramMode callee reads leftmost-first. Verified
+   **not** a v256 regression (same under the previous pin) and Pascal-side
+   `ParamCount` on i386 is unaffected. That is why the i386 rows of this test
+   pass by falling into the default branch rather than by testing anything.
+
+### One correction to this ticket's own bookkeeping
+
+`tools/crtl_decl_probe.sh` now reads **372 declared / 9 unimplemented**, not
+"1". `atexit` is gone from the list; all 9 are `math.h` (`sin`, `cos`, `tan`,
+`exp`, `log2`, `log10`, `sinh`, `cosh`, `tanh`) and are **probe
+false-positives** — they have bodies under `__crtl_`-prefixed names reached
+through function-like macros, a deliberate scar from the b377 Pascal-twin
+collision (`lib/crtl/src/math.c:29`). The probe counts declarations, and a macro
+is not one. Not filed as a gap; noted so the next reader does not re-chase it.
+The 21 pthread BUILDFAILs are the reach-based `--threadsafe` gate, unchanged.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.

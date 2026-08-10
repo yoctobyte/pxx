@@ -21,6 +21,8 @@ extern void *__pxx_malloc(long n);
 extern void  __pxx_free(void *p);
 extern void *__pxx_realloc(void *p, long n);
 extern void  __pxx_exit(int code);
+extern int   __pxx_atexit(void (*func)(void));
+extern void  __pxx_atexit_run(void);
 
 /* ---- heap ----------------------------------------------------------------- */
 
@@ -43,7 +45,17 @@ void *reallocarray(void *ptr, size_t nmemb, size_t size) {
 
 /* ---- process control ------------------------------------------------------ */
 
-void exit(int code)  { __pxx_exit(code); }
+/* The handler list itself lives in lib/rtl/pxxcio.pas — see the note there. In
+   short: a `return` from main exits through the compiler's entry stub, whose
+   only hook is the unit-finalization runner, so a list on this side would be
+   drained by exit() and silently skipped on the path most C programs take. */
+int atexit(void (*func)(void)) { return __pxx_atexit(func); }
+
+/* exit() runs the handlers; _Exit and abort deliberately do not (C99 7.20.4.4
+   and 7.20.4.1 — _Exit's whole purpose is to skip them, and abort is an
+   abnormal termination). The drain pops, so exit() from inside a handler
+   continues with the rest and never repeats one. */
+void exit(int code)  { __pxx_atexit_run(); __pxx_exit(code); }
 void _Exit(int code) { __pxx_exit(code); }
 void abort(void)     { __pxx_exit(134); }   /* 128 + SIGABRT(6) */
 

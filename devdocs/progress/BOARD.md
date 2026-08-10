@@ -36,13 +36,14 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (235)
+## backlog (236)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver | A | 40 | bug | A metaclass returned from a FUNCTION is not a receiver | — |
 | bug-a-a-typed-const-array-of-string-n-is-never-initialised | A | 50 | bug | A typed const array of `string[N]` is never initialised — silently | — |
 | bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit | A | 40 | bug | A VARIABLE field width is refused for strings/chars, and needs an RTL unit at all | — |
+| bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped | A | 60 | bug | `Slot(i)^ := v` compiles clean and stores NOTHING — a call result used as an assignment TARGET is dropped. Reading `Slot(i)^` is fine, and so is `t := Slot(i); t^ := v`, so only one arm of the double case is broken. Silent wrong value, no diagnostic. | — |
 | bug-a-fixed-array-function-result-faults-on-i386-and-arm32 | A | 45 | bug | A fixed-array function result faults on i386 and arm32 | — |
 | bug-a-for-in-refuses-a-set-constructor-and-a-string-literal | A | 35 | bug | `for x in [...]` and `for c in 'literal'` are refused | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
@@ -51,6 +52,7 @@ lives in git, not in a timestamp._
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
+| bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped | A | 55 | bug | On i386 every C program's `main` reads garbage argc and a bogus argv: the entry stub pushes cdecl order (argc lowest) but a CProgramMode callee reads leftmost-first, so argc receives the argv POINTER. Pascal's ParamCount on i386 is fine — this is the C stub only. | — |
 | bug-c-signature-mismatch-warns-even-when-crtl-defines-the-symbol | C | 45 | bug | Every C program that includes <math.h> now emits 2-3 'disagrees with the Pascal routine' warnings, for symbols crtl DEFINES itself. The warning describes a resolution that is correct — binding the C declaration — so it is pure noise on every math-using compile | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
@@ -127,7 +129,6 @@ lives in git, not in a timestamp._
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
-| feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -411,9 +412,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1615)
+## done (1616)
 
-1615 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1616 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (33)
 
@@ -458,6 +459,7 @@ lives in git, not in a timestamp._
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
 - [p 60] [U] decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [A] bug-a-assignment-through-a-pointer-returned-by-a-function-call-is-dropped
 - [p 60] [U] decide-own-language-first-name-resolution
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -472,6 +474,7 @@ lives in git, not in a timestamp._
 - [p 55] [A] bug-nilpy-text-class-name-binds-the-rtl-file-record (unblocks 1)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [A] bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
@@ -578,7 +581,6 @@ lives in git, not in a timestamp._
 - [p 40] [D] docs-verify-nil-python-page-against-the-compiler
 - [p 40] [A] feature-a-index-an-array-returning-call-directly
 - [p 40] [S] feature-a-promoint-variant-esp-targets
-- [p 40] [B] feature-b-crtl-last-seven-unimplemented-declarations
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [E] feature-demo-nilpy-ide
