@@ -5528,7 +5528,18 @@ begin
     AN_IDENT:
     begin
       varIdx := ASTIVal[node];
-      if TypeIsFrozenString(Syms[varIdx].TypeKind) or (Syms[varIdx].TypeKind = tySet) or Syms[varIdx].IsArray then
+      if Syms[varIdx].IsArray then
+        { An ARRAY in rvalue position IS its base address (C's decay; the same
+          handle Pascal passes). The node therefore has POINTER type — it used
+          to carry ASTTk, the ELEMENT type, and an address node claiming to be a
+          double is one the backend classifies as floating-point and routes to
+          an xmm register. `(void*)A` on a `double A[]` then handed its callee
+          whatever stale value sat in the integer register — a stack address —
+          while the identical `int B[]` was correct only because tyInt32 happens
+          to share the general-register class. `A == &A[0]` answered 0.
+          bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address }
+        Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer))
+      else if TypeIsFrozenString(Syms[varIdx].TypeKind) or (Syms[varIdx].TypeKind = tySet) then
         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, ASTTk[node])
       else if TypeIsPromoInt(Syms[varIdx].TypeKind) and not Syms[varIdx].IsRef then
         { A promotable int IS its slot: the value may be a bignum, so an rvalue

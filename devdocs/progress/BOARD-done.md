@@ -162,6 +162,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-call-inline-function-pointer-struct-member | C | 50 | bug | C: calling an inline function-pointer struct member mis-lowers | — |
 | bug-c-call-through-deref-of-fnptr-pointer | A | 58 | bug | C: call through a DEREF of a pointer-to-function-pointer drops the call | — |
 | bug-c-cast-as-call-arg-parse-error | C | 50 | bug | C: cast expression as call argument fails to parse | — |
+| bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address | C | 60 | bug | Casting an array with a FLOAT element type to a pointer — `(void*)a` — yields a wrong address (a stack address for a file-scope array), while the same array decays correctly when passed to a parameter and int arrays are correct in both forms | — |
 | bug-c-chained-pointer-index-loses-base-type | C | 50 | bug | C chained pointer indexing loses base type | — |
 | bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |

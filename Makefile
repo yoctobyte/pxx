@@ -3506,6 +3506,8 @@ test-core: $(COMPILER)
 	/tmp/cfn_ret_ptrptr_b6026; test "$$?" = "42"
 	./$(COMPILER) test/cptr_array_decay_stride_b61.c /tmp/cptr_array_decay_stride_b6126
 	/tmp/cptr_array_decay_stride_b6126; test "$$?" = "42"
+	./$(COMPILER) test/cfloat_array_decay_addr_b378.c /tmp/cfloat_array_decay_addr_b37826
+	/tmp/cfloat_array_decay_addr_b37826; test "$$?" = "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c /tmp/cfield_2d_row_decay_b6226
 	/tmp/cfield_2d_row_decay_b6226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_shadow_local_b151.c /tmp/ctypedef_shadow_local_b15126
