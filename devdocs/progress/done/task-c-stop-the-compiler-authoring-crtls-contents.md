@@ -91,4 +91,4 @@ literal copy of `lib/rtl/sysutils.pas`'s exact-decimal core (one of three). Same
 class, different files, neither touched here.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 25d2628d2.
