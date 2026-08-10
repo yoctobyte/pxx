@@ -296,3 +296,29 @@ Which blocks carry the bit, and who sets it. Two readings, both coherent:
 Reading 1 is the cheaper one and appears to be what is meant. Confirm before
 building, because it decides whether the `len <= 0` sites change at all or only
 the None constructor gains a tagged allocation.
+
+### Reading 2, expressed better: a third KIND rather than a flag bit (user)
+
+> "only nilpy code would use this construction.. then again, nilpy already has 2
+> string types.. so might as well add a type
+> 'ansistring_that_can_be_zero_length'." — user
+
+Worth taking seriously rather than as overthinking. The meta word ALREADY
+distinguishes `PXX_KIND_BYTESTR = 1` (Pascal AnsiString, Length in bytes) from
+`PXX_KIND_TEXTSTR = 2` (NilPy str, positions in characters). A third kind is the
+established mechanism, not a new one, and it keeps the property in the same
+place as the two distinctions already made there.
+
+It also scopes cleanly: only NilPy-produced strings carry the new kind, so
+Pascal's `AnsiString` behaviour — and the self-host binary that depends on it —
+is untouched by construction. That is a stronger isolation guarantee than a flag
+bit sprinkled across shared producers.
+
+Decide flag-bit vs third-kind together with the reading 1 / reading 2 question
+above; they are the same question asked twice.
+
+## STANDING INSTRUCTION (user, 2026-08-10)
+
+If any of this string handling raises further issues, **park them in Track U
+again** rather than deciding in passing — "i have the feeling we're not done
+with that."
