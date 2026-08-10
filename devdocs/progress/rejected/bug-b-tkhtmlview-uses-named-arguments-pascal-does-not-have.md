@@ -103,3 +103,41 @@ question. Left broken deliberately.
 
 This ticket stays as the measurement record (what is wrong with the file, and
 that it fails identically on `pinned`). The work is on the feature ticket.
+
+## 2026-08-10 (Track B) — closed as superseded; the file is now GUARDED, not just broken
+
+Moved to `rejected/` so it stops topping Track B's ready queue: it is a
+measurement record, and its own text says the file must not be repaired. The
+work lives on [[feature-b-tkhtmlview-in-nilpy]], which is genuinely blocked —
+re-verified today by probe, not by reading the board: a `.py` in `lib/pcl/`
+still fails `import`, while the identical file as a sibling prints
+`from-lib-pcl`.
+
+**The deeper miss in this ticket is now fixed.** It asked for "a smoke test that
+`uses` every `lib/pcl` unit — it would have caught this the day it landed".
+That is `tools/lib_units_compile.py`, wired into `make lib-test`: it compiles
+every unit under `lib/**` as `program p; uses <unit>; begin end.` — **138 units
+in ~16s** parallel — and this file is its single `KNOWN_BROKEN` entry, carrying
+the successor ticket's slug as the reason.
+
+Both directions of the check were verified by measurement rather than assumed:
+dropping the entry makes the sweep FAIL on the real error
+(`pascal26:171: error: undefined variable (yscrollcommand)`), and listing a
+healthy unit as broken makes it report the stale entry. So when the NilPy port
+lands, the sweep tells whoever removes the `.pas` that the entry is now stale
+instead of silently passing.
+
+Two false alarms the sweep had to learn, recorded so the next person does not
+re-derive them:
+
+- the four thread PALs (`palthread`, `palpthread`, `palthreadobj`,
+  `palparallel`) fail without `--threadsafe` **by design** — the reach-based
+  gate of [[decide-threadsafe-gate-is-reach-based-not-use-based]], not a defect;
+- `lib/rtl/platform/esp/esptimer.pas` is not on the default unit path and
+  compiles fine with `-Fulib/rtl/platform/esp`.
+
+Also worth its own line, because it cost time and would cost it again: the
+probe program must **not** be named after the unit it uses. The resolver
+searches the importing file's own directory first, so a temp `ast.pas` shadows
+`lib/rtl/ast.pas` and every unit "fails" with `Expected: unit, but got:
+program`. All 138 reported broken; none were.

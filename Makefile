@@ -8051,6 +8051,12 @@ lib-test: pxx-stable-check
 	# which would leave it invisible to a C89-style hand prototype, i.e. a glibc
 	# import in a libc-free build. Regenerate with: python3 tools/gen_crtl_map.py
 	python3 tools/gen_crtl_map.py --check
+	# Every unit under lib/** compiles as a bare `uses`. The smoke programs
+	# below reach most units, and "most" is how lib/pcl/tkhtmlview.pas stayed
+	# broken for its entire life -- 398 lines that had never once compiled, on
+	# any binary including pinned, because no gate ever named the file.
+	# ~16s parallel across 138 units.
+	PXX_STABLE=$(PXX_STABLE) python3 tools/lib_units_compile.py
 	$(PXX_STABLE) examples/sudoku/sudoku.pas /tmp/lib_sudoku
 	test "$$(/tmp/lib_sudoku)" = "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
 	$(PXX_STABLE) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/lib_collections
