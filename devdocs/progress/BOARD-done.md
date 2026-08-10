@@ -575,6 +575,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-import-lost-after-a-fallback-import-block | N | 70 | bug | A C library's function name shadows a Python module name as a qualifier | — |
 | bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |
+| bug-nilpy-in-over-objects-ignores-eq | N | 50 | bug | `obj in [list of objects]` ignores `__eq__` and compares identity | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant |
 | bug-nilpy-indexing-an-unannotated-str-parameter-segfaults | N | 80 | bug | `def f(s): return s[0]` SEGFAULTS — indexing an unannotated str parameter | — |
 | bug-nilpy-inherited-class-attribute-empty-on-a-subclass-instance | N | 60 | bug | `Sub().kind` reads empty/zero when `kind` is a class attribute declared on the BASE — construction copies only the class's OWN class attributes, never the inherited ones. Silent wrong value | — |
 | bug-nilpy-input-builtin-is-shadowed-by-pascals-standard-input-file | N | 45 | bug | `input()` never reached a call lowering — `Input` is a standard Pascal identifier (the text file), so `line = input()` bound the file variable and the failure surfaced later and unrecognisably at the first USE of the result | — |

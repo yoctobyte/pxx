@@ -162,3 +162,37 @@ want that one before this one.
 
 Also cleared here: `status: working` / `owner: claude-A-N`, a stale lock on a
 ticket that has sat in `blocked/` since 2026-08-03.
+
+## 2026-08-10 — narrower than it reads: membership already dispatches
+
+Measured while closing [[bug-nilpy-in-over-objects-ignores-eq]]. That ticket and
+this one both assert the two share one `PyVarEq` bottleneck and need one fix.
+**They no longer do:**
+
+```python
+a = V(1); xs = [V(1)]
+a in xs        -> True   (CPython True)   __eq__ VERIFIED to run
+xs.count(a)    -> 1      (CPython 1)      __eq__ VERIFIED to run
+xs.index(a)    -> 0      (CPython 0)
+ys.remove(V(1))-> [2]    (CPython [2])
+a == xs[0]     -> False  (CPython True)   <-- THIS ticket, still broken
+```
+
+A `print` inside the dunder confirms it actually runs for the membership family
+and never runs for `==`. Identical on `pinned`, so it predates today.
+
+So the remaining defect is **only the `==` operator against a variant operand**,
+not the whole equality surface. Two consequences for whoever picks this up:
+
+- the "fix `PyVarEq` and everything follows" framing is out of date — something
+  already reaches `__eq__` from the container side, so the useful first question
+  is *what route membership uses*, and whether `==` can be pointed at the same
+  one instead of building a second;
+- the sibling's `blocked-by` edge on this ticket was dropped when it closed, so
+  this one no longer blocks anything and ranks on its own priority.
+
+The user-visible shape is unchanged and still the reason this matters: the
+dunder works with two named locals and fails the moment one side is a container
+element, which is the shape real code writes.
+
+No code changed.

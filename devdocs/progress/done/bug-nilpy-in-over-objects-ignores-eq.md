@@ -2,7 +2,7 @@
 track: N
 prio: 50
 type: bug
-status: blocked
+status: done
 owner: ""
 blocked-by: bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 ---
@@ -160,3 +160,66 @@ correctly still open.
 
 No code changed. Left in `blocked/` deliberately: the edge is not wrong yet,
 only unproven.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-10) — measured fixed; the edge it waited on no longer gates it
+
+The earlier note today left this in `blocked/` because the dependency edge was
+"unproven, not wrong". It is now proven wrong, by the one measurement that note
+asked for. **No code was written for this ticket.**
+
+### `__eq__` genuinely RUNS — not an identity coincidence
+
+A `print` inside the dunder settles what the value table alone could not:
+
+```
+in:    __eq__ ran  -> True
+count: __eq__ ran  -> 1
+eqvar: (never ran) -> False
+```
+
+So membership really does dispatch the user method; it is not matching by
+pointer and happening to agree. That was the open question, and it is the reason
+the close is safe.
+
+### The ticket's own gate, all rows, against CPython
+
+| row | CPython | pxx |
+| --- | --- | --- |
+| `a in xs` | True | True |
+| `xs.count(a)` | 1 | 1 |
+| `xs.index(a)` | 0 | 0 |
+| `ys.remove(V(1))` | `[2]` | `[2]` |
+| class WITHOUT `__eq__`, other instance | False | False |
+| class WITHOUT `__eq__`, same instance | True | True |
+
+The last two rows are the guard that matters: identity semantics are preserved
+for a class that declares no `__eq__`, so the dispatch did not simply make
+everything compare by content.
+
+**Control:** identical on `stable_linux_amd64/default/pinned`, so this predates
+today's session and is not credited to it.
+
+### The premise both tickets rested on was wrong
+
+Both this ticket and its blocker assert that `in`, `count` and `==`-with-a-
+variant bottom out in one `PyVarEq` call and therefore need one fix. They do
+not: two dispatch and the third does not. The `blocked-by` edge is dropped with
+this resolution.
+
+### Still open, and NOT closed by this
+
+[[bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant]] — `a == xs[0]`
+is still False where CPython says True. That is the real remaining defect (the
+dunder works with two named locals and fails when one side is a container
+element), and it is narrower than it reads now that membership works.
+
+### One divergence found while running the gate, filed separately
+
+`d[V(1)] = "one"` — CPython raises `TypeError: unhashable type: 'V'` (a class
+defining `__eq__` without `__hash__` is unhashable); pxx accepts the store and
+then `d.get(V(1))` misses, answering `MISSING`. Different defect, different
+shape (silent miss vs. refusal), so it is not folded in here:
+[[bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses]].
