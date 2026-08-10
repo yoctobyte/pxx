@@ -143,3 +143,45 @@ much smaller than the parked strategy, and it is where the visible symptom
 (`print([a, b])` rendering `[, ]`) lives. The standing rule from
 [[decide-nilpy-class-attribute-instance-read-model]] applies: correct or a clear
 error, never silent.
+
+## 2026-08-10 — REMEASURED: the RENDERING half is fixed; the SUBSCRIPT half is not
+
+The decision singled this ticket out as the piece to take first, naming
+`print([a, b])` rendering `[, ]` as "most of the visible pain". **That half is
+already gone.** The ticket's own boundary script, verbatim, against CPython:
+
+| row | CPython | pxx (new AND pinned) |
+| --- | --- | --- |
+| `str(a)` direct | `S1` | `S1` |
+| `print([a, b])` | `[C1, C2]` | `[C1, C2]` — was `[, ]` |
+| `str([a][0])` | `S1` | `S1` — was empty |
+| `sorted([b, a])` | `[C1, C2]` | `[C1, C2]` — was TypeError |
+
+All four match, on `pinned` as well as the current binary, so this predates
+today's work.
+
+**The `__getitem__` half from the 2026-08-09 note still fails**, identically on
+both binaries:
+
+```
+v[0]                    -> 7                      (static receiver, correct)
+first(v)  # def first(w): return w[0]
+                        -> TypeError: object is not subscriptable
+```
+
+### What this changes for whoever picks it up
+
+The remaining work is **narrower than the ticket reads**, and the framing above
+is now misleading in a specific way: the container RENDERER has a route to
+dispatch, so the "hook into dispatch that already works" the decision described
+has evidently been hooked. What is left is the **subscript protocol on a variant
+receiver** — and per [[project_nilpy_subscript_protocol_has_three_members]] that
+is `__getitem__` / `__setitem__` / `__delitem__`, not one member, with
+`pyeval.pas`'s `PySubscriptGet` tag-7 arm (which knows TPyList/TPyDict/TPyBytes
+and nothing else) as the site.
+
+Consider **re-titling or splitting** this ticket: its name and its top-of-file
+boundary table now describe behaviour that works, which is the surest way to
+have the next reader either close it wrongly or re-measure what I just measured.
+
+No code changed; ticket stays open at its current prio.
