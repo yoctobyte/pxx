@@ -1,8 +1,63 @@
 ---
 track: U
-prio: 40
+prio: 10
 type: decide
+status: postponed
+postponed: 2026-08-10
 ---
+
+
+## POSTPONED 2026-08-10 — the DEFAULT format is not a contract, so it does not matter
+
+**User's call.** Moved to `rainy-day/`. Not rejected — the measurement below
+stays useful — but explicitly not worth deciding now.
+
+> "if the programmer _specifies_ the output (number of digits etc), we already
+> follow that. if unspecified, we are free to do as we see fit. [...] the
+> _default_ formatting is not relevant. programmer should specify number of
+> digits he/she wants." — user
+
+That is the same position `bug-nilpy-float-repr-loses-small-values-and-does-not-round-trip`
+already reached and recorded:
+
+> "What DOES matter is honouring an explicitly REQUESTED number of decimals
+> (`%.15f`, `{:.3f}`, `FloatToStrF(v, n)`) — those paths are a contract, and they
+> currently test correct."
+
+So the split is settled even though this ticket is not: **specified precision is
+a contract and is already honoured and tested; unspecified default output is
+ours to choose.**
+
+### Correction to the record — pxx does NOT do shortest-round-trip
+
+Worth stating plainly because it was believed otherwise in conversation, and
+because anything that relies on it would be relying on something that is not
+there. pxx does **not** implement Steele & White / Dragon4 / Grisu / Ryū. That is
+step 3 of the repr ticket and was explicitly deferred:
+
+> "Shortest-round-trip digits. The real repr rule, and the largest change: it
+> needs a Grisu/Ryu-style shortest-digit algorithm, not a scale-and-trim. Worth
+> its own ticket and probably not worth it until something needs exact
+> round-tripping."
+
+What landed there was the value-LOSS fix (a nonzero number printing as `0`). The
+renderer in `compiler/builtin/builtin.pas` is still scale-and-trim by decade
+loops, and carries a documented DEAD END warning against re-attempting the
+binary-decomposition normalisation.
+
+**If exact round-tripping is ever needed** — streaming, serialisation, a
+`repr()` that must reload identically — that is the ticket to open, and it is a
+real algorithm, not a formatting tweak.
+
+### Should this ever be revisited
+
+The one argument that does not depend on FPC parity: printing 17 significant
+digits for a `Single` prints digits the type cannot carry (24-bit mantissa
+~= 7.2 decimal digits), e.g. pxx renders a Single 1/3 as
+`3.3333334326744080E-001` where only `3.333333` is information. That is a
+presentation-honesty argument rather than a compatibility one, and it is the
+reason to reopen if anyone does.
+
 
 # decide: should WriteLn's default float format follow the STATIC type, and should untyped float constants evaluate at Single precision?
 
