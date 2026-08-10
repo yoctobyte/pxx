@@ -2,8 +2,72 @@
 track: U
 prio: 55
 type: decide
+status: rejected
+resolved: 2026-08-10
 summary: "Delphi/FPC do not detect threading at compile time at all — they always emit the lock and skip it at runtime on a global IsMultiThread boolean. Measured here: the branch costs +5% over an unlocked refcount where an unconditional lock costs +276%. That dissolves the auto-detect question and would let TThread live in Classes unconditionally"
 ---
+
+
+## REJECTED 2026-08-10 — the premise was already answered, by the user, the same day
+
+**User's call.** pxx keeps thread-safety as a COMPILE-TIME mode. FPC and Delphi
+paying the branch on every single-threaded program is their problem, not a model
+to copy.
+
+### Why this never needed deciding
+
+The whole pitch below is a PERFORMANCE argument — the runtime branch costs 5%
+where the lock costs 276%, so most of pxx's measured 14% comes back. But the
+user had already ruled that out as the crux, in
+[[decide-threadsafe-gate-is-reach-based-not-use-based]], resolved the SAME DAY
+this was opened:
+
+> "the reasons `--threadsafe` stays opt-in are NOT mainly code size and speed
+> [...] They are microcontroller targets where neither matters, and
+> single-threaded applications where the whole question is moot. That was
+> settled long ago. So the measured 14% was never the crux."
+
+This ticket was written in parallel and never took that on board.
+
+### And its deliverables shipped by another route
+
+- **`TThread` in `Classes`** — done, via the `PXX_THREADSAFE` conditional define
+  ([[feature-a-pxx-threadsafe-conditional-define]], in `done/`). A threaded build
+  already gets `TThread` from `uses Classes` exactly as on FPC. The runtime-flag
+  design would only have removed the `{$IFDEF}` around the declaration.
+- **The `__pxxclone` reach-based gate problem** — dissolved by that same define:
+  a non-threaded build never parses `palthread`, so the gate never fires.
+
+What remained was always-compiled lock paths, ~5% on every build, and **larger
+code in the default build** — landing on microcontroller targets, the exact
+constituency the opt-in flag exists for.
+
+### The design as confirmed
+
+- Thread-safety is opt-in and compile-time. Default OFF.
+- `TThread` is hidden entirely when the flag is off, so **the common route fails
+  loudly at compile time** rather than silently producing an unlocked heap. That
+  is the "detection" that matters, and it already works.
+- There is **no auto-detection** and none is wanted (correction to the framing:
+  enabling is explicit — `--threadsafe` at compiler.pas:575, or
+  `{$threadsafe on}` at lexer.inc:1601; on i386/aarch64/arm32 the directive is
+  refused because the softlock define is applied before lexing, so those require
+  the flag).
+
+### Accepted residual risk, stated by the user
+
+A programmer can still start a thread by a route the `TThread` gate does not
+cover — raw PAL calls, inline asm, or C code reaching `pthread_create` — and get
+an unlocked heap under real concurrency. **Accepted:** if they do that, the
+compiler switch is right there to turn locking on. Not worth a detection pass.
+
+### If this ever comes back
+
+The narrow version needs no codegen change at all: a Delphi/FPC corpus that
+READS `IsMultiThread` can be served by exposing it as an ordinary variable that
+is simply `True` in a `--threadsafe` build and `False` otherwise. File that as
+compat work if a corpus actually needs it; do not reopen the mode question.
+
 
 # `IsMultiThread` at runtime, instead of a compile-time mode?
 

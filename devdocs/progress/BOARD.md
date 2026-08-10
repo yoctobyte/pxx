@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (239)
+## backlog (238)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -111,7 +111,6 @@ lives in git, not in a timestamp._
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-default-float-output-format-and-constant-precision | U | 40 | decide | decide: should WriteLn's default float format follow the STATIC type, and should untyped float constants evaluate at Single precision? | — |
-| decide-ismultithread-runtime-flag-vs-compile-time-mode | U | 55 | decide | Delphi/FPC do not detect threading at compile time at all — they always emit the lock and skip it at runtime on a global IsMultiThread boolean. Measured here: the branch costs +5% over an unlocked refcount where an unconditional lock costs +276%. That dissolves the auto-detect question and would let TThread live in Classes unconditionally | — |
 | decide-nilpy-class-as-value-dispatch-strategy | U | 5 | decide | A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values. | — |
 | decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-parallel-capture-semantics | A | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
@@ -419,7 +418,7 @@ lives in git, not in a timestamp._
 
 1616 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (33)
+## rejected (34)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -440,6 +439,7 @@ lives in git, not in a timestamp._
 | chore-inc-to-units | A | 50 | chore | `.inc` → real `.pas` units refactor | — |
 | chore-register-pxxc-domain-variants | W | 55 | chore | Register the pxxc domain variants (.com, .nl, .eu) — REJECTED | — |
 | chore-runtime-emission-size | A | 50 | chore | Finer runtime-support emission (code size) | — |
+| decide-ismultithread-runtime-flag-vs-compile-time-mode | U | 55 | decide | Delphi/FPC do not detect threading at compile time at all — they always emit the lock and skip it at runtime on a global IsMultiThread boolean. Measured here: the branch costs +5% over an unlocked refcount where an unconditional lock costs +276%. That dissolves the auto-detect question and would let TThread live in Classes unconditionally | — |
 | decide-when-to-move-the-pin-after-a-long-fix-run | U | 60 | decide | 32 compiler fixes sit on master unpinned; Track B builds against pinned and has a workaround waiting on the move. Pin all at once, pin incrementally, or leave it — the brake is deliberate and this is a judgment call, not a default | — |
 | feature-asm-structured-ir-library | A | 50 | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-dynamic-compiler-arrays-ast-fixups | A | 25 | feature | Apply the dynamic-array pattern (proven on the IR arrays) to the other fixed compiler caps: AST nodes, global fixups, label arrays | — |
@@ -481,7 +481,6 @@ lives in git, not in a timestamp._
 - [p 55] [N] bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
-- [p 55] [U] decide-ismultithread-runtime-flag-vs-compile-time-mode
 - [p 55] [U] decide-sole-a-guard-for-unattended-sessions
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [A] feature-a-own-language-first-symbol-resolution
