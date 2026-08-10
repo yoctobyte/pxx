@@ -92,4 +92,4 @@ is a design change rather than a fix —
 [[decide-operator-table-keyed-on-one-operand-or-two]].
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 7e45a9def.
