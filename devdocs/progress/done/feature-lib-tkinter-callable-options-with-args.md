@@ -182,4 +182,4 @@ anything more than "two arguments arrived", which is the whole feature.
 `@if` block further down, which sent me looking at the wrong test first.)
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit e0986af40.
