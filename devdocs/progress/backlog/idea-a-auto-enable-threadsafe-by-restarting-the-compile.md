@@ -16,6 +16,47 @@ current explicit-switch design is correct and shipping
 > our linked libraries _does_ use threads. and in that case, void all, enable the
 > flag and compile with threading on.. an odd hack but.." — user
 
+## Why threading is off unless proven — the rationale behind all of this
+
+> "we spend a lot of work making async and coroutines work, even with pascal.
+> and for exactly this reason. cause threads are nice, if you have multiple
+> CPU's. they suck on single core - where timeslicing pwns the game" — user,
+> 2026-08-10
+
+This is the *why* under the whole opt-in design, and it is worth stating because
+it is not recoverable from the code. pxx's answer to CONCURRENCY is coroutines,
+generators and async — not threads. Threads are for PARALLELISM, i.e. actual
+multiple CPUs. On a single core, cooperative timeslicing beats them, and paying
+a locked heap for concurrency you could have had cooperatively is a bad trade.
+
+So "threading off unless detected" is not a performance micro-optimisation. It
+is the language saying: the common concurrency case does not need threads, and
+should not pay for them.
+
+### The constraint this puts on the detector — verified, holds today
+
+**Coroutine/async/generator code must never trip the detector.** If it did,
+every async program would silently gain a locked heap, which is precisely the
+outcome the design exists to prevent.
+
+Measured at `29ec1d815`:
+
+- a `generator` + `for..in` program compiles and runs with **no** `--threadsafe`
+  (needs only `uses coroutine`);
+- `lib/rtl/coroutine.pas` contains **zero** occurrences of `TThread`,
+  `BeginThread`, `pthread` or `__pxxclone` — it switches stacks via `CoSwitch`
+  and nothing more.
+
+So the signal set proposed above (`TThread`, `BeginThread`, `parallel`,
+`__pxxclone`) is already correctly disjoint from the coroutine machinery. Keep it
+that way: **never add a coroutine, generator or async construct to the detector's
+signal list**, and add a test that an async/generator program still resolves to
+OFF under auto.
+
+Note `parallel for` IS correctly in the signal set — it is genuine
+multi-CPU parallelism (`PXXParallelForP`), not cooperative concurrency, and it
+already errors without `--threadsafe` at parser.inc:19476.
+
 ## The idea is cheaper than it sounds: the detector already exists
 
 Two gates already fire the moment a build reaches threading without the flag,
