@@ -37,7 +37,7 @@ lives in git, not in a timestamp._
 | feature-b-crtl-last-seven-unimplemented-declarations | B | 40 | feature | The last crtl declaration without a body — now just atexit (poll landed 2026-08-09) (chmod, umask, msync, mremap and ioctl landed 2026-08-05). Each is declared, so a caller binds silently to libc.so.6 and the 'self-contained' binary grows a DT_NEEDED | feature-c-entry-stub-must-run-finalizers |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (230)
+## backlog (229)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -84,7 +84,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising | N | 50 | bug | pyeval's runtime errors `writeln` + `Halt` instead of raising | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | — |
 | bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack | O | 65 | bug | optdiff finds -O3 changing observable behaviour in two C tests — cmath_sign_bits returns rc 42 against the baseline's rc 1, and cmath_no_pascal_hijack's output differs at equal rc | — |
-| bug-p-integer-default-on-a-string-parameter-is-accepted-and-segfaults | P | 60 | bug | `procedure R(s: AnsiString = 1)` compiles clean and SEGFAULTS on the omitted argument — the bare ordinal is handed to the callee as a string. FPC rejects the declaration outright. A silent-acceptance corruption bug, same family as the ctor-variant one: no diagnostic, and the crash is wherever the string is first touched | — |
 | bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable | P | 50 | bug | `P;` on a free routine whose parameters are ALL defaulted fails with 'undefined variable (P)'. FPC accepts it, `P()` works, and the paren-less form already works for METHODS (`b.G`) and for routines with no parameters at all — so it is the free-routine path alone that never tries the defaults fill | — |
 | bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -406,9 +405,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1599)
+## done (1600)
 
-1599 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1600 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (32)
 
@@ -456,7 +455,6 @@ lives in git, not in a timestamp._
 - [p 60] [C] bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address
 - [p 60] [N] bug-nilpy-open-returns-two-different-classes-by-mode
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- [p 60] [P] bug-p-integer-default-on-a-string-parameter-is-accepted-and-segfaults
 - [p 60] [P] bug-p-uses-order-does-not-decide-which-unit-wins
 - [p 60] [U] decide-own-language-first-name-resolution
 - [p 60] [C] feature-c-csmith-differential-fuzzing

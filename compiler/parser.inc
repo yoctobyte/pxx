@@ -23087,7 +23087,16 @@ end;
                              and what ProcParamDefaultIsFloat documents)
     set expression  isSet,   val holds the baked 32-byte mask's Data[] offset
     otherwise       ordinal, val holds the folded Int64 }
-procedure ParseParamDefaultValue(var val: Int64; var isStr, isFloat, isSet: Boolean;
+{ True for the string kinds a bare ordinal must never be handed to. Deliberately
+  NOT tyChar: a Char parameter taking an ordinal is an ordinary Pascal idiom. }
+function TypeKindIsStringy(tk: TTypeKind): Boolean;
+begin
+  TypeKindIsStringy := (tk = tyAnsiString) or (tk = tyString) or
+                       (tk = tyShortString) or (tk = tyFixedString);
+end;
+
+procedure ParseParamDefaultValue(paramTk: TTypeKind; var val: Int64;
+                                 var isStr, isFloat, isSet: Boolean;
                                  var soff, slen: Integer);
 begin
   val := 0; isStr := False; isFloat := False; isSet := False; soff := 0; slen := 0;
@@ -23115,6 +23124,20 @@ begin
   end
   else
     val := ConstEval;
+
+  { The shape above comes from the LITERAL's token kind; nothing so far has
+    looked at what it is defaulting. `s: AnsiString = 1` therefore compiled
+    clean and handed the callee the ordinal 1 as a string pointer — a segfault
+    wherever the string was first touched, with no diagnostic anywhere near the
+    declaration (bug-p-integer-default-on-a-string-parameter-is-accepted-and-segfaults).
+    FPC rejects it outright, so reject it here: a real error at the declaration
+    beats a crash three frames away. A tyVariant parameter is exempt — every
+    shape is legitimately boxed into it. }
+  if paramTk = tyVariant then Exit;
+  if TypeKindIsStringy(paramTk) and (not isStr) then
+    Error('a string parameter''s default must be a string literal');
+  if isStr and (not TypeKindIsStringy(paramTk)) and (paramTk <> tyChar) then
+    Error('a string literal cannot be the default for a non-string parameter');
 end;
 
 { FPC hint directives — `deprecated ['msg']`, `platform`, `experimental`,
@@ -24145,7 +24168,7 @@ begin
       if CurTok.Kind = tkEq then
       begin
         Next;
-        ParseParamDefaultValue(rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
+        ParseParamDefaultValue(curTk, rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
                                rmDefSOff, rmDefSLen);
         for k := startIdx to nP - 1 do
         begin
@@ -24856,7 +24879,7 @@ begin
               if CurTok.Kind = tkEq then
               begin
                 Next;
-                ParseParamDefaultValue(mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                ParseParamDefaultValue(mTk, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                        mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                 mHasDefault := True;
               end;
@@ -25338,7 +25361,7 @@ begin
                   if CurTok.Kind = tkEq then
                   begin
                     Next;
-                    ParseParamDefaultValue(mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                    ParseParamDefaultValue(mTk, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                            mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                     mHasDefault := True;
                   end;
@@ -27454,7 +27477,7 @@ begin
       if CurTok.Kind = tkEq then
       begin
         Next;
-        ParseParamDefaultValue(defaultVal, defaultIsStr, defaultIsFloat,
+        ParseParamDefaultValue(tk, defaultVal, defaultIsStr, defaultIsFloat,
                                defaultIsSet, defaultSOff, defaultSLen);
         hasDefault := True;
       end;

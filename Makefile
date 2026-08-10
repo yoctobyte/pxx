@@ -2736,6 +2736,10 @@ test-core: $(COMPILER)
 	grep -q "file types are not supported" /tmp/test_ftf.log
 	! ./$(COMPILER) test/test_default_filefield_fail.pas /tmp/test_dff26 > /tmp/test_dff.log 2>&1
 	grep -q "record type contains a file field" /tmp/test_dff.log
+	! ./$(COMPILER) test/test_ordinal_default_on_string_param_fail.pas /tmp/test_odsp26 > /tmp/test_odsp.log 2>&1
+	grep -q "string parameter's default must be a string literal" /tmp/test_odsp.log
+	! ./$(COMPILER) test/test_string_default_on_ordinal_param_fail.pas /tmp/test_sdop26 > /tmp/test_sdop.log 2>&1
+	grep -q "string literal cannot be the default for a non-string parameter" /tmp/test_sdop.log
 	! ./$(COMPILER) test/test_forin_string_char_fail.pas /tmp/test_fsc26 > /tmp/test_fsc.log 2>&1
 	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
 	! ./$(COMPILER) test/test_interface_field_access_fail.pas /tmp/test_ifaf26 > /tmp/test_ifaf.log 2>&1

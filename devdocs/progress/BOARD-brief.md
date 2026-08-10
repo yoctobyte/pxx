@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:8 blocked:3 backlog:230 experimental:20 rainy-day:38 done-followup:3 decided:53 done:1599 rejected:32`
+`urgent:1 working:1 unfinished:8 blocked:3 backlog:229 experimental:20 rainy-day:38 done-followup:3 decided:53 done:1600 rejected:32`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-crtl-last-seven-unimplemented-declarations` [B] — blocked-by: feature-c-entry-stub-must-run-finalizers
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 212, ranked
+## Ready — top 30 of 211, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
@@ -41,7 +41,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [C]` bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address
 - `[p 60] [N]` bug-nilpy-open-returns-two-different-classes-by-mode
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- `[p 60] [P]` bug-p-integer-default-on-a-string-parameter-is-accepted-and-segfaults
 - `[p 60] [P]` bug-p-uses-order-does-not-decide-which-unit-wins
 - `[p 60] [U]` decide-own-language-first-name-resolution
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -64,5 +63,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 
-_182 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_181 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -3,6 +3,8 @@ track: P
 prio: 60
 type: bug
 summary: "`procedure R(s: AnsiString = 1)` compiles clean and SEGFAULTS on the omitted argument — the bare ordinal is handed to the callee as a string. FPC rejects the declaration outright. A silent-acceptance corruption bug, same family as the ctor-variant one: no diagnostic, and the crash is wherever the string is first touched"
+status: done
+owner: claude-ACPN
 ---
 
 # An integer default on a string parameter compiles, then segfaults
@@ -80,3 +82,44 @@ The repro becoming a compile error; `test/test_default_params_methods.pas`
 extended (it is the home for this concept); `tools/gate.sh quick`. If a
 `{%FAIL}`-style conformance case is the right home for the diagnostic, prefer
 that over a runtime test.
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-10)
+
+Fixed as recommended: **rejected at the declaration**, in the one shared
+`ParseParamDefaultValue` that the four parameter parsers now go through
+(unified by [[bug-p-float-literal-default-in-a-parameter-list-fails-to-parse]]
+immediately before this) — so the check lands once and covers free routines,
+class methods, interface methods and record methods together.
+
+Both arms of the mismatch are refused:
+
+```
+s: AnsiString = 1   -> a string parameter's default must be a string literal
+k: Integer    = 'a' -> a string literal cannot be the default for a non-string parameter
+```
+
+Exemptions, deliberate: **`tyVariant`** (every shape is legitimately boxed into
+it — the existing retag in `DefaultArgValueNode` is what makes that work), and
+**`tyChar`** taking an ordinal, which is ordinary Pascal.
+
+**No dialect flag.** This is not FPC-parity strictness that belongs behind
+`--strict-fpc`: the accepted form produced a *segfault*, so it falls under the
+compat-tag escape rule — silent wrong behaviour is a plain bug, not a laxness
+knob.
+
+**Corpus check** (the ticket's stated risk — a new hard error breaking code
+that used to compile): all **131** units under `lib/rtl`, `lib/pcl` and
+`lib/*` were compiled with the new binary. Zero new failures. Four units
+(`palthread`, `palpthread`, `palparallel`, `palthreadobj`) fail identically on
+the **pinned** compiler — they need `--threadsafe` — so they are a control, not
+a regression. Note `make lib-test` could not have answered this: Track B builds
+with `$(PXX_STABLE)`, which does not contain the change.
+
+**Regression tests:** `test/test_ordinal_default_on_string_param_fail.pas` and
+`test/test_string_default_on_ordinal_param_fail.pas`, both wired into the
+Makefile's negative-test block asserting the exact diagnostic text.
+
+**Gate:** `tools/gate.sh quick` GREEN (self-host fixedpoint + testmgr quick).
