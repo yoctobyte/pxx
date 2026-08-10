@@ -70,7 +70,7 @@ pass on a fix that records the wrong bits. Then `tools/gate.sh quick`.
 Extend `test/test_default_params_methods.pas` rather than adding a new file.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 3195e3947.
 
 ## Resolution (2026-08-10)
 
