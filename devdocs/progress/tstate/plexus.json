@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-09T19:46:00Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/csystem_libs_granular_libc_b113.c"
-   ],
-   "sha": "b39ac8f02003edb70d9a8340bb87fec7636d2915",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-09T19:57:52Z",
    "fixed": [],
    "new_red": [],
@@ -405,6 +395,14 @@
    "new_red": [],
    "sha": "49d857734e21f2301ed750c23fd3fe2e87b2bd28",
    "tier": "full",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-10T13:50:44Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "49d857734e21f2301ed750c23fd3fe2e87b2bd28",
+   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -4921,11 +4919,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-10T13:46:50Z",
+  "date": "2026-08-10T13:50:44Z",
   "sha": "49d857734e21f2301ed750c23fd3fe2e87b2bd28",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 775.2
+  "wall": 226.8
  },
  "last_bench": {
   "conf_rows": 550,
