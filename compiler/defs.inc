@@ -11,6 +11,9 @@ const
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
+  { Pascal scope hiding: the compiling scope's rank, above every CompiledUnits
+    position (which is bounded by that array's 256 slots). }
+  HIDE_RANK_SELF = 100000;
   PY_MAX_NESTED = 512;  { queued nested defs per enclosing body (feature-nilpy-nested-defs); uforth registers ~100 native-word bodies in one setup function }
   PY_MAX_CAPS = 20;     { enclosing locals one nested def may capture }
   PY_MAX_DEF_GLOBALS = 32;  { `global`/`nonlocal` names one def body may declare }
@@ -1950,6 +1953,17 @@ var
     Pass2BodyTok is the single live body-begin index, kept in sync by AdjustPass2Spans. }
   Pass2Active   : Boolean;
   Pass2BodyTok  : Integer;
+  { Pascal SCOPE HIDING (bug-p-uses-order-does-not-decide-which-unit-wins).
+    HIDE_RANK_SELF is above any CompiledUnits position, so the compiling scope
+    always outranks every used unit. The rest is ProcHideRank's one-entry
+    memo — MatchElig runs over the whole proc table for a single name, so
+    recomputing the winning rank per candidate would make matching quadratic. }
+  HideRankName : AnsiString;
+  HideRankFlags : Integer;
+  HideRankProcCount : Integer;
+  HideRankUnit : Integer;
+  HideRankVal : Integer;
+  HideRankValid : Boolean;
   CompiledUnits : array[0..255] of Integer;
   CompiledUnitCount : Integer;
   CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }

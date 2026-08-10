@@ -3,7 +3,7 @@ summary: "Two units exporting the same routine: FPC takes the LAST in the uses c
 type: bug
 track: P
 prio: 60
-status: working
+status: done
 owner: claude-ACPN
 ---
 
@@ -215,3 +215,74 @@ which `tools/progress.sh check` treats as critical — worse than not starting.
 
 Left in the backlog with the ground above under it. A session that picks this up
 starts at "add the rank + wire it into MatchElig", not at "where does this go".
+
+## Log
+- 2026-08-10 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-10) — hiding as candidate REMOVAL, both facets
+
+Built exactly as the 2026-08-06 investigation specified: **candidate removal in
+`MatchElig`, never ranking in `FindProc`.**
+
+- `ProcScopeRank` — compiling scope > position in `CompiledUnits` (which for a
+  `uses a, b` clause IS the uses order) > builtin. The rank did not have to be
+  invented; `CompiledUnits` already recorded it.
+- `ProcHideRank` — the winning rank per NAME, memoised (MatchElig runs over the
+  whole proc table for one name, so recomputing per candidate would make
+  matching quadratic). `overload` anywhere at the winning rank returns "no
+  hiding", which is what keeps `EmitAsmX64`'s `array of const` / `AnsiString`
+  pair alive across scopes.
+- `MatchEligBase` — the non-hiding tests, split out so the rank pass and the
+  final predicate cannot drift apart.
+
+### Two things the plan did not anticipate
+
+**1. The two call shapes bind through DIFFERENT code.** Fixing `MatchElig` alone
+left `WhoP(1)` answering `B` while a bare `Who` still answered `A` — a
+parameterless reference binds straight off `FindProc`, which the plan
+(correctly) forbade touching. It needed its own *binding* query,
+`FindProcBound`, that ranks candidates while leaving the representative alone.
+Had only the parameterised half been tested, this would have shipped half-fixed.
+
+**2. Hiding must NOT apply to a QUALIFIED call.** `System.Random(i + 1)` started
+reaching the used unit's `Random` instead of the builtin, because the unit
+outranks it — caught by `test_builtin_name_demote` in `test-core`, *not* by the
+quick tier. A qualified call has already named its scope; hiding only answers
+"which declaration does a bare name see". Gated on `demote`, which
+`MatchProcCall` already receives as `qUnit = -1`, so no new parameter.
+
+### The ticket's premise, corrected
+
+It states pxx "ignores uses order entirely and takes whichever unit registered
+first". It does not — it consistently took the **first** unit in the clause
+where FPC takes the last. Symmetric and order-sensitive, just inverted. Worth
+correcting because "ignores order" points an investigation at registration
+order rather than at direction.
+
+### Measured against FPC
+
+| | FPC | pxx now | pinned |
+| --- | --- | --- | --- |
+| `uses shadow_a, shadow_b` | `B B` | `B B` | `A A` |
+| `uses shadow_b, shadow_a` | `A A` | `A A` | `B B` |
+| program's `IntToStr` vs sysutils' | `MINE:5` | `MINE:5` | `5` |
+| `System.Random` vs unit's `Random` | `sys-ok` | `sys-ok` | `sys-ok` |
+
+Both facets the promotion note named — uses-order AND the convertible-argument
+case — are fixed by the one rule, as predicted.
+
+### Test material restored
+
+`test/shadow_a.pas`, `test/shadow_b.pas`, `test/test_shadow_last_uses_wins.pas`
+and `test/test_shadow_first_uses_hidden.pas`, wired into the Makefile. Both
+clause orders **and** both call shapes, because a rule that always picked one
+unit would pass either order alone, and the two shapes bind through different
+code.
+
+### Gate
+
+`--tier limited` **GREEN, 1726/1726** — the minimum the ticket demanded, since
+the quick tier passed both previously-broken versions. Plus `gate.sh quick`
+GREEN, `make test-core` exit 0 (the one that caught the qualified-call
+regression), `make test-nilpy` exit 0 (what the previous attempt broke), FPC
+seed canary PASS, self-host fixedpoint byte-identical.

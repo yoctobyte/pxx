@@ -10,11 +10,10 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | task-t-pin-fast-track-t-owns-verification | T | 80 | task | Track A pins in 30s and never waits; everything heavier moves to Track T, asynchronous and per-sha. Status is a JOIN of pin.log x tstate, not a label on the pin. Native full regression (incl. NilPy + corpus) is the priority right now, above the cross matrix. | — |
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-p-uses-order-does-not-decide-which-unit-wins | P | 60 | bug | Two units exporting the same routine: FPC takes the LAST in the uses clause, pxx takes the first. The naive fix (last declaring scope wins in FindProc) was measured to break the NilPy stdlib and the compiler's own self-compile — FindProc's return value is an overload-set REPRESENTATIVE that other code reads types off | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 
 ## unfinished (7)
@@ -404,9 +403,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1606)
+## done (1607)
 
-1606 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1607 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (32)
 

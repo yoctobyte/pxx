@@ -4507,6 +4507,16 @@ end;
   below. When it needs to pick by TYPE, give the routine a unique name or
   convert at the call site — full overload resolution lives in MatchProcCall
   and is not reachable from a name lookup. }
+{ Forwards: the FPC seed build compiles compiler.pas's includes in order and
+  requires a declaration before use, unlike pxx itself. ProcScopeRank and
+  MatchEligBase are both defined further down, beside MatchElig.
+  See bug-a-fpc-seed-drift-emitasmx64-forward — the seed canary is what caught
+  this, `make compiler/pascal26` was already converging. }
+function ProcScopeRank(idx, bIdx: Integer): Integer; forward;
+function MatchEligBase(idx: Integer; const name: AnsiString; demote: Boolean;
+                  bIdx: Integer; userOnly, dropLateDef: Boolean): Boolean; forward;
+function FindProcBound(const name: AnsiString): Integer; forward;
+
 function FindProc(const name: AnsiString): Integer;
 var i, own, last: Integer; lo: AnsiString;
 begin
@@ -4704,6 +4714,49 @@ begin
     end;
     i := ProcHashNext[i];
   end;
+end;
+
+{ The declaration a BARE-IDENTIFIER reference BINDS to, under Pascal's scope
+  hiding rule — `uses a, b` binds b's parameterless `Who`, as FPC does.
+
+  Separate from FindProc ON PURPOSE. FindProc returns the *representative* of a
+  same-named set and callers read signatures and return types off it; ranking
+  inside it broke the self-compile and the NilPy stdlib once already (see the
+  note in FindProc). This is the other query — "which one does this reference
+  bind to" — and it is only used where a binding is actually being made.
+
+  Calls WITH arguments never come here; they go through MatchProcCall, whose
+  MatchElig already removes hidden candidates. This covers the parameterless
+  case, which binds off FindProc directly and so was untouched by that.
+
+  `overload` anywhere in the set means JOIN rather than replace, so the
+  representative is kept and ordinary overload resolution decides.
+  bug-p-uses-order-does-not-decide-which-unit-wins }
+function FindProcBound(const name: AnsiString): Integer;
+var i, best, bestR, r: Integer; lo: AnsiString; anyOverload: Boolean;
+begin
+  best := FindProc(name);
+  FindProcBound := best;
+  if best < 0 then Exit;
+  lo := name;
+  bestR := ProcScopeRank(best, -1);
+  anyOverload := ProcOverloadDirective[best];
+  i := ProcChainHead(lo);
+  while i >= 0 do
+  begin
+    if (Procs[i].Name = lo) and
+       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
+    begin
+      r := ProcScopeRank(i, -1);
+      if r > bestR then
+      begin
+        bestR := r; best := i; anyOverload := ProcOverloadDirective[i];
+      end
+      else if (r = bestR) and ProcOverloadDirective[i] then anyOverload := True;
+    end;
+    i := ProcHashNext[i];
+  end;
+  if not anyOverload then FindProcBound := best;
 end;
 
 function FindProcOverload(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
@@ -5158,7 +5211,68 @@ begin
             (ProcPyDefTok[pi] <= TokPos);
 end;
 
-function MatchElig(idx: Integer; const name: AnsiString; demote: Boolean;
+{ SCOPE RANK of a declaration, for Pascal's hiding rule: a declaration hides a
+  same-named one from an EARLIER or OUTER scope. Higher wins.
+
+    compiling scope (the program, or the unit being parsed)  -> HIDE_RANK_SELF
+    a used unit                                              -> its position in
+                                                                CompiledUnits,
+                                                                which for a
+                                                                `uses a, b`
+                                                                clause IS the
+                                                                uses order
+    the builtin unit                                         -> 0, lowest
+
+  CompiledUnits already records compile order, so the rank this needed did not
+  have to be invented. }
+function ProcScopeRank(idx, bIdx: Integer): Integer;
+var u, k: Integer;
+begin
+  u := ProcUnitIdx[idx];
+  if u = CurrentUnitIdx then begin ProcScopeRank := HIDE_RANK_SELF; Exit; end;
+  if (bIdx >= 0) and (u = bIdx) then begin ProcScopeRank := 0; Exit; end;
+  ProcScopeRank := 1;
+  for k := 0 to CompiledUnitCount - 1 do
+    if CompiledUnits[k] = u then begin ProcScopeRank := k + 2; Exit; end;
+end;
+
+{ The winning scope rank for `name` — every candidate below it is HIDDEN.
+  Returns -1 for "nothing hides anything here", which is also what an
+  `overload`-marked winner yields: `overload` means JOIN the set rather than
+  replace it, and that is what keeps EmitAsmX64's `array of const` / AnsiString
+  pair alive across scopes.
+
+  Computed once per (name, flags) and memoised, because MatchElig is called in a
+  tight loop over the whole proc table for ONE name — recomputing per candidate
+  would make matching quadratic. The proc table grows during parsing, so
+  ProcCount is part of the key. }
+function ProcHideRank(const name: AnsiString; demote: Boolean;
+                      bIdx: Integer; userOnly, dropLateDef: Boolean): Integer;
+var i, r, best, flags: Integer; anyOverload: Boolean;
+begin
+  flags := Ord(demote) + 2 * Ord(userOnly) + 4 * Ord(dropLateDef) + 8 * (bIdx + 2);
+  if HideRankValid and (HideRankProcCount = ProcCount) and
+     (HideRankFlags = flags) and (HideRankUnit = CurrentUnitIdx) and
+     (HideRankName = name) then
+  begin ProcHideRank := HideRankVal; Exit; end;
+  best := -1; anyOverload := False;
+  for i := 0 to ProcCount - 1 do
+  begin
+    if not MatchEligBase(i, name, demote, bIdx, userOnly, dropLateDef) then Continue;
+    r := ProcScopeRank(i, bIdx);
+    if r > best then begin best := r; anyOverload := ProcOverloadDirective[i]; end
+    else if (r = best) and ProcOverloadDirective[i] then anyOverload := True;
+  end;
+  if anyOverload then best := -1;
+  HideRankName := name; HideRankFlags := flags; HideRankProcCount := ProcCount;
+  HideRankUnit := CurrentUnitIdx; HideRankVal := best; HideRankValid := True;
+  ProcHideRank := best;
+end;
+
+{ The eligibility tests that do NOT depend on scope hiding — the set
+  ProcHideRank ranks over. Split out so the rank pass and the final predicate
+  cannot drift apart. }
+function MatchEligBase(idx: Integer; const name: AnsiString; demote: Boolean;
                   bIdx: Integer; userOnly, dropLateDef: Boolean): Boolean;
 begin
   Result := ProcNameMatches(idx, name) and not (demote and (ProcUnitIdx[idx] = bIdx));
@@ -5178,6 +5292,37 @@ begin
     bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
   if Result and dropLateDef and (ProcUnitIdx[idx] = -1) and
      (not PyDefBoundHere(idx)) then Result := False;
+end;
+
+{ ...plus Pascal's SCOPE HIDING: a declaration in a later/inner scope hides a
+  same-named one from an earlier/outer scope unless marked `overload`.
+
+  This is candidate REMOVAL, deliberately, and it lives here rather than in
+  FindProc. Ranking inside FindProc's chain was tried and broke two things that
+  `gate.sh quick` did not catch — the compiler's own self-compile (the parser
+  reads the returned proc's SIGNATURE to decide whether `[...]` is an
+  open-array constructor or a set) and the NilPy stdlib (`pyparser.inc` infers
+  expression types from the returned proc's RetType, and `sum(range(i))`
+  segfaulted far from the cause). FindProc returns an overload-set
+  REPRESENTATIVE that callers read types off; it is not a "which one does this
+  call bind to" query. MatchElig is, and its 9 call sites are exactly the
+  matching phases, so one test here removes hidden declarations from every
+  phase at once.
+  bug-p-uses-order-does-not-decide-which-unit-wins }
+function MatchElig(idx: Integer; const name: AnsiString; demote: Boolean;
+                  bIdx: Integer; userOnly, dropLateDef: Boolean): Boolean;
+var hr: Integer;
+begin
+  Result := MatchEligBase(idx, name, demote, bIdx, userOnly, dropLateDef);
+  if not Result then Exit;
+  { Only for a PLAIN UNQUALIFIED call. `demote` is passed as `qUnit = -1`, so it
+    is False exactly when the call named its scope — `System.Random(i + 1)`,
+    which must reach the builtin even though a used unit declares Random and
+    outranks it. Hiding answers "which declaration does a bare name see"; a
+    qualified call has already answered that itself (test_builtin_name_demote). }
+  if not demote then Exit;
+  hr := ProcHideRank(name, demote, bIdx, userOnly, dropLateDef);
+  if (hr >= 0) and (ProcScopeRank(idx, bIdx) < hr) then Result := False;
 end;
 
 { Does the NilPy program itself declare a routine called `name`?

@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:7 blocked:3 backlog:228 experimental:20 rainy-day:38 done-followup:3 decided:53 done:1606 rejected:32`
+`urgent:1 working:1 unfinished:7 blocked:3 backlog:228 experimental:20 rainy-day:38 done-followup:3 decided:53 done:1607 rejected:32`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-p-uses-order-does-not-decide-which-unit-wins` [P] — owner: claude-ACPN
 - `feature-real-dynlib-loader` [B] — owner: claude-B
 
 ## urgent (1) — jump the queue

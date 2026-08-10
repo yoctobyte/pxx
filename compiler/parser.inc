@@ -12120,12 +12120,19 @@ begin
           SendBufferTo(...; Length: Integer). Leave idx unbound so the
           builtin branches below take the name. }
         idx := -1;
+        { NOT FindProcBound: this arm exists so an explicit `System.X` reaches
+          the BUILTIN, and scope hiding would hand back the used unit's
+          same-named routine instead — `System.Random(i+1)` stopped reaching
+          System's generator (test_builtin_name_demote). A qualified call names
+          its scope; hiding is for unqualified ones. }
         procIdx := FindProc(name);
       end
       else
       begin
         idx := FindSym(name);
-        procIdx := FindProc(name);
+        { a BARE reference binds under the scope-hiding rule — FindProc alone
+          answers with the set's representative, which ignores `uses` order }
+        procIdx := FindProcBound(name);
       end;
 
       { The EXPRESSION half of the own-field-beats-a-unit-name rule; the

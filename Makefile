@@ -4524,6 +4524,13 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_warn_ignored_directives26)" = "$$(printf '1\n1')"
 	./$(COMPILER) test/test_shadow_program_over_unit.pas /tmp/test_shadow_program_over_unit26
 	test "$$(/tmp/test_shadow_program_over_unit26)" = "$$(printf 'mine\nmine-trim\nX\n7')"
+	# `uses a, b` binds the LAST unit's routine, as FPC does — both orders, and
+	# both call shapes (parameterless binds via FindProcBound, with-args via
+	# MatchProcCall/MatchElig; fixing one left the other wrong)
+	./$(COMPILER) -Futest test/test_shadow_last_uses_wins.pas /tmp/test_shadow_last_uses26
+	test "$$(/tmp/test_shadow_last_uses26)" = "$$(printf 'B\nB')"
+	./$(COMPILER) -Futest test/test_shadow_first_uses_hidden.pas /tmp/test_shadow_first_uses26
+	test "$$(/tmp/test_shadow_first_uses26)" = "$$(printf 'A\nA')"
 	./$(COMPILER) test/test_math_intrinsics_no_uses.pas /tmp/test_math_intrinsics_no_uses26
 	test "$$(/tmp/test_math_intrinsics_no_uses26)" = "$$(printf '4.0\n0.0\n1.0\n1.0\n0.0\n3.14159\n7')"
 	./$(COMPILER) test/test_writeln_text_char.pas /tmp/test_writeln_text_char26
