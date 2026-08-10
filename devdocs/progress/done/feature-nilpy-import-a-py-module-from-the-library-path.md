@@ -77,7 +77,7 @@ has multi-module tests that rely on sibling-first — those must not move);
 self-host byte-identical; `import re` still reaching `lib/rtl/re.pas`.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 555f2d3b6.
 
 ## Resolution (2026-08-10)
 

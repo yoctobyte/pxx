@@ -75,7 +75,7 @@ accordingly — the `environ` half is the silent-wrong-answer class, which this
 project ranks worst.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 555f2d3b6.
 
 ## Resolution (2026-08-10) — the fini half, on all five targets
 
