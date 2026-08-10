@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:8 blocked:3 backlog:228 experimental:20 rainy-day:38 done-followup:3 decided:53 done:1601 rejected:32`
+`urgent:1 working:1 unfinished:8 blocked:3 backlog:228 experimental:20 rainy-day:38 done-followup:3 decided:53 done:1602 rejected:32`
 
 ## Held now (working/ — do not touch these files)
 
@@ -35,7 +35,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 210, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
-- `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [N]` bug-nilpy-open-returns-two-different-classes-by-mode
@@ -58,6 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [N]` bug-nilpy-calling-a-non-callable-segfaults
 - `[p 55] [N]` bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
+- `[p 55] [T]` bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - `[p 55] [U]` decide-ismultithread-runtime-flag-vs-compile-time-mode
 - `[p 55] [U]` decide-sole-a-guard-for-unattended-sessions
 - `[p 55] [A]` feature-a-declaration-phase
