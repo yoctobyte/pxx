@@ -36,13 +36,14 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (232)
+## backlog (233)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver | A | 40 | bug | A metaclass returned from a FUNCTION is not a receiver | — |
 | bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit | A | 40 | bug | A VARIABLE field width is refused for strings/chars, and needs an RTL unit at all | — |
 | bug-a-fixed-array-function-result-faults-on-i386-and-arm32 | A | 45 | bug | A fixed-array function result faults on i386 and arm32 | — |
+| bug-a-for-in-refuses-a-set-constructor-and-a-string-literal | A | 35 | bug | `for x in [...]` and `for c in 'literal'` are refused | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
 | bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc | A | 40 | bug | `shr` on a 32-bit operand shifts at 32 bits; FPC promotes to 64 first | decide-shift-operator-promotion-width |
 | bug-a-write-fixed-fraction-digits-past-16-are-invented | A | 35 | bug | SILENT: write(v:w:d) gets the INTEGER part exactly now, but the fraction is still scaled through a Double — 1/3 at :0:30 prints ...333312 where the double's exact tail is ...333314829616256247, so digits 17-18 are wrong and 19+ are zeros presented as digits | — |
@@ -591,6 +592,7 @@ lives in git, not in a timestamp._
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
+- [p 35] [A] bug-a-for-in-refuses-a-set-constructor-and-a-string-literal
 - [p 35] [A] bug-a-write-fixed-fraction-digits-past-16-are-invented
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
