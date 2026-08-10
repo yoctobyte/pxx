@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:11 blocked:7 backlog:224 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1587 rejected:31`
+`urgent:3 working:1 unfinished:11 blocked:7 backlog:224 experimental:20 rainy-day:36 done-followup:3 decided:53 done:1587 rejected:31`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-real-dynlib-loader` [B] — owner: claude-B
 
-## urgent (2) — jump the queue
+## urgent (3) — jump the queue
 
+- `bug-c-crtl-auto-pull-depends-on-the-pascal-preludes-unit-count` [C]
 - `bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory` [P]
 - `task-t-pin-fast-track-t-owns-verification` [T]
 
@@ -40,9 +41,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-lib-tkinter-callable-options-with-args` [B]
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 205, ranked
+## Ready — top 30 of 206, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
+- `[p 75] [C]` bug-c-crtl-auto-pull-depends-on-the-pascal-preludes-unit-count
 - `[p 70] [P]` bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory
 - `[p 65] [O]` bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack
 - `[p 60] [U]` decide-nilpy-class-as-value-dispatch-strategy (unblocks 1)
@@ -71,6 +73,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
-- `[p 55] [N]` feature-nilpy-corpus-uforth
 
-_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

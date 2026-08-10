@@ -116,3 +116,39 @@ Direction 1 or 2 removes a whole class; the deny-list only postpones it.
 
 The probe above matching gcc with `Pow`/`Log`/`CopySign` restored to
 `lib/rtl/math.pas`, plus `make lib-test` and the C suites green.
+
+## 2026-08-10 — the fix is written and verified, and BLOCKED on a second bug
+
+Attempted the split the user asked for (crtl owns its math; `pxxcio` drops
+`uses math`). It works: the whole libm surface goes byte-identical to gcc,
+`isnan(5.5)` stops answering TRUE, and the `--system-libs=c` red (b113) clears.
+
+It cannot land yet. Removing `uses math` triggers
+[[bug-c-crtl-auto-pull-depends-on-the-pascal-preludes-unit-count]] — with only
+two units in pxxcio's uses clause the crtl auto-pull silently does not fire, so
+`stdlib.c` and `string.c` are never emitted and any call into them jumps to
+garbage. **Any third unit avoids it**, which is why this has never been seen:
+`math` merely happens to be the third one today.
+
+The verified implementation is banked on that ticket. **Do not land the two
+halves separately** — adding crtl's four functions while `uses math` remains
+makes things worse (two competing definitions; asin/acos/atan2 return NaN).
+
+### Scope note, measured while doing it
+
+Only FOUR names were still crossing the boundary by collision: `ceil`, `floor`,
+`sqrt`, `fmod`. Every other crtl module already reaches shared code through
+explicitly prefixed `__pxx_*` PAL entry points (100+ of them), and crtl already
+defines 64 math functions of its own — the migration away from the Pascal
+binding has been happening one incident at a time (`exp` after b377, then
+log2/log10, then sin/cos/tan/sinh/cosh/tanh/hypot). Finishing it deliberately
+is smaller than the next incident.
+
+### The design rule this belongs to (user, 2026-08-10)
+
+**"Own language first"**: a declaration from the caller's own language beats a
+cross-language match, and that outranks import order. Cross-language binding
+stays as the FALLBACK — it is the pxx interop feature, and making lookup
+case-sensitive was explicitly rejected as defeating it. Companion: *share what
+the machine provides, duplicate what the language specifies.*
+
