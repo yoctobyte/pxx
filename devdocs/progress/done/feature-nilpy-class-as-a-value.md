@@ -219,4 +219,4 @@ Three pre-existing bugs the gate cases walked into, each confirmed at `pinned`:
 classes, as the ticket said it would.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 57a083c8f.
