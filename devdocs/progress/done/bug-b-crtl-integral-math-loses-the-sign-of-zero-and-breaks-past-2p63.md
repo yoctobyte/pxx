@@ -115,4 +115,4 @@ kernels, where a gcc difference is often glibc misrounding. Those need a decimal
 reference, not gcc.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 9f941deb1.
