@@ -50,3 +50,36 @@ across several lanes, and that is a steering decision, not a bug fix.
 ## Related
 [[meta-track-w-collision-windows-vs-website]],
 [[chore-progress-flag-prose-only-track-decl]]
+
+## 2026-08-10 — half done: the backfill is complete (it was ONE file)
+
+**Measured before acting**, and it dissolves this ticket's blocking concern. The
+worry was that auto-tagging *"moves an unknown number of tickets out of A's/N's
+ready queue in one step, changing what `next` hands out"* — a steering decision.
+
+That number is **one**. Every other live `decide-*` already declared
+`track: U`. The single offender was
+[[decide-nilpy-parallel-capture-semantics]], which declared Track U **in its
+prose** — *"a semantics fork only the user settles"* — while carrying no
+`track:` frontmatter, so the ranker put it in **Track A's queue at prio 5**.
+
+That is the exact failure [[meta-track-w-collision-windows-vs-website]] taught:
+declare the track in FRONTMATTER, because that is what the ranker reads.
+
+**Done (user, "fix that ticket"):** `track: U` added. Verified it left Track A's
+ready queue and appears in U's.
+
+## What remains: the RULE
+
+Option 1 of the fork — auto-tag `decide-*` -> U in `Ticket.track`, ~3 lines
+beside the S/O/E arms, with the same explicit-declaration tie-break the M rule
+needed. The backfill fixes today; the rule is what stops the next hand-written
+`decide-` without frontmatter from re-opening the gap.
+
+Not done here because it is `tools/progress.py` — **Track T's file** — and worth
+doing deliberately rather than tacked onto a docs commit. The steering risk that
+made the whole ticket a Track U question is now gone (the backfill already moved
+the only affected ticket), so what is left is ordinary Track T work, not a
+decision.
+
+Suggested re-file: `chore-t-auto-tag-decide-slugs-track-u`.
