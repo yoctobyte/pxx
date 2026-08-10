@@ -88,6 +88,14 @@ The two halves are NOT separable: adding the four while `uses math` remains
 makes things worse (two competing definitions — asin/acos/atan2 start returning
 NaN). Land them together, after this bug.
 
+**Update, same night:** `floor` and `ceil` landed independently in `11019fe12`
+("give floor/ceil real bodies — my Floor/Ceil change pulled in libm"), which
+also cleared the b113 red. So only **`sqrt` and `fmod`** remain to add, plus the
+`uses math` removal. The two banked below are unchanged and still needed; the
+floor/ceil pair below is superseded by what is already in the tree (their
+version handles the observable -0.0 the same way, found by the same gcc
+differential).
+
 The verified implementation is saved as a patch on this ticket rather than in
 the tree:
 
