@@ -45,6 +45,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-managed-string-arg-temp-leaks-on-loop-reuse | A | 45 | bug | Managed-string arg-materialization temp leaks one handle per loop iteration | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-a-missing-source-file-compiles-to-an-empty-program | A | 60 | bug | pxx on a nonexistent or unreadable source file printed `ok`, exited 0, and emitted a runnable binary that does nothing — LoadFile answers \"\" for an unopenable path and an empty NilPy source is a valid empty program | — |
+| bug-a-nd-array-function-result-indexes-the-wrong-slot | A | 50 | bug | An N-D array function RESULT indexes the wrong slot inside the callee | — |
 | bug-a-nilpy-and-or-in-unavailable-in-call-arguments | A | 65 | bug | NilPy `and` / `or` / `in` / `is` do not work in a CALL ARGUMENT | — |
 | bug-a-nilpy-class-variant-field-string-not-released-on-finalize | A | 55 | bug | A class's variant-typed field holding a managed string is not released on finalize — general, not Exception-specific | — |
 | bug-a-nilpy-container-equality-compares-identity | A | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |

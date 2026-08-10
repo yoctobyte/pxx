@@ -2191,6 +2191,14 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_aggret26 | tail -1)" = "AGGREGATE FUNCTION RESULTS OK"
 	test "$$(/tmp/test_aggret26 | head -1)" = "set lit   TRUE TRUE FALSE"
 	test "$$(/tmp/test_aggret26 | head -7 | tail -1)" = "arr       8 9 10"
+	# ...and the Result SLOT, which was one element wide with no dim spans:
+	# array[0..3] overran into the return address, an N-D result indexed with
+	# no strides, and a non-Integer element got an Integer stride.
+	test "$$(/tmp/test_aggret26 | head -9 | tail -1)" = "arr4      1 2 3 4"
+	test "$$(/tmp/test_aggret26 | head -10 | tail -1)" = "arr 2d    1 2 3 4"
+	test "$$(/tmp/test_aggret26 | head -11 | tail -1)" = "arr 3d    105 106 115 116 125 126 205 206 215 216 225 226"
+	test "$$(/tmp/test_aggret26 | head -12 | tail -1)" = "arr str   aa bb cc"
+	test "$$(/tmp/test_aggret26 | head -13 | tail -1)" = "arr rec   1 2 3 4"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed

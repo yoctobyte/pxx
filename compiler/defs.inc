@@ -2871,6 +2871,7 @@ var
   ArrTypeDynDepth: array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemRowLen: array[0..MAX_TYPEALIAS-1] of Integer; { dyn alias whose element is a named FIXED array (`TDA = array of T`): the row's flattened element count; 0 = scalar element }
   ArrTypeElemRowLo : array[0..MAX_TYPEALIAS-1] of Integer; { the row's low bound, paired with ArrTypeElemRowLen }
+  ArrTypeElemStrCap: array[0..MAX_TYPEALIAS-1] of Integer; { frozen-string element (`array[..] of string[N]`): N. Nothing else carries it — a USE of the alias is far from where `string[N]` was parsed, so LastTypeStrCap is whatever the last unrelated declaration left behind. bug-a-nd-array-function-result-indexes-the-wrong-slot }
   ArrTypeCount  : Integer;
 
   { Untyped string constants `const Name = 'literal'`. Stored as the literal's

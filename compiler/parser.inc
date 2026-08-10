@@ -22439,6 +22439,10 @@ begin
       elemTk := IntToTypeKind(ArrTypeElemTk[ai]); tk := elemTk;
       LastTypeRecId := ArrTypeElemRec[ai];
       LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+      { The alias records its frozen-string element width; LastTypeStrCap here
+        is whatever the last unrelated `string[N]` anywhere left behind. }
+      if (elemTk = tyFixedString) or (elemTk = tyShortString) then
+        LastTypeStrCap := ArrTypeElemStrCap[ai];
       if ArrTypeIsDyn[ai] then
       begin
         { dynamic-array alias -> AllocDynArray below }
@@ -24634,6 +24638,7 @@ var
   mFullName: AnsiString;
   aLo, aHi: Integer; aElemTk: TTypeKind;
   tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
+  aElemStrCap: Integer;   { `array[..] of string[N]`: N, captured where it is parsed }
   tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -26122,9 +26127,11 @@ begin
             p[i][j]). TG is already flattened in its own ArrType entry, so one
             merge covers arbitrary nesting depth. }
           fAi := -1;
+          aElemStrCap := 0;
           if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
           if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
           begin
+            aElemStrCap := ArrTypeElemStrCap[fAi];
             if ArrTypeNDims[fAi] >= 2 then
             begin
               for tdi := 0 to ArrTypeNDims[fAi] - 1 do
@@ -26147,7 +26154,10 @@ begin
             Next;   { consume the named array type }
           end
           else
+          begin
             aElemTk := ParseTypeKind;
+            aElemStrCap := LastTypeStrCap;
+          end;
           if tdCnt = 1 then
           begin aLo := tdDimLo[0]; aHi := tdDimLo[0] + tdDimSpan[0] - 1; end
           else
@@ -26173,6 +26183,10 @@ begin
           ArrTypeIsDyn[ArrTypeCount] := False;
           ArrTypeElemRowLen[ArrTypeCount] := 0;
           ArrTypeElemRowLo[ArrTypeCount] := 0;
+          if (aElemTk = tyFixedString) or (aElemTk = tyShortString) then
+            ArrTypeElemStrCap[ArrTypeCount] := aElemStrCap
+          else
+            ArrTypeElemStrCap[ArrTypeCount] := 0;
           Inc(ArrTypeCount);
         end
         else
@@ -26191,6 +26205,7 @@ begin
           ArrTypeElemRowLen[ArrTypeCount] := 0;
           ArrTypeElemRowLo[ArrTypeCount] := 0;
           fAi := -1;
+          aElemStrCap := 0;
           if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
           if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
           begin
@@ -26208,9 +26223,16 @@ begin
             Next;               { consume the named array type }
           end
           else
+          begin
             aElemTk := ParseTypeKind;
+            aElemStrCap := LastTypeStrCap;
+          end;
           ArrTypeName[ArrTypeCount] := tname;
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
+          if (aElemTk = tyFixedString) or (aElemTk = tyShortString) then
+            ArrTypeElemStrCap[ArrTypeCount] := aElemStrCap
+          else
+            ArrTypeElemStrCap[ArrTypeCount] := 0;
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           ArrTypeNDims[ArrTypeCount] := 0;
@@ -27183,6 +27205,7 @@ var
   zfLoop, zfDone : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
   retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
+  retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j, savedVisVarSeq: Integer;
@@ -27308,7 +27331,7 @@ begin
 
   nparams := 0; retType := tyInteger; retRecId := REC_NONE;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
-  retFixedArrBytes := 0;
+  retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
 
   if CurTok.Kind = tkLParen then
@@ -27557,19 +27580,30 @@ begin
                 + 'this target yet — return a dynamic array, or use a var '
                 + 'parameter');
         paramAi := FindArrayType(CurTok.SVal);
-        { ONE-DIMENSIONAL only. An N-D array RESULT is wrong before it is ever
-          returned: the callee's own `MkArr2[0,1] := 2` lands in the wrong slot
-          (`inside 1 3 3 4` for 1,2,3,4 — on `pinned` as well as at HEAD), so
-          returning it correctly would just deliver the callee's own garbage
-          faithfully. Refused here rather than half-supported.
-          bug-a-nd-array-function-result-indexes-the-wrong-slot }
-        if ArrTypeNDims[paramAi] >= 2 then
-          Error('a function result of a MULTI-DIMENSIONAL array type is not '
-                + 'supported yet — use a var parameter');
+        retArrAi := paramAi;
+        { ArrTypeLo/Hi are the FLATTENED bounds for an N-D alias too (the type
+          decl stores 0..prod(spans)-1), so this byte count covers both. }
         retFixedArrBytes := (ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1) *
                             TypeSize(IntToTypeKind(ArrTypeElemTk[paramAi]));
       end;
-      retType := ParseTypeKind;
+      if retArrAi >= 0 then
+      begin
+        { An array-type alias is NOT in the scalar alias table, so ParseTypeKind
+          falls through its unknown-name default and answers tyInteger. That is
+          right by accident for `array of Integer` and wrong for every other
+          element: `array[0..2] of string[8]` and `array[0..2] of TRec` both
+          returned an Integer-strided Result, so the callee's own
+          `MkR[2].a := 5` landed mid-element. Take the element type from the
+          ArrType entry, as ParseVarSection does for a variable of the alias. }
+        retType := IntToTypeKind(ArrTypeElemTk[retArrAi]);
+        LastTypeRecId := ArrTypeElemRec[retArrAi];
+        LastTypePointerElemRec := ArrTypePtrElemRec[retArrAi];
+        if (retType = tyFixedString) or (retType = tyShortString) then
+          LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
+        Next;   { consume the alias name ParseTypeKind would have eaten }
+      end
+      else
+        retType := ParseTypeKind;
       if (retType = tyRecord) or (retType = tyClass) then
         retRecId := LastTypeRecId;
       if retType = tyPointer then
@@ -28466,6 +28500,47 @@ begin
         caller-destination ABI like records. Capacity LOCAL_STR_CAP (ShortString). }
       AllocVar('Result', retType);
       Procs[procIdx].RetSymIdx := SymCount - 1;
+    end
+    else if retArrAi >= 0 then
+    begin
+      { Result is a FIXED array. It must be allocated AS an array: AllocVar
+        stamps IsArray=False/ArrLen=0/SymArrNDims=0 and reserves ONE ELEMENT
+        (`Procs[].RetType` holds the element kind for `function F: TArr`), so
+        `Result[i] := v` indexed off a 4-byte slot and wrote over the rest of
+        the frame — `array[0..2]` survived on frame padding, `array[0..3]`
+        reached the return address and SIGSEGVed, and an N-D result indexed
+        with no dim spans at all (`1 2 3 4` read back as `1 3 3 4`).
+        bug-a-nd-array-function-result-indexes-the-wrong-slot }
+      { Params were parsed since the return type, so re-state the element's
+        frozen-string width from the alias rather than trusting LastTypeStrCap. }
+      if (retType = tyFixedString) or (retType = tyShortString) then
+        LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
+      idx := AllocArray('Result', retType, ArrTypeLo[retArrAi], ArrTypeHi[retArrAi]);
+      Syms[idx].Kind := skLocal;
+      if ArrTypeNDims[retArrAi] >= 2 then
+      begin
+        SymArrNDims[idx] := ArrTypeNDims[retArrAi];
+        for i := 0 to ArrTypeNDims[retArrAi] - 1 do
+        begin
+          SymArrDimLo[idx * MAX_ARR_DIMS + i]   := ArrTypeDimLo[retArrAi * MAX_ARR_DIMS + i];
+          SymArrDimSpan[idx * MAX_ARR_DIMS + i] := ArrTypeDimSpan[retArrAi * MAX_ARR_DIMS + i];
+        end;
+      end;
+      SymSyncTypeRef(idx);
+      Procs[procIdx].RetSymIdx := idx;
+      { Restate the returned byte count from the element's real SLOT size. The
+        count above came from TypeSize(elemTk), which is the whole-value size
+        only for scalars: `array[0..2] of string[8]` copied 3*8 of a 3*(2+8)
+        slot run and came back blank, and a record element copied one pointer's
+        worth. Same elemSize rule as the whole-static-array copy in ir.inc. }
+      if retType = tyRecord then
+        sz := RecSize(Syms[idx].ElemRecName)
+      else if TypeIsFrozenString(retType) then
+        sz := FrozenStrSlotSize(retType, SymStrCap[idx])
+      else
+        sz := TypeSize(retType);
+      retFixedArrBytes := Syms[idx].ArrLen * sz;
+      ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
     end
     else
     begin
