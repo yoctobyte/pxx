@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (237)
+## backlog (238)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -186,6 +186,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-methods-on-int-and-float | N | 35 | feature | No methods on `int` or `float` — `x.bit_length()`, `x.is_integer()`, `x.hex()` | — |
 | feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
+| feature-nilpy-no-type-inference-switch | N | 45 | feature | `--no-type-inference`: compile a NilPy program fully dynamically | — |
 | feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
@@ -553,6 +554,7 @@ lives in git, not in a timestamp._
 - [p 45] [A] feature-move-fillchar-intrinsics
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
+- [p 45] [N] feature-nilpy-no-type-inference-switch
 - [p 45] [N] feature-nilpy-process-exec-binding
 - [p 45] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 45] [P] feature-pascal-corpus-passrc
