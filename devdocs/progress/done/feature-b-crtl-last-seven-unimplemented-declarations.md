@@ -310,4 +310,4 @@ is not one. Not filed as a gap; noted so the next reader does not re-chase it.
 The 21 pthread BUILDFAILs are the reach-based `--threadsafe` gate, unchanged.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit c4a1d76f6.
