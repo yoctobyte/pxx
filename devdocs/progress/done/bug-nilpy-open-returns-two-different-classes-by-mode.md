@@ -82,7 +82,7 @@ diverge further. Recorded as the fallback, not the recommendation.
 at the top plus a rename of the second `f`.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 4d3716b05.
 
 ## Resolution (2026-08-10) — one class, as the ticket recommended
 
