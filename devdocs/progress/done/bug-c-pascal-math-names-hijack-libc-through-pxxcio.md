@@ -196,4 +196,4 @@ A Track U `decide-*` on the resolution rule is the next step.
 - `gate.sh quick` GREEN, `make lib-test`, `make test-core`.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit bab16e1b3.

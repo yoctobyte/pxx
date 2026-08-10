@@ -279,4 +279,4 @@ irrational for every non-square and so is never truly at a tie. `fmod` shipped
 as banked, unchanged.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit bab16e1b3.
