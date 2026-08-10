@@ -88,3 +88,46 @@ Give each C source module its own unit identity so `ProcUnitIdx` distinguishes
 them (the warning's third term already tests it), and make a `static` definition
 private to its module rather than entered in a shared namespace. A `static`
 declared in a HEADER is per-including-TU by the same rule.
+
+## Measured 2026-08-10 — no body wins; the warning is a pure false positive
+
+Re-checked because last session's crtl work (the C-owns-its-math split,
+`task-c-stop-the-compiler-authoring-crtls-contents`) makes hand-prototyped C
+pull more crtl modules into one program, so co-pulled collisions are more
+reachable than when this was filed. The question was whether the symptom is
+still only a spurious warning.
+
+**It is.** The section above says this "becomes a miscompile the moment two crtl
+modules define a same-named `static` with **different** bodies". Measured
+directly, that is **not** what happens.
+
+Method: the two `sysret` bodies are byte-identical, which makes the question
+unobservable — so each copy was temporarily marked with a distinct return offset
+(in the working tree only, reverted; nothing committed) and a program was built
+that reaches both, `open()` through `fcntl.c` and `dup()` through `unistd.c`.
+Run in **both** directions so the answer could not be an artifact of pull order:
+
+| marked module | `open()` (fcntl's `sysret`) | `dup()` (unistd's `sysret`) | reading |
+| --- | --- | --- | --- |
+| `unistd.c` (+1000) | `3` — plain fd, unmarked | `1004` — marked | each used ITS OWN body |
+| `fcntl.c` (+2000) | `2003` — marked | fails on the bogus fd | each used ITS OWN body |
+
+The marker follows its own module in both directions. **Each caller binds to the
+static defined in its own `.c`**; the second body does not win, so there is no
+silent miscompile to escalate — this stays prio 50 rather than becoming an
+urgent bug.
+
+**But the warning's TEXT is wrong**, and that is worth fixing on its own:
+
+    warning: duplicate definition of 'sysret' in the same translation unit
+             — the later body wins
+
+"the later body wins" is a false statement about what the compiler then does,
+printed on legal C. Anyone who trusts it will go looking for a miscompile that
+is not there — or, worse, "fix" correct code to avoid it. Whoever takes this
+ticket should either scope the message to what is actually true or suppress it
+for this case; the structural fix in "Fix direction" above remains the real
+answer.
+
+(`ldd` on the built binary still reports "not a dynamic executable", so the
+co-pulled modules are not leaking to glibc.)
