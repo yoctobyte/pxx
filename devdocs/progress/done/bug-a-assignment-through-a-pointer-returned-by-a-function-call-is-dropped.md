@@ -87,7 +87,7 @@ going through an `AtExitSlot(i)` helper, with a comment naming this ticket
 this is fixed — it is the readable form.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit 6582a545c.
 
 ## Resolution (2026-08-10)
 
