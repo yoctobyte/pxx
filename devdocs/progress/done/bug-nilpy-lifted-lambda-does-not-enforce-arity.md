@@ -132,4 +132,4 @@ Gate: self-host fixedpoint, `gate.sh quick` GREEN, a 79-test family sweep
 `compiler/builtin/**`.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit f7bb7a9d3.
