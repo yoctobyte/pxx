@@ -518,4 +518,4 @@ Gate: self-host fixedpoint converged, `tools/gate.sh quick` GREEN, plus a
 broke a test outside it.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit fff0a0c13.
