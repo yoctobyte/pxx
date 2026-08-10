@@ -151,7 +151,7 @@ class-capture residue already recorded on the cell ticket
 (a `nonlocal` class capture keeps `pyboundfn_bind_obj` and has no writable cell).
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit fcdcd2ed3.
 
 ## Resolution (2026-08-10) — fixed by the cell machinery, exactly as predicted
 

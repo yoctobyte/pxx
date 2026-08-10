@@ -162,7 +162,7 @@ No code changed. Left in `blocked/` deliberately: the edge is not wrong yet,
 only unproven.
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit b4fe48f81.
 
 ## Resolution (2026-08-10) — measured fixed; the edge it waited on no longer gates it
 

@@ -217,7 +217,7 @@ Left in the backlog with the ground above under it. A session that picks this up
 starts at "add the rank + wire it into MatchElig", not at "where does this go".
 
 ## Log
-- 2026-08-10 — resolved, commit PENDING-COMMIT.
+- 2026-08-10 — resolved, commit ea0e20254.
 
 ## Resolution (2026-08-10) — hiding as candidate REMOVAL, both facets
 
