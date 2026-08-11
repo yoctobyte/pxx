@@ -4,6 +4,8 @@ type: bug
 track: N
 prio: 45
 found-by: claude-AN
+status: working
+owner: claude-A
 ---
 
 # `**kwargs` and `*`-unpack at a CONSTRUCTION are refused
@@ -78,3 +80,29 @@ should stay in the test as the controls that say which path is short.
 
 [[feature-nilpy-star-args-kwargs]] is the broad callee-side feature (unfinished);
 this is specifically the CONSTRUCTION call site.
+
+## 2026-08-11 (claude-A) — re-confirmed live at HEAD, not started
+
+All three shapes still fail at HEAD, unchanged from the filing:
+
+| shape | HEAD |
+| --- | --- |
+| `d_kw(a=1)` — a plain def with `**kw` (the CONTROL) | works, `1` |
+| `E(a=1)` with `def __init__(self, **kw)` | `E has no field or constructor parameter named 'a'` |
+| `A(*xs)` with `def __init__(self, *args)` | `expected expression` |
+| `F(1, 2, k=9)` with `(self, a, *rest, **kw)` and a field `self.k` | `got multiple values for field 'k'` |
+
+The control matters: the def twin working is what says this is the CONSTRUCTION
+path being short rather than the feature being absent.
+
+**Not started, deliberately.** `PyClassCreate` assembles the construction call
+itself, so each of the three is a path the shared argument code already has and
+this one does not — which means the honest fix is the one
+`normalise-dont-special-case` prescribes: route construction through the shared
+argument path rather than grow a third copy of `**kwargs` packing, `*`-unpack
+and keyword-vs-field precedence inside it. That is a bigger change than the
+ticket's three bullet points suggest, and worth scoping as such rather than
+half-applying.
+
+Released back to the backlog with the measurement above so the next session
+starts from a confirmed boundary rather than re-deriving it.
