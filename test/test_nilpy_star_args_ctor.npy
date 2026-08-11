@@ -1,0 +1,76 @@
+# `*args` on a CONSTRUCTOR was never packed at all, so the surplus arguments
+# were passed straight through and the callee read one as its TPyList — a
+# SEGFAULT with no diagnostic.
+#
+# PyClassCreate assembles the construction call itself (GetMem size, then the
+# user arguments) and, as its own comment says, never passes through the shared
+# path — which is also where PyPackStarArgs runs. The plain-`def` twin
+# (`def g(a, *rest)`) and the ordinary-METHOD twin (`def m(self, a, *rest)`)
+# both worked, which is what said the packing machinery is fine and one
+# construction path skipped it.
+#
+# The packer counts in PARAMETER space while the construction chain holds only
+# the user arguments, so it takes a selfSlots=1 offset here: without it
+# `pos >= si` never matched (si counts Self, pos did not) and even
+# `def __init__(self, *args)` alone crashed.
+#
+# Diffed against CPython. bug-nilpy-a-fixed-parameter-before-star-args-segfaults
+
+
+class A:
+    def __init__(self, *args):
+        self.n = len(args)
+        self.t = type(args).__name__
+
+
+class B:
+    def __init__(self, a, *rest):
+        self.a = a
+        self.n = len(rest)
+
+
+class C:
+    def __init__(self, a, b, *rest):
+        self.a = a
+        self.b = b
+        self.n = len(rest)
+
+
+class D:
+    def __init__(self, a, b=7, *rest):
+        self.a = a
+        self.b = b
+        self.n = len(rest)
+
+
+# star ONLY — the arity that crashed even with no fixed parameter
+o = A()
+print("A0", o.n, o.t)
+o = A(1)
+print("A1", o.n, o.t)
+o = A(1, 2)
+print("A2", o.n, o.t)
+o = A(1, 2, 3)
+print("A3", o.n, o.t)
+
+# one and two FIXED parameters before the star — the ticket's shape
+print("B", B("x").a, B("x").n, B("x", 1).n, B("x", 1, 2).n)
+print("C", C(1, 2).n, C(1, 2, 3).n, C(1, 2, 3, 4).n)
+
+# a DEFAULTED parameter before the star: omitted, given, and then overrun
+print("D", D(1).b, D(1).n, D(1, 9).b, D(1, 9, 5).n)
+
+
+# the twins that always worked, kept as controls
+def g(a, *rest):
+    return str(a) + ":" + str(len(rest))
+
+
+class Q:
+    def m(self, tag, *rest):
+        return str(tag) + ":" + str(len(rest))
+
+
+print("def   ", g("u"), g("u", 9), g("u", 1, 2))
+q = Q()
+print("method", q.m("v"), q.m("v", 1), q.m("v", 1, 2))

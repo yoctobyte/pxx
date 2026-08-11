@@ -716,6 +716,11 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_parentcall26 | diff -u test/test_nilpy_parent_call_after_instantiation.expected -
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy /tmp/test_nilpy_class_attr_hoist_leak26
 	/tmp/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
+	# `*args` on a CONSTRUCTOR was never packed — the surplus arguments were passed
+	# straight through and the callee read one as its TPyList (segfault, no
+	# diagnostic). The plain-def and ordinary-method twins always worked.
+	./$(COMPILER) test/test_nilpy_star_args_ctor.npy /tmp/test_nilpy_star_args_ctor26
+	/tmp/test_nilpy_star_args_ctor26 | diff -u test/test_nilpy_star_args_ctor.expected -
 	# `raise <variant>` SEGFAULTED — an exception held in a list/dict/for-in variable
 	# or built through a class VALUE reached IR_RAISE as a 16-byte variant where the
 	# instance POINTER belongs. Includes `raise [1]` (an object, but not an

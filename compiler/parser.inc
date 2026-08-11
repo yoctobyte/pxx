@@ -957,7 +957,8 @@ function PyKwNamesTokPos: Integer; forward; { Nil Python: '(' token index of the
 function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer; forward; { Nil Python: pick the UMeth overload a keyword argument names (pyparser.inc) }
 function PyPromoteProcOverloadByKwAt(procIdx, firstParam, parenTok: Integer): Integer; forward; { Nil Python: pick the Procs[] overload a keyword argument names (pyparser.inc) }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python keyword-argument reorder (pyparser.inc) }
-procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python `*args`/`**kwargs` call-site packing (pyparser.inc) }
+procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer;
+                         selfSlots: Integer); forward; { Nil Python `*args`/`**kwargs` call-site packing (pyparser.inc) }
 procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python varargs METHOD call (pyparser.inc) }
 function PyStarArgAhead: Boolean; forward; { Nil Python: a `*expr` unpack left in this argument list (pyparser.inc) }
 procedure PyStarUnpackMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python `obj.m(*xs)` call-site unpack (pyparser.inc) }
@@ -14034,7 +14035,7 @@ begin
             Error('expected comma or close parenthesis');
         end;
         Expect(tkRParen, ')');
-        PyPackStarArgs(procIdx, argsHead, lastArg, nArgs);
+        PyPackStarArgs(procIdx, argsHead, lastArg, nArgs, 0);
         PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
         currArg := argsHead;
@@ -21305,7 +21306,7 @@ begin
               Error('expected comma or close parenthesis');
           end;
           Expect(tkRParen, ')');
-          PyPackStarArgs(procIdx, argsHead, lastArg, nArgs);
+          PyPackStarArgs(procIdx, argsHead, lastArg, nArgs, 0);
           PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
           currArg := argsHead;

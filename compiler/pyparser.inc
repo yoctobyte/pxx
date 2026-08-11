@@ -5144,6 +5144,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     attrD, attrCur: Integer;   { the ancestor-chain walk, root first }
     excFoldCi, excFoldPi, excFoldStr, excFoldN, excFoldI: Integer;
     excFoldA, excFoldC: Integer;   { the multi-arg Exception fold }
+    szArgNode, starHead: Integer;  { *args packing (see below) }
 begin
   name := CurTok.SVal;
   ci := -1;
@@ -5166,6 +5167,7 @@ begin
   argNode := AllocNode(AN_ARG);
   ASTLeft[argNode] := sizeNode;
   ASTLeft[node] := argNode;
+  szArgNode := argNode;          { the GetMem SIZE slot; ctor args hang off it }
   lastArg := argNode;
   nArgs := 0;
   { `Word(name=n, wid=w)` — keyword arguments. A @dataclass has no ctor METHOD
@@ -5346,6 +5348,27 @@ begin
   if ctorMi >= 0 then
   begin
     ctorPi := UMthProc_[ctorMi];
+    { `*args` / `**kwargs` on the CONSTRUCTOR. This builder assembles the call
+      itself — GetMem size, then the user arguments — and so, as the comment
+      above says, never passes through the shared path; that path is also where
+      the surplus arguments get packed into the star parameter's TPyList. It
+      did not happen at all here, so `C(1, 2)` on `def __init__(self, *args)`
+      handed the ctor a raw 2 where a list pointer belongs and SEGFAULTED, with
+      no diagnostic. The plain-`def` and ordinary-METHOD twins both worked,
+      which is what said the packing machinery is fine and one construction
+      path skipped it (bug-nilpy-a-fixed-parameter-before-star-args-segfaults).
+
+      selfSlots = 1: the chain here holds only the user arguments, while the
+      ctor's signature counts Self at slot 0. Packing runs BEFORE the
+      trailing-defaults loop below, which then finds every slot filled and does
+      nothing — PyPackStarArgs fills the gap itself, keyword bindings included. }
+    if (ProcPyStarIdx[ctorPi] >= 0) or (ProcPyKwIdx[ctorPi] >= 0) then
+    begin
+      starHead := ASTRight[szArgNode];
+      PyPackStarArgs(ctorPi, starHead, lastArg, nArgs, 1);
+      ASTRight[szArgNode] := starHead;
+      if lastArg < 0 then lastArg := szArgNode;
+    end;
     while nArgs < Procs[ctorPi].ParamCount - 1 do
     begin
       k := nArgs + 1;
@@ -10302,7 +10325,7 @@ begin
   if (ProcPyStarIdx[mpi] >= 0) or (ProcPyKwIdx[mpi] >= 0) then
   begin
     n := n + 1;
-    PyPackStarArgs(mpi, selfArg, lastArg, n);
+    PyPackStarArgs(mpi, selfArg, lastArg, n, 0);
     if n > 0 then Dec(n);
     anyKw := False;   { the packing consumed every keyword argument }
   end;
@@ -10917,7 +10940,7 @@ begin
   if (ProcPyStarIdx[hitPi] >= 0) or (ProcPyKwIdx[hitPi] >= 0) then
   begin
     i := i + 1;
-    PyPackStarArgs(hitPi, selfArg, lastArg, i);
+    PyPackStarArgs(hitPi, selfArg, lastArg, i, 0);
     if i > 0 then Dec(i);
     anyKw := False;   { the packing consumed every keyword argument }
   end;
@@ -11758,7 +11781,7 @@ begin
     Inc(cnt);
     if CurTok.Kind = tkComma then Next else Break;
   end;
-  PyPackStarArgs(mpi, head, mlastArg, cnt);
+  PyPackStarArgs(mpi, head, mlastArg, cnt, 0);
   PyBindKwArgs(mpi, head, mlastArg, cnt);
   ASTLeft[mcallNode] := head;
   { every declared parameter is now present, so the caller's arity loop has
@@ -11825,7 +11848,20 @@ begin
   end;
 end;
 
-procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer);
+procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer;
+                         selfSlots: Integer);
+{ selfSlots = how many parameter slots the argument chain does NOT contain but
+  the SIGNATURE does — 1 for a construction, where Self is added by the
+  lowering rather than parsed, 0 everywhere else (a method call carries Self as
+  the chain's first node, so its positions already line up).
+
+  Everything here counts in PARAMETER space: `si`/`ki` are signature indices,
+  the container's ASTIVal is an explicit slot, and PyFillDefaultsUpTo walks
+  slots. Only `pos` and `nKept` are derived from the chain, so those are the
+  two that start at selfSlots. Without it a ctor's `*args` never matched
+  (`pos >= si` with si counting Self and pos not), so the surplus arguments
+  were passed straight through and the callee read one as its packed TPyList —
+  a segfault (bug-nilpy-a-fixed-parameter-before-star-args-segfaults). }
 var si, ki, n, nxt, pos, listSym, dictSym, keyNode, argNode: Integer;
     posHead, posLast, kwHead, kwLast: Integer;
     nKept: Integer;   { positional slots actually filled so far }
@@ -11836,7 +11872,7 @@ begin
   if (si < 0) and (ki < 0) then Exit;
   listSym := -1; dictSym := -1;
   posHead := -1; posLast := -1; kwHead := -1; kwLast := -1;
-  pos := 0; nKept := 0;
+  pos := selfSlots; nKept := selfSlots;
   n := argsHead;
   while n >= 0 do
   begin
