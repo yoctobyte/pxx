@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 50
+prio: 70
 type: feature
 summary: "Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. No decision needed — tag numbering is internal and renumberable."
 ---

@@ -57,7 +57,7 @@ lives in git, not in a timestamp._
 | bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
-| bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched | N | 45 | bug | `obj(...)` does not dispatch a user `__call__` | — |
+| bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched | N | 60 | bug | `obj(...)` does not dispatch a user `__call__` | — |
 | bug-nilpy-a-method-call-on-a-callable-values-result-is-refused | N | 50 | bug | `g(3).show()` — a selector on the RESULT of calling a callable VALUE is a parse error (`expected expression`). Binding the result first (`o = g(3); o.show()`) works, so only the chained arm is broken. Applies to any callable value: a def taken as a value, and now a class. | — |
 | bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys | N | 50 | bug | A class defining BOTH `__hash__` and `__eq__` is a legal dict key in CPython, and pxx stores it then never finds it again: `d = {k1: 'a'}; k2 in d` is False for an equal k2. The entry is silently lost — no diagnostic, and `k1 == k2` answers True right beside it. | — |
 | bug-nilpy-calling-a-call-result-is-refused-in-a-block-and-dropped-when-typed | N | 50 | bug | `f()(x)` — CALLING the result of a call. Two separate defects: inside any indented block it is a parse error (top level is fine), and when f's return type is statically non-callable the statement is SILENTLY DROPPED instead of raising TypeError. Distinct from the selector form `g(3).show()`. | — |
@@ -160,7 +160,7 @@ lives in git, not in a timestamp._
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
-| feature-nilpy-a-callable-value-needs-its-own-variant-tag | A | 50 | feature | Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. No decision needed — tag numbering is internal and renumberable. | — |
+| feature-nilpy-a-callable-value-needs-its-own-variant-tag | A | 70 | feature | Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. No decision needed — tag numbering is internal and renumberable. | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | N | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | bug-n-str-encode-and-bytes-decode-ignore-the-encoding |
@@ -463,7 +463,9 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [urgent p 80] [T] task-t-pin-fast-track-t-owns-verification
+- [p 70] [A] feature-nilpy-a-callable-value-needs-its-own-variant-tag
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [N] bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
@@ -510,7 +512,6 @@ lives in git, not in a timestamp._
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
-- [p 50] [A] feature-nilpy-a-callable-value-needs-its-own-variant-tag
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [P] feature-p-read-text-into-a-char-arm
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
@@ -526,7 +527,6 @@ lives in git, not in a timestamp._
 - [p 45] [A] bug-a-fixed-array-function-result-faults-on-i386-and-arm32
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [C] bug-c-signature-mismatch-warns-even-when-crtl-defines-the-symbol
-- [p 45] [N] bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched
 - [p 45] [N] bug-nilpy-dunders-not-dispatched-through-containers
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
 - [p 45] [N] bug-nilpy-multi-parameter-lambdas-are-still-interpreted

@@ -34,7 +34,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 219, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
+- `[p 70] [A]` feature-nilpy-a-callable-value-needs-its-own-variant-tag
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [N]` bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -61,7 +63,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-est-mem-from-measurement
-- `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
-- `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 
 _189 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
