@@ -180,5 +180,47 @@ no red could migrate and no phantom NEW-RED/FIXED pair is manufactured.
 **Follow-ups filed** — the pole is now blocktest and it is T's tool no longer:
 [[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]].
 
+## First measurement after landing (2026-08-11, same session)
+
+**Full tier: 2281/2281 jobs in 456.6s**, at `d996945bb` (the first sha carrying
+the shards), read from the watcher's `live.json` at 100%. Against a 771s median
+over the previous 35 full runs, that is **~1.7x** — on a box simultaneously
+running this session's own uforth measurements, so the uncontended figure
+should be better.
+
+Caveat, stated because it matters: **that run was never published.** It was
+preempted by this session's own push right as it completed, so `test_sha`
+discarded the verdict (correctly — an aborted run records nothing). The number
+above is an observation off the live progress file, not a tstate verdict. The
+official one lands on the watcher's next full run.
+
+**The blocktest shard passes and is the pole, as predicted.** Run standalone:
+
+```
+test-uforth: PASS — smoke + 1/1 corpora byte-identical to CPython
+real 6m24s   user 8m50s
+```
+
+`user > real` is the concurrent-oracle change doing its job — the pxx run and
+the CPython run genuinely overlap.
+
+**One scare worth recording.** That aborted full run showed
+`test-uforth#blocktest` red in `live.json`, which read exactly like "the new
+sharding broke it". It did not: the standalone run above passes, and the red
+was the preemption teardown killing an in-flight job. Two hypotheses were
+checked and dropped before measuring:
+
+- *a new job key has no learned duration, so it gets a quarter-class budget and
+  is killed* — wrong; `testmgr` gives a job with no metrics the FULL class
+  timeout (`j.timeout = cls_to * scale`), 1200s here;
+- *blocktest exercises the BLOCK word set, so the two runtimes now race on a
+  shared block file* — wrong; `block_store` is an in-memory dict in `uforth.py`,
+  nothing touches disk, so concurrency is safe.
+
+Recording both because the second one is a real hazard for this change in
+general: the concurrent oracle is only safe while the two runtimes share no
+mutable file. A future word set that writes into `$(UFORTH_SRC)` would break
+that assumption silently — as a DIFF, which reads like a compiler bug.
+
 ## Log
 - 2026-08-11 — resolved, commit c488470af.
