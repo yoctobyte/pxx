@@ -1,8 +1,24 @@
 ---
-track: N
+track: A
 prio: 50
 type: feature
+blocked-by: decide-variant-tag-space-is-a-language-wide-commitment
+summary: "Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. BLOCKED on the Track U decision, because a new tag is permanent and visible to Pascal via VarType()."
 ---
+
+> **Re-tracked N -> A on 2026-08-11, and blocked.** Filed as a Track N feature
+> because the *motivation* is NilPy. That was wrong on both axes. The change
+> lives in **Track A's shared internals** — `defs.inc` defines the tag,
+> `ir_codegen.inc`'s variant clear/retain emitters, `builtinheap.pas` and
+> `parser.inc` consume it — which is precisely the "new symtab field / shared
+> internals" case CLAUDE.md says a frontend must hand to A rather than edit.
+> And the tag SPACE is a language-wide commitment, not an implementation
+> detail: `defs.inc` says tags "can never be renumbered — Pascal code compares
+> VarType() against documented constants and variants are serialized", and
+> `lib/rtl/variants.pas` exports `VarType` to user Pascal. So a Pascal program
+> can observe this number, forever. That question is now
+> [[decide-variant-tag-space-is-a-language-wide-commitment]] and this ticket
+> waits on it.
 
 # A callable value needs its own variant tag
 
