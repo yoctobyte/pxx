@@ -63,6 +63,48 @@ begin
   EmitB((offset div 4) and $FF);
 end;
 
+{ ---- the atomic primitive: S32C1I + its SCOMPARE1 companion --------------
+
+  `s32c1i at, as, off` is Xtensa's compare-and-swap:
+
+      tmp := MEM[as+off];
+      if tmp = SCOMPARE1 then MEM[as+off] := at;
+      at  := tmp                       { the ORIGINAL memory word }
+
+  Present on every LX6/LX7 core Espressif ships, single- and dual-core alike,
+  so it needs no chip gate. Same RRI8 shape as s32i with r = 14 instead of 6.
+
+  Byte patterns verified against xtensa-esp32s3-elf-as, not derived from the
+  manual: `s32c1i a4, a2, 0` = 00 E2 42, `wsr.scompare1 a3` = 13 0C 30,
+  `rsr.scompare1 a3` = 03 0C 30.
+  bug-a-riscv32-and-xtensa-have-no-atomic-codegen }
+procedure xtensa_s32c1i(t, s, offset: Integer);
+begin
+  EmitB((t shl 4) or 2);
+  EmitB((14 shl 4) or s);
+  EmitB((offset div 4) and $FF);
+end;
+
+procedure xtensa_wsr_scompare1(t: Integer);
+begin
+  EmitB(t shl 4);
+  EmitB(12);        { SCOMPARE1 is special register 12 }
+  EmitB($13);       { WSR }
+end;
+
+procedure xtensa_rsr_scompare1(t: Integer);
+begin
+  EmitB(t shl 4);
+  EmitB(12);
+  EmitB($03);       { RSR }
+end;
+
+procedure xtensa_memw;
+{ full memory barrier — `memw` = C0 20 00 }
+begin
+  EmitB($C0); EmitB($20); EmitB($00);
+end;
+
 procedure xtensa_l8ui(t, s, offset: Integer);
 begin
   EmitB((t shl 4) or 2);

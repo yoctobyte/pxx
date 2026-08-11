@@ -3,12 +3,13 @@ summary: "riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported no
 type: bug
 track: A
 prio: 45
+owner: claude-A
 ---
 
 # riscv32 / xtensa: no atomic node in IR codegen
 
 - **Type:** bug — Track A (backends), tagged **S** (ESP32 campaign)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-05
 - **Found by:** cross-checking the new `lib/rtl/palatomic.pas` across targets.
 
@@ -98,3 +99,71 @@ Track A: `make test` + self-host fixedpoint (byte-identical), plus the riscv32
 cross run. `tools/fpc_diff_probe.sh` case `interlocked-family` is the
 native-side check; a cross assertion for the 32-bit half belongs in
 `tools/lib_cross_sweep.sh`.
+
+
+## 2026-08-11 — riscv32 DONE and verified on silicon; xtensa diagnosed, still open
+
+### riscv32 (esp32c3 / esp32c2) — landed
+
+No `A` extension on those parts, so the primitive is an **interrupt-masked
+critical section**: `csrrci t0, mstatus, 8` / plain RMW / `csrrw mstatus, t0`.
+Correct because they are SINGLE-CORE — nothing else can observe the middle of
+it — which is what ESP-IDF does on the C3 for the same reason.
+
+Routed by the capability table rather than by target, so the three cases that
+are NOT this one refuse by name instead of miscompiling:
+
+- a chip that HAS `A` (esp32c6/h2/p4) — "not emitted yet; rv32enc has no
+  AMO/LR-SC encoders", rather than silently taking the slow path;
+- a multi-core part with no `A` — refused, and no ESP part is in that box;
+- **hosted riscv32** (qemu-user linux) — refused, because `mstatus` is
+  machine-mode and a user-mode program cannot mask interrupts. This one is
+  easy to miss: `--target=riscv32` is dual-role, so "the C3 can do it" does not
+  mean the target can.
+
+**Verified by RUNNING, not by compiling**: `test/test_esp_bare_atomic.pas`
+boots under the Espressif `qemu-system-riscv32 -M esp32c3` and its UART output
+is diffed against the x86-64 oracle — inc/dec/xchg/add, a CAS that hits, and a
+CAS that MISSES and must leave the value alone. Wired into `make test-esp-bare`.
+
+Two bugs found that way, neither visible at compile time:
+
+- **the RMW ran TWICE** — a single `InterLockedIncrement` took 10 to 12 and
+  answered the post value. `IR_ATOMIC` is a value node consumed by its parent
+  store, and riscv32's statement-level skip list did not include it, so the
+  emit loop ran it as well. arm32's list already carried exactly this note.
+- instruction encodings were taken from `riscv32-esp-elf-as`, not the manual;
+  `rv32_bne` did not exist and had to be added (only BEQ was there).
+
+### xtensa — NOT landed, and here is exactly how far it got
+
+The encoders ARE in (`xtensa_s32c1i`, `xtensa_wsr_scompare1`,
+`xtensa_rsr_scompare1`, `xtensa_memw`), byte-verified against
+`xtensa-esp32s3-elf-as`: `s32c1i a4,a2,0` = 00 E2 42, `wsr.scompare1 a3` =
+13 0C 30. The IR_ATOMIC arm was written and then **reverted**, because it
+FAULTS on qemu's esp32s3 and a hang is worse than the clean compile error the
+target gives today.
+
+Measured, in this order:
+
+1. the sequence hangs before any output — the atomic is the first statement;
+2. `-d int` shows a repeating `xtensa_cpu_do_interrupt(12)` at pc 0x400003c0,
+   i.e. an exception vector loop in ROM, not an unimplemented-instruction
+   report;
+3. removing ONLY the `s32c1i` (leaving `wsr.scompare1`) makes the program run
+   to completion — **so `wsr.scompare1` is fine and `s32c1i` is what faults**;
+4. a first guess that the bare image's INSTRUCTION-alias address is the problem
+   was not confirmed: reading the same word through an assumed data alias
+   (`- $6F0000`) answered 0, so that offset is wrong and the hypothesis is
+   untested rather than disproved.
+
+So the open question is narrow and concrete: **under what conditions does
+`S32C1I` work on qemu's esp32s3 — is it the memory REGION (the bare profile
+loads everything at the IRAM org), or does the model not implement the atomic
+bus operation at all?** The next session should settle that with the real
+toolchain (build a two-instruction `.S` with `xtensa-esp32s3-elf-as` and run it
+under the same qemu) before touching the codegen again — that separates "our
+sequence" from "this emulator" in one step.
+
+Nothing about the xtensa half is blocked on the SoC axis: `S32C1I` is on every
+LX6/LX7 part, so it needs no chip gate.

@@ -3060,6 +3060,86 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_ATOMIC:
+      begin
+        { Atomic read-modify-write on addr^, returning the OLD value.
+
+          WHICH primitive is a per-CHIP question, not a per-ISA one, which is
+          why this asks the capability table: the ESP32-C3/C2 core is RV32IMC —
+          no `A` extension, so no AMO and no LR/SC — while the C6/H2/P4 are
+          RV32IMAC/IMAFC and do have them. `compiler/rv32enc.inc` carries no AMO
+          encoders precisely because the chip this target has always meant does
+          not implement them; emitting one there would be an ILLEGAL
+          INSTRUCTION, not an atomic.
+
+          On a single-core part with no atomic ISA, masking interrupts around
+          the read-modify-write IS the atomic — nothing else can observe the
+          middle of it. That is what ESP-IDF does on the C3. It is NOT
+          sufficient on a multi-core part, and the capability table says so:
+          `SocCoreCount > 1` with no atomic ISA is refused here, and no ESP part
+          is in that box.
+
+          Args are pushed in order; a0 is the result register.
+          bug-a-riscv32-and-xtensa-have-no-atomic-codegen }
+        if (IRIVal[node] = ATOMIC_XCHG64) or (IRIVal[node] = ATOMIC_CAS64) or
+           (IRIVal[node] = ATOMIC_ADD64) then
+          Error('target riscv32: __pxxatomic_*64 not supported (32-bit target)');
+        if SocHasAtomicISA(TargetSoc) then
+          Error('target riscv32: atomics via the A extension are not emitted yet '
+                + '(this chip has it; rv32enc has no AMO/LR-SC encoders) — '
+                + 'bug-a-riscv32-and-xtensa-have-no-atomic-codegen');
+        if SocCoreCount(TargetSoc) > 1 then
+          Error('target riscv32: no atomic primitive on a multi-core part with no '
+                + 'A extension (masking interrupts cannot stop the other core)');
+        if TargetPlatform <> PLATFORM_ESP then
+          Error('target riscv32: atomics need machine-mode CSR access (mstatus), '
+                + 'which a hosted user-mode program does not have; this core has '
+                + 'no A extension to use instead');
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeRISCV32(IRA[argNode]);
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        case IRIVal[node] of
+          ATOMIC_CAS:
+            begin
+              rv32_lw(reg_a3, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { newval }
+              rv32_lw(reg_a2, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { expected }
+              rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { addr }
+              rv32_csrrci_mstatus_mie(reg_t0);
+              rv32_lw(reg_a0, reg_a1, 0);                                 { old }
+              rv32_bne(reg_a0, reg_a2, 8);                                { old<>expected -> skip }
+              rv32_sw(reg_a3, reg_a1, 0);
+              rv32_csrw_mstatus(reg_t0);
+            end;
+          ATOMIC_ADD:
+            begin
+              rv32_lw(reg_a2, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { delta }
+              rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { addr }
+              rv32_csrrci_mstatus_mie(reg_t0);
+              rv32_lw(reg_a0, reg_a1, 0);                                 { old }
+              rv32_add(reg_a3, reg_a0, reg_a2);
+              rv32_sw(reg_a3, reg_a1, 0);
+              rv32_csrw_mstatus(reg_t0);
+            end;
+          else { ATOMIC_XCHG }
+            begin
+              rv32_lw(reg_a2, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { val }
+              rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { addr }
+              rv32_csrrci_mstatus_mie(reg_t0);
+              rv32_lw(reg_a0, reg_a1, 0);                                 { old }
+              rv32_sw(reg_a2, reg_a1, 0);
+              rv32_csrw_mstatus(reg_t0);
+            end;
+        end;
+        { the intrinsic is typed Int64 (a0:a1) — sign-extend the 32-bit old
+          value into the high word, as IR_SYSCALL does }
+        rv32_srai(reg_a1, reg_a0, 31);
+      end;
+
     else
       Error('target riscv32: unsupported node in IR codegen: ' + IROpName(IRKind[node]));
   end;
@@ -3284,9 +3364,14 @@ begin
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
-      IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
+      IR_SLOTADDR, IR_FIELD, IR_INDEX,
+      IR_ATOMIC: ;
       { IR_LOAD_MEM: pure value node — statement-level emit re-runs its address
         operand (`*f()` calls f twice). See aarch64 note. }
+      { IR_ATOMIC is a value node consumed by its parent store, like IR_SYSCALL.
+        Emitting it at statement level too ran the read-modify-write TWICE: a
+        single InterLockedIncrement took 10 to 12 and answered the post value.
+        arm32 hit exactly this and its list already says so. }
 
       else
         IREmitNodeRISCV32(i);

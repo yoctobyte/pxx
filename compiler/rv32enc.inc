@@ -97,6 +97,30 @@ begin
   hi := off - lo;                                { multiple of 4096 }
 end;
 
+{ ---- CSR access, for the interrupt-masked critical section ---------------
+
+  The ESP32-C3/C2 core is RV32IMC — no `A` extension, so there is no AMO and no
+  LR/SC to build an atomic from. What it does have is machine-mode CSR access,
+  and those parts are SINGLE-CORE, so masking interrupts around a
+  read-modify-write makes it atomic with respect to everything that can observe
+  it. This is what ESP-IDF does on the C3 for the same reason.
+
+  Encodings verified against riscv32-esp-elf-as (-march=rv32imc_zicsr):
+    csrrci t0, mstatus, 8   = 0x300472F3   { clear MIE, old mstatus -> t0 }
+    csrrw  zero, mstatus, t0 = 0x30029073  { restore it }
+  bug-a-riscv32-and-xtensa-have-no-atomic-codegen }
+procedure rv32_csrrci_mstatus_mie(rd: Integer);
+{ rd := mstatus; mstatus.MIE := 0 }
+begin
+  EmitI32(($300 shl 20) or (8 shl 15) or (7 shl 12) or (rd shl 7) or $73);
+end;
+
+procedure rv32_csrw_mstatus(rs1: Integer);
+{ mstatus := rs1 }
+begin
+  EmitI32(($300 shl 20) or (rs1 shl 15) or (1 shl 12) or $73);
+end;
+
 procedure rv32_add(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 0, rd, $33); end;
 procedure rv32_sub(rd, rs1, rs2: Integer);  begin EmitRType($20, rs2, rs1, 0, rd, $33); end;
 procedure rv32_addi(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $13); end;
@@ -149,6 +173,24 @@ end;
 procedure rv32_beq(rs1, rs2, offset: Integer);
 begin
   EmitI32(EncodeRISCVBEQ(rs1, rs2, offset));
+end;
+
+function EncodeRISCVBNE(rs1, rs2, offset: Integer): Integer;
+{ B-type, funct3 = 001. Same shape as BEQ; the branch offset is relative to the
+  BRANCH itself, as RISC-V defines it. }
+var i12, i11, i10_5, i4_1: Integer;
+begin
+  i12   := (offset shr 12) and 1;
+  i11   := (offset shr 11) and 1;
+  i10_5 := (offset shr 5) and $3F;
+  i4_1  := (offset shr 1) and $F;
+  Result := (i12 shl 31) or (i10_5 shl 25) or (rs2 shl 20) or (rs1 shl 15) or
+            (1 shl 12) or (i4_1 shl 8) or (i11 shl 7) or $63;
+end;
+
+procedure rv32_bne(rs1, rs2, offset: Integer);
+begin
+  EmitI32(EncodeRISCVBNE(rs1, rs2, offset));
 end;
 
 procedure rv32_nop;
