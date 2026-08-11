@@ -89,4 +89,4 @@ instance, a `TPyBytes`, a `TPyList`. This was the only one handing it code.
   touching anything: `c5ed9a8311c2` prints `3 3`, `6590c700cbca` cores.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit f0d730812.
