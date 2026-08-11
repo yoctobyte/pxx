@@ -115,4 +115,4 @@ It belongs with [[feature-nilpy-class-as-a-value]]'s remaining surface if
 anyone wants it.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 4b3627a2a.
