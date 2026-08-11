@@ -105,6 +105,26 @@ constructor TFDflt.Create(d: Double); begin seenF := d; end;
 procedure TFDflt.CM(d: Double); begin seenF := d; end;
 procedure TFDflt.IM(d: Double); begin seenF := d; end;
 procedure FreeF(d: Double = 5.25); begin seenF := d; end;
+
+{ PAREN-LESS statement call on a routine whose parameters are ALL defaulted.
+  `P;` used to fail with "undefined variable (P)" — the name had resolved and
+  the ARITY had not, which is why the diagnostic sent readers looking at scope.
+  `P()` worked, and so did `b.G` for a METHOD with defaults, so it was the free-
+  routine statement path alone that never reached the trailing-defaults fill.
+  bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable. }
+var seenPL: Integer;
+procedure PL1(k: Integer = 3); begin seenPL := k; end;
+procedure PL2(a: Integer = 4; b: Integer = 5); begin seenPL := a * 10 + b; end;
+{ a defaulted STRING parameter too, so the fill is exercised on a managed type }
+var seenPLs: AnsiString;
+procedure PLs(const s: AnsiString = 'dflt'); begin seenPLs := s; end;
+{ ...and the EXPRESSION arm of the same defect — `a := F` beside `P;`. The
+  ticket reported statement position only; fixing that left this one still
+  saying "undefined variable (F)". FR assigns its own name as the Result, which
+  must stay a Result assignment and NOT become a recursive call now that the
+  name looks callable — the sibling this widening could have broken. }
+function PlSelfRes(k: Integer = 3): Integer; begin PlSelfRes := k * 2; end;
+function PlResVar(k: Integer = 5): Integer; begin Result := k + 1; end;
 { a float default into a VARIANT parameter — the boxing arm, cf. the ctor case }
 procedure VarF(const v: Variant = 6.25); begin seenF := v; end;
 
@@ -122,6 +142,7 @@ var
   fr: TFRec;
   fc: TFDflt;
   fi: IFDflt;
+  plA: Integer;      { paren-less call in EXPRESSION position lands here }
 begin
   total := 0; okc := 0;
 
@@ -171,6 +192,21 @@ begin
   fi := fc;
   fi.IM();            Check('float-interface-method', Round(seenF * 100), 225);
   VarF();             Check('float-default-into-variant', Round(seenF * 100), 625);
+
+  { paren-less calls on all-defaulted routines, against their parenthesised
+    twins — the pair is the point: `P()` always worked, `P;` did not }
+  PL1;                Check('parenless-one-default', seenPL, 3);
+  PL1(8);             Check('parenless-one-explicit', seenPL, 8);
+  PL2;                Check('parenless-two-defaults', seenPL, 45);
+  PL2(7);             Check('parenless-two-partial', seenPL, 75);
+  PLs;                Check('parenless-string-default', Ord(seenPLs = 'dflt'), 1);
+  FreeF;              Check('parenless-float-default', Round(seenF * 100), 525);
+  { assigned to a local first, deliberately: bare `FR` in ARGUMENT position is a
+    third site and a genuinely ambiguous one — there it could equally be a
+    procedural-type reference — so it is left alone rather than guessed at. }
+  plA := PlSelfRes;   Check('parenless-expr-selfresult', plA, 6);
+  plA := PlResVar;    Check('parenless-expr-result-var', plA, 6);
+  plA := PlSelfRes(10); Check('parenless-expr-explicit', plA, 20);
 
   writeln('total ok ', okc, ' / ', total);
 end.

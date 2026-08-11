@@ -14404,7 +14404,10 @@ begin
         end;
         Exit;
       end
-      else if (idx < 0) and (procIdx >= 0) and Procs[procIdx].IsFunc and (Procs[procIdx].ParamCount = 0) then
+      else if (idx < 0) and (procIdx >= 0) and Procs[procIdx].IsFunc and
+              ((Procs[procIdx].ParamCount = 0) or
+               ((Procs[procIdx].ParamCount > 0) and
+                ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + 0])) then
       begin
         { Bare paramless function called by name in an expression. Guarded on
           `idx < 0`: a variable in scope with the same name (PXX is
@@ -14416,6 +14419,18 @@ begin
         Next;
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
+        { ...or ALL-DEFAULTED, which is paramless at the call site. The EXPRESSION
+          arm of the same defect the statement path had (`a := F` alongside `P;`),
+          found by testing the sibling rather than the ticket's own repro: the
+          ticket reported statement position only, and fixing that one left
+          `a := F` still reporting "undefined variable (F)". Defaults are trailing
+          in Pascal, so parameter 0 having one means they all do.
+          bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable. }
+        if Procs[procIdx].ParamCount > 0 then
+        begin
+          argSeq := -1;
+          FillDefaultArgs(procIdx, 0, node, argSeq);
+        end;
         ASTTk[node] := Ord(Procs[procIdx].RetType);
         ApplyCallResultPtrSuffix(node, procIdx);  { f()^ / ^.field / [i] }
         Exit;
@@ -21409,7 +21424,10 @@ begin
           ASTIVal[node] := procIdx;
           ASTLeft[node] := argsHead;
         end
-        else if (si < 0) and (procIdx >= 0) and (Procs[procIdx].ParamCount = 0) then
+        else if (si < 0) and (procIdx >= 0) and
+                ((Procs[procIdx].ParamCount = 0) or
+                 ((Procs[procIdx].ParamCount > 0) and
+                  ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + 0])) then
         begin
           { Bare paramless call statement. Guarded on `si < 0` (FindSym above): a
             variable in scope with the same name shadows the function, so
@@ -21420,6 +21438,22 @@ begin
           Next;
           node := AllocNode(AN_CALL);
           ASTIVal[node] := procIdx;
+          { ...or every parameter is DEFAULTED, which is paramless at the call
+            site: `procedure P(k: Integer = 3)` then `P;`. FPC accepts it, `P()`
+            already worked, and so did `b.G` for a METHOD with defaults — the
+            member-access route reaches the fill, this one tested ParamCount = 0
+            and so never did, dropping the name through to the assignment path
+            where it died as "undefined variable (P)". The diagnostic was the
+            misleading part: the NAME had resolved, the ARITY had not.
+
+            Testing parameter 0 alone is sufficient because Pascal requires
+            defaults to be TRAILING — if the first one has a default, all do.
+            bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable. }
+          if Procs[procIdx].ParamCount > 0 then
+          begin
+            lastArg := -1;
+            FillDefaultArgs(procIdx, 0, node, lastArg);
+          end;
         end;
 
         if node = -1 then
