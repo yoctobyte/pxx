@@ -123,3 +123,38 @@ reversible, a chip-name conditional sprayed through five files is not.
 `--target=esp32c3` and `--target=riscv32` producing byte-identical output;
 likewise `esp32s3` vs `xtensa`; the capability table consulted (not chip names)
 at every site that currently hardcodes a C3/S3 fact; self-host byte-identical.
+
+
+## DECIDED 2026-08-11 (user): option (B) — IDF spelling, SoC targets, capability table
+
+> "good. let's file that. … maybe IDF has a naming scheme that we can borrow
+> here. but then it's by like `--target=esp32c6` etc." … "yes, so this is
+> decided right" — user
+
+So, confirmed:
+
+1. **Chip names are IDF's, verbatim** — `esp32`, `esp32s2`, `esp32s3`,
+   `esp32c2`, `esp32c3`, `esp32c6`, `esp32h2`, `esp32p4`. We do not invent a
+   short form; `idf.py set-target` and `$IDF_TARGET` pass through untranslated,
+   and nothing assumes the `esp32` prefix is permanent.
+2. **They live in the `--target=` namespace**, not a second `--esp-chip=` axis.
+   A SoC target implies arch + `platform=esp` + its capability row, so an
+   ISA/chip contradiction cannot be expressed.
+3. **`--target=riscv32` and `--target=xtensa` stay**, meaning exactly what they
+   mean today (C3 caps and S3 caps respectively) — riscv32 is dual-role with
+   hosted linux under qemu-user, which the cross-test infrastructure depends on.
+   No existing command line changes behaviour.
+4. **Codegen consults CAPABILITIES, never chip names.** This is the load-bearing
+   half: the flag spelling is reversible, a chip-name conditional spread across
+   the backends, the memory map and the peripheral bases is not.
+
+### Implementation order
+
+The capability table first, as the single home for facts that are currently
+hardcoded per ISA (`ESP_BARE_IRAM_BASE` / `_XT`, the UART base, the implied core
+count), then the SoC targets that select a row, then the consumers.
+
+`bug-a-riscv32-and-xtensa-have-no-atomic-codegen` is the first consumer and is
+partly independent: **the xtensa half needs no chip gate** (`S32C1I` is on every
+LX6/LX7 part) and can land before or after this. The riscv32 half is the one
+that needs the table, because the answer differs within the ISA.
