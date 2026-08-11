@@ -7,7 +7,7 @@
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-uforth#00** (plexus): bad `a37f78681518`, last good `3650314233d3`, 7 commit(s) in range
+- **test-uforth#00** (plexus): bad `a37f78681518`, last good `d50f59a273e4`, 4 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
