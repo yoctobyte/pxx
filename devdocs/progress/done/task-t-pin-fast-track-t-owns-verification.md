@@ -217,4 +217,4 @@ still green; `trackt health` / `pinstatus` exercised against this box's real
 daemon and real `pin.log`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 9069f0947.
