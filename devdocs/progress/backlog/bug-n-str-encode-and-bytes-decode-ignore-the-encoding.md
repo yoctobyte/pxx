@@ -3,6 +3,8 @@ track: N
 prio: 25
 type: bug
 summary: "str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim"
+status: working
+owner: claude-A
 ---
 
 # `str.encode` / `bytes.decode` ignore the encoding argument
@@ -103,3 +105,30 @@ and is currently unimplemented in effect — `strict` must raise.
 
 `make test-nilpy` green + a `.npy` whose expectations are CPython's own output
 for the two tables above, including the raising cases.
+
+## 2026-08-11 (claude-A) — claimed, scoped, released without changes
+
+Read the code before starting. The shape is bigger than "pass the argument
+through", and the reason is worth recording so the next session does not
+rediscover it:
+
+`pystr_encode(const s: AnsiString): TPyBytes` takes **no encoding parameter at
+all** — the frontend drops the argument, and the body is a byte-for-byte copy.
+So this is not a case of an ignored parameter but of a missing one, on both
+sides.
+
+The deeper constraint: **pxx strings ARE byte strings.** `"hé"` in source is
+already UTF-8 bytes, so encoding it to latin-1 means DECODING those bytes to
+code points and re-encoding — a real codec, not a relabelling. Same in reverse
+for `decode`. That is why the table in this ticket shows utf-8 agreeing and
+everything else diverging: utf-8 is the one encoding for which the identity copy
+is right.
+
+So the work is: a code-point layer between the two byte forms, `encode`/`decode`
+entries that take the encoding, `UnicodeEncodeError` / `UnicodeDecodeError` /
+`LookupError` for the cases CPython raises on, and a frontend that passes the
+argument. Worth doing in one pass — a half-set of encodings is how you get a
+different silent wrong answer.
+
+Released unchanged rather than started at the end of a long session, since a
+codec landed half-way is worse than one not started.
