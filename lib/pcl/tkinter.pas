@@ -788,8 +788,28 @@ begin
       address 5. The façade cannot diagnose that; only the representation can
       fix it, and CPython raises TypeError precisely because it keeps the two
       distinct. Left as-is rather than papered over with a range check, which
-      would reject valid low code addresses and still accept high integers. }
+      would reject valid low code addresses and still accept high integers.
+
+      RESOLVED since VT_CALLABLE (12) landed: a callable in a variant slot is
+      now stamped off its SOURCE IR NODE rather than its type kind, so a code
+      address and an integer no longer wear one tag and `yscrollcommand=5` IS
+      refused. Tag 2 stays accepted only because a callable BOXED IN A POSITION
+      the stamping does not reach can still arrive as one; it is the residue,
+      not the representation. }
     2: TkiIsCallable := True;
+    { VT_CALLABLE — a plain compiled code address with a tag of its own. The
+      façade never saw it before the tag existed, so a bound method of a NILPY
+      class in a scroll option (`self.scrolled.configure(
+      yscrollcommand=self.on_scroll)`) stopped being recognised the moment the
+      pin carried the new tag in: it fell past every arm of TkiOptScrollCmd's
+      case, TkiIsCallable answered False for a value that is a callable by
+      construction, and configure() Halt(1)'d with "takes a callable or a Tcl
+      script" on a program that worked one pin earlier.
+
+      Kept as its own arm rather than folded into 2: they mean different things
+      (12 is "the compiler proved this is code", 2 is "we could not tell"), and
+      the day the residue closes, 2 goes and this stays. }
+    12: TkiIsCallable := True;
   end;
 end;
 
