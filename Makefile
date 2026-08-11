@@ -2273,6 +2273,14 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_mcfld26 | head -4 | tail -1)" = "named   der TDer 7"
 	test "$$(/tmp/test_mcfld26 | head -7 | tail -1)" = "classfld der"
 	test "$$(/tmp/test_mcfld26 | head -8 | tail -1)" = "ctor    B|BD"
+	# ...and the fifth spelling, a metaclass returned from a FUNCTION: it never
+	# reached that list at all (the call-result suffix walker owns it), so
+	# `Give.Kind` lowered to IR_UNSUPPORTED. All five now share NodeMetaclassCi.
+	./$(COMPILER) test/test_metaclass_call_receiver.pas /tmp/test_mccall26
+	test "$$(/tmp/test_mccall26 | tail -1)" = "METACLASS CALL RECEIVER OK"
+	test "$$(/tmp/test_mccall26 | head -3 | tail -1)" = "call    der TDer"
+	test "$$(/tmp/test_mccall26 | head -5 | tail -1)" = "args    base der"
+	test "$$(/tmp/test_mccall26 | head -6 | tail -1)" = "ctor    BDB"
 	# record operator overloads with MIXED operand types. The in-record
 	# signature skip was depth-blind and stopped at the ';' separating parameter
 	# groups; and once it parsed, the operator table turned out to be keyed on

@@ -8575,6 +8575,73 @@ begin
   Result := s;
 end;
 
+function ResolveNodeRec(node: Integer): Integer; forward;   { NodeMetaclassCi's FIELD arm needs it; real body just below }
+
+function NodeMetaclassCi(node: Integer): Integer;
+{ The class index a node's METACLASS VALUE refers to, or -1 when the node is not
+  one. A metaclass value is a `class of T` — a tyPointer whose pointee is a class
+  with a concrete id — and it can be spelled five ways, each of which carries the
+  pointee somewhere different:
+
+    a `class of T` VARIABLE          AN_IDENT     Syms[].PtrElemTk/PtrElemRec
+    an inline metaclass CAST         AN_PTR_CAST  AliasElemTk/AliasElemRec
+    an ELEMENT of an array of them   AN_INDEX     the ARRAY symbol's PtrElem*
+    a metaclass-typed FIELD          AN_FIELD     UFldPtrElemTk/UFldPtrElemRec
+    the RESULT of a function         AN_CALL      ProcRetPtrElemTk/ProcRetPtrElemRec
+
+  The first four were each taught to be a receiver one ticket at a time, as four
+  copies of this test in ParseLValueAST's suffix loop, and the fifth was the
+  spelling nobody had added — `Give.Kind` reached the pointer-field walker and
+  came out as IR_UNSUPPORTED. One predicate instead of five arms, so the next
+  spelling is added once.
+  bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver }
+var mcRec, mcFi, si: Integer;
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    si := Integer(ASTIVal[node]);
+    if (si >= 0) and (si < SymCount) and (Syms[si].TypeKind = tyPointer) and
+       (Syms[si].PtrElemTk = tyClass) and (Syms[si].PtrElemRec >= REC_UCLASS_BASE) then
+      Result := Syms[si].PtrElemRec - REC_UCLASS_BASE;
+  end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    si := Integer(ASTIVal[node]);
+    if (si >= 0) and (IntToTypeKind(AliasElemTk[si]) = tyClass) and
+       (AliasElemRec[si] >= REC_UCLASS_BASE) then
+      Result := AliasElemRec[si] - REC_UCLASS_BASE;
+  end
+  else if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_IDENT) then
+  begin
+    si := Integer(ASTIVal[ASTLeft[node]]);
+    if (si >= 0) and (si < SymCount) and Syms[si].IsArray and
+       (Syms[si].ElemType = tyPointer) and (Syms[si].PtrElemTk = tyClass) and
+       (Syms[si].PtrElemRec >= REC_UCLASS_BASE) then
+      Result := Syms[si].PtrElemRec - REC_UCLASS_BASE;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    mcRec := ResolveNodeRec(ASTLeft[node]);
+    mcFi := -1;
+    if mcRec >= REC_UCLASS_BASE then
+      mcFi := FindUField(mcRec - REC_UCLASS_BASE, GetASTIdentName(node));
+    if (mcFi >= 0) and (IntToTypeKind(UFldPtrElemTk[mcFi]) = tyClass) and
+       (UFldPtrElemRec[mcFi] >= REC_UCLASS_BASE) then
+      Result := UFldPtrElemRec[mcFi] - REC_UCLASS_BASE;
+  end
+  else if ASTKind[node] = AN_CALL then
+  begin
+    si := Integer(ASTIVal[node]);
+    if (si >= 0) and (si < ProcCount) and (Procs[si].RetType = tyPointer) and
+       (IntToTypeKind(ProcRetPtrElemTk[si]) = tyClass) and
+       (ProcRetPtrElemRec[si] >= REC_UCLASS_BASE) then
+      Result := ProcRetPtrElemRec[si] - REC_UCLASS_BASE;
+  end;
+end;
+
 function ResolveNodeRec(node: Integer): Integer;
 var baseNode, baseRec, fIdx, innerNode: Integer; fieldName: AnsiString;
 begin

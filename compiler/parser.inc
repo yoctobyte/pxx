@@ -5857,48 +5857,13 @@ begin
         which allocates the DYNAMIC class the ref points at and runs its virtual
         constructor — see the IR lowering. Distinct from the static `TFoo.Create`
         path, which resolves the class at compile time. }
-      ci := -1;
-      if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-         (Syms[ASTIVal[node]].TypeKind = tyPointer) and
-         (Syms[ASTIVal[node]].PtrElemTk = tyClass) and
-         (Syms[ASTIVal[node]].PtrElemRec >= REC_UCLASS_BASE) then
-        ci := Syms[ASTIVal[node]].PtrElemRec - REC_UCLASS_BASE
-      else if (ASTKind[node] = AN_PTR_CAST) and (ASTIVal[node] >= 0) and
-              (IntToTypeKind(AliasElemTk[ASTIVal[node]]) = tyClass) and
-              (AliasElemRec[ASTIVal[node]] >= REC_UCLASS_BASE) then
-        ci := AliasElemRec[ASTIVal[node]] - REC_UCLASS_BASE
-      else if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
-              (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
-              Syms[ASTIVal[ASTLeft[node]]].IsArray and
-              (Syms[ASTIVal[ASTLeft[node]]].ElemType = tyPointer) and
-              (Syms[ASTIVal[ASTLeft[node]]].PtrElemTk = tyClass) and
-              (Syms[ASTIVal[ASTLeft[node]]].PtrElemRec >= REC_UCLASS_BASE) then
-        { An ELEMENT of an array of metaclasses (`Map[0].Tag`,
-          `DefaultJSONInstanceTypes[jit].Create`). The array symbol carries the
-          element's class in PtrElemTk/PtrElemRec, so the element expression is
-          a metaclass VALUE like any `class of T` variable — it fell through to
-          the plain-pointer member paths and returned garbage
-          (bug-pascal-metaclass-array-element-not-a-receiver, b328). }
-        ci := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec - REC_UCLASS_BASE
-      else if ASTKind[node] = AN_FIELD then
-      begin
-        { A metaclass-typed FIELD of a record or class (`fld.m.Kind`,
-          `cfg.Factory.Create`). Same omission the array element had at b328,
-          in the same list: a `class of T` VARIABLE, a metaclass CAST and an
-          array ELEMENT were each taught to be a receiver one at a time, and a
-          FIELD never was — so it fell through to the plain-pointer member path
-          and said `a pointer has no members`. The field carries its class in
-          UFldPtrElemTk/UFldPtrElemRec exactly as the symbol does in
-          PtrElemTk/PtrElemRec.
-          bug-a-a-metaclass-typed-record-field-is-not-a-receiver }
-        mcRec := ResolveNodeRec(ASTLeft[node]);
-        mcFi := -1;
-        if mcRec >= REC_UCLASS_BASE then
-          mcFi := FindUField(mcRec - REC_UCLASS_BASE, GetASTIdentName(node));
-        if (mcFi >= 0) and (IntToTypeKind(UFldPtrElemTk[mcFi]) = tyClass) and
-           (UFldPtrElemRec[mcFi] >= REC_UCLASS_BASE) then
-          ci := UFldPtrElemRec[mcFi] - REC_UCLASS_BASE;
-      end;
+      { All five spellings of a metaclass VALUE answer through one predicate —
+        a `class of T` variable, an inline metaclass cast, an element of an
+        array of them, a metaclass-typed field, and a function RESULT. The first
+        four used to be four copies of the test right here, added one ticket at
+        a time, which is why the fifth was missing for so long.
+        bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver }
+      ci := NodeMetaclassCi(node);
       if ci >= 0 then
       begin
         { A class-reference OPERATION on a TYPED metaclass (`AClass: TJSONDataClass`):
@@ -8087,11 +8052,68 @@ end;
 
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
+    mcCi, mmi, mpi, mcallNode: Integer;
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
   elemTk := ProcRetPtrElemTk[procIdx];
   elemRec := ProcRetPtrElemRec[procIdx];
+
+  { A METACLASS-returning function is a RECEIVER, not a pointer whose fields you
+    walk: `Give.Kind`, `Give.ClassName`, `Give.Create`. The pointer walk below
+    would build an AN_FIELD over a class reference — which lowering cannot
+    lower, so the user saw `IR_UNSUPPORTED ... would miscompile` rather than a
+    diagnostic. Same three member kinds ParseLValueAST's metaclass arm handles,
+    through the same builders; NodeMetaclassCi is the shared test.
+    bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver }
+  mcCi := NodeMetaclassCi(node);
+  if (mcCi >= 0) and (CurTok.Kind = tkDot) then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('expected member name after .');
+    prevTok := TokPos - 1;
+    fieldName := GetTokenStr(prevTok);
+    mmi := FindUMethOverloadAhead(mcCi, fieldName, CountCallArgsAhead);
+    if mmi < 0 then mmi := FindUMeth(mcCi, fieldName);
+    { a real member of the class outranks a class-reference operation of the
+      same name, exactly as in the ParseLValueAST arm }
+    if (mmi < 0) and IsClassRefOpName(fieldName) then
+    begin
+      Next;                          { consume the operation name }
+      mcallNode := GenMakeClassRefOp(node, fieldName, tk);
+      if mcallNode >= 0 then
+      begin
+        CurASTNode := ParseClassRefOpTail(mcallNode, tk);
+        LastExprTk := tk;
+        Exit;
+      end;
+      Error('unknown class-reference operation: ' + fieldName);
+    end;
+    if mmi < 0 then
+      Error('unknown member on a class reference: ' + fieldName);
+    if UMthIsCtor[mmi] then
+    begin
+      EnforceMethVis(mmi, fieldName);
+      Next;                          { consume the constructor name }
+      node := BuildMetaclassNew(node, mcCi, mmi);
+      CurASTNode := node;
+      LastExprTk := tyClass;
+      Exit;
+    end;
+    if UMthIsStatic[mmi] and (UMthProc_[mmi] >= 0) then
+    begin
+      mpi := UMthProc_[mmi];
+      Next;                          { consume the method name }
+      GenVirtSlot := UMthVirSlot[mmi];
+      node := GenMakeStaticMethodCall(mpi, node);
+      CurASTNode := node;
+      LastExprTk := Procs[mpi].RetType;
+      Exit;
+    end;
+    Error('an INSTANCE method cannot be called through a class reference: '
+          + fieldName);
+  end;
+
   if (tk = tyPointer) and (elemTk <> Ord(tyUnknown)) then
   begin
     while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do

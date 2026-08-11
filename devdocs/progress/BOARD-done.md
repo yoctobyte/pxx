@@ -13,6 +13,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument | A | 45 | bug | A fixed-array call result is refused as a `const`/by-ref argument | — |
 | bug-a-a-frozen-string-field-in-a-variant-part-is-8-bytes-and-untyped | A | 55 | bug | A `string[N]` field in a record's VARIANT part is 8 bytes and reads as an address | — |
+| bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver | A | 40 | bug | A metaclass returned from a FUNCTION is not a receiver | — |
 | bug-a-a-metaclass-typed-record-field-is-not-a-receiver | A | 45 | bug | A metaclass-typed FIELD is not recognised as a receiver | — |
 | bug-a-a-mixed-type-record-operator-signature-fails-to-parse | A | 50 | bug | A mixed-type record operator (`TVec * Integer`) fails to parse — and hid a silent wrong value | — |
 | bug-a-a-typed-const-array-of-string-n-is-never-initialised | A | 50 | bug | A typed const array of `string[N]` is never initialised — silently | — |
