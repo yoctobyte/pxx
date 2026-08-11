@@ -3025,6 +3025,17 @@ test-core: $(COMPILER)
 	# because its operands supply none — a declared Double used to hold
 	# float32's 1/3 on xtensa/riscv32 and nowhere else. A Single target and an
 	# expression that already has a float operand are the controls.
+	# A SoC target must be BYTE-IDENTICAL to the generic spelling it defaults
+	# from: --target=esp32c3 is what --target=riscv32 has always meant, and
+	# esp32s3 what xtensa meant. If these ever diverge, the capability table has
+	# started disagreeing with the constants it replaced.
+	# decide-esp-soc-axis-and-capability-table
+	./$(COMPILER) --target=riscv32 test/test_esp_float_depth_from_target.pas /tmp/test_soc_rv26
+	./$(COMPILER) --target=esp32c3 test/test_esp_float_depth_from_target.pas /tmp/test_soc_c326
+	cmp /tmp/test_soc_rv26 /tmp/test_soc_c326
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare.pas /tmp/test_soc_xt26
+	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare.pas /tmp/test_soc_s326
+	cmp /tmp/test_soc_xt26 /tmp/test_soc_s326
 	./$(COMPILER) test/test_esp_float_depth_from_target.pas /tmp/test_espdepth26
 	test "$$(/tmp/test_espdepth26 | tail -1)" = "ESP FLOAT DEPTH OK"
 	test "$$(/tmp/test_espdepth26 | head -2 | tr '\n' '|')" = "0.33333333333333331483|0.33333334326744079590|"

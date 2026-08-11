@@ -1834,8 +1834,10 @@ begin
     everything else uses the classic i386 ET_EXEC base. }
   if EspBareBoot then
   begin
-    if TargetArch = TARGET_XTENSA then loadBase := ESP_BARE_IRAM_BASE_XT
-    else loadBase := ESP_BARE_IRAM_BASE;
+    { the CHIP owns its load org, not the ISA — same values for the two chips
+      the generic targets default to, so this is byte-identical for them.
+      decide-esp-soc-axis-and-capability-table }
+    loadBase := SocIramBase(TargetSoc);
   end
   else loadBase := LOAD_ADDR32;
   dataBase := loadBase + codeOffset + CodeLen;

@@ -336,6 +336,22 @@ begin
       TargetArch := TARGET_XTENSA;
       Inc(i);
     end
+    { A SoC TARGET — `--target=esp32c6`. IDF's own spelling, so `$IDF_TARGET`
+      passes straight through. It implies the ISA and selects the capability
+      row; the generic `--target=riscv32` / `--target=xtensa` above keep meaning
+      what they always have (esp32c3 / esp32s3 capabilities), which is why no
+      existing command line changes behaviour. Carried in the target namespace
+      rather than a second --esp-chip axis so an ISA/chip contradiction cannot
+      be expressed at all.
+      decide-esp-soc-axis-and-capability-table }
+    else if (Length(option) > 9) and (Copy(option, 1, 9) = '--target=') and
+            (SocFromName(Copy(option, 10, Length(option) - 9)) <> SOC_NONE) then
+    begin
+      TargetSoc := SocFromName(Copy(option, 10, Length(option) - 9));
+      if SocIsXtensa(TargetSoc) then TargetArch := TARGET_XTENSA
+      else TargetArch := TARGET_RISCV32;
+      Inc(i);
+    end
     else if option = '--platform=posix' then
     begin
       TargetPlatform := PLATFORM_POSIX;
@@ -708,8 +724,19 @@ begin
     TARGET_PTR_SIZE := 4
   else
     TARGET_PTR_SIZE := 8;
+  { Default the SoC from the ISA when a generic target was named — exactly the
+    assumption those spellings have always carried, now stated once instead of
+    being implied in the validation message, the two IRAM constants and the
+    encoder header. decide-esp-soc-axis-and-capability-table }
+  if TargetSoc = SOC_NONE then
+  begin
+    if TargetArch = TARGET_XTENSA then TargetSoc := SOC_ESP32S3
+    else if TargetArch = TARGET_RISCV32 then TargetSoc := SOC_ESP32C3;
+  end;
   if EspBareBoot and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
-  begin writeln(StdErr, '--esp-profile=bare requires --target=riscv32 (esp32c3) or --target=xtensa (esp32s3)'); Halt(1); end;
+  begin writeln(StdErr, '--esp-profile=bare requires an ESP target: a SoC name '
+        + '(--target=esp32c3, esp32s3, ...) or the generic --target=riscv32 / '
+        + '--target=xtensa, which mean esp32c3 / esp32s3'); Halt(1); end;
   { The thread-safe runtime (heap/ARC locks, statement-atomic I/O) exists on
     x86-64 (hand-emitted lock blobs) and i386 (Pascal softlock in builtinheap
     via PXX_TS_SOFTLOCK + the 386 I/O lock stubs); on other targets

@@ -850,6 +850,43 @@ const
   ESP_BARE_IRAM_BASE_XT = $40378000; { S3: SRAM_DIRAM_I_START (shared I/D SRAM) }
   ESP_BARE_STACK_TOP = $403C0000;  { top of stack (grows down toward image);
                                      valid IRAM on both C3 and S3 }
+
+{ ===== ESP SoC capability table ============================================
+
+  WHICH CHIP, and what follows from it. Until now the chip was IMPLIED by the
+  ISA — `--target=riscv32` meant ESP32-C3 and `--target=xtensa` meant ESP32-S3 —
+  which is only true while there is one chip per ISA. It stops being true at the
+  first second riscv32 part, and stops in three independent ways at once: ISA
+  extensions, core count, and the memory map.
+
+  Names are IDF's own, verbatim (`idf.py set-target esp32c3`), so an IDF wrapper
+  passes $IDF_TARGET through untranslated and nothing here assumes the `esp32`
+  prefix is permanent.
+
+  THE RULE: codegen asks a CAPABILITY, never a chip name. `SocHasAtomicISA`,
+  not `TargetSoc = SOC_ESP32C3`. The flag spelling is reversible; a chip-name
+  conditional spread across the backends, the memory map and the peripheral
+  bases is not (devdocs/dev/normalise-dont-special-case.md).
+  decide-esp-soc-axis-and-capability-table }
+const
+  SOC_NONE    = 0;   { not an ESP target }
+  SOC_ESP32   = 1;
+  SOC_ESP32S2 = 2;
+  SOC_ESP32S3 = 3;
+  SOC_ESP32C2 = 4;
+  SOC_ESP32C3 = 5;
+  SOC_ESP32C6 = 6;
+  SOC_ESP32H2 = 7;
+  SOC_ESP32P4 = 8;
+  SOC_LAST    = 8;
+
+var
+  { The selected SoC. SOC_NONE on a hosted target; defaulted from the ISA for a
+    bare `--target=riscv32` / `--target=xtensa`, which is what those spellings
+    have always meant. }
+  TargetSoc : Integer;
+
+const
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
   { PT_LOAD + PT_GNU_STACK, see CODE_OFFSET above. }
@@ -3078,6 +3115,88 @@ var
 { PXXDBG=help. Deliberately does NOT enumerate the topics: a list duplicated in
   source drifts from the real probes, and a drifted list is worse than none.
   devdocs/dev/debug-switches.md is the authority. }
+{ ---- the capability accessors. Ask these, never the chip name. ----------
+
+  Every row is a documented hardware fact:
+
+    chip      ISA          cores  atomic primitive
+    esp32     Xtensa LX6     2     S32C1I
+    esp32s2   Xtensa LX7     1     S32C1I
+    esp32s3   Xtensa LX7     2     S32C1I
+    esp32c2   RV32IMC        1     none in ISA -> interrupt mask
+    esp32c3   RV32IMC        1     none in ISA -> interrupt mask
+    esp32c6   RV32IMAC       1     AMO / LR-SC
+    esp32h2   RV32IMAC       1     AMO / LR-SC
+    esp32p4   RV32IMAFC      2     AMO / LR-SC
+
+  Note there is no "no atomic ISA AND 2 cores" row: that combination would have
+  no correct primitive at all (masking interrupts does not stop the other core,
+  and a spinlock needs an atomic to build on), and no ESP part is in it. The
+  table is what makes that provable rather than assumed. }
+
+function SocName(soc: Integer): AnsiString;
+begin
+  case soc of
+    SOC_ESP32:   SocName := 'esp32';
+    SOC_ESP32S2: SocName := 'esp32s2';
+    SOC_ESP32S3: SocName := 'esp32s3';
+    SOC_ESP32C2: SocName := 'esp32c2';
+    SOC_ESP32C3: SocName := 'esp32c3';
+    SOC_ESP32C6: SocName := 'esp32c6';
+    SOC_ESP32H2: SocName := 'esp32h2';
+    SOC_ESP32P4: SocName := 'esp32p4';
+  else
+    SocName := '';
+  end;
+end;
+
+function SocFromName(const nm: AnsiString): Integer;
+{ IDF's own spelling, exactly. SOC_NONE when it is not an ESP chip name. }
+var i: Integer;
+begin
+  SocFromName := SOC_NONE;
+  for i := 1 to SOC_LAST do
+    if SocName(i) = nm then
+    begin
+      SocFromName := i;
+      Exit;
+    end;
+end;
+
+function SocIsXtensa(soc: Integer): Boolean;
+begin
+  SocIsXtensa := (soc = SOC_ESP32) or (soc = SOC_ESP32S2) or (soc = SOC_ESP32S3);
+end;
+
+function SocCoreCount(soc: Integer): Integer;
+{ 2 only for the dual-core parts. This is what decides whether masking
+  interrupts is a SUFFICIENT atomic: on one core it is, on two it is not. }
+begin
+  if (soc = SOC_ESP32) or (soc = SOC_ESP32S3) or (soc = SOC_ESP32P4) then
+    SocCoreCount := 2
+  else
+    SocCoreCount := 1;
+end;
+
+function SocHasAtomicISA(soc: Integer): Boolean;
+{ True when the core can do a read-modify-write in hardware: every Xtensa
+  LX6/LX7 part via S32C1I (+SCOMPARE1), and the RISC-V parts that carry the `A`
+  extension. NOT the C3/C2 — those are RV32IMC, no `A`, which is why
+  `compiler/rv32enc.inc` has no AMO or LR/SC encoders to emit. }
+begin
+  SocHasAtomicISA := SocIsXtensa(soc) or
+                     (soc = SOC_ESP32C6) or (soc = SOC_ESP32H2) or
+                     (soc = SOC_ESP32P4);
+end;
+
+function SocIramBase(soc: Integer): Int64;
+{ Bare-metal load org. Was two constants selected by ISA; the chip owns it now.
+  C3: SRAM_IRAM_START(0x4037C000) + ICACHE(0x4000). S3: SRAM_DIRAM_I_START. }
+begin
+  if SocIsXtensa(soc) then SocIramBase := ESP_BARE_IRAM_BASE_XT
+  else SocIramBase := ESP_BARE_IRAM_BASE;
+end;
+
 procedure PxxDbgHelp;
 begin
   WriteLn('PXXDBG: comma-separated topics, `<lane>.*` for a whole lane, or `all`.');

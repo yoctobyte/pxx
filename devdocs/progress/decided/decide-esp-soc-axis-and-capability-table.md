@@ -158,3 +158,42 @@ count), then the SoC targets that select a row, then the consumers.
 partly independent: **the xtensa half needs no chip gate** (`S32C1I` is on every
 LX6/LX7 part) and can land before or after this. The riscv32 half is the one
 that needs the table, because the answer differs within the ISA.
+
+## Implemented 2026-08-11 — the table and the targets (first slice)
+
+Landed, in the decided order:
+
+- **The capability table** (`compiler/defs.inc`): SoC ids with IDF's spellings,
+  `SocFromName` / `SocName`, and the accessors `SocIsXtensa`, `SocCoreCount`,
+  `SocHasAtomicISA`, `SocIramBase`. Each row carries its hardware fact in a
+  comment, and the table makes explicit that **no ESP part is in the
+  "no atomic ISA AND 2 cores" box** — the combination with no correct primitive.
+- **SoC targets** — `--target=esp32c3` … `--target=esp32p4`, parsed in the
+  existing namespace, implying the ISA. `--target=riscv32` / `--target=xtensa`
+  default to `esp32c3` / `esp32s3`, which is exactly what they have always
+  meant; that default is now stated ONCE instead of being implied in three
+  unrelated places.
+- **First consumer converted:** the ELF writer asked `TargetArch = TARGET_XTENSA`
+  to choose between two IRAM constants; it asks `SocIramBase(TargetSoc)` now.
+- The `--esp-profile=bare` validation message no longer hardcodes
+  "riscv32 (esp32c3) or xtensa (esp32s3)".
+
+**Equivalence is asserted in the Makefile, not just measured once:** the same
+source built as `riscv32` and as `esp32c3` must `cmp` equal, likewise
+`xtensa`/`esp32s3` under `--esp-profile=bare`. If those ever diverge, the table
+has started disagreeing with the constants it replaced.
+
+One measurement correction worth recording: a first pass "verified" the xtensa
+equivalence with a loop that left STALE outputs in place when a compile failed,
+so `cmp` compared the previous iteration's riscv files and reported success.
+Hosted xtensa does not compile this program at all — pre-existing, "external
+(dynamic) symbols not yet supported", and it fails identically for both
+spellings. The real check requires both outputs to exist.
+
+### Still to do
+
+`SocCoreCount` and `SocHasAtomicISA` have no consumer yet — they exist for
+[[bug-a-riscv32-and-xtensa-have-no-atomic-codegen]], which is the next slice and
+whose xtensa half needs no chip gate. Facts still hardcoded per ISA elsewhere
+(the shared `ESP_BARE_STACK_TOP`, the UART base named only in a comment) should
+migrate to the table as they acquire a second value.
