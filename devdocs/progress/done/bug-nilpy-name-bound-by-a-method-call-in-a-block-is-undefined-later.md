@@ -230,4 +230,4 @@ the four new shapes rather than a near-duplicate file, its expectation taken
 from CPython.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit e3f79c0b8.
