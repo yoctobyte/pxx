@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-11T08:00:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "43d272ebe1faba4f0ba987269ff51d52b35a5257",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-11T08:09:52Z",
    "fixed": [],
    "new_red": [],
@@ -398,6 +390,14 @@
    "new_red": [],
    "sha": "8952f7b1d90c87551ed7f785c2d8116272bc234d",
    "tier": "full",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-11T19:05:07Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8952f7b1d90c87551ed7f785c2d8116272bc234d",
+   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -5007,11 +5007,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-11T18:46:50Z",
+  "date": "2026-08-11T19:05:07Z",
   "sha": "8952f7b1d90c87551ed7f785c2d8116272bc234d",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 714.3
+  "wall": 233.0
  },
  "last_bench": {
   "conf_rows": 550,
