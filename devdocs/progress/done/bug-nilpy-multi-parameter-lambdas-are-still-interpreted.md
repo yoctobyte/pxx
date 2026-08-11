@@ -126,4 +126,4 @@ Two adjacent findings, both PRE-EXISTING on `pinned` and neither caused here:
   filed, since the diagnostic is honest and names the restriction.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 9dc6db958.
