@@ -111,4 +111,4 @@ it already carried the `.method()` and `[i]` halves of this family.
 Needs a pin before other lanes see it (`compiler/builtin`).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 897749d9a.
