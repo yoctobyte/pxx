@@ -86,4 +86,4 @@ resolution is consulted by every call in every library.
 New `test/test_overload_int_prefers_int.pas`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 82a5c65a5.
