@@ -4974,13 +4974,11 @@
  "open_regressions": [
   {
    "bad": "a37f78681518be8006fd0c1c6d9835420e485c71",
-   "good": "d50f59a273e40ac25176b529690d08d98747f52c",
+   "good": "c5ed9a8311c2722157fb8cada3db5936d66aefd8",
    "job": "test-uforth#00",
    "name": "test-uforth#00",
    "opened": "2026-08-11T02:50:09Z",
    "range": [
-    "75d55bf666ad9d0f7662a87a9fb35e693f1416e1",
-    "c5ed9a8311c2722157fb8cada3db5936d66aefd8",
     "6590c700cbca22bc7490c7848f653be4efb47d05",
     "a37f78681518be8006fd0c1c6d9835420e485c71"
    ],
