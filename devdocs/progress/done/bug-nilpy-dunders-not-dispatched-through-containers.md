@@ -206,4 +206,4 @@ Stable: 20/20 runs identical. Fixed by other work before this session — since
 rather than as work done here.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 50fd84c94.

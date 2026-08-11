@@ -112,4 +112,4 @@ statement" case) and through a typed return (the "dropped" case) — are correct
 Fixed before v256; closing as no-longer-reproducing.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 50fd84c94.

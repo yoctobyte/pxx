@@ -343,4 +343,4 @@ question. Prio dropped 50 -> 35: the everyday spellings work.
 before v256; closing as no-longer-reproducing.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 50fd84c94.

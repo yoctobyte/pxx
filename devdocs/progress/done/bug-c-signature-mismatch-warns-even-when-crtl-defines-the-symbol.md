@@ -80,4 +80,4 @@ warning at all** on `pinned` (v256) and HEAD, and runs correctly (`2`). The
 are gone. Fixed before v256; closing as no-longer-reproducing.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 50fd84c94.
