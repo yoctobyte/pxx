@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:9 blocked:3 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1653 rejected:35`
+`urgent:1 unfinished:9 blocked:3 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1654 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,7 +33,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 203, ranked
+## Ready — top 30 of 202, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -66,4 +66,4 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 - `[p 55] [T]` feature-t-shard-the-uforth-ans-suite-per-word-set
 
-_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

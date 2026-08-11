@@ -1202,6 +1202,11 @@ test-nilpy: $(COMPILER)
 	# nothing. bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
 	./$(COMPILER) test/test_nilpy_pyeval_errors_are_catchable.npy /tmp/test_nilpy_pyevalerr26
 	/tmp/test_nilpy_pyevalerr26 | diff -u test/test_nilpy_pyeval_errors_are_catchable.expected -
+	# hash(x): pylib's PyVarHashKey exposed. Every row asserts the INVARIANT
+	# (equal values hash equal), never a number — CPython salts strings per
+	# process. bug-n-hash-builtin-is-not-implemented
+	./$(COMPILER) test/test_nilpy_hash_builtin.npy /tmp/test_nilpy_hash26
+	/tmp/test_nilpy_hash26 | diff -u test/test_nilpy_hash_builtin.expected -
 	! ./$(COMPILER) test/test_nilpy_isinstance_unknown_type_fail.npy /tmp/test_nilpy_isinstfail26 2>&1 | grep -q 'ok:'
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".

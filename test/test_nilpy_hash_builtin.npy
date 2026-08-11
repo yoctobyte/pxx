@@ -1,0 +1,24 @@
+# Python's `hash(x)`. pylib already computed exactly this — PyVarHashKey is the
+# dict's own key hash, written to mirror PyVarEq arm for arm — it simply was not
+# reachable from the language, so a program could not ask what a value hashes
+# to. That is part of why an ignored __hash__ dunder was hard to narrow.
+#
+# EVERY row asserts an INVARIANT, never a number: CPython salts string hashing
+# per process, so its own hash("ab") differs between two runs and a literal
+# expectation would be untestable by construction. What must hold is that equal
+# values hash equal, and that unequal ones generally do not.
+#
+# The last row is the shadowing control: a user `def hash` wins, as it does for
+# every other builtin intercept.
+# bug-n-hash-builtin-is-not-implemented
+
+class K:
+    def __init__(self, v): self.v = v
+    def __eq__(self, o): return self.v == o.v
+    def __hash__(self): return self.v * 7
+print(hash(5) == hash(5), hash("ab") == hash("ab"), hash((1,2)) == hash((1,2)))
+print(hash(5) == hash(6), hash("ab") == hash("ac"))
+print(hash(K(3)) == hash(K(3)), hash(K(3)) == hash(K(4)))
+print(hash(True) == hash(1), hash(2.0) == hash(2))
+def hash(x): return 99
+print(hash(1))

@@ -12942,6 +12942,26 @@ begin
         Exit;
       end;
 
+      { NilPy's `hash(x)`. pylib's PyVarHashKey already computes exactly this —
+        it is the dict's own key hash, written to mirror PyVarEq arm for arm —
+        it simply was not reachable from the language, so a program could not
+        ask what a value hashes to. `procIdx < 0` keeps a user `def hash` in
+        charge, like every other builtin intercept here.
+        bug-n-hash-builtin-is-not-implemented }
+      if PyExprMode and CaseEqual(name, 'hash') and (procIdx < 0) and
+         (Tokens[TokPos].Kind = tkLParen) and (FindProc('pyhash_v') >= 0) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('pyhash_v');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyInt64);
+        LastExprTk := tyInt64;
+        Exit;
+      end;
+
       { Abs(e)/Sqr(e): System intrinsics lowered to builtin helpers (eval-once;
         int and float variants by the argument type). No `uses`; user routine of
         the same name shadows. ESP (no builtin unit) errors with a clear message. }

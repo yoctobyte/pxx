@@ -975,6 +975,10 @@ function pyvar_to_int(const v: Variant): Int64;
   cannot be resolved when lowering: `len(v)` picked an overload by static
   type and dereferenced a string as a list, and `v * 2` cannot know whether
   to repeat or multiply (bug-a-len-of-variant-picks-wrong-overload). }
+{ Python's hash(x) — the dict's own key hash, exposed. Equal values hash equal;
+  the NUMBERS are not CPython's and must not be asserted (it salts strings per
+  process). bug-n-hash-builtin-is-not-implemented }
+function pyhash_v(const v: Variant): Int64;
 function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
@@ -4258,6 +4262,24 @@ begin
     PInteger(NativeInt(d.FHash) + i * 4)^ := -1;
   for i := 0 to d.FLen - 1 do
     PyDictHashPut(d, i);
+end;
+
+function pyhash_v(const v: Variant): Int64;
+{ Python's `hash(x)`.
+
+  PyVarHashKey is already exactly this — the dict's own key hash, written to
+  mirror PyVarEq arm for arm (ints by value across tags, strings by content,
+  tuples by element, a user object through its __hash__). It simply was not
+  reachable from the language, so a program could not ask what a value hashes
+  to — which is part of why an ignored __hash__ dunder was hard to narrow.
+
+  Answers a SIGNED Int64, as CPython does. The numbers are not CPython's and
+  must never be asserted: CPython salts string hashing per process, so its own
+  hash("ab") differs between two runs. What holds, and what a test may rely on,
+  is the INVARIANT: equal values hash equal within one run.
+  bug-n-hash-builtin-is-not-implemented }
+begin
+  pyhash_v := Int64(PyVarHashKey(PPyVarRec(@v)));
 end;
 
 function TPyDict.indexof(const k: Variant): Integer;
