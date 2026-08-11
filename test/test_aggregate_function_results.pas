@@ -55,6 +55,16 @@ procedure SRef(var o: TSet); begin o := [1, 4]; end;
 
 function MkArr: TArr;   begin MkArr[0] := 8; MkArr[1] := 9; MkArr[2] := 10; end;
 
+{ A fixed-array call result passed straight to a `const` / by-value array
+  parameter: the callee already returns into a caller-owned scratch, so the
+  argument HAS an address and no lvalue is needed. The array arm was the last
+  aggregate to still refuse this — the record and string arms already
+  materialised a temp.
+  bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument }
+function SumArrC(const a: TArr): Integer; begin SumArrC := a[0] + a[1] + a[2]; end;
+function SumArrV(a: TArr): Integer;
+begin a[0] := 0; SumArrV := a[0] + a[1] + a[2]; end;
+
 { the Result-slot rows. MkArr4 keeps a guard local so a frame overrun shows up
   as a wrong value and not only as a crash. }
 function MkArr4: TArr4;
@@ -112,5 +122,7 @@ begin
 
   r := MkRec;  WriteLn('rec       ', r.a, ' ', r.b);
   t := MkStr;  WriteLn('str       ', t);
+  WriteLn('arr as arg ', SumArrC(MkArr), ' ', SumArrV(MkArr), ' ',
+                          SumArrC(MkArr) + SumArrC(MkArr));
   WriteLn('AGGREGATE FUNCTION RESULTS OK');
 end.

@@ -14356,9 +14356,21 @@ begin
                 made `f(g())` fail for a promo parameter while every other
                 numeric parameter type accepts it.
                 bug-a-promoint-parameter-rejects-literals-and-call-results }
+              { A FIXED-ARRAY call result is the same case as the by-value /
+                `const` record above, and was the one aggregate still refused:
+                the callee already returns into a caller-owned scratch
+                (IRBuildHiddenDest sizes it from ProcRetFixedArrBytes), so the
+                argument HAS an address to pass and no write-back is expected.
+                A genuine `var`/`out` array parameter still needs a real lvalue
+                — FPC refuses a call result there too.
+                bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument }
               if not (((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
+                      ((ASTKind[exprNode] = AN_CALL) and (ASTIVal[exprNode] >= 0) and
+                       (ProcRetFixedArrBytes[ASTIVal[exprNode]] > 0) and
+                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
+                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
                       TypeIsPromoInt(Procs[procIdx].Params[i].TypeKind) or
                       ((Procs[procIdx].Params[i].TypeKind = tyVariant) and
                        ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i])) then
@@ -21459,9 +21471,19 @@ begin
                   copies). Only a genuine `var`/`out` record needs a true lvalue.
                   `@obj.Method` is materialised into a method-pointer record temp. }
                 { const Variant: non-lvalue boxed at IR lowering (see above) }
+                { A FIXED-ARRAY call result is sound for the same reason the
+                  by-value record above is — the callee returns into a
+                  caller-owned scratch, so the argument has an address. This is
+                  the OVERLOADED-call twin of the check further up; both had to
+                  learn it.
+                  bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument }
                 if not (((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                         (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
                          not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
+                        ((ASTKind[exprNode] = AN_CALL) and (ASTIVal[exprNode] >= 0) and
+                         (ProcRetFixedArrBytes[ASTIVal[exprNode]] > 0) and
+                         (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
+                          not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
                         ((Procs[procIdx].Params[i].TypeKind = tyVariant) and
                          ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i])) then
                   Error('by-reference argument must be a variable');

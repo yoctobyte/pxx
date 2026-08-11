@@ -39,9 +39,9 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument | A | 45 | bug | A fixed-array call result is refused as a `const`/by-ref argument | — |
 | bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver | A | 40 | bug | A metaclass returned from a FUNCTION is not a receiver | — |
 | bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit | A | 40 | bug | A VARIABLE field width is refused for strings/chars, and needs an RTL unit at all | — |
+| bug-a-an-integer-argument-binds-a-fixed-array-overload | A | 45 | bug | An Integer argument binds the fixed-ARRAY overload, not the Integer one | — |
 | bug-a-for-in-refuses-a-set-constructor-and-a-string-literal | A | 35 | bug | `for x in [...]` and `for c in 'literal'` are refused | — |
 | bug-a-riscv32-and-xtensa-have-no-atomic-codegen | S | 45 | bug | riscv32 (and xtensa) reject every __pxxatomic_* op — 'unsupported node in IR codegen: atomic' — so any unit touching an atomic cannot be compiled for them at all, on the two targets whose OS gives real concurrent tasks | — |
 | bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc | A | 40 | bug | `shr` on a 32-bit operand shifts at 32 bits; FPC promotes to 64 first | — |
@@ -407,9 +407,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1638)
+## done (1639)
 
-1638 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1639 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -510,7 +510,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [N] bug-n-a-type-name-is-not-a-first-class-value (unblocks 1)
 - [p 45] [U] decide-nilpy-none-str-representation (unblocks 1)
-- [p 45] [A] bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument
+- [p 45] [A] bug-a-an-integer-argument-binds-a-fixed-array-overload
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
 - [p 45] [N] bug-nilpy-multi-parameter-lambdas-are-still-interpreted

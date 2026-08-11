@@ -2231,6 +2231,9 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_aggret26 | tail -1)" = "AGGREGATE FUNCTION RESULTS OK"
 	test "$$(/tmp/test_aggret26 | head -1)" = "set lit   TRUE TRUE FALSE"
 	test "$$(/tmp/test_aggret26 | head -7 | tail -1)" = "arr       8 9 10"
+	# a fixed-array call result as a `const` / by-value array ARGUMENT (the last
+	# aggregate that still demanded an lvalue); a `var` one is still refused
+	test "$$(/tmp/test_aggret26 | tail -2 | head -1)" = "arr as arg 27 19 54"
 	# ...and the Result SLOT, which was one element wide with no dim spans:
 	# array[0..3] overran into the return address, an N-D result indexed with
 	# no strides, and a non-Integer element got an Integer stride.
