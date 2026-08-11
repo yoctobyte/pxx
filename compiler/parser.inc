@@ -15359,7 +15359,30 @@ begin
       ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
                                               IntToTypeKind(ASTTk[right])))
     else if (op = tkIdent) or (op = tkShl) then
-      ASTTk[node] := ASTTk[left]
+    begin
+      { A SHIFT happens at NATIVE width, and its result is not truncated back to
+        the operand's declared width — `1 shl 40` is 2^40, not 0, and
+        `-a shr 1` (a: Integer) is the 64-bit logical shift.
+        decide-shift-operator-promotion-width (user, 2026-08-10): "pxx
+        truncating to 32-bit is wrong"; FPC's own answers are inconsistent here
+        (it widens the operand for `shr` but masks the count for `shl`, and its
+        constant folder contradicts its runtime path), so copying them is left
+        to --strict-fpc. Widening never loses information; truncating does, and
+        truncating is how `1 shl 40` became 0.
+        C keeps its own semantics: CProgramMode's `<<` wraps at the declared
+        width, which is what the standard says, so the promotion is Pascal-only.
+        bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
+      if (not CProgramMode) and TypeIsMachineInt(IntToTypeKind(ASTTk[left])) and
+         (TypeSize(IntToTypeKind(ASTTk[left])) < TypeSize(tyNativeInt)) then
+      begin
+        if TypeSigned(IntToTypeKind(ASTTk[left])) then
+          ASTTk[node] := Ord(tyNativeInt)
+        else
+          ASTTk[node] := Ord(tyNativeUInt);
+      end
+      else
+        ASTTk[node] := ASTTk[left];
+    end
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
     begin

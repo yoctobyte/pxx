@@ -1595,7 +1595,10 @@ begin
             read back as a 32-bit value (sign-extended for a signed operand,
             zero-extended for unsigned), not the wider 64-bit register content
             (bug-shl-signed-integer-width). 64-bit operands shift as-is. }
-          if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
+          { ...unless the frontend asked for a NATIVE-width result — see the
+            x86-64 twin. bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
+          if (TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8) and
+             (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
           begin
             if TypeSigned(IntToTypeKind(IRTk[IRA[node]])) then
               EmitI32($93407C00)                           { sxtw x0, w0 }
@@ -1609,7 +1612,15 @@ begin
             upper 32 of x0) so a sign-extended negative value's high bits don't
             leak into the 64-bit lsr (bug-shr-signed-integer-width). }
           if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
-            EmitI32($2A0003E0);                            { mov w0, w0 }
+          begin
+            { a NATIVE-width result sign-extends a signed operand first — see
+              the x86-64 twin }
+            if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+               TypeSigned(IntToTypeKind(IRTk[IRA[node]])) then
+              EmitI32($93407C00)                           { sxtw x0, w0 }
+            else
+              EmitI32($2A0003E0);                          { mov w0, w0 }
+          end;
           EmitI32($9AC12400);                              { lsr x0, x0, x1 }
         end
         else if op = Ord(tkShr) then

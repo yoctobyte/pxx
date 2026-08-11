@@ -98,6 +98,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-selfhost-recipe-should-rename-not-write-in-place | A | 55 | bug | The self-host chain compiles straight onto the path it is about to exec, so a concurrent fd holder makes the exec fail with ETXTBSY. Write to a temp name and rename — atomic in RUN_TMP, and a new inode | — |
 | bug-a-set-and-array-function-results-come-back-empty | A | 55 | bug | A set- or fixed-array-returning function answers an empty/partial value | — |
 | bug-a-set-and-shortstring-value-params-alias-the-caller | A | 55 | bug | A by-value `set` or `string[N]` parameter aliases the caller's variable | — |
+| bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc | A | 40 | bug | `shr` on a 32-bit operand shifts at 32 bits; FPC promotes to 64 first | — |
 | bug-a-static-array-of-managed-whole-assign-loses-data | A | 80 | bug | b := a on a static array with managed elements copies NOTHING — every element comes out empty, silently; elementwise copy and the same array inside a record both work | — |
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
 | bug-a-string-n-type-alias-loses-its-capacity | A | 60 | bug | A `string[N]` TYPE ALIAS loses its capacity, so nothing truncates | — |

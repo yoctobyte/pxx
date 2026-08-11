@@ -4245,7 +4245,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_qword_literal_binop.pas /tmp/test_qword_lit26
 	test "$$(/tmp/test_qword_lit26)" = "$$(printf '%s\n' 18085043209385476867 4210752250 50529028 18085043209385476867 cmp-ok neg-ok)"
 	./$(COMPILER) test/test_shift_operand_width.pas /tmp/test_shift_ow26
-	test "$$(/tmp/test_shift_ow26)" = "$$(printf '%s\n' -2147483648 2147483648 4194304 0)"
+	test "$$(/tmp/test_shift_ow26)" = "$$(printf '%s\n' 2147483648 2147483648 36028797014769664 -4294967296)"
 	./$(COMPILER) test/test_overflow_checks_qplus.pas /tmp/test_qplus26
 	test "$$(/tmp/test_qplus26)" = "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) test/test_overflow_qplus_narrow.pas /tmp/test_qplus_narrow26
@@ -4439,7 +4439,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_succ_pred_odd.pas /tmp/test_succ_pred_odd26
 	test "$$(/tmp/test_succ_pred_odd26)" = "$$(printf '6 4\nb\ny\nodd7\neven8\n1')"
 	./$(COMPILER) test/test_shr_width.pas /tmp/test_shr_width26
-	test "$$(/tmp/test_shr_width26)" = "$$(printf '2147483644\n2147483644\n9223372036854775804\n1099511627776\n256\n-2147483648\n-16\n2147483648\n1099511627776\n4503599627370496')"
+	test "$$(/tmp/test_shr_width26)" = "$$(printf '9223372036854775804\n2147483644\n9223372036854775804\n1099511627776\n256\n2147483648\n-16\n2147483648\n1099511627776\n4503599627370496')"
 	./$(COMPILER) test/test_stderr_fd.pas /tmp/test_stderr_fd26
 	test "$$(/tmp/test_stderr_fd26 2>/dev/null)" = "$$(printf 'out1\nout2')"
 	test "$$(/tmp/test_stderr_fd26 2>&1 1>/dev/null)" = "$$(printf 'e1 n=42 i=  7 b=TRUE')"

@@ -3,6 +3,8 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
+status: done
+owner: claude-A
 ---
 
 # `shr` on a 32-bit operand shifts at 32 bits; FPC promotes to 64 first
@@ -64,3 +66,40 @@ disagrees with its own runtime path.
 That makes this a semantics choice rather than a fix, so it is now blocked on
 **[[decide-shift-operator-promotion-width]]**, which carries the table, the
 four options and a recommendation.
+
+## Resolution (2026-08-11) — native width, per the decision
+
+Implemented [[decide-shift-operator-promotion-width]]'s default half: a shift's
+RESULT is typed at native width when the left operand is a narrower machine int
+(signed → NativeInt, unsigned → NativeUInt), and both 64-bit backends obey that
+tag — x86-64 and aarch64 sign-extend a narrow SIGNED operand before the logical
+`shr` (instead of zero-extending it) and skip `shl`'s narrow-back when the
+result is native. One rule for both operators, no constant-vs-variable split.
+C is untouched: `CProgramMode` keeps the declared-width wrap the standard
+requires, and its `<<`/`>>` still match gcc.
+
+The 32-bit targets need no change and got none — native there IS 32 bits, so
+i386/arm32/riscv32 keep today's answers.
+
+**The cost is larger than the decision's table showed**, and that is worth
+knowing: the table's `-a shr 1` row agreed with FPC only because FPC's unary
+minus already widens, so it never exercised `shr`'s own width. A plain shift on
+a declared 32-bit variable diverges — four rows, listed in
+`decide-shift-native-width-costs-more-fpc-parity-than-the-table-showed`, filed
+so the user can re-confirm the call on the full table rather than the partial
+one. Two tests had to be re-blessed (`test_shr_width`,
+`test_shift_operand_width`), where the decision expected none; both now state
+the divergence in the file rather than quietly asserting new numbers.
+
+Verified: the 10-row shift matrix against `fpc -O1` (8 rows agree; the two that
+do not are FPC's count-masking, which its own folder contradicts), identical
+answers on aarch64, `make lib-test` GREEN, SHA-256 and CRC32 digests still
+correct (their intermediates land in `LongWord`, so the STORE narrows), the C
+shift matrix still matching gcc, and a 139-file bit/int/cast/const family sweep
+against `pinned` with no diffs beyond the intended ones.
+
+`--strict-fpc`'s half is not implemented — filed as
+`bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths`.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

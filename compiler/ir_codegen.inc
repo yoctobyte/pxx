@@ -3945,7 +3945,21 @@ begin
           tkIdent:
             begin
               if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
-                begin EmitB($89); EmitB($C0); end;            { mov eax, eax (zero-extend) }
+              begin
+                { A Pascal shift runs at NATIVE width, so a narrow SIGNED
+                  operand is sign-extended first and the logical shift then sees
+                  the real 64-bit two's complement — `-a shr 1` (a: Integer) is
+                  9223372036854775804, not the 32-bit pattern's 2147483644. The
+                  frontend says so by tagging the RESULT 8 bytes; a narrow
+                  result (C, and any dialect that keeps the operand's width)
+                  still zero-extends, which is this emitter's original job.
+                  bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
+                if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+                   TypeSigned(IntToTypeKind(IRTk[left])) then
+                  begin EmitB($48); EmitB($98); end           { cdqe (sign-extend) }
+                else
+                  begin EmitB($89); EmitB($C0); end;          { mov eax, eax (zero-extend) }
+              end;
               EmitB($48); EmitB($D3); EmitB($E8);             { shr rax, cl }
             end;
           { C signed `>>` (bug-c-signed-arith-shift-right): arithmetic shift,
@@ -3967,7 +3981,13 @@ begin
           tkShl:
             begin
               EmitB($48); EmitB($D3); EmitB($E0);             { shl rax, cl }
-              if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+              { ...unless the frontend asked for a NATIVE-width result, in which
+                case there is nothing to wrap back to: `1 shl 40` is 2^40 and
+                `1 shl 31` is 2147483648. Pascal-only — C's `<<` keeps its
+                declared-width wrap, and says so by tagging the result narrow.
+                bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
+              if (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
+                 (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
               begin
                 if TypeSigned(IntToTypeKind(IRTk[left])) then
                   begin EmitB($48); EmitB($98); end           { cdqe }
