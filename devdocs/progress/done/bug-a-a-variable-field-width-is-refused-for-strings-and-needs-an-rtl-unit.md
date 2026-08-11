@@ -97,4 +97,4 @@ change, which is out for re-confirmation
 (`decide-shift-native-width-costs-more-fpc-parity-than-the-table-showed`).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 62c418d59.
