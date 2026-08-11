@@ -81,4 +81,4 @@ with honest diagnostics, neither is this bug:
   `feature-a-index-an-array-returning-call-directly`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 4048fe238.
