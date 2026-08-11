@@ -3,6 +3,8 @@ track: N
 prio: 45
 type: bug
 summary: "A lambda with 2+ parameters still lowers to a pyeval SOURCE closure and is re-walked per call — the lift is gated on nParams <= 1 because the bound-fn bridge passes one argument. Correct answers, ~7x the per-call cost."
+status: done
+owner: claude-A
 ---
 
 # Multi-parameter lambdas are still interpreted
@@ -83,3 +85,45 @@ $ strings ./prog | grep -c 'a + b\|a \* b + c'
 
 Still 2 at HEAD — both lambdas are still interpreted pyeval source closures.
 Ticket stands.
+
+## Resolution (2026-08-11)
+
+The runtime was already parameterised in own-argument count and nobody had told
+it: `pyboundfn_callvn` carries `a0/a1/a2` and places `NOwn` of them ahead of the
+bound slots, and `pyboundfn_setown` exists precisely to set `NOwn`. Only this
+lowering hard-coded one own slot. So the fix is the ticket's own direction, with
+no runtime work at all:
+
+- reserve `nParams` own slots (a dummy `$lamarg0` still absorbs the bridge's
+  argument for a zero-parameter lambda);
+- `nBound` becomes `lamN - lamOwn`;
+- chain `pyboundfn_setown(fn, lamOwn)` when it is not 1;
+- gate at `nParams <= 3`, which is what the bridge carries.
+
+**The bug the first attempt introduced is the part worth remembering:** the
+capture-bind loop ran `for j := 1 to lamN - 1`, so with two own parameters it
+bound the lambda's own `b` as bound slot 0 — over `lamSyms[1] = -1`, because an
+own parameter binds no enclosing symbol. That built an `AN_IDENT` on symbol -1
+and the IR came out with a garbage type kind: `invalid type kind in IR node`,
+pointing at the end of the file. The loop now starts at `lamOwn`. Same hardcoded
+1 in the defaults' `varMask` scan, fixed with it.
+
+Verified: `strings <bin> | grep -c` on the lambda bodies is **0** where it was 2,
+answers matching CPython for 2- and 3-parameter lambdas with and without a
+capture, a lambda passed as a value and called through a parameter, `key=`, and
+the 0- and 1-parameter cases that already lifted. `make test-nilpy` EXIT=0,
+`gate.sh quick` GREEN.
+
+Two adjacent findings, both PRE-EXISTING on `pinned` and neither caused here:
+
+- **A 4+-parameter lambda SEGFAULTS when called.** It keeps the interpreted
+  fallback (the bridge carries three), and that path crashes on valid Python.
+  Filed as `bug-nilpy-a-four-parameter-lambda-segfaults-when-called` (prio 50 —
+  a crash outranks this ticket's performance concern), with both candidate
+  fixes weighed there.
+- `lambda x, y=3:` — a default whose value is a LITERAL rather than a name — is
+  refused by the existing default-capture parser. Recorded here rather than
+  filed, since the diagnostic is honest and names the restriction.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

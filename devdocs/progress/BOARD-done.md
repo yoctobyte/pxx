@@ -662,6 +662,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-module-name-reassigned-from-a-subscript-in-a-block-reads-garbage | N | 60 | bug | A module name rebound INSIDE a block reads as garbage | — |
 | bug-nilpy-multi-arg-exception-constructor-segfaults | N | 55 | bug | A multi-argument exception constructor SEGFAULTED | — |
 | bug-nilpy-multi-name-for-target-reuses-a-module-name-and-reads-garbage | N | 55 | bug | A MULTI-NAME for target at module scope reuses an existing name's slot | — |
+| bug-nilpy-multi-parameter-lambdas-are-still-interpreted | N | 45 | bug | A lambda with 2+ parameters still lowers to a pyeval SOURCE closure and is re-walked per call — the lift is gated on nParams <= 1 because the bound-fn bridge passes one argument. Correct answers, ~7x the per-call cost. | — |
 | bug-nilpy-name-assigned-from-a-call-then-reused-as-a-loop-target-segfaults | N | 50 | bug | A name assigned from a CALL, then reused as a for-loop target, SEGFAULTS | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |
 | bug-nilpy-nested-comprehension-over-range-evaluates-the-inner-one-once | N | 75 | bug | NilPy: in [[expr for j in ...] for i in range(n)] the inner comprehension is hoisted OUT of the outer loop and evaluated once with i at its initial value — and the same list object is appended to every row, so mutating one row mutates all | — |

@@ -1183,6 +1183,13 @@ test-nilpy: $(COMPILER)
 	# just constructed an instance. An UNBOUND name still errors by name.
 	./$(COMPILER) test/test_nilpy_isinstance_over_a_type_value.npy /tmp/test_nilpy_isinstval26
 	/tmp/test_nilpy_isinstval26 | diff -u test/test_nilpy_isinstance_over_a_type_value.expected -
+	# A 2- or 3-parameter lambda is COMPILED, not shipped as pyeval source and
+	# re-walked per call. An output diff cannot see this — the answers were
+	# already right — so the assertion is that NO lambda body text survives in
+	# the binary. bug-nilpy-multi-parameter-lambdas-are-still-interpreted
+	./$(COMPILER) test/test_nilpy_multi_param_lambda_is_compiled.npy /tmp/test_nilpy_mplam26
+	/tmp/test_nilpy_mplam26 | diff -u test/test_nilpy_multi_param_lambda_is_compiled.expected -
+	test "$$(strings /tmp/test_nilpy_mplam26 | grep -cE 'a \+ b \+ k|a \* b \+ c|x \* 2')" = "0"
 	! ./$(COMPILER) test/test_nilpy_isinstance_unknown_type_fail.npy /tmp/test_nilpy_isinstfail26 2>&1 | grep -q 'ok:'
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".

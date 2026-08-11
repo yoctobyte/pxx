@@ -1,0 +1,38 @@
+# A lambda with 2 or 3 parameters is COMPILED, not interpreted.
+#
+# The lift was gated on `nParams <= 1` because the bound-fn bridge was assumed
+# to pass a single argument. It is not: pyboundfn_callvn carries a0/a1/a2 and
+# places NOwn of them ahead of the bound slots, and pyboundfn_setown sets NOwn —
+# the runtime was already parameterised in count, only this lowering was not. It
+# reserved exactly one own slot, so a 2- or 3-parameter lambda stayed a pyeval
+# SOURCE closure: right answers, ~7x the per-call cost.
+#
+# An output diff cannot see this fix — the answers were already correct. The
+# test is `strings <binary>`: an interpreted lambda carries its own SOURCE TEXT
+# in the binary (project_nilpy_every_lambda_is_an_interpreted_source_closure),
+# a compiled one does not. The Makefile asserts that count is ZERO, which is
+# what makes this a regression test rather than a restatement of the answers.
+#
+# NOT covered here, deliberately: four or more parameters, which still take the
+# interpreted fallback AND segfault when called — pre-existing on pinned, filed
+# as bug-nilpy-a-four-parameter-lambda-segfaults-when-called. Nor the
+# two-iterable map(f, xs, ys), which the frontend does not parse at all.
+#
+# Every expectation is CPython's own output.
+# bug-nilpy-multi-parameter-lambdas-are-still-interpreted
+
+k = 10
+
+f = lambda a, b: a + b + k          # two own params AND a capture
+g = lambda a, b, c: a * b + c       # three
+h = lambda x: x * 2                 # one — the case that already lifted
+z = lambda: 42                      # none — lifted under a dummy own param
+
+
+def use(fn):
+    return fn(2, 5)
+
+
+print(f(3, 4), g(2, 3, 4), h(5), z())
+print(use(lambda a, b: a * b))      # passed as a value, called through a param
+print(sorted([3, 1, 2], key=lambda v: -v))

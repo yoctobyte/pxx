@@ -6455,6 +6455,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     { the LIFTED path: this lambda's own proc and the values bound into it }
     lamProc, lamN, bindIdx, argC, vNode, capSym: Integer;
     lamCallee, k: Integer; cn2: AnsiString;
+    lamOwn, ownPi: Integer;   { how many leading slots are the lambda's OWN params }
     defPi, varMask, argD: Integer;   { pyboundfn_setdefaults for defaulted params }
     lamNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
     lamTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -6526,7 +6527,16 @@ begin
   newPi := FindProc('pyboundfn_new');
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
-  if (not PyTypingPass) and (nParams <= 1) and (newPi >= 0) and (bindPi >= 0) and
+  { …up to THREE own parameters, not one. The old gate was `nParams <= 1`
+    because the bridge was assumed to pass a single argument — but
+    pyboundfn_callvn takes a0/a1/a2 and places `NOwn` of them before the bound
+    slots, and pyboundfn_setown sets NOwn, so the runtime was already
+    parameterised in count. Only this lowering was not: it reserved exactly one
+    own slot and told the object nothing, so a 2- or 3-parameter lambda stayed
+    an interpreted pyeval source closure — right answers, ~7x the per-call cost.
+    Four or more own parameters keep the fallback: the bridge carries three.
+    bug-nilpy-multi-parameter-lambdas-are-still-interpreted }
+  if (not PyTypingPass) and (nParams <= 3) and (newPi >= 0) and (bindPi >= 0) and
      (varBindPi >= 0) and PyLambdaBodyIsLiftable(bStart, bEnd) then
   begin
     lamN := 0;
@@ -6537,12 +6547,24 @@ begin
       the lift, `root.after(300, lambda: draw())` fell to the pyeval closure,
       which cannot call a COMPILED def — "pyeval: unknown call: draw()", and the
       Tk event loop never came back (bug-nilpy-zero-param-lambda-cannot-call-a-def). }
-    if nParams = 1 then lamNames[0] := pNames[0]   { the one own parameter, unannotated }
-    else lamNames[0] := '$lamarg0';
-    lamTypes[0] := tyVariant;
-    lamSyms[0] := -1;
-    lamRecs[0] := REC_NONE;
-    lamN := 1;
+    if nParams = 0 then
+    begin
+      lamNames[0] := '$lamarg0';
+      lamTypes[0] := tyVariant;
+      lamSyms[0] := -1;
+      lamRecs[0] := REC_NONE;
+      lamN := 1;
+    end
+    else
+      for i := 0 to nParams - 1 do
+      begin
+        lamNames[i] := pNames[i];        { own parameters, unannotated }
+        lamTypes[i] := tyVariant;
+        lamSyms[i] := -1;
+        lamRecs[i] := REC_NONE;
+        lamN := i + 1;
+      end;
+    lamOwn := lamN;                       { captures are bound AFTER these }
     lamManagedCap := False;
     { the `key=key` defaults first: Python's own idiom for pinning a value }
     for i := 0 to dcCount - 1 do
@@ -6671,7 +6693,7 @@ begin
       ASTLeft[argA] := node;
       argB := AllocNode(AN_ARG);
       node := AllocNode(AN_INT_LIT);
-      ASTIVal[node] := lamN - 1; ASTTk[node] := Ord(tyInt64);
+      ASTIVal[node] := lamN - lamOwn; ASTTk[node] := Ord(tyInt64);
       ASTLeft[argB] := node;
       ASTRight[argA] := argB;
       argC := AllocNode(AN_ARG);
@@ -6691,6 +6713,24 @@ begin
         clipped against NOwn and dropped, so `f = lambda x, y=k: x*y; f(3, 4)`
         returned f(3)'s answer silently
         (bug-nilpy-a-lambda-call-is-not-arity-checked). }
+      { …and tell the object how many of the leading slots are OWN parameters.
+        pyboundfn_new defaults NOwn to 1 — the historic assumption — so a
+        2- or 3-parameter lambda would have read its second argument as a bound
+        capture. Chained like the binds are, which is what pyboundfn_setown was
+        written for. bug-nilpy-multi-parameter-lambdas-are-still-interpreted }
+      ownPi := FindProc('pyboundfn_setown');
+      if (lamOwn <> 1) and (ownPi >= 0) then
+      begin
+        argA := AllocNode(AN_ARG);
+        ASTLeft[argA] := node;
+        argB := AllocNode(AN_ARG);
+        vNode := AllocNode(AN_INT_LIT);
+        ASTIVal[vNode] := lamOwn; ASTTk[vNode] := Ord(tyInt64);
+        ASTLeft[argB] := vNode;
+        ASTRight[argA] := argB;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := ownPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+      end;
       defPi := FindProc('pyboundfn_setdefaults');
       { Emitted even when dcCount = 0. `base` is the caller-side index where the
         defaulted params begin, which is exactly the count of REQUIRED caller
@@ -6705,7 +6745,7 @@ begin
       begin
         varMask := 0;
         for j := 0 to dcCount - 1 do
-          if (j + 1 < lamN) and (lamTypes[j + 1] = tyVariant) then
+          if (lamOwn + j < lamN) and (lamTypes[lamOwn + j] = tyVariant) then
             varMask := varMask or (1 shl j);
         argA := AllocNode(AN_ARG);
         ASTLeft[argA] := node;
@@ -6728,10 +6768,15 @@ begin
         ASTIVal[node] := defPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
       end;
 
-      { bind each captured value, in parameter order }
-      for j := 1 to lamN - 1 do
+      { bind each captured value, in parameter order. Captures start AFTER the
+        lambda's own parameters — `lamOwn`, not a hardcoded 1: with two own
+        parameters the old bound slot 0 was the lambda's own `b`, whose lamSyms
+        entry is -1 (an own parameter binds no enclosing symbol), so the bind
+        built an AN_IDENT over symbol -1 and the IR came out with a garbage type
+        kind. bug-nilpy-multi-parameter-lambdas-are-still-interpreted }
+      for j := lamOwn to lamN - 1 do
       begin
-        bindIdx := j - 1;
+        bindIdx := j - lamOwn;
         argA := AllocNode(AN_ARG);
         ASTLeft[argA] := node;
         argB := AllocNode(AN_ARG);
