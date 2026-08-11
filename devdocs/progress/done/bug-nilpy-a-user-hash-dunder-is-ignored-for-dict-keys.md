@@ -184,4 +184,4 @@ byte-identical). New `test/test_nilpy_user_hash_dict_key.npy`. Needs a pin
 before other lanes see it (`compiler/builtin`).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit aae40565e.
