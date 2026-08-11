@@ -86,6 +86,22 @@ begin
   WriteLn(1e30:0:2);
   WriteLn((-1e23):0:2);
   WriteLn(1e23:30:0);   { the field width counts the digits actually printed }
+
+  { ...and the FRACTION half of the same number, exact for as many digits as are
+    asked for. It used to be scaled through a Double: right for about 16 digits,
+    then the product's rounding for two or three more, then ZEROS presented as
+    digits — the routine's own comment called that "past what a double knows",
+    which was the false premise. A double is mant * 2^exp2 with both parts
+    integral, so its decimal expansion is finite and every digit of it is real:
+    a denormal runs to 1074 fraction digits and they all mean something.
+    Expectations from decimal.Decimal(float(x)) quantized half-away-from-zero.
+    bug-a-write-fixed-fraction-digits-past-16-are-invented }
+  WriteLn((1/3):0:30);      { ...314829616256247, not ...312 then zeros }
+  WriteLn(0.1:0:25);        { ...0055511151, not twenty-four zeros }
+  WriteLn(267.5:0:20);      { an exact binary value: really is all zeros }
+  WriteLn(9.96:0:1);        { the fraction rounds up INTO the integer }
+  WriteLn(0.5:0:0, ' ', 1.5:0:0, ' ', 2.5:0:0);  { half-AWAY-from-zero, not to-even }
+  WriteLn((-1/3):0:20);
   if fails = 0 then WriteLn('WRITEFLOAT OK')
   else WriteLn('WRITEFLOAT FAILED ', fails);
 end.

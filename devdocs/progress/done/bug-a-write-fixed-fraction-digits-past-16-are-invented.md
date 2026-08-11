@@ -3,6 +3,8 @@ summary: "SILENT: write(v:w:d) gets the INTEGER part exactly now, but the fracti
 type: bug
 track: A
 prio: 35
+status: done
+owner: claude-A
 ---
 
 # `write(v:w:d)`: the fraction past ~16 digits is an approximation, padded with zeros
@@ -120,3 +122,47 @@ again.
 
 Left in backlog at prio 35. It wants a session that can hold the emitter change
 and run the cross-target gate.
+
+## Resolution (2026-08-11) — and the mirroring worry was already gone
+
+The 2026-08-07 note said the fix had to land in the hand-emitted x86-64 float
+writer as well, or the backends would print different text. That is no longer
+true: `EmitWriteFloatFixed` is already a SHIM onto `PXXWriteFloatFixed` (the
+native emitter survives only as a fallback for when the helper is absent), and
+i386 / arm32 / aarch64 / riscv32 all call the same routine. So there is ONE
+implementation, and this is a numeric change after all.
+
+New `PxxFracDigits` expands the fraction exactly, in the same base-10^9 limbs
+its integer sibling `PxxIntDDigits` uses — the `exp2 < 0` half, multiplying by
+5^k, since 2^-k = 5^k * 10^-k makes the value the integer `mant*5^k` with the
+point pushed k places left. Rounding is half-away-from-zero at the cut, decided
+by the first DROPPED digit (which answers both the >half and the exact-tie case,
+and an exact tie really is one here — nothing is scaled). It is called twice:
+once with `emit = 0` to learn whether rounding carries into the integer part
+(that changes both the integer digits and the column count, `9.96:0:1` → `10.0`)
+and once to print. `PXXWriteFloatFixed` lost its `pw`/`rem`/`dv` scaling
+entirely — both halves of the number now follow one rule.
+
+Matches `decimal.Decimal(float(x))` quantized half-away-from-zero on every row
+measured, including the ticket's two:
+
+    (1/3):0:30   0.333333333333333314829616256247   (was ...312 then zeros)
+    0.1:0:25     0.1000000000000000055511151        (was twenty-four zeros)
+    1e-320:0:325 the full 320-digit denormal expansion, ending 99999
+
+plus 267.5:0:20 (an exact binary value — really is all zeros), the 0.5/1.5/2.5
+half-away-from-zero row, a negative, a carry into the integer, a field width,
+and 1e20:0:2. Identical output on x86-64, i386, arm32 and aarch64; 147-file
+float/str/format family sweep against `pinned` with no unintended diffs.
+
+**riscv32 diverges on ONE row and it is not this bug:** it folds `1/3` to a
+SINGLE-precision value (`0.33333334326744079590` is float32's 1/3), which the
+old approximate fraction hid because nobody could print far enough to see it.
+Pre-existing on `pinned`; filed as
+`bug-a-riscv32-folds-a-double-literal-division-to-single-precision`.
+
+`test/lib_writefloat_fixed.pas` extended with the fraction rows. Needs a pin
+before other lanes see it (`compiler/builtin`).
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

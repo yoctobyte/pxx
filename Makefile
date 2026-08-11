@@ -2955,6 +2955,13 @@ test-core: $(COMPILER)
 	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^1000000000000000019884624838656\.00$$')" = "1"
 	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^-99999999999999991611392\.00$$')" = "1"
 	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^       99999999999999991611392$$')" = "1"
+	# ...and the FRACTION is exact too, not ~16 digits then zeros. Expectations
+	# from decimal.Decimal(float(x)), half-away-from-zero.
+	# bug-a-write-fixed-fraction-digits-past-16-are-invented
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^0.333333333333333314829616256247$$')" = "1"
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^0.1000000000000000055511151$$')" = "1"
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^1 2 3$$')" = "1"
+	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^10.0$$')" = "1"
 	./$(COMPILER) --strict-fpc -Fulib/rtl test/lib_strict_fpc.pas /tmp/lib_strict_fpc26
 	test "$$(/tmp/lib_strict_fpc26)" = "42 OK"
 	# ...and it activates its member flags (StrictCase rejects a duplicate label
