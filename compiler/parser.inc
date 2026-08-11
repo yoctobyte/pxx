@@ -27799,10 +27799,6 @@ begin
           that crashes: on arm32 that replaces a SIGSEGV, and on i386 it says
           plainly what its old "arrays not yet supported" meant.
           bug-a-fixed-array-function-result-faults-on-i386-and-arm32 }
-        if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
-          Error('a function result of a FIXED ARRAY type is not supported on '
-                + 'this target yet — return a dynamic array, or use a var '
-                + 'parameter');
         paramAi := FindArrayType(CurTok.SVal);
         retArrAi := paramAi;
         { ArrTypeLo/Hi are the FLATTENED bounds for an N-D alias too (the type
