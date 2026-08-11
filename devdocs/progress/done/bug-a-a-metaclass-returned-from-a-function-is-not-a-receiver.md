@@ -85,4 +85,4 @@ change; the five that do not compile are negative tests, refused identically on
 New `test/test_metaclass_call_receiver.pas`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 76744a377.
