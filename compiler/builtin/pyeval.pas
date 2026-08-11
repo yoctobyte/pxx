@@ -4978,9 +4978,20 @@ begin
     body span). Publish it into the caller's namespace as a callable variant so
     the separate `ns["__body__"]()` reaches it: the value's payload is
     &PyBodyTramp, unboxed and called through the dynamic-call ABI. Keyed with a
-    VT_STRING matching NilPy's dict key (PyVarEq compares string content). }
+    VT_STRING matching NilPy's dict key (PyVarEq compares string content).
+
+    pyvar_of_callable, NOT PyBoxObj: the payload is a CODE ADDRESS, and PyBoxObj
+    stamps VT_OBJECT (7), which claims the payload is a headered heap instance.
+    Nothing inspected a tag-7 payload as an instance, so the lie was inert —
+    until the callee guard began asking whether a tag-7 receiver's class defines
+    `__call__`. GetInstanceRTTI then read a class pointer out of the bytes
+    BEFORE the trampoline's entry point and PyFindMethCI walked that garbage
+    chain, so every uforth run dumped core with its output still unflushed
+    (regression-test-uforth-00, bisected to the guard — the guard exposed this,
+    it did not introduce it). pyvar_of_callable stamps VT_CALLABLE for a bare
+    code address, which is what this is, and takes no phantom reference. }
   if (l <> nil) and (FnFind('__body__') >= 0) then
-    l.store(MakeStr('__body__'), PyBoxObj(Pointer(@PyBodyTramp)));
+    l.store(MakeStr('__body__'), pyvar_of_callable(Pointer(@PyBodyTramp)));
 end;
 
 end.
