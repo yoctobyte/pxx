@@ -113,4 +113,4 @@ calls the new routines, so the gate's fixedpoint is unaffected — confirmed by
 running it rather than assumed.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit d0141290a.
