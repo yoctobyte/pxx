@@ -617,6 +617,10 @@ begin
   StrictCase       := True;
   StrictVisibility := True;
   RequireForward   := True;
+  { …and FPC's SHIFT widths, asymmetry included — the other half of
+    decide-shift-operator-promotion-width, whose default half deliberately
+    diverges. bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
+  StrictShiftWidth := True;
 end;
 
 procedure PasInitDefines;
@@ -628,6 +632,7 @@ begin
   StrictOverload := False;
   StrictOperator := False;
   StrictCase := False;
+  StrictShiftWidth := False;
   StrictVisibility := False;
   DelphiMode := False;
   ThreadSafeMode := False;

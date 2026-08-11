@@ -3016,6 +3016,17 @@ test-core: $(COMPILER)
 	test "$$(/tmp/lib_writefloat_fixed26 | grep -c '^10.0$$')" = "1"
 	./$(COMPILER) --strict-fpc -Fulib/rtl test/lib_strict_fpc.pas /tmp/lib_strict_fpc26
 	test "$$(/tmp/lib_strict_fpc26)" = "42 OK"
+	# ...and --strict-fpc reproduces FPC's SHIFT widths, asymmetry included: a
+	# variable operand wraps at its declared width and shl masks the count to 5
+	# bits, while FPC's own constant FOLDER does neither. The default dialect
+	# deliberately diverges (decide-shift-operator-promotion-width), which is
+	# why this row needs the flag. Every value is fpc -O1's own output.
+	./$(COMPILER) --strict-fpc test/test_strict_fpc_shift_widths.pas /tmp/test_strictshift26
+	test "$$(/tmp/test_strictshift26 | tail -1)" = "STRICT FPC SHIFT WIDTHS OK"
+	test "$$(/tmp/test_strictshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|2048|2048|"
+	# ...and WITHOUT the flag the same file keeps the native-width answers
+	./$(COMPILER) test/test_strict_fpc_shift_widths.pas /tmp/test_nativeshift26
+	test "$$(/tmp/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	# ...and it activates its member flags (StrictCase rejects a duplicate label
 	# that the lax default accepts). feature-strict-fpc-umbrella.
 	./$(COMPILER) test/strict_fpc_case_fail.pas /tmp/strict_fpc_case_lax26 > /tmp/strict_fpc_case_lax.log 2>&1

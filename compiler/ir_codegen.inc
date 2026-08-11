@@ -3980,7 +3980,17 @@ begin
             8-byte by ir.inc) shift as-is. See bug-shl-signed-integer-width. }
           tkShl:
             begin
-              EmitB($48); EmitB($D3); EmitB($E0);             { shl rax, cl }
+              { --strict-fpc on a NARROW operand: FPC masks the shift count to 5
+                bits (its `8 shl 40` is 2048, not 0 and not 2^43), which is
+                exactly what the 32-bit shift does in hardware — so drop REX.W
+                rather than emit an explicit mask. The narrowing below then
+                applies as usual.
+                bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
+              if StrictShiftWidth and (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
+                 (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
+                begin EmitB($D3); EmitB($E0); end             { shl eax, cl }
+              else
+                begin EmitB($48); EmitB($D3); EmitB($E0); end; { shl rax, cl }
               { ...unless the frontend asked for a NATIVE-width result, in which
                 case there is nothing to wrap back to: `1 shl 40` is 2^40 and
                 `1 shl 31` is 2147483648. Pascal-only — C's `<<` keeps its

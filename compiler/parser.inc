@@ -15420,7 +15420,18 @@ begin
         C keeps its own semantics: CProgramMode's `<<` wraps at the declared
         width, which is what the standard says, so the promotion is Pascal-only.
         bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
-      if (not CProgramMode) and TypeIsMachineInt(IntToTypeKind(ASTTk[left])) and
+      { …and under --strict-fpc, promote ONLY a compile-time constant operand.
+        That is FPC's own asymmetry, faithfully: its constant FOLDER answers
+        `1 shl 40` = 2^40 and `-8 shr 1` = 9223372036854775804 at full width,
+        while the same expressions over a VARIABLE wrap at the operand's
+        declared width. Strict mode is documented as copying FPC's bugs, and
+        this is one of them.
+        bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
+      if (not CProgramMode) and
+         ((not StrictShiftWidth) or (ASTKind[left] = AN_INT_LIT) or
+          ((ASTKind[left] = AN_NEG) and (ASTLeft[left] >= 0) and
+           (ASTKind[ASTLeft[left]] = AN_INT_LIT))) and
+         TypeIsMachineInt(IntToTypeKind(ASTTk[left])) and
          (TypeSize(IntToTypeKind(ASTTk[left])) < TypeSize(tyNativeInt)) then
       begin
         if TypeSigned(IntToTypeKind(ASTTk[left])) then

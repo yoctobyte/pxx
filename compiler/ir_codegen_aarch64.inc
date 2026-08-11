@@ -1590,7 +1590,14 @@ begin
         else if op = Ord(tkXor) then EmitI32($CA010000)    { eor x0, x0, x1 }
         else if op = Ord(tkShl) then
         begin
-          EmitI32($9AC12000);                              { lsl x0, x0, x1 }
+          { --strict-fpc on a NARROW operand masks the count to 5 bits, which is
+            what the 32-bit lslv does in hardware — see the x86-64 twin.
+            bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
+          if StrictShiftWidth and (TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8) and
+             (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
+            EmitI32($1AC12000)                             { lsl w0, w0, w1 }
+          else
+            EmitI32($9AC12000);                            { lsl x0, x0, x1 }
           { Wrap at the operand width: a <8-byte result shifted into bit 31 must
             read back as a 32-bit value (sign-extended for a signed operand,
             zero-extended for unsigned), not the wider 64-bit register content

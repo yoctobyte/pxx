@@ -3,6 +3,8 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
+status: working
+owner: claude-A
 ---
 
 # `--strict-fpc` does not reproduce FPC's shift widths
@@ -50,3 +52,38 @@ for `shl`, which no backend emits today.
 Every row above matching `fpc -O1` under `--strict-fpc`, the default dialect
 unchanged (`test/test_shr_width.pas`, `test/test_shift_operand_width.pas`), and
 self-host byte-identical.
+
+## Resolution (2026-08-11) — 9 of the 10 rows; the 10th is not a shift
+
+`StrictShiftWidth` joins the `--strict-fpc` umbrella and reproduces FPC's shift
+behaviour including the contradiction the decision meant by "copy their bugs":
+
+- a shift over a VARIABLE keeps the operand's declared width — the typing arm
+  simply does not promote under the flag;
+- `shl` masks its count to 5 bits, so `8 shl 40` is 2048. Implemented by
+  emitting the 32-BIT shift (`shl eax, cl` / `lsl w0, w0, w1`) rather than an
+  explicit mask: the hardware already masks the count at that width, and the
+  existing narrow-back then applies unchanged. Both 64-bit backends, gated on
+  the operand AND the result being narrow — without the second test the
+  constant-fold rows masked too and `1 shl 40` came out 256;
+- the constant FOLDER keeps full width for both operators, matching FPC's own
+  inconsistency. A literal left operand — including a NEGATED one, which is a
+  separate AST shape — still promotes under the flag.
+
+Every row of the ticket's table matches `fpc -O1` except one, and that one is
+**not a shift divergence**: `-a shr 1` over an Integer variable. FPC answers
+9223372036854775804 because its UNARY MINUS on an Integer yields Int64, so the
+shift already sees 64 bits — measured directly (`-a` prints -8 in both, but
+FPC's carries the wider type). Reproducing it means adopting FPC's unary-minus
+widening, which is a different semantic with its own blast radius and does not
+belong under a shift flag. **Left open as that one row.**
+
+The DEFAULT dialect is byte-for-byte unchanged — asserted in the Makefile by
+running the same file both with and without the flag and expecting the two
+different answer sets.
+
+New `test/test_strict_fpc_shift_widths.pas`, matching `fpc -O1` row for row on
+x86-64 and aarch64. A 64-bit-target test by construction: "native width" is 32
+bits on i386/arm32/riscv32, so the full-width rows cannot hold there and do not
+under the default dialect either. `gate.sh quick` GREEN (self-host
+byte-identical).
