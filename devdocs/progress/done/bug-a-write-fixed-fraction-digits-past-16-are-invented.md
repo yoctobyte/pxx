@@ -165,4 +165,4 @@ Pre-existing on `pinned`; filed as
 before other lanes see it (`compiler/builtin`).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit d7e7dab2d.
