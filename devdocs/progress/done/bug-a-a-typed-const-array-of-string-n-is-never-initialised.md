@@ -80,4 +80,4 @@ N-D const array of `string[N]`; `test/test_const_array_of_string.pas` still
 green; self-host byte-identical.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 6900505aa.
