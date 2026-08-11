@@ -5016,6 +5016,14 @@
   "unexpected": [],
   "would_pin": true
  },
+ "pin_verify": {
+  "date": "2026-08-11T18:24:00Z",
+  "red": [],
+  "sha": "96b4b40ab6c5f0cda96864dee86ed47d50cfb57b",
+  "tier": "limited",
+  "ver": "v257",
+  "verdict": "GREEN"
+ },
  "renamed_from": [
   "xeon"
  ]
