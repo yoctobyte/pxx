@@ -37,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (216)
+## backlog (215)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,7 +53,7 @@ _none_
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-def-returning-a-precreated-global-has-no-return-type | N | 35 | bug | `rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
-| bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | decide-nilpy-none-str-representation |
+| bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
 | bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | — |
@@ -92,7 +92,6 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-nilpy-class-as-value-dispatch-strategy | U | 5 | decide | A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values. | — |
-| decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-parallel-capture-semantics | U | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-own-language-first-name-resolution | U | 5 | decide | the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it | — |
 | decide-parenless-all-defaulted-routine-in-argument-position | U | 40 | decide | Bare `F` in ARGUMENT position where F is a routine with all-defaulted parameters: call it, or take it as a procedural reference? Statement and expression positions now call it; argument position is genuinely ambiguous and was deliberately left unfixed. | — |
@@ -336,7 +335,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (58)
+## decided (59)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -371,6 +370,7 @@ _none_
 | decide-nilpy-int-promotion-default | U | 60 | decide | Decide: should NilPy `int` bindings default to promotable, not native int64? | — |
 | decide-nilpy-mixed-type-operand-policy | U | 60 | decide | Decide: what should NilPy do when an operator gets operand types Python rejects? | — |
 | decide-nilpy-multiple-inheritance-c3-or-delegate | U | 40 | decide | class D(B, C) is refused with a clear diagnostic (option 3 landed 2026-08-04). The FEATURE is still open and the remaining choice is a design fork: full C3 linearisation, or second-base-as-delegate. Needs a call before anyone builds it. | — |
+| decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
 | decide-nilpy-runtime-dunder-dispatch-mechanism | U | 45 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | decide-nilpy-runtime-dunder-dispatch-strategy |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
@@ -495,7 +495,6 @@ _none_
 - [p 50] [T] task-t-xeon-host-local-health-alerting
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [U] decide-nilpy-none-str-representation (unblocks 1)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
@@ -539,6 +538,7 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
 - [p 40] [N] bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword
+- [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [N] bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses
@@ -653,7 +653,6 @@ _none_
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
 - **1** — decide-nilpy-dict-mutation-during-iteration
-- **1** — decide-nilpy-none-str-representation
 - **1** — decide-nilpy-parallel-capture-semantics
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal

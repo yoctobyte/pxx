@@ -322,3 +322,68 @@ above; they are the same question asked twice.
 If any of this string handling raises further issues, **park them in Track U
 again** rather than deciding in passing — "i have the feeling we're not done
 with that."
+
+---
+
+# DECIDED 2026-08-11 (user) — a string KIND that may be zero length
+
+> "we 'hack' around by using ansistring / a new string type that allows zero
+> length string. so nilpy can clearly distinguish nil from an empty string."
+> — user
+
+The decision had been taken and was never written down; the ticket above stops
+at "decide flag-bit vs third-kind together with reading 1 / reading 2." Both of
+those questions are answered by this, and they were indeed one question:
+
+- **Mechanism: the third KIND, not a flag bit.** The meta word already
+  distinguishes `PXX_KIND_BYTESTR` (Pascal, bytes) from `PXX_KIND_TEXTSTR`
+  (NilPy, characters); "may be zero length" joins them as a property of the
+  string kind rather than a bit sprinkled across shared producers.
+- **Scope: reading 2, but SCOPED BY THE KIND.** Zero-length blocks stop
+  collapsing to nil — for NilPy-produced strings only. Pascal's `AnsiString`
+  keeps collapsing exactly as today, so the RTL, the compiler's own sources and
+  the self-host binary are untouched **by construction**, not by audit.
+
+## What this buys, and why it is cheaper than every option above
+
+**`is None` does not change at all.** With a NilPy `""` being a real length-0
+block, nil goes back to meaning exactly one thing, so `pystr_is_none` testing
+`Pointer(s) = nil` (pylib.pas:834) is *already correct* under this
+representation — and so is `pystr_none` returning nil. No meta read on the
+`is None` path, no new RTL predicate, no variant boxing, no promotion boundary.
+
+So the fix lands at the string-PRODUCING sites, not at the consumers:
+
+- `PXXStrFromLit` (builtinheap.pas:1064) `if len <= 0 then Result := nil` and
+  its siblings, which must not collapse when the result is a NilPy-kind string;
+- the pylib constructors that return a str, which must produce the NilPy kind.
+
+**Option E's 55-site `= nil` audit does not apply**, because Pascal's producers
+are unchanged. That audit was the price of making empty non-nil *globally*;
+scoping the property to a kind is what avoids it.
+
+## The one implementation question left (not a decision — an implementation call)
+
+Does the property attach to the existing **`PXX_KIND_TEXTSTR`** — NilPy's str
+kind already exists and already means "a NilPy string" — or does it want a
+distinct sixth kind?
+
+Recommendation: **attach it to `PXX_KIND_TEXTSTR`.** A NilPy str is already its
+own kind; minting a second kind for NilPy strings would mean two kinds for one
+concept, which is the smell `normalise-dont-special-case.md` names. Confirm
+while building, not by re-opening this ticket.
+
+Sequencing note: `PXX_KIND_TEXTSTR` is stamped but not yet semantically live —
+[[feature-nilpy-text-string-kind]] (N, 55) is the ticket that makes NilPy str
+count characters. These two are the same kind gaining two properties, and doing
+them in one pass is likely cheaper than twice; that is the builder's call.
+
+## Consequences for the work tickets
+
+- [[bug-nilpy-empty-str-and-none-are-the-same-value]] (N, 40) is **unblocked** —
+  ordinary Track N work now.
+- It touches `compiler/builtin/**`, so it carries Track A's obligation:
+  `stabilize-fast` + `make pin`, not a quick-loop-only change.
+
+The standing instruction above survives this: further string-model questions
+still get parked in U.

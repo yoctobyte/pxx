@@ -2,7 +2,7 @@
 track: N
 prio: 40
 type: bug
-blocked-by: decide-nilpy-none-str-representation
+blocked-by: []   # was decide-nilpy-none-str-representation — DECIDED 2026-08-11, see Log
 summary: "`\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not."
 ---
 
@@ -90,3 +90,27 @@ recommendation (route `Optional[str]` through variants, and decide the promotion
 boundary EXPLICITLY — that boundary, not the representation, is where this will
 go wrong; widening a str to a variant from a different direction is what broke
 `test_nilpy_none_str_field` earlier the same day).
+
+## UNBLOCKED 2026-08-11 — the representation is decided
+
+[[decide-nilpy-none-str-representation]] is settled (user): **a NilPy string
+kind whose blocks may be zero length.** Zero-length NilPy strings stop
+collapsing to nil; Pascal's `AnsiString` keeps collapsing exactly as today, so
+the RTL and the self-host binary are untouched by construction.
+
+The consequence for this ticket is that **nothing in the `is None` path
+changes**: `pystr_none` returning nil and `pystr_is_none` testing
+`Pointer(s) = nil` (pylib.pas:834) become correct as written, because nil goes
+back to meaning only None. pylib's comment quoted above stops being false.
+
+The work is at the string-PRODUCING sites — `PXXStrFromLit`'s
+`if len <= 0 then Result := nil` (builtinheap.pas:1064) and its siblings, plus
+the pylib str constructors — which must not collapse for a NilPy-kind string.
+Whether the property rides on the existing `PXX_KIND_TEXTSTR` or a new kind is
+an implementation call; the decision ticket recommends `TEXTSTR`, and notes
+this may be cheapest done alongside [[feature-nilpy-text-string-kind]] (N, 55),
+which makes the same kind semantically live.
+
+**Gate:** this is `compiler/builtin/**`, so it is Track A's obligation —
+`stabilize-fast` + `make pin`, not the quick loop alone. Oracle stays the
+`is` / `==` pair disagreeing the way CPython makes them disagree.
