@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (237)
+## backlog (236)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -115,7 +115,6 @@ lives in git, not in a timestamp._
 | decide-own-language-first-name-resolution | U | 5 | decide | the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it | — |
 | decide-parenless-all-defaulted-routine-in-argument-position | U | 40 | decide | Bare `F` in ARGUMENT position where F is a routine with all-defaulted parameters: call it, or take it as a procedural reference? Statement and expression positions now call it; argument position is genuinely ambiguous and was deliberately left unfixed. | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
-| decide-variant-tag-space-is-a-language-wide-commitment | U | 55 | decide | Adding a VT_* variant tag is permanent, serialized and visible to user Pascal via VarType() — it is a language-wide commitment, not a frontend implementation detail. Who may add one, do they come one at a time or as reserved blocks, and what does VarType() report for the NilPy-motivated tags? Tag 11 (classref) already shipped without this being asked. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
@@ -161,7 +160,7 @@ lives in git, not in a timestamp._
 | feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
-| feature-nilpy-a-callable-value-needs-its-own-variant-tag | A | 50 | feature | Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. BLOCKED on the Track U decision, because a new tag is permanent and visible to Pascal via VarType(). | decide-variant-tag-space-is-a-language-wide-commitment |
+| feature-nilpy-a-callable-value-needs-its-own-variant-tag | A | 50 | feature | Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. No decision needed — tag numbering is internal and renumberable. | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-break-continue | N | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | bug-n-str-encode-and-bytes-decode-ignore-the-encoding |
@@ -421,7 +420,7 @@ lives in git, not in a timestamp._
 
 1626 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (34)
+## rejected (35)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -443,6 +442,7 @@ lives in git, not in a timestamp._
 | chore-register-pxxc-domain-variants | W | 55 | chore | Register the pxxc domain variants (.com, .nl, .eu) — REJECTED | — |
 | chore-runtime-emission-size | A | 50 | chore | Finer runtime-support emission (code size) | — |
 | decide-ismultithread-runtime-flag-vs-compile-time-mode | U | 55 | decide | Delphi/FPC do not detect threading at compile time at all — they always emit the lock and skip it at runtime on a global IsMultiThread boolean. Measured here: the branch costs +5% over an unlocked refcount where an unconditional lock costs +276%. That dissolves the auto-detect question and would let TThread live in Classes unconditionally | — |
+| decide-variant-tag-space-is-a-language-wide-commitment | U | 55 | decide | WITHDRAWN — the premise was false. Escalated on a defs.inc comment claiming variant tags can never be renumbered because Pascal compares VarType() and variants are serialized. Neither binds us: variants.pas explicitly disclaims FPC compatibility, our numbers never matched FPC's varXxx anyway, and no tag reaches any durable format. Renumbering is a mechanical refactor, so this is Track A's design call, not a language decision. | — |
 | decide-when-to-move-the-pin-after-a-long-fix-run | U | 60 | decide | 32 compiler fixes sit on master unpinned; Track B builds against pinned and has a workaround waiting on the move. Pin all at once, pin incrementally, or leave it — the brake is deliberate and this is a judgment call, not a default | — |
 | feature-asm-structured-ir-library | A | 50 | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-dynamic-compiler-arrays-ast-fixups | A | 25 | feature | Apply the dynamic-array pattern (proven on the IR arrays) to the other fixed compiler caps: AST nodes, global fixups, label arrays | — |
@@ -474,7 +474,6 @@ lives in git, not in a timestamp._
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
-- [p 55] [U] decide-variant-tag-space-is-a-language-wide-commitment (unblocks 1)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped
@@ -511,6 +510,7 @@ lives in git, not in a timestamp._
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
+- [p 50] [A] feature-nilpy-a-callable-value-needs-its-own-variant-tag
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [P] feature-p-read-text-into-a-char-arm
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
@@ -694,7 +694,6 @@ lives in git, not in a timestamp._
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-representation
 - **1** — decide-nilpy-parallel-capture-semantics
-- **1** — decide-variant-tag-space-is-a-language-wide-commitment
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-nilpy-object-reclamation

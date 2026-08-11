@@ -1,10 +1,43 @@
 ---
-summary: "Adding a VT_* variant tag is permanent, serialized and visible to user Pascal via VarType() — it is a language-wide commitment, not a frontend implementation detail. Who may add one, do they come one at a time or as reserved blocks, and what does VarType() report for the NilPy-motivated tags? Tag 11 (classref) already shipped without this being asked."
+summary: "WITHDRAWN — the premise was false. Escalated on a defs.inc comment claiming variant tags can never be renumbered because Pascal compares VarType() and variants are serialized. Neither binds us: variants.pas explicitly disclaims FPC compatibility, our numbers never matched FPC's varXxx anyway, and no tag reaches any durable format. Renumbering is a mechanical refactor, so this is Track A's design call, not a language decision."
 type: decide
 track: U
 prio: 55
 found-by: claude-AN
+status: rejected
 ---
+
+> **WITHDRAWN 2026-08-11, before anyone spent time on it — the premise does not
+> hold.** Raised by the user: *"there are no user programs depending on our
+> serialization, unless you intended FPC compatibility for binary serialization
+> — and I don't think you did."* Correct, and checkable:
+>
+> - **FPC compatibility was explicitly disclaimed.** `lib/rtl/variants.pas`'s
+>   header: *"That is our model, not FPC's TVarData, and it is deliberately a
+>   closed scalar set."* The numbers never matched either — `VT_INT` = 1 where
+>   FPC has `varNull` = 1, `VT_DOUBLE` = 3 where FPC has `varInteger` = 3. Only
+>   `VT_EMPTY` = 0 coincides, and that header calls the coincidence out.
+> - **No tag reaches a durable format.** `lib/rtl/json.pas` reads `VT_INT` /
+>   `VT_INT64` to pick a rendering but emits JSON *text*; `promocore.pas`'s
+>   "binary serialization" is a bignum's own encoding, not a variant tag.
+>   Nothing writes a tag number to disk or wire.
+>
+> So the worst case of a bad number is a refactor across the ~7 files that
+> mention `VT_` — not a permanent public commitment. Every fork below then
+> collapses: reserved-blocks-vs-singly stops mattering when renumbering is
+> cheap, what `VarType()` reports is a design call `variants.pas` already has a
+> stated convention for, and *who allocates* is answered by CLAUDE.md (shared
+> internals are Track A's).
+>
+> **Nothing here needs human judgment.** The one durable output is worth
+> keeping: `defs.inc`'s justification is overstated and misled this analysis, so
+> it has been corrected in place. The callable-tag work is unblocked as a plain
+> Track A ticket.
+>
+> Recorded rather than deleted because the reasoning error is the useful part: a
+> source comment was quoted as fact and inflated into a language-wide decision
+> without being checked against the code it describes — the ticket equivalent of
+> the wrong-root-cause pattern `root-cause-over-microfix.md` warns about.
 
 # Is a new variant tag a frontend detail or a language commitment?
 

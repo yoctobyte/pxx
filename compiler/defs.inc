@@ -660,11 +660,27 @@ const
     (feature-nilpy-object-reclamation). }
   PXX_OBJ_MAGIC_TAG = $505942F1;
 
-  { PROMOTABLE INT tag block (feature-a-promotable-int). Variant tags can never
-    be renumbered — Pascal code compares VarType() against documented constants
-    and variants are serialized — so the whole family claims a CONTIGUOUS block
-    up front, while it is free, rather than being scattered into whatever gaps
-    exist when each class lands. Only the first two are implemented; the rest
+  { PROMOTABLE INT tag block (feature-a-promotable-int). The whole family claims
+    a CONTIGUOUS block up front, while it is free, rather than being scattered
+    into whatever gaps exist when each class lands.
+
+    WHY, precisely — an earlier wording here said tags "can never be renumbered,
+    because Pascal compares VarType() against documented constants and variants
+    are serialized", and that justification is FALSE. It sent a session off
+    escalating a routine numbering choice into a language-wide decision before
+    anyone checked it (rejected/decide-variant-tag-space-is-a-language-wide-
+    commitment). Checked: lib/rtl/variants.pas explicitly disclaims FPC's
+    TVarData model ("that is our model, not FPC's"), our numbers never matched
+    FPC's varXxx anyway (VT_INT=1 vs varNull=1, VT_DOUBLE=3 vs varInteger=3 —
+    only VT_EMPTY=0 coincides), and NO tag reaches a durable format: json.pas
+    reads VT_INT/VT_INT64 to pick a rendering but emits text, and promocore's
+    "binary serialization" is a bignum encoding, not a tag. Renumbering costs a
+    refactor across the files that mention VT_, nothing more.
+
+    The block is still the right shape, for the honest reason: a FAMILY that is
+    tested as a range (`>= VT_PROMO_BASE`) wants contiguity, and retrofitting
+    that onto scattered numbers is the refactor you would rather not do. Reserve
+    when a family is foreseeable; do not treat a number as immutable. Only the first two are implemented; the rest
     are reserved for the pointer-tagged family the ticket keeps in reserve.
     Base is far above FPC's varXxx range (which tops out in the hundreds) so a
     future FPC addition cannot collide. }
