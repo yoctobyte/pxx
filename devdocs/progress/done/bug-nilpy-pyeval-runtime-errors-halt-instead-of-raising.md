@@ -140,4 +140,4 @@ Gate: `make test-nilpy` EXIT=0, `gate.sh quick` GREEN. New
 local-vs-global trick so the next person can still reach these paths.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 7e8411426.
