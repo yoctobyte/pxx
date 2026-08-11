@@ -993,6 +993,7 @@ end;
 procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
 function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
 function PyIsExactCtorName(const nm: AnsiString): Boolean; forward; { Nil Python: `Name(` is a ctor only on an EXACT-case class match (pyparser.inc) }
+function PyIsClassTypeExact(const nm: AnsiString): Boolean; forward; { Nil Python: is this name a class, matched EXACTLY (Python is case-sensitive)? (pyparser.inc) }
 function PyIsDictCompAhead: Boolean; forward; { Nil Python dict comprehension lookahead (pyparser.inc) }
 function PyParseDictCompExprValue: Integer; forward; { Nil Python dict comp in expression position (pyparser.inc) }
 
@@ -4416,6 +4417,18 @@ begin
       else
       begin
         ci := FindUClass(fieldName);
+        { …case-SENSITIVELY under NilPy. FindUClass is Pascal-style
+          case-insensitive, so a lowercase `f` matched `class F` and became a
+          CLASS REFERENCE — since classes-as-values landed that is a VT_CLASSREF
+          variant, so `f(1, 2)` compiled clean and then raised "takes 0
+          positional arguments" from the ctor of a class the program never
+          named. Before that feature the same lookup produced a compile error
+          instead; the collision is old, only its symptom moved.
+          Third site of one family, after PyIsClassTypeExact (typing) and
+          PyIsExactCtorName (construction)
+          (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
+        if (ci >= 0) and PyExprMode and (not PyIsClassTypeExact(fieldName)) then
+          ci := -1;
         if ci >= 0 then
         begin
           if CurTok.Kind <> tkDot then
@@ -12199,8 +12212,17 @@ begin
         UClsUnitIdx = -1 is "declared in the main program", so this only fires
         for a class the user wrote; a pylib class keeps losing to a pylib
         routine exactly as before, and Pascal is untouched. }
+      { …matched EXACTLY. FindUClassInUnit is case-insensitive, Pascal-style, so
+        a lowercase `def f` lost its proc to `class F` — and then, since classes
+        became values, `f(1, 2)` compiled clean and raised "takes 0 positional
+        arguments" from the ctor of a class the program never named. Python is
+        case-sensitive: `f` and `F` are unrelated names and neither shadows the
+        other. This is the site that decides it; PyIsClassTypeExact (typing),
+        PyIsExactCtorName (construction) and the two guards added beside them
+        are the same rule at the other four
+        (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
       if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
-         (FindUClassInUnit(name, -1) >= 0) then
+         (FindUClassInUnit(name, -1) >= 0) and PyIsClassTypeExact(name) then
         procIdx := -1;
 
       { A NilPy module-level `def` is NOT bound above its own `def` statement —
@@ -13128,7 +13150,21 @@ begin
         which would otherwise mis-handle a class name as a plain pointer cast and
         resolve every field at offset 0. Field reads and writes both work via the
         class-typed AN_FIELD base path in IRLowerAddress. }
+      { `IsClassType` matches case-INSENSITIVELY, Pascal-style, and this branch
+        reads `Name(x)` as a CLASS CAST. In NilPy that is wrong twice over:
+        Python has no cast syntax, and its names are case-sensitive — so
+        `class F` plus `def f(a, b)` made `f(1, 2)` parse as a cast of `F` and
+        fail with "Expected: )" on the second argument, naming a call that is
+        ordinary Python. The exact-case construction intercept above already
+        claims a genuine `F(...)`, so under PyExprMode a name reaching here is
+        by definition NOT that class and must fall through to the call path.
+
+        Same family as bug-nilpy-calling-an-instance-named-like-its-class-runs-
+        the-constructor and the TYPING half PyIsClassTypeExact fixed: one
+        case-insensitive lookup per site, each found separately
+        (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
+         ((not PyExprMode) or PyIsClassTypeExact(name)) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         ci := FindUClass(name);

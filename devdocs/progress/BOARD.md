@@ -36,7 +36,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (236)
+## backlog (235)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -57,7 +57,6 @@ lives in git, not in a timestamp._
 | bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
-| bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class | N | 55 | bug | A NilPy CALL through a name that case-insensitively matches a class name is compiled as CONSTRUCTION of that class: `class F` plus `def f(a, b)` makes `f(1, 2)` fail with `Expected: )`. The value-position lookup was made case-sensitive in 2026-08; the call path was not. | — |
 | bug-nilpy-a-method-call-on-a-callable-values-result-is-refused | N | 50 | bug | `g(3).show()` — a selector on the RESULT of calling a callable VALUE is a parse error (`expected expression`). Binding the result first (`o = g(3); o.show()`) works, so only the chained arm is broken. Applies to any callable value: a def taken as a value, and now a class. | — |
 | bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys | N | 50 | bug | A class defining BOTH `__hash__` and `__eq__` is a legal dict key in CPython, and pxx stores it then never finds it again: `d = {k1: 'a'}; k2 in d` is False for an equal k2. The entry is silently lost — no diagnostic, and `k1 == k2` answers True right beside it. | — |
 | bug-nilpy-calling-a-non-callable-segfaults | N | 55 | bug | Calling a non-callable SEGFAULTS instead of raising TypeError | — |
@@ -416,9 +415,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1622)
+## done (1623)
 
-1622 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1623 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (34)
 
@@ -477,7 +476,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped
-- [p 55] [N] bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class
 - [p 55] [N] bug-nilpy-calling-a-non-callable-segfaults
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes

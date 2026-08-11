@@ -716,6 +716,11 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_parentcall26 | diff -u test/test_nilpy_parent_call_after_instantiation.expected -
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy /tmp/test_nilpy_class_attr_hoist_leak26
 	/tmp/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
+	# a name differing from a CLASS only in CASE was hijacked by it: `class F` plus
+	# `def f(a, b)` cleared the def's proc through a case-INSENSITIVE class lookup,
+	# so `f(1, 2)` ran F's constructor. Python names are case-sensitive.
+	./$(COMPILER) test/test_nilpy_lowercase_name_vs_class.npy /tmp/test_nilpy_lowercase_name_vs_class26
+	/tmp/test_nilpy_lowercase_name_vs_class26 | diff -u test/test_nilpy_lowercase_name_vs_class.expected -
 	# `*args` on a CONSTRUCTOR was never packed — the surplus arguments were passed
 	# straight through and the callee read one as its TPyList (segfault, no
 	# diagnostic). The plain-def and ordinary-method twins always worked.

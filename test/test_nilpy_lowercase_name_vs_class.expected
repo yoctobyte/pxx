@@ -1,0 +1,8 @@
+def    3
+local  5
+param  9 s
+global 5 7
+F 3
+isinst True
+F 4
+valdef 5

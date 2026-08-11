@@ -1,0 +1,72 @@
+# A name that differs from a CLASS only in CASE was hijacked by it.
+#
+# `class F` plus `def f(a, b)` made `f(1, 2)` unresolvable as a call: the
+# NilPy "a user class shadows a same-named routine" rule used a
+# case-INSENSITIVE class lookup, cleared the def's procIdx, and the name then
+# fell through to the class. Before classes became values that was a compile
+# error ("Expected: )", from the class-CAST branch); after, it compiled clean
+# and raised "takes 0 positional arguments" from the ctor of a class the
+# program never named — the collision is old, only its symptom moved.
+#
+# Python is case-sensitive: `f` and `F` are unrelated names and neither shadows
+# the other. That rule now holds at every site that looks a class up by name —
+# the shadow rule here, the class CAST branch, and the class-as-a-VALUE lookup,
+# beside PyIsClassTypeExact (typing) and PyIsExactCtorName (construction) which
+# fixed the earlier two halves of the same family.
+#
+# Diffed against CPython. bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class
+
+
+class F:
+    def __init__(self, v):
+        self.v = v
+
+    def show(self):
+        print("F", self.v)
+
+
+class Item:
+    def __init__(self, n):
+        self.n = n
+
+
+# a DEF named like a class, in the other case
+def f(a, b):
+    return a + b
+
+
+print("def   ", f(1, 2))
+
+
+# a LOCAL named like a class
+def uses_local():
+    item = Item(5)
+    return item.n
+
+
+print("local ", uses_local())
+
+
+# a PARAMETER named like a class
+def takes(item):
+    return item
+
+
+print("param ", takes(9), takes("s"))
+
+# module GLOBALS named like a class
+f2 = 5
+item = 7
+print("global", f2, item)
+
+# the class itself keeps working in every position it already worked in
+o = F(3)
+o.show()
+print("isinst", isinstance(o, F))
+kf = F
+o2 = kf(4)
+o2.show()
+
+# and the DEF is still a value, not the class
+g = f
+print("valdef", g(2, 3))
