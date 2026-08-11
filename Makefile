@@ -1190,6 +1190,11 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_multi_param_lambda_is_compiled.npy /tmp/test_nilpy_mplam26
 	/tmp/test_nilpy_mplam26 | diff -u test/test_nilpy_multi_param_lambda_is_compiled.expected -
 	test "$$(strings /tmp/test_nilpy_mplam26 | grep -cE 'a \+ b \+ k|a \* b \+ c|x \* 2')" = "0"
+	# ...and a FOUR-argument call through a callable VALUE, which had no runtime
+	# dispatcher at all: the old lowering called through the callee payload as a
+	# code ADDRESS, correct for a def and a SEGFAULT for a lambda.
+	./$(COMPILER) test/test_nilpy_arity_four_dynamic_call.npy /tmp/test_nilpy_a4call26
+	/tmp/test_nilpy_a4call26 | diff -u test/test_nilpy_arity_four_dynamic_call.expected -
 	! ./$(COMPILER) test/test_nilpy_isinstance_unknown_type_fail.npy /tmp/test_nilpy_isinstfail26 2>&1 | grep -q 'ok:'
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".

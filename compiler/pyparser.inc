@@ -9066,7 +9066,12 @@ begin
   if n = 0 then dispPi := FindProc('pyvar_callv0')
   else if n = 1 then dispPi := FindProc('pyvar_callv1')
   else if n = 2 then dispPi := FindProc('pyvar_callv2')
-  else if n = 3 then dispPi := FindProc('pyvar_callv3');
+  else if n = 3 then dispPi := FindProc('pyvar_callv3')
+  { …and FOUR. Past this the old lowering still applies, and it calls through
+    the callee's payload as a code address — correct for a plain def, a SEGFAULT
+    for a lambda (whose value is a closure OBJECT).
+    bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+  else if n = 4 then dispPi := FindProc('pyvar_callv4');
   if dispPi >= 0 then
   begin
     dispArg := AllocNode(AN_ARG);
@@ -9131,7 +9136,12 @@ begin
   if n = 0 then dispPi := FindProc('pyvar_callv0')
   else if n = 1 then dispPi := FindProc('pyvar_callv1')
   else if n = 2 then dispPi := FindProc('pyvar_callv2')
-  else if n = 3 then dispPi := FindProc('pyvar_callv3');
+  else if n = 3 then dispPi := FindProc('pyvar_callv3')
+  { …and FOUR. Past this the old lowering still applies, and it calls through
+    the callee's payload as a code address — correct for a plain def, a SEGFAULT
+    for a lambda (whose value is a closure OBJECT).
+    bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+  else if n = 4 then dispPi := FindProc('pyvar_callv4');
   if dispPi < 0 then Exit;
 
   isArg := AllocNode(AN_ARG); ASTLeft[isArg] := calleeNode; ASTRight[isArg] := -1;
@@ -9233,7 +9243,12 @@ begin
     if n = 0 then dispPi := FindProc('pyvar_callv0')
     else if n = 1 then dispPi := FindProc('pyvar_callv1')
     else if n = 2 then dispPi := FindProc('pyvar_callv2')
-    else if n = 3 then dispPi := FindProc('pyvar_callv3');
+    else if n = 3 then dispPi := FindProc('pyvar_callv3')
+  { …and FOUR. Past this the old lowering still applies, and it calls through
+    the callee's payload as a code address — correct for a plain def, a SEGFAULT
+    for a lambda (whose value is a closure OBJECT).
+    bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+  else if n = 4 then dispPi := FindProc('pyvar_callv4');
     if dispPi >= 0 then
     begin
       dispArg := AllocNode(AN_ARG);

@@ -1,0 +1,37 @@
+# A FOUR-argument call through a callable VALUE. Arities past 3 had no runtime
+# dispatcher, so they kept an older lowering that unboxes the callee and calls
+# through its payload as a code ADDRESS. That is correct for a plain def and a
+# SEGFAULT for a lambda, whose value is a closure OBJECT — `q(1,2,3,4)` jumped
+# to the object pointer. A def bound to a name and called with four arguments
+# always worked, which is exactly what made the crash look like a lambda-arity
+# problem rather than a missing dispatch: the shape that works and the shape
+# that dies differ only in what the NAME holds.
+#
+# So the rows below are one per callable shape, all at arity 4: an interpreted
+# lambda (4+ params are not lifted — the bound-fn bridge carries three), a plain
+# def through a name, a class reached as a value, and a lambda that also
+# CAPTURES. The __call__ row is arity 3 on purpose: it is the neighbour that
+# must keep working.
+#
+# Every expectation is CPython's own output.
+# bug-nilpy-a-four-parameter-lambda-segfaults-when-called
+
+q = lambda a, b, c, e: a + b + c + e
+print(q(1, 2, 3, 4))
+
+def add4(a, b, c, e): return a * 1000 + b * 100 + c * 10 + e
+f = add4
+print(f(1, 2, 3, 4))
+
+class K:
+    def __init__(self, a, b, c, e): self.s = a + b + c + e
+cls = K
+print(cls(1, 2, 3, 4).s)
+
+class C:
+    def __call__(self, a, b, c): return a + b + c
+print(C()(1, 2, 3))
+
+n = 5
+g = lambda a, b, c, e: a + b + c + e + n
+print(g(1, 2, 3, 4))

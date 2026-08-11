@@ -881,6 +881,7 @@ function pybound_callv0(const cb: Variant): Variant;
 function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
 { Finalizer for dying refcounted objects, installed into builtinheap's
   PXXObjFinalizeHook by the container constructors and pybound_new: releases
   the object's children recursively before the block is freed
@@ -8580,10 +8581,12 @@ type
   TPyCbM1 = function(recv: Pointer; const a0: Variant): Variant;
   TPyCbM2 = function(recv: Pointer; const a0, a1: Variant): Variant;
   TPyCbM3 = function(recv: Pointer; const a0, a1, a2: Variant): Variant;
+  TPyCbM4 = function(recv: Pointer; const a0, a1, a2, a3: Variant): Variant;
   TPyCbF0 = function: Variant;
   TPyCbF1 = function(const a0: Variant): Variant;
   TPyCbF2 = function(const a0, a1: Variant): Variant;
   TPyCbF3 = function(const a0, a1, a2: Variant): Variant;
+  TPyCbF4 = function(const a0, a1, a2, a3: Variant): Variant;
   { PROCEDURE-shaped siblings of the above: an explicit `-> None` def compiles
     as a genuine Pascal procedure (Procs[pi].IsFunc = False), which never sets
     up the Variant-hidden-destination-pointer convention TPyCbM*/TPyCbF*
@@ -8596,10 +8599,12 @@ type
   TPyCbMP1 = procedure(recv: Pointer; const a0: Variant);
   TPyCbMP2 = procedure(recv: Pointer; const a0, a1: Variant);
   TPyCbMP3 = procedure(recv: Pointer; const a0, a1, a2: Variant);
+  TPyCbMP4 = procedure(recv: Pointer; const a0, a1, a2, a3: Variant);
   TPyCbFP0 = procedure;
   TPyCbFP1 = procedure(const a0: Variant);
   TPyCbFP2 = procedure(const a0, a1: Variant);
   TPyCbFP3 = procedure(const a0, a1, a2: Variant);
+  TPyCbFP4 = procedure(const a0, a1, a2, a3: Variant);
 
 function pycallback_is(const cb: Variant): Boolean;
 begin
@@ -8752,6 +8757,33 @@ begin
   begin
     if isFn then begin m3 := TPyCbM3(code); Result := m3(recv, a0, a1, a2); end
     else begin mp3 := TPyCbMP3(code); mp3(recv, a0, a1, a2); Result := pynone; end;
+  end;
+end;
+
+function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
+{ The FOUR-argument twin. `f = some_def` binds a callback pair (code + nil
+  receiver) even for a plain def, so every dynamic call at this arity comes
+  through here — and there was no arity-4 member, which is why the arity-4
+  dispatcher had to exist at all.
+  bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+var code, recv: Pointer; m4: TPyCbM4; f4: TPyCbF4; mp4: TPyCbMP4; fp4: TPyCbFP4;
+    isFn: Boolean;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  isFn := pybound_isfunc(cb);
+  if recv = nil then
+  begin
+    if isFn then begin f4 := TPyCbF4(code); Result := f4(a0, a1, a2, a3); end
+    else begin fp4 := TPyCbFP4(code); fp4(a0, a1, a2, a3); Result := pynone; end;
+  end
+  else
+  begin
+    if isFn then begin m4 := TPyCbM4(code); Result := m4(recv, a0, a1, a2, a3); end
+    else begin mp4 := TPyCbMP4(code); mp4(recv, a0, a1, a2, a3); Result := pynone; end;
   end;
 end;
 

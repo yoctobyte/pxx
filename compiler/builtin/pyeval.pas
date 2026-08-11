@@ -216,6 +216,10 @@ procedure pycall_value(const cb: Variant; const arg: Variant; withArg: Boolean);
 function pyvar_callv0(const cb: Variant): Variant;
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
 function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+{ The four-argument dispatcher. Past arity 3 the old lowering calls through the
+  callee's payload as a code ADDRESS — a segfault for a lambda, whose value is
+  an object. bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+function pyvar_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 
 { Box a callable OBJECT pointer (a lambda's pyeval closure or lifted bound-fn)
@@ -2035,6 +2039,7 @@ type
   TPyCallFn1 = function(const a0: Variant): Variant;
   TPyCallFn2 = function(const a0, a1: Variant): Variant;
   TPyCallFn3 = function(const a0, a1, a2: Variant): Variant;
+  TPyCallFn4 = function(const a0, a1, a2, a3: Variant): Variant;
   { Variant results, not Int64: an unannotated NilPy def returns its value
     through a hidden destination pointer the callee always copies into. Through
     an Int64-typed pointer that register held stale data and the callee's
@@ -4589,6 +4594,49 @@ begin
   end;
   f2 := TPyCallFn2(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
   Result := f2(a0, a1);
+end;
+
+function pyvar_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
+{ The FOUR-argument dispatcher. Arities past 3 used to keep the older lowering,
+  which unboxes the callee and calls through the payload as a code ADDRESS —
+  fine for a plain def, and a SEGFAULT for a lambda, whose value is a closure or
+  bound-fn OBJECT that no tag guard there recognises. `q = lambda a,b,c,e: ...;
+  q(1,2,3,4)` therefore jumped to the object pointer. A def bound to a name and
+  called with four arguments always worked, which is what made the crash look
+  like a lambda-arity problem rather than a missing dispatch.
+
+  The interpreted closure has no arity limit — its arguments travel as a TPyList
+  — so it is served exactly as at arity 3. The shapes whose bridges DO stop at
+  three raise here instead of being handed a truncated argument list: dropping
+  arguments silently is the failure mode this dispatcher exists to remove.
+  bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+var o: Pointer; aLo, aHi: Int64; f4: TPyCallFn4; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then begin Result := pybound_callv4(cb, a0, a1, a2, a3); Exit; end;
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 4, a0, a1, a2, a3, Result); Exit; end;
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 4, aLo, aHi) then PyRaiseArity(4, aLo, aHi);
+  if PyBoundFnArityBad(o, 4, aLo, aHi) then PyRaiseArity(4, aLo, aHi);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      args := TPyList.Create;
+      args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      args.Free;
+      Exit;
+    end;
+    { a LIFTED bound-fn: the bridge carries three own arguments, and a lambda of
+      four own parameters is not lifted for exactly that reason — so this is
+      unreachable today, and says so rather than truncating if it ever is not. }
+    raise TypeError.Create('a compiled closure takes at most 3 arguments, got 4');
+  end;
+  { a plain compiled code address — what the old lowering handled correctly }
+  f4 := TPyCallFn4(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f4(a0, a1, a2, a3);
 end;
 
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
