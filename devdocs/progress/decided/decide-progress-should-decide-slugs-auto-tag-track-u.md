@@ -83,3 +83,33 @@ the only affected ticket), so what is left is ordinary Track T work, not a
 decision.
 
 Suggested re-file: `chore-t-auto-tag-decide-slugs-track-u`.
+
+## CLOSED 2026-08-11 (user) — STALE, no rule needed
+
+> "there was one ticket without the proper tagging, that ticket was edited, the
+> question is stale." — user
+
+The fork was posed as a steering question because option 1 (the ranker rule)
+*"moves an unknown number of tickets out of A's/N's ready queue in one step"*.
+That number was measured and it was **one** —
+[[decide-nilpy-parallel-capture-semantics]], which declared Track U in prose but
+carried no `track:` frontmatter. It was edited. There is nothing left to steer.
+
+**Re-measured at close**, because "one file" was the claim the whole closure
+rests on. Every `decide-*` ticket lacking `track:` frontmatter is in `decided/`
+— nine of them, all closed, none ranked by `next`/`ready`, so none can be handed
+to an agent to guess at. **Every live `decide-*` declares `track: U`.**
+
+## The rule is deliberately NOT built
+
+Option 1 was kept alive in the 2026-08-10 log as "what remains", with a
+suggested re-file to Track T. Declined: it is a ~3-line rule in
+`tools/progress.py` guarding against a hand-written `decide-` that omits
+frontmatter, and CLAUDE.md already tells every agent to declare the track in
+frontmatter *because that is what the ranker reads*
+([[meta-track-w-collision-windows-vs-website]]). If the gap ever re-opens it
+costs one line of frontmatter to close again — the same edit that closed it this
+time. Not worth a tool change carrying its own regression surface.
+
+Re-open only if an untagged `decide-` actually reaches a lane's ready queue
+again. One occurrence is not a pattern.
