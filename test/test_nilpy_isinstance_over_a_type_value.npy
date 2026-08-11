@@ -1,0 +1,52 @@
+# `isinstance(x, t)` where the second argument is a VALUE, not a literal type
+# name: an aliased class (`A = B`) or a tuple of types held in a name
+# (`string_types = (str,)`, the six idiom).
+#
+# The lowering resolves that argument by NAME, so it could not see through a
+# binding: `A = B` then `isinstance(x, A)` was a COMPILE error, "unknown type in
+# isinstance: A" — for a name that had just constructed an instance with `A(3)`
+# on the line above. Binding a class and calling through it already worked; only
+# the type test did not, so the two halves of one alias disagreed.
+#
+# A name that is not bound at all still gets the compile-time diagnostic naming
+# it, so a typo'd type does not silently become a runtime False.
+#
+# Every expectation is CPython's own output.
+# bug-n-a-type-name-is-not-a-first-class-value
+
+
+class B:
+    def __init__(self, v=0):
+        self.v = v
+
+
+class C(B):
+    def __init__(self):
+        B.__init__(self, 9)
+
+
+class D:
+    def __init__(self):
+        self.z = 1
+
+
+A = B
+x = A(3)
+c = C()
+d = D()
+
+print(x.v, isinstance(x, A))
+print(isinstance(c, A))              # a DESCENDANT of the aliased base
+print(isinstance(d, A))              # unrelated class
+print(isinstance("s", A))            # a non-object tested against a class
+
+types_ = (B, D)
+print(isinstance(d, types_))         # a TUPLE of types held in a name
+print(isinstance(x, types_))
+print(isinstance(c, types_))         # matches via B, its base
+
+# the compile-time path must keep answering everything it already did
+print(isinstance(x, B), isinstance(x, D))
+print(isinstance("s", str), isinstance(3, int), isinstance([1], list))
+print(isinstance(1.5, float), isinstance(True, bool), isinstance(b"z", bytes))
+print(isinstance("s", (int, str)))   # a LITERAL tuple, the old path

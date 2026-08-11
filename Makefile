@@ -1177,6 +1177,13 @@ test-nilpy: $(COMPILER)
 	# readline().strip() was "TPyBytes has no method strip".
 	./$(COMPILER) test/test_nilpy_file_read_follows_the_mode.npy /tmp/test_nilpy_readmode26
 	/tmp/test_nilpy_readmode26 | diff -u test/test_nilpy_file_read_follows_the_mode.expected -
+	# isinstance(x, t) with t a VALUE — an aliased class, or a tuple of types
+	# held in a name (the six idiom). The lowering resolved it by NAME, so
+	# `A = B` then isinstance(x, A) was a COMPILE error for a name that had
+	# just constructed an instance. An UNBOUND name still errors by name.
+	./$(COMPILER) test/test_nilpy_isinstance_over_a_type_value.npy /tmp/test_nilpy_isinstval26
+	/tmp/test_nilpy_isinstval26 | diff -u test/test_nilpy_isinstance_over_a_type_value.expected -
+	! ./$(COMPILER) test/test_nilpy_isinstance_unknown_type_fail.npy /tmp/test_nilpy_isinstfail26 2>&1 | grep -q 'ok:'
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".
 	./$(COMPILER) test/test_nilpy_sort_lt_dunder.npy /tmp/test_nilpy_sortlt26

@@ -1042,6 +1042,10 @@ function pygt_v(const a: Variant; const b: Variant): Boolean;
 function pyge_v(const a: Variant; const b: Variant): Boolean;
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
 function pyint_v(const v: Variant): Variant;      { int(v) as a variant }
+{ `isinstance(x, t)` with t a VALUE — a class object or a tuple of them —
+  rather than a literal type name. See the body.
+  bug-n-a-type-name-is-not-a-first-class-value }
+function pyisinstance_v(const x: Variant; const t: Variant): Boolean;
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
 { Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
@@ -11291,6 +11295,63 @@ begin
     Result := '<bound method at 0x' + hx + '>'
   else
     Result := '<function at 0x' + hx + '>';
+end;
+
+function pyisinstance_v(const x: Variant; const t: Variant): Boolean;
+{ `isinstance(x, t)` where t is a VALUE rather than a literal type name.
+
+  The compile-time lowering resolves the second argument by NAME, which cannot
+  see through a binding: `A = B` then `isinstance(x, A)` reported "unknown type
+  in isinstance: A" even though `A(3)` had just constructed one — the alias is a
+  perfectly good class OBJECT, it simply is not a class NAME. A tuple of types
+  held in a name (`string_types = (str,)`, the six idiom) has the same shape.
+
+  t may be a class object (VT_CLASSREF, payload = the RTTI blob) or a TUPLE of
+  them, which CPython accepts anywhere a type is expected. Anything else answers
+  False rather than raising: the literal-name path still handles every builtin
+  type, so a non-class here means the program passed something that was never a
+  type, and CPython raises TypeError for that — worth doing once the builtin
+  types are values too, which is the other half of the ticket.
+  bug-n-a-type-name-is-not-a-first-class-value }
+var
+  xo: TObject;
+  want, curr: PClassRTTI;
+  tl: TObject;
+  i: Integer;
+begin
+  pyisinstance_v := False;
+  { a TUPLE of types: True when ANY member matches, like CPython }
+  if (pyvartag(t) = 7) and (PPyVarRec(@t)^.Payload <> 0) then
+  begin
+    tl := TObject(Pointer(NativeInt(PPyVarRec(@t)^.Payload)));
+    if tl is TPyList then
+    begin
+      for i := 0 to TPyList(tl).count - 1 do
+        if pyisinstance_v(x, TPyList(tl).at(i)) then
+        begin
+          pyisinstance_v := True;
+          Exit;
+        end;
+      Exit;
+    end;
+  end;
+  if pyvartag(t) <> 11 then Exit;                 { VT_CLASSREF }
+  want := PClassRTTI(Pointer(NativeInt(PPyVarRec(@t)^.Payload)));
+  if want = nil then Exit;
+  if pyvartag(x) <> 7 then Exit;                  { only an object can be an instance }
+  if PPyVarRec(@x)^.Payload = 0 then Exit;
+  xo := TObject(Pointer(NativeInt(PPyVarRec(@x)^.Payload)));
+  curr := GetInstanceRTTI(Pointer(xo));
+  { walk the instance's ancestry — isinstance is True for a DESCENDANT too }
+  while curr <> nil do
+  begin
+    if curr = want then
+    begin
+      pyisinstance_v := True;
+      Exit;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
 end;
 
 { `<class '__main__.A'>` — CPython's str()/repr() of a CLASS OBJECT, which is

@@ -3,6 +3,8 @@ track: N
 prio: 45
 type: bug
 summary: "`t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not"
+status: working
+owner: claude-A
 ---
 
 # A type name is not a first-class value
@@ -99,3 +101,43 @@ the frontend already emits rather than user ctors.
 
 Recommend doing the builtin half first and independently. It unblocks the
 library campaign's stated top lever without waiting on the Track U decision.
+
+## 2026-08-11 (claude-A) — RE-MEASURED: most of the table is stale, one gap closed
+
+The measurements above are from 2026-08-09 and `feature-nilpy-class-as-a-value`
+landed since. Re-ran the user-class rows at HEAD before building anything:
+
+| row | ticket (2026-08-09) | HEAD (2026-08-11) |
+| --- | --- | --- |
+| `A = B` | parses | parses |
+| `A(3)` | `error: unexpected token` | **works** |
+| `print(A)` | (not listed) | **works** — `<class '__main__.B'>` |
+| `isinstance(x, A)` | `unknown type in isinstance: A` | **was still broken; FIXED here** |
+
+So the user-class half was down to ONE row, and the ticket's own "blocked on
+decide-nilpy-class-as-value-dispatch-strategy" no longer applies to it: binding
+a class and CALLING through it already work, because a class object is a real
+VT_CLASSREF variant now. Only the type TEST had not caught up — it resolves its
+second argument by NAME, and a name is exactly what an alias is not.
+
+**Fixed:** `pyisinstance_v(x, t)` walks the instance's ancestry against the
+class object t (so a DESCENDANT answers True, as CPython does), and accepts a
+TUPLE of types, which is what CPython allows anywhere a type is expected. The
+frontend routes to it when the second argument is not a type name but IS a bound
+name — deliberately not for an unbound one, so a typo'd type keeps its
+compile-time diagnostic naming it rather than quietly becoming a runtime False.
+That is pinned by a negative test.
+
+**This unblocks the six shim's real idiom** — `string_types = (str,)` then
+`isinstance(s, string_types)` — for the tuple-in-a-name half. The remaining work
+is the BUILTIN-type half the 2026-08-09 note scoped: `t = str` still does not
+parse, because `str`/`int`/`bytes` are not classes and have no RTTI blob to
+point at, so they need a payload space of their own. `pyisinstance_v` is written
+to take them the moment they exist (its `Exit` for a non-class tag is the seam).
+
+Gate: `make test-nilpy` EXIT=0, `gate.sh quick` GREEN (self-host byte-identical).
+New `test/test_nilpy_isinstance_over_a_type_value.npy` (+ the unknown-name
+negative test). Needs a pin before other lanes see it (`compiler/builtin`).
+
+**Left OPEN** for the builtin-type half; moved back to the backlog rather than
+resolved, with the user-class rows struck out above.

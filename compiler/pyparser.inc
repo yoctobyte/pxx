@@ -1610,6 +1610,7 @@ end;
 procedure PyParseIsinstance;
 var xNode, node, left, term, callN, argN, tagCall: Integer;
     isVar, hadTuple: Boolean; nm: AnsiString; ci: Integer;
+    rtArg, rtArg2: Integer;   { the runtime `isinstance(x, <value>)` call }
 
   function TagEq(tagConst: Int64): Integer;
   var c, a, e: Integer;
@@ -1728,6 +1729,31 @@ begin
       else if nm = 'dict' then ci := FindUClass('TPyDict')
       else if (nm = 'bytes') or (nm = 'bytearray') then ci := FindUClass('TPyBytes')
       else ci := FindUClass(CurTok.SVal);
+      { …and when it is not a type NAME at all, it may still be a type VALUE:
+        `A = B` binds a class object, `string_types = (str,)` a tuple of them,
+        and CPython accepts either. This lowering resolves the argument by name,
+        so it could not see through a binding and said "unknown type" for a name
+        that had just constructed an instance. Parse it as an expression and let
+        the runtime decide — but only for a name that IS bound, so an actual
+        typo still gets the compile-time diagnostic naming it.
+        bug-n-a-type-name-is-not-a-first-class-value }
+      if (ci < 0) and (FindSym(CurTok.SVal) >= 0) then
+      begin
+        PyParseBoolExpr;                    { consumes the name (and any suffix) }
+        rtArg := AllocNode(AN_ARG);
+        ASTLeft[rtArg] := PyForceVariant(xNode);
+        rtArg2 := AllocNode(AN_ARG);
+        ASTLeft[rtArg2] := PyForceVariant(CurASTNode);
+        ASTRight[rtArg] := rtArg2;
+        term := AllocNode(AN_CALL);
+        ASTIVal[term] := FindProc('pyisinstance_v');
+        if ASTIVal[term] < 0 then Error('Nil Python: pylib (pyisinstance_v) not loaded');
+        ASTTk[term] := Ord(tyBoolean);
+        ASTLeft[term] := rtArg;
+        left := OrJoin(left, term);
+        if hadTuple and (CurTok.Kind = tkComma) then begin Next; Continue; end;
+        Break;
+      end;
       if ci < 0 then Error('Nil Python: unknown type in isinstance: ' + CurTok.SVal);
       if isVar then
       begin

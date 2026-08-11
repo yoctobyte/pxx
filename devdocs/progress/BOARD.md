@@ -10,9 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | task-t-pin-fast-track-t-owns-verification | T | 80 | task | Track A pins in 30s and never waits; everything heavier moves to Track T, asynchronous and per-sha. Status is a JOIN of pin.log x tstate, not a label on the pin. Native full regression (incl. NilPy + corpus) is the priority right now, above the cross matrix. | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
 
 ## unfinished (8)
 
@@ -35,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (223)
+## backlog (222)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -45,7 +47,6 @@ _none_
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
-| bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
 | bug-n-hash-builtin-is-not-implemented | N | 35 | bug | `hash(x)` is not implemented | — |
 | bug-n-int-bit-length-is-not-implemented | N | 30 | bug | `int.bit_length()` is not implemented | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
@@ -499,7 +500,6 @@ _none_
 - [p 50] [T] task-t-xeon-host-local-health-alerting
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [N] bug-n-a-type-name-is-not-a-first-class-value (unblocks 1)
 - [p 45] [U] decide-nilpy-none-str-representation (unblocks 1)
 - [p 45] [S] bug-a-riscv32-and-xtensa-have-no-atomic-codegen
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused

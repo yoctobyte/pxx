@@ -1,0 +1,5 @@
+# A genuinely UNKNOWN type name in isinstance must stay a COMPILE error naming
+# it. The runtime type-VALUE path (bug-n-a-type-name-is-not-a-first-class-value)
+# is reached only for a name that is BOUND, precisely so a typo'd type does not
+# quietly become a runtime False.
+print(isinstance("a", Nope))
