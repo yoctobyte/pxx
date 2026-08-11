@@ -143,4 +143,4 @@ passed as a parameter) all still call. Gate: `tools/gate.sh quick` GREEN +
 is not linked by the compiler itself.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 6590c700c.
