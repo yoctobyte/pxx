@@ -110,4 +110,4 @@ fixedpoint. Breadth offloaded to Track T, which is UP (plexus through
 d10a982af010).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 3757dddd0.

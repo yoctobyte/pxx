@@ -131,4 +131,4 @@ WITHOUT `__call__`) each asserting CPython's TypeError.
 - `tools/gate.sh quick` GREEN, self-host fixedpoint, `make test-nilpy` green.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 3757dddd0.
