@@ -102,4 +102,4 @@ refused because the METHOD does not exist (the chain parses; the diagnostic
 names it). Filed as `bug-n-int-bit-length-is-not-implemented`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 5a7d29e21.
