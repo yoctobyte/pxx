@@ -69,6 +69,7 @@ _none_
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
+| bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
 | bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler | T | 45 | bug | gate.sh's self-host check compares the hermetic fixedpoint against the LIVE compiler/pascal26, so a concurrent build in the same clone flips it red transiently — testmgr snapshots the binary per run for exactly this reason | — |
@@ -94,7 +95,6 @@ _none_
 | decide-nilpy-class-as-value-dispatch-strategy | U | 5 | decide | A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values. | — |
 | decide-nilpy-parallel-capture-semantics | U | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-own-language-first-name-resolution | U | 5 | decide | the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it | — |
-| decide-parenless-all-defaulted-routine-in-argument-position | U | 40 | decide | Bare `F` in ARGUMENT position where F is a routine with all-defaulted parameters: call it, or take it as a procedural reference? Statement and expression positions now call it; argument position is genuinely ambiguous and was deliberately left unfixed. | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
@@ -335,7 +335,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (59)
+## decided (60)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -379,6 +379,7 @@ _none_
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
 | decide-nilpy-where-the-exact-decimal-float-core-lives | U | 60 | decide | NilPy's float repr needs exact decimal digits + a correctly-rounded strtod. Both exist, in lib/rtl/sysutils.pas — which a BUILTIN unit may not use (builtins sit below the Track B libraries, and pylib dragging sysutils in would link it into every NilPy program). Move the core down into a builtin unit, duplicate it, or relax the layering? Blocks bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip. | — |
 | decide-operator-table-keyed-on-one-operand-or-two | U | 40 | decide | Decide: should the operator-overload table be keyed on BOTH operand types? | — |
+| decide-parenless-all-defaulted-routine-in-argument-position | U | 40 | decide | Bare `F` in ARGUMENT position where F is a routine with all-defaulted parameters: call it, or take it as a procedural reference? Statement and expression positions now call it; argument position is genuinely ambiguous and was deliberately left unfixed. | — |
 | decide-pascal-uses-campaign-scope | U | 55 | decide | Decide: how should the `uses`-is-transitive fix be scoped and sequenced? | — |
 | decide-pcl-may-use-pylib | U | 55 | decide | decide: may a PCL library unit use pylib (Python runtime types) to accept Python-shaped arguments? | — |
 | decide-promoint-rvalue-representation | U | 85 | decide | Promotable int: what IS an rvalue once heap bignums exist? | — |
@@ -542,10 +543,10 @@ _none_
 - [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [N] bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses
+- [p 40] [P] bug-p-bare-all-defaulted-routine-refused-in-argument-position
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
-- [p 40] [U] decide-parenless-all-defaulted-routine-in-argument-position
 - [p 40] [D] docs-verify-nil-python-page-against-the-compiler
 - [p 40] [A] feature-a-index-an-array-returning-call-directly
 - [p 40] [S] feature-a-promoint-variant-esp-targets
