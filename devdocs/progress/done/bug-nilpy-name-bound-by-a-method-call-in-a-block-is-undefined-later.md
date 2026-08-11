@@ -3,6 +3,7 @@ prio: 50
 track: N
 type: bug
 blocked-by: []
+status: done
 ---
 
 # A name bound in a block by a METHOD CALL is "undefined" in a later assignment
@@ -10,7 +11,7 @@ blocked-by: []
 - **Type:** bug (NilPy, valid CPython refused) — **Track N**
 - **Found:** 2026-08-09, writing a JSON round-trip program and diffing it
   against CPython.
-- **Owner:** —
+- **Owner:** claude-A-N
 
 ```python
 with open(p) as f:
@@ -138,3 +139,95 @@ confirming the narrowing did not undo the fix it guards: a plain
 canary for the tempting wrong fix — still passes.
 
 **This ticket stays OPEN**: its own defect, `raw = f.read()`, is unchanged.
+
+## 2026-08-11 — FIXED, by the fourth route: a PHANTOM registration
+
+The ticket's own "what would actually work" was right about the goal and wrong
+about the mechanism. Its route — `AllocVar(name, tyUnknown)` with no
+`PyNoteLocalType` — was already measured and closed above, because a symbol
+allocated during the pre-pass does not merely fail to contribute a type: the
+HARVEST loop at the end of every round turns **every** scratch symbol into a
+`PyLocals` constraint, and an unknown widens to Variant from there.
+
+So the missing piece was never a type to allocate. It was **a way to be
+excluded from the harvest**:
+
+- `PyPhantomNames` records names registered purely so a later trial parse can
+  resolve them. The scratch symbol is allocated `tyVariant` (the only kind that
+  builds an expression without a conversion error), the harvest skips it by
+  name, and `SymRollbackTo` deletes it with the rest of the scratch scope.
+  Nothing reaches the widening table, so the name's real type still comes from
+  the real parse — exactly the cost this ticket priced in ("no WIDENING for that
+  name").
+- `PyCollectTopTargets` is the guard: a name that is ALSO bound at module top
+  level gets its type from the depth-0 arm's own trial parse, and a phantom
+  would swallow that. One O(n) token prescan per collect, deliberately
+  over-inclusive — a false positive means "no phantom", i.e. today's behaviour.
+
+All three repro shapes now match CPython:
+
+```python
+with open(p) as f:      # the ticket's own motivating shape
+    raw = f.read()
+n = len(raw)            # was: error: undefined variable (raw)
+```
+
+plus the `if`/`for`/`while`/`try` spellings and a `for` target feeding a later
+`w = v`.
+
+### The canary held
+`test_nilpy_none_str_field` — the test that catches the tempting wrong fix — is
+green, and it is green for a REASON rather than by luck: the phantom never
+widens the name, so `tok = s.next_token()` still gets its str type from the real
+parse and `tok is None` still tests the nil handle. That is the specific failure
+the `tyVariant` attempt caused, and the phantom cannot cause it by construction.
+
+### A second, worse bug found in the same arm — also fixed
+Sweeping shapes rather than re-running the repro turned up a SILENT wrong value
+that had nothing to do with registration:
+
+```python
+while True:
+    wrapped = "a-b".split("-")
+    break
+print(len(wrapped))     # CPython 2      pxx 1348027121
+```
+
+The arm's safe-shape tests each matched on the **first token of the right-hand
+side and nothing else**, so this matched the STRING-LITERAL shape on its
+`"a-b"`, `PXXDBG=n.locals` confirmed `wrapped tk=23` (tyAnsiString), and the
+real assignment stored a TPyList into a string slot. Identical on pinned, so
+pre-existing and never asked. Exactly the lesson `PyBlkRhsEndsAfterCall` was
+added for one commit earlier, one arm over — `project_nilpy_constant_fastpath_
+claims_first_token_pattern` again.
+
+Fixed by `PyBlkRhsEndsAt` (a literal must END the statement) and
+`PyBlkRhsEndsAfterGroup` (a `[...]` / `{...}` literal must be the whole RHS,
+newlines inside the brackets allowed). A right-hand side that continues now
+falls through to the phantom, which asserts nothing — the two fixes compose:
+the narrowing would have re-introduced "undefined variable" without it.
+
+### What this does NOT close
+[[feature-n-nilpy-ast-typing-module-scope]] item (3) stays open as the
+*widening* gap: a block-bound name still contributes no type to the table, and
+the pre-pass still cannot trial-parse an arbitrary block statement because
+`Error()` still calls `Halt`. The phantom removes the FAILURE MODE (a loud
+compile error on ordinary code) without removing the CAUSE. Addendum recorded
+there.
+
+### Filed while measuring
+[[bug-nilpy-is-none-followed-by-and-or-else-takes-a-generic-compare]] — `if x
+is None and y:` takes the wrong branch, because PyBareNoneHere's allow-list of
+follow tokens has no tkAnd/tkOr/tkElse and the compare then falls to a generic
+binop against a boxed variant. Nine call sites, one predicate. Reproduces
+identically on pinned; unrelated to this change.
+
+### Gate
+`make compiler/pascal26` (fixedpoint, converged in 1 round) + `tools/gate.sh
+quick` GREEN + `make test-nilpy` as the family sweep (the earned exception —
+this touches the NilPy frontend). `test_nilpy_module_block_scope` extended with
+the four new shapes rather than a near-duplicate file, its expectation taken
+from CPython.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

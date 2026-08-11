@@ -139,3 +139,37 @@ The ticket says it "survives for ONE caller: the ctor field scan". Measured:
 seven, including the ternary arm, the sequence-repeat arm and the def
 return-type chase. Removing it is a larger job than the ticket implies, and it
 is not blocked on the ctor scan alone.
+
+## 2026-08-11 — the FAILURE MODE of item (3) is closed; the CAUSE is not
+
+Landed under [[bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later]].
+
+The 2026-08-09 note above says "every new shape is another silent bug found by
+luck", and that is still the right reading — but it conflates two things the
+safe-shape list was doing at once:
+
+1. **Making a name RESOLVE** so a later statement's trial parse does not
+   `Error()`-and-Halt. This half is now shape-independent. A block-bound name
+   whose RHS matches nothing is registered as a **phantom**: a scratch symbol
+   the harvest skips, so it resolves and asserts no type. `raw = f.read()`,
+   `v = str(x)`, any call at all.
+2. **Contributing a TYPE to the widening table.** Still shape-by-shape, still
+   the losing game this ticket describes, and `.items()` is still unhandled.
+
+Only (1) is fixed. The route this ticket names as the real close — a pre-pass
+that does not Halt on an as-yet-unseen name — is unchanged and is what (2)
+needs; `Error` still calls `Halt` directly, which is why the depth>0 arm still
+cannot simply trial-parse.
+
+**What the phantom changes for whoever takes this on:** the cost of an
+unrecognised shape is no longer a compile error on ordinary Python. It is now
+only a missing widening — the same cost item (2) of this ticket has always
+carried. That makes the remaining work a correctness-of-types job rather than a
+"the compiler rejects my file" job, and it should be re-priced accordingly.
+
+Also fixed in the same arm and worth knowing before touching it: the safe-shape
+tests matched on the FIRST TOKEN of the right-hand side only, so
+`wrapped = "a-b".split("-")` was typed tyAnsiString off its leading string
+literal and `len()` read garbage. `PyBlkRhsEndsAt` / `PyBlkRhsEndsAfterGroup`
+now require a literal to be the WHOLE right-hand side. Any new shape added to
+this list must ask the same question.

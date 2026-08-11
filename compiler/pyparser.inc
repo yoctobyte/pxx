@@ -54,6 +54,42 @@ var
   PyLocalCount: Integer;
   PyModuleLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
   PyModuleLocalCount: Integer;
+  { PHANTOMS — names registered in PyCollectModuleLocalsAST's SCRATCH symbol
+    table purely so a LATER statement's trial parse can RESOLVE them, and
+    deliberately withheld from the harvest that builds the widening table.
+
+    A name first bound inside a control-flow block (`with open(p) as f: raw =
+    f.read()`) is not registered at all today unless its right-hand side matches
+    one of the arm's safe token shapes, so the very next `n = len(raw)` — the
+    only form that IS trial-parsed — died with "undefined variable (raw)" while
+    `print(len(raw))` one line earlier was fine. That asymmetry is what made the
+    error impossible to place.
+
+    Three earlier routes were measured and each failed for its own reason (all
+    recorded on bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-
+    later): noting tyVariant WIDENS the name and broke `tok is None` for a
+    str-typed Optional; per-shape widening is a losing game; and AllocVar(name,
+    tyUnknown) does not stay unknown — the harvest turns it into a Variant the
+    real assignment then cannot convert to.
+
+    The phantom is the fourth and it is the one the ticket actually asked for:
+    REGISTER WITHOUT ASSERTING A TYPE. The symbol exists for the duration of the
+    round (so the trial parse resolves), is rolled back with everything else, and
+    contributes NOTHING to PyLocals — so the name's real type still comes from
+    the real parse, exactly as it does today. Cost is the one the ticket already
+    priced in: no widening for that name.
+
+    Only names that are never a MODULE-TOP-LEVEL binding target are phantomed
+    (PyTopTarget) — for those, the depth-0 arm's own trial parse is the real
+    source of type information and a phantom would swallow it. }
+  PyPhantomNames: array[0..PY_MAX_LOCALS-1] of AnsiString;
+  PyPhantomCount: Integer;
+  { names bound at module TOP level (depth 0) anywhere in the file — the
+    over-inclusive token prescan behind the PyTopTarget guard above. Over-
+    inclusion only means FEWER phantoms, i.e. today's behaviour, which is the
+    safe direction to be wrong in. }
+  PyTopTargets: array[0..PY_MAX_LOCALS-1] of AnsiString;
+  PyTopTargetCount: Integer;
   { PyCollectLocalsAST's trial parse is on. The assignment paths report every
     RHS type they build so the table can WIDEN: the symbol table alone only
     remembers a local's FIRST assignment, which is exactly the information
@@ -3211,6 +3247,51 @@ begin
       end;
     end
     else if Tokens[k].Kind in [tkNewline, tkEOF] then Exit;   { unbalanced }
+    Inc(k);
+  end;
+end;
+
+function PyBlkRhsEndsAt(k: Integer): Boolean;
+{ Is token k the LAST token of its statement? The other half of
+  PyBlkRhsEndsAfterCall's lesson: the depth>0 arm's safe-shape tests each looked
+  at the FIRST token of the right-hand side and nothing else, so
+  `wrapped = "a-b".split("-")` matched the STRING-LITERAL shape on its `"a-b"`
+  and was typed tyAnsiString. The real assignment then stored a TPyList into a
+  string slot and `len(wrapped)` answered 1348027121 — silent, and the shape is
+  as ordinary as `.split()` gets. Every literal arm asks this now; a right-hand
+  side that continues falls through to the phantom, which asserts nothing. }
+begin
+  PyBlkRhsEndsAt := (k + 1 >= MainProgramTokCount) or
+    (Tokens[k + 1].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon]);
+end;
+
+function PyBlkRhsEndsAfterGroup(op: Integer): Boolean;
+{ The same question for a BRACKETED right-hand side — `xs = [1, 2]`, `d = {}`:
+  is the group that opens at `op` the whole of it? PyBlkRhsEndsAfterCall asks
+  this of a '(' run; a list or dict literal needs its own matching closer
+  instead, and (unlike a call) may carry newlines inside the brackets, so only
+  EOF ends the scan early. Scanning cannot Error(), which is the constraint the whole
+  branch works under. }
+var d, k: Integer;
+begin
+  PyBlkRhsEndsAfterGroup := False;
+  if (op < 0) or (op >= MainProgramTokCount) then Exit;
+  if not (Tokens[op].Kind in [tkLParen, tkLBrack, tkBegin]) then Exit;
+  d := 0;
+  k := op;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(d);
+      if d <= 0 then
+      begin
+        PyBlkRhsEndsAfterGroup := PyBlkRhsEndsAt(k);
+        Exit;
+      end;
+    end
+    else if Tokens[k].Kind = tkEOF then Exit;
     Inc(k);
   end;
 end;
@@ -19004,6 +19085,92 @@ begin
   PyBlkIntArith := sawOp;
 end;
 
+function PyIsPhantom(const nm: AnsiString): Boolean;
+{ Was this name registered by the pre-pass PURELY so a later trial parse could
+  resolve it? See the PyPhantomNames declaration. }
+var i: Integer;
+begin
+  PyIsPhantom := False;
+  for i := 0 to PyPhantomCount - 1 do
+    if PyPhantomNames[i] = nm then begin PyIsPhantom := True; Exit; end;
+end;
+
+procedure PyNotePhantom(const nm: AnsiString);
+begin
+  if PyIsPhantom(nm) then Exit;
+  if PyPhantomCount >= PY_MAX_LOCALS then Exit;   { silently stop: a phantom is
+    an aid, never a requirement — running out costs the old "undefined
+    variable", not a wrong answer }
+  PyPhantomNames[PyPhantomCount] := nm;
+  Inc(PyPhantomCount);
+end;
+
+function PyTopTarget(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  PyTopTarget := False;
+  for i := 0 to PyTopTargetCount - 1 do
+    if PyTopTargets[i] = nm then begin PyTopTarget := True; Exit; end;
+end;
+
+procedure PyCollectTopTargets;
+{ One linear pass over the module's tokens, collecting every name that is bound
+  at DEPTH 0 — the shapes the depth-0 arms of PyCollectModuleLocalsAST already
+  handle (a bare or annotated assignment, an augmented assignment, a tuple
+  target list, a `for` target). Those names get their type from the depth-0
+  arm's own trial parse, so a phantom for them would swallow real information;
+  everything else is fair game.
+
+  Deliberately OVER-inclusive — it takes any statement-initial identifier
+  followed by `=`/`:`/`,`/an augmented operator, without checking the shape
+  closes. A false positive only means "no phantom for that name", i.e. exactly
+  the behaviour that shipped before phantoms existed, which is the safe
+  direction. One O(n) pass, run once per collect: the quadratic trap the
+  `def`/`class` skip note warns about is why this is not a per-name scan. }
+var k, d, m, forCnt, forIn: Integer;
+    atStart, isFor: Boolean;
+
+  procedure NoteTop(const nm: AnsiString);
+  begin
+    if PyTopTargetCount >= PY_MAX_LOCALS then Exit;
+    if PyTopTarget(nm) then Exit;
+    PyTopTargets[PyTopTargetCount] := nm;
+    Inc(PyTopTargetCount);
+  end;
+
+begin
+  PyTopTargetCount := 0;
+  d := 0;
+  k := PyScanLo;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(d)
+    else if Tokens[k].Kind = tkDedent then Dec(d)
+    else if d = 0 then
+    begin
+      atStart := (k = PyScanLo) or
+                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
+      if atStart then
+      begin
+        if (Tokens[k].Kind = tkIdent) and (k + 1 < MainProgramTokCount) and
+           (Tokens[k + 1].Kind in [tkAssign, tkColon, tkComma, tkTrueDivEq, tkPowEq,
+                                   tkPlusEq, tkMinusEq, tkStarEq, tkShlEq]) then
+          NoteTop(GetTokenStr(k));
+        isFor := (Tokens[k].Kind = tkFor) or
+                 ((Tokens[k].Kind = tkIdent) and CaseEqual(GetTokenStr(k), 'for'));
+        if isFor and (k + 1 < MainProgramTokCount) and
+           (Tokens[k + 1].Kind = tkIdent) and PyForTargetRun(k + 1, forCnt, forIn) then
+        begin
+          for m := k + 1 to forIn - 1 do
+            if Tokens[m].Kind = tkIdent then NoteTop(GetTokenStr(m));
+          k := forIn;
+        end;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 procedure PyCollectModuleLocalsAST;
 var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     newCi, oldCi: Integer;
@@ -19020,10 +19187,14 @@ var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     blkSrcVar: Boolean;   { an augmented assign whose SOURCE is a variant }
 begin
   PyLocalCount := 0;
+  PyCollectTopTargets;   { the phantom guard — see PyPhantomNames }
   rnd := 0;
   repeat
     changed := False;
     PyTypingChanged := False;
+    PyPhantomCount := 0;   { phantoms are per-ROUND: their symbols die with the
+      scratch scope below, and the block statement that creates each one is
+      re-scanned before any statement that reads it }
     savedTok := TokPos;
     savedAST := ASTNodeCount;
     savedCur := CurASTNode;
@@ -19110,12 +19281,18 @@ begin
         blkName := GetTokenStr(i);
         blkJ := i + 2;
         blkTk := tyUnknown;
-        if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkString) then
+        { …and each literal shape must be the WHOLE right-hand side. Matching on
+          the first token alone typed `wrapped = "a-b".split("-")` as a string —
+          see PyBlkRhsEndsAt. }
+        if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkString) and
+           PyBlkRhsEndsAt(blkJ) then
           blkTk := tyAnsiString
-        else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkInteger) then
+        else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkInteger) and
+                PyBlkRhsEndsAt(blkJ) then
           blkTk := tyInt64
         else if (blkJ < MainProgramTokCount) and
-                (Tokens[blkJ].Kind in [tkLBrack, tkBegin]) then
+                (Tokens[blkJ].Kind in [tkLBrack, tkBegin]) and
+                PyBlkRhsEndsAfterGroup(blkJ) then
           blkTk := tyVariant
         else if (blkJ < MainProgramTokCount) and PyBlkIntArith(blkJ) then
           { an accumulator: `n = n * 2`, `total = total + i`. Arbitrary
@@ -19207,6 +19384,25 @@ begin
             file) trial-parses before that seeding ever runs, and died
             "undefined variable" before this. }
           if PyProgSym(blkName) < 0 then si := AllocVar(blkName, blkTk);
+        end
+        { ...and when NONE of the safe shapes matched — `raw = f.read()`,
+          `v = str(x)`, `k = obj.method(a)`, any call at all — register a
+          PHANTOM: a scratch symbol so a LATER statement's trial parse can
+          resolve the name, withheld from the harvest so it asserts no type.
+          See the PyPhantomNames declaration for why the three earlier routes
+          (tyVariant / per-shape widening / tyUnknown) each failed, and why
+          this one is the "register without asserting a type" the ticket asked
+          for. bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later }
+        else if (PyProgSym(blkName) < 0) and (PyFindConstraint(blkName) < 0) and
+                (not PyTopTarget(blkName)) then
+        begin
+          { tyVariant is what the SCRATCH symbol is made of, not what the name
+            is claimed to be: the trial parse has to be able to build an
+            expression out of it, and a variant is the only kind that accepts
+            every operator without a conversion error. It never leaves this
+            scope — the harvest skips it and SymRollbackTo deletes it. }
+          si := AllocVar(blkName, tyVariant);
+          PyNotePhantom(blkName);
         end;
       end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
@@ -19658,6 +19854,12 @@ begin
     begin
       nm := Syms[i].Name;
       if nm = '' then Continue;
+      { A PHANTOM contributes nothing. It exists only so the trial parse above
+        could resolve the name; harvesting it would assert the tyVariant its
+        scratch symbol happens to wear, which is precisely the widening that
+        broke `tok is None` when this was tried as a real constraint.
+        See PyPhantomNames. }
+      if PyIsPhantom(nm) then Continue;
       tk := Syms[i].TypeKind;
       si := PyFindConstraint(nm);
       if si < 0 then

@@ -34,3 +34,41 @@ class C:
 print(helper())
 c = C()
 print(c.class_only)
+
+# ...and the same rule when the RHS is a CALL, which no token shape can type.
+# The pre-pass's depth>0 arm recognised a short list of safe RHS shapes (a
+# literal, a subscript of a known name, a constructor of a known class); a
+# METHOD CALL was not one, so the name was never registered at all and the very
+# next bare assignment reading it Halted with "undefined variable" -- while
+# `print(len(raw))` one line earlier was fine, because only a bare assignment's
+# RHS is trial-parsed. Registering a PHANTOM (a scratch symbol withheld from the
+# widening harvest) is what closes it without asserting a type the earlier
+# attempts got wrong.
+# bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
+
+
+class Src:
+    def read(self):
+        return "hello"
+
+
+src = Src()
+with open("test/nilpy_data.txt") as fh:
+    fileraw = fh.read()
+filelen = len(fileraw)
+print(filelen > 0)
+
+if True:
+    methraw = src.read()
+methlen = len(methraw)
+print(methlen)
+
+for ix in [1, 2, 3]:
+    strv = str(ix)
+copied = strv
+print(copied)
+
+while True:
+    wrapped = "a-b".split("-")
+    break
+print(len(wrapped))

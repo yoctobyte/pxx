@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:10 blocked:3 backlog:213 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1655 rejected:35`
+`urgent:1 unfinished:10 blocked:3 backlog:213 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1656 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,6 +50,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [N]` bug-nilpy-is-none-followed-by-and-or-else-takes-a-generic-compare
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - `[p 55] [A]` feature-a-declaration-phase
@@ -65,6 +66,5 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-est-mem-from-measurement
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
-- `[p 55] [T]` feature-t-shard-the-uforth-ans-suite-per-word-set
 
 _167 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

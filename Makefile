@@ -941,7 +941,7 @@ test-nilpy: $(COMPILER)
 	@# a name first bound inside an if/for block is visible to a later
 	@# top-level assignment's RHS; def/class bodies stay real scopes
 	./$(COMPILER) test/test_nilpy_module_block_scope.npy /tmp/test_nilpy_modblockscope26
-	test "$$(/tmp/test_nilpy_modblockscope26)" = "$$(printf '%b' '3\n4\n4\n5\n7')"
+	test "$$(/tmp/test_nilpy_modblockscope26)" = "$$(printf '%b' '3\n4\n4\n5\n7\nTrue\n5\n3\n2')"
 	@# exec()'s host-call dispatch reads the receiver from the bound method
 	@# itself, not a hardcoded "vm" key
 	./$(COMPILER) test/test_nilpy_pyeval_no_vm_key.npy /tmp/test_nilpy_novmkey26
