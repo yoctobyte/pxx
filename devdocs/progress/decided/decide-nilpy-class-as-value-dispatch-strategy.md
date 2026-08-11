@@ -205,3 +205,7 @@ without noticing the def path existed.
 Re-filed as ordinary Track N work: **[[feature-nilpy-class-as-a-value]]**.
 Nothing here needs a human decision — the trigger is missing, not the design.
 Kept only as the record of how the wrong framing arose. Prio dropped to 5.
+
+## MOVED TO decided/ 2026-08-11 — record only
+Superseded and re-filed as work (see the SUPERSEDED note above). Kept as the
+record of how the framing arose; nothing here awaits a human decision.

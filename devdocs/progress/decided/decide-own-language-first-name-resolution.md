@@ -114,3 +114,7 @@ the naming. Duplicate per-language implementations are the intended outcome.
 Re-filed as work: **[[feature-a-own-language-first-symbol-resolution]]**.
 Kept as the record of the measurement (case-agreement closes the known class)
 and of the module-vs-symbol distinction. Prio dropped to 5.
+
+## MOVED TO decided/ 2026-08-11 — record only
+Superseded and re-filed as work (see the SUPERSEDED note above). Kept as the
+record of how the framing arose; nothing here awaits a human decision.
