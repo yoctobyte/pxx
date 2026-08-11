@@ -152,4 +152,4 @@ Coverage stays; the cost gets fixed at its source.
 Real walls land in `tstate` on the next full run carrying the shard commit.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit c488470af.

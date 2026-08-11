@@ -181,4 +181,4 @@ no red could migrate and no phantom NEW-RED/FIXED pair is manufactured.
 [[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]].
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit c488470af.
