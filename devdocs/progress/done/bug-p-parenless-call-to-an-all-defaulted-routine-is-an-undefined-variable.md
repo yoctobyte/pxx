@@ -128,4 +128,4 @@ diagnostic** ("undefined variable (PL1)"), so it is a regression test rather
 than a passing example. Gate: `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit ac45498bd.

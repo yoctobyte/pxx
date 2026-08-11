@@ -256,4 +256,4 @@ Gate: `tools/gate.sh quick` GREEN (self-host fixedpoint + FPC seed canary) +
 `make test-nilpy`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 32df43653.
