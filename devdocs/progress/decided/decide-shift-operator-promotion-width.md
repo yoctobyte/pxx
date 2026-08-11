@@ -148,3 +148,69 @@ test has to be un-blessed.
 
 `Int64` operands already agree, and so does every non-shift operator. Nothing
 outside `shl`/`shr` on a 32-bit operand should move.
+
+
+---
+
+## 2026-08-11 — the COST of this ruling, corrected (claude-A)
+
+The table in the "What this costs in FPC agreement — less than expected" section
+above listed ONE divergence. Implementing it (`a3f51dce1`) showed there are
+four, and that the table understated it for a specific reason worth recording:
+
+> its `-a shr 1` row agreed with FPC only because **FPC's unary minus on an
+> Integer already yields Int64**, so that row never exercised `shr`'s own width.
+
+
+The table's `-a shr 1` row agreed with FPC for a reason that does not
+generalise: **FPC's unary minus already widens an Integer to Int64**, so that
+row never exercised `shr`'s own width. A plain shift on a declared 32-bit
+variable does, and there FPC keeps the operand's width:
+
+| row | FPC | pxx (as decided) |
+| --- | --- | --- |
+| `i shr 1`, `i: Integer = -8` | 2147483644 | **9223372036854775804** |
+| `i shl 31`, `i: Integer = 1` | -2147483648 | **2147483648** |
+| `l shr 9`, `l = -2147483648` | 4194304 | **36028797014769664** |
+| `l shl 1`, `l = -2147483648` | 0 | **-4294967296** |
+| `a shl b` (8 shl 40) | 2048 | 8796093022208 |
+| `1 shl 40`, `-8 shr 1`, `1 shl 31` (const) | — | agree |
+| Int64 operands | — | agree (unchanged) |
+
+In every row pxx keeps the bits FPC discards. And **two tests DID have to be
+re-blessed** — `test/test_shift_operand_width.pas` and `test/test_shr_width.pas`
+asserted the operand-width answers row by row. Both now assert the native ones,
+with the divergence spelled out in the file.
+
+## Why it is probably still right
+
+The principle behind the ruling survives the bigger table: widening never loses
+information, truncating does, and `1 shl 40 = 0` was the trap. The RTL was
+checked and is unaffected — SHA-256 and CRC32 still produce correct digests,
+because their intermediates land in `LongWord` variables and the STORE narrows.
+The risk is code that consumes a shift result WITHOUT storing it to a sized
+variable (a comparison, a `WriteLn`, an argument), which is where the four rows
+above bite.
+
+## If this changes your mind
+
+1. **Keep it** (status quo, shipped): one rule, native width everywhere.
+2. **Promote only an UNTYPED operand** — a literal is native, a declared
+   `Integer`/`Cardinal` keeps its width. Fixes `1 shl 40` and leaves all four
+   rows above matching FPC. This is the "a declared type IS an explicit width
+   specification" half of the original decision's own reasoning, which the final
+   rule then overrode.
+3. Keep it, and bring `--strict-fpc` forward (it is not implemented yet — see
+   `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths`).
+
+**Not re-filed as a decision.** The ruling stands as made; this is the cost
+record it should have had. If the four rows above change your mind, the
+alternative is: The divergent rows are all cases where FPC
+throws bits away; anyone who wants that behaviour is asking for a 32-bit result
+and can declare one. But the table above is what you were not shown on
+2026-08-10, so the call is worth re-confirming rather than assuming.
+
+
+Also implemented since: `--strict-fpc` reproduces FPC's shift widths for anyone
+who needs them — 9 of 10 rows, the 10th being that unary-minus semantic rather
+than a shift (`f27a32595`, `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths`).
