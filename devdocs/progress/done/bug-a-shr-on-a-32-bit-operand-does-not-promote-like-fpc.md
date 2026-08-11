@@ -102,4 +102,4 @@ against `pinned` with no diffs beyond the intended ones.
 `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit a3f51dce1.
