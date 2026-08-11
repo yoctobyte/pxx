@@ -1661,7 +1661,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_variant_in.npy /tmp/test_nilpy_variant_in26
 	test "$$(/tmp/test_nilpy_variant_in26)" = "$$(printf '%b' '2 in list\n5 not in list\nk in dict')"
 	./$(COMPILER) test/test_nilpy_is_none_typed.npy /tmp/test_nilpy_is_none_typed26
-	test "$$(/tmp/test_nilpy_is_none_typed26)" = "$$(printf '%b' '11\nobj-live')"
+	test "$$(/tmp/test_nilpy_is_none_typed26)" = "$$(printf '%b' '11\nobj-live\nTrue\nTrue\n1\ncompound-yes\n[1]\nTrue\n1\nFalse\nFalse\nTrue\n5\nNone')"
 	./$(COMPILER) test/test_nilpy_bytes_setslice_variant.npy /tmp/test_nilpy_bytes_setslice_variant26
 	/tmp/test_nilpy_bytes_setslice_variant26 | diff -u test/test_nilpy_bytes_setslice_variant.expected -
 	@# `seq * n` where the COUNT has no static type (uforth's FILL)

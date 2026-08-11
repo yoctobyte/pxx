@@ -17,3 +17,53 @@ def go() -> int:
         print("obj-live")
     return 0
 go()
+
+# ...and the same type-aware lowering must be reached when the `None` is
+# FOLLOWED by a token that continues the expression. PyBareNoneHere's follow-set
+# is an allow-list built for the eight sites that consume a None as a whole
+# VALUE, and it has no tkAnd/tkOr/tkElse -- so `b is None and True` fell out of
+# the typed lowering, parsed None as a boxed VT_EMPTY primary, and compared it
+# to a managed string handle with a generic binop. The commonest compound None
+# guard there is silently took the other branch. Fixed by giving the `is` site
+# its own predicate (PyNoneOperandHere) rather than widening the shared one.
+# Not str-specific: the Optional[int] rows below fail the same way, which is
+# what rules out the nil-handle representation as the cause.
+# bug-nilpy-is-none-followed-by-and-or-else-takes-a-generic-compare
+
+
+def fs(i):
+    if i > 1:
+        return None
+    return "ok"
+
+
+def fi(i):
+    if i > 1:
+        return None
+    return 7
+
+
+b = fs(2)
+print(b is None and True)
+print(b is None or False)
+print(1 if b is None else -1)
+if b is None and True:
+    print("compound-yes")
+else:
+    print("compound-no")
+xs = [1] if b is None else [2]
+print(xs)
+
+h = fi(2)
+print(h is None and True)
+print(1 if h is None else -1)
+print(h is not None and True)
+
+s = fs(0)
+print(s is None and True)
+print(s is not None and True)
+
+# the eight VALUE sites keep their semantics: a bare None must still be
+# consumed as a whole expression, not swallowed leaving `or 5` dangling.
+print(None or 5)
+print(None and 5)

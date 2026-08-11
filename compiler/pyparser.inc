@@ -2033,8 +2033,13 @@ begin
       if CurTok.Kind = tkNot then begin neg := True; Next; end;
       { `x is None` / `x is not None`. The lowering depends on the STATIC type of
         the left side — comparing a managed string or a scalar directly against a
-        None variant read the wrong bytes and crashed. }
-      if PyBareNoneHere then
+        None variant read the wrong bytes and crashed.
+
+        PyNoneOperandHere, NOT PyBareNoneHere: after `is`, a `None` is this
+        compare's right operand whatever follows it, so the value sites' "is it
+        the whole expression" test wrongly excluded `and` / `or` / `else` and
+        dropped the guard to a generic binop. See PyNoneOperandHere. }
+      if PyNoneOperandHere then
       begin
         Next;
         rTk := IntToTypeKind(ASTTk[left]);
@@ -11658,6 +11663,30 @@ begin
   PyBareNoneHere := Tokens[TokPos].Kind in
     [tkNewline, tkDedent, tkIndent, tkEOF, tkComma, tkRParen, tkRBrack,
      tkEnd, tkColon, tkSemicolon];
+end;
+
+function PyNoneOperandHere: Boolean;
+{ A DIFFERENT question from PyBareNoneHere, and the distinction is the whole of
+  bug-nilpy-is-none-followed-by-and-or-else-takes-a-generic-compare.
+
+  PyBareNoneHere's follow-set is load-bearing at its eight VALUE sites: each
+  consumes the token and builds PyMakeNone without parsing further, so it must
+  know the `None` is the WHOLE expression or `res = None or 5` would swallow the
+  `None` and leave `or 5` dangling. There the list is the test those sites need.
+
+  After `is` / `is not` the question is not "does anything follow" but "is this
+  operand a None" — the `None` is the compare's right operand no matter what
+  comes next, because PyParseBoolAnd / the ternary handle the rest. Asking the
+  value sites' question there meant `b is None and True` fell out of the
+  type-aware lowering entirely: `None` was parsed as an ordinary primary (a
+  boxed VT_EMPTY variant) and compared to a managed string handle with a generic
+  binop that tests nothing relevant, so the commonest compound None guard there
+  is silently took the other branch.
+
+  Widening the SHARED predicate is the fix that looks obvious and breaks the
+  eight value sites. Hence a second predicate rather than three more tokens. }
+begin
+  PyNoneOperandHere := CurTok.Kind = tkNil;
 end;
 
 function PyMakeNone: Integer;
