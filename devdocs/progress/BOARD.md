@@ -10,9 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | task-t-pin-fast-track-t-owns-verification | T | 80 | task | Track A pins in 30s and never waits; everything heavier moves to Track T, asynchronous and per-sha. Status is a JOIN of pin.log x tstate, not a label on the pin. Native full regression (incl. NilPy + corpus) is the priority right now, above the cross matrix. | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-nilpy-a-bare-attribute-on-a-call-result-is-refused | N | 50 | bug | `g(3).v` — a bare ATTRIBUTE (no parens) on a call result is a parse error, while `g(3).show()` and `g()[1]` now work. The runtime getter it would need, pydynattr_get_v, only consults the dynamic-attribute side store and never the object's DECLARED fields, so wiring the parse alone turns the error into a false AttributeError. | — |
 
 ## unfinished (8)
 
@@ -46,9 +48,9 @@ _none_
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-n-a-type-name-is-not-a-first-class-value | N | 45 | bug | `t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not | — |
+| bug-n-hash-builtin-is-not-implemented | N | 35 | bug | `hash(x)` is not implemented | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
-| bug-nilpy-a-bare-attribute-on-a-call-result-is-refused | N | 50 | bug | `g(3).v` — a bare ATTRIBUTE (no parens) on a call result is a parse error, while `g(3).show()` and `g()[1]` now work. The runtime getter it would need, pydynattr_get_v, only consults the dynamic-attribute side store and never the object's DECLARED fields, so wiring the parse alone turns the error into a false AttributeError. | — |
 | bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys | N | 50 | bug | A class defining BOTH `__hash__` and `__eq__` is a legal dict key in CPython, and pxx stores it then never finds it again: `d = {k1: 'a'}; k2 in d` is False for an equal k2. The entry is silently lost — no diagnostic, and `k1 == k2` answers True right beside it. | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
@@ -485,7 +487,6 @@ _none_
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
-- [p 50] [N] bug-nilpy-a-bare-attribute-on-a-call-result-is-refused
 - [p 50] [N] bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys
 - [p 50] [N] bug-nilpy-method-chained-on-open-result-fails-to-parse
 - [p 50] [N] bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later
@@ -581,6 +582,7 @@ _none_
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
+- [p 35] [N] bug-n-hash-builtin-is-not-implemented
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
 - [p 35] [N] bug-nilpy-def-returning-a-precreated-global-has-no-return-type
 - [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
