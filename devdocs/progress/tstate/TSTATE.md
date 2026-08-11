@@ -3,11 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg **QUIET 10d8h** | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `a37f78681518` | 2026-08-11T02:39:00Z | GREEN (native) | 146.4s | `3650314233d3` GREEN |
+| plexus | `a37f78681518` | 2026-08-11T02:50:09Z | RED (full) | 627.7s | `a37f78681518` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- none
+- **test-uforth#00** (plexus): bad `a37f78681518`, last good `3650314233d3`, 7 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
