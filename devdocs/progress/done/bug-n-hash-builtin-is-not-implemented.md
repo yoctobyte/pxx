@@ -73,4 +73,4 @@ Gate: `make test-nilpy` EXIT=0, `gate.sh quick` GREEN. New
 (`compiler/builtin`).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit da16b2be9.
