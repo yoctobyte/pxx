@@ -87,4 +87,4 @@ are an argv assertion on every target and currently all collapse to the default
 branch on i386 — a passing i386 run of those three is the proof).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit b58b3904e.
