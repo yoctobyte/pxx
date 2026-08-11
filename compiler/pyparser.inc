@@ -2387,6 +2387,22 @@ begin
   Result := castNode;
 end;
 
+{ Wrap a variant in pylib's pyraise_check — the value passes through, a
+  non-object tag raises TypeError. Kept a separate node so the unbox below sees
+  an ordinary variant expression. }
+function PyRaiseCheckVariant(varNode: Integer): Integer;
+var argN, callN, pi: Integer;
+begin
+  pi := FindProc('pyraise_check');
+  if pi < 0 then begin Result := varNode; Exit; end;
+  argN := AllocNode(AN_ARG); ASTLeft[argN] := varNode; ASTRight[argN] := -1;
+  callN := AllocNode(AN_CALL);
+  ASTIVal[callN] := pi;
+  ASTTk[callN] := Ord(tyVariant);
+  ASTLeft[callN] := argN;
+  Result := callN;
+end;
+
 function PyUnboxVariantToClass(varNode, ci: Integer): Integer;
 begin
   Result := PyUnboxVariantToClassEx(varNode, ci, False);
@@ -17398,6 +17414,23 @@ begin
     else
     begin
       PyParseBoolExpr;
+      { A VARIANT operand — `raise xs[0]`, `raise d[k]`, `raise cls(msg)`
+        through a class value, a for-in variable. IR_RAISE wants the instance
+        POINTER; handed the 16-byte variant it jumped through the tag word and
+        SEGFAULTED, with no diagnostic. `raise E("x")` and `raise e` on a
+        class-typed local were always fine, so this is the variant arm of the
+        same static-vs-variant split `__eq__` had
+        (bug-nilpy-raising-a-variant-segfaults).
+
+        Unboxed to Exception rather than to a specific class: the static type
+        is exactly what a variant does not have, and it is not needed — handler
+        matching reads the object's own VMT, so the base class is the honest
+        static answer. A non-object tag unboxes to nil and pyraise_check turns
+        that into the TypeError CPython raises for `raise 5`. }
+      if (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) and
+         (FindUClass('Exception') >= 0) then
+        CurASTNode := PyUnboxVariantToClass(PyRaiseCheckVariant(CurASTNode),
+                                            FindUClass('Exception'));
       ASTLeft[node] := CurASTNode;
       { `raise X from e` — PEP 3134 exception chaining. The cause is metadata
         (it sets __cause__ for the traceback); the raise itself is unchanged, so

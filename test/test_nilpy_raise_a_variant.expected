@@ -1,0 +1,14 @@
+forin   E a
+forin   F b
+dict    E dk
+clsval  E via class value
+specific b
+typeerror
+typeerror
+typeerror
+typeerror
+typeerror
+static  E static
+local   E local
+indef   E from a def
+reraise E a

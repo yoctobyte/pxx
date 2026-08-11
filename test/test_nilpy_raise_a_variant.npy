@@ -1,0 +1,93 @@
+# `raise <variant>` SEGFAULTED — an exception held in a list, a dict, a for-in
+# variable, or built through a class VALUE.
+#
+# IR_RAISE wants the instance POINTER; handed the 16-byte variant slot it jumped
+# through the tag word, with no diagnostic. `raise E("x")` and `raise e` on a
+# class-typed local were always fine, so this was the variant arm of the same
+# static-vs-variant split `__eq__` had: the shape a minimal test writes worked
+# and the shape real code writes crashed.
+#
+# The operand is now unboxed to Exception — the base class is the honest static
+# answer, since handler matching reads the object's own VMT — behind a
+# pyraise_check that turns a non-exception into the TypeError CPython raises.
+# That check tests `is Exception`, not merely "is an object": a LIST is tag 7
+# too, and `raise [1]` must be a TypeError, not a raised TPyList.
+#
+# Diffed against CPython. bug-nilpy-raising-a-variant-segfaults
+
+
+class E(Exception):
+    pass
+
+
+class F(Exception):
+    pass
+
+
+xs = [E("a"), F("b")]
+for x in xs:
+    try:
+        raise x
+    except Exception as e:
+        print("forin  ", type(e).__name__, str(e))
+
+d = {"k": E("dk")}
+try:
+    raise d["k"]
+except Exception as e:
+    print("dict   ", type(e).__name__, str(e))
+
+# through a class VALUE — feature-nilpy-class-as-a-value's shape
+ke = E
+try:
+    raise ke("via class value")
+except Exception as e:
+    print("clsval ", type(e).__name__, str(e))
+
+# a SPECIFIC handler still matches on the runtime class, not the static one
+try:
+    raise xs[1]
+except F as e:
+    print("specific", str(e))
+except Exception as e:
+    print("WRONG", type(e).__name__)
+
+# raising a NON-exception is a catchable TypeError, never a crash. The list is
+# the interesting row: it is an object, so an "is it tag 7" check would pass it.
+for v in [5, "s", [1], 1.5, None]:
+    try:
+        raise v
+    except TypeError:
+        print("typeerror")
+    except Exception as e:
+        print("WRONG", type(e).__name__)
+
+# the statically typed forms must be untouched
+try:
+    raise E("static")
+except Exception as e:
+    print("static ", type(e).__name__, str(e))
+
+se = E("local")
+try:
+    raise se
+except Exception as e:
+    print("local  ", type(e).__name__, str(e))
+
+# re-raise from a handler, and a raise inside a def, both over variants
+def boom(err):
+    raise err
+
+
+try:
+    boom(E("from a def"))
+except Exception as e:
+    print("indef  ", type(e).__name__, str(e))
+
+try:
+    try:
+        raise xs[0]
+    except Exception:
+        raise
+except Exception as e:
+    print("reraise", type(e).__name__, str(e))

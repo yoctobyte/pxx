@@ -4,6 +4,8 @@ type: bug
 track: N
 prio: 55
 found-by: claude-AN
+status: done
+owner: claude-AN
 ---
 
 # Raising an exception held in a variant segfaults
@@ -63,3 +65,54 @@ image and is likely to have the same hole.
 `raise xs[0]`, `raise d[k]`, `raise cls(msg)` through a class VALUE, a for-in
 variable, `raise 5` (must be a catchable TypeError, not a crash), and the
 `except` side; diffed against CPython.
+
+## Resolution (2026-08-11)
+
+The fix-shape section above was right about both halves, and the `except` mirror
+it predicted is real (below).
+
+### Fix
+
+`raise <expr>` in `PyParseStatement` now unboxes a `tyVariant` operand to an
+instance pointer before building `AN_RAISE`, through the existing
+`PyUnboxVariantToClass` (pylib's `pyvarobj` + a class cast).
+
+Unboxed to **Exception**, not to a specific class, and that is the point rather
+than a shortcut: the static type is exactly what a variant does not have, and it
+is not needed — handler matching reads the raised object's own VMT, so
+`except F:` still selects on the runtime class. The base class is the honest
+static answer.
+
+In front of it, pylib's `pyraise_check(v)` passes the value through and raises
+`TypeError: exceptions must derive from BaseException` otherwise — what CPython
+does for `raise 5`. It tests **`is Exception`**, not merely "is it tag 7", and
+that distinction is load-bearing: a LIST is an object too, so an
+object-tag-only check let `raise [1]` through and an `except Exception` arm
+then caught a raised `TPyList` as though it were an exception. Measured, not
+assumed — the first cut did exactly that.
+
+### Verified
+
+`test/test_nilpy_raise_a_variant.npy` (`.expected` from CPython), wired into
+`make test-nilpy`: a for-in variable, a list element, a dict value, a class
+VALUE, a specific handler matching the runtime class, the five non-exception
+kinds each as a catchable TypeError (list included), a raise inside a def, a
+bare re-raise over a variant, and the two statically typed forms as controls.
+Gate: `tools/gate.sh quick` GREEN + `make test-nilpy`.
+
+### The `except` mirror — refused, not crashing, left open
+
+```python
+kc = E
+try: raise E("x")
+except kc as e: ...     # error: Nil Python: unknown exception class kc
+```
+
+A class VALUE as a HANDLER operand is a named refusal, at `pinned` too. That is
+dynamic handler matching — a feature, not this crash — and a diagnostic is an
+acceptable answer for it, so it is recorded here rather than opened as a bug.
+It belongs with [[feature-nilpy-class-as-a-value]]'s remaining surface if
+anyone wants it.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

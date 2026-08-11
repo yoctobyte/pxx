@@ -582,6 +582,7 @@ function PyClassRefStr(const v: Variant): AnsiString;
   protocol (0 = not handled, 1 = False, 2 = True). Answers only when an OBJECT
   is involved, so a user __eq__ is reached; declines everything else. Must stay
   in the interface — ir.inc calls it by name. }
+function pyraise_check(const v: Variant): Variant;
 function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
@@ -3703,6 +3704,27 @@ end;
 
   The PROMOTABLE-INT family never reaches here — PXXPromoVarCmpTry runs first
   and answers before this. }
+{ `raise <variant>` — CPython raises `TypeError: exceptions must derive from
+  BaseException` for anything that is not an exception object, and pxx used to
+  SEGFAULT on the whole shape (the variant's 16-byte slot reached IR_RAISE where
+  an instance POINTER belongs, so it jumped through the tag word). The frontend
+  unboxes a variant operand to a pointer; this is the check in front of that, so
+  a non-object tag becomes the diagnostic instead of a wild jump. The value
+  passes through so the two compose in one expression.
+  bug-nilpy-raising-a-variant-segfaults }
+function pyraise_check(const v: Variant): Variant;
+var o: TObject;
+begin
+  o := nil;
+  if pyvartag(v) = 7 then o := TObject(pyvarobj(v));
+  { `is Exception`, not merely "is an object": a LIST is tag 7 too, and
+    `raise [1]` must be the TypeError CPython gives, not a raised TPyList that
+    an `except Exception` arm then catches as if it were one. }
+  if (o = nil) or (not (o is Exception)) then
+    raise TypeError.Create('exceptions must derive from BaseException');
+  Result := v;
+end;
+
 function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
 var eq: Boolean;
 begin

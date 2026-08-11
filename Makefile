@@ -716,6 +716,12 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_parentcall26 | diff -u test/test_nilpy_parent_call_after_instantiation.expected -
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy /tmp/test_nilpy_class_attr_hoist_leak26
 	/tmp/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
+	# `raise <variant>` SEGFAULTED — an exception held in a list/dict/for-in variable
+	# or built through a class VALUE reached IR_RAISE as a 16-byte variant where the
+	# instance POINTER belongs. Includes `raise [1]` (an object, but not an
+	# exception) as a catchable TypeError. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_raise_a_variant.npy /tmp/test_nilpy_raise_a_variant26
+	/tmp/test_nilpy_raise_a_variant26 | diff -u test/test_nilpy_raise_a_variant.expected -
 	# `__eq__` was SKIPPED as soon as one operand was a VARIANT — the dunder worked
 	# with two named locals and `a == xs[0]` compared payloads, silently False. `==`
 	# now routes to pyvar_eqv, the router over the equality `in`/count/index already

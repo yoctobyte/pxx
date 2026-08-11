@@ -690,6 +690,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-pytypeerror-halts-instead-of-raising | N | 40 | bug | `PyTypeError` halts the process, so `except TypeError:` cannot catch it | — |
 | bug-nilpy-qualified-proc-omitted-default | N | 35 | bug | A qualified UNIT-LEVEL proc call cannot omit a defaulted parameter | — |
 | bug-nilpy-raise-of-empty-exception-subclass-with-no-args | N | 65 | bug | `raise E()` where E is a user Exception subclass with an EMPTY body segfaults or prints nothing. Passing any argument, or giving E an __init__, makes it work — so the idiomatic empty exception class is the broken one | — |
+| bug-nilpy-raising-a-variant-segfaults | N | 55 | bug | `raise xs[0]` — raising an exception held in a VARIANT segfaults. `raise E(\"x\")` and `raise e` on a class-typed local both work, so only the variant-operand arm is broken; no diagnostic, and the crash is at the raise. | — |
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
 | bug-nilpy-range-negative-runtime-step-yields-empty | N | 55 | bug | `range(a, b, s)` with a NEGATIVE step passed at runtime yields an empty range | — |
 | bug-nilpy-range-over-a-variant-bound-loops-forever | N | 75 | bug | `for i in range(n)` LOOPS FOREVER when n is a variant | — |
