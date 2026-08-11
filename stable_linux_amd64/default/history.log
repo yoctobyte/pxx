@@ -254,3 +254,4 @@
 2026-08-10T10:30:35Z  v254  fee55aacb5a76c9a2c4f496a8c0dcf80621d8a1d3cd5b871b31281e6f9fef9f6  de1b49a09c7a7c1886a96b1e517da2011c8e6780  docs(progress): record the shas the resolves landed as
 2026-08-10T10:56:53Z  v255  259f2580d97fc9ae67a985586a057a69b2da38773b9b02692c51d9f198fb1668  71929a82deb790952425309f4df92c8840a540c7  docs(progress): record the shas the resolves landed as
 2026-08-10T14:03:09Z  v256  44db8460bb761c135b2cc38752c5690160ca56a7e15591e74436ab1e96f441db  4c2836ea1106ea6a2688e877787100be23c8f6de  docs(progress): regenerate board after the finalizer/import landings
+2026-08-11T16:18:30Z  v257  b2ec8a9f0ec28408e8d239db5e7df84fb6f7e0681717d985085e2f29381c3082  96b4b40ab6c5f0cda96864dee86ed47d50cfb57b  tickets(N): feature-nilpy-parallel-for-in had no track: frontmatter — resolved to A

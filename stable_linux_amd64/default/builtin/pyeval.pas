@@ -68,6 +68,12 @@ function PyClosureCall1(const clv: Variant; const a0: Variant): Variant;
   (Word.native) and called as `word.native(vm2)`. pyclosure_is tells a closure
   object apart from a real compiled function address so the field-call site can
   branch. }
+{ Box a class's RTTI blob address as a VT_CLASSREF variant — how a NilPy CLASS
+  used as a VALUE is represented (`cls = A`, `{"a": A}[k](x)`). The AN_CLASSREF
+  lowering calls this BY NAME, so it must stay in the interface. }
+function PyBoxClassRef(p: Pointer): Variant;
+function pyclassref_is(const cb: Variant): Boolean;
+
 function pyclosure_is(p: Pointer): Boolean;
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { The same call, keeping the RESULT — what a key function is for. }
@@ -210,6 +216,10 @@ procedure pycall_value(const cb: Variant; const arg: Variant; withArg: Boolean);
 function pyvar_callv0(const cb: Variant): Variant;
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
 function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
+{ The four-argument dispatcher. Past arity 3 the old lowering calls through the
+  callee's payload as a code ADDRESS — a segfault for a lambda, whose value is
+  an object. bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+function pyvar_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 
 { Box a callable OBJECT pointer (a lambda's pyeval closure or lifted bound-fn)
@@ -224,6 +234,7 @@ const
     visible to a builtin unit, so the reflection blob's numeric kinds are used raw. }
   TK_DOUBLE  = 19;
   TK_VARIANT = 22;
+  TK_ANSISTR = 23;   { Ord(tyAnsiString) — Exception.Create's one parameter }
 
   { Token kinds — plain integer consts (not an enum) so they are valid `case`
     labels; pxx rejects Ord(enumconst) as a case label. }
@@ -274,6 +285,18 @@ type
   TVPr3 = procedure(self: Pointer; const a, b, c: Variant);
   TVPr4 = procedure(self: Pointer; const a, b, c, d: Variant);
   TVPr5 = procedure(self: Pointer; const a, b, c, d, e: Variant);
+  { …and the shapes a NilPy `*args` constructor has: the star slot is a TPyList
+    CLASS parameter (a plain pointer), never a Variant, so it cannot ride in a
+    TVPr* slot. Only the star-LAST forms exist, which is all Python allows for
+    a positional `*args`. }
+  { An EXCEPTION subclass inherits Exception.Create(const msg: AnsiString) and
+    is constructed through it — a class VALUE holding one is the `raise cls(m)`
+    registry shape, so the string arity-1 form has to exist beside the variant
+    ones. }
+  TSPr1 = procedure(self: Pointer; const s: AnsiString);
+  TVPrS1 = procedure(self: Pointer; l: TPyList);
+  TVPrS2 = procedure(self: Pointer; const a: Variant; l: TPyList);
+  TVPrS3 = procedure(self: Pointer; const a, b: Variant; l: TPyList);
   { AnsiString-return (e.g. next_token_strict), N Variant args (0..2). }
   TSFn0 = function(self: Pointer): AnsiString;
   TSFn1 = function(self: Pointer; const a: Variant): AnsiString;
@@ -344,6 +367,21 @@ var r: PPyRec;
 begin
   r := PPyRec(@Result);
   r^.VType := 0; r^.Payload := 0;
+end;
+
+{ box a CLASS (its RTTI blob address) as a VT_CLASSREF variant — a NilPy class
+  used as a VALUE. No retain: the payload is a static data address, not a heap
+  block, so the clear/retain emitters must leave tag 11 alone. }
+function PyBoxClassRef(p: Pointer): Variant;
+var r: PPyRec;
+begin
+  r := PPyRec(@Result);
+  r^.VType := 11; r^.Payload := Int64(p);
+end;
+
+function pyclassref_is(const cb: Variant): Boolean;
+begin
+  pyclassref_is := (PPyRec(@cb)^.VType = 11) and (PPyRec(@cb)^.Payload <> 0);
 end;
 
 { box a class/object pointer as a VT_OBJECT variant }
@@ -1054,25 +1092,26 @@ begin
     n := Length(s); i := pyvar_to_int(index);
     if i < 0 then i := i + n;
     if (i < 0) or (i >= n) then
-    begin writeln('pyeval: string index out of range'); Halt(1); end;
+    raise IndexError.Create('string index out of range');
     res := MakeStr(s[i + 1]);
     Exit;
   end;
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot subscript a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object is not subscriptable');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
   begin
     li := TPyList(o); n := li.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: list index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then raise IndexError.Create('list index out of range');
     res := li.at(i);
   end
   else if o is TPyBytes then
   begin
     by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then raise IndexError.Create('index out of range');
     res := pyvar_of_int(by.at(i));
   end
   else if o is TPyDict then
@@ -1081,7 +1120,8 @@ begin
     res := di.fetch(index);
   end
   else
-    begin writeln('pyeval: unsupported subscript target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object is not subscriptable');
 end;
 
 { container[index] = val }
@@ -1090,20 +1130,22 @@ procedure PySubscriptSet(const container: Variant; const index: Variant;
 var o: TObject; li: TPyList; by: TPyBytes; di: TPyDict; i, n: Int64;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot subscript-assign a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object does not support item assignment');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
   begin
     li := TPyList(o); n := li.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: list assignment index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then
+      raise IndexError.Create('list assignment index out of range');
     li.put(i, val);
   end
   else if o is TPyBytes then
   begin
     by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then raise IndexError.Create('index out of range');
     by.put(i, pyvar_to_int(val) and $FF);
   end
   else if o is TPyDict then
@@ -1112,7 +1154,8 @@ begin
     di.store(index, val);
   end
   else
-    begin writeln('pyeval: unsupported subscript-assign target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object does not support item assignment');
 end;
 
 { container[lo:hi] = value. bytes take a variant RHS holding bytes; lists take a
@@ -1121,14 +1164,16 @@ procedure PySliceSet(const container: Variant; lo, hi: Int64; const val: Variant
 var o: TObject;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot slice-assign a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object does not support slice assignment');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyBytes then
     pybytes_setslice_v(TPyBytes(o), lo, hi, val)
   else if o is TPyList then
     pylist_setslice(TPyList(o), lo, hi, TPyList(pyvarobj(val)))
   else
-    begin writeln('pyeval: unsupported slice-assign target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object does not support slice assignment');
 end;
 
 { del container[index] }
@@ -1136,19 +1181,21 @@ procedure PyDelSubscript(const container: Variant; const index: Variant);
 var o: TObject; li: TPyList; di: TPyDict; i, nn: Int64;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot del a subscript of a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object does not support item deletion');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
   begin
     li := TPyList(o); nn := li.count; i := pyvar_to_int(index);
     if i < 0 then i := i + nn;
-    if (i < 0) or (i >= nn) then begin writeln('pyeval: del index out of range'); Halt(1); end;
+    if (i < 0) or (i >= nn) then raise IndexError.Create('list index out of range');
     li.pop_at(i);
   end
   else if o is TPyDict then
     TPyDict(o).remove(index)
   else
-    begin writeln('pyeval: unsupported del target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object does not support item deletion');
 end;
 
 { ---- tokenizer ---- }
@@ -1763,6 +1810,23 @@ end;
   against; this side is what stamps the tag. }
 const VT_PYCLOSURE = 9;
       VT_BOUNDFN   = 10;
+      { …and the two STATIC-address arms of the same family. Neither payload is
+        a heap block, so neither joins the object-tag lists; they exist so the
+        callee guard can tell code and a class apart from an integer. }
+      VT_CLASSREF  = 11;
+      VT_CALLABLE  = 12;
+{ The two tags PyNotCallable still names by number. Same mirror rule as the
+  block above — they restate compiler/defs.inc's VT_BOUNDMETHOD / VT_OBJECT and
+  must change with them. Prefixed VT_NC_ so the duplicate names cannot collide
+  with anything a later include brings in.
+
+  This list used to hold VT_INT/VT_DOUBLE/VT_BOOL/VT_CHAR/VT_STRING/
+  VT_PROMO_BASE too, because the guard was a REFUSAL list. It is an allow-list
+  now (see PyNotCallable), so the non-callable tags do not need naming at all —
+  which is the point: a tag nobody thought about is refused by default instead
+  of being let through. }
+const VT_NC_BOUNDMETHOD = 8;
+      VT_NC_OBJECT      = 7;
 type
   TPyClosure = record
     Kinds:  array of Integer;
@@ -1984,6 +2048,7 @@ type
   TPyCallFn1 = function(const a0: Variant): Variant;
   TPyCallFn2 = function(const a0, a1: Variant): Variant;
   TPyCallFn3 = function(const a0, a1, a2: Variant): Variant;
+  TPyCallFn4 = function(const a0, a1, a2, a3: Variant): Variant;
   { Variant results, not Int64: an unannotated NilPy def returns its value
     through a hidden destination pointer the callee always copies into. Through
     an Int64-typed pointer that register held stale data and the callee's
@@ -2554,6 +2619,119 @@ begin
   raise TypeError.Create('<lambda>() takes ' + want + ' but '
     + pystr_of(n) + ' were given');
 end;
+
+procedure PyClassRefNew(const cb: Variant; nargs: Integer;
+                        const a0, a1, a2, a3: Variant; var res: Variant);
+{ `cls(args)` where `cls` holds a VT_CLASSREF variant — a NilPy class reached as
+  a VALUE. Allocates the DYNAMIC class the blob names (size@InstanceSize), stamps
+  its VMT, and runs its `create` through the blob's own method table, so a value
+  holding A and one holding B each construct their own class from one call site.
+
+  Why the ctor is reflected rather than dispatched through a VMT slot: a NilPy
+  constructor is deliberately given NO virtual slot (pyparser's slot assignment
+  excludes isCtor), so there is no slot number two unrelated classes could agree
+  on. The RTTI method table already carries every method's name AND code address
+  for the host bridge below, which makes the lookup a reuse rather than new
+  machinery.
+
+  The ctor MUST have all-Variant parameters — PyClassUsedAsValue widens it for
+  exactly this reason. Calling one that was not widened would reinterpret a
+  boxed variant as a raw Int64, so a mismatch raises instead: a wrong value here
+  is unrecoverable, and the only way to reach it is a compiler bug.
+
+  Result is a var-out parameter, not a function result: the same Variant-fn-
+  return NRVO corruption PyClosureCall1 is written around. }
+var
+  cls: PClassRTTI;
+  mi: PMethInfo;
+  inst: Pointer;
+  pk: PInt64;
+  i, n, starIdx, nFixed: Integer;
+  av: array[0..3] of Variant;    { the call's arguments, then the ctor's }
+  star: TPyList;
+  vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4;
+  vs1: TVPrS1; vs2: TVPrS2; vs3: TVPrS3; sp1: TSPr1;
+  strCtor: Boolean;
+begin
+  res := pynone;
+  cls := PClassRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  if cls = nil then Exit;
+  av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
+  n := 0;
+  starIdx := -1;
+  mi := PyFindMethCI(cls, 'create');
+  if mi <> nil then
+  begin
+    n := Integer(mi^.Arity) - 1;             { user args; index 0 is Self }
+    { a `*args` parameter is a PACKED slot, not a pass-through one: the caller
+      owes it a TPyList of every surplus argument. Its index rides in the meth
+      Flags word (RTTI_METH_STARIDX_SHIFT) because nothing else in the reflected
+      signature distinguishes it from an ordinary parameter. }
+    starIdx := Integer((mi^.Flags shr 8) and 255) - 1;
+    if n > 4 then
+      raise TypeError.Create('constructing ' + cls^.NamePtr^ + ' through a '
+        + 'class value supports at most 4 constructor parameters');
+    if starIdx >= 0 then
+    begin
+      nFixed := starIdx - 1;                 { fixed user args before the star }
+      if nargs < nFixed then PyRaiseArity(nargs, nFixed, nFixed);
+      if starIdx > 3 then
+        raise TypeError.Create('constructing ' + cls^.NamePtr^ + ' through a '
+          + 'class value supports at most 2 fixed parameters before *args');
+      star := TPyList.Create;
+      for i := nFixed to nargs - 1 do star.append(av[i]);
+    end
+    else if n <> nargs then PyRaiseArity(nargs, n, n);
+    pk := PInt64(mi^.ParamKinds);
+    { `class E(Exception): pass` inherits Exception.Create(const msg:
+      AnsiString) — a REAL signature this must marshal to, not a widening the
+      frontend forgot. Recognised as its own shape rather than folded into the
+      check below, because the check exists to catch exactly the case where the
+      frontend DID forget. }
+    strCtor := (n = 1) and (starIdx < 0) and (pk <> nil) and (pk[1] = TK_ANSISTR);
+    if (pk <> nil) and (not strCtor) then
+      for i := 1 to n do
+        if (pk[i] <> TK_VARIANT) and (i <> starIdx) then
+          raise TypeError.Create('cannot construct ' + cls^.NamePtr^
+            + ' through a class VALUE: its constructor takes '
+            + pystr_of(pk[i]) + ' at position ' + pystr_of(Int64(i))
+            + ', which this path cannot marshal');
+  end;
+  inst := PXXObjAlloc(NativeInt(cls^.InstanceSize));
+  PPointer(inst)^ := cls^.VMTPtr;            { stamp the dynamic class's VMT }
+  if mi <> nil then
+  begin
+    { through a typed proc VARIABLE, not a cast-and-call — the same shape
+      PyHostCall's trampoline uses below. }
+    if strCtor then
+    begin
+      sp1 := TSPr1(mi^.Code);
+      sp1(inst, pystr_of(av[0]));
+    end
+    else if starIdx >= 0 then
+      case starIdx of
+        1: begin vs1 := TVPrS1(mi^.Code); vs1(inst, star); end;
+        2: begin vs2 := TVPrS2(mi^.Code); vs2(inst, av[0], star); end;
+        3: begin vs3 := TVPrS3(mi^.Code); vs3(inst, av[0], av[1], star); end;
+      end
+    else
+      case n of
+        0: begin vp0 := TVPr0(mi^.Code); vp0(inst); end;
+        1: begin vp1 := TVPr1(mi^.Code); vp1(inst, av[0]); end;
+        2: begin vp2 := TVPr2(mi^.Code); vp2(inst, av[0], av[1]); end;
+        3: begin vp3 := TVPr3(mi^.Code); vp3(inst, av[0], av[1], av[2]); end;
+        4: begin vp4 := TVPr4(mi^.Code); vp4(inst, av[0], av[1], av[2], av[3]); end;
+      end;
+  end;
+  { create(rc=1) then the slot's own +1, and no release of the alloc's — the
+    convention every other object-producing site in this unit uses (the list and
+    dict literal arms below). Being consistent matters more than being tight:
+    reclamation is one open design (feature-nilpy-object-reclamation), and an
+    extra release HERE against a convention that keeps the +1 elsewhere is a
+    use-after-free, not a saving. }
+  res := PyBoxObj(inst);
+end;
+
 
 function PyMakeClosure(fnIdx: Integer): Variant;
 var c, i: Integer; r: PPyRec;
@@ -4228,9 +4406,39 @@ begin
 end;
 
 procedure PyNotCallable(const cb: Variant);
-{ A name bound to None (an import that did not resolve, a value never assigned)
-  used as a callee. Python raises TypeError; the older pyvar_callee_addr path
-  says the same thing, so the message stays recognisable. }
+{ The callee guard: raise TypeError for a value that cannot possibly be code,
+  instead of jumping to its payload and dumping core
+  (bug-nilpy-calling-a-non-callable-segfaults).
+
+  An ALLOW-LIST, not a refusal list, and that inversion is the whole point of
+  feature-nilpy-a-callable-value-needs-its-own-variant-tag. It USED to be a
+  refusal list because it had to be: a plain def's code address boxed as
+  VT_INT64 (2) — the same tag `3 + 4`, `2**40` and `int("99")` wear, since
+  1-vs-2 is an integer WIDTH distinction and says nothing about callability.
+  Refusing tag 2 would have broken every ordinary call through a def value (106
+  of them across the .npy corpus, measured), so `(3 + 4)(x)` jumped to address 7
+  and dumped core and NO test on the tag could have stopped it.
+
+  A callable now carries VT_CALLABLE (12) — stamped in the backends'
+  variant-boxing tag selection off the SOURCE IR node (IRSrcIsCallable: a code
+  address, or the pyboundfn_*/pyclosure_* chain a lambda in an argument position
+  lowers to), see defs.inc — so the tags finally partition and the guard can
+  state what IS callable:
+
+    8  VT_BOUNDMETHOD  {code, recv} pair (pybound_new)
+    9  VT_PYCLOSURE    pyeval source closure
+    10 VT_BOUNDFN      lifted bound-fn
+    11 VT_CLASSREF     a class used as a value — constructs
+    12 VT_CALLABLE     a plain compiled code address
+    7  VT_OBJECT       ONLY when its class defines __call__
+
+  Everything else is refused, which is strictly more than the old list caught:
+  VT_INT64, VT_EMPTY-with-a-payload, and any tag added later that forgets to say
+  whether it is code. 8 and 11 are unreachable in practice (pycallback_is /
+  pyclassref_is short-circuit ahead of every caller) and are listed anyway — an
+  allow-list fails CLOSED, so naming one tag too many costs nothing and omitting
+  one costs a TypeError on working code. }
+var t: Int64;
 begin
   { TypeError, not a bare Exception: `except TypeError:` must see it. This was
     the one raise site of the family left in pyeval when the pylib ones were
@@ -4241,6 +4449,68 @@ begin
   if PPyRec(@cb)^.Payload = 0 then
     raise TypeError.Create('object is not callable — the name is '
       + 'None (an import that did not resolve, or a value never assigned)');
+
+  t := PPyRec(@cb)^.VType;
+  if (t = VT_NC_BOUNDMETHOD) or (t = VT_PYCLOSURE) or (t = VT_BOUNDFN) or
+     (t = VT_CLASSREF) or (t = VT_CALLABLE) then Exit;
+
+  { A class INSTANCE (tag 7) — a list, dict, tuple or a user object. Callable
+    only if its class defines `__call__`; otherwise the payload is an instance
+    pointer and jumping to it faults. An instance that DOES define `__call__`
+    falls through to the existing path rather than being refused here — wiring
+    that dispatch up is its own ticket
+    (bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched); refusing it
+    would be a regression, so this arm stays narrow. }
+  if t = VT_NC_OBJECT then
+  begin
+    if PyFindMethCI(GetInstanceRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload))),
+                    '__call__') = nil then
+      raise TypeError.Create('object is not callable');
+    Exit;
+  end;
+
+  { the allow-list's closing arm: an int, a float, a string, a promo, a tag
+    nobody has classified — none of them is code. }
+  raise TypeError.Create('object is not callable');
+end;
+
+function PyCallDunder(const cb: Variant; n: Integer;
+                      const a0, a1, a2: Variant; var res: Variant): Boolean;
+{ `obj(...)` where obj is a class INSTANCE whose class defines `__call__` —
+  Python's callable-object protocol. Answers False for anything else, so each
+  pyvar_callv<n> can offer the value here and fall through unchanged.
+
+  PyNotCallable has always let this shape past (it refuses a tag-7 instance only
+  when the class has NO `__call__`), and past it the payload — an INSTANCE
+  POINTER — was called as a code address, which dumps core.
+
+  Only the DYNAMIC receiver ever got here, and that is why the bug outlived so
+  much: `c(5)` on a named local works and always has, because the frontend knows
+  c's class and lowers a direct method call. Reach the same instance through a
+  dict, a list, a call result or an unannotated parameter and the receiver is a
+  variant, this dispatcher runs, and it faulted. Measured on `pinned`: `c(5)`
+  printed 10, `{"c": c}["c"](5)` segfaulted
+  (bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched, whose own repro is
+  the passing static form).
+
+  PyHostCall is the existing by-name trampoline and handles the ABI shapes, so
+  this is a receiver + an argument list and nothing else. It is reached only
+  after PyFindMethCI has confirmed the method, which is what makes PyHostCall's
+  missing-method Halt unreachable from here. }
+var inst: Pointer; args: TPyList;
+begin
+  PyCallDunder := False;
+  if PPyRec(@cb)^.VType <> VT_NC_OBJECT then Exit;
+  inst := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if inst = nil then Exit;
+  if PyFindMethCI(GetInstanceRTTI(inst), '__call__') = nil then Exit;
+  args := TPyList.Create;
+  if n >= 1 then args.append(a0);
+  if n >= 2 then args.append(a1);
+  if n >= 3 then args.append(a2);
+  PyHostCall(inst, '__call__', args, res);
+  args.Free;
+  PyCallDunder := True;
 end;
 
 function pyvar_callv0(const cb: Variant): Variant;
@@ -4248,7 +4518,13 @@ var o: Pointer; aLo, aHi: Int64; f0: TPyCallFn0; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv0(cb); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 0, pynone, pynone, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 0, pynone, pynone, pynone, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
   if PyBoundFnArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
@@ -4272,7 +4548,13 @@ var o: Pointer; aLo, aHi: Int64; f1: TPyCallFn1; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv1(cb, a0); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 1, a0, pynone, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 1, a0, pynone, pynone, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
   if PyBoundFnArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
@@ -4297,7 +4579,13 @@ var o: Pointer; aLo, aHi: Int64; f2: TPyCallFn2; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv2(cb, a0, a1); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 2, a0, a1, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 2, a0, a1, pynone, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
   if PyBoundFnArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
@@ -4317,12 +4605,61 @@ begin
   Result := f2(a0, a1);
 end;
 
+function pyvar_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
+{ The FOUR-argument dispatcher. Arities past 3 used to keep the older lowering,
+  which unboxes the callee and calls through the payload as a code ADDRESS —
+  fine for a plain def, and a SEGFAULT for a lambda, whose value is a closure or
+  bound-fn OBJECT that no tag guard there recognises. `q = lambda a,b,c,e: ...;
+  q(1,2,3,4)` therefore jumped to the object pointer. A def bound to a name and
+  called with four arguments always worked, which is what made the crash look
+  like a lambda-arity problem rather than a missing dispatch.
+
+  The interpreted closure has no arity limit — its arguments travel as a TPyList
+  — so it is served exactly as at arity 3. The shapes whose bridges DO stop at
+  three raise here instead of being handed a truncated argument list: dropping
+  arguments silently is the failure mode this dispatcher exists to remove.
+  bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+var o: Pointer; aLo, aHi: Int64; f4: TPyCallFn4; args: TPyList;
+begin
+  Result := pynone;
+  if pycallback_is(cb) then begin Result := pybound_callv4(cb, a0, a1, a2, a3); Exit; end;
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 4, a0, a1, a2, a3, Result); Exit; end;
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if PyClosureArityBad(o, 4, aLo, aHi) then PyRaiseArity(4, aLo, aHi);
+  if PyBoundFnArityBad(o, 4, aLo, aHi) then PyRaiseArity(4, aLo, aHi);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      args := TPyList.Create;
+      args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      args.Free;
+      Exit;
+    end;
+    { a LIFTED bound-fn: the bridge carries three own arguments, and a lambda of
+      four own parameters is not lifted for exactly that reason — so this is
+      unreachable today, and says so rather than truncating if it ever is not. }
+    raise TypeError.Create('a compiled closure takes at most 3 arguments, got 4');
+  end;
+  { a plain compiled code address — what the old lowering handled correctly }
+  f4 := TPyCallFn4(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f4(a0, a1, a2, a3);
+end;
+
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 var o: Pointer; aLo, aHi: Int64; f3: TPyCallFn3; args: TPyList;
 begin
   Result := pynone;
   if pycallback_is(cb) then begin Result := pybound_callv3(cb, a0, a1, a2); Exit; end;
+  { a CLASS reached as a VALUE constructs — told apart by its own tag, which
+    is the whole reason VT_CLASSREF exists (an untagged blob address is
+    indistinguishable from the code address a plain def rides as, and this
+    site would have jumped into the RTTI blob). }
+  if pyclassref_is(cb) then begin PyClassRefNew(cb, 3, a0, a1, a2, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 3, a0, a1, a2, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
   if PyBoundFnArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
@@ -4360,7 +4697,11 @@ begin
   PPyRec(@Result)^.Payload := Int64(NativeInt(p));
   if pyclosure_is(p) then PPyRec(@Result)^.VType := VT_PYCLOSURE
   else if pyboundfn_is(p) then PPyRec(@Result)^.VType := VT_BOUNDFN
-  else PPyRec(@Result)^.VType := 0;
+  { anything else here is a plain compiled code address. It used to ride as
+    VT_EMPTY ("a bare payload"), which is what a None binding also wears — so
+    the guard's payload test was the only thing separating the two. VT_CALLABLE
+    says what it is; the payload is still static, so nothing manages it. }
+  else PPyRec(@Result)^.VType := VT_CALLABLE;
 end;
 
 { Reverse bridge, 1-arg form: NilPy's PyMakeDynCall calls this when the callee
@@ -4694,9 +5035,20 @@ begin
     body span). Publish it into the caller's namespace as a callable variant so
     the separate `ns["__body__"]()` reaches it: the value's payload is
     &PyBodyTramp, unboxed and called through the dynamic-call ABI. Keyed with a
-    VT_STRING matching NilPy's dict key (PyVarEq compares string content). }
+    VT_STRING matching NilPy's dict key (PyVarEq compares string content).
+
+    pyvar_of_callable, NOT PyBoxObj: the payload is a CODE ADDRESS, and PyBoxObj
+    stamps VT_OBJECT (7), which claims the payload is a headered heap instance.
+    Nothing inspected a tag-7 payload as an instance, so the lie was inert —
+    until the callee guard began asking whether a tag-7 receiver's class defines
+    `__call__`. GetInstanceRTTI then read a class pointer out of the bytes
+    BEFORE the trampoline's entry point and PyFindMethCI walked that garbage
+    chain, so every uforth run dumped core with its output still unflushed
+    (regression-test-uforth-00, bisected to the guard — the guard exposed this,
+    it did not introduce it). pyvar_of_callable stamps VT_CALLABLE for a bare
+    code address, which is what this is, and takes no phantom reference. }
   if (l <> nil) and (FnFind('__body__') >= 0) then
-    l.store(MakeStr('__body__'), PyBoxObj(Pointer(@PyBodyTramp)));
+    l.store(MakeStr('__body__'), pyvar_of_callable(Pointer(@PyBodyTramp)));
 end;
 
 end.

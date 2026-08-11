@@ -452,20 +452,33 @@ type
   TPyFile = class
   public
     FFd: Int64;
+    { WHICH of the two string types this file's reads yield — the one fact that
+      decides it, held once instead of hard-coded four times.
+
+      CPython picks str or bytes from the MODE, which is a run-time value, so no
+      accessor can answer it from its own static return type. Four of them tried
+      and four got it wrong in one direction or the other: text read(n) and
+      readline() answered bytes, binary read() and readlines() answered str.
+      Every reader now branches on this field and returns a Variant, which is
+      how NilPy carries any value whose type is not known until run time.
+      bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+    FBinary: Boolean;
     constructor Create;
-    function read(u: Int64): TPyBytes; overload;
+    function read(u: Int64): Variant; overload;
     { CPython's `f.read()` with NO argument: everything from the current
       position to EOF, as TEXT. The read-slurp model gave this to TPyList and
       TPyFile never had it, which is the whole reason open() answered two
       different classes by mode (bug-nilpy-open-returns-two-different-classes-by-mode).
       Text, not TPyBytes, because that is what `print(f.read())` must produce —
       our strings are byte strings, the same identity TPyFile.write relies on. }
-    function read: AnsiString; overload;
+    function read: Variant; overload;
+    { the mode-blind slurp both readers are built on }
+    function readall: AnsiString;
     { CPython's readlines(): the rest of the file split into lines, each KEEPING
       its trailing newline, exactly as TPyList's version yielded them so that
       joining reproduces the file byte for byte. }
     function readlines: TPyList;
-    function readline: TPyBytes;
+    function readline: Variant;
     function write(b: TPyBytes): Int64; overload;
     { Python's TEXT-mode write takes a str, and that is how every ordinary
       program spells it. Without this overload `f.write("hello")` resolved to
@@ -577,6 +590,13 @@ function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
 function PyCallableStr(const v: Variant): AnsiString;
+function PyClassRefStr(const v: Variant): AnsiString;
+{ `==`/`!=` TRY for two variant slots by address, in PXXPromoVarCmpTry's
+  protocol (0 = not handled, 1 = False, 2 = True). Answers only when an OBJECT
+  is involved, so a user __eq__ is reached; declines everything else. Must stay
+  in the interface — ir.inc calls it by name. }
+function pyraise_check(const v: Variant): Variant;
+function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
 function pyvar_repr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
   Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
@@ -861,6 +881,7 @@ function pybound_callv0(const cb: Variant): Variant;
 function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
 { Finalizer for dying refcounted objects, installed into builtinheap's
   PXXObjFinalizeHook by the container constructors and pybound_new: releases
   the object's children recursively before the block is freed
@@ -954,6 +975,10 @@ function pyvar_to_int(const v: Variant): Int64;
   cannot be resolved when lowering: `len(v)` picked an overload by static
   type and dereferenced a string as a list, and `v * 2` cannot know whether
   to repeat or multiply (bug-a-len-of-variant-picks-wrong-overload). }
+{ Python's hash(x) — the dict's own key hash, exposed. Equal values hash equal;
+  the NUMBERS are not CPython's and must not be asserted (it salts strings per
+  process). bug-n-hash-builtin-is-not-implemented }
+function pyhash_v(const v: Variant): Int64;
 function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
@@ -1022,6 +1047,10 @@ function pygt_v(const a: Variant; const b: Variant): Boolean;
 function pyge_v(const a: Variant; const b: Variant): Boolean;
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
 function pyint_v(const v: Variant): Variant;      { int(v) as a variant }
+{ `isinstance(x, t)` with t a VALUE — a class object or a tuple of them —
+  rather than a literal type name. See the body.
+  bug-n-a-type-name-is-not-a-first-class-value }
+function pyisinstance_v(const x: Variant; const t: Variant): Boolean;
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
 { Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
@@ -2723,7 +2752,112 @@ begin
             (PyDynAttrStore.indexof(PyDynAttrKey(obj, name)) >= 0);
 end;
 
+type
+  PPyF8  = ^Int64;
+  PPyF4  = ^Integer;
+  PPyU4  = ^Cardinal;
+  PPyF2  = ^SmallInt;
+  PPyU2  = ^Word;
+  PPyF1  = ^ShortInt;
+  PPyU1  = ^Byte;
+  PPyFB  = ^Boolean;
+  PPyFC  = ^Char;
+  PPyFS  = ^Single;
+  PPyFD  = ^Double;
+  PPyFP  = ^Pointer;
+  PPyFN  = ^NativeInt;
+  PPyFV  = ^Variant;
+
+function PyEqAttrCI(const a, b: AnsiString): Boolean;
+{ Case-insensitive name compare. pyeval has the same helper, but pyeval USES
+  pylib and not the reverse, so it cannot be borrowed from there. }
+var i, n: Integer; ca, cb: Char;
+begin
+  n := Length(a);
+  if n <> Length(b) then begin PyEqAttrCI := False; Exit; end;
+  for i := 1 to n do
+  begin
+    ca := a[i]; cb := b[i];
+    if (ca >= 'A') and (ca <= 'Z') then ca := Chr(Ord(ca) + 32);
+    if (cb >= 'A') and (cb <= 'Z') then cb := Chr(Ord(cb) + 32);
+    if ca <> cb then begin PyEqAttrCI := False; Exit; end;
+  end;
+  PyEqAttrCI := True;
+end;
+
+function PyFindFieldCI(cls: PClassRTTI; const name: AnsiString): PFieldInfo;
+{ The DECLARED field of that name, anywhere up the class hierarchy. Mirrors
+  pyeval's PyFindMethCI, which walks the same blob for methods. }
+var curr: PClassRTTI; flds: PFieldInfo; i: Integer;
+begin
+  PyFindFieldCI := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.FieldCount > 0 then
+    begin
+      flds := curr^.FieldsPtr;
+      for i := 0 to Integer(curr^.FieldCount) - 1 do
+        if PyEqAttrCI(flds[i].NamePtr^, name) then
+        begin
+          PyFindFieldCI := @flds[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyDeclaredAttrGet(obj: Pointer; const name: AnsiString;
+                           var found: Boolean): Variant;
+{ A field DECLARED by the class, read out of the instance through its RTTI and
+  boxed by TypeKind.
+
+  The dynamic-attribute store below only knows attributes created by ASSIGNMENT
+  or setattr; a field the class declares is invisible to it. That was fine while
+  every attribute read the frontend could not resolve statically was a dynamic
+  one — but a chained receiver (`mk(3).v`) has no symbol for the frontend to key
+  on, so it must ask at run time, and the answer has to include the declared
+  fields or it is a false AttributeError for a field that plainly exists.
+
+  `found` distinguishes "not a declared field" from "a declared field whose
+  value is None" — a Result of None means the latter.
+  bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+var cls: PClassRTTI; fi: PFieldInfo; a: Pointer; k: Int64;
+begin
+  found := False;
+  if obj = nil then Exit;
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then Exit;
+  fi := PyFindFieldCI(cls, name);
+  if fi = nil then Exit;
+  a := Pointer(NativeInt(obj) + NativeInt(fi^.Offset));
+  k := fi^.TypeKind;
+  found := True;
+  if k = 23 then Result := PPyAnsiString(a)^          { AnsiString }
+  else if k = 19 then Result := PPyFD(a)^             { Double }
+  else if k = 18 then Result := PPyFS(a)^             { Single }
+  else if k = 2 then Result := PPyFB(a)^              { Boolean }
+  else if k = 3 then Result := PPyFC(a)^              { Char }
+  else if (k = 13) or (k = 14) then Result := PPyF8(a)^        { Int64/QWord }
+  else if (k = 1) or (k = 11) then Result := PPyF4(a)^         { Integer/LongInt }
+  else if k = 12 then Result := PPyU4(a)^                       { Cardinal }
+  else if k = 9 then Result := PPyF2(a)^                        { SmallInt }
+  else if k = 10 then Result := PPyU2(a)^                       { Word }
+  else if k = 7 then Result := PPyF1(a)^                        { ShortInt }
+  else if k = 8 then Result := PPyU1(a)^                        { Byte }
+  else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
+  else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
+  else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
+  else
+    { a kind with no Python value shape yet (a record, a set, a frozen string,
+      a static array). Answering with SOMETHING would be a wrong value; report
+      it as not-found so the caller raises, which is at least loud. }
+    found := False;
+end;
+
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
+var declFound: Boolean;
 begin
   { Reached with a receiver STATICALLY known to be a real class instance (or
     nil, a class-typed field/local defaulting to None) — never an int/str/etc
@@ -2740,14 +2874,21 @@ begin
   else if obj = nil then
     raise AttributeError.Create('''NoneType'' object has no attribute ''' + name + '''')
   else
+  begin
+    { ...then the fields the class DECLARES. A dynamic attribute shadows one of
+      the same name, which is the CPython order (instance __dict__ first).
+      bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+    Result := PyDeclaredAttrGet(obj, name, declFound);
+    if declFound then Exit;
     raise AttributeError.Create('''' + TObject(obj).ClassName +
       ''' object has no attribute ''' + name + '''');
+  end;
 end;
 
 function PyVarTypeName(t: Int64): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
-var obj: Pointer; tg: Int64; cn: AnsiString;
+var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -2764,6 +2905,12 @@ begin
   tg := pyvartag(v);
   if tg = 7 then
   begin
+    { a declared field of the object the variant holds — same fallback the
+      statically-typed getter above does, and the reason a chained receiver
+      (`mk(3).v`) resolves at all.
+      bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+    Result := PyDeclaredAttrGet(obj, name, declFound);
+    if declFound then Exit;
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
@@ -3625,6 +3772,15 @@ begin
         Mutually recursive with pydict_eq, which is why that one is
         forward-declared. }
       Result := pydict_eq(TPyDict(pl), TPyDict(ql))
+    else if (pl is TPyBytes) and (ql is TPyBytes) then
+      { …and two BYTES by contents — the third of this unit's containers, and
+        the arm that was missing while list and dict had theirs. `b"ab" ==
+        b"ab"` answered False (identity) where CPython says True, and
+        `b"ab" in [b"ab"]` with it. pybytes_eq already existed; only this line
+        was absent. The sibling-of-a-double-case check
+        (devdocs/dev/normalise-dont-special-case.md) found it the moment `==`
+        started routing here. }
+      Result := pybytes_eq(TPyBytes(pl), TPyBytes(ql))
     else
       { Neither is one of this unit's containers, so they may be USER class
         instances with an `__eq__`. Identity above already settled the equal
@@ -3664,6 +3820,62 @@ begin
   end
   else
     Result := p^.Payload = q^.Payload;
+end;
+
+{ A `TRY` for `==` / `!=` on two variant SLOTS, taken by address and answering
+  in PXXPromoVarCmpTry's exact protocol: **0 = not handled**, 1 = False,
+  2 = True. It is one more link in that same chain in ir.inc, and deliberately
+  nothing more.
+
+  It handles ONE case: an OBJECT (tag 7) on either side, which it answers with
+  PyVarEq — the only equality in this unit that reaches a user `__eq__` (via
+  PyUserObjEq) and compares lists/dicts/tuples by CONTENT. Everything else
+  returns 0 and the caller's own comparison runs completely unchanged
+  (bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant).
+
+  "Answer nothing you were not asked" is the whole design, and it was learned
+  by breaking three things that were not asked. Earlier cuts REPLACED the
+  fallback, on the assumption that PyVarEq covers what it covered. It does not:
+  it wants equal tags outside the numeric family (a CHAR against a
+  one-character STRING went False), and the fallback is not even a routine — on
+  x86-64 `IR_VAR_BINOP` is INLINE-EMITTED code with its own None arm, so
+  `0 == None` became True when the call went to builtinheap's PXXVarBinOp
+  instead. A try that declines cannot regress a case it never sees.
+
+  The PROMOTABLE-INT family never reaches here — PXXPromoVarCmpTry runs first
+  and answers before this. }
+{ `raise <variant>` — CPython raises `TypeError: exceptions must derive from
+  BaseException` for anything that is not an exception object, and pxx used to
+  SEGFAULT on the whole shape (the variant's 16-byte slot reached IR_RAISE where
+  an instance POINTER belongs, so it jumped through the tag word). The frontend
+  unboxes a variant operand to a pointer; this is the check in front of that, so
+  a non-object tag becomes the diagnostic instead of a wild jump. The value
+  passes through so the two compose in one expression.
+  bug-nilpy-raising-a-variant-segfaults }
+function pyraise_check(const v: Variant): Variant;
+var o: TObject;
+begin
+  o := nil;
+  if pyvartag(v) = 7 then o := TObject(pyvarobj(v));
+  { `is Exception`, not merely "is an object": a LIST is tag 7 too, and
+    `raise [1]` must be the TypeError CPython gives, not a raised TPyList that
+    an `except Exception` arm then catches as if it were one. }
+  if (o = nil) or (not (o is Exception)) then
+    raise TypeError.Create('exceptions must derive from BaseException');
+  Result := v;
+end;
+
+function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
+var eq: Boolean;
+begin
+  if (PPyVarRec(a)^.VType <> 7) and (PPyVarRec(b)^.VType <> 7) then
+  begin
+    Result := 0;                      { not ours — the caller's own compare stands }
+    Exit;
+  end;
+  eq := PyVarEq(PPyVarRec(a), PPyVarRec(b));
+  if neq <> 0 then eq := not eq;
+  if eq then Result := 2 else Result := 1;
 end;
 
 { Does this variant hold the given pylib container? k: 1=list, 2=dict,
@@ -4050,6 +4262,24 @@ begin
     PInteger(NativeInt(d.FHash) + i * 4)^ := -1;
   for i := 0 to d.FLen - 1 do
     PyDictHashPut(d, i);
+end;
+
+function pyhash_v(const v: Variant): Int64;
+{ Python's `hash(x)`.
+
+  PyVarHashKey is already exactly this — the dict's own key hash, written to
+  mirror PyVarEq arm for arm (ints by value across tags, strings by content,
+  tuples by element, a user object through its __hash__). It simply was not
+  reachable from the language, so a program could not ask what a value hashes
+  to — which is part of why an ignored __hash__ dunder was hard to narrow.
+
+  Answers a SIGNED Int64, as CPython does. The numbers are not CPython's and
+  must never be asserted: CPython salts string hashing per process, so its own
+  hash("ab") differs between two runs. What holds, and what a test may rely on,
+  is the INVARIANT: equal values hash equal within one run.
+  bug-n-hash-builtin-is-not-implemented }
+begin
+  pyhash_v := Int64(PyVarHashKey(PPyVarRec(@v)));
 end;
 
 function TPyDict.indexof(const k: Variant): Integer;
@@ -5001,6 +5231,16 @@ begin
   else if t = 4 then Result := 'bool'
   else if (t = 5) or (t = 6) then Result := 'str'
   else if t = 7 then Result := 'object'
+  { the callable / class-object tags. They used to fall through to '<unknown>'
+    — except a plain def, which wore VT_INT64 and so answered 'int', so
+    `type(add).__name__` said int and `isinstance(add, int)` said True. Both are
+    consequences of the tag collision VT_CALLABLE closed; naming the tags here
+    is what turns the new tag into the right ANSWER rather than just a
+    different wrong one. CPython spells a bound method 'method' and everything
+    else callable 'function'. }
+  else if t = 8 then Result := 'method'
+  else if (t = 9) or (t = 10) or (t = 12) then Result := 'function'
+  else if t = 11 then Result := 'type'
   else Result := '<unknown>';
 end;
 
@@ -5136,7 +5376,14 @@ var
   r: Int64;
 begin
   p := PPyVarRec(@v);
-  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+  { 12 = VT_CALLABLE, a compiled routine's code address. Here for the
+    machine-word readings the internals do — a callable variant read back into a
+    tyPointer to be called through — NOT because Python would coerce a function
+    to an int. It arrived as VT_INT64 and landed in this arm by accident of the
+    tag collision the callable tag closed, so keeping it is what makes that
+    retagging behaviour-preserving. VT_CLASSREF (11) is deliberately NOT here:
+    it has always had its own tag and has always raised. }
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 12) then
     Result := p^.Payload
   else if p^.VType = 8193 then
   begin
@@ -5831,7 +6078,7 @@ end;
 
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
-    oa, ob: TObject; joined: TPyList; ji: Integer;
+    oa, ob: TObject; joined: TPyList; ji: Integer; jb: TPyBytes;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
   { A USER class operand: its own __add__, or the reflected __radd__. The
@@ -5860,6 +6107,23 @@ begin
       for ji := 0 to TPyList(oa).count - 1 do joined.append(TPyList(oa).at(ji));
       for ji := 0 to TPyList(ob).count - 1 do joined.append(TPyList(ob).at(ji));
       Result := joined;
+      Exit;
+    end;
+    { bytes + bytes -> a NEW bytes, the sibling of the list arm above and of the
+      str arm below. It was missing, so a variant-held bytes fell through to the
+      NUMERIC path and raised "expected a number, got object" — every other
+      container concatenation had an arm and this one did not. Reachable from
+      any bytes that arrives as a variant: an element of a list, an unannotated
+      parameter, and (since the mode-aware readers) `f.read(n)` in binary mode.
+      bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+    if (oa is TPyBytes) and (ob is TPyBytes) then
+    begin
+      jb := TPyBytes.Create(TPyBytes(oa).FLen + TPyBytes(ob).FLen);
+      jb.FIsByteArray := TPyBytes(oa).FIsByteArray;
+      jb.FLen := 0;
+      jb.extend(TPyBytes(oa));
+      jb.extend(TPyBytes(ob));
+      Result := jb;
       Exit;
     end;
   end;
@@ -8339,10 +8603,12 @@ type
   TPyCbM1 = function(recv: Pointer; const a0: Variant): Variant;
   TPyCbM2 = function(recv: Pointer; const a0, a1: Variant): Variant;
   TPyCbM3 = function(recv: Pointer; const a0, a1, a2: Variant): Variant;
+  TPyCbM4 = function(recv: Pointer; const a0, a1, a2, a3: Variant): Variant;
   TPyCbF0 = function: Variant;
   TPyCbF1 = function(const a0: Variant): Variant;
   TPyCbF2 = function(const a0, a1: Variant): Variant;
   TPyCbF3 = function(const a0, a1, a2: Variant): Variant;
+  TPyCbF4 = function(const a0, a1, a2, a3: Variant): Variant;
   { PROCEDURE-shaped siblings of the above: an explicit `-> None` def compiles
     as a genuine Pascal procedure (Procs[pi].IsFunc = False), which never sets
     up the Variant-hidden-destination-pointer convention TPyCbM*/TPyCbF*
@@ -8355,10 +8621,12 @@ type
   TPyCbMP1 = procedure(recv: Pointer; const a0: Variant);
   TPyCbMP2 = procedure(recv: Pointer; const a0, a1: Variant);
   TPyCbMP3 = procedure(recv: Pointer; const a0, a1, a2: Variant);
+  TPyCbMP4 = procedure(recv: Pointer; const a0, a1, a2, a3: Variant);
   TPyCbFP0 = procedure;
   TPyCbFP1 = procedure(const a0: Variant);
   TPyCbFP2 = procedure(const a0, a1: Variant);
   TPyCbFP3 = procedure(const a0, a1, a2: Variant);
+  TPyCbFP4 = procedure(const a0, a1, a2, a3: Variant);
 
 function pycallback_is(const cb: Variant): Boolean;
 begin
@@ -8511,6 +8779,33 @@ begin
   begin
     if isFn then begin m3 := TPyCbM3(code); Result := m3(recv, a0, a1, a2); end
     else begin mp3 := TPyCbMP3(code); mp3(recv, a0, a1, a2); Result := pynone; end;
+  end;
+end;
+
+function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
+{ The FOUR-argument twin. `f = some_def` binds a callback pair (code + nil
+  receiver) even for a plain def, so every dynamic call at this arity comes
+  through here — and there was no arity-4 member, which is why the arity-4
+  dispatcher had to exist at all.
+  bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+var code, recv: Pointer; m4: TPyCbM4; f4: TPyCbF4; mp4: TPyCbMP4; fp4: TPyCbFP4;
+    isFn: Boolean;
+begin
+  Result := pynone;
+  if not pycallback_is(cb) then Exit;
+  code := pybound_code(cb);
+  if code = nil then Exit;
+  recv := pybound_recv(cb);
+  isFn := pybound_isfunc(cb);
+  if recv = nil then
+  begin
+    if isFn then begin f4 := TPyCbF4(code); Result := f4(a0, a1, a2, a3); end
+    else begin fp4 := TPyCbFP4(code); fp4(a0, a1, a2, a3); Result := pynone; end;
+  end
+  else
+  begin
+    if isFn then begin m4 := TPyCbM4(code); Result := m4(recv, a0, a1, a2, a3); end
+    else begin mp4 := TPyCbMP4(code); mp4(recv, a0, a1, a2, a3); Result := pynone; end;
   end;
 end;
 
@@ -10771,6 +11066,7 @@ end;
 constructor TPyFile.Create;
 begin
   FFd := -1;
+  FBinary := False;
 end;
 
 function pyfile_open(const path, mode: AnsiString): TPyFile;
@@ -10801,23 +11097,40 @@ begin
     raise FileNotFoundError.Create(path);
   Result := TPyFile.Create;
   Result.FFd := fd;
+  { 'b' anywhere in the mode is CPython's own test for a binary stream }
+  for i := 1 to Length(mode) do
+    if mode[i] = 'b' then Result.FBinary := True;
 end;
 
-function TPyFile.read(u: Int64): TPyBytes;
-var r: TPyBytes; got: Int64;
+function TPyFile.read(u: Int64): Variant;
+{ `f.read(n)`. TEXT mode yields a str, binary yields bytes — see FBinary. This
+  arity used to yield bytes unconditionally, so `print(f.read(3))` on a text
+  file printed b'one' where CPython prints one, and `f.read(3) + "x"` was a type
+  error against working Python. Its own zero-argument sibling was already
+  correct for text, so the two arities of one method disagreed.
+  bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var r: TPyBytes; got: Int64; s: AnsiString; i: Integer;
 begin
   if u < 0 then u := 0;
   r := TPyBytes.Create(u);
   got := PyPalRead(FFd, r.FData, u);
   if got < 0 then got := 0;
   r.FLen := got;
-  Result := r;
+  if FBinary then
+  begin
+    Result := r;
+    Exit;
+  end;
+  s := '';
+  for i := 0 to Integer(got) - 1 do s := s + Chr(PByte(NativeInt(r.FData) + i)^);
+  Result := s;
 end;
 
 { Read to EOF from the current position. Chunked rather than byte-at-a-time
   (readline's excuse — "line reads are rare and short" — does not hold for a
   whole file), and it leaves the position at EOF like CPython. }
-function TPyFile.read: AnsiString;
+function TPyFile.readall: AnsiString;
+{ the slurp itself, mode-blind — both public readers are built on it }
 var buf: array[0..8191] of Char; got: Int64; res: AnsiString;
     rlen, rcap, i: Integer;
 begin
@@ -10840,11 +11153,33 @@ begin
   Result := res;
 end;
 
+function TPyFile.read: Variant;
+{ `f.read()`. Binary mode must yield BYTES — it answered a str, so
+  `open(p,"rb").read()` printed 'one\n' where CPython prints b'one\n'. The
+  mirror of the read(n) bug, in the other direction.
+  bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var s: AnsiString; b: TPyBytes; i: Integer;
+begin
+  s := Self.readall;
+  if not FBinary then
+  begin
+    Result := s;
+    Exit;
+  end;
+  b := TPyBytes.Create(Length(s));
+  for i := 1 to Length(s) do PByte(NativeInt(b.FData) + i - 1)^ := Ord(s[i]);
+  b.FLen := Length(s);
+  Result := b;
+end;
+
 function TPyFile.readlines: TPyList;
-var content, line: AnsiString; i, n: Integer;
+{ ...and its ELEMENTS follow the mode too: binary readlines() is a list of
+  bytes in CPython, and answering a list of str is the same divergence one
+  level down. bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var content, line: AnsiString; i, n, k: Integer; lb: TPyBytes;
 begin
   Result := TPyList.Create;
-  content := Self.read;
+  content := Self.readall;
   { each line KEEPS its trailing newline -- Python's file iteration yields them
     that way, and a final unterminated line is still a line }
   i := 1; n := Length(content); line := '';
@@ -10853,27 +11188,49 @@ begin
     line := line + content[i];
     if content[i] = #10 then
     begin
-      Result.append(line);
+      if FBinary then
+      begin
+        lb := TPyBytes.Create(Length(line));
+        for k := 1 to Length(line) do PByte(NativeInt(lb.FData) + k - 1)^ := Ord(line[k]);
+        lb.FLen := Length(line);
+        Result.append(lb);
+      end
+      else
+        Result.append(line);
       line := '';
     end;
     Inc(i);
   end;
-  if line <> '' then Result.append(line);
+  if line <> '' then
+  begin
+    if FBinary then
+    begin
+      lb := TPyBytes.Create(Length(line));
+      for k := 1 to Length(line) do PByte(NativeInt(lb.FData) + k - 1)^ := Ord(line[k]);
+      lb.FLen := Length(line);
+      Result.append(lb);
+    end
+    else
+      Result.append(line);
+  end;
 end;
 
-function TPyFile.readline: TPyBytes;
-var r: TPyBytes; got: Int64; ch: Byte;
+function TPyFile.readline: Variant;
+{ TEXT mode yields a str here too — it answered bytes, so `f.readline()` on a
+  text file printed b'one\n'. bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var r: TPyBytes; got: Int64; ch: Byte; s: AnsiString;
 begin
   { one byte at a time — line reads are rare and short in the corpus }
   r := TPyBytes.Create(0);
+  s := '';
   while True do
   begin
     got := PyPalRead(FFd, @ch, 1);
     if got <= 0 then Break;
-    r.append(ch);
+    if FBinary then r.append(ch) else s := s + Chr(ch);
     if ch = 10 then Break;
   end;
-  Result := r;
+  if FBinary then Result := r else Result := s;
 end;
 
 function TPyFile.write(b: TPyBytes): Int64;
@@ -10958,6 +11315,21 @@ end;
   are, and they are what distinguishes a function from None. Naming it would
   need the frontend to record one per callable — its own ticket if anyone wants
   byte-parity with CPython. }
+function PyVarIsCallableTag(const v: Variant): Boolean;
+{ Does this variant hold a CALLABLE VALUE (rather than a class, a container or a
+  scalar)? VT_BOUNDMETHOD 8, VT_PYCLOSURE 9, VT_BOUNDFN 10 and VT_CALLABLE 12 —
+  the last being a plain compiled code address, which before it had a tag of its
+  own wore VT_INT64 and so rendered as a DECIMAL INTEGER.
+
+  ONE predicate because value->text has THREE entry points here (pystr_of,
+  pyvar_repr, pyvar_print_of) and each carried its own copy of the tag list; a
+  tag added to two of the three is a rendering that is right in print() and
+  wrong in an f-string. }
+begin
+  PyVarIsCallableTag := (pyvartag(v) = 8) or (pyvartag(v) = 9) or
+                        (pyvartag(v) = 10) or (pyvartag(v) = 12);
+end;
+
 function PyCallableStr(const v: Variant): AnsiString;
 const HEXD = '0123456789abcdef';
 var a: Int64; i: Integer; hx: AnsiString; lead: Boolean;
@@ -10977,6 +11349,77 @@ begin
     Result := '<bound method at 0x' + hx + '>'
   else
     Result := '<function at 0x' + hx + '>';
+end;
+
+function pyisinstance_v(const x: Variant; const t: Variant): Boolean;
+{ `isinstance(x, t)` where t is a VALUE rather than a literal type name.
+
+  The compile-time lowering resolves the second argument by NAME, which cannot
+  see through a binding: `A = B` then `isinstance(x, A)` reported "unknown type
+  in isinstance: A" even though `A(3)` had just constructed one — the alias is a
+  perfectly good class OBJECT, it simply is not a class NAME. A tuple of types
+  held in a name (`string_types = (str,)`, the six idiom) has the same shape.
+
+  t may be a class object (VT_CLASSREF, payload = the RTTI blob) or a TUPLE of
+  them, which CPython accepts anywhere a type is expected. Anything else answers
+  False rather than raising: the literal-name path still handles every builtin
+  type, so a non-class here means the program passed something that was never a
+  type, and CPython raises TypeError for that — worth doing once the builtin
+  types are values too, which is the other half of the ticket.
+  bug-n-a-type-name-is-not-a-first-class-value }
+var
+  xo: TObject;
+  want, curr: PClassRTTI;
+  tl: TObject;
+  i: Integer;
+begin
+  pyisinstance_v := False;
+  { a TUPLE of types: True when ANY member matches, like CPython }
+  if (pyvartag(t) = 7) and (PPyVarRec(@t)^.Payload <> 0) then
+  begin
+    tl := TObject(Pointer(NativeInt(PPyVarRec(@t)^.Payload)));
+    if tl is TPyList then
+    begin
+      for i := 0 to TPyList(tl).count - 1 do
+        if pyisinstance_v(x, TPyList(tl).at(i)) then
+        begin
+          pyisinstance_v := True;
+          Exit;
+        end;
+      Exit;
+    end;
+  end;
+  if pyvartag(t) <> 11 then Exit;                 { VT_CLASSREF }
+  want := PClassRTTI(Pointer(NativeInt(PPyVarRec(@t)^.Payload)));
+  if want = nil then Exit;
+  if pyvartag(x) <> 7 then Exit;                  { only an object can be an instance }
+  if PPyVarRec(@x)^.Payload = 0 then Exit;
+  xo := TObject(Pointer(NativeInt(PPyVarRec(@x)^.Payload)));
+  curr := GetInstanceRTTI(Pointer(xo));
+  { walk the instance's ancestry — isinstance is True for a DESCENDANT too }
+  while curr <> nil do
+  begin
+    if curr = want then
+    begin
+      pyisinstance_v := True;
+      Exit;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+{ `<class '__main__.A'>` — CPython's str()/repr() of a CLASS OBJECT, which is
+  what a VT_CLASSREF variant holds (feature-nilpy-class-as-a-value). Unlike the
+  function case above the name IS recoverable: the payload is the class's RTTI
+  blob and its first word is the name pointer. `__main__` is spelled literally
+  because a NilPy program IS the main module — a class reached as a value out of
+  an imported module would want that module's name, and nothing records one. }
+function PyClassRefStr(const v: Variant): AnsiString;
+var cls: PClassRTTI; nm: AnsiString;
+begin
+  cls := PClassRTTI(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+  if cls = nil then nm := '?' else nm := '__main__.' + cls^.NamePtr^;
+  Result := '<class ' + Chr(39) + nm + Chr(39) + '>';
 end;
 
 { `__repr__` / `__str__` on a USER class instance that arrives only as a bare
@@ -11049,6 +11492,13 @@ type
     handle. }
   TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
   TPyHashFn  = function(self: Pointer): Int64;
+  { ...and the shape an UNANNOTATED `def __hash__(self)` actually has. NilPy
+    types an unannotated def's result as a Variant (RetKind 22), which is the
+    ordinary way to write the dunder — `-> int` is the exception, not the rule.
+    Only the Int64 shape was declared, so the guard below rejected every plain
+    `def __hash__` and the key silently fell back to an identity hash.
+    bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys }
+  TPyHashVFn = function(self: Pointer): Variant;
   TPyObjDunderFn    = function(self: Pointer; const other: Variant): Pointer;
   TPyObjDunderObjFn = function(self: Pointer; other: Pointer): Pointer;
   { An ARITHMETIC dunder returns whatever the body returns, so the call has to
@@ -11314,7 +11764,7 @@ end;
   __hash__ result to Py_hash_t, and this hash is avalanched by the caller
   afterwards, so any int width is fine to take verbatim here. }
 function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean;
-var cls: PClassRTTI; mi: PMethInfo; fn: TPyHashFn;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyHashFn; vfn: TPyHashVFn; hv: Variant;
 begin
   PyUserObjHash := False;
   if o = nil then Exit;
@@ -11324,6 +11774,25 @@ begin
   mi := PyFindDunder(cls, '__hash__');
   if mi = nil then Exit;
   if mi^.Arity <> 1 then Exit;
+  { RetKind 22 = Variant, which is what an UNANNOTATED `def __hash__(self)`
+    returns — the ordinary spelling. Rejecting it meant the dunder was never
+    called and the key hashed by IDENTITY, so two __eq__-equal objects landed in
+    different buckets and `k2 in d` was False for a key the dict held. It was
+    also NONDETERMINISTIC, which is the tell: whether two identity hashes
+    collide is a property of the run's memory layout and nothing else. Adding
+    `-> int` to the same dunder made the whole repro pass, which is what
+    isolated this guard.
+    CPython requires __hash__ to return an int; a variant that is not int-valued
+    folds through pyvar_to_int the same way any other integer context does.
+    bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys }
+  if mi^.RetKind = 22 then
+  begin
+    vfn := TPyHashVFn(mi^.Code);
+    hv := vfn(Pointer(o));
+    h := NativeUInt(pyvar_to_int(hv));
+    PyUserObjHash := True;
+    Exit;
+  end;
   if (mi^.RetKind <> 13) and (mi^.RetKind <> 1) and (mi^.RetKind <> 15) then Exit;
   fn := TPyHashFn(mi^.Code);
   h := NativeUInt(fn(Pointer(o)));
@@ -11415,8 +11884,10 @@ var o: TObject; us: AnsiString;
 begin
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;   { VT_EMPTY }
   { a callable VALUE — see PyCallableStr }
-  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  if PyVarIsCallableTag(v) then
   begin Result := PyCallableStr(v); Exit; end;
+  { a CLASS reached as a value renders as CPython's class object }
+  if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
@@ -11443,8 +11914,10 @@ end;
 function pyvar_print_of(const v: Variant): AnsiString;
 var o: TObject; us: AnsiString;
 begin
-  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  if PyVarIsCallableTag(v) then
   begin Result := PyCallableStr(v); Exit; end;
+  { a CLASS reached as a value renders as CPython's class object }
+  if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
   { a container prints as its repr; every scalar as plain str (no quotes) }
   if pyvartag(v) = 7 then
   begin
@@ -11641,8 +12114,10 @@ function pystr_of(const v: Variant): AnsiString; overload;
 begin
   { VT_EMPTY is Python's None, not an empty string }
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;
-  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  if PyVarIsCallableTag(v) then
   begin Result := PyCallableStr(v); Exit; end;
+  { a CLASS reached as a value renders as CPython's class object }
+  if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';

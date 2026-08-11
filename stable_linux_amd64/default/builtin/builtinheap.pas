@@ -112,7 +112,7 @@ procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
   instances created by NilPy code paths are refcounted like AnsiString handles.
-  The instance pointer is base+16 of its own heap block, rc at [inst-16] — the
+  The instance pointer is base+PXX_HDR_SIZE of its own heap block, rc at [inst-16] — the
   same protocol as the string handles above. Pascal-created instances are NOT
   in this scheme; only allocations routed through PXXObjAlloc are. A headered
   instance is recognized at runtime by PXX_OBJ_MAGIC in the word at [inst-8]:
@@ -1052,7 +1052,7 @@ end;
 {$endif}
 
 { Managed-string constructor: allocate a [refcount:8][length:8][data][nul]
-  block and copy len bytes from src. Returns the data pointer (base+16) or
+  block and copy len bytes from src. Returns the data pointer (base+PXX_HDR_SIZE) or
   nil for an empty string. Called from the emitted runtime shim
   (AnsiStrFromLiteralAddr); the shim holds the heap lock in threadsafe mode.
   Raw pointers only — this code IS the string runtime, so it must not use
@@ -1589,7 +1589,7 @@ begin
 end;
 
 { NilPy object-reclamation primitives. An instance allocated here lives at
-  base+16 of its own heap block: [rc:8][spare:8][instance data...], so the
+  base+PXX_HDR_SIZE of its own heap block: [kind:8][rc:8][spare:8][instance data...], so the
   refcount sits at [inst-16] exactly like a managed string's — the same
   retain/release idiom (and the same threadsafe atomic) applies. The spare
   word at [inst-8] is reserved (zero); note it is NOT the RTTI backlink —
@@ -3120,6 +3120,7 @@ end;
   statements so no constant folding can collapse it. }
 
 function PxxIntDDigits(pv: Pointer; emit: NativeInt): NativeInt; forward;
+function PxxFracDigits(pv: Pointer; decimals: NativeInt; emit: NativeInt): NativeInt; forward;
 
 procedure PXXWriteUIntD(pv: Pointer);
 { Print a non-negative integral double in decimal (writeUInt, double domain).
@@ -3204,28 +3205,25 @@ end;
 
 procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt; width: NativeInt);
 { [-]intpart.frac with exactly 'decimals' fractional digits (0 -> rounded
-  integer, no point). Mirrors EmitWriteFloatFixed (x86-64), and must keep
-  mirroring it: this is the i386 / arm32 / riscv32 route to the same output, so
-  a program's text must not depend on which backend built it.
+  integer, no point), right-justified in `width` columns.
 
-  The INTEGER AND FRACTIONAL parts are scaled SEPARATELY, for the same reason
-  the x86-64 emitter does it: scaling the whole value by 10^decimals pushes it
-  past the 53-bit mantissa long before it runs out of exponent, so the low
-  digits become the scale's granularity rather than the number's — `267.5:0:20`
-  printed 267.50000000000000524288, where 524288 is 2^19 and no part of the
-  value (bug-b-writeln-float-with-17-decimals-prints-garbage).
+  Both halves are now EXACT. The integer part expands in base-10^9 limbs
+  (PXXWriteUIntD -> PxxIntDDigits) and the fraction likewise (PxxFracDigits):
+  a double is mant * 2^exp2 with both parts integral, so its decimal form is
+  finite and every digit of it is a real digit of the value. Nothing is scaled
+  through a Double any more, which is what used to bound the answer at ~16
+  fraction digits and then pad with zeros — 1/3 at :0:30 printed
+  0.333333333333333312 and twelve zeros where the value continues
+  ...314829616256247 (bug-a-write-fixed-fraction-digits-past-16-are-invented,
+  and bug-a-write-fixed-emits-false-digits-past-1e22 for the integer half).
 
-  Splitting first keeps the product below 1e18, and digits past the 18th are
-  printed as zeros rather than guessed: a double carries no information there,
-  and FPC pads the same way. }
-var x, pw, v, ip, rem, dv, r, two52, ipc: Double; d, fdigits: Integer; i: Int64; ch: Char;
-    neg: Boolean; ndig, total: Int64;
+  x86-64's EmitWriteFloatFixed is a shim onto this routine, and i386 / arm32 /
+  aarch64 / riscv32 all call it, so there is ONE implementation and a program's
+  text cannot depend on which backend built it. }
+var x, ip, r, two52, ipc: Double; i: Int64; neg: Boolean; ndig, total: Int64;
 begin
-  { NON-FINITE first — see PXXWriteFloatSci. The digit loops here do not
-    terminate on an infinity either, and on x86-64 the native twin does not hang
-    but scales through Int64 and prints 9223372036854775809.000000, which is the
-    silent half of the same defect. A fixed-decimals request cannot be honoured
-    for a value with no digits, so the spelling wins over the field
+  { NON-FINITE first — see PXXWriteFloatSci. A fixed-decimals request cannot be
+    honoured for a value with no digits, so the spelling wins over the field
     (bug-a-writeln-of-a-non-finite-double-hangs). }
   x := PDouble(p)^;
   if x <> x then
@@ -3253,16 +3251,7 @@ begin
   x := PDouble(p)^;
   neg := PByte(Int64(p) + 7)^ >= 128;
   if neg then x := -x;
-  fdigits := decimals;
-  if fdigits > 18 then fdigits := 18;
-  pw := 1;
-  i := 1;
-  while i <= fdigits do
-  begin
-    pw := pw * 10;
-    i := i + 1;
-  end;
-  { ip := trunc(x), by the round-even-then-correct-down trick used above }
+  { ip := trunc(x), by round-even-then-correct-down }
   if x >= two52 then
     ip := x
   else
@@ -3272,32 +3261,19 @@ begin
     if r > x then r := r - 1;
     ip := r;
   end;
-  { rem := round-half-AWAY((x - ip) * pw). The fraction is below 1, so the
-    product stays under 1e18 and every digit of it is a digit of the value; the
-    +0.5-then-truncate is FPC's rounding rule for write(v:w:d), measured
-    (0.5/1.5/2.5 at :0:0 print 1/2/3, not round-to-even's 0/2/2). x is
-    non-negative here, the sign having been printed and removed. }
-  v := (x - ip) * pw + 0.5;
-  if v < two52 then
+  { Ask the fraction whether ROUNDING carries into the integer, before printing
+    anything: a carry changes both the integer digits and the column count
+    (9.96:0:1 -> 10.0). decimals <= 0 asks for zero fraction digits, which makes
+    this exactly "round the integer half-away-from-zero". }
+  if decimals > 0 then
   begin
-    r := v + two52;
-    rem := r - two52;
-    if rem > v then rem := rem - 1;      { round-even then correct down = trunc }
+    if PxxFracDigits(@x, decimals, 0) <> 0 then ip := ip + 1;
   end
   else
-    rem := v;
-  if rem >= pw then          { the fraction rounded up to 1.0 }
-  begin
-    rem := 0;
-    ip := ip + 1;
-  end;
-  { FIELD WIDTH. Counted AFTER the rounding above, because a carry out of the
-    fraction (9.96:0:1 -> 10.0) adds an integer digit and would otherwise pad
-    one column too many. ip is a non-negative integral Double here, possibly
-    past 2^63, so the digit count is taken in double arithmetic rather than
-    through Int64 — the same reason this routine exists rather than the
-    Int64-scaling native emitter.
-    bug-a-aarch64-float-field-width-ignored }
+    if PxxFracDigits(@x, 0, 0) <> 0 then ip := ip + 1;
+  { FIELD WIDTH, counted after that rounding. ip is a non-negative integral
+    Double here, possibly past 2^63, so the digit count is taken exactly rather
+    than through Int64. bug-a-aarch64-float-field-width-ignored }
   if width > 0 then
   begin
     if ip >= two52 * 2 then
@@ -3317,30 +3293,10 @@ begin
     end;
   end;
   if neg then write('-');
-  if decimals <= 0 then      { fdigits = 0, so `rem >= pw` above IS the rounding }
-  begin
-    PXXWriteUIntD(@ip);
-    Exit;
-  end;
   PXXWriteUIntD(@ip);
+  if decimals <= 0 then Exit;
   write('.');
-  dv := pw / 10;
-  i := 1;
-  while i <= fdigits do
-  begin
-    d := Trunc(rem / dv);
-    rem := rem - d * dv;
-    ch := Chr(48 + d);
-    write(ch);
-    dv := dv / 10;
-    i := i + 1;
-  end;
-  i := fdigits + 1;
-  while i <= decimals do     { past what a double knows: zeros, not guesses }
-  begin
-    write('0');
-    i := i + 1;
-  end;
+  ndig := PxxFracDigits(@x, decimals, 1);
 end;
 
 { ---- exact decimal expansion of a Double, string-free -------------------
@@ -3565,6 +3521,117 @@ begin
     end;
   end;
   PxxIntDDigits := total;
+end;
+
+function PxxFracDigits(pv: Pointer; decimals: NativeInt; emit: NativeInt): NativeInt;
+{ The EXACT fraction digits of a finite non-negative Double, `decimals` of them,
+  rounded HALF-AWAY-FROM-ZERO at the cut. Returns 1 when that rounding carried
+  into the INTEGER part (9.96 at :0:1 -> 10.0), else 0. With emit <> 0 the
+  digits are written; with emit = 0 nothing is written and only the carry is
+  computed, which is what lets the caller fix up the integer part and the field
+  width before printing anything.
+
+  A double is mant * 2^exp2 exactly, and 2^-k = 5^k * 10^-k, so for exp2 < 0 the
+  value is the INTEGER mant*5^k with the point pushed k places left — a finite
+  decimal, every digit of it real. exp2 >= 0 means the value is an integer and
+  the fraction is genuinely all zeros.
+
+  This replaces `(x - ip) * 10^d` scaling, which could only ever be right for
+  about 16 digits: 1/3 at :0:30 printed ...333333312 where the double's exact
+  tail is ...333333314829616256247, and 0.1 at :0:25 printed twenty-four zeros
+  where the value has 55511151... The old routine called that padding "past what
+  a double knows", which was the false premise — the expansion below is what it
+  knows.
+  bug-a-write-fixed-fraction-digits-past-16-are-invented }
+const
+  PXX_FRAC_MAX = 1080;      { a subnormal's fraction is 1074 digits; nothing is longer }
+var
+  buf: TPxxSciBuf;
+  dig: array[0..PXX_FRAC_MAX] of Byte;
+  n, i, k, topLen, idx, total, keep, j, d: Integer;
+  mant, t, scale: Int64;
+  exp2: Integer;
+  roundUp: Boolean;
+  ch: Char;
+begin
+  PxxFracDigits := 0;
+  PxxSciSplit(PDouble(pv)^, mant, exp2);
+  if (exp2 >= 0) or (mant = 0) then
+  begin
+    { an integral (or zero) value: the fraction is all zeros, exactly }
+    if emit <> 0 then
+      for i := 1 to decimals do write('0');
+    Exit;
+  end;
+  k := -exp2;                        { value = mant / 2^k = mant*5^k / 10^k }
+  for i := 0 to PXX_SCI_LIMBS - 1 do buf[i] := 0;
+  buf[0] := mant mod PXX_SCI_BASE;
+  buf[1] := mant div PXX_SCI_BASE;
+  n := 2;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+  i := k;
+  while i >= 13 do begin PxxSciMul(buf, n, PXX_SCI_P5_13); i := i - 13; end;
+  while i > 0 do begin PxxSciMul(buf, n, 5); i := i - 1; end;
+  while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
+  topLen := 1; t := buf[n - 1];
+  while t >= 10 do begin t := t div 10; topLen := topLen + 1; end;
+  total := topLen + (n - 1) * 9;     { digits of mant*5^k; the low k are the fraction }
+
+  { fraction digit j (1-based, just right of the point) is the digit at 0-based
+    index k-j from the LOW end; j > k has none, and j > total means the value's
+    leading fraction digits are zeros. }
+  keep := decimals;
+  if keep > k then keep := k;
+  if keep > PXX_FRAC_MAX then keep := PXX_FRAC_MAX;
+  for j := 1 to keep do
+  begin
+    idx := k - j;
+    if idx >= total then d := 0
+    else
+    begin
+      scale := 1;
+      for i := 1 to (idx mod 9) do scale := scale * 10;
+      d := Integer((buf[idx div 9] div scale) mod 10);
+    end;
+    dig[j] := Byte(d);
+  end;
+
+  { half-away-from-zero: the first DROPPED digit decides. >= 5 means the dropped
+    tail is >= one half of the last kept place, and an exact 0.5 tie rounds away
+    from zero — so the single digit answers both cases. }
+  roundUp := False;
+  j := keep + 1;
+  if (j <= k) and (decimals >= keep) then
+  begin
+    idx := k - j;
+    if idx < total then
+    begin
+      scale := 1;
+      for i := 1 to (idx mod 9) do scale := scale * 10;
+      if Integer((buf[idx div 9] div scale) mod 10) >= 5 then roundUp := True;
+    end;
+  end;
+  if roundUp then
+  begin
+    j := keep;
+    while j >= 1 do
+    begin
+      if dig[j] < 9 then begin dig[j] := dig[j] + 1; Break; end;
+      dig[j] := 0;
+      j := j - 1;
+    end;
+    if j = 0 then PxxFracDigits := 1;     { carried out of the fraction }
+  end;
+
+  if emit <> 0 then
+  begin
+    for j := 1 to keep do
+    begin
+      ch := Chr(48 + dig[j]);
+      write(ch);
+    end;
+    for j := keep + 1 to decimals do write('0');   { the value really does end }
+  end;
 end;
 
 procedure PXXWriteFloatSci(p: Pointer);
