@@ -179,4 +179,4 @@ ticket's history. This ticket closes on its own repro, which was riscv32 and now
 runs.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit ecde40c02.
