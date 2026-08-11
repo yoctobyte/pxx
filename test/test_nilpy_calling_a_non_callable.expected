@@ -1,0 +1,15 @@
+TypeError 0
+TypeError 1
+TypeError 2
+TypeError 3
+TypeError 4
+TypeError 5
+TypeError 6
+TypeError 7
+def as a value: 5
+lambda: 12
+bound method: 15
+def in a list: 2 4
+class as a value: 7
+def in a dict: 8
+passed as a parameter: 13

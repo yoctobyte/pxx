@@ -1797,6 +1797,17 @@ end;
   against; this side is what stamps the tag. }
 const VT_PYCLOSURE = 9;
       VT_BOUNDFN   = 10;
+{ The tags PyNotCallable refuses. Same mirror rule as the pair above — these
+  restate compiler/defs.inc's VT_INT/VT_DOUBLE/VT_BOOL/VT_CHAR/VT_STRING/
+  VT_OBJECT/VT_PROMO_BASE and must change with them. Prefixed VT_NC_ so the
+  duplicate names cannot collide with anything a later include brings in. }
+const VT_NC_INT        = 1;
+      VT_NC_DOUBLE     = 3;
+      VT_NC_BOOL       = 4;
+      VT_NC_CHAR       = 5;
+      VT_NC_STRING     = 6;
+      VT_NC_OBJECT     = 7;
+      VT_NC_PROMO_BASE = 8192;
 type
   TPyClosure = record
     Kinds:  array of Integer;
@@ -4375,9 +4386,27 @@ begin
 end;
 
 procedure PyNotCallable(const cb: Variant);
-{ A name bound to None (an import that did not resolve, a value never assigned)
-  used as a callee. Python raises TypeError; the older pyvar_callee_addr path
-  says the same thing, so the message stays recognisable. }
+{ The callee guard: raise TypeError for a value that cannot possibly be code,
+  instead of jumping to its payload and dumping core
+  (bug-nilpy-calling-a-non-callable-segfaults).
+
+  What a tag CAN carry decides this, and the tags were MEASURED against the
+  whole .npy corpus rather than reasoned about. Every callee that legitimately
+  reaches here wears tag 2 (a plain compiled def's code address, 106 samples),
+  8 (bound method), 9 (pyeval closure, 12), 10 (lifted bound-fn, 245) or 11 (a
+  class used as a value, which constructs). Tags 1/3/4/5/6 and the promotable-int
+  block appeared ZERO times — nothing callable is ever boxed as one — so
+  refusing them cannot break a working program, and each was a live segfault.
+
+  THE HOLE THIS DOES NOT CLOSE — deliberately, and the test says so: an int
+  arriving as VT_INT64 (tag 2). `5` boxes as VT_INT (1) and is caught here, but
+  `3 + 4`, `2**40` and `int("99")` box as VT_INT64 — the SAME tag a def's code
+  address rides as, because 1-vs-2 is an integer WIDTH distinction and carries
+  no information about callability. Rejecting tag 2 would break every ordinary
+  call through a def value. Closing it needs a distinct CALLABLE tag, which is
+  feature-nilpy-a-callable-value-needs-its-own-variant-tag; until then
+  `(3 + 4)(x)` still faults. }
+var t: Int64;
 begin
   { TypeError, not a bare Exception: `except TypeError:` must see it. This was
     the one raise site of the family left in pyeval when the pylib ones were
@@ -4388,6 +4417,23 @@ begin
   if PPyRec(@cb)^.Payload = 0 then
     raise TypeError.Create('object is not callable — the name is '
       + 'None (an import that did not resolve, or a value never assigned)');
+
+  t := PPyRec(@cb)^.VType;
+  if (t = VT_NC_INT) or (t = VT_NC_DOUBLE) or (t = VT_NC_BOOL) or
+     (t = VT_NC_CHAR) or (t = VT_NC_STRING) or (t >= VT_NC_PROMO_BASE) then
+    raise TypeError.Create('object is not callable');
+
+  { A class INSTANCE (tag 7) — a list, dict, tuple or a user object. Callable
+    only if its class defines `__call__`; otherwise the payload is an instance
+    pointer and jumping to it faults. An instance that DOES define `__call__`
+    falls through to the existing path rather than being refused here — wiring
+    that dispatch up is its own ticket
+    (bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched); refusing it
+    would be a regression, so this arm stays narrow. }
+  if t = VT_NC_OBJECT then
+    if PyFindMethCI(GetInstanceRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload))),
+                    '__call__') = nil then
+      raise TypeError.Create('object is not callable');
 end;
 
 function pyvar_callv0(const cb: Variant): Variant;

@@ -1,0 +1,50 @@
+# Calling a NON-CALLABLE raises TypeError, catchably — it used to SEGFAULT,
+# inside a `try` that names TypeError, so the program could not defend itself.
+#
+# WHAT THIS TEST DOES NOT COVER, on purpose: an int that arrives as VT_INT64
+# (tag 2) — `3 + 4`, `2**40`, `int("99")`. That is the SAME variant tag a plain
+# compiled def's code address rides as, so it cannot be refused without
+# breaking every call through a def value; `(3 + 4)(x)` still faults. The tags
+# below were measured against the whole corpus: nothing callable ever wears
+# one. Closing the rest needs a distinct callable tag —
+# feature-nilpy-a-callable-value-needs-its-own-variant-tag.
+def get(which):
+    if which == 0: return 5
+    if which == 1: return "text"
+    if which == 2: return [1, 2]
+    if which == 3: return 3.5
+    if which == 4: return True
+    if which == 5: return {"a": 1}
+    if which == 6: return None
+    if which == 7: return (1, 2)
+    return 5
+
+for i in range(8):
+    try:
+        get(i)(3)
+        print("NO RAISE", i)
+    except TypeError:
+        print("TypeError", i)
+
+# --- controls: every shape that IS callable must still call ---
+def add(a, b): return a + b
+class K:
+    def __init__(self, v): self.v = v
+    def m(self, x): return self.v + x
+
+f = add
+print("def as a value:", f(2, 3))
+g = lambda a, b: a * b
+print("lambda:", g(3, 4))
+k = K(10)
+bm = k.m
+print("bound method:", bm(5))
+tbl = [add, g]
+print("def in a list:", tbl[0](1, 1), tbl[1](2, 2))
+print("class as a value:", K(7).v)
+d = {"add": add}
+print("def in a dict:", d["add"](4, 4))
+
+def apply(fn, x, y):
+    return fn(x, y)
+print("passed as a parameter:", apply(add, 6, 7))

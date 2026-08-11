@@ -2,6 +2,8 @@
 track: N
 prio: 55
 type: bug
+status: done
+owner: claude-AN
 ---
 
 # Calling a non-callable SEGFAULTS instead of raising TypeError
@@ -76,3 +78,69 @@ it.
 int, a float, a bool, a string, a list, a dict and None; each inside a
 `try/except TypeError`; plus controls that a def, a lambda, a bound method, a
 def-in-a-list and a `Callable`-annotated parameter all still call correctly.
+
+## Resolution (2026-08-11) — 7 of the 8 shapes, and the 8th is measured, not guessed
+
+### The ticket's blocking claim was half right, and the half that was wrong is what unblocked it
+
+The ticket said a deny-list is impossible because "a plain compiled def is
+represented as its code address boxed as a plain INTEGER (tag 2), so `5` and a
+code address are indistinguishable." That reasoning was sound but the premise
+was never measured against a corpus. So I probed the guard — print
+`VType` on entry, run every `.npy` in `test/`:
+
+| tag | samples | what it is |
+| --- | --- | --- |
+| 10 | 245 | lifted bound-fn |
+| 2 | 106 | plain def code address |
+| 9 | 12 | pyeval closure |
+| 0 | 2 | None (already raised) |
+
+**Tags 1, 3, 4, 5, 6 and 7 appear ZERO times.** Nothing callable is ever boxed
+as one. And the shapes in the repro land on exactly those tags — `5`→1,
+`"text"`→6, `3.5`→3, `True`→4, list/dict/tuple→7, `None`→0. So a refusal on
+those cannot break a working program, and every one of them was a live
+segfault. The ticket's "the four scalar tags are all that CAN be rejected, and
+the int case is the one that matters" undercounted: `5` is tag 1 and *is*
+rejectable.
+
+### Then the obvious over-claim got falsified before it shipped
+
+The tempting conclusion — "ints are tag 1, defs are tag 2, so refuse 1" — is
+luck, not a rule. `VT_INT=1` / `VT_INT64=2` is an integer **width** distinction
+and says nothing about callability. Tested directly rather than assumed:
+
+| expression | tag |
+| --- | --- |
+| `5`, `-7`, `len("abcd")` | 1 |
+| `3 + 4`, `2**40`, `int("99")` | **2** |
+| `2**70` | 8193 (promo) |
+
+So `(3 + 4)(x)` still faults, and no tag test can fix it. That is the honest
+residual, split out as
+`feature-nilpy-a-callable-value-needs-its-own-variant-tag` with this table so
+nobody re-derives it — and the test carries a comment saying which case it does
+NOT cover, exactly as this ticket asked, so it cannot read as fully fixed.
+
+### The tag-7 arm, kept deliberately narrow
+
+An instance is callable iff its class defines `__call__`. A tag-7 payload with
+no `__call__` now raises (list, dict, tuple — three of the eight). One that HAS
+`__call__` falls through to the old path instead of being refused: it currently
+returns a garbage integer, and refusing it would turn a wrong value into a
+wrong error, which is a regression. That dispatch is
+`bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched` — where I noted that
+`pylib.pas` already contains `PyNotCallableError`, written for this arm and
+never wired to anything.
+
+### Verified
+
+`test/test_nilpy_calling_a_non_callable.npy`, output byte-identical to CPython:
+all 8 shapes raise a catchable TypeError, and 7 controls (def as a value,
+lambda, bound method, def in a list, def in a dict, class as a value, def
+passed as a parameter) all still call. Gate: `tools/gate.sh quick` GREEN +
+`make test-nilpy`. No re-pin — `pyeval.pas` is a compiled program's runtime and
+is not linked by the compiler itself.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
