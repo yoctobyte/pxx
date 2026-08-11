@@ -67,6 +67,15 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 all: $(COMPILER)
 
+# Print any make variable's expanded value: `make print-UFORTH_WORDSETS`.
+# Exists so tooling can ASK for a list this Makefile owns instead of keeping a
+# second copy of it — testmgr shards test-uforth per word set and reads the set
+# through here, so adding a word set to UFORTH_WORDSETS is all it takes for a
+# new shard to appear. No file is ever named print-*, so the pattern rule
+# cannot shadow a real target.
+print-%:
+	@echo '$($*)'
+
 # Debug build of the COMPILER itself, for gdb'ing pascal26 while it compiles
 # something. Written to a SEPARATE path: compiler/pascal26 and the pinned
 # stable are untouched, so a debug session cannot contaminate a gate run or the
@@ -7596,6 +7605,26 @@ UFORTH_CORPUS ?= testje.for testjefixed.for testjefix2.for testjefix3.for
 # ~80s, because it is a memory-walk and hash workload. The other twelve
 # together are seconds. Whoever tunes tier placement should know the ~6 minutes
 # is almost entirely that one file.
+#
+# SHARDING (feature-t-shard-the-uforth-ans-suite-per-word-set). Both lists are
+# `?=`, so testmgr shards this target by OVERRIDING them on the make command
+# line — `make test-uforth UFORTH_CORPUS= UFORTH_WORDSETS=blocktest.fth` is one
+# shard. That is why each loop tolerates an EMPTY list (`for f in $(LIST) ""`
+# plus a skip): a shard that runs only word sets passes an empty UFORTH_CORPUS,
+# and a bare `for f in ; do` is a shell syntax error, not an empty loop.
+#
+# The compile + smoke prologue (~28s) is paid by EVERY shard, since each is an
+# independent `make` with its own scratch dir. That is the deliberate trade:
+# ~28s x N of otherwise-idle CPU buys a wall time bounded by the SLOWEST WORD
+# SET instead of their SUM, on a box sized for 12 concurrent jobs.
+#
+# The pxx run and the CPython oracle are INDEPENDENT — same inputs, different
+# runtimes — so they run CONCURRENTLY and are joined by `wait`. That takes the
+# oracle off the critical path everywhere (~80s of blocktest's ~320s). Their
+# outputs go to separate files and both read `in.txt` through their own
+# redirection, so there is nothing shared to race on. Deliberately NOT cached
+# across runs: a stale oracle turns a real regression into a false green, which
+# is the one failure mode this whole differential exists to prevent.
 UFORTH_WORDSETS ?= core.fr coreplustest.fth doubletest.fth exceptiontest.fth \
                    facilitytest.fth localstest.fth memorytest.fth \
                    searchordertest.fth stringtest.fth coreexttest.fth \
@@ -7621,14 +7650,16 @@ test-uforth: $(COMPILER)
 	fi; \
 	echo "running uforth's own corpora, DIFFERENTIAL against CPython ..."; \
 	bad=0; ok=0; miss=0; missing=""; want=0; \
-	for f in $(UFORTH_CORPUS); do \
+	for f in $(UFORTH_CORPUS) ""; do \
+	  [ -n "$$f" ] || continue; \
 	  want=$$((want+1)); \
 	  if [ ! -f "$(UFORTH_SRC)/$$f" ]; then \
 	    miss=$$((miss+1)); missing="$$missing $$f"; continue; \
 	  fi; \
 	  printf '"%s" INCLUDE\nBYE\n' "$$f" > "$$wd/in.txt"; \
-	  ( cd "$(UFORTH_SRC)" && timeout 180 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 || true; \
-	  ( cd "$(UFORTH_SRC)" && timeout 180 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 || true; \
+	  ( cd "$(UFORTH_SRC)" && timeout 180 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 & pp=$$!; \
+	  ( cd "$(UFORTH_SRC)" && timeout 180 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 & cp=$$!; \
+	  wait $$pp || true; wait $$cp || true; \
 	  if diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
 	    ok=$$((ok+1)); \
 	  else \
@@ -7636,7 +7667,8 @@ test-uforth: $(COMPILER)
 	  fi; \
 	done; \
 	echo "running the Forth 2012 / ANS suite per WORD SET, DIFFERENTIAL against CPython ..."; \
-	for f in $(UFORTH_WORDSETS); do \
+	for f in $(UFORTH_WORDSETS) ""; do \
+	  [ -n "$$f" ] || continue; \
 	  want=$$((want+1)); \
 	  if [ ! -f "$(UFORTH_SRC)/tests/$$f" ]; then \
 	    miss=$$((miss+1)); missing="$$missing tests/$$f"; continue; \
@@ -7644,8 +7676,9 @@ test-uforth: $(COMPILER)
 	  drv="_pxxdrv_$$$$_$$f.fth"; \
 	  printf 'S" prelimtest.fth" INCLUDED\nS" tester.fr" INCLUDED\nS" utilities.fth" INCLUDED\nS" errorreport.fth" INCLUDED\nS" %s" INCLUDED\n' "$$f" > "$(UFORTH_SRC)/tests/$$drv"; \
 	  printf '"tests/%s" INCLUDE\nBYE\n' "$$drv" > "$$wd/in.txt"; \
-	  ( cd "$(UFORTH_SRC)" && timeout 900 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 || true; \
-	  ( cd "$(UFORTH_SRC)" && timeout 900 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 || true; \
+	  ( cd "$(UFORTH_SRC)" && timeout 900 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 & pp=$$!; \
+	  ( cd "$(UFORTH_SRC)" && timeout 900 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 & cp=$$!; \
+	  wait $$pp || true; wait $$cp || true; \
 	  rm -f "$(UFORTH_SRC)/tests/$$drv"; \
 	  if diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
 	    ok=$$((ok+1)); \

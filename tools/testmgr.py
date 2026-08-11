@@ -1037,9 +1037,17 @@ def classify(lines):
 
 
 # ------------------------------------------------------------ generation ---
-def make_dry_run(target):
-    r = subprocess.run(["make", "-n", "--no-print-directory", target],
-                       cwd=REPO, capture_output=True, text=True)
+def make_dry_run(target, overrides=None):
+    """The recipe lines `make` would run for `target`.
+
+    `overrides` are VAR=value pairs appended to the command line, which is how
+    a target gets sharded without a second copy of its recipe: the uforth shards
+    pass a one-element UFORTH_WORDSETS and an empty UFORTH_CORPUS, and make
+    expands the same recipe around the narrower list.
+    """
+    cmd = ["make", "-n", "--no-print-directory", target]
+    cmd += ["%s=%s" % kv for kv in (overrides or {}).items()]
+    r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit("testmgr: make -n %s failed:\n%s" % (target, r.stderr))
     lines, cont = [], None
@@ -1136,9 +1144,56 @@ def split_jobs(target, lines):
     return jobs
 
 
+def uforth_shards():
+    """[(shard-label, {make overrides}), ...] — one per ANS word set, plus one
+    for the uforth-native corpora.
+
+    Why this target and not another: `test-uforth` was a SINGLE serial job of
+    ~790s (learned EWMA), and it is enrolled in both `limited` and `full`. Those
+    tiers carry 1064s and 1967s of total work, so on a 12-core box their
+    parallel floor is 89s and 164s — meaning BOTH tiers' wall time was set by
+    this one job, with eleven cores idle behind it. Sharding is the whole
+    difference between a 13-minute tier and a ~4-minute one.
+
+    The list comes from `make print-UFORTH_WORDSETS`, never a copy of it here:
+    a word set added to the Makefile must not silently keep running inside
+    somebody else's shard (that is exactly the invisible-coverage hole
+    test-nilpy and test-uforth were both found in). If make cannot be asked,
+    fall back to ONE unsharded job rather than guessing a list — a slow tier is
+    a cost, a wrong list is a coverage lie.
+    """
+    try:
+        # NOT `make -n`: under -n make would PRINT the `@echo` line instead of
+        # running it, and the recipe text would parse as the word list
+        # (`echo`, `'core.fr`, ...). print-% must actually execute.
+        sets = subprocess.run(
+            ["make", "--no-print-directory", "print-UFORTH_WORDSETS"],
+            cwd=REPO, capture_output=True, text=True, timeout=60)
+        names = sets.stdout.split() if sets.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError):
+        names = []
+    if not names:
+        return []
+    out = [("corpus", {"UFORTH_WORDSETS": ""})]
+    for n in names:
+        # strip the extension for the label: `blocktest.fth` -> `blocktest`,
+        # so the job name reads test-uforth#blocktest.
+        out.append((n.rsplit(".", 1)[0],
+                    {"UFORTH_CORPUS": "", "UFORTH_WORDSETS": n}))
+    return out
+
+
 def generate(tier):
     jobs = []
     for tgt in TIERS[tier]:
+        if tgt == "test-uforth":
+            shards = uforth_shards()
+            for label, ov in shards:
+                for job in split_jobs(tgt, make_dry_run(tgt, ov)):
+                    job.name = "%s#%s" % (tgt, label)
+                    jobs.append(job)
+            if shards:
+                continue
         for job in split_jobs(tgt, make_dry_run(tgt)):
             if job.cls == "conformance" and CONFORMANCE_SHARDS > 1:
                 for i in range(CONFORMANCE_SHARDS):

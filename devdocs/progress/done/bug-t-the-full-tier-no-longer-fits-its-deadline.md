@@ -3,6 +3,7 @@ summary: "DOWNGRADED: the 3600s truncation was ONE run inflated by the uforth dr
 type: bug
 track: T
 prio: 45
+status: done
 ---
 
 # The full tier no longer fits its deadline, so it is truncated every run
@@ -107,3 +108,48 @@ on the next full tier.
 full tier did grow from ~520s to ~768s, and `test-uforth` is most of that. The
 options below still apply — sharding is still the right call for attribution
 and parallelism — but this is capacity planning, not a fire.
+
+---
+
+## RESOLVED 2026-08-11 — option 1 landed; the growth is paid back with margin
+
+Both halves of this ticket's gate are met, and the recommended structural fix
+is in.
+
+**Gate, first half — "a full tier that completes inside its deadline".** It
+does, and has for days. From `tstate/runs-plexus.ndjson`, the last 35 full-tier
+runs: min 622.6s, median **770.9s**, max 810.0s, against a 3600s deadline. No
+truncation since the driver-collision window this ticket originally
+misdiagnosed.
+
+**Gate, second half — "`pin_shadow` showing a verdict rather than 'not
+evaluated yet'".** It has been deciding continuously since the 2026-08-09
+restart; `tstate/pin-shadow.log` carries a 13-deep streak of qualifying shas as
+of 2026-08-11T15:22.
+
+**Option 1 has now landed** ([[feature-t-shard-the-uforth-ans-suite-per-word-set]]):
+`test-uforth` is 14 shards, and the CPython oracle runs concurrently with the
+pxx run. Measured cause, which is what closes the capacity question rather than
+just the deadline one:
+
+| tier | total work | longest single job | wall floor |
+| --- | --- | --- | --- |
+| limited | 1064s | `test-uforth#00` 791s | max(791, 89) |
+| full | 1967s | `test-uforth#00` 791s | max(791, 164) |
+
+The tier was not short of clock — it was short of *parallelism*, with 74% of
+`limited`'s entire work in one serial job. Projected wall after sharding is
+~270s for both tiers, so the ~520s→~768s growth this ticket asked to watch is
+repaid several times over.
+
+Option 4 ("drop blocktest — does the differential earn its cost?") is
+**declined, and re-filed as the real question it was pointing at**: blocktest
+is slow because pxx-compiled code loses to CPython by 2-4x on every uforth
+subject measured, which is a compiler bug worth having rather than a test worth
+dropping — [[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]].
+Coverage stays; the cost gets fixed at its source.
+
+Real walls land in `tstate` on the next full run carrying the shard commit.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
