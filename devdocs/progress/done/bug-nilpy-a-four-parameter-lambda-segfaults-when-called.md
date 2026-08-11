@@ -88,4 +88,4 @@ own arguments. That is a performance limit, not a crash, and it is
 [[bug-nilpy-multi-parameter-lambdas-are-still-interpreted]]'s remainder.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit cbb1ebbb4.
