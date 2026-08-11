@@ -11285,6 +11285,13 @@ type
     handle. }
   TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
   TPyHashFn  = function(self: Pointer): Int64;
+  { ...and the shape an UNANNOTATED `def __hash__(self)` actually has. NilPy
+    types an unannotated def's result as a Variant (RetKind 22), which is the
+    ordinary way to write the dunder — `-> int` is the exception, not the rule.
+    Only the Int64 shape was declared, so the guard below rejected every plain
+    `def __hash__` and the key silently fell back to an identity hash.
+    bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys }
+  TPyHashVFn = function(self: Pointer): Variant;
   TPyObjDunderFn    = function(self: Pointer; const other: Variant): Pointer;
   TPyObjDunderObjFn = function(self: Pointer; other: Pointer): Pointer;
   { An ARITHMETIC dunder returns whatever the body returns, so the call has to
@@ -11550,7 +11557,7 @@ end;
   __hash__ result to Py_hash_t, and this hash is avalanched by the caller
   afterwards, so any int width is fine to take verbatim here. }
 function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean;
-var cls: PClassRTTI; mi: PMethInfo; fn: TPyHashFn;
+var cls: PClassRTTI; mi: PMethInfo; fn: TPyHashFn; vfn: TPyHashVFn; hv: Variant;
 begin
   PyUserObjHash := False;
   if o = nil then Exit;
@@ -11560,6 +11567,25 @@ begin
   mi := PyFindDunder(cls, '__hash__');
   if mi = nil then Exit;
   if mi^.Arity <> 1 then Exit;
+  { RetKind 22 = Variant, which is what an UNANNOTATED `def __hash__(self)`
+    returns — the ordinary spelling. Rejecting it meant the dunder was never
+    called and the key hashed by IDENTITY, so two __eq__-equal objects landed in
+    different buckets and `k2 in d` was False for a key the dict held. It was
+    also NONDETERMINISTIC, which is the tell: whether two identity hashes
+    collide is a property of the run's memory layout and nothing else. Adding
+    `-> int` to the same dunder made the whole repro pass, which is what
+    isolated this guard.
+    CPython requires __hash__ to return an int; a variant that is not int-valued
+    folds through pyvar_to_int the same way any other integer context does.
+    bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys }
+  if mi^.RetKind = 22 then
+  begin
+    vfn := TPyHashVFn(mi^.Code);
+    hv := vfn(Pointer(o));
+    h := NativeUInt(pyvar_to_int(hv));
+    PyUserObjHash := True;
+    Exit;
+  end;
   if (mi^.RetKind <> 13) and (mi^.RetKind <> 1) and (mi^.RetKind <> 15) then Exit;
   fn := TPyHashFn(mi^.Code);
   h := NativeUInt(fn(Pointer(o)));

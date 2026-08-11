@@ -1156,6 +1156,13 @@ test-nilpy: $(COMPILER)
 	# count/remove/dict keys, both __eq__ shapes, and the no-__eq__ identity control.
 	./$(COMPILER) test/test_nilpy_membership_eq_dunder.npy /tmp/test_nilpy_memeq26
 	/tmp/test_nilpy_memeq26 | diff -u test/test_nilpy_membership_eq_dunder.expected -
+	# ...and the __hash__ half of that pair, which decides the BUCKET: an
+	# unannotated `def __hash__` returns a Variant, the guard admitted only the
+	# integer RetKinds, so the key hashed by IDENTITY and an __eq__-equal key
+	# missed — nondeterministically, since collisions are memory layout.
+	# Covers both dunder spellings, a real bucket collision, and sets.
+	./$(COMPILER) test/test_nilpy_user_hash_dict_key.npy /tmp/test_nilpy_userhash26
+	/tmp/test_nilpy_userhash26 | diff -u test/test_nilpy_user_hash_dict_key.expected -
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".
 	./$(COMPILER) test/test_nilpy_sort_lt_dunder.npy /tmp/test_nilpy_sortlt26

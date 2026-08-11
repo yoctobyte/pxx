@@ -1,0 +1,78 @@
+# A user class defining BOTH __eq__ and __hash__ is a legal dict/set key in
+# CPython. pxx stored it and then never found it again: `d = {k1: "a"}` then
+# `k2 in d` was False for an __eq__-equal k2, while `k1 == k2` answered True
+# on the very same line.
+#
+# The dict was never the problem — both its sides hash through one routine,
+# PyVarHashKey, whose VT_OBJECT arm calls PyUserObjHash. That helper rejected
+# the method before calling it: it admitted RetKind 13/1/15 (Int64/Integer/
+# NativeInt) only, and an UNANNOTATED `def __hash__(self)` returns a VARIANT
+# (RetKind 22) — the ordinary way to write it. So the key fell back to an
+# IDENTITY hash and two equal objects at different addresses landed in
+# different buckets.
+#
+# That also made the bug nondeterministic, which is why `Ann` below is here:
+# adding `-> int` to the same dunder made the whole repro pass, and that
+# annotation control is what isolated the guard. Both spellings must work.
+#
+# Every expectation is CPython's own output.
+# bug-nilpy-a-user-hash-dunder-is-ignored-for-dict-keys
+
+
+class K:
+    def __init__(self, v):
+        self.v = v
+
+    def __eq__(self, o):
+        return self.v == o.v
+
+    def __hash__(self):
+        return self.v
+
+
+class C:
+    # every instance hashes the same: a REAL bucket collision, so the chain
+    # is exercised rather than one-key-per-bucket luck
+    def __init__(self, v):
+        self.v = v
+
+    def __eq__(self, o):
+        return self.v == o.v
+
+    def __hash__(self):
+        return 7
+
+
+class Ann:
+    # the annotated spelling, which always worked — it must keep working
+    def __init__(self, v):
+        self.v = v
+
+    def __eq__(self, o):
+        return self.v == o.v
+
+    def __hash__(self) -> int:
+        return self.v
+
+
+d = {K(1): "a", K(2): "b"}
+print(K(1) in d, K(2) in d, K(3) in d)
+print(d[K(1)], d[K(2)])
+print(d.get(K(2), "miss"), d.get(K(9), "miss"))
+
+c = {C(1): "x", C(2): "y"}
+print(C(1) in c, C(2) in c, C(3) in c, c[C(2)])
+
+a = {Ann(5): "z"}
+print(Ann(5) in a, a[Ann(5)])
+
+# mutating the key's field after the store loses the entry — CPython does the
+# same thing, and matching it matters more than "finding" it would
+k = K(1)
+e = {k: "v"}
+k.v = 99
+print(K(1) in e, K(99) in e)
+
+s = set()
+s.add(K(4))
+print(K(4) in s, K(5) in s)

@@ -4,6 +4,8 @@ type: bug
 track: N
 prio: 50
 found-by: claude-AN
+status: done
+owner: claude-A
 ---
 
 # A user `__hash__` is ignored for dict keys
@@ -147,3 +149,39 @@ because it changes RetKind from 22 to 13 and the guard then admits it:
 
 Same program, same binary, one annotation apart. That is the guard, and nothing
 else, and it also gives users a workaround until the fix lands.
+
+## Resolution (2026-08-11)
+
+Exactly the guard the diagnosis above predicted. `PyUserObjHash` admitted
+`RetKind` 13/1/15 (Int64 / Integer / NativeInt) only; an unannotated
+`def __hash__(self)` — the ordinary spelling — returns a VARIANT, RetKind 22.
+So the dunder was never called, the key hashed by IDENTITY, and two
+`__eq__`-equal objects at different addresses landed in different buckets.
+
+Fixed by declaring the Variant-returning shape (`TPyHashVFn`) and folding its
+result with `pyvar_to_int`, the same coercion any other integer context uses.
+The integer RetKinds keep their existing path, so an `-> int`-annotated dunder
+is unaffected.
+
+Verified against CPython, every row of the ticket's gate: store then `in` / `[]`
+/ `.get()` with an equal-but-distinct key; a class whose `__hash__` returns a
+CONSTANT, so every key collides and the bucket chain is genuinely exercised;
+both dunder spellings; mutation of the key's field after the store (CPython
+loses it too — matched); and sets as well as dicts.
+
+**The nondeterminism is gone, and that is the real check.** The ticket warned
+that a single run proves nothing here. 15 consecutive whole-run hashes of the
+new test are identical — which is what a VALUE hash guarantees and an identity
+hash cannot, so it is evidence about the mechanism and not just about one run.
+
+The sibling shape is untouched: a class with `__eq__` and NO `__hash__` still
+stores and misses exactly as it did on `pinned`, which is
+`bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses`'s own
+call to make (CPython raises `unhashable type` there).
+
+Gate: `make test-nilpy` EXIT=0, `gate.sh quick` GREEN (self-host
+byte-identical). New `test/test_nilpy_user_hash_dict_key.npy`. Needs a pin
+before other lanes see it (`compiler/builtin`).
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
