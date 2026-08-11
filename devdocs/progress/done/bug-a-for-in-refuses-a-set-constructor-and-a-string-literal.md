@@ -95,4 +95,4 @@ four cross targets; every row except the two documented divergences diffed
 against `fpc -O1`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 7ded8180a.
