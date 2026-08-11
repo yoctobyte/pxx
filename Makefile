@@ -2265,6 +2265,9 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_wcw26 | head -3 | tail -1)" = "[    q]"
 	test "$$(/tmp/test_wcw26 | head -6 | tail -1)" = "[q][q]"
 	test "$$(/tmp/test_wcw26 | head -8 | tail -1)" = "   x   y"
+	# ...and the VARIABLE-width rows, in a program with NO uses clause
+	test "$$(/tmp/test_wcw26 | head -11 | tail -3 | tr '\n' '|')" = "[   ab]|[    q]|[ TRUE]|"
+	test "$$(/tmp/test_wcw26 | head -14 | tail -3 | tr '\n' '|')" = "[    5]|[ 3.50]|[ab][  abc]|"
 	# a metaclass-typed FIELD as a receiver. The parser recognises a metaclass
 	# receiver from a LIST of base node kinds (variable, cast, array element --
 	# the last added at b328 for this same bug) and a FIELD was never in it.

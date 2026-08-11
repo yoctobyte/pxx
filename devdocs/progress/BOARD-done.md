@@ -17,6 +17,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-a-metaclass-typed-record-field-is-not-a-receiver | A | 45 | bug | A metaclass-typed FIELD is not recognised as a receiver | — |
 | bug-a-a-mixed-type-record-operator-signature-fails-to-parse | A | 50 | bug | A mixed-type record operator (`TVec * Integer`) fails to parse — and hid a silent wrong value | — |
 | bug-a-a-typed-const-array-of-string-n-is-never-initialised | A | 50 | bug | A typed const array of `string[N]` is never initialised — silently | — |
+| bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit | A | 40 | bug | A VARIABLE field width is refused for strings/chars, and needs an RTL unit at all | — |
 | bug-a-aarch64-float-field-width-ignored | A | 45 | bug | aarch64 ignores the field WIDTH in writeln(d:w:n) — `writeln(x:10:4)` prints `3.1416` where FPC and x86-64 print `    3.1416`. Pre-existing; the aarch64 emitter never took a width parameter at all | — |
 | bug-a-aarch64-large-double-decimal-formatting | A | 45 | bug | aarch64: writeln(d:0:1) of a large Double prints a wrong integer part — 9007199254740991 comes out as 9007199254740990.4, and QWord-max shifts a whole decimal digit. Not ULP rounding: the digits are wrong | — |
 | bug-a-aarch64-managed-string-concat-leak | A | 70 | bug | aarch64: repeated string concat inside a function LEAKS | — |

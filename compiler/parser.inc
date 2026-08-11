@@ -18726,7 +18726,27 @@ begin
   tk := IntToTypeKind(ASTTk[exprNode]);
   if widthNode < 0 then widthNode := GenMakeIntLit(0);
   if TypeIsFrozenString(tk) or (tk = tyAnsiString) then
-    Result := exprNode
+  begin
+    { A field width on a STRING used to be dropped here — silently, and for a
+      LITERAL width too, so `write(f, s:5)` to a Text file wrote `ab` where FPC
+      writes `   ab`. The value was handed straight through because a string
+      needs no conversion; it still needs PADDING.
+      bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit }
+    pi := FindProc('StrStrW');
+    if pi < 0 then Error('write(Text): StrStrW not loaded');
+    Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
+                widthNode, -1, -1, -1, -1);
+  end
+  else if tk = tyBoolean then
+  begin
+    { ...and a Boolean must print FPC's TRUE/FALSE, not the ordinal StrInt
+      would give it. The stdout literal-width path has always branched to text
+      (IRLowerBoolWrite); this one fell into the ordinal arm below. }
+    pi := FindProc('StrBool');
+    if pi < 0 then Error('write(Text): StrBool not loaded');
+    Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
+                widthNode, -1, -1, -1, -1);
+  end
   else if TypeIsFloat(tk) then
   begin
     pi := FindProc('StrFloat');
@@ -19026,10 +19046,17 @@ begin
       else
       begin
         { variable width/decimals: pre-format to a string node }
+        { Strings, Chars and Booleans have formatters too (StrStrW / StrChar /
+          StrBool) — they were simply not routed, so a VARIABLE width was
+          refused for exactly the types the LITERAL-width path handles inline.
+          Two paths disagreeing about what is writable, the recurring shape.
+          bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit }
         if not (TypeIsFloat(IntToTypeKind(ASTTk[exprNode])) or
-                (TypeIsOrdinal(IntToTypeKind(ASTTk[exprNode])) and
-                 not (IntToTypeKind(ASTTk[exprNode]) in [tyChar, tyBoolean]))) then
-          Error('write: variable width needs an integer or float value');
+                TypeIsOrdinal(IntToTypeKind(ASTTk[exprNode])) or
+                TypeIsFrozenString(IntToTypeKind(ASTTk[exprNode])) or
+                (IntToTypeKind(ASTTk[exprNode]) = tyAnsiString)) then
+          Error('write: a variable field width needs a string, Char, Boolean, '
+                + 'integer or float value');
         ASTLeft[argNode] := TextStrArg(exprNode, widthVal, decimalsVal);
         ASTIVal[argNode] := 0;
         ASTSOffset[argNode] := -1;
@@ -31509,7 +31536,7 @@ begin
 end;
 
 procedure ParseProgram;
-var jmpPatch, i, j: Integer; needsPromoInt: Boolean;
+var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
@@ -31891,6 +31918,33 @@ begin
         CaseEqual(GetTokenStr(i), 'is')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
+    { A write/writeln with a VARIABLE field width pre-formats through
+      StrInt/StrFloat/StrChar/StrStrW/StrBool, which live in the builtin unit —
+      so a program with no `uses` clause failed with `StrInt not loaded`,
+      naming a routine the user never wrote. Pull the unit when a ':' inside a
+      write argument list is followed by something other than an integer
+      literal; a LITERAL width formats inline in codegen and needs nothing.
+      bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit }
+    if ((Tokens[i].Kind = tkwrite) or (Tokens[i].Kind = tkwriteln)) and
+       (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+    begin
+      wdDepth := 0;
+      j := i + 1;
+      while j < TokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(wdDepth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(wdDepth);
+          if wdDepth = 0 then Break;
+        end
+        else if (Tokens[j].Kind = tkColon) and (wdDepth = 1) and
+                (j + 1 < TokCount) and (Tokens[j + 1].Kind <> tkInteger) then
+          needsBuiltin := True;
+        Inc(j);
+      end;
+    end;
     { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /
       __pxxStrInsert in the builtin unit (see ParseStatementAST). Pull the unit so
       the helpers resolve; a user routine of the same name shadows at the call

@@ -24,6 +24,15 @@ function StrQWord(v: QWord; width: Integer): AnsiString;
   ORDINAL — 120 for 'x'), which is why the ordinal arm there excludes
   tyChar. bug-p-writeln-text-rejects-char }
 function StrChar(c: Char; width: Integer): AnsiString;
+{ A STRING right-justified to `width`, and a Boolean as FPC's TRUE/FALSE right-
+  justified the same way. The two formatters the write lowering was missing:
+  writing either with a field width to a TEXT FILE silently DROPPED the width
+  (TextStrArg handed the string straight through), and with a VARIABLE width to
+  stdout it was refused outright — while the literal-width stdout path, which
+  formats inline in codegen, had always handled both.
+  bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit }
+function StrStrW(const s: AnsiString; width: Integer): AnsiString;
+function StrBool(b: Boolean; width: Integer): AnsiString;
 
 { ---- InterLocked* : FPC declares these in the `system` unit --------------
 
@@ -844,6 +853,22 @@ begin
   r[1] := c;
   while Length(r) < width do r := ' ' + r;
   StrChar := r;
+end;
+
+function StrStrW(const s: AnsiString; width: Integer): AnsiString;
+{ see the interface comment. FPC pads on the LEFT and never truncates: a value
+  wider than the field is written in full. }
+var r: AnsiString;
+begin
+  r := s;
+  while Length(r) < width do r := ' ' + r;
+  StrStrW := r;
+end;
+
+function StrBool(b: Boolean; width: Integer): AnsiString;
+begin
+  if b then StrBool := StrStrW('TRUE', width)
+  else StrBool := StrStrW('FALSE', width);
 end;
 
 function StrInt(v: Int64; width: Integer): AnsiString;

@@ -13,8 +13,16 @@
 
   Every row diffed against FPC, and against all five backends.
   bug-a-x86-64-write-ignores-a-field-width-on-a-char }
+
+{ ...and the VARIABLE-width half, added with
+  bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit:
+  `v:w` was refused outright for strings, Chars and Booleans (the literal path
+  formats all three inline, so the two paths disagreed about what is writable),
+  and even for an Integer it needed a `uses` clause — a bare program got
+  "write(Text): StrInt not loaded", naming a Text file it never opened and a
+  routine the user never wrote. This program has NO uses clause on purpose. }
 program test_write_char_field_width;
-var c: Char; i: Integer;
+var c: Char; i: Integer; w: Integer; s: string; b: Boolean; d: Double;
 begin
   c := 'q';
   WriteLn('[', 'ab':5, ']');      { string literal -- was already right }
@@ -26,5 +34,13 @@ begin
   i := 5;
   WriteLn('[', i:5, '][', True:8, ']');  { the neighbours that always worked }
   Write('x':4, 'y':4); WriteLn;   { two padded chars in one Write }
+  { the same rows with a VARIABLE width — every one of these was refused }
+  w := 5; s := 'ab'; b := True; d := 3.5;
+  WriteLn('[', s:w, ']');
+  WriteLn('[', c:w, ']');
+  WriteLn('[', b:w, ']');
+  WriteLn('[', i:w, ']');
+  WriteLn('[', d:w:2, ']');
+  WriteLn('[', s:1, '][', 'abc':w, ']');   { narrower than the value: no truncation }
   WriteLn('WRITE CHAR FIELD WIDTH OK');
 end.
