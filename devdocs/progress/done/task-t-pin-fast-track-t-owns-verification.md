@@ -216,5 +216,50 @@ unreachable-pin guard, missing files); `devtest_pinstatus`, `devtest_idle_ladder
 still green; `trackt health` / `pinstatus` exercised against this box's real
 daemon and real `pin.log`.
 
+**End-to-end, on the live daemon** (restarted to pick it up — `twatch.py` has
+no hot reload, which is why the shadow-mode cutover needed the same thing):
+
+```
+twatch: 3915a1289f41..22226d7acb7c is docs/tstate-only — no gate needed
+twatch: verifying PIN v257 (96b4b40ab6c5) at limited — the sha every other track builds on
+```
+
+and `trackt status` rendering the new phase:
+
+```
+daemon : RUNNING pid 3855625 — pin-verify sha=96b4b40ab6c5 tier=limited
+```
+
+v257 had **no judged tier at all** when this fired, which is the ticket's whole
+point demonstrated on the pin that happened to be current.
+
+The **preemption path** was exercised in the same window — a sibling track
+pushed mid-verification:
+
+```
+twatch: pin verify preempted by a push — will resume
+```
+
+Clean teardown, no verdict recorded, retried on a later quiet cycle. That is
+the required behaviour: pin verification must never delay a fresh push's fast
+verdict, and a half-run must never publish.
+
+## The cost, stated plainly
+
+This is not free, and the trade should be watched rather than assumed:
+
+- a pin now costs a `limited` run **and** a `full` run on top of HEAD's ladder,
+  roughly 12-15 minutes of box time per pin at current tier walls (less now
+  that `test-uforth` is sharded — the two changes in this session pull in
+  opposite directions and the sharding is the larger term);
+- pins land a few times a day, so that is a small fraction of the box. But if
+  pinning ever becomes frequent, `pin_deep` sits **above** opt/bench/fuzz in the
+  chain and would squeeze them first. If those phases start starving, moving
+  `pin_deep` below `opt` is the knob — the mid-tier verification is the part
+  that must stay high.
+
+`pin_mid` can never starve HEAD: a new push is checked first and always gets
+its fast verdict before anything here runs.
+
 ## Log
 - 2026-08-11 — resolved, commit 9069f0947.
