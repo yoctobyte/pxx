@@ -128,3 +128,22 @@ Also worth knowing when re-testing: with the current HEAD the repro missed
 **10 times out of 10** on this box, so the flakiness recorded above is
 layout-dependent rather than a fixed rate — do not read a run of misses as
 "more broken" or a run of hits as "fixed".
+
+### The control that proves it (no rebuild needed)
+
+Annotating the dunder's return type is enough to make the whole repro pass,
+because it changes RetKind from 22 to 13 and the guard then admits it:
+
+```python
+    def __hash__(self) -> int:      # ...instead of `def __hash__(self):`
+        return self.v
+```
+
+| | `k1 == k2, k2 in d` |
+| --- | --- |
+| CPython | `True True` |
+| pxx, unannotated `__hash__` | `True False` |
+| pxx, `__hash__(self) -> int` | **`True True`** |
+
+Same program, same binary, one annotation apart. That is the guard, and nothing
+else, and it also gives users a workaround until the fix lands.
