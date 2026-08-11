@@ -113,3 +113,20 @@ time. Not worth a tool change carrying its own regression surface.
 
 Re-open only if an untagged `decide-` actually reaches a lane's ready queue
 again. One occurrence is not a pattern.
+
+## POSTSCRIPT 2026-08-11 — the same failure, a different slug family
+
+Within the hour of closing this, [[feature-nilpy-parallel-for-in]] was found
+resolving to **Track A**: its body says *"Track N — Nil-Python frontend"* in
+prose, its frontmatter said nothing, so the ranker guessed — and guessed the
+shared-core lane, where the sole-A guard applies.
+
+Not a contradiction of the closure above (that was scoped to `decide-*` slugs,
+and every live one of those is tagged), but the same root cause one family over:
+**prose-declared track, absent frontmatter.** Fixed by adding `track: N`.
+
+So the rule declined here would not have caught it either — an auto-tag on
+`decide-*` says nothing about `feature-*`. If this recurs a third time the useful
+fix is not per-slug rules but a `check` warning for any ticket whose prose names
+a track its frontmatter does not declare. Related:
+[[chore-progress-flag-prose-only-track-decl]], which is exactly that.

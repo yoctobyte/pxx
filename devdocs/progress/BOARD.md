@@ -160,7 +160,7 @@ _none_
 | feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-no-type-inference-switch | N | 45 | feature | `--no-type-inference`: compile a NilPy program fully dynamically | — |
-| feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | — |
+| feature-nilpy-parallel-for-in | N | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | — |
 | feature-nilpy-parallel-reduction-bigint | N | 5 | feature | Opt-in arbitrary-precision reduction for `parallel for`. v1 keeps per-worker partials in the promo-int inline tier and raises at the spill point; this adds the real bignum path, which is correct but anti-scales because every bignum op takes the global heap spinlock. | feature-nilpy-parallel-for-in |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
@@ -644,7 +644,7 @@ _none_
 - [p 10] [B] feature-crtl-implement-libc-assumptions
 - [p 10] [A] idea-adaptive-heap-growth
 - [p 10] [A] idea-cross-namespace-ambiguity-warning
-- [p  5] [A] feature-nilpy-parallel-for-in (unblocks 1)
+- [p  5] [N] feature-nilpy-parallel-for-in (unblocks 1)
 
 ## Leverage (tickets each one unblocks)
 
