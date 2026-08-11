@@ -8151,10 +8151,23 @@ end;
   `int(value).to_bytes(8, "little", signed=True)` and could not compile at all.
   The intrinsic unboxes such a receiver with pyvar_to_int (see PyParseToBytes).
   bug-nilpy-to-bytes-on-a-variant-receiver-does-not-compile }
-function PyIsToBytesBaseTk(tk: TTypeKind): Boolean;
+{ The int methods the frontend intercepts. Kept as ONE name test consulted by
+  every intercept site, rather than a fresh `= 'to_bytes'` literal per site:
+  there are three sites (the lvalue member path, ParseFactor's suffix loop, and
+  the postfix-chain loop), so a per-method literal is three edits that must
+  agree, and the one that gets missed is the one that stays broken. Adding an
+  int method is now a line here plus an arm in PyParseIntMethod.
+  bug-n-int-bit-length-is-not-implemented }
+function PyIsIntMethodName(const nm: AnsiString): Boolean;
 begin
-  PyIsToBytesBaseTk := PyIsIntBaseTk(tk) or
-                       ((tk = tyVariant) and not PyAnyClassDeclares('to_bytes'));
+  PyIsIntMethodName := (nm = 'to_bytes') or (nm = 'bit_length') or
+                       (nm = 'bit_count');
+end;
+
+function PyIsIntMethodBaseTk(tk: TTypeKind; const nm: AnsiString): Boolean;
+begin
+  PyIsIntMethodBaseTk := PyIsIntBaseTk(tk) or
+                         ((tk = tyVariant) and not PyAnyClassDeclares(nm));
 end;
 
 function PyIsIntBaseTk(tk: TTypeKind): Boolean;
@@ -8249,15 +8262,46 @@ begin
   Result := callNode;
 end;
 
-{ Is CurTok the '.' of a `.to_bytes(` suffix? Used by the generic postfix
-  chains to LEAVE the suffix alone so the intrinsic can claim it — a grouped
-  `(10).to_bytes(...)` would otherwise be eaten as a member access on an
+{ `<int>.bit_length()` / `.bit_count()`; CurTok is the '(' . Both are
+  argument-less and answer an int, so one builder serves them; the receiver is
+  passed AS IS and boxed to the Variant parameter by the ordinary argument
+  conversion, which is what keeps an arbitrary-precision receiver exact —
+  pyint_bit_length reads the promo's limbs rather than narrowing to Int64. }
+function PyParseBitLenCount(baseNode: Integer; const nm: AnsiString): Integer;
+var procIdx, callNode, a0: Integer; fn: AnsiString;
+begin
+  if nm = 'bit_count' then fn := 'pyint_bit_count' else fn := 'pyint_bit_length';
+  procIdx := FindProc(fn);
+  if procIdx < 0 then Error('Nil Python: pylib (' + fn + ') not loaded');
+  Expect(tkLParen, '(');
+  Expect(tkRParen, ')');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode; ASTRight[a0] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyInt64);
+  ASTRight[callNode] := -1;
+  ASTLeft[callNode] := a0;
+  LastExprTk := tyInt64;
+  Result := callNode;
+end;
+
+{ The one dispatcher every intercept site calls once it has decided the suffix
+  is an int method. CurTok is the '(' . }
+function PyParseIntMethod(baseNode: Integer; const nm: AnsiString): Integer;
+begin
+  if nm = 'to_bytes' then PyParseIntMethod := PyParseToBytes(baseNode)
+  else PyParseIntMethod := PyParseBitLenCount(baseNode, nm);
+end;
+
+{ Is CurTok the '.' of an intercepted int-method suffix? Used by the generic
+  postfix chains to LEAVE the suffix alone so the intrinsic can claim it — a
+  grouped `(10).to_bytes(...)` would otherwise be eaten as a member access on an
   integer and die as "unexpected token". }
-function PyIsToBytesSuffixAhead: Boolean;
+function PyIsIntMethodSuffixAhead: Boolean;
 begin
   Result := (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
             (Tokens[TokPos].Kind = tkIdent) and
-            (LowerCase(GetTokenStr(TokPos)) = 'to_bytes') and
+            PyIsIntMethodName(LowerCase(GetTokenStr(TokPos))) and
             (Tokens[TokPos + 1].Kind = tkLParen);
 end;
 

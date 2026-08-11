@@ -458,6 +458,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-n-fpc-seed-drift-pybytesci-used-before-forward | N | 60 | bug | FPC cold-start broken again: PyBytesCi is called at pyparser.inc:1508 but not defined until 5236, with no forward. One-line fix, verified — FPC then compiles the whole compiler in 10.7s | — |
 | bug-n-fpc-seed-drift-pywiden-needs-a-forward-in-parser-inc | N | 60 | bug | Third FPC seed drift in two days: parser.inc calls PyWiden, defined in pyparser.inc which is included 14 files later. Verified one-line fix. The rule is mechanical and worth stating once | — |
 | bug-n-hash-builtin-is-not-implemented | N | 35 | bug | `hash(x)` is not implemented | — |
+| bug-n-int-bit-length-is-not-implemented | N | 30 | bug | `int.bit_length()` is not implemented | — |
 | bug-n-nilpy-char-to-string-arg-leaks | N | 40 | bug | NilPy tyChar arg to a string parameter leaks one handle per call | — |
 | bug-n-nilpy-import-sqlite-asserts-host-sqlite-version | N | 60 | bug | test-nilpy hard-codes sqlite 3.45.1's version number, so the suite is red on any box with a different system sqlite | — |
 | bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale | N | 55 | bug | test_nilpy_operator_dunder_missing_fail still expects a COMPILE error; the missing-dunder case now raises a runtime TypeError like CPython, so the assertion is stale | — |

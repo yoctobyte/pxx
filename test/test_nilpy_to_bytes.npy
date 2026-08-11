@@ -59,3 +59,51 @@ print(int.from_bytes(r, "little", signed=True))
 
 # negative through the variant path
 print(int.from_bytes(via_untyped_param(-2), "little", signed=True))
+
+
+# bug-n-int-bit-length-is-not-implemented
+#
+# `.bit_length()` / `.bit_count()` join `.to_bytes(` in the SAME intercept, so
+# they live in the same test. The three intercept sites (the lvalue member
+# path, ParseFactor's suffix loop, the postfix-chain loop) are now name-driven
+# via PyIsIntMethodName rather than each carrying a `= 'to_bytes'` literal, so
+# every receiver shape exercised above must work for these too.
+#
+# Both are defined on the MAGNITUDE — the sign is ignored — and both take a
+# Variant so an arbitrary-precision receiver stays EXACT: an Int64 parameter
+# would narrow `2**70` mod 2^64 and answer confidently wrong, the trap
+# pyvar_to_float records. (2**70).bit_length() is 71, not a machine-int answer.
+
+print(int("42").bit_length())
+print((255).bit_length(), (0).bit_length(), (-8).bit_length())
+print((1).bit_length(), (2).bit_length(), (3).bit_length())
+
+# arbitrary precision — the machine-int path would be wrong for all of these
+print((2 ** 70).bit_length())
+print((2 ** 70 - 1).bit_length())
+print((-(2 ** 70)).bit_length())
+big = 1 << 200
+print(big.bit_length())
+
+# a plain variable, and a variant receiver (untyped parameter)
+small = 1023
+print(small.bit_length())
+
+
+def bl(x):
+    return x.bit_length()
+
+
+print(bl(255), bl(2 ** 100))
+
+# a container element is a variant too
+nums = [1, 258]
+print(nums[1].bit_length())
+
+# bit_count
+print((255).bit_count(), (0).bit_count(), (-8).bit_count())
+print((2 ** 70).bit_count(), (2 ** 70 - 1).bit_count())
+
+# in a larger expression, and in a comprehension
+print((255).bit_length() + 1)
+print([x.bit_length() for x in [1, 2, 255]])

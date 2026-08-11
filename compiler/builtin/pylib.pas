@@ -724,6 +724,13 @@ procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant
   frontend REJECTS anything else rather than silently ignoring it. }
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
+{ `n.bit_length()` / `n.bit_count()`. Both are defined on the MAGNITUDE — the
+  sign is ignored, so (-8) answers as 8 — and both take a Variant rather than
+  an Int64 so an arbitrary-precision receiver stays exact: `(2**70)` is outside
+  Int64, and an Int64 parameter would narrow it mod 2^64 and answer confidently
+  wrong, which is the trap pyvar_to_float records. }
+function pyint_bit_length(const v: Variant): Int64;
+function pyint_bit_count(const v: Variant): Int64;
 { Python's two-argument int(s, base). RAISES ValueError on a bad parse rather
   than halting, which is the whole point: a Forth interpreter tries EVERY input
   word as a number, so a non-numeric token is the ordinary case and a fatal
@@ -7082,6 +7089,83 @@ end;
   raises OverflowError when the value does not fit in n bytes; that check is
   kept, because uforth stores fixed-width Forth cells and a silent truncation
   there would corrupt the data space rather than fail. }
+{ The binary digits of a heap-tier promotable int's MAGNITUDE, no '0b' prefix
+  and no sign. PXXPromoToBase spells it Python's way ('0b1010', '-0b1010'), so
+  the digits are simply everything after the 'b' — counting '0'/'1' characters
+  instead would also count the prefix's own leading '0'. }
+function PromoMagBits(const v: Variant): AnsiString;
+var pslot: array[0..1] of NativeInt;
+    s: AnsiString;
+    i: Integer;
+begin
+  PXXPromoInit(@pslot);
+  PXXPromoFromVariant(@pslot, @v);
+  s := PXXPromoToBase(@pslot, 2);
+  PXXPromoClear(@pslot);
+  for i := 1 to Length(s) do
+    if (s[i] = 'b') or (s[i] = 'B') then
+    begin
+      PromoMagBits := Copy(s, i + 1, Length(s) - i);
+      Exit;
+    end;
+  PromoMagBits := s;   { no prefix seen — take it as already bare }
+end;
+
+{ Is this variant a heap-tier promotable int, i.e. a value that may be outside
+  Int64 and must not be read through pyvar_to_int? }
+function VarIsPromo(const v: Variant): Boolean;
+begin
+  VarIsPromo := PPyVarRec(@v)^.VType = 8193;
+end;
+
+function pyint_bit_length(const v: Variant): Int64;
+var m: Int64; n: Integer; s: AnsiString;
+begin
+  if VarIsPromo(v) then
+  begin
+    s := PromoMagBits(v);
+    { PXXPromoToBase renders zero as '0b0'; bit_length(0) is 0, not 1. A
+      heap-tier promo is never zero in practice, but the guard costs nothing
+      and keeps the two paths agreeing. }
+    if (Length(s) = 1) and (s[1] = '0') then pyint_bit_length := 0
+    else pyint_bit_length := Length(s);
+    Exit;
+  end;
+  m := pyvar_to_int(v);
+  { Low(Int64) has no positive counterpart, so negating it overflows. Its
+    magnitude is 2^63, whose bit_length is 64. }
+  if m = Low(Int64) then begin pyint_bit_length := 64; Exit; end;
+  if m < 0 then m := -m;
+  n := 0;
+  while m <> 0 do begin Inc(n); m := m shr 1; end;
+  pyint_bit_length := n;
+end;
+
+function pyint_bit_count(const v: Variant): Int64;
+var m: Int64; n, i: Integer; s: AnsiString;
+begin
+  if VarIsPromo(v) then
+  begin
+    s := PromoMagBits(v);
+    n := 0;
+    for i := 1 to Length(s) do
+      if s[i] = '1' then Inc(n);
+    pyint_bit_count := n;
+    Exit;
+  end;
+  m := pyvar_to_int(v);
+  { see pyint_bit_length: 2^63 has exactly one set bit. }
+  if m = Low(Int64) then begin pyint_bit_count := 1; Exit; end;
+  if m < 0 then m := -m;
+  n := 0;
+  while m <> 0 do
+  begin
+    if (m and 1) <> 0 then Inc(n);
+    m := m shr 1;
+  end;
+  pyint_bit_count := n;
+end;
+
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 var k: Integer; p: PByte; u: Int64; fits: Boolean;
 begin

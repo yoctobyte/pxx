@@ -919,6 +919,7 @@ function PyParseSliceTail(baseNode, loNode: Integer): Integer; forward; { Nil Py
 function PyIterArgAsList(n: Integer): Integer; forward; { Nil Python: explode a str arg to an iterable builtin (pyparser.inc) }
 function PyIsIntBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: is this an int base for .to_bytes? (pyparser.inc) }
 function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>.to_bytes(...) intrinsic (pyparser.inc) }
+function PyParseIntMethod(baseNode: Integer; const nm: AnsiString): Integer; forward; { Nil Python intercepted int method (pyparser.inc) }
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
 function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
@@ -944,8 +945,9 @@ function PyRangeAsListWanted: Boolean; forward;   { Nil Python: is this range( i
 function PyParseRangeList: Integer; forward;      { Nil Python: list(range(...)) materialised (pyparser.inc) }
 function PyAnyProcWithArity(const nm: AnsiString; n: Integer): Boolean; forward; { any routine of this name with exactly n params (pyparser.inc) }
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
-function PyIsToBytesBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: may .to_bytes( claim this receiver? (pyparser.inc) }
-function PyIsToBytesSuffixAhead: Boolean; forward; { Nil Python: at a `.to_bytes(` suffix? (pyparser.inc) }
+function PyIsIntMethodBaseTk(tk: TTypeKind; const nm: AnsiString): Boolean; forward; { Nil Python: may an int method claim this receiver? (pyparser.inc) }
+function PyIsIntMethodName(const nm: AnsiString): Boolean; forward; { Nil Python: an intercepted int method name? (pyparser.inc) }
+function PyIsIntMethodSuffixAhead: Boolean; forward; { Nil Python: at an intercepted int-method suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a value (pyparser.inc) }
 function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
@@ -5717,16 +5719,17 @@ begin
         Continue;
       end;
 
-      { `n.to_bytes(...)` on an INT-typed base, the same asymmetry as the str
-        methods above: an ident or field base is consumed here by the lvalue
-        path and never reaches ParseFactor's suffix loop, which only ever sees
-        non-lvalue bases like `(10).to_bytes(...)`. Both routes land in
-        pyparser's one intrinsic. }
+      { `n.to_bytes(...)` / `n.bit_length()` on an INT-typed base, the same
+        asymmetry as the str methods above: an ident or field base is consumed
+        here by the lvalue path and never reaches ParseFactor's suffix loop,
+        which only ever sees non-lvalue bases like `(10).to_bytes(...)`. Both
+        routes land in pyparser's one dispatcher. }
       if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-         PyIsToBytesBaseTk(tk) and (LowerCase(fieldName) = 'to_bytes') then
+         PyIsIntMethodName(LowerCase(fieldName)) and
+         PyIsIntMethodBaseTk(tk, LowerCase(fieldName)) then
       begin
         Next;   { consume the method name; CurTok is now the '(' }
-        node := PyParseToBytes(node);
+        node := PyParseIntMethod(node, LowerCase(fieldName));
         tk := IntToTypeKind(ASTTk[node]);
         recName := ASTRight[node];
         Continue;
@@ -9693,7 +9696,7 @@ begin
         `(a)[i]`. Without this the `^`/`.`/`[` were left dangling and the grouped
         value was used as-is (e.g. `(p)^` returned the pointer, not the pointee). }
       node := CurASTNode;
-      { `.to_bytes(` is left for the NilPy intrinsic — see PyIsToBytesSuffixAhead. }
+      { `.to_bytes(` / `.bit_length(` are left for the NilPy intrinsics — see PyIsIntMethodSuffixAhead. }
       { …and in PYTHON mode, so is every other `.` and `[`. This tail is
         Pascal-shaped: it builds a raw AN_INDEX for `[` and reads a record FIELD
         for `.`, neither of which is what a Python receiver means. So
@@ -9708,7 +9711,7 @@ begin
         bug-nilpy-postfix-after-a-parenthesised-expression }
       while ((CurTok.Kind = tkCaret) or
              ((CurTok.Kind in [tkDot, tkLBrack]) and not PyExprMode)) and
-            not (PyExprMode and PyIsToBytesSuffixAhead) do
+            not (PyExprMode and PyIsIntMethodSuffixAhead) do
       begin
         { A grouped value whose type is a CLASS goes to the real member/index dispatcher --
           `(Data as TJSONArray)[0].ClassType` (fcl-json's suite).
@@ -14635,6 +14638,7 @@ end;
 procedure ParseFactor;
 var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     sdName: AnsiString;
+    smName: AnsiString;      { the intercepted int-method name at this suffix }
     smTk, tpTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
     ppBase, ppExp, ppPi, ppArgSeq, ppArgSeq2: Integer;   { `**` power operator }
     enStart, enArg0, enArg1: Integer;   { enumerate(xs, start=N) }
@@ -14864,16 +14868,19 @@ begin
     rewrites the node without consuming input would otherwise spin forever. }
   repeat
     pySuffixTokPos := TokPos;
-  { `<int>.to_bytes(n, "little", signed=s)`, the other half of the pair. }
+  { `<int>.to_bytes(n, "little", signed=s)` / `<int>.bit_length()`, the other
+    half of the pair. }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
-        (LowerCase(GetTokenStr(TokPos)) = 'to_bytes') and
+        PyIsIntMethodName(LowerCase(GetTokenStr(TokPos))) and
         (Tokens[TokPos + 1].Kind = tkLParen) and
-        PyIsToBytesBaseTk(IntToTypeKind(ASTTk[CurASTNode])) do
+        PyIsIntMethodBaseTk(IntToTypeKind(ASTTk[CurASTNode]),
+                            LowerCase(GetTokenStr(TokPos))) do
   begin
     smBase := CurASTNode;
+    smName := LowerCase(GetTokenStr(TokPos));
     Next; Next;                 { '.' and the name; CurTok = '(' }
-    CurASTNode := PyParseToBytes(smBase);
+    CurASTNode := PyParseIntMethod(smBase, smName);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and

@@ -1046,7 +1046,7 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_print_kwargs26 2>/dev/null)" = "$$(printf 'ab\nx|y|\nplain\nmulti 1 2\nafter stderr\nnl end\nflush only')"
 	test "$$(/tmp/test_nilpy_print_kwargs26 2>&1 >/dev/null)" = "to stderr"
 	./$(COMPILER) test/test_nilpy_to_bytes.npy /tmp/test_nilpy_to_bytes26
-	test "$$(/tmp/test_nilpy_to_bytes26)" = "$$(printf '8\n10\n0\n10\n254\n255\n-2\n255\n0\n255\n-1\n255\n8\n44\n1\n300\n300\n4\n258\n-2')"
+	test "$$(/tmp/test_nilpy_to_bytes26)" = "$$(printf '8\n10\n0\n10\n254\n255\n-2\n255\n0\n255\n-1\n255\n8\n44\n1\n300\n300\n4\n258\n-2\n6\n8 0 4\n1 2 2\n71\n70\n71\n201\n10\n8 101\n9\n8 0 1\n1 70\n9\n[1, 2, 8]')"
 	@# input() / input(prompt): stdin-driven, like test_eof_stdin.pas. `Input` is a
 	@# standard Pascal identifier, so the name needs its own NilPy arm.
 	./$(COMPILER) test/test_nilpy_input_builtin.npy /tmp/test_nilpy_input26
@@ -1067,7 +1067,7 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_list_of_bytes26)" = "$$(printf '[44, 1, 0, 0, 0, 0, 0, 0]\n(44, 1, 0, 0, 0, 0, 0, 0)\n8\n44\n1\n45\n[44, 1, 0, 0]\n[44, 1, 0, 0]\n[]')"
 	@# the guard: a user class declaring to_bytes must win over the intrinsic
 	./$(COMPILER) test/test_nilpy_to_bytes_user_class_wins.npy /tmp/test_nilpy_tb_userwins26
-	test "$$(/tmp/test_nilpy_tb_userwins26)" = "$$(printf 'packet:7\npacket:1\nframe:2')"
+	test "$$(/tmp/test_nilpy_tb_userwins26)" = "$$(printf 'packet:7\npacket:1\nframe:2\nreg:16\nreg:32\nregcount:8')"
 	./$(COMPILER) test/test_nilpy_comp_iterable.npy /tmp/test_nilpy_comp_iterable26
 	test "$$(/tmp/test_nilpy_comp_iterable26)" = "$$(printf '2\n3\n4\nr 0\nr 1\nr 2\n66')"
 	./$(COMPILER) test/test_nilpy_mixed_return_variant.npy /tmp/test_nilpy_mixed_return_variant26

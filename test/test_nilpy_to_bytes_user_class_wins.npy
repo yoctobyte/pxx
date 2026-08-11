@@ -41,3 +41,31 @@ print(Packet(7).to_bytes(8, "little", signed=True))
 # would have claimed without the guard
 print(use(Packet(1)))
 print(use(Frame(2)))
+
+
+# bug-n-int-bit-length-is-not-implemented — the same guard, for the methods
+# that joined the intercept. PyIsIntMethodBaseTk asks PyAnyClassDeclares with
+# the ACTUAL method name rather than a hardcoded 'to_bytes', so a user class
+# declaring `bit_length` must keep it for a variant receiver exactly as Packet
+# keeps `to_bytes` above. Hardcoding the name here is the mistake that would
+# let the intrinsic shadow real code.
+
+
+class Register:
+    def __init__(self, w):
+        self.w = w
+
+    def bit_length(self):
+        return "reg:" + str(self.w)
+
+    def bit_count(self):
+        return "regcount:" + str(self.w)
+
+
+def widen(r):
+    return r.bit_length()
+
+
+print(Register(16).bit_length())
+print(widen(Register(32)))
+print(Register(8).bit_count())
