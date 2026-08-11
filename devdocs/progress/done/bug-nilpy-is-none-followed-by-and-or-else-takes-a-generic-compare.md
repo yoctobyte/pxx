@@ -166,4 +166,4 @@ plus the two value-site controls, expectation taken from CPython rather than
 from pxx.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit eb6484bd2.
