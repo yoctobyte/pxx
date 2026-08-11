@@ -162,4 +162,4 @@ would cost a grep over the files mentioning `VT_`. The tag is deliberately kept
 below `VT_PROMO_BASE` so the emitters' `jl done` range test skips it for free.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit ea9ed57c5.

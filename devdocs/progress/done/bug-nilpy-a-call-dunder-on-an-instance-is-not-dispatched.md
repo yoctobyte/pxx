@@ -106,4 +106,4 @@ directly and through a dict, and a class WITHOUT one reached the same dynamic
 way still raising catchably. Output is byte-identical to CPython's.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit ea9ed57c5.
