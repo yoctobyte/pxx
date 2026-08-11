@@ -5,18 +5,19 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:8 blocked:3 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1650 rejected:35`
+`urgent:1 unfinished:9 blocked:3 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1650 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-n-a-type-name-is-not-a-first-class-value` [N] — owner: claude-A
+_none — no lane is locked._
 
 ## urgent (1) — jump the queue
 
 - `task-t-pin-fast-track-t-owns-verification` [T]
 
-## unfinished (8) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
+- `bug-n-a-type-name-is-not-a-first-class-value` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
