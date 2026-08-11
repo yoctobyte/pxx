@@ -142,3 +142,37 @@ tw = Twice()
 print(mh(3).show(), mh(3).show().upper())
 print(ml()[1], ml()[1] + 5, ml()[1:][0])
 print(tw(4)[1])
+
+# ...and the third member of that family: a BARE attribute (no parens) on a
+# call result. `mh(3).show()` and `ml()[1]` above worked; `mh(3).v` was
+# "unexpected token", while `o = mh(3); o.v` was fine.
+#
+# Fixing the parse alone was not enough and was reverted once: the runtime
+# getter it routes to consulted only the setattr side-store, so a field the
+# class DECLARES came back as a false AttributeError. pylib now falls back to
+# the class's RTTI field table, which also serves an INHERITED field and a
+# field of each scalar kind.
+# bug-nilpy-a-bare-attribute-on-a-call-result-is-refused
+
+
+class Kinds(Holder):
+    def __init__(self):
+        Holder.__init__(self, 1)
+        self.s = "hi"
+        self.f = 1.5
+        self.b = True
+
+
+def mkk():
+    return Kinds()
+
+
+mk2 = mkk
+print(mh(3).v, mh(3).v + 1)
+print(mk2().s, mk2().f, mk2().b)
+print(mk2().v)                      # INHERITED from Holder
+print(mkh(mh(2).v).show())          # a chain through the attribute
+try:
+    print(mh(3).nope)
+except AttributeError:
+    print("AttributeError")

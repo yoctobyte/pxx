@@ -14921,6 +14921,34 @@ begin
     CurASTNode := ParseClassRecordSelectors(smBase, ResolveNodeRec(smBase), smTk);
     LastExprTk := smTk;
   end;
+  { …and a bare ATTRIBUTE on a receiver the frontend cannot type as a class:
+    `mk(3).v`, `g(3).v` — a call RESULT, where there is no symbol to key on. The
+    class-selector loop just above needs a statically known class; the method
+    loops all need a '(' after the name. So a bare attribute on a call result
+    was claimed by nobody and reported `unexpected token`, while
+    `o = mk(3); o.v` worked — the same asymmetry the '.method()' and '[i]'
+    halves of this family already had.
+
+    Routed to the dynamic attribute read, which is what an unknown receiver
+    gets everywhere else. That was only half a fix until pylib's getter learned
+    to fall back to the class's DECLARED fields (PyDeclaredAttrGet): before
+    that it consulted the setattr side-store alone and answered a false
+    AttributeError for a field that plainly exists, which is why this ticket
+    was filed rather than the parse gap papered over.
+    bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+  while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) and
+        (Tokens[TokPos + 1].Kind <> tkLParen) and
+        (ASTKind[CurASTNode] = AN_CALL) and
+        not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
+  begin
+    smBase := CurASTNode;
+    Next;                       { consume '.'; CurTok = the attribute name }
+    smNameTok := TokPos - 1;
+    Next;                       { consume the name }
+    CurASTNode := PyMakeDynAttrGet(smBase, GetTokenStr(smNameTok));
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+  end;
   { Same asymmetry for the SUBSCRIPT suffix: `s[i]` on an ident goes through
     ParseLValueAST, but a string literal and a call RESULT are not lvalues, so
     `"abc"[1]` and `"a b".split(" ")[1]` never consumed the '[' and were parse

@@ -3,7 +3,7 @@ track: N
 prio: 50
 type: bug
 summary: "`g(3).v` — a bare ATTRIBUTE (no parens) on a call result is a parse error, while `g(3).show()` and `g()[1]` now work. The runtime getter it would need, pydynattr_get_v, only consults the dynamic-attribute side store and never the object's DECLARED fields, so wiring the parse alone turns the error into a false AttributeError."
-status: working
+status: done
 owner: claude-A
 ---
 
@@ -73,3 +73,42 @@ a chain `g(3).v + 1`, an INHERITED field, a field of each scalar kind, and a
 genuinely missing attribute still raising AttributeError — diffed against
 CPython. Extend `test_nilpy_postfix_after_parens`, which already carries the
 `.method()` and `[i]` halves.
+
+## Resolution (2026-08-11) — the runtime half first, then the parse
+
+Done in the order the ticket insisted on, because the reverse turns a loud
+compile error into a plausible-but-false `AttributeError`.
+
+**Runtime half.** `PyDeclaredAttrGet` (pylib) walks the class's RTTI field table
+up the parent chain — the same shape `PyFindMethCI` already has for methods —
+and boxes `inst + Offset` by `TypeKind`: AnsiString, Double, Single, Boolean,
+Char, Int64/QWord, Integer/LongInt, Cardinal, SmallInt, Word, ShortInt, Byte,
+NativeInt/UInt, Variant (copied) and a class instance. A kind with no Python
+value shape yet (record, set, frozen string, static array) reports NOT-FOUND
+rather than inventing a value, so the failure stays loud. `pylib` already
+`uses typinfo`, so `PFieldInfo` needed no new mirror — the ticket's "pylib does
+not mirror PFieldInfo yet" was stale.
+
+Both getters consult it: `pydynattr_get` (statically class-typed receiver) and
+`pydynattr_get_v` (variant receiver), each AFTER the setattr side-store, which
+is CPython's order — an instance `__dict__` entry shadows the declared field.
+
+**Parse half.** One more loop in the Python suffix cluster: a bare `.name` (no
+`(` after it) on an `AN_CALL` receiver that is not statically a class routes to
+`PyMakeDynAttrGet`. The class-selector loop above it needs a known class and
+every method loop needs a `(`, which is why this shape was claimed by nobody.
+
+Diffed against CPython, all matching: `mk(3).v`, `g(3).v` through a callable
+value, `g(3).v + 1`, a field of each scalar kind, an INHERITED field, a chain
+through the attribute, `o = mk(3); o.v` still fine, and a genuinely missing
+attribute still raising `AttributeError`. `hasattr`/`getattr` with a default
+also answer correctly for a declared field.
+
+Gate: `make test-nilpy` GREEN, `gate.sh quick` GREEN (self-host byte-identical).
+`test/test_nilpy_postfix_after_parens` extended with the bare-attribute rows —
+it already carried the `.method()` and `[i]` halves of this family.
+
+Needs a pin before other lanes see it (`compiler/builtin`).
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

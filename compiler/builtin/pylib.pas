@@ -2730,7 +2730,112 @@ begin
             (PyDynAttrStore.indexof(PyDynAttrKey(obj, name)) >= 0);
 end;
 
+type
+  PPyF8  = ^Int64;
+  PPyF4  = ^Integer;
+  PPyU4  = ^Cardinal;
+  PPyF2  = ^SmallInt;
+  PPyU2  = ^Word;
+  PPyF1  = ^ShortInt;
+  PPyU1  = ^Byte;
+  PPyFB  = ^Boolean;
+  PPyFC  = ^Char;
+  PPyFS  = ^Single;
+  PPyFD  = ^Double;
+  PPyFP  = ^Pointer;
+  PPyFN  = ^NativeInt;
+  PPyFV  = ^Variant;
+
+function PyEqAttrCI(const a, b: AnsiString): Boolean;
+{ Case-insensitive name compare. pyeval has the same helper, but pyeval USES
+  pylib and not the reverse, so it cannot be borrowed from there. }
+var i, n: Integer; ca, cb: Char;
+begin
+  n := Length(a);
+  if n <> Length(b) then begin PyEqAttrCI := False; Exit; end;
+  for i := 1 to n do
+  begin
+    ca := a[i]; cb := b[i];
+    if (ca >= 'A') and (ca <= 'Z') then ca := Chr(Ord(ca) + 32);
+    if (cb >= 'A') and (cb <= 'Z') then cb := Chr(Ord(cb) + 32);
+    if ca <> cb then begin PyEqAttrCI := False; Exit; end;
+  end;
+  PyEqAttrCI := True;
+end;
+
+function PyFindFieldCI(cls: PClassRTTI; const name: AnsiString): PFieldInfo;
+{ The DECLARED field of that name, anywhere up the class hierarchy. Mirrors
+  pyeval's PyFindMethCI, which walks the same blob for methods. }
+var curr: PClassRTTI; flds: PFieldInfo; i: Integer;
+begin
+  PyFindFieldCI := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.FieldCount > 0 then
+    begin
+      flds := curr^.FieldsPtr;
+      for i := 0 to Integer(curr^.FieldCount) - 1 do
+        if PyEqAttrCI(flds[i].NamePtr^, name) then
+        begin
+          PyFindFieldCI := @flds[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyDeclaredAttrGet(obj: Pointer; const name: AnsiString;
+                           var found: Boolean): Variant;
+{ A field DECLARED by the class, read out of the instance through its RTTI and
+  boxed by TypeKind.
+
+  The dynamic-attribute store below only knows attributes created by ASSIGNMENT
+  or setattr; a field the class declares is invisible to it. That was fine while
+  every attribute read the frontend could not resolve statically was a dynamic
+  one — but a chained receiver (`mk(3).v`) has no symbol for the frontend to key
+  on, so it must ask at run time, and the answer has to include the declared
+  fields or it is a false AttributeError for a field that plainly exists.
+
+  `found` distinguishes "not a declared field" from "a declared field whose
+  value is None" — a Result of None means the latter.
+  bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+var cls: PClassRTTI; fi: PFieldInfo; a: Pointer; k: Int64;
+begin
+  found := False;
+  if obj = nil then Exit;
+  cls := GetInstanceRTTI(obj);
+  if cls = nil then Exit;
+  fi := PyFindFieldCI(cls, name);
+  if fi = nil then Exit;
+  a := Pointer(NativeInt(obj) + NativeInt(fi^.Offset));
+  k := fi^.TypeKind;
+  found := True;
+  if k = 23 then Result := PPyAnsiString(a)^          { AnsiString }
+  else if k = 19 then Result := PPyFD(a)^             { Double }
+  else if k = 18 then Result := PPyFS(a)^             { Single }
+  else if k = 2 then Result := PPyFB(a)^              { Boolean }
+  else if k = 3 then Result := PPyFC(a)^              { Char }
+  else if (k = 13) or (k = 14) then Result := PPyF8(a)^        { Int64/QWord }
+  else if (k = 1) or (k = 11) then Result := PPyF4(a)^         { Integer/LongInt }
+  else if k = 12 then Result := PPyU4(a)^                       { Cardinal }
+  else if k = 9 then Result := PPyF2(a)^                        { SmallInt }
+  else if k = 10 then Result := PPyU2(a)^                       { Word }
+  else if k = 7 then Result := PPyF1(a)^                        { ShortInt }
+  else if k = 8 then Result := PPyU1(a)^                        { Byte }
+  else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
+  else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
+  else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
+  else
+    { a kind with no Python value shape yet (a record, a set, a frozen string,
+      a static array). Answering with SOMETHING would be a wrong value; report
+      it as not-found so the caller raises, which is at least loud. }
+    found := False;
+end;
+
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
+var declFound: Boolean;
 begin
   { Reached with a receiver STATICALLY known to be a real class instance (or
     nil, a class-typed field/local defaulting to None) — never an int/str/etc
@@ -2747,14 +2852,21 @@ begin
   else if obj = nil then
     raise AttributeError.Create('''NoneType'' object has no attribute ''' + name + '''')
   else
+  begin
+    { ...then the fields the class DECLARES. A dynamic attribute shadows one of
+      the same name, which is the CPython order (instance __dict__ first).
+      bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+    Result := PyDeclaredAttrGet(obj, name, declFound);
+    if declFound then Exit;
     raise AttributeError.Create('''' + TObject(obj).ClassName +
       ''' object has no attribute ''' + name + '''');
+  end;
 end;
 
 function PyVarTypeName(t: Int64): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
-var obj: Pointer; tg: Int64; cn: AnsiString;
+var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -2771,6 +2883,12 @@ begin
   tg := pyvartag(v);
   if tg = 7 then
   begin
+    { a declared field of the object the variant holds — same fallback the
+      statically-typed getter above does, and the reason a chained receiver
+      (`mk(3).v`) resolves at all.
+      bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+    Result := PyDeclaredAttrGet(obj, name, declFound);
+    if declFound then Exit;
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
