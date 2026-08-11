@@ -7601,6 +7601,16 @@ UFORTH_CORPUS ?= testje.for testjefixed.for testjefix2.for testjefix3.for
 # `_pxxdrv_blocktest.fth.fth` sitting in $(UFORTH_SRC)/tests from an earlier
 # kill when this was found.
 #
+# A trap cannot be the whole answer, because SIGKILL is not trappable and that
+# is exactly how testmgr ends a job past its budget. Measured 2026-08-11: **87
+# leaked drivers**, 71 of them blocktest — which was independent evidence of
+# which word set kept being killed, before anything was timed. So the recipe
+# also SWEEPS on entry: any `_pxxdrv_<pid>_*` whose creating pid is gone is
+# removed. Scoped by liveness rather than by age or a bare glob, because a
+# concurrent run's drivers are live and deleting those is the collision this
+# whole naming scheme exists to prevent. (PID reuse can spare a stale file for
+# one more sweep; harmless.)
+#
 # COST: blocktest is by far the slowest — ~240s under pxx against CPython's
 # ~80s, because it is a memory-walk and hash workload. The other twelve
 # together are seconds. Whoever tunes tier placement should know the ~6 minutes
@@ -7637,6 +7647,11 @@ test-uforth: $(COMPILER)
 	wd="$$(mktemp -d)"; \
 	trap 'rm -rf "$$wd" "$(UFORTH_SRC)"/tests/_pxxdrv_$$$$_*.fth' EXIT INT TERM HUP; \
 	root="$$(pwd)"; \
+	for d in "$(UFORTH_SRC)"/tests/_pxxdrv_*.fth; do \
+	  [ -e "$$d" ] || continue; \
+	  p="$${d##*/_pxxdrv_}"; p="$${p%%_*}"; \
+	  kill -0 "$$p" 2>/dev/null || rm -f "$$d"; \
+	done; \
 	echo "compiling uforth.py as Nil-Python ..."; \
 	"$$root/$(COMPILER)" "$(UFORTH_SRC)/uforth.py" "$$wd/uforth" > /dev/null || \
 	  { echo "test-uforth: FAIL — uforth.py did not compile"; exit 1; }; \

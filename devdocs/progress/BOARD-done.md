@@ -1652,6 +1652,7 @@ should not read it to find out what to do. Grep it freely._
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | task-t-borg-open-regression-is-permanently-stale | T | 40 | task | borg's watcher was stopped 2026-07-31 with one open regression recorded; nothing will ever clear it, so every --status and gate.sh check reads a dead host's red as live | — |
+| task-t-pin-fast-track-t-owns-verification | T | 80 | task | Track A pins in 30s and never waits; everything heavier moves to Track T, asynchronous and per-sha. Status is a JOIN of pin.log x tstate, not a label on the pin. Native full regression (incl. NilPy + corpus) is the priority right now, above the cross matrix. | — |
 | task-t-seed-from-stable-defeats-rebuild | T | 65 | task | seed-from-stable makes the whole matrix test the pinned binary; only selfhost-fixedpoint can see it | — |
 | task-t-suppress-autoticket-until-host-baselined | T | 60 | task | a new watcher host's first run auto-files a bogus 17-job cascade ticket; NEW-RED is meaningless without a per-host baseline | — |
 | task-t-worktree-is-not-current-state | T | 65 | task | In a watcher clone the working tree is a snapshot of the sha under test, not current state. Four separate bugs in one day came from reading it. | — |

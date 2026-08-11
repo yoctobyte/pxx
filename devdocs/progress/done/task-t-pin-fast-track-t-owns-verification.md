@@ -3,6 +3,8 @@ track: T
 prio: 80
 type: task
 summary: "Track A pins in 30s and never waits; everything heavier moves to Track T, asynchronous and per-sha. Status is a JOIN of pin.log x tstate, not a label on the pin. Native full regression (incl. NilPy + corpus) is the priority right now, above the cross matrix."
+status: done
+owner: claude@plexus
 ---
 
 # Pinning is fast and unverified; Track T owns verification
@@ -115,3 +117,104 @@ That gap is exactly what the regression suites cover and what `quick` may miss.
 Track T's own: `tools/testmgr.py --tier full` green for tooling changes, and
 `pinstatus` exercised against a real `pin.log` + `tstate/` pair rather than a
 synthetic one.
+
+---
+
+## RESOLVED 2026-08-11 — all three deliverables in; the last one was the gap
+
+**Deliverable 1 — `pinstatus`.** Landed earlier in `bb461b937`. The join, the
+per-tier lines, and the last-fully-green fallback all work against the real
+`pin.log` x `tstate/` pair.
+
+**Deliverable 2 — native depth before platform breadth.** Landed earlier in
+`e347d187a` (`limited` became the native-depth tier: all frontends, `test-nilpy`
+and `test-uforth`, the real corpus, no qemu) and `c32381c4f` (the idle
+escalation ladder). NilPy is tier 1, as this ticket asked.
+
+**The "suggested shape" bullet was the one that mattered, and it was never
+built:**
+
+> T may treat "a new sha appeared in `pin.log`" as a trigger to run tier 1
+> against it promptly, so the pin the tracks are actually using is the one that
+> gets attention first.
+
+`twatch` never read `pin.log` at all (`grep -c pin.log tools/twatch.py` = 0).
+Measured over `pin.log` x `runs-*.ndjson`, that is not a rounding error:
+
+| of the last 25 pins | count |
+| --- | --- |
+| got a `full` run | 7 |
+| got `native` only | 2 |
+| **never judged in ANY tier** | **13** |
+| **never got a `full` run** | **18** |
+
+And it was live while this ticket was being read: **v257 (`96b4b40a`), pinned
+2026-08-11T16:18Z, `NOT JUDGED`** — the binary every other track had been
+building with for an hour.
+
+This is not a bug in the ladder; it is a gap the ladder *cannot* see. The
+ladder deepens HEAD, and a pin is whatever HEAD happened to be when a human ran
+`make pin` — by the time the box climbs from the fast tier to depth, HEAD has
+moved and the pin is history. The pin was covered only by the accident of
+still being HEAD when T looked. So the recovery half of this ticket's own
+trade — "a bad pin is RECOVERED, not prevented" — had nothing to recover from,
+because no verdict was being produced for the artifact in question.
+
+**Landed:** a pin-verification phase in `twatch`, at two priorities.
+
+```
+1. new push        -> fast tier on HEAD        seconds; nobody waits on T
+2. PIN, mid tier   -> native depth on the PIN  <- new, and ahead of HEAD's idle
+3. idle            -> mid tier on HEAD            depth on purpose
+4. still idle      -> deep tier on HEAD
+5. PIN, deep tier  -> platform breadth on the PIN  <- new
+6. opt / bench / bisect / fuzz
+```
+
+Native depth on the pin outranks idle depth on HEAD because that binary is what
+Tracks B/C/D/E are compiling against *right now*, while HEAD is a sha nobody
+has adopted. Platform breadth on the pin waits its turn — it is ordinary work,
+and it is what gives `pin_is_green` (which requires a `full` run) a fallback
+target to name.
+
+Two design points that were easy to get wrong, both recorded in
+`devdocs/dev/track-t.md`:
+
+- **It does not go through `test_sha`.** That function maintains the HEAD
+  progression — `last`, `jobs`, the open-regression ledger — all defined
+  relative to the sha sequence the host walks. Feeding it a days-old pin would
+  set "last tested" backwards, diff the pin's job map against HEAD's and
+  manufacture NEW-RED/FIXED pairs out of nothing but the time travel, and open
+  regressions whose commit range means nothing. `verify_pin` publishes exactly
+  one run record and touches no state another phase reads.
+- **A box that could not measure publishes nothing** (INFRA/INVALID/no
+  measurement all bail). An unjudged pin is a known unknown; a fabricated
+  verdict on the artifact every track builds against is much worse.
+
+A RED on the pin prints loudly and names both recovery routes (`pinstatus` for
+the last fully-green pin, `make revert` to demote), per this ticket's
+"surfacing loudly" note.
+
+**Also fixed while here:** `pin-verify` is a long phase that is not
+`"testing"`, and `trackt`'s wedge detector keyed on that exact string — so the
+longest new phase would have been its one blind spot. Both `health_check` and
+the attach/progress view now key on a `GATE_PHASES` tuple. (The heartbeat
+itself was already safe: `run_gate` refreshes it every 30s regardless of phase
+name.)
+
+**What this ticket does NOT do**, deliberately: it does not move `pinned`, and
+it does not auto-revert. Those belong to
+[[decide-track-t-autopin-criteria]], which is in shadow mode and has four
+questions still open before a live cutover. This ticket only makes the pin's
+status a *measured fact* instead of an accident — which is the precondition for
+any of that, and is worth having on its own.
+
+**Verified:** `tools/devtest_pin_verify.py` (9 checks — both `pin.log` line
+shapes, the already-judged skip, the mid-before-deep split, the
+unreachable-pin guard, missing files); `devtest_pinstatus`, `devtest_idle_ladder`,
+`devtest_pin_shadow`, `devtest_skip_semantics`, `devtest_stub_lifecycle` all
+still green; `trackt health` / `pinstatus` exercised against this box's real
+daemon and real `pin.log`.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

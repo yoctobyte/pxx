@@ -103,6 +103,52 @@ one — and it doesn't matter, because there's nothing it should have tested.
 - Idle watcher time narrows open regression ranges: midpoint commit, failing
   job only (`testmgr --job`) — lazy bisect toward a single SHA.
 
+## The watcher verifies the PIN, not only HEAD
+
+A pin is fast and unverified **on purpose**: `make stabilize-fast && make pin`
+is ~34s and proves the self-host fixedpoint, on the explicit trade that a bad
+pin is **recovered, not prevented**
+(`task-t-pin-fast-track-t-owns-verification`). Track A pays 34s instead of 25
+minutes, and T supplies the verdict afterwards.
+
+That second half was missing, and the gap is invisible unless you go looking
+for it. The escalation ladder deepens **HEAD**; a pin is whatever HEAD happened
+to be when a human ran `make pin`. By the time the box climbs from the fast
+tier to depth, HEAD has moved on and the pin is history — so the pin was only
+ever covered *by accident*, when it happened to still be HEAD. Measured
+2026-08-11 over `pin.log` x `runs-*.ndjson`:
+
+> **18 of the last 25 pins never received a `full` run. 13 were never judged in
+> any tier at all.**
+
+Which is exactly backwards: `pinned` is the ground Tracks B/C/D/E build every
+artifact on, and it was the one sha nobody was deepening.
+
+So the watcher now schedules the pin itself, at two priorities:
+
+- **native depth on the pin runs AHEAD of idle depth on HEAD** — that binary is
+  what other tracks are compiling against *right now*, while HEAD is a sha
+  nobody has adopted;
+- **platform breadth on the pin runs after HEAD's ladder** — ordinary work, and
+  it is what lets `trackt pinstatus` name a last-fully-green pin to fall back
+  to (`pin_is_green` requires a `full` run).
+
+Two properties this must keep, and both are easy to break:
+
+1. **It does not go through `test_sha`.** That function maintains the HEAD
+   progression — `last`, the per-job map, the open-regression ledger — all
+   defined relative to the sha sequence the host is walking. Feeding it a
+   days-old pin sets "last tested" backwards, diffs the pin's jobs against
+   HEAD's map and manufactures NEW-RED/FIXED pairs out of nothing but the time
+   travel. `verify_pin` publishes exactly one run record and touches nothing
+   else.
+2. **A box that could not measure publishes nothing.** Same rule as everywhere
+   else. An unjudged pin is a known unknown; a fabricated verdict on the
+   artifact every track builds against is far worse.
+
+Read the answer with `tools/trackt.py pinstatus` — the `pin.log` x `tstate`
+join, and `make revert` demotes.
+
 ## Rule: a watcher clone's worktree is HISTORY, not current state
 
 The clone is **detached at the sha under test** for most of every cycle, so its

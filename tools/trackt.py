@@ -296,7 +296,7 @@ def cmd_status(clone, attach_ok=True):
         print("  daemon : %sSTOPPED%s — trackt start" % (RED, OFF))
     print_pubhealth(clone)
     print_tstate(clone)
-    if attach_ok and pid and w.get("phase") == "testing":
+    if attach_ok and pid and w.get("phase") in GATE_PHASES:
         print("%s-- run in progress, attaching (Ctrl-C detaches) --%s" % (DIM, OFF))
         cmd_watch(clone)
     return 0
@@ -377,7 +377,7 @@ def render_live(clone, w, live, last_reds, seen_phase=None):
         seen_phase["phase"] = phase
         seen_phase["since"] = time.time()
 
-    if phase != "testing" or not live:
+    if phase not in GATE_PHASES or not live:
         line = "phase %-12s %s" % (phase, DIM + fmt_age(w.get("ts")) + " ago" + OFF)
         sys.stdout.write("\r\033[K  " + line if ISATTY else "  " + line + "\n")
         sys.stdout.flush()
@@ -910,12 +910,19 @@ def cmd_setup(clone, fetch_corpus=False):
 
 
 # Wedged detection. testmgr rewrites live.json every second FOR THE WHOLE RUN,
-# so during `phase == testing` a stale live.json means the daemon is alive and
+# so during a gate phase a stale live.json means the daemon is alive and
 # not working — a direct observation, unlike --status, which can only infer a
 # problem from coverage and takes up to its grace window to do it.
 LIVE_STALE_SECS = 180        # generous: the slowest single job is ~40s
 HEARTBEAT_STALE_SECS = 900   # watch.json only moves on phase change, so idle is fine
 PUB_DROPS_DEGRADED = 3       # consecutive dropped publishes before we care
+# Phases that RUN testmgr, and are therefore covered by the live.json wedge
+# check above. Keyed by phase name rather than "not idle" because most phases
+# (bench, fuzz, bisect-check) do not write live.json continuously and a stale
+# file there means nothing. `pin-verify` belongs here: it is an ordinary gate
+# run that happens to be pointed at the pinned sha instead of HEAD, so leaving
+# it out would have made the longest new phase the one blind spot.
+GATE_PHASES = ("testing", "pin-verify")
 
 
 def health_check(clone):
@@ -941,13 +948,13 @@ def health_check(clone):
     phase = watch.get("phase") or "?"
     # A quiet repo is NOT a fault. Conflating "idle" with "broken" is exactly
     # what made --status untrustworthy, so idle is only checked for a heartbeat.
-    if phase == "testing":
+    if phase in GATE_PHASES:
         age = now - (live.get("ts") or 0)
         if age > LIVE_STALE_SECS:
-            reasons.append("WEDGED: phase=testing but live.json has not moved "
+            reasons.append("WEDGED: phase=%s but live.json has not moved "
                            "in %ds (pct %s, %s/%s) — the daemon is alive and "
                            "not progressing"
-                           % (age, live.get("pct"), live.get("done"),
+                           % (phase, age, live.get("pct"), live.get("done"),
                               live.get("total")))
             return "DOWN", 2, reasons
     hb = now - (watch.get("ts") or 0)
@@ -1233,6 +1240,13 @@ def cmd_pinstatus(repo):
                       % (covered[:8],
                          ", ".join("%s %s" % (t, v[0])
                                    for t, v in sorted(runs[covered].items())))))
+        # "Not judged" used to be a dead end: T tested HEAD, so a pin was
+        # covered only by the accident of having BEEN head when T looked, and
+        # 18 of 25 pins never got a full run. A watcher now schedules the pin
+        # itself, ahead of idle depth on HEAD — so this state is a wait, not a
+        # permanent hole, and the line should say which.
+        print("    (a running watcher verifies the pin itself — native depth "
+              "first; `trackt watch` to follow)")
     else:
         for tier in sorted(got):
             verdict, host, date = got[tier]

@@ -10,6 +10,22 @@ Publishes sparse per-SHA regression reports to devdocs/progress/tstate/.
 No AI, no judgment: signal only.  Ticket crafting from these reports is
 the Track T agent's job (face 2).
 
+Work order on each cycle, highest priority first (a push preempts anything
+below it, and the ladder restarts for the new sha):
+
+  1. new push        -> fast tier on HEAD        seconds; nobody waits on T
+  2. PIN, mid tier   -> native depth on the PIN  the binary every other track
+                                                 is building with right now
+  3. idle            -> mid tier on HEAD         native depth
+  4. still idle      -> deep tier on HEAD        platform breadth (qemu)
+  5. PIN, deep tier  -> platform breadth on the PIN
+  6. opt / bench / bisect / fuzz                 in that order
+
+Steps 2 and 5 exist because the pin is NOT reachable by deepening HEAD: a pin
+is whatever HEAD happened to be when a human ran `make pin`, so by the time the
+ladder climbs, the pin is history. Measured 2026-08-11: 18 of the last 25 pins
+never got a `full` run and 13 were never judged at all. See `pinned_ref`.
+
 The watcher relies on tools/testmgr.py's adaptive resource-aware
 scheduling, so the same command runs on a dev box, a low-power laptop, or
 a big Xeon — several hosts in parallel are fine, they just push
@@ -2430,6 +2446,162 @@ def idle_phase(st, tested, mid_tier, deep_tier):
     return None
 
 
+# ------------------------------------------------------------ pin coverage ---
+# A pin is FAST and UNVERIFIED **by design**: `make stabilize-fast && make pin`
+# is ~34s and proves the self-host fixedpoint and little else, on the explicit
+# trade that a bad pin is RECOVERED rather than prevented
+# (task-t-pin-fast-track-t-owns-verification). Track A already did its half.
+# The other half is T actually judging the pinned sha — and T was not:
+#
+#   18 of the last 25 pins never received a `full` run, and 13 were never
+#   judged in ANY tier (measured 2026-08-11 across pin.log x runs-*.ndjson).
+#
+# That is not a bug in the escalation ladder; it is a gap the ladder cannot see.
+# The ladder deepens HEAD, and the pin is whatever HEAD *happened to be* when a
+# human ran `make pin`. By the time the box climbs to depth, HEAD has moved on
+# and the pin is history. So the one artifact every OTHER track builds against
+# (`$(PXX_STABLE)`, Tracks B/C/D/E) was the sha nobody was deepening — exactly
+# backwards, and it quietly voided the recovery half of the fast-pin trade.
+#
+# Verifying the pin is therefore NOT the same work as testing HEAD, and it is
+# scheduled ahead of idle depth on HEAD.
+PIN_LOG_REL = "stable_linux_amd64/default/pin.log"
+
+
+def pinned_ref(clone):
+    """(version, git sha) of the CURRENT pin, or None.
+
+    Read out of git (`origin/<branch>`) rather than off disk: this clone checks
+    out arbitrary shas in order to test them, so the worktree's copy of pin.log
+    is whatever the sha under test happened to carry, not what is pinned now.
+
+    Two line shapes live in that file — older ones omit the binary sha256. The
+    GIT sha is last in both, so key off position from the END, never a field
+    index (same rule trackt.read_pin_log follows).
+    """
+    try:
+        out = sh(["git", "show", "origin/%s:%s" % (clone.branch, PIN_LOG_REL)],
+                 cwd=clone.path)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        return None
+    cur = None
+    for ln in out.splitlines():
+        w = ln.split()
+        if len(w) >= 5 and w[1] == "pinned" and len(w[-1]) == 40:
+            cur = (w[2], w[-1])
+    return cur
+
+
+def judged_tiers(clone, host, sha):
+    """Tiers in which THIS host has already published a verdict for `sha`.
+
+    Reads the uncapped run archive, not `st["history"]`, which is capped and
+    would forget a pin older than the cap — the exact case that matters here,
+    since a pin is usually days behind HEAD.
+    """
+    got = set()
+    path = os.path.join(clone.path, TSTATE_REL, "runs-%s.ndjson" % host)
+    try:
+        with open(path) as f:
+            for ln in f:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    r = json.loads(ln)
+                except ValueError:
+                    continue
+                if r.get("sha") == sha and r.get("tier"):
+                    got.add(r["tier"])
+    except OSError:
+        pass
+    return got
+
+
+def pin_verify_due(clone, host, st, tiers):
+    """(ver, sha, tier) for the first of `tiers` the current pin still lacks.
+
+    `tiers` is passed by the caller rather than fixed here because the two
+    halves sit at different priorities: native DEPTH on the pin outranks idle
+    depth on HEAD (it is what the other tracks are building on right now),
+    while platform BREADTH on the pin is ordinary work and waits its turn.
+    """
+    cur = pinned_ref(clone)
+    if not cur:
+        return None
+    ver, sha = cur
+    have = judged_tiers(clone, host, sha)
+    for tier in tiers:
+        if tier in have:
+            continue
+        # A pin we cannot reach is not ours to judge: another box may have
+        # pushed a pin newer than anything this clone has fetched, and a
+        # checkout of an unknown sha would just fail the cycle.
+        if not is_ancestor(clone.path, sha, clone.remote_head()):
+            return None
+        return (ver, sha, tier)
+    return None
+
+
+def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
+    """Judge the PINNED sha out of band and record it for the pinstatus join.
+
+    Deliberately does NOT go through test_sha(). That function maintains the
+    HEAD progression — `st["last"]`, the per-job map `st["jobs"]`, and the
+    open-regression ledger — all of which are defined relative to the sha
+    sequence this host is walking. Feeding it a days-old pin would set "last
+    tested" backwards, diff the pin's jobs against HEAD's map and manufacture
+    NEW-RED/FIXED pairs out of nothing but the time travel, and open
+    regressions whose commit range is meaningless.
+    So this publishes exactly one thing — a run record — and touches no state
+    that another phase reads.
+    """
+    print("twatch: verifying PIN %s (%s) at %s — the sha every other track "
+          "builds on" % (ver, sha[:12], tier), flush=True)
+    set_phase(clone, host, "pin-verify", sha=sha[:12], tier=tier, pin=ver)
+    clone.checkout(sha)
+    report, rc = run_gate(clone, tier, abort_check=abort_check)
+    clone_head_back(clone)
+    if rc == "aborted":
+        print("twatch: pin verify preempted by a push — will resume", flush=True)
+        return "aborted"
+    if report is None or report.get("verdict") in ("INFRA", "INVALID") \
+            or no_measurement(report):
+        # Same rule as everywhere else: a box that could not measure publishes
+        # NOTHING. An unjudged pin is a known unknown; a fabricated verdict on
+        # the artifact every track builds against is far worse.
+        print("twatch: pin verify produced no usable verdict — publishing "
+              "nothing, the pin stays unjudged", flush=True)
+        return False
+    verdict = report["verdict"]
+    reds = [j["name"] for j in report["jobs"]
+            if j["status"] not in ("pass", "skip")]
+    st = load_state(clone, host)
+    st["pin_verify"] = {"ver": ver, "sha": sha, "tier": tier,
+                        "verdict": verdict, "date": utcnow(),
+                        "red": reds[:20]}
+    save_state(clone, host, st)
+    with open(os.path.join(clone.path, TSTATE_REL,
+                           "runs-%s.ndjson" % host), "a") as f:
+        f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
+                            "full": True, "verdict": verdict,
+                            "wall": report["wall"], "new_red": [], "fixed": [],
+                            "pin": ver}, sort_keys=True) + "\n")
+    regen_index(clone)
+    # A RED here is louder than an ordinary red, and says so: every track
+    # building with $(PXX_STABLE) is on this binary right now, and `make revert`
+    # plus `trackt pinstatus`'s last-fully-green line are how it gets undone.
+    if verdict != "GREEN":
+        print("twatch: *** PIN %s (%s) is %s at %s: %s — tracks are BUILDING "
+              "on this. `tools/trackt.py pinstatus` for the last fully-green "
+              "pin, `make revert` to demote."
+              % (ver, sha[:12], verdict, tier, ", ".join(reds[:5]) or "?"),
+              flush=True)
+    clone.publish("tstate(%s): pin %s %s %s (%s)"
+                  % (host, ver, sha[:12], verdict, tier))
+    return True
+
+
 def needs_test(repo, sha):
     out = sh(["git", "diff-tree", "--no-commit-id", "--name-only", "-r",
               "-m", "--first-parent", sha], cwd=repo)
@@ -3253,6 +3425,16 @@ def main():
                     print("twatch: %s..%s is docs/tstate-only — no gate needed"
                           % ((tested or "")[:12], head[:12]), flush=True)
                     notest_logged = head
+            # Evaluated ONCE per cycle rather than inside the elif chain: each
+            # call costs a `git show` plus a `merge-base`, and asking twice
+            # could also act on a different pin than the one that satisfied the
+            # condition. Requires `tested`: the abort-check below is defined
+            # relative to it, and on a host that has tested nothing yet HEAD is
+            # the more urgent work anyway.
+            pin_mid = pin_deep = None
+            if tested and not do_test:
+                pin_mid = pin_verify_due(clone, host, st, (args.mid_tier,))
+                pin_deep = pin_verify_due(clone, host, st, (args.tier,))
             if do_test:
                 head = debounce(clone, args.debounce)
                 if not STOP:
@@ -3267,6 +3449,14 @@ def main():
                               "back to %s" % args.tier, flush=True)
                         test_sha(clone, host, st, head, args.tier, full=True)
                     did_work = True
+            elif pin_mid:
+                # AHEAD of idle depth on HEAD, and deliberately so: this is the
+                # binary Tracks B/C/D/E are building with *right now*, whereas
+                # HEAD is a sha nobody has adopted yet. Native depth only here —
+                # platform breadth on the pin is ordinary work and waits below.
+                verify_pin(clone, host, st, *pin_mid,
+                           abort_check=make_preempted(clone, tested))
+                did_work = True
             elif tested and fast and \
                     idle_phase(st, tested, args.mid_tier, args.tier):
                 # idle: climb the ladder — native DEPTH first, platform
@@ -3276,6 +3466,15 @@ def main():
                 nxt = idle_phase(st, tested, args.mid_tier, args.tier)
                 test_sha(clone, host, st, tested, nxt,
                          full=True, abort_check=make_preempted(clone, tested))
+                did_work = True
+            elif pin_deep:
+                # HEAD's ladder is exhausted: give the pin platform breadth too.
+                # This is what lets `trackt pinstatus` name a last fully-green
+                # pin to fall back to — pin_is_green() requires a `full` run,
+                # and without one the recovery half of the fast-pin trade has
+                # no target.
+                verify_pin(clone, host, st, *pin_deep,
+                           abort_check=make_preempted(clone, tested))
                 did_work = True
             elif tested and CONF.get("idle_opt") and \
                     (st.get("last_full") or {}).get("sha") == tested and \
