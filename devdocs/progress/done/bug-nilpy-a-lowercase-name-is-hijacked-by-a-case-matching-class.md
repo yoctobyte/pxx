@@ -130,4 +130,4 @@ The three sibling tests that pin the earlier halves —
 all stay green. Gate: `tools/gate.sh quick` GREEN + `make test-nilpy`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 0f0027d01.
