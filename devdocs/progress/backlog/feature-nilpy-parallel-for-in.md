@@ -2,7 +2,7 @@
 summary: "NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime"
 type: feature
 prio: 5
-blocked-by: [decide-nilpy-parallel-capture-semantics]
+blocked-by: []   # was decide-nilpy-parallel-capture-semantics — DECIDED 2026-08-11
 ---
 
 # NilPy parallel for-in
@@ -71,3 +71,65 @@ CPython code silently races). Cheap to add, permanent to own.
 
 Whoever picks this up later: re-read the fork above before writing any code,
 and confirm with the user that the substrate is actually settled.
+
+---
+
+## UNBLOCKED 2026-08-11 — the semantics are decided; still parked by choice
+
+[[decide-nilpy-parallel-capture-semantics]] is settled and moved to `decided/`.
+Read it for the reasoning; the design is summarised here so the implementer needs
+one file. Background on the threading model:
+`devdocs/dev/threading-model.md`.
+
+**The prio stays low on purpose.** The decision is made; the *parking* is not
+lifted. The user's framing is unchanged — trivial to implement, expensive to own
+— and this is an X-tag extension (CPython has no parallel `for`, so nothing is
+missing without it). Confirm with the user before starting.
+
+## The design, settled
+
+**Surface** — Pascal's `parallel for`, transliterated, with `parallel` as a
+**soft keyword** (Python's own precedent: `match`/`case`/`type`, PEP 634):
+
+```python
+parallel for i in range(n):
+    out[i] = i * 3
+
+parallel(workers=4, cap=50) for i in range(n):      # policy, as real kwargs
+parallel(sum=total, max=best) for i in range(n):    # reductions, same clause list
+```
+
+Reduction names are Python's own: `sum`/`prod`/`any`/`all`/`min`/`max`, mapping
+onto the ops `ParseParallelFor` already accepts (`+`/`mul`/`or`/`and`/`min`/`max`
+— **verified**, no runtime gap). Explicit only: do NOT infer a reduction from
+`total += x`, because float addition is not associative and the result would
+vary with worker count.
+
+**Capture: BY REFERENCE (shared)** — Pascal's model, and the faithful one.
+Python has no per-iteration scope (a `for` body's names are the function's
+names — the closure-in-a-loop gotcha), so iteration-private capture would invent
+a scoping rule Python lacks. Safety comes from the explicit per-loop opt-in, the
+explicit reduction clause, [[feature-nilpy-threadsafe-containers]] and the docs
+— not from a private-by-default model.
+
+**Reductions, v1:** the per-worker partial stays in the promo-int **inline
+tier**; reaching the spill point **raises**. Every integer accumulator infers as
+a promotable int (measured: `total += i` → kind 28, and `a: int = 0` does not
+escape it), and the heap tier packs/allocates/unpacks *per operation*, so a
+bignum partial would anti-scale on the heap spinlock. Arbitrary precision on
+request is [[feature-nilpy-parallel-reduction-bigint]]. Float, and `max`/`min`/
+`any`/`all` on ints, are plain scalars and free.
+
+**Also settled:** `--threadsafe` required (mirror the Pascal error); v1 is
+`range()` only; x86-64 only, because `--threadsafe` is; and **`i` after the loop
+is unspecified** — document it, do not leave whatever the last worker wrote.
+
+## Tests this needs
+
+- The disjoint-write shape from `test_parallel_for_lang.pas`, in `.npy`.
+- **The soft-keyword test**: a NilPy program with a `def parallel(x)` and a
+  variable named `parallel`, both still working. `test_parallel_policy_lang.pas`
+  is the Pascal precedent and it exists for a reason.
+- A reduction of each supported op; a float sum; an integer sum that stays inline.
+- An integer sum that overflows the inline tier → the diagnostic, not a wrong
+  answer and not a silent crawl.

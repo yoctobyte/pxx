@@ -37,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (212)
+## backlog (213)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -92,7 +92,6 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
-| decide-nilpy-parallel-capture-semantics | U | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
@@ -161,7 +160,8 @@ _none_
 | feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
 | feature-nilpy-no-type-inference-switch | N | 45 | feature | `--no-type-inference`: compile a NilPy program fully dynamically | — |
-| feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
+| feature-nilpy-parallel-for-in | A | 5 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | — |
+| feature-nilpy-parallel-reduction-bigint | N | 5 | feature | Opt-in arbitrary-precision reduction for `parallel for`. v1 keeps per-worker partials in the promo-int inline tier and raises at the spill point; this adds the real bignum path, which is correct but anti-scales because every bignum op takes the global heap spinlock. | feature-nilpy-parallel-for-in |
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
 | feature-nilpy-six-and-warnings-shims | B | 45 | feature | `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign | bug-n-a-type-name-is-not-a-first-class-value |
@@ -173,6 +173,7 @@ _none_
 | feature-nilpy-str-surface-gaps-2026-08-09 | N | 25 | feature | str/bytes surface gaps found by the 2026-08-09 differential sweep | — |
 | feature-nilpy-text-string-kind | N | 55 | feature | Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1) | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-nilpy-threadsafe-containers | N | 30 | feature | TPyList/TPyDict corrupt under concurrent mutation — append is a read-modify-write over a buffer PyListGrow may realloc, so two threads can use-after-free. Free-threaded CPython guarantees this cannot happen; adopt that contract under --threadsafe with one-way biased sharing. | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | — |
 | feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
 | feature-nilpy-yield-outside-a-for-loop | N | 35 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
@@ -332,7 +333,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (63)
+## decided (64)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -370,6 +371,7 @@ _none_
 | decide-nilpy-multiple-inheritance-c3-or-delegate | U | 40 | decide | class D(B, C) is refused with a clear diagnostic (option 3 landed 2026-08-04). The FEATURE is still open and the remaining choice is a design fork: full C3 linearisation, or second-base-as-delegate. Needs a call before anyone builds it. | — |
 | decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-optional-int-none-vs-zero | U | 60 | decide | decide: NilPy Optional[int] — None must be distinct from 0 | — |
+| decide-nilpy-parallel-capture-semantics | U | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-nilpy-runtime-dunder-dispatch-mechanism | U | 45 | decide | Decide: how should NilPy dispatch dunders on an instance whose class is known only at RUN time (container elements)? | decide-nilpy-runtime-dunder-dispatch-strategy |
 | decide-nilpy-runtime-dunder-dispatch-strategy | U | 45 | decide | Decide: how should NilPy dispatch dunders on a Variant-held instance? | — |
 | decide-nilpy-set-as-a-distinct-type-or-a-list | U | 55 | decide | pxx backs a Python set with TPyList. That makes set difference work, makes `list - list` unrejectable, and makes a set repr as [1, 3] instead of {1, 3}. Give sets their own row, or keep the alias and pay at run time? | — |
@@ -606,6 +608,7 @@ _none_
 - [p 30] [N] feature-nilpy-match-statement
 - [p 30] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
+- [p 30] [N] feature-nilpy-threadsafe-containers
 - [p 30] [N] feature-nilpy-walrus-operator
 - [p 30] [S] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
@@ -641,7 +644,7 @@ _none_
 - [p 10] [B] feature-crtl-implement-libc-assumptions
 - [p 10] [A] idea-adaptive-heap-growth
 - [p 10] [A] idea-cross-namespace-ambiguity-warning
-- [p  5] [U] decide-nilpy-parallel-capture-semantics (unblocks 1)
+- [p  5] [A] feature-nilpy-parallel-for-in (unblocks 1)
 
 ## Leverage (tickets each one unblocks)
 
@@ -651,12 +654,12 @@ _none_
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
 - **1** — decide-nilpy-dict-mutation-during-iteration
-- **1** — decide-nilpy-parallel-capture-semantics
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-b-tkhtmlview-in-nilpy
 - **1** — feature-inline-asm-xmm-operands
 - **1** — feature-nilpy-object-reclamation
+- **1** — feature-nilpy-parallel-for-in
 - **1** — feature-nilpy-tkinter-facade
 - **1** — feature-opt-accumulator-value-tracker
 - **1** — feature-os-targets-bsd-mac
