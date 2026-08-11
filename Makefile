@@ -3021,6 +3021,14 @@ test-core: $(COMPILER)
 	# bits, while FPC's own constant FOLDER does neither. The default dialect
 	# deliberately diverges (decide-shift-operator-promotion-width), which is
 	# why this row needs the flag. Every value is fpc -O1's own output.
+	# ESP: an ordinal/ordinal float operator takes its depth from the TARGET,
+	# because its operands supply none — a declared Double used to hold
+	# float32's 1/3 on xtensa/riscv32 and nowhere else. A Single target and an
+	# expression that already has a float operand are the controls.
+	./$(COMPILER) test/test_esp_float_depth_from_target.pas /tmp/test_espdepth26
+	test "$$(/tmp/test_espdepth26 | tail -1)" = "ESP FLOAT DEPTH OK"
+	test "$$(/tmp/test_espdepth26 | head -2 | tr '\n' '|')" = "0.33333333333333331483|0.33333334326744079590|"
+	test "$$(/tmp/test_espdepth26 | head -6 | tail -2 | tr '\n' '|')" = "0.83333333333333325932|0.11111111111111110494|"
 	./$(COMPILER) --strict-fpc test/test_strict_fpc_shift_widths.pas /tmp/test_strictshift26
 	test "$$(/tmp/test_strictshift26 | tail -1)" = "STRICT FPC SHIFT WIDTHS OK"
 	test "$$(/tmp/test_strictshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|2048|2048|"

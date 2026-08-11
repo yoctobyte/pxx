@@ -66,3 +66,52 @@ line in the ESP docs, because nothing tells the programmer today.
 - The measurement boundary: `1/3` and `2/3` diverge; `1/4`, `10/4`, `0.1`,
   `1.0/3`, `1/3.0` and `a/b` all agree, because they are either exact in float32
   or already have a float operand.
+
+
+## DECIDED 2026-08-11 (user): option 2 — the REQUESTED TARGET TYPE decides
+
+> "on #2. the requested target type decides." — user
+
+So when a float-producing operator has **no float operand to take a depth from**
+— the ordinal/ordinal case, `1 / 3` — the depth comes from the type the program
+actually asked for: the assignment target. `x: Double` gets a double divide;
+`x: Single` gets a single one. Nothing changes when an operand IS a float: two
+Singles still make a Single on ESP, which is the cheap path the design chose and
+the one most MCU code is written in.
+
+That keeps the engineering intent (no silent soft-double tax on code that never
+asked for a Double) while removing the failure it caused: a declared `Double`
+quietly holding 7 significant digits, and the same source giving different
+numbers on ESP than on every other target.
+
+x86-64 / i386 / arm32 / aarch64 are unaffected under any option — their
+`FloatBinopResultTk` already answers tyDouble for every float-producing binop.
+
+## Implemented 2026-08-11
+
+`IRWidenOrdinalFloatBinop`, called from the assign lowering where the target
+type is known: a float-producing binop whose operands supply no depth is
+re-typed to the target's float kind. Both soft-float backends then honour the
+node's result type as well as its operands.
+
+Two ordering traps, both found by testing the nested shapes rather than the
+reported one:
+
+- **Look inside even when the node needs nothing.** `1/3 + 0.5` assigned to a
+  Double: the outer `+` already has a Double operand, but the inner `/` has
+  none and is exactly the case the target decides. Stopping at the outer node
+  left the division single and the sum inherited it.
+- **Recurse BEFORE deciding about the node.** `(1/3) * (1/3)` has two float
+  operands, so a node-first rule refused to widen the product and then widened
+  both divisions under it — operands Double, product Single, and storing that
+  into a Double slot read **0.0**.
+
+The ESP design is preserved where it was the point: a genuinely narrower float
+operand still blocks the widen, so `s1 / s2` (two Singles) assigned to a Double
+stays a single divide on xtensa/riscv32. That row therefore still differs from
+x86-64, where Single is storage-only — deliberate, and not part of this change.
+
+Verified: `test/test_esp_float_depth_from_target.pas` reads identically on
+x86-64, i386, arm32, aarch64 and riscv32, with a Single target and an
+already-float expression as the controls. `gate.sh quick` GREEN (self-host
+byte-identical).

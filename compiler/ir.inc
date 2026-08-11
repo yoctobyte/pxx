@@ -4706,6 +4706,41 @@ begin
     -1, count * elemSize, Ord(tyRecord));
 end;
 
+procedure IRWidenOrdinalFloatBinop(node: Integer; wantTk: TTypeKind);
+{ Re-type a float-producing binop whose operands supply NO float depth, so it
+  yields what the assignment target asked for. ESP-only in effect: elsewhere
+  such a node is already tyDouble and the size test below exits at once.
+
+  Only when NEITHER operand is a float — with one, the operand's depth decides,
+  which is the ESP design and is left alone (two Singles still make a Single).
+  The recursion is bounded by the same float test: an ordinal subexpression is
+  not a float binop, so integer arithmetic underneath is never re-typed.
+  decide-esp-single-depth-division-into-a-declared-double }
+begin
+  if node < 0 then Exit;
+  if not TypeIsFloat(wantTk) then Exit;
+  if ASTKind[node] <> AN_BINOP then Exit;
+  if not TypeIsFloat(IntToTypeKind(ASTTk[node])) then Exit;
+  { OPERANDS FIRST, then this node — the order matters. `(1/3) * (1/3)` has two
+    float operands, so a node-first rule refused to widen the product and then
+    widened both divisions underneath it: the operands came back Double, the
+    product stayed Single, and the store of a Single into a Double slot read
+    0.0. Deciding after the recursion sees the operands as they will actually
+    be. }
+  IRWidenOrdinalFloatBinop(ASTLeft[node], wantTk);
+  IRWidenOrdinalFloatBinop(ASTRight[node], wantTk);
+  { A genuinely NARROWER float operand still blocks the widen — that is the ESP
+    design and the point of the Single-target control: `s1 * s2` assigned to a
+    Double stays a single multiply. An operand this walk just widened is no
+    longer narrow, so it no longer blocks. }
+  if (TypeSize(IntToTypeKind(ASTTk[node])) < TypeSize(wantTk)) and
+     not (TypeIsFloat(IntToTypeKind(ASTTk[ASTLeft[node]])) and
+          (TypeSize(IntToTypeKind(ASTTk[ASTLeft[node]])) < TypeSize(wantTk))) and
+     not (TypeIsFloat(IntToTypeKind(ASTTk[ASTRight[node]])) and
+          (TypeSize(IntToTypeKind(ASTTk[ASTRight[node]])) < TypeSize(wantTk))) then
+    ASTTk[node] := Ord(wantTk);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
@@ -7484,6 +7519,18 @@ begin
       end;
       lhsStoreTk := lhsTk;
       lhsStrCap := 0;
+      { ESP (xtensa/riscv32) treats Single as first-class, so a float-producing
+        operator with NO float operand — `1 / 3` — takes the NATIVE depth, which
+        is Single there. That is the right call for code that never asked for a
+        Double, and the wrong one when the program did: a declared `Double` then
+        quietly held 7 significant digits, and the same source gave different
+        numbers on ESP than on every other target.
+
+        So when neither operand supplies a depth, the TARGET's does (user,
+        2026-08-11, decide-esp-single-depth-division-into-a-declared-double).
+        A no-op everywhere else: every other backend already types such a binop
+        tyDouble, so the widen has nothing to do. }
+      IRWidenOrdinalFloatBinop(ASTRight[node], lhsTk);
       if ASTKind[ASTLeft[node]] = AN_FIELD then
       begin
         slFldRec := ResolveNodeRec(ASTLeft[ASTLeft[node]]);

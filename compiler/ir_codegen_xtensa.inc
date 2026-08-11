@@ -909,7 +909,13 @@ var left, right, op, procIdx, argBase, nArgs, i: Integer; ltk, rtk, opTk: TTypeK
 begin
   left := IRA[node]; right := IRB[node]; op := IRC[node];
   ltk := IntToTypeKind(IRTk[left]); rtk := IntToTypeKind(IRTk[right]);
-  isDouble := (ltk = tyDouble) or (rtk = tyDouble);
+  { ...and the RESULT type decides when the operands do not: an ordinal/ordinal
+    `/` assigned to a Double is computed at double depth, because that is the
+    depth the program asked for (user, 2026-08-11,
+    decide-esp-single-depth-division-into-a-declared-double). Comparisons are
+    unaffected — their result is tyBoolean, so the operand rule still decides. }
+  isDouble := (ltk = tyDouble) or (rtk = tyDouble) or
+             (IntToTypeKind(IRTk[node]) = tyDouble);
   if isDouble then opTk := tyDouble else opTk := tySingle;
   isCmp := (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
            (op = Ord(tkGt)) or (op = Ord(tkLe)) or (op = Ord(tkGe));
