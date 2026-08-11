@@ -85,4 +85,4 @@ overload rather than the Integer one, because a fixed-array parameter's
 (pre-existing on `pinned`).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit e14e2b10e.
