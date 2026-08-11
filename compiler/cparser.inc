@@ -8423,8 +8423,13 @@ begin
       EmitB($89); EmitB($E0);                                  { mov eax, esp }
       EmitB($A3); EmitGlobRef(BSS_INITIAL_RSP);                { mov [initial_sp], eax }
       EmitB($8D); EmitB($48); EmitB($04);                      { lea ecx, [eax+4] (argv) }
-      EmitB($51);                                              { push ecx        (arg2 = argv) }
+      { The i386 internal convention pushes LEFTMOST-FIRST, and ir_codegen386's
+        cdecl reversal is disabled inside a C program, so main reads arg1 from
+        the HIGHER slot. Push argc first, then argv — pushing cdecl order here
+        handed main the argv pointer as argc.
+        bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped }
       EmitB($FF); EmitB($30);                                  { push [eax]      (arg1 = argc) }
+      EmitB($51);                                              { push ecx        (arg2 = argv) }
       EmitB($E8); callPatch := CodeLen; EmitI32(0);            { call main }
       { Run registered finalizers before exiting, so a plain `return` from main
         is not a silent skip. The stub is `call main; exit_group(retval)`, so

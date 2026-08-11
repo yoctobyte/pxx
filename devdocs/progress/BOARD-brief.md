@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:8 blocked:3 backlog:230 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1635 rejected:35`
+`urgent:1 unfinished:8 blocked:3 backlog:229 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1636 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 213, ranked
+## Ready — top 30 of 212, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -48,7 +48,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [A]` bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - `[p 55] [A]` feature-a-declaration-phase
@@ -64,5 +63,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-est-mem-from-measurement
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
+- `[p 55] [T]` feature-t-shard-the-uforth-ans-suite-per-word-set
 
-_183 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_182 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

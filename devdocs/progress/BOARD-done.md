@@ -220,6 +220,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
 | bug-c-huge-struct-high-field-offset-miscompile | C | 30 | bug | C struct with a field at byte offset > 65535 miscompiles the field access (wrong value); suspect a 16-bit offset wrap | — |
 | bug-c-i386-crtl-growth-corrupts-main-exit-code | C | 65 | bug | i386: adding ANY code to lib/crtl corrupts an unrelated program's exit code — output stays right, main's implicit return 0 becomes garbage | — |
+| bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped | A | 55 | bug | On i386 every C program's `main` reads garbage argc and a bogus argv: the entry stub pushes cdecl order (argc lowest) but a CProgramMode callee reads leftmost-first, so argc receives the argv POINTER. Pascal's ParamCount on i386 is fine — this is the C stub only. | — |
 | bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
 | bug-c-init-array-designators | C | 50 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |

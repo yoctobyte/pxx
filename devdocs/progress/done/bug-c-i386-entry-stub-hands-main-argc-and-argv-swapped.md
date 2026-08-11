@@ -4,6 +4,8 @@ type: bug
 track: A
 prio: 55
 found-by: claude-B
+status: done
+owner: claude-A
 ---
 
 # i386: the C entry stub hands `main` argc and argv in the wrong slots
@@ -83,3 +85,6 @@ the test above, x86-64 too, so i386 is the odd one out.
 `test/crtl_atexit.c`'s `e`/`x`/`n` sub-modes (they select on `argv[1]`, so they
 are an argv assertion on every target and currently all collapse to the default
 branch on i386 — a passing i386 run of those three is the proof).
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
