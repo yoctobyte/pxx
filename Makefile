@@ -1170,6 +1170,13 @@ test-nilpy: $(COMPILER)
 	# have left str()/int() chains broken.
 	./$(COMPILER) test/test_nilpy_intrinsic_result_chain.npy /tmp/test_nilpy_chain26
 	/tmp/test_nilpy_chain26 | diff -u test/test_nilpy_intrinsic_result_chain.expected -
+	# WHICH string type a file's reads yield is decided by the MODE, a run-time
+	# value — so four accessors hard-coding it got four answers wrong in one
+	# direction or the other (text read(n)/readline gave bytes, binary
+	# read()/readlines gave str). On pinned this file does not even COMPILE:
+	# readline().strip() was "TPyBytes has no method strip".
+	./$(COMPILER) test/test_nilpy_file_read_follows_the_mode.npy /tmp/test_nilpy_readmode26
+	/tmp/test_nilpy_readmode26 | diff -u test/test_nilpy_file_read_follows_the_mode.expected -
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".
 	./$(COMPILER) test/test_nilpy_sort_lt_dunder.npy /tmp/test_nilpy_sortlt26

@@ -3,6 +3,8 @@ track: N
 prio: 50
 type: bug
 summary: "`f.read(3)` on a TEXT-mode file returns bytes (`b'one'`) where CPython returns a str (`one`). TPyFile.read(n)'s return type is statically TPyBytes, so it cannot branch on the mode at run time — the fix needs either a mode-carrying text path or a distinct binary class, not a runtime test"
+status: done
+owner: claude-A
 ---
 
 # text-mode `read(n)` returns bytes, not str
@@ -69,3 +71,52 @@ The repro printing `one`; the parent ticket's test extended with the row that
 was left out; `make test-nilpy` green; self-host fixedpoint. Note
 `compiler/builtin/pylib.pas` is involved, so a change there needs
 `make stabilize-fast && make pin` for the gate's fixedpoint.
+
+## Resolution (2026-08-11) — FOUR accessors were wrong, not one
+
+Swept the family before choosing a shape, and the ticket had seen a quarter of
+it. One concept — which of the two string types this file yields — hard-coded in
+four places, wrong in BOTH directions:
+
+| | CPython | pxx before |
+| --- | --- | --- |
+| text `read(n)` | `'one'` | `b'one'` (the ticket) |
+| text `readline()` | `'one\n'` | `b'one\n'` |
+| binary `read()` | `b'one\ntwo\n'` | `'one\ntwo\n'` |
+| binary `readlines()` | `[b'one\n', ...]` | `['one\n', ...]` |
+
+So a per-accessor fix would have left three, and fixing only the reported
+direction would have left the binary half.
+
+**Took option (3), and it did not need a Track U ticket.** The trade the ticket
+described — static sharpness vs CPython fidelity — is already settled by two
+written rules: Track N's own definition of a bug is "code CPython runs must run
+here", and correctness outranks optimization. Option (1) only works when the
+mode is a LITERAL at the call site, and its fallback would have to guess; option
+(2) the ticket already rejects. `TPyFile` now carries `FBinary` (set from the
+mode in `pyfile_open`) and every reader branches on it, returning a Variant.
+`readall` is the mode-blind slurp both public readers share.
+
+**The variant route exposed a real gap, now fixed:** `pyadd_v` had arms for
+list+list and str+str and NONE for bytes+bytes, so a variant-held bytes fell
+through to the numeric path and raised `expected a number, got object`. That was
+reachable before this change (any bytes arriving as a variant — a list element,
+an unannotated parameter) and this made it common, so it is fixed here rather
+than filed.
+
+**And one library caller had to move.** `lib/rtl/json.pas`'s `load` chunked
+through `f.read(65536)` bound to a `TPyBytes` — which only worked because the
+text accessor answered bytes. It now calls the zero-argument `f.read()`, which
+is CPython's own spelling. Deliberately NOT the new `readall`: `lib/rtl` is
+compiled by the PINNED compiler, so a library calling a method that exists only
+in HEAD's pylib turns `make lib-test` red — measured, that is exactly what the
+first attempt did. `json.pas` now builds and passes under BOTH compilers.
+
+Gate: `make test-nilpy` EXIT=0, `gate.sh lib` GREEN, `gate.sh quick` GREEN
+(self-host byte-identical). New `test/test_nilpy_file_read_follows_the_mode.npy`
+covering all eight mode/accessor rows plus the concatenations — on `pinned` it
+does not even COMPILE (`readline().strip()` was "TPyBytes has no method strip").
+Needs a pin before other lanes see it (`compiler/builtin`).
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

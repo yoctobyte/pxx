@@ -813,18 +813,23 @@ begin
 end;
 
 function load(f: TPyFile): Variant;
-var chunk: TPyBytes; all_: AnsiString;
+{ The whole stream as TEXT, whatever mode the file was opened in — which is
+  what CPython's json.load accepts (it decodes a bytes stream for you).
+
+  This used to chunk through `f.read(65536)` bound to a TPyBytes, which only
+  worked because that accessor answered bytes for a TEXT file too. It does not
+  any more: the readers follow the MODE now, so `read(n)` on the text-mode file
+  json.load is normally handed yields a str and the TPyBytes binding was left
+  holding the wrong shape — the JSON parser then failed at offset 1.
+  The zero-argument `f.read()` is the CPython spelling of "the whole stream"
+  and is what this now uses. Deliberately NOT the mode-blind `readall` helper
+  the accessors are built on: that method is new, and lib/rtl is compiled by
+  the PINNED compiler (Track B's stable-binary boundary), so a library written
+  against a method the pinned pylib does not have cannot build until a pin.
+  bug-nilpy-text-mode-read-n-returns-bytes-not-str }
 begin
   if f = nil then raise EJSONError.Create('json.load: no file');
-  all_ := '';
-  while True do
-  begin
-    chunk := f.read(65536);
-    if chunk = nil then break;
-    if chunk.count = 0 then break;
-    all_ := all_ + chunk.decode('utf-8');
-  end;
-  load := loads(all_);
+  load := loads(f.read);
 end;
 
 end.

@@ -1,0 +1,63 @@
+# WHICH string type a file's reads yield is decided by the MODE, and the mode is
+# a run-time value — so no accessor can answer it from its own static return
+# type. Four of them tried, and four were wrong in one direction or the other:
+#
+#   text   read(n)      answered bytes   b'one'          CPython: 'one'
+#   text   readline()   answered bytes   b'one\n'        CPython: 'one\n'
+#   binary read()       answered str     'one\ntwo\n'    CPython: b'one\ntwo\n'
+#   binary readlines()  answered [str]   ['one\n', ...]  CPython: [b'one\n', ...]
+#
+# The ticket reported only the first. The other three were found by sweeping the
+# family, which is the point of this file: one concept, four accessors, and
+# fixing one arm would have left three.
+#
+# TPyFile now carries the mode (FBinary) and every reader branches on it,
+# returning a Variant — the way NilPy carries any value whose type is not known
+# until run time. The alternative shapes were considered and rejected in the
+# ticket: a separate binary CLASS re-creates the two-classes-for-one-type split
+# a previous ticket was opened to remove, and frontend lowering on the mode
+# LITERAL only works when the mode is literal at the call site.
+#
+# The last rows matter as much as the first: a str result must still concatenate
+# with a str and a bytes result with bytes. Going through a variant moved those
+# to the runtime operator, where bytes+bytes had no arm at all and raised
+# "expected a number, got object".
+#
+# Every expectation is CPython's own output.
+# bug-nilpy-text-mode-read-n-returns-bytes-not-str
+
+p = "/tmp/pxx_nilpy_read_mode.txt"
+
+f = open(p, "w")
+f.write("one\ntwo\n")
+f.close()
+
+# --- TEXT mode: every reader yields str
+f = open(p, "r"); print(repr(f.read(3))); f.close()
+f = open(p, "r"); print(repr(f.readline())); f.close()
+f = open(p, "r"); print(repr(f.read())); f.close()
+f = open(p, "r"); print(repr(f.readlines())); f.close()
+
+# --- BINARY mode: every reader yields bytes
+f = open(p, "rb"); print(repr(f.read(3))); f.close()
+f = open(p, "rb"); print(repr(f.readline())); f.close()
+f = open(p, "rb"); print(repr(f.read())); f.close()
+f = open(p, "rb"); print(repr(f.readlines())); f.close()
+
+# --- the results must still behave as their own type
+f = open(p, "r")
+print(f.read(3) + "X")
+f.close()
+
+f = open(p, "rb")
+print(f.read(3) + b"Y")
+f.close()
+
+f = open(p, "r")
+for line in f.readlines():
+    print(line.strip().upper())
+f.close()
+
+f = open(p, "r")
+print(f.readline().strip(), f.readline().strip())
+f.close()

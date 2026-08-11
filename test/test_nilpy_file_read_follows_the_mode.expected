@@ -1,0 +1,13 @@
+'one'
+'one\n'
+'one\ntwo\n'
+['one\n', 'two\n']
+b'one'
+b'one\n'
+b'one\ntwo\n'
+[b'one\n', b'two\n']
+oneX
+b'oneY'
+ONE
+TWO
+one two

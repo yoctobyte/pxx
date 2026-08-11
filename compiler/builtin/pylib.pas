@@ -452,20 +452,33 @@ type
   TPyFile = class
   public
     FFd: Int64;
+    { WHICH of the two string types this file's reads yield — the one fact that
+      decides it, held once instead of hard-coded four times.
+
+      CPython picks str or bytes from the MODE, which is a run-time value, so no
+      accessor can answer it from its own static return type. Four of them tried
+      and four got it wrong in one direction or the other: text read(n) and
+      readline() answered bytes, binary read() and readlines() answered str.
+      Every reader now branches on this field and returns a Variant, which is
+      how NilPy carries any value whose type is not known until run time.
+      bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+    FBinary: Boolean;
     constructor Create;
-    function read(u: Int64): TPyBytes; overload;
+    function read(u: Int64): Variant; overload;
     { CPython's `f.read()` with NO argument: everything from the current
       position to EOF, as TEXT. The read-slurp model gave this to TPyList and
       TPyFile never had it, which is the whole reason open() answered two
       different classes by mode (bug-nilpy-open-returns-two-different-classes-by-mode).
       Text, not TPyBytes, because that is what `print(f.read())` must produce —
       our strings are byte strings, the same identity TPyFile.write relies on. }
-    function read: AnsiString; overload;
+    function read: Variant; overload;
+    { the mode-blind slurp both readers are built on }
+    function readall: AnsiString;
     { CPython's readlines(): the rest of the file split into lines, each KEEPING
       its trailing newline, exactly as TPyList's version yielded them so that
       joining reproduces the file byte for byte. }
     function readlines: TPyList;
-    function readline: TPyBytes;
+    function readline: Variant;
     function write(b: TPyBytes): Int64; overload;
     { Python's TEXT-mode write takes a str, and that is how every ordinary
       program spells it. Without this overload `f.write("hello")` resolved to
@@ -6038,7 +6051,7 @@ end;
 
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec; concat: AnsiString;
-    oa, ob: TObject; joined: TPyList; ji: Integer;
+    oa, ob: TObject; joined: TPyList; ji: Integer; jb: TPyBytes;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
 begin
   { A USER class operand: its own __add__, or the reflected __radd__. The
@@ -6067,6 +6080,23 @@ begin
       for ji := 0 to TPyList(oa).count - 1 do joined.append(TPyList(oa).at(ji));
       for ji := 0 to TPyList(ob).count - 1 do joined.append(TPyList(ob).at(ji));
       Result := joined;
+      Exit;
+    end;
+    { bytes + bytes -> a NEW bytes, the sibling of the list arm above and of the
+      str arm below. It was missing, so a variant-held bytes fell through to the
+      NUMERIC path and raised "expected a number, got object" — every other
+      container concatenation had an arm and this one did not. Reachable from
+      any bytes that arrives as a variant: an element of a list, an unannotated
+      parameter, and (since the mode-aware readers) `f.read(n)` in binary mode.
+      bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+    if (oa is TPyBytes) and (ob is TPyBytes) then
+    begin
+      jb := TPyBytes.Create(TPyBytes(oa).FLen + TPyBytes(ob).FLen);
+      jb.FIsByteArray := TPyBytes(oa).FIsByteArray;
+      jb.FLen := 0;
+      jb.extend(TPyBytes(oa));
+      jb.extend(TPyBytes(ob));
+      Result := jb;
       Exit;
     end;
   end;
@@ -10978,6 +11008,7 @@ end;
 constructor TPyFile.Create;
 begin
   FFd := -1;
+  FBinary := False;
 end;
 
 function pyfile_open(const path, mode: AnsiString): TPyFile;
@@ -11008,23 +11039,40 @@ begin
     raise FileNotFoundError.Create(path);
   Result := TPyFile.Create;
   Result.FFd := fd;
+  { 'b' anywhere in the mode is CPython's own test for a binary stream }
+  for i := 1 to Length(mode) do
+    if mode[i] = 'b' then Result.FBinary := True;
 end;
 
-function TPyFile.read(u: Int64): TPyBytes;
-var r: TPyBytes; got: Int64;
+function TPyFile.read(u: Int64): Variant;
+{ `f.read(n)`. TEXT mode yields a str, binary yields bytes — see FBinary. This
+  arity used to yield bytes unconditionally, so `print(f.read(3))` on a text
+  file printed b'one' where CPython prints one, and `f.read(3) + "x"` was a type
+  error against working Python. Its own zero-argument sibling was already
+  correct for text, so the two arities of one method disagreed.
+  bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var r: TPyBytes; got: Int64; s: AnsiString; i: Integer;
 begin
   if u < 0 then u := 0;
   r := TPyBytes.Create(u);
   got := PyPalRead(FFd, r.FData, u);
   if got < 0 then got := 0;
   r.FLen := got;
-  Result := r;
+  if FBinary then
+  begin
+    Result := r;
+    Exit;
+  end;
+  s := '';
+  for i := 0 to Integer(got) - 1 do s := s + Chr(PByte(NativeInt(r.FData) + i)^);
+  Result := s;
 end;
 
 { Read to EOF from the current position. Chunked rather than byte-at-a-time
   (readline's excuse — "line reads are rare and short" — does not hold for a
   whole file), and it leaves the position at EOF like CPython. }
-function TPyFile.read: AnsiString;
+function TPyFile.readall: AnsiString;
+{ the slurp itself, mode-blind — both public readers are built on it }
 var buf: array[0..8191] of Char; got: Int64; res: AnsiString;
     rlen, rcap, i: Integer;
 begin
@@ -11047,11 +11095,33 @@ begin
   Result := res;
 end;
 
+function TPyFile.read: Variant;
+{ `f.read()`. Binary mode must yield BYTES — it answered a str, so
+  `open(p,"rb").read()` printed 'one\n' where CPython prints b'one\n'. The
+  mirror of the read(n) bug, in the other direction.
+  bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var s: AnsiString; b: TPyBytes; i: Integer;
+begin
+  s := Self.readall;
+  if not FBinary then
+  begin
+    Result := s;
+    Exit;
+  end;
+  b := TPyBytes.Create(Length(s));
+  for i := 1 to Length(s) do PByte(NativeInt(b.FData) + i - 1)^ := Ord(s[i]);
+  b.FLen := Length(s);
+  Result := b;
+end;
+
 function TPyFile.readlines: TPyList;
-var content, line: AnsiString; i, n: Integer;
+{ ...and its ELEMENTS follow the mode too: binary readlines() is a list of
+  bytes in CPython, and answering a list of str is the same divergence one
+  level down. bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var content, line: AnsiString; i, n, k: Integer; lb: TPyBytes;
 begin
   Result := TPyList.Create;
-  content := Self.read;
+  content := Self.readall;
   { each line KEEPS its trailing newline -- Python's file iteration yields them
     that way, and a final unterminated line is still a line }
   i := 1; n := Length(content); line := '';
@@ -11060,27 +11130,49 @@ begin
     line := line + content[i];
     if content[i] = #10 then
     begin
-      Result.append(line);
+      if FBinary then
+      begin
+        lb := TPyBytes.Create(Length(line));
+        for k := 1 to Length(line) do PByte(NativeInt(lb.FData) + k - 1)^ := Ord(line[k]);
+        lb.FLen := Length(line);
+        Result.append(lb);
+      end
+      else
+        Result.append(line);
       line := '';
     end;
     Inc(i);
   end;
-  if line <> '' then Result.append(line);
+  if line <> '' then
+  begin
+    if FBinary then
+    begin
+      lb := TPyBytes.Create(Length(line));
+      for k := 1 to Length(line) do PByte(NativeInt(lb.FData) + k - 1)^ := Ord(line[k]);
+      lb.FLen := Length(line);
+      Result.append(lb);
+    end
+    else
+      Result.append(line);
+  end;
 end;
 
-function TPyFile.readline: TPyBytes;
-var r: TPyBytes; got: Int64; ch: Byte;
+function TPyFile.readline: Variant;
+{ TEXT mode yields a str here too — it answered bytes, so `f.readline()` on a
+  text file printed b'one\n'. bug-nilpy-text-mode-read-n-returns-bytes-not-str }
+var r: TPyBytes; got: Int64; ch: Byte; s: AnsiString;
 begin
   { one byte at a time — line reads are rare and short in the corpus }
   r := TPyBytes.Create(0);
+  s := '';
   while True do
   begin
     got := PyPalRead(FFd, @ch, 1);
     if got <= 0 then Break;
-    r.append(ch);
+    if FBinary then r.append(ch) else s := s + Chr(ch);
     if ch = 10 then Break;
   end;
-  Result := r;
+  if FBinary then Result := r else Result := s;
 end;
 
 function TPyFile.write(b: TPyBytes): Int64;
