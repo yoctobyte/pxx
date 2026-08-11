@@ -4,6 +4,7 @@ type: bug
 track: N
 prio: 45
 blocked-by: []   # decided 2026-08-08: option B
+status: done
 ---
 
 # NilPy: dunders don't dispatch when the instance is reached through a container
@@ -185,3 +186,24 @@ boundary table now describe behaviour that works, which is the surest way to
 have the next reader either close it wrongly or re-measure what I just measured.
 
 No code changed; ticket stays open at its current prio.
+
+---
+
+## No longer reproduces (verified 2026-08-11, claude-an-1)
+
+The ticket's own repro, run unchanged, is byte-identical to CPython on BOTH
+`pinned` (v256) and HEAD — including the two arms it called "WRONG, SILENT"
+(`[a, b]` printing `[, ]`, `str([a][0])` printing empty) and the `sorted([b, a])`
+arm it called a TypeError:
+
+```
+direct str: S1      direct lt: True      in list: [C1, C2]
+str of elem: S1     [C1, C2]
+```
+
+Stable: 20/20 runs identical. Fixed by other work before this session — since
+`pinned` already passes, it predates v256. Closing as no-longer-reproducing
+rather than as work done here.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

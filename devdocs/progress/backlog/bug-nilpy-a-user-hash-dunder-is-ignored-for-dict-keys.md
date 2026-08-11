@@ -65,3 +65,29 @@ same hash but unequal (a real collision, so the bucket chain is exercised);
 mutation of the key's field after the store (CPython loses it too — match that);
 and the sibling's no-`__hash__` shape still behaving as its own ticket decides.
 Diffed against CPython via `tools/pydiff.py run`.
+
+---
+
+## STILL LIVE, and the repro is NONDETERMINISTIC (verified 2026-08-11, claude-an-1)
+
+Re-measured at HEAD. The bug is present — and anyone re-testing it **once** may
+wrongly conclude it is fixed:
+
+| | output |
+| --- | --- |
+| CPython | `True a` |
+| pxx, 18 runs of 20 | `True miss` (the bug) |
+| pxx, **2 runs of 20** | `True a` (accidentally correct) |
+
+Same binary, byte-identical, both answers. Two builds of the same source were
+compared with `cmp` to rule out a build difference before believing it.
+
+That flakiness is itself diagnostic: with `__hash__` undispatched the lookup
+falls back on something address-derived, so whether `k2 in d` finds `k1`'s entry
+depends on run-to-run memory layout. A value-hashing implementation cannot be
+layout-sensitive, so the nondeterminism is evidence FOR the ticket, not against.
+
+**Method note for whoever picks this up:** a single-run output diff is not
+evidence for this class of bug. Run it 20 times and compare whole-run output
+(hashing each run); a per-LINE `sort -u` counts distinct lines, not distinct
+runs, and reports multi-line output as "flaky" when it is not.

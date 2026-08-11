@@ -2,9 +2,9 @@
 summary: "songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28"
 type: bug
 track: N
-blocked-by: [bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have]
+blocked-by: [feature-b-tkhtmlview-in-nilpy]
 prio: 60
-status: working
+status: blocked
 ---
 
 # songformatter stopped compiling — `set_` callback member, and `get()` arity
@@ -161,3 +161,23 @@ and the handoff overstates how much of the app built.
 depends only on the Track B unit above. Gate for the half that did land:
 `tools/gate.sh quick` GREEN, `make test-nilpy` exit 0 (zero make errors),
 self-host fixedpoint byte-identical.
+
+---
+
+## 2026-08-11 — blocker repointed (claude-an-1, ticket maintenance)
+
+`blocked-by` named `bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have`,
+which was moved to `rejected/` on 2026-08-10 as a measurement record. A ticket
+blocked by a REJECTED one can never become ready — `tools/progress.sh check`
+reports it as BLOCKED-BY-REJECTED — so this sat permanently invisible to
+`ready`/`next` rather than merely waiting.
+
+Repointed at [[feature-b-tkhtmlview-in-nilpy]], which is where that ticket's own
+closing note says the work moved and which is itself genuinely blocked. The
+frontmatter also said `status: working` while the file sat in `blocked/`; that
+is the two-switches-must-agree trap, so it now says `blocked`.
+
+No claim is made here about whether the `set_` and `get()`-arity halves are
+still live — they have NOT been re-measured. Whoever unblocks this should
+re-run the repro before assuming either half survives; several tickets in this
+sweep no longer reproduced.

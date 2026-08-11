@@ -270,6 +270,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |
 | bug-c-scalar-ptr-global-init-silently-skipped | C | 60 | bug | bug: scalar pointer-global initializers silently skipped (null pointer at runtime) | — |
 | bug-c-shift-result-type-battery-00200 | A | 45 | bug | C shift-result-type battery (00200): result type = promoted LEFT operand across all int classes | — |
+| bug-c-signature-mismatch-warns-even-when-crtl-defines-the-symbol | C | 45 | bug | Every C program that includes <math.h> now emits 2-3 'disagrees with the Pascal routine' warnings, for symbols crtl DEFINES itself. The warning describes a resolution that is correct — binding the C declaration — so it is pure noise on every math-using compile | — |
 | bug-c-signed-arith-shift-right | A | 50 | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-sizeof-a-file-scope-double-array-answers-one-element | C | 70 | bug | sizeof() on a file-scope double[] whose length comes from its initializer answers 8 (one element) instead of the array size — silently, and the int[] case is correct, so nothing looks wrong | — |
 | bug-c-sizeof-array-type-ignores-extent | C | 35 | bug | C `sizeof(int[10])` returns the element size (4), not 40 — sizeof of an array TYPE-NAME ignores the extent (silent wrong value) | — |
@@ -510,6 +511,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-callable-in-local-var-call-does-nothing | N | 70 | bug | `cb = lambda ...` then `cb(x)` compiles and does NOTHING | — |
 | bug-nilpy-callable-return-abi-mismatch | N | 75 | bug | nilpy: a def passed to a Callable[...] parameter marshalled by the ANNOTATION, not by the def | — |
 | bug-nilpy-callable-value-abi-sorted-key-and-builtins | N | 65 | bug | `sorted(key=...)` ignores most keys, and a callable passed as a VALUE has no common ABI | — |
+| bug-nilpy-calling-a-call-result-is-refused-in-a-block-and-dropped-when-typed | N | 50 | bug | `f()(x)` — CALLING the result of a call. Two separate defects: inside any indented block it is a parse error (top level is fine), and when f's return type is statically non-callable the statement is SILENTLY DROPPED instead of raising TypeError. Distinct from the selector form `g(3).show()`. | — |
 | bug-nilpy-calling-a-non-callable-segfaults | N | 55 | bug | Calling a non-callable SEGFAULTS instead of raising TypeError | — |
 | bug-nilpy-calling-an-instance-named-like-its-class-runs-the-constructor | N | 55 | bug | Calling an instance whose NAME matches a class runs the CONSTRUCTOR | — |
 | bug-nilpy-caught-exception-objects-are-never-freed | N | 60 | bug | Every caught exception leaks its object — 640k raises cost 105 MB | — |
@@ -555,6 +557,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-dict-views-and-result-alias | N | 75 | bug | nilpy: d.values()/d.keys() jumped to address 0, and a local named `result` aliased the function result | — |
 | bug-nilpy-discarded-string-result-leaks | N | 50 | bug | A call whose managed-string result is DISCARDED leaks it | — |
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
+| bug-nilpy-dunders-not-dispatched-through-containers | N | 45 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class | N | 40 | bug | SILENT->CRASH: with two classes declaring the same field name, a call through a dynamically-typed receiver hard-casts to whichever class the scan found FIRST — the field offset is read from the wrong layout, no diagnostic | — |
 | bug-nilpy-enumerate-with-start-fails-in-a-for-header | N | 45 | bug | `for i, v in enumerate(xs, 1):` — the start offset works everywhere EXCEPT a for header | — |
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
@@ -621,6 +624,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element | N | 45 | bug | In uforth, `lst.pop(idx)` on a list of tuples leaves the SURVIVING element as an empty tuple `()` — the popped item is returned intact, its neighbour is destroyed. Kills the ANS tools word set (CS-ROLL) with a 12-line Forth repro; the equivalent standalone NilPy shapes all pass, so the trigger is still unisolated. | — |
 | bug-nilpy-list-reverse-method-missing | N | 50 | bug | `list.reverse()` was missing | — |
 | bug-nilpy-list-sort-ignores-lt-dunder-on-objects | N | 35 | bug | `list.sort()` on user objects with `__lt__` raises a runtime TypeError instead of using it | — |
+| bug-nilpy-list-sort-method-missing | N | 35 | bug | `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine | — |
 | bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance | N | 70 | bug | NilPy: list, tuple and set all answer True to isinstance(x, list) AND isinstance(x, tuple), and a set reports type(x).__name__ == 'list'. Libraries routinely accept several container kinds and branch on isinstance to tell them apart, so working CPython code takes the wrong arm silently. | — |
 | bug-nilpy-local-reassigned-across-classes-keeps-one-static-class | N | 45 | bug | SILENT->CRASH: a local assigned instances of two unrelated classes keeps ONE static class identity, so every member access uses that layout. `o = DC(...)` then `o = PC(...)` reads o.native at DC's offset for both — a segfault when the layouts differ. | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
@@ -751,7 +755,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-super-and-unbound-parent-method-calls | N | 70 | bug | Neither `super().m()` nor `Parent.m(self)` reaches an overridden method | — |
 | bug-nilpy-sweep-gaps-pow-thousands-sep-stepped-slice | N | 50 | bug | Three loud gaps found by the CPython differential sweep | — |
 | bug-nilpy-ternary-comprehension-element-stringified | N | 70 | bug | A mixed-type conditional in a comprehension element turns numbers into strings | — |
-| bug-nilpy-text-class-name-binds-the-rtl-file-record | A | 55 | bug | NilPy resolves the class name `Text` to lib/rtl/textfile.pas's `Text = record` (the FILE type) instead of tkinter.Text, in the two positions that record a type by NAME — an instance attribute and a base class. Locals and globals resolve correctly. Blocks any NilPy code that stores or subclasses a Text widget | — |
+| bug-nilpy-text-class-name-binds-the-rtl-file-record | A | 55→60 | bug | NilPy resolves the class name `Text` to lib/rtl/textfile.pas's `Text = record` (the FILE type) instead of tkinter.Text, in the two positions that record a type by NAME — an instance attribute and a base class. Locals and globals resolve correctly. Blocks any NilPy code that stores or subclasses a Text widget | — |
 | bug-nilpy-the-exec-body-trampoline-is-boxed-as-an-object | N | 70 | bug | exec()'s `__body__` trampoline is boxed with PyBoxObj, which stamps VT_OBJECT on a CODE ADDRESS. Dormant for as long as it existed; the moment the callee guard asked a tag-7 receiver for its `__call__`, GetInstanceRTTI read a class pointer out of the bytes before the trampoline and walked garbage. This is test-uforth#00. | — |
 | bug-nilpy-tk-pxxcb-invalid-command-name | N | 65 | bug | Tk: `invalid command name "pxxcb"` in a long-running app | — |
 | bug-nilpy-to-bytes-on-a-variant-receiver-does-not-compile | N | 45 | bug | `.to_bytes()` on a VARIANT receiver failed at COMPILE time with 'no class declares a method or callable field .to_bytes()' — the intrinsic was gated on a statically int receiver. It is what stopped the uforth corpus compiling at all. | — |
@@ -1301,7 +1305,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-function-values | N | 70 | feature | NilPy: a def as a VALUE (procedure pointer) | — |
 | feature-nilpy-generator-expression-arg | N | 45 | feature | NilPy: a generator expression as a call argument | — |
 | feature-nilpy-hex-bin-oct-over-a-big-int | N | 55 | feature | hex/bin/oct take Int64, so they stop matching the moment every NilPy int is promotable — they need a PXXPromoToBase in promocore plus a frontend lowering, NOT a pylib overload (a PromoInt parameter cannot reach the runtime) | decide-nilpy-int-promotion-costs-10x-on-ordinary-loops |
-| feature-nilpy-import-a-py-module-from-the-library-path | A | 55 | feature | A NilPy `import X` finds X.py only as a SIBLING of the importing file; the fall-through chain looks for units (.pas) only, so a .py module shipped in lib/** is unreachable. Blocks shipping any NilPy-written library, starting with tkhtmlview | — |
+| feature-nilpy-import-a-py-module-from-the-library-path | A | 55→60 | feature | A NilPy `import X` finds X.py only as a SIBLING of the importing file; the fall-through chain looks for units (.pas) only, so a .py module shipped in lib/** is unreachable. Blocks shipping any NilPy-written library, starting with tkhtmlview | — |
 | feature-nilpy-keyword-args | N | 65 | feature | NilPy: keyword arguments at call sites | — |
 | feature-nilpy-lambda | N | 40 | feature | NilPy: real lambda expressions (function values) | — |
 | feature-nilpy-len-of-str | N | 50 | feature | NilPy: len() on a str (only TPyList is accepted today) | — |

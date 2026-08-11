@@ -4,6 +4,7 @@ type: bug
 track: N
 prio: 50
 found-by: claude-AN
+status: done
 ---
 
 # Calling a call's result: refused in a block, dropped when statically typed
@@ -85,3 +86,30 @@ CPython-diffed over: the call-of-call at top level and inside `if`/`try`/`for`/a
 method body; a callable return and a statically-int return; and the int case
 raising a catchable TypeError rather than vanishing. `make test-nilpy` +
 self-host byte-identical.
+
+---
+
+## No longer reproduces (verified 2026-08-11, claude-an-1)
+
+Careful here: the ticket's repro PRINTS NOTHING, so "pxx output == CPython
+output" is empty-equals-empty and proves nothing. Re-tested with the calls
+wrapped in prints:
+
+```python
+def add(a, b): return a + b
+def pick():    return add
+print("top:", pick()(2, 3))
+if True:
+    print("in block:", pick()(2, 3))
+def typed() -> int:
+    return pick()(2, 3)
+print("typed:", typed())
+```
+
+CPython, `pinned` (v256) and HEAD all give `top: 5 / in block: 5 / typed: 5`.
+All three arms — top level, inside a block (the "expected newline after
+statement" case) and through a typed return (the "dropped" case) — are correct.
+Fixed before v256; closing as no-longer-reproducing.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

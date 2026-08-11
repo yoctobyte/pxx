@@ -63,3 +63,23 @@ N own parameters reduce the captures a lambda can hold.
 
 The two lambdas above compiled (`strings ... | grep -c '^return '` = 0), answers
 still matching CPython, the NilPy suite green, and self-host fixedpoint.
+
+---
+
+## STILL LIVE — an output diff cannot see this one (verified 2026-08-11, claude-an-1)
+
+`f = lambda a, b: a + b` and `g = lambda a, b, c: a * b + c` both return the
+RIGHT VALUES on `pinned` and HEAD, so a CPython output diff shows no difference
+and this ticket looks stale in an automated sweep. It is not: the claim is about
+HOW they run, not what they answer.
+
+The tell (per [[project_nilpy_every_lambda_is_an_interpreted_source_closure]])
+is the lambda's SOURCE TEXT embedded in the binary:
+
+```
+$ strings ./prog | grep -c 'a + b\|a \* b + c'
+2
+```
+
+Still 2 at HEAD — both lambdas are still interpreted pyeval source closures.
+Ticket stands.

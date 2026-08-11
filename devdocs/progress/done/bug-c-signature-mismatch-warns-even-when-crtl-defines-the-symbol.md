@@ -3,6 +3,7 @@ track: C
 prio: 45
 type: bug
 summary: "Every C program that includes <math.h> now emits 2-3 'disagrees with the Pascal routine' warnings, for symbols crtl DEFINES itself. The warning describes a resolution that is correct — binding the C declaration — so it is pure noise on every math-using compile"
+status: done
 ---
 
 # The mismatch warning fires even when crtl owns the symbol
@@ -68,3 +69,15 @@ note.
 The five-line program above compiles with no warnings; `make test` and the C
 suites stay green; the genuinely dangerous same-arity hijack case still warns or
 is otherwise caught (`test/cmath_no_pascal_hijack.c`).
+
+---
+
+## No longer reproduces (verified 2026-08-11, claude-an-1)
+
+The ticket's repro (`#include <math.h>` + `floor(2.5)`) compiles with **no
+warning at all** on `pinned` (v256) and HEAD, and runs correctly (`2`). The
+"2-3 'disagrees with the Pascal routine' warnings on every math-using compile"
+are gone. Fixed before v256; closing as no-longer-reproducing.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

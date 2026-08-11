@@ -2,6 +2,7 @@
 track: N
 prio: 35
 type: bug
+status: done
 ---
 
 # `list.sort(key=...)` (the in-place METHOD) is missing — `sorted()` works fine
@@ -332,3 +333,14 @@ pyeval builtins.
 So the fix is no longer "wrap sorted()" — it is "let the compiled `sort` method
 reach the pyeval key machinery", which is the general `key=`-on-a-method
 question. Prio dropped 50 -> 35: the everyday spellings work.
+
+---
+
+## No longer reproduces (verified 2026-08-11, claude-an-1)
+
+`xs.sort()` and `xs.sort(reverse=True)` both give CPython's answer on `pinned`
+(v256) and HEAD: `[1, 2, 3]` then `[3, 2, 1]`. Stable over 20/20 runs. Fixed
+before v256; closing as no-longer-reproducing.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
