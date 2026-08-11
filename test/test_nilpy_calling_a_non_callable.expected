@@ -6,6 +6,9 @@ TypeError 4
 TypeError 5
 TypeError 6
 TypeError 7
+TypeError 8
+TypeError 9
+TypeError 10
 def as a value: 5
 lambda: 12
 bound method: 15
@@ -13,3 +16,4 @@ def in a list: 2 4
 class as a value: 7
 def in a dict: 8
 passed as a parameter: 13
+def through two dicts: 42

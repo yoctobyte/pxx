@@ -1,13 +1,13 @@
 # Calling a NON-CALLABLE raises TypeError, catchably — it used to SEGFAULT,
 # inside a `try` that names TypeError, so the program could not defend itself.
 #
-# WHAT THIS TEST DOES NOT COVER, on purpose: an int that arrives as VT_INT64
-# (tag 2) — `3 + 4`, `2**40`, `int("99")`. That is the SAME variant tag a plain
-# compiled def's code address rides as, so it cannot be refused without
-# breaking every call through a def value; `(3 + 4)(x)` still faults. The tags
-# below were measured against the whole corpus: nothing callable ever wears
-# one. Closing the rest needs a distinct callable tag —
-# feature-nilpy-a-callable-value-needs-its-own-variant-tag.
+# Cases 8..10 are the ones this test used to DISCLAIM: an int that arrives as
+# VT_INT64 (tag 2) — `3 + 4`, `2**40`, `int("99")`. That was the same variant
+# tag a plain compiled def's code address rode as, so it could not be refused
+# without breaking every call through a def value, and `(3 + 4)(x)` jumped to
+# address 7. A code address now carries VT_CALLABLE (12) instead, the guard is
+# an allow-list, and the width of an integer no longer decides anything
+# (feature-nilpy-a-callable-value-needs-its-own-variant-tag).
 def get(which):
     if which == 0: return 5
     if which == 1: return "text"
@@ -17,9 +17,12 @@ def get(which):
     if which == 5: return {"a": 1}
     if which == 6: return None
     if which == 7: return (1, 2)
+    if which == 8: return 3 + 4
+    if which == 9: return 2 ** 40
+    if which == 10: return int("99")
     return 5
 
-for i in range(8):
+for i in range(11):
     try:
         get(i)(3)
         print("NO RAISE", i)
@@ -48,3 +51,18 @@ print("def in a dict:", d["add"](4, 4))
 def apply(fn, x, y):
     return fn(x, y)
 print("passed as a parameter:", apply(add, 6, 7))
+
+# A def reached through a container is the shape that WORE tag 2, so it is also
+# the shape the retagging could have broken. Nested one level deeper than the
+# controls above, and called through a variable, so the value survives a
+# variant-to-variant copy on the way.
+reg = {"ops": {"sum": add, "prod": g}}
+op = reg["ops"]["sum"]
+print("def through two dicts:", op(20, 22))
+
+# NOT tested here: the same thing spelled inline, `(3 + 4)(1)`. That form never
+# reaches this guard at all — on an assignment RHS the parser DROPS the argument
+# list and yields the parenthesised group, so it answers 7, and `(add)(4, 5)`
+# answers a raw code address instead of 9. A separate defect in the parenthesised
+# -callee path, filed as bug-nilpy-a-parenthesised-callee-drops-its-arguments;
+# putting it here would test that bug rather than this tag.

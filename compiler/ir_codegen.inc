@@ -5535,6 +5535,11 @@ begin
           else
             Error('Variant := this type not yet supported');
           end;
+          { A CODE ADDRESS overrides the type-kind answer — see defs.inc's
+            VT_CALLABLE_TAG. tyPointer said VT_INT64, the same tag an integer
+            wears, so a def stored in a container was indistinguishable from a
+            number and the callee guard could refuse neither. }
+          if IRSrcIsCallable(IRB[node]) then size := VT_CALLABLE_TAG;
           IREmitNode(IRB[node]);                 { rax = scalar value (float: double bits) }
           if tk = tyString then
             EmitAnsiStrFromInlineString
@@ -5612,6 +5617,8 @@ begin
         else
           Error('Variant operand: this scalar type not yet supported');
         end;
+        { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
+        if IRSrcIsCallable(IRB[node]) then size := VT_CALLABLE_TAG;
         IREmitNode(IRB[node]);                 { rax = scalar value }
         if tk = tyString then
           EmitAnsiStrFromInlineString

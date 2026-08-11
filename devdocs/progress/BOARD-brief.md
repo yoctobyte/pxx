@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:7 blocked:3 backlog:236 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1626 rejected:35`
+`urgent:1 working:1 unfinished:7 blocked:3 backlog:235 experimental:20 rainy-day:40 done-followup:3 decided:56 done:1628 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,12 +31,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 219, ranked
+## Ready — top 30 of 218, ranked
 
 - `[p 80] [T]` task-t-pin-fast-track-t-owns-verification
-- `[p 70] [A]` feature-nilpy-a-callable-value-needs-its-own-variant-tag
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched
+- `[p 60] [N]` bug-nilpy-a-parenthesised-callee-drops-its-arguments
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -63,5 +62,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-est-mem-from-measurement
+- `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 
-_189 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_188 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

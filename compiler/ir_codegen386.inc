@@ -4245,6 +4245,9 @@ begin
         else
         begin
           j := VariantTagForTk386(tk, 'Variant :=');
+          { A CODE ADDRESS overrides the type-kind answer — defs.inc's
+            VT_CALLABLE_TAG; the x86-64 arm carries the full note. }
+          if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
           if tk = tyString then
           begin
             IREmitNode386(IRB[node]);                { eax = inline string buffer }
@@ -4308,6 +4311,8 @@ begin
         { Box a scalar into a temp variant (IRA = temp addr); addr -> eax. }
         tk := IntToTypeKind(IRC[node]);
         j := VariantTagForTk386(tk, 'Variant operand');
+        { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
+        if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
         if tk = tyString then
         begin
           IREmitNode386(IRB[node]);                  { eax = inline string buffer }

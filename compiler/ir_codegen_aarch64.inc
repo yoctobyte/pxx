@@ -3191,7 +3191,10 @@ begin
           else
             Error('Variant := this type not yet supported');
           end;
-          
+          { A CODE ADDRESS overrides the type-kind answer — defs.inc's
+            VT_CALLABLE_TAG; the x86-64 arm carries the full note. }
+          if IRSrcIsCallable(IRB[node]) then sz := VT_CALLABLE_TAG;
+
           if tk = tyString then
           begin
             IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
@@ -3251,6 +3254,8 @@ begin
         else
           Error('Variant operand: this scalar type not yet supported');
         end;
+        { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
+        if IRSrcIsCallable(IRB[node]) then sz := VT_CALLABLE_TAG;
 
         if tk = tyString then
         begin

@@ -884,9 +884,12 @@ test-nilpy: $(COMPILER)
 	@# read as raw bytes off the wrong builtin-container overload
 	./$(COMPILER) test/test_nilpy_dunder_len_contains.npy /tmp/test_nilpy_dunderlc26
 	test "$$(/tmp/test_nilpy_dunderlc26)" = "$$(printf '%b' '3\nTrue\nFalse\nFalse\n3\n5\n2\nTrue\nTrue\ncaught len: TypeError\ncaught in: TypeError')"
-	@# a class defining __call__ is callable as obj(args); no __call__ raises
+	@# a class defining __call__ is callable as obj(args); no __call__ raises.
+	@# The tail covers a DYNAMIC receiver (dict/list/call-result/parameter),
+	@# which used to call the instance pointer as code and dump core
+	@# (bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched).
 	./$(COMPILER) test/test_nilpy_dunder_call.npy /tmp/test_nilpy_dundercall26
-	test "$$(/tmp/test_nilpy_dundercall26)" = "$$(printf '%b' '15\n25\nhi\n6\ncaught: TypeError')"
+	test "$$(/tmp/test_nilpy_dundercall26)" = "$$(printf '%b' '15\n25\nhi\n6\ncaught: TypeError\ndict: 6\nlist: 7\ncall result: 103\nparam 1: 9\nparam 0: hi\nparam 3: 7\ninherited: 15\ninherited via dict: 15\ndynamic no-__call__: TypeError')"
 	@# a class defining __getitem__/__setitem__ routes subscript read/write
 	./$(COMPILER) test/test_nilpy_dunder_getitem_setitem.npy /tmp/test_nilpy_dundergetset26
 	test "$$(/tmp/test_nilpy_dundergetset26)" = "$$(printf '%b' '20\n99\n[10, 99, 30]\n42\n-1\n10\ncaught: TypeError')"

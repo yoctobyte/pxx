@@ -459,6 +459,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | 50 | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-nilpy-a-borrowed-object-returned-through-a-call-is-over-released | A | 55 | bug | A NilPy function that returns a container element (`return store[k]`) hands the caller a BORROW the ARC model treats as owned: the caller's local releases it at scope exit and the container's own reference dies. Root cause measured — the dict/list index lowers to an AN_CALL, and IRNodeYieldsOwnedRef reads any AN_CALL as +1, so the return-retain is skipped. | — |
+| bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched | N | 60 | bug | `obj(...)` does not dispatch a user `__call__` | — |
 | bug-nilpy-a-class-used-as-a-value-segfaults-or-refuses | N | 60 | bug | A class used as a VALUE: SEGFAULT from a container, compile errors from a name | — |
 | bug-nilpy-a-def-named-float-or-bool-is-never-called | N | 40 | bug | NilPy: `def float(x)` / `def bool(x)` were never called — their NilPy arms in ParseFactorCore claimed the name unconditionally, with none of the `not PyUserShadowsProc(name)` guard `int` and `str` beside them carry. Silent, on both sides of the def. | — |
 | bug-nilpy-a-fixed-parameter-before-star-args-segfaults | N | 55 | bug | `def __init__(self, tag, *rest)` — a fixed parameter BEFORE `*args` segfaults on ordinary construction. `*args` alone works, so only the mixed shape is broken; no diagnostic, the crash is inside the constructor. | — |
@@ -1263,6 +1264,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-net-a-first-connect-by-name | B | 35 | feature | Connect-by-name with A-first, AAAA-fallback ordering | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
+| feature-nilpy-a-callable-value-needs-its-own-variant-tag | A | 70 | feature | Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. No decision needed — tag numbering is internal and renumberable. | — |
 | feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: map/filter over an arbitrary callable value | — |
 | feature-nilpy-arithmetic-dunders-full-protocol | N | 40 | feature | Arithmetic dunders (`__add__`, `__sub__`, …) — full protocol | — |
 | feature-nilpy-arithmetic-ordering-dunders | N | 60 | feature | NilPy arithmetic/ordering dunders — umbrella | — |

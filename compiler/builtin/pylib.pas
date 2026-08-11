@@ -5073,6 +5073,16 @@ begin
   else if t = 4 then Result := 'bool'
   else if (t = 5) or (t = 6) then Result := 'str'
   else if t = 7 then Result := 'object'
+  { the callable / class-object tags. They used to fall through to '<unknown>'
+    — except a plain def, which wore VT_INT64 and so answered 'int', so
+    `type(add).__name__` said int and `isinstance(add, int)` said True. Both are
+    consequences of the tag collision VT_CALLABLE closed; naming the tags here
+    is what turns the new tag into the right ANSWER rather than just a
+    different wrong one. CPython spells a bound method 'method' and everything
+    else callable 'function'. }
+  else if t = 8 then Result := 'method'
+  else if (t = 9) or (t = 10) or (t = 12) then Result := 'function'
+  else if t = 11 then Result := 'type'
   else Result := '<unknown>';
 end;
 
@@ -5208,7 +5218,14 @@ var
   r: Int64;
 begin
   p := PPyVarRec(@v);
-  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+  { 12 = VT_CALLABLE, a compiled routine's code address. Here for the
+    machine-word readings the internals do — a callable variant read back into a
+    tyPointer to be called through — NOT because Python would coerce a function
+    to an int. It arrived as VT_INT64 and landed in this arm by accident of the
+    tag collision the callable tag closed, so keeping it is what makes that
+    retagging behaviour-preserving. VT_CLASSREF (11) is deliberately NOT here:
+    it has always had its own tag and has always raised. }
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 12) then
     Result := p^.Payload
   else if p^.VType = 8193 then
   begin
@@ -11030,6 +11047,21 @@ end;
   are, and they are what distinguishes a function from None. Naming it would
   need the frontend to record one per callable — its own ticket if anyone wants
   byte-parity with CPython. }
+function PyVarIsCallableTag(const v: Variant): Boolean;
+{ Does this variant hold a CALLABLE VALUE (rather than a class, a container or a
+  scalar)? VT_BOUNDMETHOD 8, VT_PYCLOSURE 9, VT_BOUNDFN 10 and VT_CALLABLE 12 —
+  the last being a plain compiled code address, which before it had a tag of its
+  own wore VT_INT64 and so rendered as a DECIMAL INTEGER.
+
+  ONE predicate because value->text has THREE entry points here (pystr_of,
+  pyvar_repr, pyvar_print_of) and each carried its own copy of the tag list; a
+  tag added to two of the three is a rendering that is right in print() and
+  wrong in an f-string. }
+begin
+  PyVarIsCallableTag := (pyvartag(v) = 8) or (pyvartag(v) = 9) or
+                        (pyvartag(v) = 10) or (pyvartag(v) = 12);
+end;
+
 function PyCallableStr(const v: Variant): AnsiString;
 const HEXD = '0123456789abcdef';
 var a: Int64; i: Integer; hx: AnsiString; lead: Boolean;
@@ -11501,7 +11533,7 @@ var o: TObject; us: AnsiString;
 begin
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;   { VT_EMPTY }
   { a callable VALUE — see PyCallableStr }
-  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  if PyVarIsCallableTag(v) then
   begin Result := PyCallableStr(v); Exit; end;
   { a CLASS reached as a value renders as CPython's class object }
   if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
@@ -11531,7 +11563,7 @@ end;
 function pyvar_print_of(const v: Variant): AnsiString;
 var o: TObject; us: AnsiString;
 begin
-  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  if PyVarIsCallableTag(v) then
   begin Result := PyCallableStr(v); Exit; end;
   { a CLASS reached as a value renders as CPython's class object }
   if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
@@ -11731,7 +11763,7 @@ function pystr_of(const v: Variant): AnsiString; overload;
 begin
   { VT_EMPTY is Python's None, not an empty string }
   if pyvartag(v) = 0 then begin Result := 'None'; Exit; end;
-  if (pyvartag(v) = 8) or (pyvartag(v) = 9) or (pyvartag(v) = 10) then
+  if PyVarIsCallableTag(v) then
   begin Result := PyCallableStr(v); Exit; end;
   { a CLASS reached as a value renders as CPython's class object }
   if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;

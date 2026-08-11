@@ -1797,17 +1797,23 @@ end;
   against; this side is what stamps the tag. }
 const VT_PYCLOSURE = 9;
       VT_BOUNDFN   = 10;
-{ The tags PyNotCallable refuses. Same mirror rule as the pair above — these
-  restate compiler/defs.inc's VT_INT/VT_DOUBLE/VT_BOOL/VT_CHAR/VT_STRING/
-  VT_OBJECT/VT_PROMO_BASE and must change with them. Prefixed VT_NC_ so the
-  duplicate names cannot collide with anything a later include brings in. }
-const VT_NC_INT        = 1;
-      VT_NC_DOUBLE     = 3;
-      VT_NC_BOOL       = 4;
-      VT_NC_CHAR       = 5;
-      VT_NC_STRING     = 6;
-      VT_NC_OBJECT     = 7;
-      VT_NC_PROMO_BASE = 8192;
+      { …and the two STATIC-address arms of the same family. Neither payload is
+        a heap block, so neither joins the object-tag lists; they exist so the
+        callee guard can tell code and a class apart from an integer. }
+      VT_CLASSREF  = 11;
+      VT_CALLABLE  = 12;
+{ The two tags PyNotCallable still names by number. Same mirror rule as the
+  block above — they restate compiler/defs.inc's VT_BOUNDMETHOD / VT_OBJECT and
+  must change with them. Prefixed VT_NC_ so the duplicate names cannot collide
+  with anything a later include brings in.
+
+  This list used to hold VT_INT/VT_DOUBLE/VT_BOOL/VT_CHAR/VT_STRING/
+  VT_PROMO_BASE too, because the guard was a REFUSAL list. It is an allow-list
+  now (see PyNotCallable), so the non-callable tags do not need naming at all —
+  which is the point: a tag nobody thought about is refused by default instead
+  of being let through. }
+const VT_NC_BOUNDMETHOD = 8;
+      VT_NC_OBJECT      = 7;
 type
   TPyClosure = record
     Kinds:  array of Integer;
@@ -4390,22 +4396,34 @@ procedure PyNotCallable(const cb: Variant);
   instead of jumping to its payload and dumping core
   (bug-nilpy-calling-a-non-callable-segfaults).
 
-  What a tag CAN carry decides this, and the tags were MEASURED against the
-  whole .npy corpus rather than reasoned about. Every callee that legitimately
-  reaches here wears tag 2 (a plain compiled def's code address, 106 samples),
-  8 (bound method), 9 (pyeval closure, 12), 10 (lifted bound-fn, 245) or 11 (a
-  class used as a value, which constructs). Tags 1/3/4/5/6 and the promotable-int
-  block appeared ZERO times — nothing callable is ever boxed as one — so
-  refusing them cannot break a working program, and each was a live segfault.
+  An ALLOW-LIST, not a refusal list, and that inversion is the whole point of
+  feature-nilpy-a-callable-value-needs-its-own-variant-tag. It USED to be a
+  refusal list because it had to be: a plain def's code address boxed as
+  VT_INT64 (2) — the same tag `3 + 4`, `2**40` and `int("99")` wear, since
+  1-vs-2 is an integer WIDTH distinction and says nothing about callability.
+  Refusing tag 2 would have broken every ordinary call through a def value (106
+  of them across the .npy corpus, measured), so `(3 + 4)(x)` jumped to address 7
+  and dumped core and NO test on the tag could have stopped it.
 
-  THE HOLE THIS DOES NOT CLOSE — deliberately, and the test says so: an int
-  arriving as VT_INT64 (tag 2). `5` boxes as VT_INT (1) and is caught here, but
-  `3 + 4`, `2**40` and `int("99")` box as VT_INT64 — the SAME tag a def's code
-  address rides as, because 1-vs-2 is an integer WIDTH distinction and carries
-  no information about callability. Rejecting tag 2 would break every ordinary
-  call through a def value. Closing it needs a distinct CALLABLE tag, which is
-  feature-nilpy-a-callable-value-needs-its-own-variant-tag; until then
-  `(3 + 4)(x)` still faults. }
+  A callable now carries VT_CALLABLE (12) — stamped in the backends'
+  variant-boxing tag selection off the SOURCE IR node (IRSrcIsCallable: a code
+  address, or the pyboundfn_*/pyclosure_* chain a lambda in an argument position
+  lowers to), see defs.inc — so the tags finally partition and the guard can
+  state what IS callable:
+
+    8  VT_BOUNDMETHOD  {code, recv} pair (pybound_new)
+    9  VT_PYCLOSURE    pyeval source closure
+    10 VT_BOUNDFN      lifted bound-fn
+    11 VT_CLASSREF     a class used as a value — constructs
+    12 VT_CALLABLE     a plain compiled code address
+    7  VT_OBJECT       ONLY when its class defines __call__
+
+  Everything else is refused, which is strictly more than the old list caught:
+  VT_INT64, VT_EMPTY-with-a-payload, and any tag added later that forgets to say
+  whether it is code. 8 and 11 are unreachable in practice (pycallback_is /
+  pyclassref_is short-circuit ahead of every caller) and are listed anyway — an
+  allow-list fails CLOSED, so naming one tag too many costs nothing and omitting
+  one costs a TypeError on working code. }
 var t: Int64;
 begin
   { TypeError, not a bare Exception: `except TypeError:` must see it. This was
@@ -4419,9 +4437,8 @@ begin
       + 'None (an import that did not resolve, or a value never assigned)');
 
   t := PPyRec(@cb)^.VType;
-  if (t = VT_NC_INT) or (t = VT_NC_DOUBLE) or (t = VT_NC_BOOL) or
-     (t = VT_NC_CHAR) or (t = VT_NC_STRING) or (t >= VT_NC_PROMO_BASE) then
-    raise TypeError.Create('object is not callable');
+  if (t = VT_NC_BOUNDMETHOD) or (t = VT_PYCLOSURE) or (t = VT_BOUNDFN) or
+     (t = VT_CLASSREF) or (t = VT_CALLABLE) then Exit;
 
   { A class INSTANCE (tag 7) — a list, dict, tuple or a user object. Callable
     only if its class defines `__call__`; otherwise the payload is an instance
@@ -4431,9 +4448,55 @@ begin
     (bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched); refusing it
     would be a regression, so this arm stays narrow. }
   if t = VT_NC_OBJECT then
+  begin
     if PyFindMethCI(GetInstanceRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload))),
                     '__call__') = nil then
       raise TypeError.Create('object is not callable');
+    Exit;
+  end;
+
+  { the allow-list's closing arm: an int, a float, a string, a promo, a tag
+    nobody has classified — none of them is code. }
+  raise TypeError.Create('object is not callable');
+end;
+
+function PyCallDunder(const cb: Variant; n: Integer;
+                      const a0, a1, a2: Variant; var res: Variant): Boolean;
+{ `obj(...)` where obj is a class INSTANCE whose class defines `__call__` —
+  Python's callable-object protocol. Answers False for anything else, so each
+  pyvar_callv<n> can offer the value here and fall through unchanged.
+
+  PyNotCallable has always let this shape past (it refuses a tag-7 instance only
+  when the class has NO `__call__`), and past it the payload — an INSTANCE
+  POINTER — was called as a code address, which dumps core.
+
+  Only the DYNAMIC receiver ever got here, and that is why the bug outlived so
+  much: `c(5)` on a named local works and always has, because the frontend knows
+  c's class and lowers a direct method call. Reach the same instance through a
+  dict, a list, a call result or an unannotated parameter and the receiver is a
+  variant, this dispatcher runs, and it faulted. Measured on `pinned`: `c(5)`
+  printed 10, `{"c": c}["c"](5)` segfaulted
+  (bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched, whose own repro is
+  the passing static form).
+
+  PyHostCall is the existing by-name trampoline and handles the ABI shapes, so
+  this is a receiver + an argument list and nothing else. It is reached only
+  after PyFindMethCI has confirmed the method, which is what makes PyHostCall's
+  missing-method Halt unreachable from here. }
+var inst: Pointer; args: TPyList;
+begin
+  PyCallDunder := False;
+  if PPyRec(@cb)^.VType <> VT_NC_OBJECT then Exit;
+  inst := Pointer(NativeInt(PPyRec(@cb)^.Payload));
+  if inst = nil then Exit;
+  if PyFindMethCI(GetInstanceRTTI(inst), '__call__') = nil then Exit;
+  args := TPyList.Create;
+  if n >= 1 then args.append(a0);
+  if n >= 2 then args.append(a1);
+  if n >= 3 then args.append(a2);
+  PyHostCall(inst, '__call__', args, res);
+  args.Free;
+  PyCallDunder := True;
 end;
 
 function pyvar_callv0(const cb: Variant): Variant;
@@ -4447,6 +4510,7 @@ begin
     site would have jumped into the RTTI blob). }
   if pyclassref_is(cb) then begin PyClassRefNew(cb, 0, pynone, pynone, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 0, pynone, pynone, pynone, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
   if PyBoundFnArityBad(o, 0, aLo, aHi) then PyRaiseArity(0, aLo, aHi);
@@ -4476,6 +4540,7 @@ begin
     site would have jumped into the RTTI blob). }
   if pyclassref_is(cb) then begin PyClassRefNew(cb, 1, a0, pynone, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 1, a0, pynone, pynone, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
   if PyBoundFnArityBad(o, 1, aLo, aHi) then PyRaiseArity(1, aLo, aHi);
@@ -4506,6 +4571,7 @@ begin
     site would have jumped into the RTTI blob). }
   if pyclassref_is(cb) then begin PyClassRefNew(cb, 2, a0, a1, pynone, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 2, a0, a1, pynone, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
   if PyBoundFnArityBad(o, 2, aLo, aHi) then PyRaiseArity(2, aLo, aHi);
@@ -4536,6 +4602,7 @@ begin
     site would have jumped into the RTTI blob). }
   if pyclassref_is(cb) then begin PyClassRefNew(cb, 3, a0, a1, a2, pynone, Result); Exit; end;
   PyNotCallable(cb);
+  if PyCallDunder(cb, 3, a0, a1, a2, Result) then Exit;
   o := PyCallableObj(cb);
   if PyClosureArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
   if PyBoundFnArityBad(o, 3, aLo, aHi) then PyRaiseArity(3, aLo, aHi);
@@ -4573,7 +4640,11 @@ begin
   PPyRec(@Result)^.Payload := Int64(NativeInt(p));
   if pyclosure_is(p) then PPyRec(@Result)^.VType := VT_PYCLOSURE
   else if pyboundfn_is(p) then PPyRec(@Result)^.VType := VT_BOUNDFN
-  else PPyRec(@Result)^.VType := 0;
+  { anything else here is a plain compiled code address. It used to ride as
+    VT_EMPTY ("a bare payload"), which is what a None binding also wears — so
+    the guard's payload test was the only thing separating the two. VT_CALLABLE
+    says what it is; the payload is still static, so nothing manages it. }
+  else PPyRec(@Result)^.VType := VT_CALLABLE;
 end;
 
 { Reverse bridge, 1-arg form: NilPy's PyMakeDynCall calls this when the callee

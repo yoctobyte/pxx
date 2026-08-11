@@ -6,6 +6,15 @@
 # genuine catchable runtime error rather than failing to compile.
 # bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic
 # Every expectation is CPython's own output.
+#
+# The DYNAMIC receiver block at the bottom is the half that stayed broken and
+# is bug-nilpy-a-call-dunder-on-an-instance-is-not-dispatched. Everything above
+# it goes through the STATIC path: the frontend knows the receiver's class and
+# lowers `a(10)` to a direct method call, which is why the ticket's own repro
+# passed while the bug was open. Reach the same instance through a dict, a
+# list, a call result or an unannotated parameter and the receiver is a VARIANT
+# instead — that path went through pyvar_callv<n>, which called the INSTANCE
+# POINTER as a code address and dumped core.
 
 class Adder:
     def __init__(self, n):
@@ -37,3 +46,41 @@ try:
     print(p(1))
 except Exception as e:
     print("caught:", type(e).__name__)
+
+# --- the instance reached as a VARIANT: every route that loses the static type
+d = {"a": a}
+print("dict:", d["a"](1))
+
+lst = [a, m]
+print("list:", lst[0](2))
+
+def mk():
+    return Adder(100)
+print("call result:", mk()(3))
+
+def apply1(f, v):
+    return f(v)
+def apply0(f):
+    return f()
+def apply3(f, x, y, z):
+    return f(x, y, z)
+print("param 1:", apply1(a, 4))
+print("param 0:", apply0(g))
+print("param 3:", apply3(m, 1, 2, 4))
+
+# an INHERITED __call__ — the lookup walks the parent chain
+class Base:
+    def __call__(self, x):
+        return x * 3
+class Derived(Base):
+    pass
+dv = Derived()
+print("inherited:", dv(5))
+print("inherited via dict:", {"d": dv}["d"](5))
+
+# a class WITHOUT __call__ reached the same dynamic way must still raise,
+# catchably, rather than jumping to the instance pointer
+try:
+    print({"p": p}["p"](1))
+except TypeError:
+    print("dynamic no-__call__: TypeError")

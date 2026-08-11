@@ -4218,6 +4218,59 @@ begin
     (IntToTypeKind(ASTTk[n]) = tyClass);
 end;
 
+function IRSrcIsCallable(n: Integer): Boolean;
+{ Does this IR node yield something CALLABLE, whatever its type kind says? The
+  one discriminator the backends' variant-boxing tag tables consult beyond the
+  source TYPE KIND, so a boxed callable takes VT_CALLABLE_TAG instead of
+  VT_INT64 (see defs.inc on that tag: tyPointer maps to VT_INT64, which is also
+  what a plain integer wears, and that collision is why `(3 + 4)(x)` could not
+  be refused).
+
+  TWO shapes, and finding only the first is what a measurement caught:
+
+  - IR_PROCADDR — a plain compiled def's entry point, `{"a": add}`.
+  - a call to one of the callable CONSTRUCTORS — the pyboundfn_* / pyclosure_*
+    chain a lambda or a capturing nested def lowers to. Its result is a heap
+    callable OBJECT, and it reaches a variant here only in an ARGUMENT position
+    (`apply2(lambda a, b: a - b, 6, 7)`), where PyBoxCallableValue deliberately
+    does not run. Bound to a NAME first, the same lambda goes through
+    pyvar_of_callable and lands as VT_PYCLOSURE/VT_BOUNDFN instead — an OWNING
+    tag. This borrowed arm must NOT claim one of those: the slot would then
+    release an object it never retained.
+
+  So VT_CALLABLE means "the payload is callable and the slot does not own it",
+  which is exactly the lifetime these values already had as VT_INT64 — the
+  retagging changes what the guard can SEE, and nothing about who frees what.
+  Run-time dispatch is unaffected either way: PyCallableObj tells a code address
+  from a closure from a bound-fn by the object's MAGIC, never by the tag.
+
+  ONE predicate, applied at all five boxing sites (x86-64 IR_VAR_STORE and
+  IR_VAR_BOX, the i386 tag function's two callers, aarch64's two) — the sibling
+  arm is the thing that stays wrong when a discrimination is written per-site. }
+var nm: AnsiString;
+begin
+  IRSrcIsCallable := False;
+  if n < 0 then Exit;
+  if IRKind[n] = IR_PROCADDR then
+  begin
+    IRSrcIsCallable := True;
+    Exit;
+  end;
+  if IRKind[n] <> IR_CALL then Exit;
+  if (IRA[n] < 0) or (IRA[n] >= ProcCount) then Exit;
+  { the same constructor set PyNodeIsCallableValue and PyBoxCallableValue list,
+    minus pybound_new — that one already returns a tyVariant tagged 8 and never
+    reaches a scalar boxing site. }
+  nm := LowerCase(Procs[IRA[n]].Name);
+  IRSrcIsCallable :=
+    (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
+    (nm = 'pyclosure_setarity') or
+    (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
+    (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
+    (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
+    (nm = 'pyboundfn_bind_cell');
+end;
+
 function IRNodeIsPyStr(n: Integer): Boolean;
 { A Python str operand: pxx spells a one-character literal tyChar, but Python
   has no character type -- "a" * 3 must repeat, not multiply a code point. }

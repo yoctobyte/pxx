@@ -653,6 +653,38 @@ const
     read a refcount header that does not exist. }
   VT_CLASSREF_TAG = 11;
 
+  { payload = something CALLABLE that the slot does not own — usually a plain
+    compiled routine's CODE ADDRESS (a NilPy `def` reaching a variant without
+    going through pybound_new/pyboundfn_new: `{"a": add}[k](1, 2)`,
+    `[add][0](1, 2)`, a def handed to a `Callable[...]` parameter), and also a
+    BORROWED heap callable — an inline lambda in an argument position.
+
+    Its own tag for the same reason VT_CLASSREF_TAG above has one, and it is the
+    LAST arm of that family: such an address used to box as VT_INT64 (2),
+    because the boxing tag is chosen from the source's TTypeKind and tyPointer
+    maps to VT_INT64. So a code address and an INTEGER wore one tag — measured
+    across the whole .npy corpus, tag 2 was 106 legitimate callees — and the
+    callee guard could not refuse tag 2 without breaking every one of them.
+    `(3 + 4)(x)` therefore jumped to address 7 and dumped core, and no test on
+    the tag could have stopped it (bug-nilpy-calling-a-non-callable-segfaults,
+    feature-nilpy-a-callable-value-needs-its-own-variant-tag). With this tag the
+    guard becomes an ALLOW-list and the int case closes with everything else.
+
+    Stamped in the backends' variant-boxing tag selection, keyed on the SOURCE
+    IR node (IRSrcIsCallable) rather than on its type kind — the type kind is
+    exactly the thing that cannot tell these apart.
+
+    The payload is USUALLY a static code address; it may also be a BORROWED heap
+    callable (an inline lambda in an argument position — see IRSrcIsCallable).
+    Either way the slot does NOT own it, which is why this tag stays out of the
+    variant clear/retain object-tag lists: that is the lifetime these values
+    already had while they wore VT_INT64. A callable whose slot must OWN the
+    object is boxed by pyvar_of_callable and gets VT_PYCLOSURE/VT_BOUNDFN
+    instead. Run-time dispatch never keys on this tag — PyCallableObj tells the
+    shapes apart by the object's magic — so the tag is purely what lets the
+    callee guard SEE that a payload is code. }
+  VT_CALLABLE_TAG = 12;
+
   { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
     match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it
     can never equal a plain block's allocator size word (always a multiple of
