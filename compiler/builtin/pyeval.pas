@@ -1092,25 +1092,26 @@ begin
     n := Length(s); i := pyvar_to_int(index);
     if i < 0 then i := i + n;
     if (i < 0) or (i >= n) then
-    begin writeln('pyeval: string index out of range'); Halt(1); end;
+    raise IndexError.Create('string index out of range');
     res := MakeStr(s[i + 1]);
     Exit;
   end;
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot subscript a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object is not subscriptable');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
   begin
     li := TPyList(o); n := li.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: list index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then raise IndexError.Create('list index out of range');
     res := li.at(i);
   end
   else if o is TPyBytes then
   begin
     by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then raise IndexError.Create('index out of range');
     res := pyvar_of_int(by.at(i));
   end
   else if o is TPyDict then
@@ -1119,7 +1120,8 @@ begin
     res := di.fetch(index);
   end
   else
-    begin writeln('pyeval: unsupported subscript target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object is not subscriptable');
 end;
 
 { container[index] = val }
@@ -1128,20 +1130,22 @@ procedure PySubscriptSet(const container: Variant; const index: Variant;
 var o: TObject; li: TPyList; by: TPyBytes; di: TPyDict; i, n: Int64;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot subscript-assign a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object does not support item assignment');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
   begin
     li := TPyList(o); n := li.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: list assignment index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then
+      raise IndexError.Create('list assignment index out of range');
     li.put(i, val);
   end
   else if o is TPyBytes then
   begin
     by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
     if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then begin writeln('pyeval: index out of range'); Halt(1); end;
+    if (i < 0) or (i >= n) then raise IndexError.Create('index out of range');
     by.put(i, pyvar_to_int(val) and $FF);
   end
   else if o is TPyDict then
@@ -1150,7 +1154,8 @@ begin
     di.store(index, val);
   end
   else
-    begin writeln('pyeval: unsupported subscript-assign target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object does not support item assignment');
 end;
 
 { container[lo:hi] = value. bytes take a variant RHS holding bytes; lists take a
@@ -1159,14 +1164,16 @@ procedure PySliceSet(const container: Variant; lo, hi: Int64; const val: Variant
 var o: TObject;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot slice-assign a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object does not support slice assignment');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyBytes then
     pybytes_setslice_v(TPyBytes(o), lo, hi, val)
   else if o is TPyList then
     pylist_setslice(TPyList(o), lo, hi, TPyList(pyvarobj(val)))
   else
-    begin writeln('pyeval: unsupported slice-assign target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object does not support slice assignment');
 end;
 
 { del container[index] }
@@ -1174,19 +1181,21 @@ procedure PyDelSubscript(const container: Variant; const index: Variant);
 var o: TObject; li: TPyList; di: TPyDict; i, nn: Int64;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  begin writeln('pyeval: cannot del a subscript of a non-container'); Halt(1); end;
+  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+                           ' object does not support item deletion');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
   begin
     li := TPyList(o); nn := li.count; i := pyvar_to_int(index);
     if i < 0 then i := i + nn;
-    if (i < 0) or (i >= nn) then begin writeln('pyeval: del index out of range'); Halt(1); end;
+    if (i < 0) or (i >= nn) then raise IndexError.Create('list index out of range');
     li.pop_at(i);
   end
   else if o is TPyDict then
     TPyDict(o).remove(index)
   else
-    begin writeln('pyeval: unsupported del target'); Halt(1); end;
+    raise TypeError.Create(Chr(39) + pytype_name_v(container) + Chr(39) +
+         ' object does not support item deletion');
 end;
 
 { ---- tokenizer ---- }

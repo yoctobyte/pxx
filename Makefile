@@ -1195,6 +1195,13 @@ test-nilpy: $(COMPILER)
 	# code ADDRESS, correct for a def and a SEGFAULT for a lambda.
 	./$(COMPILER) test/test_nilpy_arity_four_dynamic_call.npy /tmp/test_nilpy_a4call26
 	/tmp/test_nilpy_a4call26 | diff -u test/test_nilpy_arity_four_dynamic_call.expected -
+	# pyeval's runtime errors are catchable RAISES, not writeln + Halt: a
+	# try/except around an interpreted body could not run at all. Reaching the
+	# interpreted path needs a lambda capturing a LOCAL managed string (the one
+	# shape the lift still refuses) — a module global would compile and prove
+	# nothing. bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
+	./$(COMPILER) test/test_nilpy_pyeval_errors_are_catchable.npy /tmp/test_nilpy_pyevalerr26
+	/tmp/test_nilpy_pyevalerr26 | diff -u test/test_nilpy_pyeval_errors_are_catchable.expected -
 	! ./$(COMPILER) test/test_nilpy_isinstance_unknown_type_fail.npy /tmp/test_nilpy_isinstfail26 2>&1 | grep -q 'ok:'
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".

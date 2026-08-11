@@ -1,0 +1,50 @@
+# pyeval's runtime errors must be catchable RAISES, not writeln + Halt.
+#
+# A `try: ... except IndexError:` around an interpreted body could not run at
+# all: the tree-walker printed `pyeval: string index out of range` and exited.
+# Real Python guards subscripts with `except (TypeError, IndexError)`, so every
+# such site was an uncatchable exit on ordinary code.
+#
+# REACHING the interpreted path is the hard part of this test, and the reason
+# the ticket's original repro went stale: lambdas are LIFTED to native code now,
+# and a lifted body raises properly. The lift is refused for a lambda that
+# captures a LOCAL managed string — so `s` below must be a local, not a module
+# global, or these lambdas compile and the test proves nothing.
+#
+# On `pinned` the first row prints `pyeval: string index out of range` and the
+# handler never runs.
+#
+# Every expectation is CPython's own output.
+# bug-nilpy-pyeval-runtime-errors-halt-instead-of-raising
+
+
+def string_index():
+    s = "abc"
+    f = lambda v: s + v[9]
+    try:
+        return f("xy")
+    except IndexError:
+        return "caught IndexError"
+
+
+def list_index():
+    s = "abc"
+    f = lambda v: s + str(v[9])
+    try:
+        return f([1, 2])
+    except IndexError:
+        return "caught list IndexError"
+
+
+def not_subscriptable():
+    s = "abc"
+    f = lambda v: s + str(v[0])
+    try:
+        return f(None)
+    except TypeError:
+        return "caught TypeError"
+
+
+print(string_index())
+print(list_index())
+print(not_subscriptable())

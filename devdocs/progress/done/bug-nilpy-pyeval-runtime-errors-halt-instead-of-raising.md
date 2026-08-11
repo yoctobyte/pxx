@@ -3,6 +3,8 @@ prio: 50
 track: N
 type: bug
 blocked-by: []
+status: done
+owner: claude-A
 ---
 
 # pyeval's runtime errors `writeln` + `Halt` instead of raising
@@ -89,3 +91,53 @@ via the obvious paths, the priority question is no longer "catchable vs halt"
 but "is this reachable at all". Both answers are progress; a stale repro is not.
 
 **No code changed.** Ticket stays open with its original prio.
+
+## Resolution (2026-08-11) — and the reachability question the ticket asked
+
+Followed the 2026-08-10 instruction: started from the `grep`, not the repro, and
+answered "can a NilPy program still reach this?" per site.
+
+**Yes — and here is the shape that does it.** A lambda is lifted to native code
+now, which is why the old repro went stale; the lift is REFUSED for a lambda
+capturing a **local managed string**, and that body stays interpreted:
+
+```python
+def run():
+    s = "abc"                    # a LOCAL managed string — a module global LIFTS
+    f = lambda v: s + v[9]       # ...so this body runs in pyeval
+    try:
+        return f("xy")
+    except IndexError:
+        return "caught IndexError"
+```
+
+| | output |
+| --- | --- |
+| CPython | `caught IndexError` |
+| `pinned` | `pyeval: string index out of range` — the handler never runs |
+| HEAD | `caught IndexError` |
+
+That distinction is the whole trick and belongs in any future repro: with `s` as
+a module global the lambda compiles and the test proves nothing.
+
+**Converted: the 14 sites that report a PROGRAM error** — subscript get/set,
+slice-assign, del, and index-out-of-range on str/list/bytes — now raise
+`IndexError` / `TypeError` with CPython's own wording (`list index out of
+range`, `'NoneType' object is not subscriptable`, `... does not support item
+assignment`), the type name coming from `pytype_name_v` so the message names
+what the program actually passed.
+
+**Deliberately NOT converted: the 15 that report an INTERNAL invariant** —
+`no RTTI for attribute`, `vm has no method`, `host arity N too large`. Those
+mean the COMPILER emitted something impossible, not that the program did
+something wrong; dressing them as Python exceptions would let a compiler bug be
+swallowed by an `except TypeError:` and reported as a program error. They stay
+halts, and that is now a decision rather than an oversight. `grep -c "Halt("
+compiler/builtin/pyeval.pas` is 15, down from 29.
+
+Gate: `make test-nilpy` EXIT=0, `gate.sh quick` GREEN. New
+`test/test_nilpy_pyeval_errors_are_catchable.npy`, whose header records the
+local-vs-global trick so the next person can still reach these paths.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
