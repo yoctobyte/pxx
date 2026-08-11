@@ -37,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (216)
+## backlog (217)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -91,6 +91,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
+| decide-esp-soc-axis-and-capability-table | S | 45 | decide | Decide: how does the compiler learn WHICH ESP chip, and what does it derive? | — |
 | decide-nilpy-class-as-value-dispatch-strategy | U | 5 | decide | A variant tag cannot make `cls(...)` callable — NilPy ctor params are statically INFERRED per class, so two classes of the same arity have different ABIs. Choose: compile-time candidate dispatch, an RTTI-driven runtime marshaller, or a uniform variant ctor ABI for classes used as values. | — |
 | decide-nilpy-none-str-representation | U | 45 | decide | `\"\" is None` is True for a statically str-typed value and False for the same string in a variant — the variant path ALREADY models None-vs-empty correctly, so choose: route str Optionals through variants, give None-str a distinguished non-nil handle, or leave the divergence documented | — |
 | decide-nilpy-parallel-capture-semantics | U | 5 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
@@ -504,6 +505,7 @@ _none_
 - [p 45] [T] bug-t-the-full-tier-no-longer-fits-its-deadline
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
+- [p 45] [S] decide-esp-soc-axis-and-capability-table
 - [p 45] [C] feature-c-entry-stub-must-run-initializers-for-environ
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
