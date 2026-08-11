@@ -27234,7 +27234,7 @@ procedure CompilePendingLocalInits;
   current code position (the routine prologue, after managed-local zero-init and
   before the body). Mirror of CompilePendingGlobalInits over the LocalInit list;
   the list is reset by the caller at routine entry. }
-var i, identNode, valNode, idxLit, target, assignNode: Integer;
+var i, identNode, valNode, idxLit, target, assignNode, initTk: Integer;
 begin
   { -O2 register-residency: suppress r14/r15 residency assignment for these
     per-initializer CompileAST calls. Each would otherwise re-emit the save+load
@@ -27244,6 +27244,10 @@ begin
   RcSuppressAssign := True;
   for i := 0 to LocalInitCount - 1 do
   begin
+    { Value kind, not storage kind — see the same line in
+      CompilePendingGlobalInits for why a frozen string[N] element must be
+      spelled tyString here. This is that bug's ROUTINE-LOCAL twin. }
+    initTk := StrValTk(IntToTypeKind(LocalInitTk[i]));
     identNode := AllocNode(AN_IDENT);
     ASTIVal[identNode] := LocalInitSym[i];
     ASTTk[identNode] := Ord(Syms[LocalInitSym[i]].TypeKind);
@@ -27255,7 +27259,7 @@ begin
       ASTLeft[target] := identNode;
       ASTSOffset[target] := LocalInitFOff[i];
       ASTSLen[target] := LocalInitFLen[i];
-      ASTTk[target] := LocalInitTk[i];
+      ASTTk[target] := initTk;
     end
     else if LocalInitElem[i] >= 0 then
     begin
@@ -27265,7 +27269,7 @@ begin
       target := AllocNode(AN_INDEX);
       ASTLeft[target] := identNode;
       ASTRight[target] := idxLit;
-      ASTTk[target] := LocalInitTk[i];
+      ASTTk[target] := initTk;
     end
     else
       target := identNode;
@@ -27288,7 +27292,7 @@ begin
     begin
       valNode := AllocNode(AN_INT_LIT);
       ASTIVal[valNode] := LocalInitVal[i];
-      ASTTk[valNode] := LocalInitTk[i];
+      ASTTk[valNode] := initTk;
     end;
 
     assignNode := AllocNode(AN_ASSIGN);
@@ -31191,9 +31195,20 @@ procedure CompilePendingGlobalInits;
 { Emit the recorded constant global-var initializers as assignments, at the
   current code position (just before `main begin`). }
 var i, identNode, valNode, idxLit, target, assignNode, lenVal, innerAddr: Integer;
+    initTk: Integer;
 begin
   for i := 0 to PendingInitCount - 1 do
   begin
+    { The recorded Tk is the DECLARED storage kind; every target built below is
+      an EXPRESSION, so it must carry the value kind the resolver would have
+      given the same `a[0] := 'aa'` written by hand — StrValTk, which folds
+      tyFixedString/tyShortString onto tyString. Without it a frozen-string
+      element kept its storage spelling, IR_STORE_MEM's frozen arm (which tests
+      `tk = tyString`) did not fire, and the store fell through to the generic
+      8-byte path that wrote the source HANDLE into the slot: a const array of
+      string[N] read back as pointer garbage, with no diagnostic.
+      bug-a-a-typed-const-array-of-string-n-is-never-initialised }
+    initTk := StrValTk(IntToTypeKind(PendingInitTk[i]));
     identNode := AllocNode(AN_IDENT);
     ASTIVal[identNode] := PendingInitSym[i];
     ASTTk[identNode] := Ord(Syms[PendingInitSym[i]].TypeKind);
@@ -31208,7 +31223,7 @@ begin
       target := AllocNode(AN_INDEX);
       ASTLeft[target] := identNode;
       ASTRight[target] := idxLit;
-      ASTTk[target] := PendingInitTk[i];
+      ASTTk[target] := initTk;
     end;
 
     if PendingInitFOff[i] >= 0 then
@@ -31220,7 +31235,7 @@ begin
       ASTSOffset[valNode] := PendingInitFOff[i];
       ASTSLen[valNode] := PendingInitFLen[i];
       target := valNode;
-      ASTTk[target] := PendingInitTk[i];
+      ASTTk[target] := initTk;
     end;
 
     if PendingInitKind[i] = 7 then
@@ -31233,7 +31248,7 @@ begin
       valNode := AllocNode(AN_INDEX);
       ASTLeft[valNode] := target;
       ASTRight[valNode] := idxLit;
-      ASTTk[valNode] := PendingInitTk[i];
+      ASTTk[valNode] := initTk;
       target := valNode;
     end;
 
@@ -31320,7 +31335,7 @@ begin
     begin
       valNode := AllocNode(AN_FLOAT_LIT);
       ASTIVal[valNode] := PendingInitVal[i];
-      ASTTk[valNode] := PendingInitTk[i];
+      ASTTk[valNode] := initTk;
     end
     else if PendingInitKind[i] = 5 then
     begin
@@ -31333,7 +31348,7 @@ begin
     begin
       valNode := AllocNode(AN_INT_LIT);
       ASTIVal[valNode] := PendingInitVal[i];
-      ASTTk[valNode] := PendingInitTk[i];
+      ASTTk[valNode] := initTk;
     end;
 
     assignNode := AllocNode(AN_ASSIGN);

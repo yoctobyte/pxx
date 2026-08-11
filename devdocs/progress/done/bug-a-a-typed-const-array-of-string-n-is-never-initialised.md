@@ -3,6 +3,8 @@ track: A
 prio: 50
 type: bug
 blocked-by: []
+status: done
+owner: claude-A
 ---
 
 # A typed const array of `string[N]` is never initialised — silently
@@ -76,3 +78,6 @@ sibling right beside it already refuses what it cannot do
 The six element types above matching FPC, plus a named-alias element and an
 N-D const array of `string[N]`; `test/test_const_array_of_string.pas` still
 green; self-host byte-identical.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

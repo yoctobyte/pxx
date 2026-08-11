@@ -7498,7 +7498,17 @@ begin
         end;
         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then
           lhsTk := lhsStoreTk;
-      end;
+      end
+      else if (ASTKind[ASTLeft[node]] = AN_INDEX) and (lhsTk = tyString) and
+              (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) and
+              TypeIsFrozenString(Syms[ASTIVal[ASTLeft[ASTLeft[node]]]].ElemType) then
+        { `array[..] of string[N]` ELEMENT: same capacity clamp the record-field
+          arm above has had all along. Without it `a[0] := s` copied the SOURCE
+          length — writing past the element's N chars into its neighbour, and
+          reading back with a length that is not the slot's. The declared
+          capacity lives on the array symbol (SymStrCap), the way the element
+          stride in IRLowerAddress reads it. }
+        lhsStrCap := SymStrCap[ASTIVal[ASTLeft[ASTLeft[node]]]];
       if ASTKind[ASTRight[node]] = AN_DEFAULT then
       begin
         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then

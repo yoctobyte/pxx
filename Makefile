@@ -4512,6 +4512,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nativeint_cast_field26)" = "$$(printf '16\n16\n16\n16\n16\n15\n0')"
 	./$(COMPILER) test/test_const_array_of_string.pas /tmp/test_const_array_of_string26
 	test "$$(/tmp/test_const_array_of_string26)" = "$$(printf 'aa bb cc dd \na b c d \nxx yy zz \nzzz bb')"
+	# a const/var array of string[N] copies CHARS into the frozen slot (it stored
+	# the source handle), and an element store clamps to the element's capacity
+	./$(COMPILER) test/test_const_array_of_string_n.pas /tmp/test_const_array_of_string_n26
+	test "$$(/tmp/test_const_array_of_string_n26)" = "$$(printf '[dd][ff]\n[gg][ii]\n[jj][ll]\n[abc][xy]\n[p][s]\n[v0][v2]\n2 2 3\n[m1][m2]\n[abc][zz] 3')"
 	./$(COMPILER) test/test_case_else_multistmt.pas /tmp/test_case_else_multistmt26
 	test "$$(/tmp/test_case_else_multistmt26)" = "$$(printf '5 a\n1 b\n4 c')"
 	./$(COMPILER) test/test_var_array_of_string.pas /tmp/test_var_array_of_string26
