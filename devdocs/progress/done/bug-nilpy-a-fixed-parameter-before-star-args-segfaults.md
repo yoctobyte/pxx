@@ -141,4 +141,4 @@ inference for a star parameter, which is [[feature-n-nilpy-ast-typing-module-sco
 territory rather than an argument-passing bug.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit dc509e1df.
