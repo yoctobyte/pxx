@@ -96,3 +96,57 @@ The six rows above matching CPython; the comprehension pair; both a str- and an
 int-returning source; `make compiler/pascal26` + `tools/gate.sh quick`; and
 **`make test-nilpy`** as the family sweep, which anything touching None boxing
 requires.
+
+## 2026-08-11 (same day) — the "boxing boundary" diagnosis above is WRONG for int
+
+Probed the actual variant contents rather than inferring them from `is None`,
+using `type(x).__name__` alongside the test:
+
+| value | CPython type | pxx type | pxx `is None` | pxx `str(x)` |
+| --- | --- | --- | --- | --- |
+| `fs(2)` — str-returning def returns None | NoneType | **str** | False | *(empty)* |
+| `fs(0)` | str | str | False | `ok` |
+| `fi(2)` — int-returning def returns None | NoneType | **int** | False | **`0`** |
+| `fi(0)` | int | int | False | `7` |
+| literal `None` | NoneType | NoneType | **True** | `None` |
+
+This splits the ticket into **two different defects**, and only one of them is
+at the boundary the section above names:
+
+**(a) str — the information survives, the box drops it.** `fs(2)` yields a nil
+AnsiString handle, which is a real None sentinel; read DIRECTLY it works
+(`sv = fs(2); sv is None` is True, recorded in the boundary table). It is only
+crossing into a variant that loses it: the slot becomes VT_STRING with a nil
+payload, and the variant arm of `is None` tests VT_EMPTY. Fixable either at the
+box (emit VT_EMPTY for a nil handle) or at the test (treat VT_STRING+nil as
+None).
+
+**(b) int — the information is already gone before any box exists.** `fi`'s
+return type is INFERRED as int from its `return 7`, so `return None` stores a
+plain `0` at the return itself. `str(fi(2))` prints `0`, not an empty slot.
+There is nothing left for a boxing-boundary fix to convert, and no test-side
+fix can distinguish it from a genuine `0`.
+
+So the earlier framing — "both sentinels are stored raw into a variant slot
+without being converted to VT_EMPTY" — is right about (a) and wrong about (b).
+The real cause of (b) is **return-type inference**: a def with both `return
+None` and `return <int>` must get a nullable/variant return type, not `int`.
+That is a typing change, not a conversion change.
+
+### Why this is NOT being half-fixed now
+Fixing (a) alone is the classic one-arm-of-a-double-case
+(`normalise-dont-special-case`): it would make `plain(fs(2))` correct while
+`plain(fi(2))` stayed silently wrong, and the two are indistinguishable in
+source. Worse, it would make the bug *harder* to find next time, because the
+str spelling — the one people reach for first when reproducing — would start
+working.
+
+Banked rather than microfixed, per `root-cause-over-microfix`. The unit of work
+is nullable return typing for (b), with (a) falling out of it or fixed
+alongside.
+
+### Re-priced
+Still prio 55 and still silent, but this is **not** a contained conversion fix
+and should not be picked up as one. It is adjacent to
+[[feature-n-nilpy-ast-typing-module-scope]] — same "what type does this
+expression really have" ground.
