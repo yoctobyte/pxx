@@ -642,6 +642,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-local-reassigned-across-classes-keeps-one-static-class | N | 45 | bug | SILENT->CRASH: a local assigned instances of two unrelated classes keeps ONE static class identity, so every member access uses that layout. `o = DC(...)` then `o = PC(...)` reads o.native at DC's offset for both — a segfault when the layouts differ. | — |
 | bug-nilpy-locals-list-pointer-truncated-32bit | N | 55 | bug | NilPy: a list passed to a method truncates its pointer to 32-bit (SIGSEGV) | — |
 | bug-nilpy-method-call-on-fresh-construction | N | 45 | bug | nilpy: Cls().method() — a method call directly on a construction expression | — |
+| bug-nilpy-method-chained-on-open-result-fails-to-parse | N | 50 | bug | `open(p).read().strip()` fails with a bare 'unexpected token'. ONE method off open()'s result parses fine and so does a two-deep chain off any ordinary value — it is specifically the SECOND link of a chain rooted at the open() intrinsic that the parser drops | — |
 | bug-nilpy-method-chaining-on-a-call-result | N | 65 | bug | Chaining a method call on the RESULT of a method call does not parse | — |
 | bug-nilpy-method-result-copied-to-var-undefined | N | 60 | bug | NilPy: `x = obj.method()` immediately followed by `y = x` leaves x undefined | — |
 | bug-nilpy-method-returning-a-fresh-string-leaks | N | 55 | bug | A METHOD returning a freshly built string leaks it; the same def does not | — |

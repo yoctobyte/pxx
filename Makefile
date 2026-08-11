@@ -1163,6 +1163,13 @@ test-nilpy: $(COMPILER)
 	# Covers both dunder spellings, a real bucket collision, and sets.
 	./$(COMPILER) test/test_nilpy_user_hash_dict_key.npy /tmp/test_nilpy_userhash26
 	/tmp/test_nilpy_userhash26 | diff -u test/test_nilpy_user_hash_dict_key.expected -
+	# A method chain rooted at a frontend INTRINSIC: open(p).read().strip() was
+	# "unexpected token" at the SECOND link, because the suffix cluster was a
+	# sequence of loops and a suffix was only reachable in the order they
+	# appeared. Covers the sibling intrinsics too — a per-intrinsic fix would
+	# have left str()/int() chains broken.
+	./$(COMPILER) test/test_nilpy_intrinsic_result_chain.npy /tmp/test_nilpy_chain26
+	/tmp/test_nilpy_chain26 | diff -u test/test_nilpy_intrinsic_result_chain.expected -
 	# ...and sorting OBJECTS consults __lt__ (via the reflected arm) or __gt__;
 	# it fell through to a numeric compare and raised "expected a number".
 	./$(COMPILER) test/test_nilpy_sort_lt_dunder.npy /tmp/test_nilpy_sortlt26

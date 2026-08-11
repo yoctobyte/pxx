@@ -1,0 +1,30 @@
+# A method chain rooted at a frontend INTRINSIC — open(), str(), int().
+#
+# `open(p).read().strip()` was "unexpected token" while `open(p).read()` and
+# `f = open(p); f.read().strip()` both parsed: it was specifically the SECOND
+# link of a chain rooted at the intrinsic. The cause was not the intrinsic at
+# all — the Python suffix cluster was a SEQUENCE of loops, so a suffix was only
+# reachable in the order the loops happened to appear, and `.read()` then
+# `.strip()` needed them backwards. Fixed for the whole family at once by
+# re-running the cluster until a pass consumes nothing (3757dddd0), which is
+# why this file tests the SIBLING intrinsics too: a per-intrinsic fix would
+# have left them broken.
+#
+# Every expectation is CPython's own output.
+# bug-nilpy-method-chained-on-open-result-fails-to-parse
+
+p = "test/nilpy_chain_input.txt"
+
+f = open(p)
+print(f.read().strip())                     # the control: via a variable
+
+print(open(p).read())                        # one link — always worked
+print(open(p).read().strip())                # TWO links — the bug
+print(open(p).read().strip().upper())        # three
+print(open(p).read().strip().replace("h", "H").lower())   # four
+
+print(open(p).readlines()[0].strip())        # a chain through a SUBSCRIPT
+
+print(str(12).zfill(4))                      # the same shape on str()
+print(str(12).zfill(4).upper())
+print(str(3.5).split(".")[1].strip())
