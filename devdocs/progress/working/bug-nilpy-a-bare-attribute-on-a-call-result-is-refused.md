@@ -3,6 +3,8 @@ track: N
 prio: 50
 type: bug
 summary: "`g(3).v` — a bare ATTRIBUTE (no parens) on a call result is a parse error, while `g(3).show()` and `g()[1]` now work. The runtime getter it would need, pydynattr_get_v, only consults the dynamic-attribute side store and never the object's DECLARED fields, so wiring the parse alone turns the error into a false AttributeError."
+status: working
+owner: claude-A
 ---
 
 # A bare attribute on a call result is refused

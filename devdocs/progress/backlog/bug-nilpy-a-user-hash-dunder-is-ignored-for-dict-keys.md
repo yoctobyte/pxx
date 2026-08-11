@@ -91,3 +91,40 @@ layout-sensitive, so the nondeterminism is evidence FOR the ticket, not against.
 evidence for this class of bug. Run it 20 times and compare whole-run output
 (hashing each run); a per-LINE `sort -u` counts distinct lines, not distinct
 runs, and reports multi-line output as "flaky" when it is not.
+
+---
+
+## 2026-08-11 (claude-A) — the mechanism, measured
+
+Both halves of the machinery are present and BOTH sides of the dict use the same
+one: `TPyDict.indexof` hashes through `PyVarHashKey`, whose VT_OBJECT arm calls
+`PyUserObjHash`. So it is not a store-vs-lookup disagreement.
+
+`PyUserObjHash` (pylib.pas) rejects the method before calling it:
+
+```pascal
+  if (mi^.RetKind <> 13) and (mi^.RetKind <> 1) and (mi^.RetKind <> 15) then Exit;
+```
+
+13/1/15 are Int64 / Integer / NativeInt. **An unannotated NilPy `def __hash__`
+returns a VARIANT — RetKind 22 (`TK_VARIANT` in pyeval)** — so the guard rejects
+it, `PyUserObjHash` answers False, and the key falls through to the identity
+hash. Two `__eq__`-equal objects at different addresses then land in different
+buckets, which is both the miss AND the reported nondeterminism: whether they
+collide is a property of the run's memory layout, nothing else.
+
+Predicted fix: accept RetKind 22 as well, calling through a variant-returning
+signature and folding the result with the same rule `hash()` would
+(`pyvar_to_int` for an int-valued variant; CPython requires `__hash__` to return
+an int, so a non-int result is a TypeError). Keep 13/1/15 working — an
+`-> int`-annotated def takes that path.
+
+Adjacent gap found while probing: **`hash(x)` is not implemented at all** in the
+NilPy frontend (`undefined variable (hash)`), so a program cannot even ask. That
+is its own small ticket, and it is also the natural place for the shared
+"variant to hash" rule this fix needs.
+
+Also worth knowing when re-testing: with the current HEAD the repro missed
+**10 times out of 10** on this box, so the flakiness recorded above is
+layout-dependent rather than a fixed rate — do not read a run of misses as
+"more broken" or a run of hits as "fixed".
