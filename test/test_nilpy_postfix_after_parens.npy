@@ -45,6 +45,100 @@ print((C(6)).get())
 f = lambda a, b: a - b
 print((lambda a, b: a - b)(9, 4), (f)(9, 4))
 
+# ...and so is one whose grouped type is NOT a variant. Those two above worked
+# because a lambda is boxed into a variant, and the dynamic-call loop that
+# claims the '(' used to fire only for tyVariant. Everything else fell out of
+# the loop leaving the '(' for nobody, so the ARGUMENT LIST WAS DISCARDED and
+# the expression evaluated to the callee: `(add)(4, 5)` answered a raw code
+# address and `(3 + 4)(1)` answered 7.
+# bug-nilpy-a-parenthesised-callee-drops-its-arguments
+
+
+def add(a, b):
+    return a + b
+
+
+class K:
+    def m(self, x):
+        return x + 1
+
+
+class Dbl:
+    def __call__(self, x):
+        return x * 2
+
+
+k = K()
+dbl = Dbl()
+lst = [add]
+dd = {"a": add}
+print((add)(4, 5), ((add))(3, 4))
+print((k.m)(1), (lst[0])(1, 1), (dd["a"])(2, 2))
+print((dbl)(5))
+
+# and a non-callable grouped callee is CPython's TypeError, not a silent
+# half-evaluated expression. Every arm below used to print the callee.
+n = 7
+for probe in ["int expr", "int var", "str", "list", "tuple", "dict", "float", "instance"]:
+    try:
+        if probe == "int expr":
+            (3 + 4)(1)
+        elif probe == "int var":
+            (n)(1)
+        elif probe == "str":
+            (x)(1)
+        elif probe == "list":
+            (xs)(1)
+        elif probe == "tuple":
+            (1, 2)(3)
+        elif probe == "dict":
+            (d)(1)
+        elif probe == "float":
+            (3.5)(1)
+        else:
+            (k)(1)
+        print("NO RAISE", probe)
+    except TypeError:
+        print("TypeError", probe)
+
 # a parenthesised TUPLE is still a tuple, not a grouping
 t = (1, 2)
 print(t, len(t), (1, 2)[0])
+
+# A SUFFIX ON A CALL RESULT, composing in any order. ParseFactor runs nine
+# suffix loops as a SEQUENCE, each claiming one (token, receiver) pair, so a
+# suffix used to be reachable only in the order the loops happen to be written:
+# `g(3).show()` needs the dynamic-call loop (last) and then the call-result
+# method loop (third) — backwards — and was a parse error, while the same call
+# bound to a name first worked. The cluster now re-runs until a pass consumes
+# nothing, so order stops mattering.
+# bug-nilpy-a-method-call-on-a-callable-values-result-is-refused
+
+
+class Holder:
+    def __init__(self, v):
+        self.v = v
+
+    def show(self):
+        return "H" + str(self.v)
+
+
+def mkh(v):
+    return Holder(v)
+
+
+def mklist():
+    return [10, 20, 30]
+
+
+class Twice:
+    def __call__(self, n):
+        return [n, n * 2]
+
+
+mh = mkh
+ml = mklist
+tw = Twice()
+print(mh(3).show(), mh(3).show().upper())
+print(ml()[1], ml()[1] + 5, ml()[1:][0])
+print(tw(4)[1])

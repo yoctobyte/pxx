@@ -14555,6 +14555,7 @@ var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     smTk, tpTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
     ppBase, ppExp, ppPi, ppArgSeq, ppArgSeq2: Integer;   { `**` power operator }
     enStart, enArg0, enArg1: Integer;   { enumerate(xs, start=N) }
+    pySuffixTokPos: Integer;   { token cursor at the top of the suffix cluster }
 begin
   { `type(x).__name__` -- the ONLY shape of Python's `type()` builtin this
     frontend accepts (not a general type-object value: no bare `type(x)`,
@@ -14757,6 +14758,29 @@ begin
   end
   else
     ParseFactorCore;
+  { --- the Python SUFFIX cluster -------------------------------------------
+    Nine loops follow, each claiming one (suffix token, receiver shape) pair:
+    `.method()` on a str base, on a call result, on a class expression, on a
+    variant; `[i]`; a dynamic CALL through a variant; the `__call__` protocol.
+    They are written as a SEQUENCE, so without this outer loop each one gets
+    exactly one turn and a suffix is only reachable in the ORDER the loops
+    happen to appear. `g(3).show()` needs the dynamic-call loop (last) and then
+    the call-result method loop (third) — backwards through the sequence — so it
+    was a parse error, while `o = g(3); o.show()` worked
+    (bug-nilpy-a-method-call-on-a-callable-values-result-is-refused).
+
+    Python's grammar has no such ordering: a primary takes `.attr`, `[i]` and
+    `(args)` suffixes in ANY sequence, any number of times. So the cluster
+    re-runs until a pass consumes nothing, which makes it order-independent
+    without touching the nine loops individually. The right shape is ONE
+    dispatcher over the suffix tokens rather than nine loops — nine mechanisms
+    for one concept is well past the two-is-a-smell line — but that is a rewrite
+    of a hot region, and this makes the composition correct meanwhile.
+
+    Termination is on TOKEN PROGRESS, not on the node changing: a loop that
+    rewrites the node without consuming input would otherwise spin forever. }
+  repeat
+    pySuffixTokPos := TokPos;
   { `<int>.to_bytes(n, "little", signed=s)`, the other half of the pair. }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
@@ -14890,12 +14914,36 @@ begin
       LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
     end;
   end;
-  { A VARIANT value followed by '(' is a DYNAMIC call through a callable stored
-    in it — `ns["__body__"]()`, the function exec() built. Nothing else claimed
-    the '(', so a call is the only reading. Looped so a returned callable can be
-    called again. }
-  while PyExprMode and (CurTok.Kind = tkLParen) and
-        (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) do
+  { A value followed by '(' is a DYNAMIC call through whatever it holds —
+    `ns["__body__"]()`, the function exec() built. Nothing else claimed the '(',
+    so a call is the only reading: Python has no juxtaposition operator, so
+    there is no other thing `x(y)` can mean. Looped so a returned callable can
+    be called again.
+
+    The test USED to be `= tyVariant`, and a non-variant factor therefore fell
+    out of the loop leaving the '(' for nobody — the argument list was SILENTLY
+    DISCARDED and the expression evaluated to the callee. `x = (add)(4, 5)`
+    answered a raw code address instead of 9 and `(3 + 4)(1)` answered 7, while
+    the identical call through a variant-typed name worked
+    (bug-nilpy-a-parenthesised-callee-drops-its-arguments). Silently dropping
+    half an expression is the worst available reading of a '(' — even "not
+    callable" is better, because it is CPython's answer and it is loud.
+
+    Widening is only SAFE now: pyvar_callv<n> takes `const cb: Variant`, so the
+    ordinary argument coercion boxes a non-variant callee, and until callables
+    had their own variant tag a boxed code address was indistinguishable from a
+    boxed integer — this loop would have started routing `(3 + 4)(1)` to an
+    indirect jump to address 7 rather than to a TypeError. With VT_CALLABLE the
+    guard tells them apart, so a real callable dispatches and everything else
+    raises (feature-nilpy-a-callable-value-needs-its-own-variant-tag).
+
+    A user-class INSTANCE is excluded because the loop below claims it: that is
+    the `__call__` protocol, which needs the receiver, not a boxed handle. A
+    pylib CONTAINER (tyClass, but below REC_UCLASS_BASE) is NOT excluded — it
+    belongs here, where `(1, 2)(3)` becomes CPython's TypeError. }
+  while PyExprMode and (CurTok.Kind = tkLParen) and (CurASTNode >= 0) and
+        not ((IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
+             (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE)) do
   begin
     CurASTNode := PyMakeDynCall(CurASTNode);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
@@ -14911,6 +14959,8 @@ begin
     CurASTNode := PyMakeCallDunder(CurASTNode);
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
+  until (not PyExprMode) or (TokPos = pySuffixTokPos);
+  { --- end of the suffix cluster ------------------------------------------- }
   { `**` -- Python's power operator: right-associative, and binding TIGHTER
     than unary minus (`-2 ** 2` is `-(2**2)` = -4, not `(-2)**2`). Recognized
     here, at the very end of ParseFactor, rather than in ParseTerm alongside
