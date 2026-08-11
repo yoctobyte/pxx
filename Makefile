@@ -4207,6 +4207,13 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_textfile_in_unit26)" = "hello from unit"
 	./$(COMPILER) test/test_forin_native.pas /tmp/test_forin_native26
 	test "$$(/tmp/test_forin_native26)" = "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4\nwd=0\nwd=2\nwd=4\ncs=a\ncs=m\ncs=x')"
+	# for-in over a SET CONSTRUCTOR (members in ORDINAL order, not source order)
+	# and over a string LITERAL (source order) -- both were refused outright
+	./$(COMPILER) test/test_forin_literal_sources.pas /tmp/test_forin_lit26
+	test "$$(/tmp/test_forin_lit26 | tail -1)" = "FORIN LITERAL SOURCES OK"
+	test "$$(/tmp/test_forin_lit26 | head -1)" = "ints  1 2 3 5 "
+	test "$$(/tmp/test_forin_lit26 | head -5 | tail -1)" = "mixed 1 2 3 7 9 "
+	test "$$(/tmp/test_forin_lit26 | head -8 | tail -1)" = "lit   h.e.l.l.o."
 	./$(COMPILER) test/test_forin_enumerator.pas /tmp/test_forin_enumerator26
 	test "$$(/tmp/test_forin_enumerator26)" = "$$(printf 'x=11\nx=22\nx=33\nsum=66')"
 	./$(COMPILER) test/test_forin_record_enumerator_b355.pas /tmp/test_forin_record_enumerator_b35526

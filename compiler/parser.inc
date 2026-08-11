@@ -17044,8 +17044,17 @@ begin
   begin loV := 0; hiV := EnumTypeValCount[setEnumId] - 1; end
   else if setElemTk = Ord(tyChar) then
   begin loV := 0; hiV := 255; isChar := 1; end
+  else if TypeIsOrdinal(IntToTypeKind(setElemTk)) then
+    { An ORDINAL-element set — what a bare `[5, 1, 3, 2]` constructor is. The
+      set domain here is 0..255 (the `in` codegen refuses anything above), so
+      that is the scan range, and iteration comes out in ORDINAL order, which is
+      what FPC does with the same construct: `for i in [5,1,3,2]` prints 1 2 3 5,
+      not 5 1 3 2.
+      bug-a-for-in-refuses-a-set-constructor-and-a-string-literal }
+  begin loV := 0; hiV := 255; end
   else
-    Error('for-in: set iteration supports `set of <enum>` or `set of Char` only');
+    Error('for-in: set iteration supports `set of <enum>`, `set of Char` or an '
+          + 'ordinal set constructor');
 
   { Scan with a separate Integer ordinal so the `<= hi` test cannot wrap on a
     narrow loop var (a Char counter overflows 255 -> 0 and loops forever). }
@@ -18356,6 +18365,50 @@ begin
   if CurTok.Kind = tkIn then
   begin
     Next;
+    { `for x in [ ... ]` — a SET CONSTRUCTOR, not a list: FPC iterates the
+      MEMBERS in ordinal order (`[5,1,3,2]` gives 1 2 3 5), and so do we. Written
+      as list iteration this would silently produce a different ORDER, which is
+      the expensive kind of wrong.
+      bug-a-for-in-refuses-a-set-constructor-and-a-string-literal }
+    if CurTok.Kind = tkLBrack then
+    begin
+      forcNode := ParseSetLiteralAST;
+      forcRec := Ord(tyInteger);            { element kind of the loop variable }
+      if (ASTLeft[forcNode] >= 0) and
+         (IntToTypeKind(ASTTk[ASTLeft[ASTLeft[forcNode]]]) = tyChar) then
+        forcRec := Ord(tyChar);
+      if Syms[varIdx].TypeKind = tyAuto then
+      begin
+        Syms[varIdx].TypeKind := IntToTypeKind(forcRec);
+        SymSyncTypeRef(varIdx);
+      end;
+      Expect(tkDo, 'do');
+      Result := BuildForInSetLoop(varIdx, -1, forcRec, forcNode, ParseStatementAST);
+      Exit;
+    end;
+    { `for c in 'hello'` — a string LITERAL, in SOURCE order, exactly like the
+      string-VARIABLE form that already worked. The two-spellings tell: only the
+      variable form was ever implemented. }
+    if CurTok.Kind = tkString then
+    begin
+      ParseExpr;
+      forcNode := CurASTNode;
+      if Syms[varIdx].TypeKind = tyAuto then
+      begin
+        Syms[varIdx].TypeKind := tyChar;
+        SymSyncTypeRef(varIdx);
+      end;
+      forcSym := AllocVar('', tyAnsiString);
+      forcAssign := GenMakeAssign(GenMakeIdent(forcSym, tyAnsiString), forcNode);
+      forcLoop := ParseForInVarAST(varIdx, forcSym);
+      Result := AllocNode(AN_SEQ);
+      ASTLeft[Result] := forcAssign;
+      forcNode := AllocNode(AN_SEQ);
+      ASTLeft[forcNode] := forcLoop;
+      ASTRight[forcNode] := -1;
+      ASTRight[Result] := forcNode;
+      Exit;
+    end;
     if CurTok.Kind <> tkIdent then Error('for-in: expected a generator, enum type, or iterable variable');
     { qualified member-access / indexed source (`obj.field`, `Self.field`,
       `a.b[i]`...): the ident is followed by a `.`/`[` selector, so it is not a
