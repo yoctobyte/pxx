@@ -1417,6 +1417,18 @@ var
     (rec-blind legacy behavior), so paths that never fill the array are safe. }
   MatchArgRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   MatchArgRecValid : Boolean;
+  { Call arg j is DEFINITELY a non-aggregate scalar value (an ordinal/float
+    literal, arithmetic expression, non-array variable, or scalar-returning
+    call), so it cannot bind an ARRAY parameter. Filled beside MatchArgRec from
+    the arg AST nodes; the type channel alone cannot answer this, because a
+    fixed-array parameter and a fixed-array argument both present their ELEMENT
+    kind in argTypes — which is how `Sum(7)` and `Sum(n)` bound an
+    `array[0..2] of Integer` overload and read three elements off a 4-byte
+    variable. Conservative: only shapes we are sure about set it, everything
+    else stays False and keeps the legacy behaviour.
+    bug-a-an-integer-argument-binds-a-fixed-array-overload }
+  MatchArgScalar : array[0..MAX_PROC_PARAMS-1] of Boolean;
+  MatchArgScalarValid : Boolean;
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
   MimicFpc : Boolean;  { --mimic-fpc / {$MIMIC FPC}: install a curated FPC 3.2.2 define set so identity-probing library headers pick their FPC path. Opt-in only, NEVER default (the compiler's own {$ifdef FPC} means real FPC; mimic during self-build = broken bootstrap). }

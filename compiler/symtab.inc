@@ -5187,6 +5187,22 @@ function MatchArgRecMismatch(i, j: Integer; aTk: TTypeKind): Boolean;
 var pr, ar, curr: Integer;
 begin
   Result := False;
+  { A definitely-scalar argument cannot bind an ARRAY parameter. Checked first,
+    and independently of the record channel below, because the two facts come
+    from different places: argTypes carries a fixed array's ELEMENT kind, so the
+    array parameter is INDISTINGUISHABLE from a scalar one by type alone and won
+    on declaration order. `array of const` (tyRecord / tyVariant element) is
+    excluded — it legitimately takes anything.
+    bug-a-an-integer-argument-binds-a-fixed-array-overload }
+  if MatchArgScalarValid and (j < MAX_PROC_PARAMS) and MatchArgScalar[j] and
+     Procs[i].Params[j].IsArray and
+     (Procs[i].Params[j].TypeKind <> tyRecord) and
+     (Procs[i].Params[j].TypeKind <> tyVariant) and
+     not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
+  begin
+    Result := True;
+    Exit;
+  end;
   if not MatchArgRecValid then Exit;
   if j >= MAX_PROC_PARAMS then Exit;
   { Records AND classes. Classes were excluded here, so an UNRELATED class bound

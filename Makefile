@@ -4517,6 +4517,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_array_of_string26)" = "$$(printf 'aa bb cc dd \na b c d \nxx yy zz \nzzz bb')"
 	# a const/var array of string[N] copies CHARS into the frozen slot (it stored
 	# the source handle), and an element store clamps to the element's capacity
+	# a fixed-array PARAMETER must not swallow a scalar argument: its
+	# Params[].TypeKind is the ELEMENT kind, so it looked like the Integer
+	# overload and won on declaration order (Sum(n) then segfaulted)
+	./$(COMPILER) test/test_overload_array_vs_scalar.pas /tmp/test_ovl_arr_scalar26
+	test "$$(/tmp/test_ovl_arr_scalar26 | tail -1)" = "OVERLOAD ARRAY VS SCALAR OK"
+	test "$$(/tmp/test_ovl_arr_scalar26 | head -4 | tr '\n' '|')" = "arr    6|call   6|var    50|lit    70|"
 	./$(COMPILER) test/test_const_array_of_string_n.pas /tmp/test_const_array_of_string_n26
 	test "$$(/tmp/test_const_array_of_string_n26)" = "$$(printf '[dd][ff]\n[gg][ii]\n[jj][ll]\n[abc][xy]\n[p][s]\n[v0][v2]\n2 2 3\n[m1][m2]\n[abc][zz] 3')"
 	./$(COMPILER) test/test_case_else_multistmt.pas /tmp/test_case_else_multistmt26

@@ -8558,6 +8558,34 @@ begin
   end;
   MatchArgRecValid := True;
 
+  { ...and, beside it, whether the argument is DEFINITELY a scalar value, which
+    disqualifies an ARRAY parameter. argTypes cannot answer that: a fixed-array
+    parameter and a fixed-array argument both present their ELEMENT kind, so an
+    `array[0..2] of Integer` overload looked exactly like an `Integer` one and
+    won by declaration order — `Sum(n)` then read three elements off a 4-byte
+    variable and segfaulted. Only shapes whose scalar-ness is certain are
+    marked; anything else stays False and matches as before.
+    bug-a-an-integer-argument-binds-a-fixed-array-overload }
+  currArg := argsHead;
+  for i := 0 to nArgs-1 do
+  begin
+    if i < MAX_PROC_PARAMS then
+    begin
+      node := ASTLeft[currArg];
+      MatchArgScalar[i] := (TypeIsOrdinal(argTypes[i]) or TypeIsFloat(argTypes[i])) and
+                           (argTypes[i] <> tyChar) and (argTypes[i] <> tyPointer) and
+        (((ASTKind[node] = AN_INT_LIT) or (ASTKind[node] = AN_FLOAT_LIT) or
+          (ASTKind[node] = AN_BINOP)) or
+         ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+          (ASTIVal[node] < SymCount) and not Syms[ASTIVal[node]].IsArray) or
+         ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
+          (ProcRetFixedArrBytes[ASTIVal[node]] = 0) and
+          not ProcRetIsDynArray[ASTIVal[node]]));
+    end;
+    currArg := ASTRight[currArg];
+  end;
+  MatchArgScalarValid := True;
+
   { FPC parity: an untyped integer LITERAL is typed by its VALUE — the smallest
     type that holds it — and overload resolution ranks against THAT. pxx types
     every literal LongInt (Int64 when it does not fit), so `hi($1234)` bound

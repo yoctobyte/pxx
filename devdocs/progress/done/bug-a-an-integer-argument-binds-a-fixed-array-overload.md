@@ -3,6 +3,8 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
+status: done
+owner: claude-A
 ---
 
 # An Integer argument binds the fixed-ARRAY overload, not the Integer one
@@ -53,3 +55,35 @@ The program above printing `70`, plus the array overload still selected for a
 real `TArr` argument and for a `TArr`-returning call result
 (`test/test_aggregate_function_results.pas`'s `arr as arg` row); self-host
 byte-identical.
+
+## Resolution (2026-08-11)
+
+Worse than the ticket recorded: only the LITERAL form is refused. `Sum(n)` with
+`n: Integer` **compiles and segfaults** — an identifier satisfies the by-ref
+check, so the array overload is entered and reads three elements off a 4-byte
+variable.
+
+Fixed in the matcher, via the existing per-argument side channel rather than
+through `argTypes` (which cannot carry it — a fixed array's element kind IS its
+argTypes entry): a new `MatchArgScalar[j]`, filled beside `MatchArgRec` in
+`MatchCallDelphiProcAddr`, marks an argument whose scalar-ness is CERTAIN (an
+ordinal/float literal, an arithmetic expression, a non-array variable, or a
+scalar-returning call). `MatchArgRecMismatch` — already consulted by every match
+phase — disqualifies an array parameter for such an argument. `array of const`
+(tyRecord/tyVariant element) and untyped parameters are excluded, and anything
+whose shape is not certain stays unmarked and matches exactly as before.
+
+Verified against `fpc -O1`: array variable, fixed-array-returning call, scalar
+variable, literal and float all pick what FPC picks; open-array and
+`array of const` overloads, `SetLength`d dynamic arrays and `Format` unaffected.
+Family sweep of all 132 `test/*.pas` matching overload|array|param, HEAD vs
+`pinned`: no regression — the only three diffs are tests `pinned` cannot build.
+
+New `test/test_overload_array_vs_scalar.pas`.
+
+One divergence surfaced that this bug had been hiding — `Sum(n + 1)` binds a
+`Double` overload where FPC binds `Integer`. Pre-existing on `pinned`, filed as
+`bug-a-an-integer-binop-argument-binds-a-double-overload`.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
