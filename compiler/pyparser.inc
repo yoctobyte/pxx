@@ -8448,6 +8448,17 @@ begin
     `import math` had nothing to resolve `fabs` to (feature-nilpy-stdlib-
     coverage-gaps-measured), unlike floor/ceil which reached the WRONG thing. }
   else if dotted = 'math.fabs' then Result := 'pymath_fabs'
+  { math.trunc: the same int-vs-float CONTRACT mismatch as floor/ceil above.
+    math.copysign: no contract mismatch at all, but the name cannot exist in the
+    Pascal RTL, where it hijacks libc's in every C program.
+    math.log / math.pow / math.atan2 are NOT here — they need a transcendental
+    (Ln, a correctly-rounded pow) and a BUILTIN unit cannot reach one: Ln lives
+    in lib/rtl/math.pas, and `uses math` from pylib would put the RTL's Min/Max/
+    Power beside pylib's own min/max overloads. See the ticket for the measured
+    detail.
+    bug-n-math-trunc-and-log-need-frontend-intercepts }
+  else if dotted = 'math.trunc' then Result := 'pymath_trunc'
+  else if dotted = 'math.copysign' then Result := 'pymath_copysign'
   else Result := '';
 end;
 

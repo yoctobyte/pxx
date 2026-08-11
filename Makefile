@@ -1508,7 +1508,7 @@ test-nilpy: $(COMPILER)
 	@# math.floor/math.ceil must return an int, not the RTL Math unit's own
 	@# Double->Double Floor/Ceil that `import math` would otherwise reach
 	./$(COMPILER) test/test_nilpy_math_floor_ceil_int.npy /tmp/test_nilpy_mathfloor26
-	test "$$(/tmp/test_nilpy_mathfloor26)" = "$$(printf '%b' '2 3\n-3 -2\n2 2\n3\n3 2 2.7')"
+	test "$$(/tmp/test_nilpy_mathfloor26)" = "$$(printf '%b' '2 3\n-3 -2\n2 2\n3\n3 2 2.7\n-2 2 -2 0\n2 -2 0\n-6\n-3.0 3.0\n-3.0 3.0\n-3.0 3.0')"
 	@# f-string format specs: precision, exponential, width/alignment incl. ^
 	@# (center) and an explicit fill char
 	./$(COMPILER) test/test_nilpy_fstring_format_spec.npy /tmp/test_nilpy_fmtspec26

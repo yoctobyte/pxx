@@ -15,3 +15,27 @@ x = math.floor(2.7)
 print(x + 1)
 
 print(round(2.7), round(2.4), round(2.7, 2))
+
+# math.trunc joins them: the SAME int/float contract mismatch, which is why a
+# Double->Double `Trunc` was deliberately NOT added to lib/rtl/math.pas -- it
+# would resolve ahead of everything and hand every caller the wrong type
+# quietly, which is worse than the honest `undefined variable (trunc)` this
+# replaces. trunc rounds toward ZERO, so it is floor only for positives:
+# trunc(-2.5) is -2 where floor(-2.5) is -3, and both rows are below.
+#
+# math.copysign is here for a different reason -- no contract mismatch at all,
+# but the name cannot exist in the Pascal RTL, where it hijacks libc's in every
+# C program through pxxcio (measured: copysign(3,-1) answered atan2's result).
+# The sign comes from y's BIT PATTERN, not from `y < 0`, so the -0.0 row below
+# is -3.0 as CPython has it; a comparison would answer +3.0 there.
+# bug-n-math-trunc-and-log-need-frontend-intercepts
+
+print(math.trunc(-2.5), math.trunc(2.5), math.trunc(-2.0), math.trunc(0.0))
+print(math.trunc(2.9), math.trunc(-2.9), math.trunc(-0.5))
+
+t = math.trunc(-7.9)
+print(t + 1)
+
+print(math.copysign(3, -1), math.copysign(3, 1))
+print(math.copysign(3, -0.0), math.copysign(3, 0.0))
+print(math.copysign(-3, -1), math.copysign(-3, 1))

@@ -1287,6 +1287,19 @@ function pyround_n(x: Double; n: Integer): Double;
 function pymath_floor(x: Double): Int64;
 function pymath_ceil(x: Double): Int64;
 function pymath_fabs(x: Double): Double;
+{ math.trunc — the SAME int/float contract mismatch that put floor/ceil here,
+  and the reason a Double->Double `Trunc` was deliberately NOT added to
+  lib/rtl/math.pas: it would resolve ahead of everything and hand every caller
+  the wrong type quietly. Rounds toward ZERO, which is floor only for
+  positives (trunc(-2.5) is -2, floor(-2.5) is -3).
+  bug-n-math-trunc-and-log-need-frontend-intercepts }
+function pymath_trunc(x: Double): Int64;
+{ math.copysign — cannot live in lib/rtl/math.pas under this name at all: a
+  Pascal `copysign` there hijacks libc's in every C program through pxxcio
+  (bug-c-pascal-math-names-hijack-libc-through-pxxcio, measured — copysign(3,-1)
+  answered atan2's result). The sign is read from the BIT PATTERN, not from
+  `y < 0`, so copysign(3, -0.0) is -3.0 as CPython has it. }
+function pymath_copysign(x, y: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -4645,6 +4658,25 @@ end;
 function pymath_fabs(x: Double): Double;
 begin
   Result := Abs(x);
+end;
+
+function pymath_trunc(x: Double): Int64;
+begin
+  { Pascal's Trunc already rounds toward zero AND yields an integer type, so
+    the whole fix is that this returns Int64 rather than Double. }
+  Result := Trunc(x);
+end;
+
+function pymath_copysign(x, y: Double): Double;
+var m: Double; pb: PInt64;
+begin
+  m := Abs(x);
+  { The SIGN BIT, not `y < 0`: negative zero compares equal to zero, so a
+    comparison would answer +3.0 for copysign(3, -0.0) where CPython answers
+    -3.0. Reading the double's bits as Int64 makes the sign bit the sign of
+    that integer. }
+  pb := PInt64(@y);
+  if pb^ < 0 then Result := -m else Result := m;
 end;
 
 function pyenumerate(a: TPyList): TPyList;
