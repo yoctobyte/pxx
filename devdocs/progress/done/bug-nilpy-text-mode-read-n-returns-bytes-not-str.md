@@ -119,4 +119,4 @@ does not even COMPILE (`readline().strip()` was "TPyBytes has no method strip").
 Needs a pin before other lanes see it (`compiler/builtin`).
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 898f70544.
