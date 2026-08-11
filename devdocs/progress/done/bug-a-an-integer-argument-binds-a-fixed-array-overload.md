@@ -86,4 +86,4 @@ One divergence surfaced that this bug had been hiding — `Sum(n + 1)` binds a
 `bug-a-an-integer-binop-argument-binds-a-double-overload`.
 
 ## Log
-- 2026-08-11 — resolved, commit PENDING-COMMIT.
+- 2026-08-11 — resolved, commit 76a798ba3.
