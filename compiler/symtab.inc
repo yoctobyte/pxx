@@ -5484,6 +5484,16 @@ begin
   end;
 end;
 
+function TypeIsMachineInt(tk: TTypeKind): Boolean;
+{ The fixed-width integer kinds — deliberately NOT the whole of TypeIsOrdinal:
+  Boolean, Char, Pointer, Bool8 and UCS4Char are ordinals that do not take part
+  in integer-vs-float overload ranking, and the arbitrary-precision promo kinds
+  have their own lossless rules in ArgNarrowsInt. }
+begin
+  Result := tk in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
+                   tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt];
+end;
+
 function ArgNarrowsInt(pType, aType: TTypeKind): Boolean;
 { True when binding an integer argument to this parameter would silently DROP
   high bits — a 16-bit argument onto a Byte parameter, an Int64 onto a LongInt.
@@ -5557,7 +5567,7 @@ end;
 
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
-    userOnly: Boolean; ownM, anyM: Integer;
+    userOnly: Boolean; ownM, anyM: Integer; pass: Integer;
     dropLateDef: Boolean;   { NilPy: a def below this call site is not bound yet }
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
@@ -5713,6 +5723,63 @@ begin
       end;
     end;
     i := ProcHashNext[i];
+  end;
+
+  { Phase 1c2: an INTEGER-valued argument prefers an INTEGER parameter over a
+    FLOAT one — FPC's rule, and a strong one: it holds even when the integer
+    parameter NARROWS. Measured against fpc 3.2.2, `f(Integer)` vs `f(Double)`
+    binds the Integer overload for an Int64 argument, and `f(Byte)` vs
+    `f(Double)` binds Byte for an Integer argument. pxx had no such preference,
+    so Phase 1d below — which ranks purely by losslessness — handed `f(n + 1)`
+    to the Double overload and computed something entirely different, silently.
+
+    Two passes, because losslessness still ranks WITHIN the integer candidates:
+    a lossless integer parameter must beat a narrowing one (`f(Integer)` vs
+    `f(Int64)` with an Int64 argument stays Int64), and only then does a
+    narrowing integer parameter beat a float. Both run before Phase 1d, so an
+    integer candidate outranks a float one either way.
+    bug-a-an-integer-binop-argument-binds-a-double-overload }
+  for pass := 0 to 1 do
+  begin
+    i := ProcChainHead(name);
+    while i >= 0 do
+    begin
+      if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) and
+         ProcArityMatches(i, nArgs) then
+      begin
+        match := False;   { at least one argument must be the int->int case }
+        for j := 0 to nArgs-1 do
+        begin
+          if ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
+            { untyped: neutral }
+          else if TypeIsMachineInt(argTypes[j]) and
+                  TypeIsMachineInt(Procs[i].Params[j].TypeKind) and
+                  TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) and
+                  ((pass = 1) or
+                   not ArgNarrowsInt(Procs[i].Params[j].TypeKind, argTypes[j])) then
+            match := True
+          else if (Procs[i].Params[j].TypeKind = argTypes[j]) and
+                  not MatchArgRecMismatch(i, j, argTypes[j]) then
+            { some other argument matching exactly is fine }
+          else
+          begin
+            match := False;
+            Break;
+          end;
+          if MatchArgRecMismatch(i, j, argTypes[j]) then
+          begin
+            match := False;
+            Break;
+          end;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+      i := ProcHashNext[i];
+    end;
   end;
 
   { Phase 1d: compatible match that does NOT narrow an integer argument. Runs

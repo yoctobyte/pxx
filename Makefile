@@ -4520,6 +4520,11 @@ test-core: $(COMPILER)
 	# a fixed-array PARAMETER must not swallow a scalar argument: its
 	# Params[].TypeKind is the ELEMENT kind, so it looked like the Integer
 	# overload and won on declaration order (Sum(n) then segfaulted)
+	# FPC's rule: an integer argument prefers an integer parameter over a float
+	# one even when it NARROWS -- and losslessness still ranks among the ints
+	./$(COMPILER) test/test_overload_int_prefers_int.pas /tmp/test_ovl_int26
+	test "$$(/tmp/test_ovl_int26 | tail -1)" = "OVERLOAD INT PREFERS INT OK"
+	test "$$(/tmp/test_ovl_int26 | head -4 | tr '\n' '|')" = "Fa int int int int int dbl|Fb byte byte byte byte|Fc i64 i64 i64 i64|Fd int i64 i64 int int|"
 	./$(COMPILER) test/test_overload_array_vs_scalar.pas /tmp/test_ovl_arr_scalar26
 	test "$$(/tmp/test_ovl_arr_scalar26 | tail -1)" = "OVERLOAD ARRAY VS SCALAR OK"
 	test "$$(/tmp/test_ovl_arr_scalar26 | head -4 | tr '\n' '|')" = "arr    6|call   6|var    50|lit    70|"
