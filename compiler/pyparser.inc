@@ -1128,7 +1128,10 @@ begin
   if IsClassType(GetTokenStr(i)) then
   begin
     Result := tyClass;
-    PyAnnLastCi := FindUClass(GetTokenStr(i));
+    { NonRecord, to agree with the IsClassType that just said yes — otherwise
+      the predicate answers about the CLASS and the ci names the RECORD.
+      bug-nilpy-text-class-name-binds-the-rtl-file-record. }
+    PyAnnLastCi := FindUClassNonRecord(GetTokenStr(i));
     Inc(i);
     Exit;
   end;
@@ -20799,7 +20802,15 @@ begin
   Result := REC_NONE;
   if (i < 0) or (i >= TokCount) then Exit;
   if Tokens[i].Kind <> tkIdent then Exit;
-  ci := FindUClass(GetTokenStr(i));
+  { NonRecord: this answers "which CLASS does this name denote" for a NilPy
+    field/parameter type, and FindUClass returns the first row of the name
+    whatever it is. With the RTL's `Text` RECORD ahead of `lib/pcl`'s `Text`
+    class, `self.t = Text(...)` recorded the RECORD as the field's type — the
+    field then had no methods and the receiver fell back to dynamic dispatch,
+    which is why a bound method as a VALUE (`command=self.text.yview`) failed
+    while the direct call worked.
+    bug-nilpy-text-class-name-binds-the-rtl-file-record. }
+  ci := FindUClassNonRecord(GetTokenStr(i));
   if ci >= 0 then Result := REC_UCLASS_BASE + ci;
 end;
 
@@ -22456,10 +22467,16 @@ begin
               if (rhsAt + 3 < bodyEnd) and (Tokens[rhsAt].Kind = tkIdent) and
                  (Tokens[rhsAt + 1].Kind = tkDot) and (Tokens[rhsAt + 2].Kind = tkIdent) and
                  (Tokens[rhsAt + 3].Kind = tkLParen) and
-                 (FindUClass(GetTokenStr(rhsAt + 2)) >= 0) then
+                 (FindUClassNonRecord(GetTokenStr(rhsAt + 2)) >= 0) then
               begin
+                { NonRecord, both times: a QUALIFIED construction
+                  `self.t = tk.Text(...)` names a class, and the first row of
+                  that name may be a same-named RECORD — which is how this arm
+                  typed a Text field as the RTL's file record and then reported
+                  "Text has no method insert".
+                  bug-nilpy-text-class-name-binds-the-rtl-file-record. }
                 tk := tyClass;
-                fldRec := REC_UCLASS_BASE + FindUClass(GetTokenStr(rhsAt + 2));
+                fldRec := REC_UCLASS_BASE + FindUClassNonRecord(GetTokenStr(rhsAt + 2));
               end;
               { A bare identifier that names a PARAMETER of this method is a
                 VALUE, and that reading has to win before the type scanners see
@@ -23365,7 +23382,10 @@ begin
           baseCi := -1;
           if Tokens[i + 3].Kind = tkIdent then
           begin
-            baseCi := FindUClass(GetTokenStr(i + 3));
+            { NonRecord — same reason as PyParseClass's own base lookup below:
+              the first row of the name may be a same-named RECORD.
+              bug-nilpy-text-class-name-binds-the-rtl-file-record. }
+            baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
             if (baseCi < 0) and CaseEqual(GetTokenStr(i + 3), 'Exception') then
             begin
               k := PyStoredName('Exception');
@@ -23581,7 +23601,11 @@ begin
     end
     else
     begin
-    baseCi := FindUClass(CurTok.SVal);
+    { NonRecord: a base class is a CLASS position, and FindUClass answers with
+      the FIRST row of the name — the RTL's `Text` RECORD sits ahead of a `Text`
+      class, so `class H(Text)` inherited a record with no methods.
+      bug-nilpy-text-class-name-binds-the-rtl-file-record. }
+    baseCi := FindUClassNonRecord(CurTok.SVal);
     if (baseCi < 0) and CaseEqual(CurTok.SVal, 'Exception') then
     begin
       k := PyStoredName('Exception');

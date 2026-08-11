@@ -3,6 +3,8 @@ track: A
 prio: 55
 type: bug
 summary: "NilPy resolves the class name `Text` to lib/rtl/textfile.pas's `Text = record` (the FILE type) instead of tkinter.Text, in the two positions that record a type by NAME — an instance attribute and a base class. Locals and globals resolve correctly. Blocks any NilPy code that stores or subclasses a Text widget"
+status: done
+owner: claude-AN
 ---
 
 # NilPy: `Text` as an attribute or base class binds the RTL file record
@@ -177,3 +179,81 @@ The repro above printing `ok`; `class H(tk.Text)` inheriting `insert`;
 `make test-nilpy` green; self-host byte-identical. Add the `Text` cases to
 `field_class_identity.npy` per the section above — this survived a `done` root
 fix unnoticed precisely because nothing tested a colliding name.
+
+## Resolution (2026-08-11) — one predicate, and the helper was already written
+
+### The repro does not need tkinter, X11 or a display
+
+Before touching anything, the collision was reduced to a 12-line Pascal unit and
+6 lines of NilPy — a `Text = class` next to the RTL's `Text = record`, no
+widgets involved. That made the edit/measure loop seconds instead of a headless
+X server, and it gave a **control that removes the variable rather than
+relabelling it**: the identical unit with the class renamed `Zext`.
+
+| | `Text` (collides) | `Zext` (control) |
+| --- | --- | --- |
+| before | attribute dynamic, `class H(Text)` → *"H has no method Insert"* | both fine |
+| after | `attribute: 15` / `base class: 17 11` | identical |
+
+### The root — `IsClassType` asked the wrong ROW
+
+```pascal
+ci := FindUClass(lo2);                          { the FIRST row of that name }
+if (ci >= 0) and (not UClsIsRecord[ci]) then Result := True;
+```
+
+`FindUClass` answers with the first row whatever it is, so testing
+`not UClsIsRecord[ci]` on it says **False whenever a same-named record comes
+first** — even though a class of that name also exists. The RTL's `Text` sits
+ahead of `lib/pcl`'s `Text = class(Widget)`, so `IsClassType('Text')` was False
+and every gate keyed on it stood down. That is the ticket's "one cause, three
+faces", and it is one line.
+
+### The helper for it already existed, wired to only three sites
+
+`FindUClassNonRecord` (`symtab.inc:1171`) — *"the CLASS of that name, skipping
+same-named RECORDS"* — was written for **this exact `Text` collision**, cites
+`decide-class-namespace-scoping`, and its comment names the file record. It had
+been wired into the construction intercept and the Pascal typecast branch. The
+positions this ticket reports were left on plain `FindUClass`:
+
+| site | face |
+| --- | --- |
+| `IsClassType` (symtab.inc) | the root predicate under all three |
+| `PyParseClass` base-class lookup | B — inherited the record |
+| the hoisted base-class lookup | B — the same, on the pre-pass path |
+| `PyRecFromTokenIndex` | A — the field's recorded type |
+| the qualified-construction arm (`self.t = tk.Text(...)`) | C — compile error |
+| the annotation arm beside `IsClassType` | the ci disagreeing with the predicate that just said yes |
+
+Textbook `normalise-dont-special-case.md`: the fix existed, and the siblings
+were never grepped for. Six sites now share one rule.
+
+### Verified
+
+- The ticket's own repro compiles and prints **`ok`** under `xvfb-run`.
+- `class H(tk.Text)` inherits `insert` and `shout()` runs; the `tk.Canvas`
+  control beside it still works.
+- The minimal collision repro matches its renamed control exactly, for both the
+  attribute and the base class.
+
+### Regression test — in the file that was already asserting this
+
+Per the ticket's own section, the cases went into
+`examples/tk/field_class_identity.npy` rather than a new file: it has asserted
+this invariant since it was written and could not see the break, because every
+field in it was a `Canvas` or a `Frame` — a name nothing else uses. Added: a
+field from bare `Text(...)` and from qualified `tk.Text(...)` (separate lookups,
+both were broken), a **bound method taken as a value** off that field (the thing
+a dynamic receiver could not do, while a direct call on it worked — so a direct
+call alone would not have caught it), and `class Editor(tk.Text)`.
+
+**Confirmed it fails on the old compiler**, which is what makes it a regression
+test rather than a passing example: `stable_linux_amd64/default/pinned` reports
+*"Nil Python: Text has no method configure"* on it, and HEAD compiles it.
+
+Gate: `tools/gate.sh quick` GREEN (self-host fixedpoint + FPC seed canary) +
+`make test-nilpy`.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.

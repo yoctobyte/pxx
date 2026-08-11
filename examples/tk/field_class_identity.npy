@@ -1,6 +1,15 @@
 # A field assigned a QUALIFIED construction keeps its class — in any method, not
 # only __init__ — so calls on it resolve statically and bind keyword arguments.
+#
+# The Text cases below are the ones that matter: `Text` is ALSO the name of the
+# RTL's file record (lib/rtl/textfile.pas), and every class lookup that took the
+# first row of a name found the record instead of lib/pcl's `Text = class`. This
+# file asserted the invariant for two years and could not see the break, because
+# every field in it was a Canvas or a Frame — a name nothing else uses. A
+# colliding name is the case it was never pointed at.
+# bug-nilpy-text-class-name-binds-the-rtl-file-record.
 import tkinter as tk
+from tkinter import Text
 
 
 class Panel:
@@ -14,6 +23,30 @@ class Panel:
         self.text = self.canvas.create_text(0, 0, text="hello", anchor="nw")
         self.canvas.itemconfigure(self.item, width=120)
         return self.item
+
+
+# A field whose class name COLLIDES with an RTL record — the face that stayed
+# broken. Bare `Text` and qualified `tk.Text` are separate lookups and both had
+# to be fixed, so both are asserted.
+class TextPanel:
+    def __init__(self, master):
+        self.qualified = tk.Text(master, width=20, height=3)
+        self.bare = Text(master, width=20, height=3)
+
+    def wire(self, bar):
+        # a bound method as a VALUE off the field — this is what a DYNAMIC
+        # receiver could not do, while a direct call on it worked, so a direct
+        # call alone would not have caught the regression.
+        bar.config(command=self.qualified.yview)
+        self.qualified.configure(yscrollcommand=bar.set)
+        return self.bare.get("1.0", "end")
+
+
+# ...and the same name as a BASE class, which inherited the method-less record.
+class Editor(tk.Text):
+    def shout(self, s):
+        self.insert("end", s.upper())
+        return "shouted"
 
 
 root = tk.Tk()

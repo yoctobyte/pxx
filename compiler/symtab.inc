@@ -1199,13 +1199,21 @@ begin
     end;
 end;
 
+{ Is there a CLASS of this name? Asks FindUClassNonRecord, not FindUClass:
+  FindUClass answers with the FIRST row of that name whatever it is, so testing
+  `not UClsIsRecord[ci]` on it answered FALSE whenever a same-named RECORD came
+  first — even though a class of that name also existed. The RTL's `Text` (the
+  file record) sits ahead of `lib/pcl`'s `Text = class(Widget)`, so
+  `IsClassType('Text')` was False and every gate keyed on it stood down: a
+  `Text` field fell back to dynamic, `class H(Text)` inherited the record, and
+  `self.t = tk.Text(...)` was a compile error, while `Canvas` beside it was
+  fine. One predicate, the ticket's three faces.
+  bug-nilpy-text-class-name-binds-the-rtl-file-record. }
 function IsClassType(const lo: AnsiString): Boolean;
-var ci: Integer; lo2: AnsiString;
+var lo2: AnsiString;
 begin
-  Result := False;
   lo2 := lo;
-  ci := FindUClass(lo2);
-  if (ci >= 0) and (not UClsIsRecord[ci]) then Result := True;
+  Result := FindUClassNonRecord(lo2) >= 0;
 end;
 
 const
