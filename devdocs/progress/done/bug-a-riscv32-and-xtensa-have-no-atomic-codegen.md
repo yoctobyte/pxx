@@ -9,7 +9,7 @@ owner: claude-A
 # riscv32 / xtensa: no atomic node in IR codegen
 
 - **Type:** bug — Track A (backends), tagged **S** (ESP32 campaign)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** cross-checking the new `lib/rtl/palatomic.pas` across targets.
 
@@ -167,3 +167,16 @@ sequence" from "this emulator" in one step.
 
 Nothing about the xtensa half is blocked on the SoC axis: `S32C1I` is on every
 LX6/LX7 part, so it needs no chip gate.
+
+
+### Xtensa remainder split out
+
+Filed as `bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3` for a dedicated Track S
+session: what is left there is a hardware/emulator question (does `S32C1I` work
+at that address on qemu's esp32s3 model at all?), not compiler work — the
+encoders are in tree and assembler-verified, and the sequence is in this
+ticket's history. This ticket closes on its own repro, which was riscv32 and now
+runs.
+
+## Log
+- 2026-08-11 — resolved, commit PENDING-COMMIT.
