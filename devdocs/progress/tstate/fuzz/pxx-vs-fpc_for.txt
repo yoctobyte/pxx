@@ -1,0 +1,19 @@
+sig=pxx-vs-fpc_for
+seed=26803
+sha=f27a3259505c
+compiler=/home/neo/trackt-watch/compiler/pascal26
+note=pxx and FPC each self-consistent but disagree -- investigate in order: (a) pasmith emitted UB/impl-defined code, (b) pxx bug, (c) FPC bug. Do NOT auto-dismiss (c).
+
+fpc-O0       8311716282103997856
+fpc-O2       8311716282103997856
+pxx-O0       6821815434835371424
+pxx-O2       6821815434835371424
+pxx-O3       6821815434835371424
+
+first divergence at checkpoint 5 of 21 -- a `for` statement
+    pxx-O0     3208432597171918722
+    fpc-O0     11726030848414513026
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 26803 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3
