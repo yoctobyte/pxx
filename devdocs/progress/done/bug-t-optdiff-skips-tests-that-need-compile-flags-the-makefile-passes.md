@@ -3,6 +3,7 @@ track: T
 prio: 55
 type: bug
 summary: "optdiff compiles every test with bare `$(CC) -O<n> file`, so the 9 cmath tests that need `-Ilib/crtl/include -Ilib/crtl/src` (which the Makefile does pass) fail to compile and are silently counted as skips. Half the cmath family — the exact family that produced the only two optdiff DIFFs ever reported — is invisible to the O-level sweep"
+status: done
 ---
 
 # optdiff skips the tests whose compile flags live in the Makefile
@@ -68,3 +69,6 @@ cmath.
 `tools/optdiff.sh --shard 1/12` reporting the 9 as pass rather than skip, with
 the skip list itemized; `tools/testmgr.py --tier full` green (Track T's own
 gate for tooling changes).
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

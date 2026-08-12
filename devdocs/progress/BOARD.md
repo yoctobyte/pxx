@@ -35,7 +35,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -82,7 +82,6 @@ _none_
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
 | bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler | T | 45 | bug | gate.sh's self-host check compares the hermetic fixedpoint against the LIVE compiler/pascal26, so a concurrent build in the same clone flips it red transiently — testmgr snapshots the binary per run for exactly this reason | — |
 | bug-t-nilpy-isnumeric-red-at-T-not-reproducible-locally | T | 45 | bug | T reports `test_nilpy_str_isnumeric_istitle` RED at full tier; not reproducible locally | — |
-| bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes | T | 55 | bug | optdiff compiles every test with bare `$(CC) -O<n> file`, so the 9 cmath tests that need `-Ilib/crtl/include -Ilib/crtl/src` (which the Makefile does pass) fail to compile and are silently counted as skips. Half the cmath family — the exact family that produced the only two optdiff DIFFs ever reported — is invisible to the O-level sweep | — |
 | bug-t-pydiff-cpython-arm-fails-on-a-relative-path | T | 45 | bug | pydiff.py reports a bogus DIFF for any file given as a relative path: run_cpython passes the full relative path while setting cwd to that path's dirname, so CPython exits 2 and every line reads 'cpython: <no line>' | — |
 | bug-t-three-network-tests-flake-and-cost-real-debugging-time | T | 45 | bug | lib_net_v6only, lib_sockets and lib_platform_esp each pass or fail run-to-run with the SAME compiler, so a gate.sh lib RED and two cross-sweep A/B deltas in one night were all noise that had to be disproved by hand | — |
 | bug-t-tstate-launders-skip-into-pass | T | 50 | bug | tstate records a SKIPPED job as \"pass\", so a green published state cannot be distinguished from one that actually ran — cross-host coverage differences are invisible exactly when they matter | — |
@@ -99,6 +98,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
+| decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
@@ -227,7 +227,6 @@ _none_
 | feature-t-fpc-seed-canary-closer-to-the-dev-loop | T | 55 | feature | The FPC seed build breaks every couple of days, always the same way, and only the watcher ever notices — yet it costs 10.7s. Put it where the person who broke it will see it. | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 20 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-per-invocation-tmp-namespace-for-make-recipes | T | 55 | feature | The Makefile's ~3700 fixed /tmp/test_* output paths make two concurrent `make test*` runs on one box clobber each other; route them through a per-invocation temp dir | — |
-| feature-t-testmgr-owns-pinning-interruptible | T | 60 | feature | Move the pin gate into testmgr so pinning is scheduled, resource-aware and INTERRUPTIBLE, instead of a long foreground gate.sh run a dev agent has to babysit | — |
 | feature-t-uforth-benchmark-harness | T | 45 | feature | Track T: uforth benchmark harness — pxx-compiled vs interpreted Python baselines | — |
 | feature-t-windows-wine-harness | M | 25 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -408,9 +407,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1664)
+## done (1666)
 
-1664 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1666 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -461,7 +460,6 @@ _none_
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
-- [p 60] [T] feature-t-testmgr-owns-pinning-interruptible
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [N] bug-nilpy-an-override-returning-a-different-type-than-the-base-reads-float-bits
 - [p 58] [N] bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list
@@ -473,7 +471,6 @@ _none_
 - [p 55] [N] bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero
 - [p 55] [N] bug-nilpy-repr-returning-a-bare-string-field-is-empty
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- [p 55] [T] bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [A] feature-a-own-language-first-symbol-resolution
 - [p 55] [E] feature-demo-portable-userland
@@ -561,6 +558,7 @@ _none_
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
+- [p 40] [U] decide-pin-the-bench-box-clock
 - [p 40] [D] docs-verify-nil-python-page-against-the-compiler
 - [p 40] [A] feature-a-index-an-array-returning-call-directly
 - [p 40] [S] feature-a-promoint-variant-esp-targets

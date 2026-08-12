@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1664 rejected:35`
+`unfinished:10 blocked:3 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1666 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 204, ranked
+## Ready — top 30 of 203, ranked
 
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -39,7 +39,6 @@ _none — no lane is locked._
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
-- `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [N]` bug-nilpy-an-override-returning-a-different-type-than-the-base-reads-float-bits
 - `[p 58] [N]` bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list
@@ -51,7 +50,6 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero
 - `[p 55] [N]` bug-nilpy-repr-returning-a-bare-string-field-is-empty
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- `[p 55] [T]` bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution
 - `[p 55] [E]` feature-demo-portable-userland
@@ -62,5 +60,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [T]` feature-pasmith-multi-unit-programs
 - `[p 55] [A]` feature-signal-siginfo-ucontext
+- `[p 55] [T]` feature-t-est-mem-from-measurement
+- `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 
-_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

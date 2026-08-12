@@ -3,6 +3,7 @@ summary: "Move the pin gate into testmgr so pinning is scheduled, resource-aware
 type: feature
 track: T
 prio: 60
+status: done
 ---
 
 # testmgr should own pinning, and pinning must be interruptible
@@ -112,3 +113,6 @@ time, so a builtin change cannot be pinned without its RTL.
 A pin driven through testmgr produces a pin byte-identical to one driven through
 `gate.sh` + `make pin`, and SIGINT at several points during it leaves the tree in
 a clean, un-pinned state every time.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.
