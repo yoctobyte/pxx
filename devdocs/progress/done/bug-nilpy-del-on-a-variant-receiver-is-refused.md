@@ -60,4 +60,4 @@ class-attribute receiver, a chained receiver (`del obj.d[k]`), the KeyError /
 IndexError a missing key raises, and the existing static forms still working.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit aab8fd0e6.
