@@ -1,0 +1,16 @@
+ret param ['1', 'x']
+loop local [0, 1, 2, 3]
+param caller [0]
+variant local caller [0]
+static local caller [0]
+global caller [0]
+variant global caller [0]
+walk ['0-1-2', '0-1-2', '0-1-2', '0-1-2']
+method [0, 9]
+method caller [0]
+mutated [0, 7]
+augmented [0, 5] 1
+str ab a
+int 2 1
+tuple (0, 1) (0,)
+dict {'k': 2} {'k': 1}

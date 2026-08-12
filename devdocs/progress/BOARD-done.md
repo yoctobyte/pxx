@@ -736,6 +736,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-range-for-variant-loop-var | N | 30 | bug | NilPy: range for-loop with a pre-existing VARIANT loop variable corrupts it | — |
 | bug-nilpy-range-negative-runtime-step-yields-empty | N | 55 | bug | `range(a, b, s)` with a NEGATIVE step passed at runtime yields an empty range | — |
 | bug-nilpy-range-over-a-variant-bound-loops-forever | N | 75 | bug | `for i in range(n)` LOOPS FOREVER when n is a variant | — |
+| bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list | N | 58 | bug | A list rebound with `+` and then RETURNED loses its value: returning a rebound PARAMETER yields the empty list, returning a LOCAL built by `out = out + [i]` in a loop yields a raw pointer printed as a 15-digit int, and in a recursion the rebinding leaks into the caller's list so a DFS prints '0-1-2-2-1-2' instead of '0-1-2'. append() and a copy-to-another-local are both correct | — |
 | bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs | N | 60 | bug | Redefining a `def` silently does nothing — the FIRST body still runs | — |
 | bug-nilpy-repr-and-sum-over-range-are-undefined-variables | N | 30 | bug | repr() is not a builtin at all, and sum(range(n)) fails 'undefined variable (range)' because range is only a for-header form | — |
 | bug-nilpy-repr-of-a-function-value-prints-none | N | 25 | bug | `print(f)` on a function value prints None (or nothing) instead of a repr | — |

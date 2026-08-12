@@ -4,6 +4,8 @@ prio: 58
 type: bug
 blocked-by: []
 summary: "A list rebound with `+` and then RETURNED loses its value: returning a rebound PARAMETER yields the empty list, returning a LOCAL built by `out = out + [i]` in a loop yields a raw pointer printed as a 15-digit int, and in a recursion the rebinding leaks into the caller's list so a DFS prints '0-1-2-2-1-2' instead of '0-1-2'. append() and a copy-to-another-local are both correct"
+status: done
+owner: claude-AN
 ---
 
 # A list rebound with `+` loses its value when returned
@@ -154,3 +156,85 @@ A `.npy` diffed against CPython: every row of the table above, the recursive
 walker (which is the shape that fails loudest), a str parameter rebound the
 same way (`s = s + "x"`), a dict parameter (`d = d | {...}` / a copy), and the
 caller's list asserted unchanged after each call.
+
+## 2026-08-13 — FIXED. Three symptoms, TWO causes, and the ticket's own boundary was an artifact
+
+Both causes were found by varying the shape until the boundary moved, not by
+reading the code the ticket pointed at.
+
+### Cause 1 — the return TYPE, and it is not the loop (symptoms 1 and 3)
+
+The recorded diagnosis said the LOOP was the trigger. It is not: `PXXDBG=n.ret`
+(added here) prints the inferred result of each def, and the boundary is a
+one-element list literal used as an OPERAND.
+
+| body | inferred result |
+| --- | --- |
+| `out = out + [1]` (int literal) | tyClass rec=39 — TPyList, right |
+| `out = out + [i]` (an ident) | **tyClass rec=0** — a class result with NO class |
+| `out = out + [i, 1]` | right, **by accident** — the int widened the assignment to an int default, so it was ignored and the earlier `out = []` survived |
+
+Two independent holes, both in the token-only inference:
+
+- **The chain fold dropped the class identity.** `PyInferDefRetTypeScan` folds a
+  self-referential accumulator through `chainCur`, but `PyWiden` folds a
+  *TTypeKind* and knows nothing of `PyInferLastCi` — so the chain said "still a
+  class" while the re-scan of `out + [i]` had just cleared the class to -1. The
+  def registered a CLASS RESULT WITH NO CLASS and the caller read the TPyList
+  handle as a bare pointer: a 15-digit integer. Fixed by carrying `chainRec`
+  beside `chainCur`.
+- **A list/dict literal as an OPERAND was walked element by element.** The
+  literal arms of `PyInferExprType` only fire when the expression STARTS with
+  the bracket, so `p + ["x"]` took its type from the `"x"` and inferred
+  AnsiString — that is symptom 1, where a def returning a list declared a
+  string result and handed back the empty string. Now folded as its container
+  type with the group skipped, the way the subscript arms already skip theirs.
+  Literal-vs-subscript is decided by the preceding token, because `f(x)[0]`
+  leaves the walk sitting on a `[`.
+
+### Cause 2 — a rebound variant PARAMETER was the caller's own slot (symptom 2)
+
+The ticket's boundary table says "only a parameter, only in a recursion". Both
+halves are artifacts of static typing. Measured:
+
+| the CALLER's variable | callee's `p = p + [9]` reaches it? |
+| --- | --- |
+| a module global holding a list literal | no |
+| a def local holding a list literal | no |
+| a **variant** local (`z = mk(1)`) | **yes** |
+| a **variant** global | **yes** |
+| a parameter | **yes** |
+
+The three "no" rows are statically tyClass, so the call site boxes them into a
+temp and the callee's write lands in the temp. Every genuinely VARIANT caller
+variable is corrupted, recursion or not — this dialect passes a variant
+const-by-REF, so the parameter symbol IS the caller's storage and `p = ...`
+stores through it. Python rebinding is local, always.
+
+Fixed callee-side: a variant parameter whose body rebinds it is RENAMED to
+`$byref.<name>` and an ordinary local takes the name, seeded from the parameter
+at the top of the body. Renaming rather than teaching the assignment path about
+parameters is the point — every read, every write, the locals inference and the
+capture scan then see one ordinary local, so no second path can disagree.
+Both parameter paths needed it (`PyParseDef` and `PyParseMethod` are separate
+code; the method path was still wrong after the def path was fixed).
+
+Augmented assignment counts as a rebind and is correct that way: `p += [x]`
+mutates the list in place through the copied handle, so the caller sees it, while
+`p += 1` rebinds the private slot and the caller does not — both match CPython.
+
+**A CAPTURE is not a parameter.** Nested defs receive the enclosing frame's
+names as extra params; giving one a private slot broke `nonlocal`
+(`test_nilpy_selfassigned_comprehension` went from `(2, 'done')` to `(2, None)`),
+which is why the copy is restricted to the def's OWN declared parameters.
+
+### Gate
+
+`test/test_nilpy_rebinding_a_parameter_is_local.npy` + `.expected` from CPython,
+wired into `make test-nilpy`: all three symptoms, every caller-variable kind
+above, the recursive walker, a method, genuine `append` mutation, `+=` on a list
+vs an int, and str/int/tuple/dict parameter controls. `make test-nilpy` green,
+`gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

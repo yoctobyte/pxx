@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:224 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1679 rejected:35`
+`unfinished:10 blocked:3 backlog:223 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1680 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 207, ranked
+## Ready — top 30 of 206, ranked
 
 - `[p 62] [P]` bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -41,7 +41,6 @@ _none — no lane is locked._
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
-- `[p 58] [N]` bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
@@ -62,5 +61,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 - `[p 53] [S]` feature-esp-peripheral-callback-api
+- `[p 53] [A]` feature-threadsafe-heap-optimize
 
-_177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

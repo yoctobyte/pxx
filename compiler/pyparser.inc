@@ -3654,6 +3654,43 @@ begin
   i := startIdx;
   while i < endIdx do
   begin
+    { A list/dict LITERAL used as an OPERAND — `p + ["x"]`, `d | {"a": 1}`.
+      The literal arms far above only fire when the expression STARTS with the
+      bracket, so as an operand the group was walked token by token and the
+      result took its type from the ELEMENTS: `p + ["x"]` inferred AnsiString
+      off the "x", and a def returning it declared a STRING result and handed
+      back the empty string for what is a list. Fold the container's own type
+      and skip the group, exactly as the subscript arms below skip theirs.
+
+      Literal, not subscript: a subscript's bracket FOLLOWS a value, so the
+      preceding token settles it. `f(x)[0]` is the case that makes the test
+      necessary rather than assumed — the call arm skips the paren group and
+      leaves the walk sitting on the `[`.
+      bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+    if ((Tokens[i].Kind = tkLBrack) or (Tokens[i].Kind = tkBegin)) and
+       (i > startIdx) and
+       not (Tokens[i - 1].Kind in [tkIdent, tkRParen, tkRBrack, tkString]) then
+    begin
+      tk := tyClass;
+      if (Tokens[i].Kind = tkBegin) and PyDictLiteralAt(i) then
+        PyInferLastCi := FindUClass('TPyDict')
+      else
+        PyInferLastCi := FindUClass('TPyList');
+      depth := 0;
+      while i < endIdx do
+      begin
+        if Tokens[i].Kind in [tkLBrack, tkBegin] then Inc(depth)
+        else if Tokens[i].Kind in [tkRBrack, tkEnd] then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end;
+        Inc(i);
+      end;
+      Result := PyWiden(Result, tk);
+      Inc(i);
+      Continue;
+    end;
     { A str method called on a string LITERAL — `"a,b".split(",")`. The scan
       below only inspects IDENT tokens, so a literal base never reached the
       str-method case and the result fell through untyped: a local assigned
@@ -17061,6 +17098,49 @@ begin
   end;
 end;
 
+{ Does the body starting at `bodyStart` REBIND the parameter `nm` — `p = ...`
+  or an augmented `p += ...`? Python's rule is that rebinding a parameter is
+  local to the call; this dialect passes a variant parameter CONST-BY-REF, so
+  the name is an alias for the caller's own slot and the store went straight
+  into it. `def h(p): p = p + [9]` then grew the CALLER's list, and a recursive
+  walker built `['0-1-2', '0-1-2-2', '0-1-2-2-1-2', ...]` where CPython builds
+  four identical paths.
+
+  Augmented assignment counts, and counts CORRECTLY: `p += [x]` on a list
+  mutates the object in place and the caller sees it either way (the copy holds
+  the same handle), while `p += 1` on an int rebinds and the caller must NOT see
+  it — which is exactly what a private slot holding the same value gives.
+
+  Bounded by the body's own DEDENT, so a LATER def rebinding the same parameter
+  name does not make this one pay for a copy.
+  bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+function PyParamRebound(bodyStart: Integer; const nm: AnsiString): Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  i := bodyStart;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth <= 0 then Exit;
+    end
+    else if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+            (Tokens[i + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq,
+                                    tkSlashEq, tkModEq, tkTrueDivEq, tkAmpEq,
+                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq]) and
+            (GetTokenStr(i) = nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyPromoteNonlocalCells(bodyStart: Integer): Integer;
 var i, depth: Integer;
 begin
@@ -21218,6 +21298,8 @@ end;
 procedure PyParseDef;
 var name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
+    pbInit, pbAsgn, pbOwn: Integer;
+    pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
     savedNest, savedTok, savedLam, savedHoist, savedSelf2: Integer;
     defTok0: Integer;   { this def's `def` token — the redefinition key }
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
@@ -21341,6 +21423,13 @@ begin
     ones stand for the enclosing locals it captures. Take the count from the
     Proc, or the captured names get no frame slot and the body reports them as
     undefined variables (feature-nilpy-nested-defs). }
+  { the def's OWN declared parameters, before the capture block below appends
+    the enclosing frame's names as extra ones. Only those are Python
+    parameters; a CAPTURE is the outer variable itself, and giving one a
+    private slot would break `nonlocal` — a nested `label = t` under
+    `nonlocal label` stopped reaching the enclosing frame
+    (test_nilpy_selfassigned_comprehension). }
+  pbOwn := nparams;
   if Procs[procIdx].ParamCount > nparams then
   begin
     for i := nparams to Procs[procIdx].ParamCount - 1 do
@@ -21402,6 +21491,30 @@ begin
     if PyHdrPSigs[i] >= 0 then SymProcSig[idx] := PyHdrPSigs[i];
     SymSyncTypeRef(idx);
   end;
+  { A variant parameter this body REBINDS gets a private slot, and the name in
+    the body means that slot. A variant travels const-by-REF here, so the
+    parameter symbol IS the caller's storage and `p = p + [9]` wrote through it
+    — the callee's rebinding reached the caller, which Python never does.
+
+    Done by RENAMING the parameter out of the way rather than by teaching the
+    assignment path about parameters: every read, every write, the locals
+    inference and the nested-def capture scan then see one ordinary local, so
+    there is no second path that can disagree with the first.
+    bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+  for i := 0 to nparams - 1 do
+  begin
+    pbLocal[i] := -1;
+    if (i < pbOwn) and (i < MAX_PROC_PARAMS) and (PyHdrPTypes[i] = tyVariant) and
+       (Procs[procIdx].Params[i].SymIdx >= 0) and
+       PyParamRebound(bodyStart, PyHdrPNames[i]) then
+    begin
+      Syms[Procs[procIdx].Params[i].SymIdx].Name := '$byref.' + PyHdrPNames[i];
+      { tyVariant, not whatever the locals pre-pass infers from the REBINDING:
+        the incoming argument is an Any, and only the parameter's own type
+        describes every value the slot may hold. }
+      pbLocal[i] := AllocVar(PyHdrPNames[i], tyVariant);
+    end;
+  end;
   if not isProc then
   begin
     { NOT literally 'Result': Pascal's implicit result variable is case-insensitive,
@@ -21457,6 +21570,18 @@ begin
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock;
   Expect(tkDedent, 'dedent');
+  { ...and the private parameter slots are seeded before either: the body may
+    READ the parameter before it rebinds it. }
+  pbInit := -1;
+  for i := 0 to nparams - 1 do
+    if (i < MAX_PROC_PARAMS) and (pbLocal[i] >= 0) then
+    begin
+      pbAsgn := AllocNode(AN_ASSIGN);
+      ASTLeft[pbAsgn] := PyMakeIdent(pbLocal[i]);
+      ASTRight[pbAsgn] := PyMakeIdent(Procs[procIdx].Params[i].SymIdx);
+      pbInit := PySeqAppend(pbInit, pbAsgn);
+    end;
+  if pbInit >= 0 then bodyNode := PySeqAppend(pbInit, bodyNode);
   { the cells are allocated FIRST: the body's first assignment stores through one }
   if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
@@ -21910,7 +22035,7 @@ end;
 function PyInferDefRetTypeScan(methodStart: Integer; var retRec: Integer;
                                var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
-    tupDepth: Integer;
+    tupDepth, chainRec: Integer;
     t2, cur, chainCur: TTypeKind;
     seenAny, tupComma: Boolean;
     bigRet: Boolean;   { the return holds `**` or a wide literal — arbitrary precision }
@@ -22095,6 +22220,7 @@ begin
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
       begin
         chainCur := tyUnknown;
+        chainRec := -1;
         for k := bodyScanStart to j - 1 do
           if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
              (Tokens[k + 1].Kind = tkAssign) and
@@ -22116,11 +22242,27 @@ begin
             if (chainCur <> tyUnknown) and (k + 2 < e2) and
                (Tokens[k + 2].Kind = tkIdent) and
                CaseEqual(GetTokenStr(k + 2), GetTokenStr(j + 1)) then
+            begin
               t2 := PyWiden(chainCur, t2);
+              { ...and the class IDENTITY travels with the kind. PyWiden folds
+                a TTypeKind and knows nothing of PyInferLastCi, so
+                `out = out + [i]` came back tyClass with ci = -1: the chain said
+                "still a class", the re-scan of `out + [i]` found no class of its
+                own, and the def registered a CLASS RESULT WITH NO CLASS. The
+                caller then read the TPyList handle as a bare pointer and
+                `print(build(4))` showed a 15-digit integer.
+                A one-element list literal is what exposes it — `[i, 1]` widened
+                to an int default and the whole assignment was skipped, so the
+                first assignment's class survived by accident.
+                bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+              if (t2 = tyClass) and (PyInferLastCi < 0) then
+                PyInferLastCi := chainRec;
+            end;
             if (t2 <> tyUnknown) and (not PyRetIsIntDefault(t2)) and (t2 <> tyVariant) then
             begin
               cur := t2;
               chainCur := t2;
+              chainRec := PyInferLastCi;
               rec2 := PyInferLastCi;
             end;
           end;
@@ -22328,6 +22470,10 @@ function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind
 var sawNone: Boolean;
 begin
   Result := PyInferDefRetTypeScan(methodStart, retRec, sawNone);
+  if PxxDbgEnabled('n.ret') then
+    WriteLn('PXXDBG n.ret def@', methodStart, ' ', GetTokenStr(methodStart + 1),
+            ' tk=', Ord(Result), ' rec=', retRec, ' sawNone=', Ord(sawNone),
+            ' trial=', Ord(PyTypingPass));
   if sawNone and (Result = tyClass) then
   begin
     Result := tyVariant;
@@ -23769,6 +23915,8 @@ var savedHoist: Integer; clsAttrSeq: Integer;
     savedNest, savedTok, savedLam, savedSelf2: Integer; savedPfx, savedPfx2: AnsiString;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
     savedDefGlobalCount, dgI, cellInit: Integer;
+    pbInit, pbAsgn: Integer;
+    pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
 begin
   savedHoist := PyHoistHead;
   { PARK the queue on a fresh chain rather than merely remembering its head.
@@ -23936,6 +24084,22 @@ begin
     if psigs[i] >= 0 then SymProcSig[idx] := psigs[i];   { Callable parameter }
     SymSyncTypeRef(idx);
   end;
+  { A rebound variant parameter gets a private slot — see the identical block in
+    PyParseDef for why (a variant is const-by-REF, so `p = ...` wrote into the
+    CALLER's slot). A method needs it for the same reason a def does: the two
+    parameter paths are separate code, and a fix in one leaves the other wrong.
+    bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+  for i := 0 to nparams - 1 do
+  begin
+    pbLocal[i] := -1;
+    if (i < MAX_PROC_PARAMS) and (ptypes[i] = tyVariant) and
+       (Procs[procIdx].Params[i].SymIdx >= 0) and
+       PyParamRebound(bodyStart, pnames[i]) then
+    begin
+      Syms[Procs[procIdx].Params[i].SymIdx].Name := '$byref.' + pnames[i];
+      pbLocal[i] := AllocVar(pnames[i], tyVariant);
+    end;
+  end;
   if not isCtor then
   begin
     { see the note in the def path — a Python local may be named `result` }
@@ -24007,6 +24171,16 @@ begin
     assignment released stale stack bytes (`decq -0x10(%rax)` on garbage). }
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
+  pbInit := -1;
+  for i := 0 to nparams - 1 do
+    if (i < MAX_PROC_PARAMS) and (pbLocal[i] >= 0) then
+    begin
+      pbAsgn := AllocNode(AN_ASSIGN);
+      ASTLeft[pbAsgn] := PyMakeIdent(pbLocal[i]);
+      ASTRight[pbAsgn] := PyMakeIdent(Procs[procIdx].Params[i].SymIdx);
+      pbInit := PySeqAppend(pbInit, pbAsgn);
+    end;
+  if pbInit >= 0 then bodyNode := PySeqAppend(pbInit, bodyNode);
   if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
   bodyNode := PyPrependResultZero(procIdx, bodyNode);
   { A CONSTRUCTOR applies the class attributes first — see PyClassAttrInitSeq.

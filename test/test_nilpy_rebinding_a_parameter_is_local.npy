@@ -1,0 +1,138 @@
+# Rebinding a PARAMETER is local to the call in Python. This dialect passes a
+# variant parameter const-by-REF, so `p = p + [9]` used to store straight into
+# the CALLER's slot: the caller's list grew, a recursive walker accumulated
+# across sibling calls, and a def returning the rebound name handed back the
+# empty list or a raw pointer.
+# bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list
+# Every expectation is CPython's own output.
+
+def a(p):
+    p = p + ["x"]
+    return p
+
+print("ret param", a(["1"]))
+
+def build(n):
+    out = []
+    for i in range(n):
+        out = out + [i]
+    return out
+
+print("loop local", build(4))
+
+# the caller's list is untouched, whichever kind of variable holds it
+def h(p):
+    p = p + [9]
+
+def mk(n):
+    if n > 0:
+        return [0]
+    return None
+
+def caller_param(z):
+    h(z)
+    h(z)
+    print("param caller", z)
+
+def caller_variant_local():
+    z = mk(1)
+    h(z)
+    h(z)
+    print("variant local caller", z)
+
+def caller_static_local():
+    z = [0]
+    h(z)
+    h(z)
+    print("static local caller", z)
+
+caller_param([0])
+caller_variant_local()
+caller_static_local()
+
+g = [0]
+h(g)
+h(g)
+print("global caller", g)
+
+vg = mk(1)
+h(vg)
+h(vg)
+print("variant global caller", vg)
+
+# the recursive walker — the shape that fails loudest
+out2 = []
+def walk(node, path):
+    path = path + [node]
+    if node >= 2:
+        out2.append("-".join([str(x) for x in path]))
+        return
+    walk(node + 1, path)
+    walk(node + 1, path)
+
+walk(0, [])
+print("walk", out2)
+
+# a METHOD's parameter is the same rule, and a separate code path
+class K:
+    def m(self, p):
+        p = p + [9]
+        return p
+
+def method_caller(z):
+    print("method", K().m(z))
+    print("method caller", z)
+
+method_caller([0])
+
+# genuine MUTATION still reaches the caller — the rebinding rule must not
+# turn a parameter into a copy of the OBJECT
+def mutate(p):
+    p.append(7)
+
+def mutate_caller(z):
+    mutate(z)
+    print("mutated", z)
+
+mutate_caller([0])
+
+# ...and so does `+=` on a list, which mutates in place in CPython, while
+# `+=` on an int rebinds and does not
+def bump_list(p):
+    p += [5]
+
+def bump_int(n):
+    n += 1
+
+def bump_caller(z, k):
+    bump_list(z)
+    bump_int(k)
+    print("augmented", z, k)
+
+bump_caller([0], 1)
+
+# the other parameter types the ticket measured, for the controls
+def s_rebind(s):
+    s = s + "b"
+    return s
+
+def n_rebind(n):
+    n = n + 1
+    return n
+
+def t_rebind(t):
+    t = t + (1,)
+    return t
+
+def d_rebind(d):
+    d = dict(d)
+    d["k"] = 2
+    return d
+
+def controls(s0, n0, t0, d0):
+    print("str", s_rebind(s0), s0)
+    print("int", n_rebind(n0), n0)
+    print("tuple", t_rebind(t0), t0)
+    print("dict", d_rebind(d0), d0)
+
+controls("a", 1, (0,), {"k": 1})

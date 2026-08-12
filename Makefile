@@ -791,6 +791,11 @@ test-nilpy: $(COMPILER)
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which
 	# has no class index at compile time: read, write, inheritance, getattr/hasattr,
 	# the plugin-registry shape, and the AttributeError. Diffed against CPython.
+	@# rebinding a PARAMETER is local to the call: a variant param is const-by-ref
+	@# here, so `p = p + [9]` stored into the CALLER's slot. Mutation and `+=` on a
+	@# list must still reach the caller. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_rebinding_a_parameter_is_local.npy /tmp/test_nilpy_param_rebind26
+	/tmp/test_nilpy_param_rebind26 | diff -u test/test_nilpy_rebinding_a_parameter_is_local.expected -
 	./$(COMPILER) test/test_nilpy_class_attribute_through_a_class_reference.npy /tmp/test_nilpy_clsattr_byref26
 	/tmp/test_nilpy_clsattr_byref26 | diff -u test/test_nilpy_class_attribute_through_a_class_reference.expected -
 	./$(COMPILER) test/test_nilpy_inherited_class_attribute.npy /tmp/test_nilpy_inhclsattr26
