@@ -192,4 +192,4 @@ green** (the family sweep this ticket demanded, and the `test_nilpy_none_str_fie
 canary is in it), `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit d094e82bb.
