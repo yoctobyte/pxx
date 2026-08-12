@@ -322,6 +322,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
+	# range is a VALUE — a lazy SEQUENCE: re-iterable, indexable, len-able,
+	# sliceable, with constant-time membership. NOT a cursor (see the test).
+	./$(COMPILER) test/test_nilpy_range_as_a_value.npy /tmp/test_nilpy_rangeval26
+	test "$$(/tmp/test_nilpy_rangeval26)" = "$$(printf '%b' 'range(0, 3)\nrange(0, 10, 2)\nrange(5, 0)\n[0, 1, 2]\n[0, 1, 2]\n3 0 1 2\nTrue False False\n4 [0, 3, 6, 9]\n0 []\n[3, 2, 1]\nTrue True\nTrue False\nrange(2, 5)\n[2, 3, 4]\nrange(0, 10, 2) [0, 2, 4, 6, 8]\nrange(7, 10)\n1000000000 999999999 True False\n10 2 8\n[1, 2, 3] (0, 1, 2)\nFalse True\n[3, 2, 1, 0]\n[0, 2, 4, 6]\n[(0, \0047a\0047), (1, \0047b\0047), (2, \0047c\0047)]\n[(1, 0), (2, 1)]\n[\00470\0047, \00471\0047, \00472\0047]\n[0, 2, 4]\n[0, 1, 2]\n[0, 1, 2, 0, 1, 2]\n[0, 1, 2, 3]\n[0, 1, 2]\n[0, 1]\n7')"
 	# map/filter/enumerate/zip/reversed are LAZY: an early break never reaches a
 	# raise past it, a bound cursor resumes where it parked, len(map(...)) is a
 	# TypeError, and each one reports CPython's own type name.
@@ -5417,6 +5421,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
+	# range is a VALUE — a lazy SEQUENCE: re-iterable, indexable, len-able,
+	# sliceable, with constant-time membership. NOT a cursor (see the test).
+	./$(COMPILER) test/test_nilpy_range_as_a_value.npy /tmp/test_nilpy_rangeval26
+	test "$$(/tmp/test_nilpy_rangeval26)" = "$$(printf '%b' 'range(0, 3)\nrange(0, 10, 2)\nrange(5, 0)\n[0, 1, 2]\n[0, 1, 2]\n3 0 1 2\nTrue False False\n4 [0, 3, 6, 9]\n0 []\n[3, 2, 1]\nTrue True\nTrue False\nrange(2, 5)\n[2, 3, 4]\nrange(0, 10, 2) [0, 2, 4, 6, 8]\nrange(7, 10)\n1000000000 999999999 True False\n10 2 8\n[1, 2, 3] (0, 1, 2)\nFalse True\n[3, 2, 1, 0]\n[0, 2, 4, 6]\n[(0, \0047a\0047), (1, \0047b\0047), (2, \0047c\0047)]\n[(1, 0), (2, 1)]\n[\00470\0047, \00471\0047, \00472\0047]\n[0, 2, 4]\n[0, 1, 2]\n[0, 1, 2, 0, 1, 2]\n[0, 1, 2, 3]\n[0, 1, 2]\n[0, 1]\n7')"
 	# map/filter/enumerate/zip/reversed are LAZY: an early break never reaches a
 	# raise past it, a bound cursor resumes where it parked, len(map(...)) is a
 	# TypeError, and each one reports CPython's own type name.

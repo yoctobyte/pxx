@@ -2192,6 +2192,12 @@ begin
         node := FindProc('pyvar_contains')
       else if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
         node := FindProc('pydictcontains')
+      else if (FindUClass('TPyRange') >= 0) and
+              (ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+        { `x in range(...)` is CONSTANT time in CPython — one modulo, not a
+          scan — which is the whole reason a range is worth having as a value
+          rather than as a materialised list. }
+        node := FindProc('pyrange_contains')
       else if (PyBytesCi >= 0) and
               (ResolveNodeRec(right) = REC_UCLASS_BASE + PyBytesCi) then
         { BYTES: a bytes subsequence or an integer byte value. Without its own
@@ -7632,6 +7638,11 @@ begin
      (ResolveNodeRec(node) = REC_UCLASS_BASE + iterCi) then Exit;
   if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
     Result := PyCallProc1('pyiter_of_str', node)
+  else if (tk = tyClass) and (FindUClass('TPyRange') >= 0) and
+          (ResolveNodeRec(node) = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+    { a RANGE is a sequence, not a list — `zip(range(3), xs)` must not try to
+      read its three Int64 fields as a TPyList header }
+    Result := PyCallProc1('pyiter_of_range', node)
   else if tk = tyClass then
     Result := PyCallProc1('pyiter_of_list', node)
   else
@@ -7728,13 +7739,17 @@ function PyClassWantsIntIndex(ci: Integer): Boolean;
   and so is a user class's `__getitem__` argument — Python hands both the object
   itself, and coercing either through `__index__` would silently change which
   entry a program means. str is handled on its own path (PyMakeStrIndex). }
-var listCi, bytesCi: Integer;
+var listCi, bytesCi, rangeCi: Integer;
 begin
   Result := False;
   if ci < 0 then Exit;
   listCi := FindUClass('TPyList');
   bytesCi := FindUClass('TPyBytes');
-  Result := ((listCi >= 0) and (ci = listCi)) or ((bytesCi >= 0) and (ci = bytesCi));
+  { ...and a RANGE, which is a sequence in exactly this sense: r[i] is a
+    POSITION, so an index object is asked for its __index__ like a list's is. }
+  rangeCi := FindUClass('TPyRange');
+  Result := ((listCi >= 0) and (ci = listCi)) or ((bytesCi >= 0) and (ci = bytesCi))
+            or ((rangeCi >= 0) and (ci = rangeCi));
 end;
 
 function PyIndexCoerce(n: Integer): Integer;
@@ -7921,6 +7936,8 @@ begin
   if mci < 0 then Exit;
   listCi := FindUClass('TPyList');
   if mci = listCi then PyIndexSeqKindCi := 'list'
+  else if (FindUClass('TPyRange') >= 0) and (mci = FindUClass('TPyRange')) then
+    PyIndexSeqKindCi := 'range'
   else if mci = PyBytesCi then PyIndexSeqKindCi := 'bytearray';
 end;
 
@@ -8005,7 +8022,12 @@ begin
   listCi  := FindUClass('TPyList');
   bytesCi := PyBytesCi;
   Result := ((listCi >= 0) and (rec = REC_UCLASS_BASE + listCi)) or
-            ((bytesCi >= 0) and (rec = REC_UCLASS_BASE + bytesCi));
+            ((bytesCi >= 0) and (rec = REC_UCLASS_BASE + bytesCi)) or
+            { a RANGE slices too, and answers a range. Without this the bracket
+              was claimed by the default-property path, which demands a ']' and
+              reported "Expected: ]" at the slice colon. }
+            ((FindUClass('TPyRange') >= 0) and
+             (rec = REC_UCLASS_BASE + FindUClass('TPyRange')));
 end;
 
 { The sentinel an omitted bound is compiled to; pylib's PySliceBounds turns it
@@ -8068,6 +8090,23 @@ begin
     begin
       pname := 'pylist_slice';
       retTk := tyClass;
+    end
+    else if (FindUClass('TPyRange') >= 0) and
+            (rec = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+    begin
+      { Slicing a range answers a RANGE, not a list — `range(10)[2:5]` is
+        `range(2, 5)` in CPython, so slices compose without materialising.
+        pyrange_slice always takes an explicit step, so the `_step` suffix
+        convention does not apply and an omitted step becomes a literal 1. }
+      pname := 'pyrange_slice';
+      retTk := tyClass;
+      suffix := '';
+      if stepNode < 0 then
+      begin
+        stepNode := AllocNode(AN_INT_LIT);
+        ASTIVal[stepNode] := 1;
+        ASTTk[stepNode] := Ord(tyInt64);
+      end;
     end;
   end;
   if pname = '' then Error('Nil Python: this value cannot be sliced');
@@ -14377,35 +14416,14 @@ end;
   (the .append/.count history), and the cursor is reached from the desugarer
   where the receiver's class is already known. Errors out naming the routine,
   because a missing pylib entry here means the unit did not load. }
-{ Which SPELLING of a cursor constructor fits this iterable. `base` is the
-  variant-taking entry (`pymap_iter`, `pyfilter_iter`, `pyiter_map_conv`) and
-  the suffixed ones take a concrete type. Needed because these calls are built
-  through FindProc, which answers one proc by bare name and never consults
-  overloads ([[project_findproc_by_name_ignores_overloads]]) — so the argument
-  shape has to be spelled into the NAME.
-
-  A class that is neither a list nor a cursor (a dict, say) takes `_l`: that is
-  what the eager pymap_call did with it, so this is no worse rather than a new
-  hazard, and it keeps a class handle out of a Variant parameter — which is the
-  one combination nothing in the tree exercises. }
-function PyIterCtorName(const base: AnsiString; tk: TTypeKind;
-                        node: Integer): AnsiString;
-var rec, iterCi: Integer;
-begin
-  if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
-  begin Result := base + '_s'; Exit; end;
-  if tk = tyClass then
-  begin
-    rec := ResolveNodeRec(node);
-    iterCi := FindUClass('TPyIter');
-    if (iterCi >= 0) and (rec = REC_UCLASS_BASE + iterCi) then
-      Result := base + '_i'
-    else
-      Result := base + '_l';
-    Exit;
-  end;
-  Result := base;      { a variant / untyped iterable — decided at run time }
-end;
+{ PyIterCtorName is GONE. map()/filter() used to pick a pylib entry per
+  argument SHAPE (`_l` / `_s` / `_i` / the variant one) because these calls are
+  built through FindProc, which is not overload-aware. Then `range` became a
+  value and the picker had to learn a fourth class that is a sequence but not a
+  list — at which point one conversion (PyMakeIterOf) and ONE entry taking a
+  cursor is plainly the right shape, and is what enumerate()/zip() already did.
+  Four spellings and a type-dispatch deleted; see
+  devdocs/dev/normalise-dont-special-case.md. }
 
 function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer;
 var pi, a: Integer;
@@ -14730,7 +14748,7 @@ end;
 
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
                        forTokIdx: Integer): Integer;
-var contNode, ci, dictCi, listCi, fileCi, iterCi, symIdx, cSym, iSym, nSym: Integer;
+var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, nSym: Integer;
     enumStartNode, enumStartSym: Integer;   { `enumerate(xs, START)` }
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
@@ -14858,6 +14876,7 @@ begin
   dictCi := FindUClass('TPyDict');
   fileCi := FindUClass('TPyFile');
   iterCi := FindUClass('TPyIter');
+  rangeCi := FindUClass('TPyRange');
   isIter := False;
   { A VARIANT container — `for n in num` where num is Any — is unboxed to
     TPyList via pylib pylist_v. The corpus reaches this only under an
@@ -14949,6 +14968,16 @@ begin
       counter, `continue`, `break` — is unchanged.
       feature-nilpy-lazy-iterator-objects }
     isIter := (iterCi >= 0) and (ci = iterCi);
+    { `for i in r` where r is a RANGE VALUE. Not the `for i in range(...)`
+      header — that is recognised in PyParseFor and stays a counted loop; this
+      is the bound form, which had no path at all while range was not a value.
+      A fresh cursor per loop, which is what makes the range re-iterable. }
+    if (rangeCi >= 0) and (ci = rangeCi) then
+    begin
+      contNode := PyCallProc1('pyiter_of_range', contNode);
+      ci := iterCi;
+      isIter := True;
+    end;
     { `for line in f:` over a FILE. CPython iterates a file object by LINE, so
       read the lines and iterate that list — the same shape the dict arm just
       below uses to iterate its keys. Without it the loop reached the generic
@@ -15868,43 +15897,29 @@ end;
   `sum(range(3))` failed with "undefined variable (range)" — range is not a
   value in NilPy, it exists only as the counted-loop lowering in a `for` header.
 
-  A WHITELIST, not "any call argument". CPython's range is LAZY and reprs as
-  `range(0, 3)`, so materialising it is only invisible where the callee does
-  nothing but iterate. `print(range(3))` is the case that is NOT invisible, and
-  it is currently a compile error (on `pinned` too) rather than a wrong answer —
-  widening this to every call position would silently turn it into `[0, 1, 2]`.
-  Each name here is a promise that the callee only ever iterates its argument. }
-function PyRangeIterConsumer(const nm: AnsiString): Boolean;
-begin
-  PyRangeIterConsumer := CaseEqual(nm, 'list') or CaseEqual(nm, 'sum') or
-                         CaseEqual(nm, 'max') or CaseEqual(nm, 'min') or
-                         CaseEqual(nm, 'sorted') or CaseEqual(nm, 'tuple') or
-                         CaseEqual(nm, 'set') or CaseEqual(nm, 'len') or
-                         CaseEqual(nm, 'any') or CaseEqual(nm, 'all') or
-                         CaseEqual(nm, 'reversed');
-end;
+  GONE, and deliberately: this used to be a WHITELIST of callees that promise
+  to do nothing but iterate their argument (`list`, `sum`, `len`, `sorted`, …),
+  because `range(...)` had no value form and could only be MATERIALISED where
+  materialising was invisible. `print(range(3))` was outside the list and so
+  was a compile error rather than a wrong answer — the honest failure, but a
+  failure.
 
-function PyRangeAsListWanted: Boolean;
-begin
-  PyRangeAsListWanted :=
-    (TokPos >= 3) and (Tokens[TokPos - 2].Kind = tkLParen) and
-    (Tokens[TokPos - 3].Kind = tkIdent) and
-    PyRangeIterConsumer(GetTokenStr(TokPos - 3));
-end;
+  TPyRange removed the reason for the list to exist. A range is now an ordinary
+  value in every position, so there is nothing to gate: one mechanism where
+  there were two, which is the direction devdocs/dev/normalise-dont-special-case
+  asks for. }
 
 { `range(stop)` / `range(start, stop)` / `range(start, stop, step)` as a LIST.
 
-  NilPy's range is not a value: it exists only as the counted-loop lowering in a
-  `for` header, so `list(range(3))` failed with "undefined variable (range)"
-  (bug-nilpy-missing-builtins-step-slicing-range-into-list, group 2 — five of
-  its thirteen cases).
+  Builds a TPyRange — CPython's lazy, re-iterable, indexable SEQUENCE — and is
+  reached from EVERY expression position. The name is historical: it built a
+  LIST until feature-nilpy-range-as-a-value, and only inside a whitelist of
+  callees that promised to merely iterate it, because there was no range value
+  to hand back.
 
-  Reached ONLY through PyRangeAsListWanted, i.e. only when the enclosing call is
-  `list(`. CPython's range is lazy and prints as `range(0, 3)`, so materialising
-  every range would have replaced a loud compile error with a quietly different
-  `print(range(3))` — the trade this frontend deliberately does not make. The
-  enclosing `list()` then receives a TPyList and its ordinary copy overload
-  applies, so nothing else had to learn about range at all.
+  The `for i in range(...)` HEADER never comes here: PyParseFor recognises it
+  first and keeps the counted-loop lowering, where the bounds are induction
+  variables rather than an object.
 
   Bounds go through pyvar_to_int (PyUnboxRangeBound) for the same reason the for
   header does: an unannotated parameter is a VARIANT, and comparing the counter
@@ -15946,8 +15961,14 @@ begin
   lo   := PyUnboxRangeBound(lo);
   hi   := PyUnboxRangeBound(hi);
   step := PyUnboxRangeBound(step);
-  pi := FindProc('pyrange_list');
-  if pi < 0 then Error('Nil Python: pyrange_list (pylib) not loaded');
+  { A RANGE VALUE, not a list. It used to materialise, and only in the call
+    positions a whitelist promised were iterate-only (PyRangeIterConsumer,
+    deleted with this change) — because there was no range value to hand back.
+    TPyRange is that value: lazy, re-iterable, indexable and len-able, so every
+    position works and `print(range(3))` says `range(0, 3)` instead of being a
+    compile error. feature-nilpy-range-as-a-value }
+  pi := FindProc('pyrange3');
+  if pi < 0 then Error('Nil Python: pyrange3 (pylib) not loaded');
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := lo;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := hi;
   a2 := AllocNode(AN_ARG); ASTLeft[a2] := step; ASTRight[a2] := -1;
@@ -15957,6 +15978,7 @@ begin
   ASTIVal[node] := pi;
   ASTLeft[node] := a0;
   ASTTk[node] := Ord(Procs[pi].RetType);
+  ASTRight[node] := ProcRetRecId[pi];
   LastExprTk := IntToTypeKind(ASTTk[node]);
   PyParseRangeList := node;
 end;

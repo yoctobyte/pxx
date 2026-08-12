@@ -6673,6 +6673,29 @@ begin
         lists was a pointer compare and answered False for equal lists
         (bug-a-nilpy-container-equality-compares-identity). pylib's PyVarEq
         already compares strings by content, so the element rule is settled. }
+      { Two RANGES compare by the SEQUENCE they represent, not by handle — so
+        range(0) == range(2, 2, 3) is True and an equal pair built separately
+        is too. Same failure the list rule above fixes, and it is checked first
+        because a range is a class handle like any other and would otherwise
+        fall into the pointer compare. }
+      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
+         ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+         (FindUClass('TPyRange') >= 0) and
+         (ResolveNodeRec(ASTLeft[node]) = REC_UCLASS_BASE + FindUClass('TPyRange')) and
+         (ResolveNodeRec(ASTRight[node]) = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+      begin
+        cpi := FindProc('pyrange_eq');
+        if cpi < 0 then Error('Nil Python: pyrange_eq (pylib) not loaded');
+        left := IRLowerAST(ASTLeft[node]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyClass));
+        right := IRLowerAST(ASTRight[node]);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyClass));
+        IRB[first] := last;
+        Result := IRAppendCall(cpi, first, -1, Ord(tyBoolean));
+        if Integer(ASTIVal[node]) = Ord(tkNeq) then
+          Result := IRAppend(IR_NOT, Result, -1, -1, 0, Ord(tyBoolean));
+        Exit;
+      end;
       if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (IRNodePyListRec(ASTLeft[node]) >= 0) and

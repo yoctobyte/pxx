@@ -263,3 +263,4 @@
 2026-08-12T16:30:44Z  v263  c54affa87a9b82dce7d931370ab02bcd33fe56cb21ef21bef2fac9f9268d6c7f  89724e0b725e02497bd75119e3f175e34e2f1e43  docs(progress): handoff prompt for the lazy-iterator umbrella
 2026-08-12T17:51:13Z  v264  60d346199a7be7f642f89d79fa16de3540216e5980f55d56b91941ff9643166b  0e171a8d1a96da53209f3d3ef061c70f34acf509  feat(N): TPyIter cursors — iter()/next(), and a for-loop that consumes one
 2026-08-12T18:28:28Z  v265  bd3c40477c735d9a08a0c881e1ab560db399b4ee6a77b0260374ab257e4906e0  0579aabd7920c536cd9e12ba83129280b695c573  feat(N): map() and filter() are lazy cursors
+2026-08-12T19:57:07Z  v266  34788000ee828ca592496a381758db9f9fdb4cfa54fd36214495f9197ddd4d88  79da7b65d91eeeb2be868728f1254dbb4577be34  docs(progress): record the shas the resolves landed as

@@ -124,6 +124,11 @@ function max(l: TPyList; key: Pointer = nil): Variant; overload;
 function sorted(it: TPyIter; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
 function min(it: TPyIter; key: Pointer = nil): Variant; overload;
 function max(it: TPyIter; key: Pointer = nil): Variant; overload;
+{ ...and over a RANGE, which is a sequence rather than a cursor but reaches
+  these the same way: materialise once, then the routine that already exists. }
+function sorted(r: TPyRange; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
+function min(r: TPyRange; key: Pointer = nil): Variant; overload;
+function max(r: TPyRange; key: Pointer = nil): Variant; overload;
 
 { `map(f, xs)` / `filter(f, xs)` over an arbitrary callable VALUE -- the
   general form beside the existing map(int|str|float, xs) conversion shims.
@@ -139,16 +144,13 @@ function pyfilter_call(key: Pointer; l: TPyList): TPyList;
   no unit-initialisation order to depend on. }
 function pymap_iter(key: Pointer; const v: Variant): TPyIter;
 function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
-{ Four SPELLINGS, not four overloads: the parser arm reaches these through
-  FindProc, which answers one proc by bare name and never consults overloads
-  ([[project_findproc_by_name_ignores_overloads]]), so the arm has to name the
-  entry that matches the iterable's static type — exactly as the existing
-  pymap_int/str/float shims are chosen. }
-function pymap_iter_l(key: Pointer; l: TPyList): TPyIter;
-function pymap_iter_s(key: Pointer; const src: AnsiString): TPyIter;
+{ ONE entry each, taking a cursor — the frontend converts the iterable once
+  (PyMakeIterOf). There was briefly a spelling per argument type here, because
+  the parser arm reaches these through FindProc and it never consults overloads
+  ([[project_findproc_by_name_ignores_overloads]]); `range` arriving as a
+  fourth iterable shape is what showed that dispatch to be the wrong mechanism
+  rather than merely a verbose one. }
 function pymap_iter_i(key: Pointer; up: TPyIter): TPyIter;
-function pyfilter_iter_l(key: Pointer; l: TPyList): TPyIter;
-function pyfilter_iter_s(key: Pointer; const src: AnsiString): TPyIter;
 function pyfilter_iter_i(key: Pointer; up: TPyIter): TPyIter;
 
 { Build a closure from raw SOURCE text — the compiled frontend's lowering of a
@@ -4884,6 +4886,8 @@ begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := sorted(TPyList(o), key, reverse); Exit; end;
     if o is TPyDict then begin Result := sorted(TPyDict(o), key, reverse); Exit; end;
+    if o is TPyRange then begin Result := sorted(TPyRange(o), key, reverse); Exit; end;
+    if o is TPyIter then begin Result := sorted(pyiter_drain(TPyIter(o)), key, reverse); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := sorted(pystr_of(v), key, reverse); Exit; end;
   Result := TPyList.Create;      { None / empty }
@@ -4968,34 +4972,10 @@ begin
   Result := pyiter_filter(key, v);
 end;
 
-function pymap_iter_l(key: Pointer; l: TPyList): TPyIter;
-begin
-  PyIterCallHook := @PyCallKey1;
-  Result := pyiter_map_l(key, l);
-end;
-
-function pymap_iter_s(key: Pointer; const src: AnsiString): TPyIter;
-begin
-  PyIterCallHook := @PyCallKey1;
-  Result := pyiter_map_s(key, src);
-end;
-
 function pymap_iter_i(key: Pointer; up: TPyIter): TPyIter;
 begin
   PyIterCallHook := @PyCallKey1;
   Result := pyiter_map_i(key, up);
-end;
-
-function pyfilter_iter_l(key: Pointer; l: TPyList): TPyIter;
-begin
-  PyIterCallHook := @PyCallKey1;
-  Result := pyiter_filter_l(key, l);
-end;
-
-function pyfilter_iter_s(key: Pointer; const src: AnsiString): TPyIter;
-begin
-  PyIterCallHook := @PyCallKey1;
-  Result := pyiter_filter_s(key, src);
 end;
 
 function pyfilter_iter_i(key: Pointer; up: TPyIter): TPyIter;
@@ -5017,6 +4997,21 @@ end;
 function max(it: TPyIter; key: Pointer): Variant; overload;
 begin
   Result := max(pyiter_drain(it), key);
+end;
+
+function sorted(r: TPyRange; key: Pointer; reverse: Boolean): TPyList; overload;
+begin
+  Result := sorted(list(r), key, reverse);
+end;
+
+function min(r: TPyRange; key: Pointer): Variant; overload;
+begin
+  Result := min(list(r), key);
+end;
+
+function max(r: TPyRange; key: Pointer): Variant; overload;
+begin
+  Result := max(list(r), key);
 end;
 
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;

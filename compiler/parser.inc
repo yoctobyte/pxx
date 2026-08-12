@@ -941,7 +941,6 @@ function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sy
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
 function PyParseVariadicMinMax(const nm: AnsiString): Integer; forward; { Nil Python min/max at 3+ args (pyparser.inc) }
-function PyRangeAsListWanted: Boolean; forward;   { Nil Python: is this range( inside a list( ? (pyparser.inc) }
 function PyParseRangeList: Integer; forward;      { Nil Python: list(range(...)) materialised (pyparser.inc) }
 function PyAnyProcWithArity(const nm: AnsiString; n: Integer): Boolean; forward; { any routine of this name with exactly n params (pyparser.inc) }
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
@@ -10617,9 +10616,14 @@ begin
         if IntToTypeKind(ASTTk[CurASTNode]) = tyClass then
         begin
           atRecv := ResolveNodeRec(CurASTNode);
+          { TPyRange joins the pylib container classes here: it HAS a matching
+            len() overload, so it rewinds into the ordinary overload path like
+            they do. Without it a range fell into the no-__len__ arm below and
+            `len(range(3))` raised "not a container". }
           if (atRecv >= REC_UCLASS_BASE) and
              (atRecv <> REC_UCLASS_BASE + FindUClass('TPyList')) and
              (atRecv <> REC_UCLASS_BASE + FindUClass('TPyDict')) and
+             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyRange')) and
              (atRecv <> REC_UCLASS_BASE + FindUClass('TPyBytes')) then
           begin
             { a CURSOR: CPython answers `object of type 'map' has no len()`,
@@ -11161,9 +11165,9 @@ begin
             so they ride the same cursor with the conversion CODE in place of a
             function pointer (pyiter_map_conv_*). The entry is picked by the
             iterable's static type because FindProc is not overload-aware. }
-          mapProc := FindProc(PyIterCtorName('pyiter_map_conv', LastExprTk,
-                                             CurASTNode));
-          if mapProc < 0 then Error('Nil Python: pylib (pyiter_map_conv_*) not loaded');
+          CurASTNode := PyMakeIterOf(CurASTNode);
+          mapProc := FindProc('pyiter_map_conv_i');
+          if mapProc < 0 then Error('Nil Python: pylib (pyiter_map_conv_i) not loaded');
           node := AllocNode(AN_CALL);
           ASTIVal[node] := mapProc;
           exprNode := AllocNode(AN_INT_LIT);
@@ -11189,8 +11193,9 @@ begin
           Expect(tkComma, ',');
           PyParseBoolExpr;
           Expect(tkRParen, ')');
-          mapProc := FindProc(PyIterCtorName('pymap_iter', LastExprTk, CurASTNode));
-          if mapProc < 0 then Error('Nil Python: pyeval (pymap_iter_*) not loaded');
+          CurASTNode := PyMakeIterOf(CurASTNode);
+          mapProc := FindProc('pymap_iter_i');
+          if mapProc < 0 then Error('Nil Python: pyeval (pymap_iter_i) not loaded');
           node := AllocNode(AN_CALL);
           ASTIVal[node] := mapProc;
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
@@ -11226,8 +11231,9 @@ begin
         Expect(tkComma, ',');
         PyParseBoolExpr;
         Expect(tkRParen, ')');
-        mapProc := FindProc(PyIterCtorName('pyfilter_iter', LastExprTk, CurASTNode));
-        if mapProc < 0 then Error('Nil Python: pyeval (pyfilter_iter_*) not loaded');
+        CurASTNode := PyMakeIterOf(CurASTNode);
+        mapProc := FindProc('pyfilter_iter_i');
+        if mapProc < 0 then Error('Nil Python: pyeval (pyfilter_iter_i) not loaded');
         node := AllocNode(AN_CALL);
         ASTIVal[node] := mapProc;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
@@ -14803,18 +14809,18 @@ begin
     CurASTNode := PyParseVariadicMinMax(CurTok.SVal)
   else if PyExprMode and PyIsIdent('range') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen) and (FindSym('range') < 0) and
-          (not PyUserShadowsProc('range')) and PyRangeAsListWanted then
-    { `list(range(...))` — range MATERIALISED, because the program has already
-      asked for a list. NilPy's range is otherwise not a value at all (it exists
-      only as the counted-loop lowering in a `for` header), so this failed with
-      "undefined variable (range)"
-      (bug-nilpy-missing-builtins-step-slicing-range-into-list, group 2).
+          (not PyUserShadowsProc('range')) then
+    { `range(...)` as a VALUE — a TPyRange, lazy and re-iterable, in EVERY
+      position. No gate: the old arm only fired inside a whitelist of callees
+      that promised to merely iterate their argument, because there was no
+      range value to produce and materialising elsewhere would have turned a
+      loud compile error into a quiet `[0, 1, 2]` where CPython prints
+      `range(0, 3)`. feature-nilpy-range-as-a-value
 
-      Gated on PyRangeAsListWanted — the enclosing call being `list(` —
-      deliberately, rather than making every range a list: CPython's range is
-      LAZY and prints as `range(0, 3)`, so a general materialisation would turn
-      this loud compile error into a quietly different `print(range(3))`, which
-      is the worse failure. }
+      The `for i in range(...)` HEADER is recognised earlier (PyParseFor) and
+      keeps its counted-loop lowering — a range there is a loop bound, not a
+      value, and lowering it as one would put an object where an induction
+      variable belongs. }
     CurASTNode := PyParseRangeList
   else if PyExprMode and PyIsIdent('enumerate') and (TokPos < TokCount) and
           (Tokens[TokPos].Kind = tkLParen) and (FindSym('enumerate') < 0) and

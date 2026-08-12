@@ -54,6 +54,10 @@ const
   PYITER_FILTER = 5;
   PYITER_ENUM   = 6;
   PYITER_ZIP    = 7;
+  { a RANGE cursor holds no source object at all — FStart is the next value,
+    FStep the stride and FPos the number of values left, which is why a
+    range of a billion costs the same as a range of three. }
+  PYITER_RANGE  = 8;
 
 type
   TPyVarRec = record
@@ -552,12 +556,40 @@ type
     FUp: TPyIter;            { upstream cursor (MAP, FILTER, ENUM, ZIP left) }
     FUp2: TPyIter;           { ZIP right }
     FKey: Pointer;           { the stored callable (MAP, FILTER) — see PyIterCallHook }
-    FPos: Integer;           { leaf position / ENUM counter }
-    FStart: Int64;           { enumerate(xs, START) }
+    FPos: Integer;           { leaf position / ENUM counter / RANGE values left }
+    FStart: Int64;           { enumerate(xs, START) / RANGE next value }
+    FStep: Int64;            { RANGE stride }
     FBox: TPyList;           { the one-slot prefetch }
     FHas: Boolean;           { FBox holds a prefetched value }
     FEnd: Boolean;           { the source is exhausted — never restarts }
     constructor Create;
+  end;
+
+  { CPython's `range` — a lazy SEQUENCE, not a cursor, and the distinction is
+    the whole reason it is its own class beside TPyIter. A range is
+    RE-ITERABLE (iterating one twice yields the same values twice), INDEXABLE,
+    len-able and sliceable; a cursor is none of those and is consumed once.
+    Both are lazy, and that shared word is what made the two look like one
+    problem — they are not.
+
+    Three Int64 fields and no storage: `range(1000000000)` costs 24 bytes and
+    `r[999999999]` is one multiply. NilPy used to have no range VALUE at all —
+    it existed only as the counted-loop lowering in a `for` header, so
+    `r = range(3)` was `undefined variable (range)` and `list(range(3))` needed
+    a hard-coded whitelist of "callees that only iterate their argument"
+    (PyRangeIterConsumer, now deleted). feature-nilpy-range-as-a-value. }
+  TPyRange = class
+  public
+    FStart: Int64;
+    FStop: Int64;
+    FStep: Int64;
+    constructor Create;
+    { r[i] — one multiply, no storage. Spelled `at` and exposed as the DEFAULT
+      property for the same reason TPyList and TPyBytes are: that is the shape
+      the frontend's subscript path already knows how to call, so indexing a
+      range needs no new mechanism. }
+    function at(i: Int64): Int64;
+    property Items[i: Int64]: Int64 read at; default;
   end;
 
 { Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
@@ -948,20 +980,15 @@ function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
   conversion code in FStart: 1 = int, 2 = str, 3 = float. Same laziness, no
   dependency on pyeval's callable dispatch. }
 function pyiter_map_conv(conv: Int64; const v: Variant): TPyIter;
-{ The same constructors reached by the iterable's STATIC type. The frontend
-  builds these calls through FindProc, which is not overload-aware, so each
-  argument shape needs its own NAME — the convention the pymap_int /
-  pystr_expandtabs_n families already follow here. `_i` is the primitive; `_l`
-  and `_s` just wrap a leaf cursor around the source first. }
+{ The forms the frontend builds: ONE entry each, taking a cursor, because the
+  frontend converts the iterable once (PyMakeIterOf). There used to be a
+  spelling per argument type (`_l`, `_s`, the variant one) picked by a helper,
+  since these calls go through FindProc and it is not overload-aware — that
+  collapsed when `range` arrived as a fourth iterable shape and made the
+  per-type dispatch plainly the wrong mechanism. }
 function pyiter_map_i(key: Pointer; up: TPyIter): TPyIter;
-function pyiter_map_l(key: Pointer; l: TPyList): TPyIter;
-function pyiter_map_s(key: Pointer; const src: AnsiString): TPyIter;
 function pyiter_filter_i(key: Pointer; up: TPyIter): TPyIter;
-function pyiter_filter_l(key: Pointer; l: TPyList): TPyIter;
-function pyiter_filter_s(key: Pointer; const src: AnsiString): TPyIter;
 function pyiter_map_conv_i(conv: Int64; up: TPyIter): TPyIter;
-function pyiter_map_conv_l(conv: Int64; l: TPyList): TPyIter;
-function pyiter_map_conv_s(conv: Int64; const src: AnsiString): TPyIter;
 function pyiter_has(it: TPyIter): Boolean;
 function pyiter_take(it: TPyIter): Variant;
 { `next(it)` / `next(it, default)`: advance one step. Exhaustion RAISES
@@ -980,6 +1007,32 @@ function pyiter_is(const v: Variant): Boolean;
   a doctest or a logged debug line sees it. }
 function pyiter_repr(it: TPyIter): AnsiString;
 function pyiter_typename(it: TPyIter): AnsiString;
+
+{ ---- range (TPyRange) --------------------------------------------------
+  A lazy SEQUENCE. See the class. Everything here is arithmetic on three
+  Int64s — nothing is ever materialised, so the cost does not depend on the
+  range's length. }
+function pyrange1(stop: Int64): TPyRange;
+function pyrange2(start: Int64; stop: Int64): TPyRange; overload;
+function pyrange3(start: Int64; stop: Int64; step: Int64): TPyRange; overload;
+{ How many values the range yields — CPython's own formula, clamped at 0, so
+  range(5, 0) is empty rather than negative. }
+function pyrange_len(r: TPyRange): Int64;
+{ r[i], with Python's negative indexing and an IndexError past the end. }
+function pyrange_at(r: TPyRange; i: Int64): Int64;
+{ `x in r` in CONSTANT time: membership is one modulo, not a scan, which is
+  what makes `999999999 in range(10 ** 9)` finish. }
+function pyrange_contains(r: TPyRange; const v: Variant): Boolean;
+{ r[lo:hi:step] — CPython answers a RANGE, not a list, so slicing composes. }
+function pyrange_slice(r: TPyRange; lo: Int64; hi: Int64; step: Int64): TPyRange;
+{ Two ranges are equal when they yield the same SEQUENCE, so range(0) equals
+  range(2, 2, 3) and range(0, 3, 2) equals range(0, 4, 2). CPython's rule. }
+function pyrange_eq(a: TPyRange; b: TPyRange): Boolean;
+function pyrange_repr(r: TPyRange): AnsiString;
+{ Iterating one yields a CURSOR — a fresh one each time, which is what makes a
+  range re-iterable where a cursor is not. }
+function pyiter_of_range(r: TPyRange): TPyIter;
+function pyrange_is(const v: Variant): Boolean;
 { `len(map(...))` — CPython's TypeError, word for word. A FUNCTION returning
   Int64 so it can stand in for the whole len() expression at the call site, the
   same shape PyIndexTypeError uses; and a RUNTIME raise rather than a compile
@@ -1315,6 +1368,9 @@ function list(b: TPyBytes): TPyList; overload;
 { `list(<cursor>)` — CONSUMES it, leaving it exhausted, which is CPython's
   single-consumption rule. See pyiter_drain. }
 function list(it: TPyIter): TPyList; overload;
+{ `list(range(3))` — the shape that used to need a hard-coded whitelist of
+  "callees that only iterate their argument", because range was not a value. }
+function list(r: TPyRange): TPyList; overload;
 { tuple(iterable) — the same sequence with the TUPLE flag set. The tuple TYPE
   existed (literals work, and FKind distinguishes it) but the CONSTRUCTOR did
   not, so `tuple([1, 2])` failed with 'undefined variable (tuple)'.
@@ -1333,6 +1389,7 @@ function tuple(b: TPyBytes): TPyList; overload;
   bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked }
 function tuple(const v: Variant): TPyList; overload;
 function tuple(it: TPyIter): TPyList; overload;
+function tuple(r: TPyRange): TPyList; overload;
 { pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
 { pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
@@ -1456,6 +1513,7 @@ function pymath_copysign(x, y: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
+function sum(r: TPyRange): Variant; overload;
 { ...and over a CURSOR, declared after the list forms on purpose — see the note
   in the cursor block above. Drains, then the routine that already exists. }
 function sum(it: TPyIter): Variant; overload;
@@ -1481,6 +1539,8 @@ function any(l: TPyList): Boolean;
 function all(l: TPyList): Boolean;
 function any(it: TPyIter): Boolean; overload;
 function all(it: TPyIter): Boolean; overload;
+function any(r: TPyRange): Boolean; overload;
+function all(r: TPyRange): Boolean; overload;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -1499,6 +1559,7 @@ function reversed(const s: AnsiString): TPyIter; overload;
 { reversed(<variant>) — a VARIANT receiver, same shape and same crash as
   tuple(<variant>) above. Declared AFTER the two typed forms, like every other
   cursor overload here: order decides which one a variant unwraps into. }
+function reversed(r: TPyRange): TPyIter; overload;
 function reversed(const v: Variant): TPyIter; overload;
 { `hex(n)` — Python spells it with the 0x prefix and lower-case digits, and
   spells a negative as -0x… rather than in two's complement. }
@@ -1531,6 +1592,10 @@ function len(const s: AnsiString): Integer; overload;
   on such a value was a compile error listing only the class and string
   overloads, which is a wall for ordinary Python. }
 function len(const v: Variant): Integer; overload;
+{ `len(range(...))` is legal and cheap — a range knows its length without
+  producing a single value. This is exactly where a range differs from a
+  cursor, whose len() is a TypeError. }
+function len(r: TPyRange): Integer; overload;
 function next(c: TPyCounter): Int64;
 { Python's `iter(x)` and `next(it[, default])` — the two builtins the cursor
   family finally gives somewhere to live
@@ -1547,6 +1612,7 @@ function iter(d: TPyDict): TPyIter; overload;
 function iter(b: TPyBytes): TPyIter; overload;
 function iter(const s: AnsiString): TPyIter; overload;
 function iter(const v: Variant): TPyIter; overload;
+function iter(r: TPyRange): TPyIter; overload;
 function next(it: TPyIter): Variant; overload;
 function next(it: TPyIter; const dflt: Variant): Variant; overload;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
@@ -3159,6 +3225,7 @@ begin
     `type(reversed(xs)).__name__` is 'list_reverseiterator', so the NAME comes
     from the kind, not from ClassName (which would answer 'TPyIter'). }
   else if o is TPyIter then Result := pyiter_typename(TPyIter(o))
+  else if o is TPyRange then Result := 'range'
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -3239,6 +3306,9 @@ begin
     ki := PPyVarRec(@key)^.Payload;      { list index is an integer key }
     Result := TPyList(o).at(ki);
   end
+  else if o is TPyRange then
+    { r[i] on a range held in a variant — arithmetic, not a lookup }
+    Result := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
   else if o is TPyBytes then
   begin
     { bytes/bytearray index -> the integer byte value. Missing this case made
@@ -4367,7 +4437,10 @@ begin
   begin
     o := TObject(pyvarobj(c));
     if o is TPyDict then Result := pydictcontains(TPyDict(o), v)
-    else if o is TPyList then Result := pycontains(TPyList(o), v);
+    else if o is TPyList then Result := pycontains(TPyList(o), v)
+    { a range answers membership in CONSTANT time — one modulo, no scan }
+    else if o is TPyRange then Result := pyrange_contains(TPyRange(o), v)
+    else if o is TPyIter then Result := pycontains(pyiter_drain(TPyIter(o)), v);
   end
   else if pyvartag(c) = 6 then
     Result := pystr_contains(pystr_of(c), pystr_of(v));
@@ -5189,6 +5262,10 @@ begin
   if pyvartag(v) <> 7 then
     raise TypeError.Create('max() argument is not iterable');
   o := TObject(pyvarobj(v));
+  { a RANGE and a CURSOR are both iterable — materialise once and fall through
+    to the list walk below rather than growing a second copy of it }
+  if (o <> nil) and (o is TPyRange) then o := TObject(list(TPyRange(o)));
+  if (o <> nil) and (o is TPyIter) then o := TObject(pyiter_drain(TPyIter(o)));
   if (o = nil) or (not (o is TPyList)) then
     raise TypeError.Create('max() argument is not iterable');
   n := TPyList(o).count;
@@ -5212,6 +5289,10 @@ begin
   if pyvartag(v) <> 7 then
     raise TypeError.Create('min() argument is not iterable');
   o := TObject(pyvarobj(v));
+  { a RANGE and a CURSOR are both iterable — materialise once and fall through
+    to the list walk below rather than growing a second copy of it }
+  if (o <> nil) and (o is TPyRange) then o := TObject(list(TPyRange(o)));
+  if (o <> nil) and (o is TPyIter) then o := TObject(pyiter_drain(TPyIter(o)));
   if (o = nil) or (not (o is TPyList)) then
     raise TypeError.Create('min() argument is not iterable');
   n := TPyList(o).count;
@@ -9059,6 +9140,9 @@ begin
     if o is TPyDict then begin Result := pyiter_of_list(TPyDict(o).keylist); Exit; end;
     if o is TPyBytes then begin Result := pyiter_of_list(list(TPyBytes(o))); Exit; end;
     if o is TPyFile then begin Result := pyiter_of_list(TPyFile(o).readlines); Exit; end;
+    { a RANGE hands back a FRESH cursor every time — that is what re-iterable
+      means, and it is why range is not itself a cursor }
+    if o is TPyRange then begin Result := pyiter_of_range(TPyRange(o)); Exit; end;
   end;
   PyTypeError(pyvartag(v), 'an iterable');
   Result := pyiter_of_list(TPyList.Create);
@@ -9133,16 +9217,6 @@ begin
   PXXObjRetain(key);
 end;
 
-function pyiter_map_l(key: Pointer; l: TPyList): TPyIter;
-begin
-  Result := pyiter_map_i(key, pyiter_of_list(l));
-end;
-
-function pyiter_map_s(key: Pointer; const src: AnsiString): TPyIter;
-begin
-  Result := pyiter_map_i(key, pyiter_of_str(src));
-end;
-
 function pyiter_filter_i(key: Pointer; up: TPyIter): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -9153,30 +9227,10 @@ begin
   PXXObjRetain(key);
 end;
 
-function pyiter_filter_l(key: Pointer; l: TPyList): TPyIter;
-begin
-  Result := pyiter_filter_i(key, pyiter_of_list(l));
-end;
-
-function pyiter_filter_s(key: Pointer; const src: AnsiString): TPyIter;
-begin
-  Result := pyiter_filter_i(key, pyiter_of_str(src));
-end;
-
 function pyiter_map_conv_i(conv: Int64; up: TPyIter): TPyIter;
 begin
   Result := pyiter_map_i(nil, up);
   Result.FStart := conv;
-end;
-
-function pyiter_map_conv_l(conv: Int64; l: TPyList): TPyIter;
-begin
-  Result := pyiter_map_conv_i(conv, pyiter_of_list(l));
-end;
-
-function pyiter_map_conv_s(conv: Int64; const src: AnsiString): TPyIter;
-begin
-  Result := pyiter_map_conv_i(conv, pyiter_of_str(src));
 end;
 
 function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
@@ -9315,6 +9369,16 @@ begin
     Result := True;
     Exit;
   end;
+  if it.FKind = PYITER_RANGE then
+  begin
+    if it.FPos <= 0 then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, it.FStart);
+    it.FStart := it.FStart + it.FStep;
+    Dec(it.FPos);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
   if it.FKind = PYITER_ZIP then
   begin
     { the LEFT element is consumed before the right is even asked for, which is
@@ -9369,6 +9433,175 @@ begin
     Result.append(pyiter_take(it));
 end;
 
+constructor TPyRange.Create;
+begin
+  PXXObjFinalizeHook := @PyObjFinalize;
+  FStart := 0;
+  FStop := 0;
+  FStep := 1;
+end;
+
+function TPyRange.at(i: Int64): Int64;
+begin
+  Result := pyrange_at(Self, i);
+end;
+
+function pyrange3(start: Int64; stop: Int64; step: Int64): TPyRange; overload;
+begin
+  if step = 0 then
+    raise ValueError.Create('range() arg 3 must not be zero');
+  Result := TPyRange.Create;
+  Result.FStart := start;
+  Result.FStop := stop;
+  Result.FStep := step;
+end;
+
+function pyrange1(stop: Int64): TPyRange;
+begin
+  Result := pyrange3(0, stop, 1);
+end;
+
+function pyrange2(start: Int64; stop: Int64): TPyRange; overload;
+begin
+  Result := pyrange3(start, stop, 1);
+end;
+
+function pyrange_len(r: TPyRange): Int64;
+var span, st: Int64;
+begin
+  Result := 0;
+  if r = nil then Exit;
+  if r.FStep > 0 then
+  begin
+    if r.FStop <= r.FStart then Exit;
+    span := r.FStop - r.FStart;
+    st := r.FStep;
+  end
+  else
+  begin
+    if r.FStop >= r.FStart then Exit;
+    span := r.FStart - r.FStop;
+    st := -r.FStep;
+  end;
+  { ceil(span / st) without floating point — the last value is start + (n-1)*step }
+  Result := (span + st - 1) div st;
+end;
+
+function pyrange_at(r: TPyRange; i: Int64): Int64;
+var n: Int64;
+begin
+  n := pyrange_len(r);
+  if i < 0 then i := i + n;      { Python counts back from the end }
+  if (i < 0) or (i >= n) then
+    raise IndexError.Create('range object index out of range');
+  Result := r.FStart + i * r.FStep;
+end;
+
+function pyrange_contains(r: TPyRange; const v: Variant): Boolean;
+var x, off: Int64; t: Int64;
+begin
+  Result := False;
+  if r = nil then Exit;
+  t := pyvartag(v);
+  { CPython falls back to iterating for a non-number, which answers False for
+    anything a range cannot hold. A FLOAT that happens to be integral IS a
+    member (`2.0 in range(3)` is True), so it is converted and compared, not
+    rejected. }
+  if (t <> 1) and (t <> 2) and (t <> 3) and (t <> 4) then Exit;
+  if t = 4 then
+  begin
+    { a float: only an exact integer value can be in a range }
+    if pyvar_to_float(v) <> Int64(Trunc(pyvar_to_float(v))) then Exit;
+  end;
+  x := pyvar_to_int(v);
+  off := x - r.FStart;
+  { in range, on the grid, and on the right side — one modulo, no scan }
+  if r.FStep > 0 then
+  begin
+    if (x < r.FStart) or (x >= r.FStop) then Exit;
+  end
+  else
+  begin
+    if (x > r.FStart) or (x <= r.FStop) then Exit;
+  end;
+  Result := (off mod r.FStep) = 0;
+end;
+
+function pyrange_slice(r: TPyRange; lo: Int64; hi: Int64; step: Int64): TPyRange;
+var n, a, b: Int64;
+begin
+  n := pyrange_len(r);
+  if step = 0 then raise ValueError.Create('slice step cannot be zero');
+  { normalise the bounds against the range's LENGTH, exactly as a list slice
+    does, then map them back onto the underlying arithmetic }
+  a := lo;
+  b := hi;
+  if a = PY_SLICE_OMIT then begin if step > 0 then a := 0 else a := n - 1; end
+  else
+  begin
+    if a < 0 then a := a + n;
+    if a < 0 then begin if step > 0 then a := 0 else a := -1; end;
+    if a > n then begin if step > 0 then a := n else a := n - 1; end;
+    if (a = n) and (step < 0) then a := n - 1;
+  end;
+  if b = PY_SLICE_OMIT then begin if step > 0 then b := n else b := -1; end
+  else
+  begin
+    if b < 0 then b := b + n;
+    if b < -1 then b := -1;
+    if b > n then b := n;
+  end;
+  Result := pyrange3(r.FStart + a * r.FStep,
+                     r.FStart + b * r.FStep,
+                     r.FStep * step);
+end;
+
+function pyrange_eq(a: TPyRange; b: TPyRange): Boolean;
+var na, nb: Int64;
+begin
+  Result := False;
+  if (a = nil) or (b = nil) then Exit;
+  na := pyrange_len(a);
+  nb := pyrange_len(b);
+  if na <> nb then Exit;
+  { an EMPTY range equals every other empty one whatever its bounds, and a
+    one-element range ignores the step — CPython compares the SEQUENCE }
+  if na = 0 then begin Result := True; Exit; end;
+  if a.FStart <> b.FStart then Exit;
+  if na = 1 then begin Result := True; Exit; end;
+  Result := a.FStep = b.FStep;
+end;
+
+function pyrange_repr(r: TPyRange): AnsiString;
+begin
+  if r = nil then begin Result := 'None'; Exit; end;
+  { CPython always prints start and stop, and the step only when it is not 1 }
+  Result := 'range(' + pystr_of(r.FStart) + ', ' + pystr_of(r.FStop);
+  if r.FStep <> 1 then Result := Result + ', ' + pystr_of(r.FStep);
+  Result := Result + ')';
+end;
+
+function pyiter_of_range(r: TPyRange): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_RANGE;
+  if r = nil then Exit;
+  Result.FStart := r.FStart;
+  Result.FStep := r.FStep;
+  { the count is taken ONCE, here — a range is immutable, so unlike the list
+    cursor there is nothing live to re-read }
+  Result.FPos := Integer(pyrange_len(r));
+end;
+
+function pyrange_is(const v: Variant): Boolean;
+var o: TObject;
+begin
+  Result := False;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  Result := o is TPyRange;
+end;
+
 function pyiter_typename(it: TPyIter): AnsiString;
 begin
   Result := 'iterator';
@@ -9380,7 +9613,8 @@ begin
   else if it.FKind = PYITER_MAP then Result := 'map'
   else if it.FKind = PYITER_FILTER then Result := 'filter'
   else if it.FKind = PYITER_ENUM then Result := 'enumerate'
-  else if it.FKind = PYITER_ZIP then Result := 'zip';
+  else if it.FKind = PYITER_ZIP then Result := 'zip'
+  else if it.FKind = PYITER_RANGE then Result := 'range_iterator';
 end;
 
 function pyiter_repr(it: TPyIter): AnsiString;
@@ -9410,6 +9644,55 @@ end;
 function sum(it: TPyIter): Variant; overload;
 begin
   Result := sum(pyiter_drain(it));
+end;
+
+{ The RANGE consumers. Each drains a fresh cursor, so consuming a range does
+  not consume the range — it stays re-iterable, which is the property that
+  separates it from a cursor. }
+function sum(r: TPyRange): Variant; overload;
+begin
+  Result := sum(pyiter_drain(pyiter_of_range(r)));
+end;
+
+function tuple(r: TPyRange): TPyList; overload;
+begin
+  Result := tuple(pyiter_drain(pyiter_of_range(r)));
+end;
+
+function any(r: TPyRange): Boolean; overload;
+begin
+  Result := any(pyiter_drain(pyiter_of_range(r)));
+end;
+
+function all(r: TPyRange): Boolean; overload;
+begin
+  Result := all(pyiter_drain(pyiter_of_range(r)));
+end;
+
+function list(r: TPyRange): TPyList; overload;
+begin
+  Result := pyiter_drain(pyiter_of_range(r));
+end;
+
+function len(r: TPyRange): Integer; overload;
+begin
+  Result := Integer(pyrange_len(r));
+end;
+
+function iter(r: TPyRange): TPyIter; overload;
+begin
+  Result := pyiter_of_range(r);
+end;
+
+function reversed(r: TPyRange): TPyIter; overload;
+begin
+  { CPython gives a range_iterator walking backwards. Built as the equivalent
+    range rather than a materialised list, so reversed(range(10 ** 9)) is
+    still three fields. }
+  if pyrange_len(r) = 0 then Result := pyiter_of_range(pyrange3(0, 0, 1))
+  else Result := pyiter_of_range(pyrange3(r.FStart + (pyrange_len(r) - 1) * r.FStep,
+                                          r.FStart - r.FStep,
+                                          -r.FStep));
 end;
 
 function sum(it: TPyIter; const start: Variant): Variant; overload;
@@ -10052,6 +10335,9 @@ begin
     if o is TPyList then begin Result := TPyList(o).count; Exit; end;
     if o is TPyDict then begin Result := TPyDict(o).count; Exit; end;
     if o is TPyBytes then begin Result := TPyBytes(o).count; Exit; end;
+    { ...but a RANGE does have one, and cheaply: this is the line where the
+      lazy-SEQUENCE / cursor distinction pays. }
+    if o is TPyRange then begin Result := len(TPyRange(o)); Exit; end;
     { a cursor has no length — CPython's own answer, word for word, and the one
       row this change deliberately makes STRICTER. Allowed because CPython
       REJECTS the code, so no working CPython program can depend on it. }
@@ -11510,6 +11796,7 @@ begin
       laziness cannot survive here — the lazy path for a `for` header is the
       cursor loop in PyParseForIn, which never reaches this. }
     if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
+    if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
   end;
   PyTypeError(pyvartag(v), 'a str, a list or a dict');
   Result := TPyList.Create;
@@ -11608,6 +11895,7 @@ begin
     end;
     if o is TPyBytes then begin Result := tuple(TPyBytes(o)); Exit; end;
     if o is TPyIter then begin Result := tuple(TPyIter(o)); Exit; end;
+    if o is TPyRange then begin Result := tuple(TPyRange(o)); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := tuple(pystr_of(v)); Exit; end;
   Result := TPyList.Create;      { None / empty }
@@ -11624,6 +11912,7 @@ begin
     { reversed(<cursor>) is a TypeError in CPython — an iterator has no known
       end to walk back from — but NilPy is allowed to be laxer where CPython
       REJECTS the code: drain and reverse what came out. }
+    if o is TPyRange then begin Result := reversed(TPyRange(o)); Exit; end;
     if o is TPyIter then begin Result := reversed(pyiter_drain(TPyIter(o))); Exit; end;
     if o is TPyDict then begin Result := reversed(TPyDict(o).keylist); Exit; end;
   end;
@@ -11751,6 +12040,7 @@ begin
       makes a lazy map indistinguishable from the eager one it replaced, and
       it leaves the cursor exhausted, as CPython does }
     if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
+    if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := list(pystr_of(v)); Exit; end;
   Result := TPyList.Create;   { None / empty }
@@ -12901,6 +13191,9 @@ begin
     { a cursor reprs as CPython's `<map object at 0x...>` — it does NOT render
       its contents, because reading them would CONSUME it }
     if o is TPyIter then begin Result := pyiter_repr(TPyIter(o)); Exit; end;
+    { a range reprs as `range(0, 3)` — it does NOT print its values, which is
+      the visible half of being lazy }
+    if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
     if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
   { the scalar/string tail, INLINE rather than delegating to pyrepr_of. The two
@@ -12933,6 +13226,7 @@ begin
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
     if o is TPyIter then begin Result := pyiter_repr(TPyIter(o)); Exit; end;
+    if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
     { a bare print() of an instance prefers __str__, like CPython's str() }
     if PyUserObjStr(o, False, us) then begin Result := us; Exit; end;
   end;

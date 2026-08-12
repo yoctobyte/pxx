@@ -1365,6 +1365,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-property-decorator | N | 55 | feature | NilPy: `@property` and `@x.setter` inside a class | — |
 | feature-nilpy-py-module-loader | N | 55 | feature | NilPy: `import <sibling>.py` — compile a real Python module as a unit | — |
 | feature-nilpy-qualified-class-construction | N | 55 | feature | nilpy: unit-qualified class construction (`tk.Frame(...)`) | — |
+| feature-nilpy-range-as-a-value | N | 55 | feature | range was NOT A VALUE — `r = range(3)` was `undefined variable (range)`, and `list(range(3))` worked only through a hard-coded whitelist of callees that promise to merely iterate their argument. TPyRange makes it CPython's lazy SEQUENCE: re-iterable, indexable, len-able, sliceable, constant-time membership, three Int64s and no storage. | — |
 | feature-nilpy-re-module | N | 50 | feature | nilpy: re module (match/search/sub/findall/fullmatch/compile) over the regex engine | feature-lib-regex-engine |
 | feature-nilpy-runtime-method-dispatch-on-variant | N | 50 | feature | NilPy: dispatch a method call on a VARIANT receiver at RUNTIME | — |
 | feature-nilpy-set-methods-issubset-union-etc | N | 35 | feature | set methods missing: issubset/issuperset/union/intersection/difference/discard | — |

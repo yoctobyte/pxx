@@ -1,0 +1,82 @@
+# `range` is a VALUE — CPython's lazy SEQUENCE, not a cursor and not a list.
+#
+# NilPy used to have no range value at all: it existed only as the counted-loop
+# lowering in a `for` header, so `r = range(3)` was `undefined variable (range)`
+# and `list(range(3))` worked only because a hard-coded whitelist named the
+# callees that promise to merely iterate their argument. TPyRange is three
+# Int64s and no storage (feature-nilpy-range-as-a-value).
+#
+# The distinction from a cursor is the point and is pinned below: a range is
+# RE-ITERABLE, INDEXABLE, len-able and sliceable; a map/filter cursor is none of
+# those and is consumed once. Both are lazy, and that shared word is what made
+# the two look like one problem.
+#
+# Every expectation below is CPython's, checked with `python3` on this file.
+
+r = range(3)
+print(r)
+print(range(0, 10, 2))
+print(range(5, 0))
+
+# RE-ITERABLE: consuming one does not consume it, which is exactly where it
+# differs from a cursor (list(map(...)) twice gives the second one nothing).
+print(list(r))
+print(list(r))
+
+# indexable, len-able, and membership WITHOUT a scan
+print(len(r), r[0], r[1], r[-1])
+print(2 in r, 3 in r, -1 in r)
+print(len(range(0, 10, 3)), list(range(0, 10, 3)))
+print(len(range(5, 0)), list(range(5, 0)))
+print(list(range(3, 0, -1)))
+
+# equality is by the SEQUENCE, so every empty range equals every other one and
+# a one-element range ignores its step
+print(range(0, 3) == range(0, 3), range(0) == range(2, 2, 3))
+print(range(0, 1, 5) == range(0, 1, 9), range(0, 3) == range(0, 4))
+
+# slicing answers a RANGE, so slices compose without materialising
+print(range(10)[2:5])
+print(list(range(10)[2:5]))
+print(range(10)[::2], list(range(10)[::2]))
+print(range(10)[-3:])
+
+# laziness is the point: a billion elements cost three fields, and both the
+# index and the membership test are arithmetic rather than a walk
+big = range(10 ** 9)
+print(len(big), big[999999999], 999999998 in big, 10 ** 9 in big)
+
+# every consuming builtin takes one
+print(sum(range(5)), min(range(2, 9)), max(range(2, 9)))
+print(sorted(range(3, 0, -1)), tuple(range(3)))
+print(any(range(0, 1)), all(range(1, 3)))
+print(list(reversed(range(4))))
+print([x * 2 for x in range(4)])
+print(list(zip(range(3), "abc")))
+print(list(enumerate(range(2), 1)))
+print(list(map(str, range(3))))
+print(list(filter(lambda v: v % 2 == 0, range(6))))
+
+# ...and a range BOUND to a name iterates, which is the shape that had no path
+# at all before: the `for i in range(...)` header is a counted loop and never
+# built a value to bind.
+out = []
+for i in r:
+    out.append(i)
+print(out)
+for i in r:
+    out.append(i)
+print(out)
+
+# a runtime bound, and one reached through a call
+n = 4
+print(list(range(n)))
+
+
+def upto(k):
+    return list(range(k))
+
+
+print(upto(3))
+print(list(iter(range(2))))
+print(next(iter(range(7, 9))))
