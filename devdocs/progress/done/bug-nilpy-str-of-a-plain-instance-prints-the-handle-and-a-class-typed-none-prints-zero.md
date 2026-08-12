@@ -4,6 +4,7 @@ prio: 52
 type: bug
 blocked-by: [bug-nilpy-a-def-returning-a-field-is-typed-as-the-receivers-class]
 summary: "`str(obj)` on a class that declares no __str__/__repr__ prints the raw handle (134298980057) where CPython prints `<__main__.N object at 0x…>` — while repr(obj) and print([obj]) are both right. And a CLASS-TYPED None — what a method with `return self` on one path and `return None` on another yields — prints as 0, though `is None` on it answers True"
+status: done
 ---
 
 # `str()` of a plain instance prints the handle; a class-typed `None` prints 0
@@ -110,3 +111,6 @@ instance with no dunders, with `__str__` only, with `__repr__` only, and with
 both; a class-typed None from a method printed through each of those; the same
 None from a top-level def (the row that already works); and `is None` asserted
 alongside each so a rendering fix cannot quietly change the semantics.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

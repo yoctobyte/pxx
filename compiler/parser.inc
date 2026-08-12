@@ -10557,7 +10557,16 @@ begin
             if atRecv - REC_UCLASS_BASE = FindUClass('TPyList') then
               procIdx := FindProc('pylist_repr')
             else if atRecv - REC_UCLASS_BASE = FindUClass('TPyDict') then
-              procIdx := FindProc('pydict_repr');
+              procIdx := FindProc('pydict_repr')
+            else
+              { any OTHER user class: CPython's `<__main__.N object at 0x...>`,
+                and 'None' for a nil handle — a CLASS-TYPED None, which is what
+                a method returning `self` on one path and None on another
+                yields. Without it an f-string hole fell through to the ordinary
+                overload path and rendered the instance HANDLE as an integer,
+                the same arm PyReprContainer had for print().
+                bug-nilpy-str-of-a-plain-instance-prints-the-handle-and-a-class-typed-none-prints-zero }
+              procIdx := FindProc('pyobj_str_of');
             if procIdx >= 0 then
             begin
               argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;

@@ -1,0 +1,99 @@
+# The frontend's class arm for str/print fell through to the INTEGER path when
+# the class declared no __str__/__repr__, so:
+#   str(n) printed the instance HANDLE (134298980057) where CPython prints
+#   <__main__.N object at 0x...>, while repr(n) and print([n]) were right; and
+#   a CLASS-TYPED None -- what a method with `return self` on one path and
+#   `return None` on another yields -- printed as 0, though `is None` on it
+#   already answered True.
+# bug-nilpy-str-of-a-plain-instance-prints-the-handle-and-a-class-typed-none-prints-zero
+# Addresses differ per run, so every row below asserts the SHAPE, not the digits.
+
+
+class Plain:
+    def __init__(self):
+        self.v = 1
+
+
+class WithStr:
+    def __str__(self):
+        return "S!"
+
+
+class WithRepr:
+    def __repr__(self):
+        return "R!"
+
+
+class Both:
+    def __str__(self):
+        return "s"
+
+    def __repr__(self):
+        return "r"
+
+
+p = Plain()
+print(str(p).startswith("<__main__.Plain object at 0x"), str(p).endswith(">"))
+print(repr(p).startswith("<__main__.Plain object at 0x"))
+print(str(p) == repr(p))
+print(("%s" % p).startswith("<__main__.Plain"), f"{p}".startswith("<__main__.Plain"))
+
+print(str(WithStr()), repr(WithStr()).startswith("<__main__.WithStr"))
+print(str(WithRepr()), repr(WithRepr()))
+print(str(Both()), repr(Both()), "%s|%r" % (Both(), Both()))
+print([WithRepr(), Both()])
+
+
+# a CLASS-TYPED None, from a method whose other return is `self`
+class Node:
+    def __init__(self, name):
+        self.name = name
+        self.kids = []
+
+    def find(self, nm):
+        if self.name == nm:
+            return self
+        for k in self.kids:
+            r = k.find(nm)
+            if r is not None:
+                return r
+        return None
+
+
+root = Node("a")
+root.kids.append(Node("b"))
+print(root.find("a").name, root.find("b").name)
+print(root.find("zz"), root.find("zz") is None)
+miss = root.find("zz")
+print(miss, miss is None, str(miss), repr(miss))
+print([root.find("zz")], "%s" % root.find("zz"), f"{root.find('zz')}")
+print(root.find("b") is not None, root.find("b").name)
+
+# the same None out of a top-level def, which already worked
+def look(flag):
+    if flag:
+        return Node("x")
+    return None
+
+
+print(look(False), look(False) is None, look(True).name)
+
+# a def returning a FIELD keeps its own type — the typing fix this one waited on
+class Holder:
+    def __init__(self):
+        self.n = 5
+        self.obj = Plain()
+
+
+def field_int():
+    h = Holder()
+    return h.n
+
+
+def field_obj():
+    h = Holder()
+    return h.obj
+
+
+print(field_int(), type(field_int()).__name__)
+print(str(field_obj()).startswith("<__main__.Plain"), field_obj().v)

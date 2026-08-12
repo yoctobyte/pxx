@@ -12926,7 +12926,24 @@ begin
     and printed the instance pointer (bug-nilpy-user-class-bytes-method-loses-
     identity: the visible half; the annotated form hit this too). }
   else if (PyBytesCi >= 0) and (rec = REC_UCLASS_BASE + PyBytesCi) then pname := 'pybytes_repr'
-  else Exit;
+  else
+    { ...and any OTHER user class: `pyobj_str_of`, which produces CPython's
+      `<__main__.N object at 0x...>` through the same renderer repr() and a
+      container element already use — and 'None' for a nil handle.
+
+      This used to Exit unchanged, leaving an integer print of the instance
+      HANDLE. Two symptoms, one arm: `str(n)` on a class with no dunders
+      printed 134298980057 while `repr(n)` and `print([n])` were right, and a
+      CLASS-TYPED None (what a method with `return self` on one path and
+      `return None` on another yields) printed as 0 even though `is None` on it
+      answered True.
+
+      Landing this REQUIRED the typing fix first: with a tyClass node actually
+      treated as an object, a def returning a field crashed here, because its
+      return type was the receiver's class while its value was the field's int
+      (bug-nilpy-a-def-returning-a-field-is-typed-as-the-receivers-class).
+      bug-nilpy-str-of-a-plain-instance-prints-the-handle-and-a-class-typed-none-prints-zero }
+    pname := 'pyobj_str_of';
   procIdx := FindProc(pname);
   if procIdx < 0 then Exit;   { pylib not loaded — leave the old behaviour }
   argNode := AllocNode(AN_ARG);

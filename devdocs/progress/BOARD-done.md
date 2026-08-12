@@ -770,6 +770,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-str-format-ignores-positional-indices | N | 60 | bug | NilPy: `\"{1}{0}\".format(a, b)` ignores the explicit indices and substitutes left-to-right — silently prints the arguments in the WRONG ORDER | — |
 | bug-nilpy-str-index-method-missing | N | 50 | bug | `str.index()` / `str.rindex()` were missing | — |
 | bug-nilpy-str-index-off-by-one | N | 75 | bug | NilPy string subscripts are 1-BASED — silently off by one vs CPython | — |
+| bug-nilpy-str-of-a-plain-instance-prints-the-handle-and-a-class-typed-none-prints-zero | N | 52 | bug | `str(obj)` on a class that declares no __str__/__repr__ prints the raw handle (134298980057) where CPython prints `<__main__.N object at 0x…>` — while repr(obj) and print([obj]) are both right. And a CLASS-TYPED None — what a method with `return self` on one path and `return None` on another yields — prints as 0, though `is None` on it answers True | bug-nilpy-a-def-returning-a-field-is-typed-as-the-receivers-class |
 | bug-nilpy-str-of-literal-none-prints-zero | N | 65 | bug | `str(None)` prints `0`, but `str(x)` with `x = None` prints `None` | — |
 | bug-nilpy-str-of-mixed-mod-prints-double-bits | N | 65 | bug | `str(3 % 2.5)` prints the double's BIT PATTERN | — |
 | bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-string | N | 75 | bug | `str(obj)` SEGFAULTS when `__str__`/`__repr__` builds a string and nothing touched the instance first | — |

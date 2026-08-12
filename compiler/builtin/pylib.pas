@@ -1452,6 +1452,8 @@ function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
   at run time. Dispatch on the boxed object: dict fetch/store by key, list index
   by an integer key. }
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+{ str()/print() of a user class instance; 'None' for a nil handle. }
+function pyobj_str_of(o: TObject): AnsiString;
 { `del v[k]` on a variant receiver — see the implementation. }
 function pyvar_delitem(const v: Variant; const key: Variant): Variant;
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
@@ -3075,6 +3077,28 @@ end;
   call the read already lowered to — the del statement rewrites that node's
   proc, exactly as it does for TPyList.at and TPyDict.fetch.
   bug-nilpy-del-on-a-variant-receiver-is-refused }
+{ str()/print() of a USER CLASS INSTANCE that carries no frontend rendering of
+  its own — the arm that used to fall through to the integer path and print the
+  HANDLE (`134298980057`) where CPython prints `<__main__.N object at 0x...>`,
+  and printed a class-typed None as `0`.
+
+  nil FIRST: a method with `return self` on one path and `return None` on
+  another has a CLASS return type, so its None is a nil handle. `is None`
+  already answers True for it; only the rendering was wrong.
+  bug-nilpy-str-of-a-plain-instance-prints-the-handle-and-a-class-typed-none-prints-zero }
+function pyobj_str_of(o: TObject): AnsiString;
+var v: Variant;
+begin
+  if o = nil then begin Result := 'None'; Exit; end;
+  { boxed INLINE with a retain, for the reasons spelled out on repr(TObject):
+    PyObjAsVar is a forward use from here, and the local `v` releases its
+    object-tagged slot on scope exit. }
+  PPyVarRec(@v)^.VType := 7;
+  PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(o)));
+  PXXObjRetain(Pointer(o));
+  Result := pyvar_print_of(v);
+end;
+
 function pyvar_delitem(const v: Variant; const key: Variant): Variant;
 var o: TObject; ki: Int64;
 begin
@@ -10646,6 +10670,10 @@ begin
     The RETAIN matters for the same reason it does there: `v` is a local, so
     its scope exit releases the object-tagged slot, and without the retain
     `repr(c)` would hand back a net release of the caller's `c`. }
+  { a NIL handle is a class-typed None — `repr(None)` is 'None', and without
+    this it boxed as a VT_OBJECT with a nil payload and rendered EMPTY. Same
+    first line as pyobj_str_of, for the same reason. }
+  if o = nil then begin Result := 'None'; Exit; end;
   PPyVarRec(@v)^.VType := 7;
   PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(o)));
   PXXObjRetain(Pointer(o));
