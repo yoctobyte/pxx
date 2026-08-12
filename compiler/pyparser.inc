@@ -247,6 +247,61 @@ begin
   while CurTok.Kind = tkNewline do Next;
 end;
 
+{ `@dataclass(...)`'s argument list. The bare and empty-paren forms were the
+  only ones accepted, so `@dataclass(order=True)` died on `unexpected token`
+  with the parser pointing at `order` — a message that says nothing about the
+  actual gap (bug-nilpy-dataclass-keyword-arguments-do-not-parse).
+
+  Every option here is a keyword with a documented CPython default, and passing
+  an option its OWN default changes nothing — `@dataclass(eq=True)` is exactly
+  `@dataclass`. So the whole list parses, a default-valued option is accepted
+  as the no-op it is, and anything that would actually alter the generated
+  class is refused BY NAME.
+
+  Refused rather than ignored deliberately: silently accepting `frozen=True`
+  would hand back a class that looks immutable and is not — a silent wrong
+  answer in place of today's loud one. The generated `__init__`/`__eq__`/
+  `__repr__` are unconditional here, so every non-default value is refused
+  until the corresponding generator can honour it.
+
+  Only the decorator's own keywords are known; an unknown name is refused too,
+  matching CPython's TypeError for it. }
+procedure PyParseDataclassArgs;
+var name, given: AnsiString;
+    dflt: Boolean;
+begin
+  if CurTok.Kind <> tkLParen then Exit;
+  Next;
+  if CurTok.Kind = tkRParen then begin Next; Exit; end;
+  repeat
+    if CurTok.Kind <> tkIdent then
+      Error('Nil Python: @dataclass takes only keyword arguments');
+    name := CurTok.SVal;
+    { CPython's defaults, dataclasses.dataclass }
+    if StrEqual(name, 'init') or StrEqual(name, 'repr') or
+       StrEqual(name, 'eq') or StrEqual(name, 'match_args') then dflt := True
+    else if StrEqual(name, 'order') or StrEqual(name, 'unsafe_hash') or
+            StrEqual(name, 'frozen') or StrEqual(name, 'kw_only') or
+            StrEqual(name, 'slots') or StrEqual(name, 'weakref_slot') then dflt := False
+    else
+      Error('Nil Python: @dataclass has no option named ''' + name + '''');
+    Next;
+    Expect(tkAssign, '=');
+    if (CurTok.Kind <> tkTrue) and (CurTok.Kind <> tkFalse) then
+      Error('Nil Python: @dataclass option ''' + name + ''' takes True or False');
+    if CurTok.Kind = tkTrue then given := 'True' else given := 'False';
+    if (CurTok.Kind = tkTrue) <> dflt then
+      Error('Nil Python: @dataclass ' + name + '=' + given +
+            ' is not supported (only the default is generated)');
+    Next;
+    if CurTok.Kind <> tkComma then Break;
+    Next;
+    { a trailing comma before `)` is legal Python }
+    if CurTok.Kind = tkRParen then Break;
+  until False;
+  Expect(tkRParen, ')');
+end;
+
 function PySeqAppend(head, stmt: Integer): Integer; forward;
 { An integer literal node, for the pair-unpack indices below. }
 function PyMakeIntLit(v: Int64): Integer;
@@ -23739,6 +23794,26 @@ begin
         isDC := False;
         j := i - 1;
         while (j >= 1) and (Tokens[j].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(j);
+        { `@dataclass(eq=True)` puts a ')' where the bare form puts the name, so
+          step back over a balanced argument list first. Without this the
+          pre-pass and PyParseClass disagreed about isDC — the pre-pass would
+          register the class WITHOUT its dataclass fields while the parse pass
+          treated it as one, which is the two-passes-disagree hazard, not a
+          missing feature. bug-nilpy-dataclass-keyword-arguments-do-not-parse }
+        if (j >= 1) and (Tokens[j].Kind = tkRParen) then
+        begin
+          depth := 0;
+          while j >= 1 do
+          begin
+            if Tokens[j].Kind = tkRParen then Inc(depth)
+            else if Tokens[j].Kind = tkLParen then
+            begin
+              Dec(depth);
+              if depth = 0 then begin Dec(j); Break; end;
+            end;
+            Dec(j);
+          end;
+        end;
         if (j >= 1) and (Tokens[j].Kind = tkIdent) and
            CaseEqual(GetTokenStr(j), 'dataclass') and (Tokens[j - 1].Kind = tkAt) then
           isDC := True;
@@ -25081,7 +25156,7 @@ begin
       if not PyIsIdent('dataclass') then
         Error('Nil Python: unsupported decorator (only @dataclass)');
       Next;
-      if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+      PyParseDataclassArgs;
       Expect(tkNewline, 'newline');
       PySkipNewlines;
       if CurTok.Kind <> tkClass then
@@ -25379,7 +25454,7 @@ begin
       if not PyIsIdent('dataclass') then
         Error('Nil Python: unsupported decorator (only @dataclass)');
       Next;
-      if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+      PyParseDataclassArgs;
       Expect(tkNewline, 'newline');
       PySkipNewlines;
       if CurTok.Kind <> tkClass then

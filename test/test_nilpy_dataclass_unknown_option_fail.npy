@@ -1,0 +1,12 @@
+# An option name the decorator does not have is a TypeError in CPython; here it
+# is a compile error naming the option, rather than a parse error pointing at
+# the token. bug-nilpy-dataclass-keyword-arguments-do-not-parse
+from dataclasses import dataclass
+
+
+@dataclass(sorted=True)
+class D:
+    v: int
+
+
+print(D(1))

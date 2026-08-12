@@ -1,0 +1,10 @@
+Empty(v=1)
+True
+Eq(v=3, s='hi')
+True
+False
+Multi(n=1, s='a', f=1.5)
+True
+Multi(n=1, s='a', f=2.5)
+Later(a=9, b='z')
+z

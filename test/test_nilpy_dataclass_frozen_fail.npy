@@ -1,0 +1,14 @@
+# `@dataclass(frozen=True)` must be REFUSED, not ignored: an ignored frozen=True
+# hands back a class that looks immutable and is not, which is worse than
+# today's loud failure. bug-nilpy-dataclass-keyword-arguments-do-not-parse
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class D:
+    v: int
+
+
+d = D(1)
+d.v = 2          # CPython: FrozenInstanceError
+print(d)

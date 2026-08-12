@@ -1,0 +1,13 @@
+# `@dataclass(order=True)` asks for generated comparison dunders, which are not
+# synthesized. Refusing by name beats accepting-and-ignoring: a class that
+# sorts by identity where the source asked for field order is a silent wrong
+# answer. bug-nilpy-dataclass-keyword-arguments-do-not-parse
+from dataclasses import dataclass
+
+
+@dataclass(order=True)
+class D:
+    v: int
+
+
+print(sorted([D(3), D(1)]))

@@ -1,0 +1,59 @@
+# `@dataclass(...)` with keyword arguments used to die on `unexpected token`
+# pointing at the first option name — the bare and empty-paren forms were the
+# only ones the decorator parser accepted.
+# bug-nilpy-dataclass-keyword-arguments-do-not-parse
+#
+# Every option passed here is given its OWN CPython default, so the generated
+# class is identical to the bare `@dataclass` one. That is the whole of what is
+# accepted; a non-default value is a compile error (the _fail siblings).
+from dataclasses import dataclass
+
+
+@dataclass()
+class Empty:
+    v: int
+
+
+print(Empty(1))
+print(Empty(1) == Empty(1))
+
+
+@dataclass(eq=True)
+class Eq:
+    v: int
+    s: str = "hi"
+
+
+print(Eq(3))
+print(Eq(3) == Eq(3))
+print(Eq(3) == Eq(4))
+
+
+# several options, a trailing comma, and the ones that default to False
+@dataclass(init=True, repr=True, eq=True, order=False, frozen=False,)
+class Multi:
+    n: int
+    s: str
+    f: float = 1.5
+
+
+print(Multi(1, "a"))
+print(Multi(1, "a") == Multi(1, "a"))
+print(Multi(1, "a", 2.5))
+
+
+# the decorated class still registers as a dataclass in the PRE-pass, which
+# scans backwards from the class header and now steps over the argument list —
+# a disagreement there would leave the fields unregistered rather than raise
+@dataclass(repr=True)
+class Later:
+    a: int
+    b: str = "z"
+
+
+def make() -> Later:
+    return Later(9)
+
+
+print(make())
+print(make().b)
