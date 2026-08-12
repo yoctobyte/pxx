@@ -4776,19 +4776,77 @@ begin
   if (l = nil) or (l.count = 0) then pynext_first_or := dflt else pynext_first_or := l.at(0);
 end;
 
+{ Is every element of this list a plain int/bool/float, with at least one
+  FLOAT among them? That is exactly the case sum() compensates — see
+  PySumNeumaier. A promo (arbitrary-precision) element, a str, a list, an
+  object: all answer False, and the ordinary variant accumulation runs. }
+function PySumAllFloatish(l: TPyList; var sawFloat: Boolean): Boolean;
+var i, t: Integer;
+begin
+  Result := False;
+  sawFloat := False;
+  if (l = nil) or (l.count = 0) then Exit;
+  for i := 0 to l.count - 1 do
+  begin
+    t := pyvartag(l.at(i));
+    if t = 3 then sawFloat := True
+    else if (t <> 1) and (t <> 2) and (t <> 4) then Exit;   { VT_INT/INT64/BOOL }
+  end;
+  Result := sawFloat;
+end;
+
+{ NEUMAIER compensated summation — the algorithm CPython's sum() has used for
+  floats since 3.12, and the reason sum([1e16, 1.0, -1e16]) is 1.0 there and
+  was 0.0 here: a naive accumulator loses the 1.0 against the 1e16 term and
+  never gets it back. The compensation term c collects exactly what each
+  addition dropped, and is added once at the end.
+
+  Neumaier rather than plain Kahan because the running total can be SMALLER
+  than the term being added (that is the 1e16 case in reverse), which is the
+  branch below.
+  bug-nilpy-sum-of-floats-has-no-compensated-summation }
+function PySumNeumaier(l: TPyList; s: Double): Double;
+var i: Integer; c, x, t: Double;
+begin
+  c := 0.0;
+  for i := 0 to l.count - 1 do
+  begin
+    x := pyvar_to_float(l.at(i));
+    t := s + x;
+    if Abs(s) >= Abs(x) then c := c + ((s - t) + x)
+    else c := c + ((x - t) + s);
+    s := t;
+  end;
+  PySumNeumaier := s + c;
+end;
+
 function sum(l: TPyList): Variant;
-var i: Integer;
+var i: Integer; sawFloat: Boolean;
 begin
   Result := pyvar_of_int(0);
   if l = nil then Exit;
+  if PySumAllFloatish(l, sawFloat) then
+  begin
+    Result := PySumNeumaier(l, 0.0);
+    Exit;
+  end;
   for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
 end;
 
 function sum(l: TPyList; const start: Variant): Variant; overload;
-var i: Integer;
+var i, st: Integer; sawFloat: Boolean;
 begin
   Result := start;
   if l = nil then Exit;
+  { the START joins the float path only when it is itself a plain number —
+    otherwise (a promo start, a str) the ordinary accumulation decides }
+  st := pyvartag(start);
+  if ((st = 1) or (st = 2) or (st = 3) or (st = 4)) and
+     PySumAllFloatish(l, sawFloat) then
+  begin
+    Result := PySumNeumaier(l, pyvar_to_float(start));
+    Exit;
+  end;
   for i := 0 to l.count - 1 do Result := pyadd_v(Result, l.at(i));
 end;
 
@@ -6647,24 +6705,32 @@ begin
   Result := a - pyfloordiv_f(a, b) * b;
 end;
 
+{ TIES GO TO THE FIRST ARGUMENT, in min and max alike — CPython's documented
+  rule, and the reason min(-0.0, 0.0) is -0.0 there and max(-0.0, 0.0) is -0.0
+  too. Each test is therefore written against the SECOND operand: `b < a`
+  rather than `a < b`, so an equal pair falls through to a. Negative zero only
+  makes it visible; the case that bites real code is min(items, key=...) over
+  equal-scoring objects, where CPython guarantees the first and handing back a
+  different object is silent.
+  bug-nilpy-abs-keeps-the-sign-of-negative-zero-and-min-max-break-ties-backwards }
 function min(a: Int64; b: Int64): Int64;
 begin
-  if a < b then Result := a else Result := b;
+  if b < a then Result := b else Result := a;
 end;
 
 function min(a: Double; b: Double): Double; overload;
 begin
-  if a < b then Result := a else Result := b;
+  if b < a then Result := b else Result := a;
 end;
 
 function max(a: Int64; b: Int64): Int64; overload;
 begin
-  if a > b then Result := a else Result := b;
+  if b > a then Result := b else Result := a;
 end;
 
 function max(a: Double; b: Double): Double; overload;
 begin
-  if a > b then Result := a else Result := b;
+  if b > a then Result := b else Result := a;
 end;
 
 function min(const a: Variant; const b: Variant): Variant; overload;
@@ -6674,7 +6740,7 @@ end;
 
 function max(const a: Variant; const b: Variant): Variant; overload;
 begin
-  if pyvar_gt(a, b) then Result := a else Result := b;
+  if pyvar_gt(b, a) then Result := b else Result := a;
 end;
 
 
@@ -10569,7 +10635,11 @@ begin
   if t = 3 then           { VT_DOUBLE }
   begin
     d := pyvar_to_float(v);
-    if d < 0.0 then d := -d;
+    { -0.0 is not < 0.0, so this used to hand back the negative zero unchanged;
+      CPython's abs(-0.0) is 0.0. Same rule as __pxxAbsDbl, which the static
+      path uses. }
+    if d < 0.0 then d := -d
+    else if d = 0.0 then d := 0.0;
     Result := d;
     Exit;
   end;

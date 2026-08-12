@@ -4,6 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "abs(-0.0) answers -0.0 (CPython: 0.0) — the sign bit is never cleared — and min()/max() return the LAST of several equal-comparing arguments where CPython returns the FIRST, observable as min(-0.0, 0.0) answering 0.0 instead of -0.0"
+status: done
+owner: claude-AN
 ---
 
 # abs() keeps the sign of negative zero, and min/max break ties backwards
@@ -43,3 +45,6 @@ A `.npy` diffed against CPython: `abs` over `-0.0` / `0.0` / negative and
 positive floats and ints; `min`/`max` with two equal arguments in both orders,
 with a `key=`, over a list, and over objects that compare equal but are
 distinguishable (so "returns the first" is actually asserted).
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

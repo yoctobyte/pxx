@@ -1484,7 +1484,15 @@ end;
 
 function __pxxAbsDbl(d: Double): Double;
 begin
-  if d < 0 then Result := -d else Result := d;
+  { NEGATIVE ZERO is not less than zero, so the `d < 0` test left its sign
+    alone and Abs(-0.0) answered -0.0 — where FPC answers 0.0 and so does
+    CPython's abs(). Negating unconditionally when the sign bit is set is the
+    whole rule; `d = 0.0` is true for -0.0 too, which is what makes it
+    reachable without a bit test.
+    bug-nilpy-abs-keeps-the-sign-of-negative-zero-and-min-max-break-ties-backwards }
+  if d < 0 then Result := -d
+  else if (d = 0.0) then Result := 0.0
+  else Result := d;
 end;
 
 function __pxxSqrInt(x: Int64): Int64;

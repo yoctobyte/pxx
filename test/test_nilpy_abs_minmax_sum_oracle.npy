@@ -1,0 +1,26 @@
+# Three numeric builtins measured against CPython:
+#   abs(-0.0) kept the sign, because -0.0 is not < 0 and the test was `d < 0`;
+#   min/max returned the LAST of an equal pair where CPython returns the FIRST;
+#   sum() added floats naively, so sum([1e16, 1.0, -1e16]) dropped the 1.0
+#   entirely -- CPython has used Neumaier compensated summation since 3.12.
+# bug-nilpy-abs-keeps-the-sign-of-negative-zero-and-min-max-break-ties-backwards
+# bug-nilpy-sum-of-floats-has-no-compensated-summation
+# Every expectation is CPython's own output.
+
+print(abs(-0.0), abs(0.0), abs(-1.5), abs(1.5), abs(-3), abs(3))
+z = -0.0
+print(abs(z), abs([-0.0][0]))
+
+print(min(-0.0, 0.0), max(-0.0, 0.0))
+print(min(0.0, -0.0), max(0.0, -0.0))
+print(min(1, 2), max(1, 2), min(2, 1), max(2, 1))
+print(min([3, 1, 2]), max([3, 1, 2]), min("bca"), max("bca"))
+print(min(1.5, 1.5), max(1.5, 1.5), min(3, 1, 2), max(3, 1, 2))
+
+print(sum([0.1, 0.2, 0.3]))
+print(sum([1e16, 1.0, -1e16]))
+print(sum([0.1] * 10))
+print(sum([1, 2, 3]), sum([]), sum([0.5, 0.5]))
+print(sum([1, 2, 3], 10), sum([0.1, 0.2], 0.3))
+print(sum([1, 2.5]), sum([2 ** 70, 1]))
+print(sum([x * 0.1 for x in range(10)]))

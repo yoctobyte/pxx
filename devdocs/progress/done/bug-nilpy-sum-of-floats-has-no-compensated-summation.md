@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "CPython's builtin sum() uses Neumaier compensated summation for floats; NilPy's adds naively, so sum([1e16, 1.0, -1e16]) answers 0.0 where CPython answers 1.0, and sum([0.1]*10) answers 0.9999999999999999 where CPython answers 1.0. Ordinary averaging code disagrees with the oracle in the last digits, or loses a whole term"
+status: done
+owner: claude-AN
 ---
 
 # sum() of floats has no compensated summation
@@ -62,3 +64,6 @@ float.
 A `.npy` diffed against CPython: the three rows above, an int-only sum, a mixed
 int/float sum, an empty sum, a sum with a `start` argument, and a sum over a
 generator/comprehension — plus `math.fsum` if it exists, which must agree too.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.
