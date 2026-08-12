@@ -301,4 +301,4 @@ and stays open:
   exhausted either way; noted in pylib where it happens.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit c4e74b888.
