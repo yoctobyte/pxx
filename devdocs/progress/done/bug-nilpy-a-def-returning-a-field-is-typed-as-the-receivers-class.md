@@ -70,4 +70,4 @@ the type is checked and not just the rendering; a def returning a CHAIN
 and an f-string of each result.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 32a020a74.
