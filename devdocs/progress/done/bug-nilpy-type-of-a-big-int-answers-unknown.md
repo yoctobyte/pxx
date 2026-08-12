@@ -52,4 +52,4 @@ plus the machine-int / float / str / bool / list / None / user-class rows in the
 same file as controls.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 2adec8b8e.
