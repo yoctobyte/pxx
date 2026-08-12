@@ -48,6 +48,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
+- `[p 55] [U]` decide-nilpy-eager-map-filter-reversed-enumerate
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution
 - `[p 55] [E]` feature-demo-portable-userland
@@ -61,6 +62,5 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-est-mem-from-measurement
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
-- `[p 53] [S]` feature-esp-peripheral-callback-api
 
 _177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

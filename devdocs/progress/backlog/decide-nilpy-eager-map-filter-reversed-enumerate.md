@@ -1,9 +1,9 @@
 ---
 track: U
-prio: 40
+prio: 55
 type: decide
 blocked-by: []
-summary: "map/filter/reversed/enumerate return LISTS, not lazy iterators — so `print(map(str, [1]))` prints `['1']` where CPython prints `<map object at 0x…>`. Every ordinary use agrees; laziness-dependent code does not. Decide: divergence note (my recommendation), or real iterator objects"
+summary: "map/filter/reversed/enumerate return LISTS, not lazy iterators. MEASURED: `for v in map(risky, xs)` with an early break raises an exception CPython never reaches (f runs 1000x vs 4x), so a working CPython program crashes — this is an upward-compatibility break, not a perf note. Decide: fuse at the for-loop consumption site (recommended), full iterator protocol, or document"
 ---
 
 # Decide: eager `map` / `filter` / `reversed` / `enumerate`
@@ -31,9 +31,42 @@ Three shapes of working CPython code CAN observe the difference:
 
 1. **Printing or repring one directly** (above) — harmless but visible, and the
    kind of thing a doctest or a logged debug line catches.
-2. **An unbounded or expensive source**: `for x in map(f, huge)` in CPython
-   never materialises the list; here it does, so memory and the cost of `f`
-   both change, and an infinite generator source would hang.
+2. **The function runs for EVERY element, even when the loop stops early** —
+   and this one can turn a working CPython program into a crashing one.
+   Measured:
+
+   ```python
+   def risky(x):
+       if x > 5:
+           raise ValueError("too far: " + str(x))
+       return x
+
+   out = []
+   for v in map(risky, list(range(100))):
+       out.append(v)
+       if len(out) == 3:
+           break
+   print("survived", out)
+   ```
+
+   | | result |
+   | --- | --- |
+   | CPython | `survived [0, 1, 2]` |
+   | pxx | **`Unhandled exception: ValueError: too far: 6`** |
+
+   The same shape without the raise just wastes work: with an early `break`,
+   a counting `f` is called **1000 times under pxx and 4 times under CPython**.
+   Any side effect in `f` — a print, a write, a counter, a network call —
+   happens N times instead of k.
+
+   Memory is the *lesser* half of this, and much smaller than "explode":
+   materialising costs one extra list per stage. Measured over 2,000,000
+   elements, peak RSS was 210 MB (pxx) against 88 MB (CPython) — a constant
+   factor, not unbounded growth. The genuinely unbounded case needs a lazy or
+   infinite source, which needs generators (`yield` is unsupported today —
+   [[feature-nilpy-yield-outside-a-for-loop]]), and `map(f, range(n))` does not
+   even compile, since `range` is not a value outside a loop header. So today
+   the hazard is **wasted work and premature side effects**, not memory.
 3. **Single consumption**: a CPython iterator is exhausted after one pass. All
    four, measured:
 
@@ -52,15 +85,19 @@ Three shapes of working CPython code CAN observe the difference:
    because in CPython that second pass is empty and any program relying on it
    would already be broken.
 
-Point 2 is the one that can make working code fail rather than differ.
+Point 2 is the one that makes working code FAIL rather than differ — measured
+above, not reasoned. Points 1 and 3 are cosmetic and laxer-than-CPython
+respectively; point 2 alone is what this decision is really about.
 
 ## The options
 
-**A — Document it as a divergence (recommended).** Add it to
-`devdocs/dev/nilpy-semantics-divergences.md` with the three observable shapes
-spelled out. Cheap, honest, and consistent with how the mutable-tuple call was
-made. The cost is that shape 2 stays a real (if rare) failure mode, and the
-first person to hit it debugs it from scratch unless the page is easy to find.
+**A — Document it as a divergence.** Add it to
+`devdocs/dev/nilpy-semantics-divergences.md` with the three shapes spelled out.
+Cheap and honest — but it was the recommendation only while shape 2 read as a
+memory/perf note. Now that shape 2 is measured as *an exception CPython never
+raises*, documenting it means shipping a known upward-compatibility break, which
+is the one thing the NilPy rule does not bend on. Keep A only as the interim
+step that goes with D or B.
 
 **B — Implement real lazy iterators.** Correct, and it also gives `iter()` /
 `next()` somewhere to live (both are absent —
@@ -75,9 +112,29 @@ one show CPython's `<map object at 0x…>` shape. This is the worst option and i
 named only to be rejected: it makes the value LIE about what it is, so shape 3
 gets more surprising, not less.
 
-## Recommendation
+**D — Fuse them at the CONSUMPTION site (new, and the cheap correct one).**
+The hazard lives entirely in `for x in map(f, xs):` — a loop that may stop
+early. Lower that ONE shape as a fused loop (iterate `xs`, apply `f` per
+iteration, evaluate the body) instead of building a list first. `list(map(...))`,
+`sorted(map(...))` and a comprehension over one keep materialising, because
+those consume everything anyway and cannot observe the difference. Same for
+`filter` and `enumerate`; `reversed` needs no laziness at all, since its source
+is already a materialised sequence.
 
-**A**, plus a line in the divergences page for shape 2 specifically ("a map over
-an unbounded or expensive source is materialised here"), and revisit B if and
-when generators land — the two want the same machinery, and doing them together
-is much less work than doing them apart.
+This gets the break, the side effects and the raise right without an iterator
+protocol, without `__next__` dispatch, and without touching the value's type —
+`map(...)` in every other position stays the list it is today.
+
+## Recommendation — REVISED after measuring shape 2
+
+**D**, with **A** alongside it for what D deliberately leaves eager (a `map`
+bound to a name and consumed twice, and the constant-factor memory), and **B**
+revisited when generators land, since the two want the same machinery.
+
+The earlier recommendation in this ticket was **A alone**. That was written when
+shape 2 was described as "an unbounded or expensive source" — a perf note. The
+measurement above changes the category: a program CPython accepts and runs
+raises `ValueError` here, and no amount of documentation makes that acceptable
+under the upward-compatibility rule. Recorded rather than quietly edited,
+because the reasoning is the point: the shape was right and the severity was
+guessed.
