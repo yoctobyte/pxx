@@ -237,4 +237,4 @@ vs an int, and str/int/tuple/dict parameter controls. `make test-nilpy` green,
 `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 628764a23.
