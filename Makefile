@@ -791,6 +791,11 @@ test-nilpy: $(COMPILER)
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which
 	# has no class index at compile time: read, write, inheritance, getattr/hasattr,
 	# the plugin-registry shape, and the AttributeError. Diffed against CPython.
+	@# `h[i], h[j] = h[j], h[i]` — a tuple assignment to SUBSCRIPT targets, incl.
+	@# a dict, a nested subscript, an attribute base, __setitem__, a variant base
+	@# and a heapify that cannot be written without it. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_tuple_assign_to_subscripts.npy /tmp/test_nilpy_tuple_sub26
+	/tmp/test_nilpy_tuple_sub26 | diff -u test/test_nilpy_tuple_assign_to_subscripts.expected -
 	@# a def that returns None on one path and a value on another answers Any:
 	@# `return None` beside `return 7` used to store a plain 0, so `x is None` was
 	@# False and str(x) printed 0. Diffed against CPython.

@@ -4,6 +4,8 @@ prio: 52
 type: bug
 blocked-by: []
 summary: "`h[i], h[j] = h[j], h[i]` — the in-place swap every sort and heap is built on — fails with 'expected expression'. A tuple assignment accepts NAME and ATTRIBUTE targets (`a, b = b, a` and `k.a, k.b = k.b, k.a` both work) but not a SUBSCRIPT, so the one idiom that needs it most is the one that does not parse"
+status: done
+owner: claude-AN
 ---
 
 # Tuple assignment to SUBSCRIPT targets does not parse
@@ -89,3 +91,61 @@ name/subscript target list, a three-element target list, a nested subscript
 (`m[i][j], m[j][i] = ...`), an attribute-and-subscript mix, and an assertion
 that the right-hand side is fully evaluated first (`h[0], h[1] = h[1], h[0]`
 over distinguishable values).
+
+## 2026-08-13 — FIXED. Two builders, and the target list is a few lines on top
+
+Done as the 08-12 scoping said, with one honest boundary marked below.
+
+**The store.** `PyMakeSubscriptStore(base, idx, val)` (pyparser.inc) is now the
+single node-level home for the four-way fork: a VARIANT base dispatches at run
+time (`pyvar_setitem`), a class with a Pascal default property calls its setter,
+a user class calls `__setitem__`, a class with neither raises CPython's
+TypeError at RUN time (so `try/except TypeError` still compiles), and anything
+else is an ordinary indexed store. `PyMakeSubscriptLoad` is its read mirror —
+needed because only the LAST bracket of a target is stored into and everything
+left of it is an ordinary read (`m[i][j]` stores into `m[i]`). Both coerce a
+sequence index through `__index__` exactly as the inline path does.
+
+**The target parse.** `PyParseUnpackAssign` carries `subBase[]`/`subIdx[]`
+beside `names[]`/`flds[]`; an element may now end in any number of `[expr]`
+groups, over a name or over an attribute (`self.grid[i]`). All three store
+sites (the starred slice, the indexed unpack and the plain one) route through
+the builder. `PyUnpackTargetAhead` skips bracket groups via
+`PySkipTargetSubscripts` — without that the statement was not recognised as an
+unpack at all, which is why the mixed row `a, h[0] = ...` reported "undefined
+variable (a)" rather than the other rows' "expected expression".
+
+**Python's evaluation order holds for free.** The bases and index expressions
+become nodes during the target parse, the values go into hidden temps, and the
+stores are built afterwards from those temps — so `h[i], h[j] = h[j], h[i]`
+cannot degrade into the sequential form that silently loses the swap. The test
+asserts it on distinguishable values.
+
+### The boundary that is deliberate
+
+The inline `x[k] = v` path in parser.inc keeps its own arms. It is
+parse-interleaved in ways the builder has no tokens for — multi-index property
+args (`obj[a, b]`), the augmented forms (`d[k] += v`, `xs[0] **= 5`, each with
+its evaluate-once temps), and chained assignment's value-bearing COMMA wrapper.
+What the builder owns is the SINGLE-index store, which is what a target list
+needs; the fork's shape lives in one place now, and the next caller has
+something to call. Extracting the augmented/multi-arg arms is a separate,
+larger refactor of the hottest path in the frontend, and doing it in this
+ticket would have put an unrelated regression risk behind a swap.
+
+Also limited on purpose: a target element must START with a NAME
+(`h[0]`, `self.g[0]`, `m[i][j]`), not a call — `Plain()[0], ... = ...` is not
+a shape real code writes and accepting it would mean parsing an arbitrary
+postfix expression as an lvalue.
+
+### Gate
+
+`test/test_nilpy_tuple_assign_to_subscripts.npy` + `.expected` from CPython,
+wired into `make test-nilpy`: a list swap, a dict swap, a mixed name/subscript
+list, three targets, a nested subscript, an attribute base, an
+attribute/name mix, the evaluation-order assertion, a `__setitem__` class, a
+variant base, the no-`__setitem__` TypeError, and a heapify that cannot be
+written without the idiom. `make test-nilpy` green, `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

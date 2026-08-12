@@ -17639,6 +17639,162 @@ end;
   attribute the class never declared — Python creates that on assignment, and
   it goes through the same dynamic store `obj.name = v` already uses. `newTk`
   is the type a freshly created plain name takes. }
+{ `base[idx]` as a NODE — the READ mirror of PyMakeSubscriptStore below, for
+  the same caller. A target list's INNER steps are reads: in
+  `m[i][j], m[j][i] = ...` only the last bracket is stored into, and everything
+  left of it has to be evaluated the ordinary way.
+  bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
+function PyMakeSubscriptLoad(baseNode, idxNode: Integer): Integer;
+var ci, pri, i, idxN, idxArg: Integer;
+begin
+  if IntToTypeKind(ASTTk[baseNode]) <> tyClass then
+  begin
+    PyMakeSubscriptLoad := PyMakeVariantGetItem(PyForceVariant(baseNode), idxNode);
+    Exit;
+  end;
+  ci := -1;
+  i := ResolveNodeRec(baseNode);
+  if i >= REC_UCLASS_BASE then ci := i - REC_UCLASS_BASE;
+  pri := -1;
+  if ci >= 0 then pri := FindDefaultProp(ci);
+  if pri < 0 then
+  begin
+    PyMakeSubscriptLoad := PyMakeVariantGetItem(PyForceVariant(baseNode), idxNode);
+    Exit;
+  end;
+  idxN := idxNode;
+  if PyClassWantsIntIndex(ci) then
+  begin
+    i := PyIndexNotIntKind(PyIndexSeqKindCi(ci), idxN);
+    if i >= 0 then idxN := i else idxN := PyIndexCoerce(idxN);
+  end;
+  idxArg := AllocNode(AN_ARG);
+  ASTLeft[idxArg] := idxN;
+  ASTRight[idxArg] := -1;
+  PyMakeSubscriptLoad := PyMakeSubscriptRead(baseNode, idxArg, ci, pri);
+end;
+
+{ `base[idx] = val` as a NODE, for a caller that already has all three and no
+  tokens left to read — the tuple-unpack target list (`h[i], h[j] = h[j], h[i]`).
+
+  The same four-way fork the inline `x[k] = v` path in parser.inc makes, written
+  once: a VARIANT base dispatches at run time, a class with a Pascal default
+  property (pylib's TPyList/TPyDict) calls its setter, a user class calls
+  `__setitem__`, a class with neither raises CPython's TypeError at run time,
+  and anything else is an ordinary indexed store. A fifth copy of that fork is
+  what devdocs/dev/normalise-dont-special-case.md warns about; the inline path
+  keeps its own parse-interleaved arms (augmented ops, multi-index property
+  args, chained assignment) and this builder covers the single-index store the
+  target list needs.
+
+  bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
+function PyMakeSubscriptStore(baseNode, idxNode, valNode: Integer): Integer;
+var ci, pri, mmi, mpi, selfArg, idxArg, valArg, callNode, asgn, idxN: Integer;
+    methName: AnsiString;
+    i: Integer;
+begin
+  if IntToTypeKind(ASTTk[baseNode]) = tyVariant then
+  begin
+    PyMakeSubscriptStore := PyMakeVariantSetItem(baseNode, idxNode, valNode);
+    Exit;
+  end;
+  ci := -1;
+  if IntToTypeKind(ASTTk[baseNode]) = tyClass then
+  begin
+    i := ResolveNodeRec(baseNode);
+    if i >= REC_UCLASS_BASE then ci := i - REC_UCLASS_BASE;
+  end;
+  if ci >= 0 then
+  begin
+    { pylib's own containers: the Pascal default property carries the setter,
+      and a SEQUENCE wants the index coerced through __index__ exactly as the
+      inline path coerces it. }
+    pri := FindDefaultProp(ci);
+    idxN := idxNode;
+    if PyClassWantsIntIndex(ci) then
+    begin
+      i := PyIndexNotIntKind(PyIndexSeqKindCi(ci), idxN);
+      if i >= 0 then idxN := i else idxN := PyIndexCoerce(idxN);
+    end;
+    if pri >= 0 then
+    begin
+      if UPropWriteMLen[pri] <= 0 then
+        Error('Nil Python: this container is read-only');
+      methName := '';
+      for i := 0 to UPropWriteMLen[pri] - 1 do
+        AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
+      mmi := FindUMeth(ci, methName);
+      if mmi < 0 then Error('Nil Python: setter method not found: ' + methName);
+    end
+    else
+      mmi := FindUMeth(ci, '__setitem__');
+    if mmi < 0 then
+    begin
+      { neither a default property nor __setitem__: CPython's TypeError, at RUN
+        time, so `try: obj[k] = v / except TypeError:` still compiles }
+      PyMakeSubscriptStore := PyClassErrCallNode('PyNoSetitemError', ci);
+      if PyMakeSubscriptStore < 0 then
+        Error('Nil Python: pylib (PyNoSetitemError) not loaded');
+      Exit;
+    end;
+    mpi := UMthProc_[mmi];
+    if UMthVirSlot[mmi] >= 0 then
+    begin
+      callNode := AllocNode(AN_VIRTUAL_CALL);
+      ASTRight[callNode] := UMthVirSlot[mmi];
+    end
+    else
+      callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := mpi;
+    ASTTk[callNode] := Ord(Procs[mpi].RetType);
+    selfArg := AllocNode(AN_ARG); ASTLeft[selfArg] := baseNode;
+    idxArg := AllocNode(AN_ARG); ASTLeft[idxArg] := idxN;
+    valArg := AllocNode(AN_ARG); ASTLeft[valArg] := valNode;
+    ASTRight[selfArg] := idxArg; ASTRight[idxArg] := valArg; ASTRight[valArg] := -1;
+    ASTLeft[callNode] := selfArg;
+    PyMakeSubscriptStore := callNode;
+    Exit;
+  end;
+  { an ordinary indexed lvalue — a static array or a pointer base }
+  asgn := AllocNode(AN_INDEX);
+  ASTLeft[asgn] := baseNode;
+  ASTRight[asgn] := idxNode;
+  ASTTk[asgn] := ASTTk[baseNode];
+  PyMakeSubscriptStore := AllocNode(AN_ASSIGN);
+  ASTLeft[PyMakeSubscriptStore] := asgn;
+  ASTRight[PyMakeSubscriptStore] := valNode;
+end;
+
+{ `obj.name` as a NODE — a declared FIELD read where the class declares one,
+  the dynamic attribute route otherwise. The read half of the attribute logic in
+  PyUnpackTargetStore below, needed once a target may continue into a subscript
+  (`self.grid[i], self.grid[j] = ...`).
+  bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
+function PyMakeAttrLoad(baseNode: Integer; const fld: AnsiString): Integer;
+var ci, fi, node: Integer;
+begin
+  ci := -1;
+  if IntToTypeKind(ASTTk[baseNode]) = tyClass then
+  begin
+    fi := ResolveNodeRec(baseNode);
+    if fi >= REC_UCLASS_BASE then ci := fi - REC_UCLASS_BASE;
+  end;
+  fi := -1;
+  if ci >= 0 then fi := FindUField(ci, fld);
+  if fi < 0 then
+  begin
+    PyMakeAttrLoad := PyMakeDynAttrGet(baseNode, fld);
+    Exit;
+  end;
+  node := AllocNode(AN_FIELD);
+  ASTLeft[node] := baseNode;
+  ASTSOffset[node] := PyStoredName(fld);
+  ASTSLen[node] := Length(fld);
+  ASTTk[node] := UFldTk[fi];
+  ASTRight[node] := UFldRec_[fi];
+  PyMakeAttrLoad := node;
+end;
+
 function PyUnpackTargetStore(const nm, fld: AnsiString; valNode: Integer;
                             newTk: TTypeKind; newRec: Integer): Integer;
 var symIdx, ci, fi, lhs: Integer;
@@ -17744,6 +17900,14 @@ function PyParseUnpackAssign: Integer;
 var names: array[0..7] of AnsiString;
     flds: array[0..7] of AnsiString;    { attribute target, or '' for a plain name }
     tmps: array[0..7] of Integer;
+    { a SUBSCRIPT target — `h[i], h[j] = h[j], h[i]`. subIdx is the index node
+      of the LAST bracket and subBase the value it indexes (already a read for
+      an inner step, e.g. `m[i]` in `m[i][j]`); -1 when the target is a plain
+      name or an attribute.
+      bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
+    subBase: array[0..7] of Integer;
+    subIdx: array[0..7] of Integer;
+    tgtBase: Integer;
     nTargets, nValues, i, symIdx, node, seq, tk: Integer;
     unpCi, unpIdx, unpElem: Integer;
     starAt, unpCnt, unpHi, unpTrail: Integer;   { `a, *rest = xs` }
@@ -17765,6 +17929,8 @@ begin
     if nTargets >= 8 then Error('Nil Python: at most 8 unpacking targets');
     names[nTargets] := CurTok.SVal;
     flds[nTargets] := '';
+    subBase[nTargets] := -1;
+    subIdx[nTargets] := -1;
     Next;
     { An ATTRIBUTE target — `self.x, self.y = x, y`, which is how a class
       records a position in one line. Only the object.field shape is taken;
@@ -17774,6 +17940,32 @@ begin
       Next;
       flds[nTargets] := CurTok.SVal;
       Next;
+    end;
+    { A SUBSCRIPT target — `h[i], h[j] = h[j], h[i]`, the swap every sort and
+      heap is written with. Only the LAST bracket is a store; the ones before it
+      are ordinary reads that build the base (`m[i][j]` stores into `m[i]`).
+      The base is captured as a NODE here and the store built after the values
+      are in temps, so Python's "evaluate everything first" order holds. }
+    if CurTok.Kind = tkLBrack then
+    begin
+      symIdx := PyProgSym(names[nTargets]);
+      if symIdx < 0 then
+        Error('Nil Python: ' + names[nTargets] + ' is not defined, so '
+              + names[nTargets] + '[...] cannot be assigned');
+      tgtBase := PyMakeIdent(symIdx);
+      if flds[nTargets] <> '' then
+        tgtBase := PyMakeAttrLoad(tgtBase, flds[nTargets]);
+      while CurTok.Kind = tkLBrack do
+      begin
+        Next;                          { consume '[' }
+        PyParseBoolExpr;
+        node := CurASTNode;
+        Expect(tkRBrack, ']');
+        if subIdx[nTargets] >= 0 then
+          tgtBase := PyMakeSubscriptLoad(tgtBase, subIdx[nTargets]);
+        subBase[nTargets] := tgtBase;
+        subIdx[nTargets] := node;
+      end;
     end;
     Inc(nTargets);
   until not Eat(tkComma);
@@ -17881,7 +18073,10 @@ begin
         ASTTk[unpIdx] := Ord(Procs[unpCnt].RetType);
         ASTRight[unpIdx] := ProcRetRecId[unpCnt];
         unpElem := unpIdx;
-        node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
+        if subIdx[i] >= 0 then
+          node := PyMakeSubscriptStore(subBase[i], subIdx[i], unpElem)
+        else
+          node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
         seq := PySeqAppend(seq, node);
         Continue;
       end;
@@ -17912,7 +18107,10 @@ begin
       end
       else
         unpElem := PyMakeVariantGetItem(PyMakeIdent(tmps[0]), unpIdx);
-      node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
+      if subIdx[i] >= 0 then
+        node := PyMakeSubscriptStore(subBase[i], subIdx[i], unpElem)
+      else
+        node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
       seq := PySeqAppend(seq, node);
     end;
     Result := seq;
@@ -17928,11 +18126,40 @@ begin
   { then the stores }
   for i := 0 to nTargets - 1 do
   begin
-    node := PyUnpackTargetStore(names[i], flds[i], PyMakeIdent(tmps[i]),
-                                Syms[tmps[i]].TypeKind, Syms[tmps[i]].RecName);
+    if subIdx[i] >= 0 then
+      node := PyMakeSubscriptStore(subBase[i], subIdx[i], PyMakeIdent(tmps[i]))
+    else
+      node := PyUnpackTargetStore(names[i], flds[i], PyMakeIdent(tmps[i]),
+                                  Syms[tmps[i]].TypeKind, Syms[tmps[i]].RecName);
     seq := PySeqAppend(seq, node);
   end;
   Result := seq;
+end;
+
+{ Step over any `[...]` groups a target element ends with, so the lookahead
+  below sees `h[i], h[j] = ...` as a target LIST. Without it the statement was
+  not recognised as an unpack at all and the first name died as an expression
+  statement ("undefined variable (a)" for `a, h[0] = ...`), which is the
+  different message the ticket's mixed row records.
+  bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
+function PySkipTargetSubscripts(i: Integer): Integer;
+var depth: Integer;
+begin
+  while (i < TokCount) and (Tokens[i].Kind = tkLBrack) do
+  begin
+    depth := 0;
+    while i < TokCount do
+    begin
+      if Tokens[i].Kind = tkLBrack then Inc(depth)
+      else if Tokens[i].Kind = tkRBrack then
+      begin
+        Dec(depth);
+        if depth = 0 then begin Inc(i); Break; end;
+      end;
+      Inc(i);
+    end;
+  end;
+  Result := i;
 end;
 
 { Does an `a, b = ...` target list start here? Only a bare comma-separated name
@@ -17960,6 +18187,7 @@ begin
   { an ATTRIBUTE target counts as one name — `self.x, self.y = x, y` }
   if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
      (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+  i := PySkipTargetSubscripts(i);
   if (i >= TokCount) or (Tokens[i].Kind <> tkComma) then Exit;
   while i < TokCount do
   begin
@@ -17976,6 +18204,7 @@ begin
       Inc(i);
       if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
          (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+      i := PySkipTargetSubscripts(i);
     end
     else if Tokens[i].Kind = tkAssign then begin Result := True; Exit; end
     else Exit;

@@ -1,0 +1,100 @@
+# `h[i], h[j] = h[j], h[i]` — the in-place swap every sort, heap and partition
+# is built on. A tuple assignment took NAME and ATTRIBUTE targets but stopped at
+# a `[`, so the one idiom that needs it most did not parse.
+# bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse
+# Every expectation is CPython's own output.
+
+h = [10, 20, 30]
+h[0], h[2] = h[2], h[0]
+print("list", h)
+
+d = {"x": 1, "y": 2}
+d["x"], d["y"] = d["y"], d["x"]
+print("dict", d)
+
+a = 0
+a, h[0] = h[0], 9
+print("mixed", a, h)
+
+m = [[1, 2], [3, 4]]
+m[0][1], m[1][0] = m[1][0], m[0][1]
+print("nested", m)
+
+t = [1, 2, 3]
+t[0], t[1], t[2] = t[2], t[0], t[1]
+print("three", t)
+
+class Box:
+    def __init__(self):
+        self.g = [1, 2]
+
+b = Box()
+b.g[0], b.g[1] = b.g[1], b.g[0]
+print("attr-sub", b.g)
+
+y = 5
+b.g[0], y = y, b.g[0]
+print("attr-mix", b.g, y)
+
+# the RIGHT-hand side is evaluated in full BEFORE any target is stored — a
+# left-to-right lowering degrades this to `h[0] = h[1]; h[1] = h[0]` and would
+# print [2, 2] with no error at all
+q = [1, 2]
+q[0], q[1] = q[1], q[0]
+print("order", q)
+
+# a user class routes through __setitem__
+class Grid:
+    def __init__(self):
+        self.cells = {}
+    def __setitem__(self, k, v):
+        self.cells[k] = v
+    def __getitem__(self, k):
+        return self.cells.get(k, 0)
+
+g = Grid()
+g[1], g[2] = 7, 8
+g[1], g[2] = g[2], g[1]
+print("setitem", g[1], g[2])
+
+# ...and a VARIANT base dispatches at run time
+def get(v):
+    return v
+
+vv = get([1, 2])
+vv[0], vv[1] = vv[1], vv[0]
+print("variant", vv)
+
+# a class with no __setitem__ raises TypeError, at run time, so it is catchable
+class Plain:
+    pass
+
+pp = Plain()
+try:
+    pp[0], pp[1] = 1, 2
+    print("no-setitem: no error")
+except TypeError:
+    print("no-setitem raises TypeError")
+
+# the shape this was found writing: a sift-down, which is only writable this way
+def heapify(xs):
+    n = len(xs)
+    i = n // 2 - 1
+    while i >= 0:
+        p = i
+        while True:
+            l = 2 * p + 1
+            r = l + 1
+            small = p
+            if l < n and xs[l] < xs[small]:
+                small = l
+            if r < n and xs[r] < xs[small]:
+                small = r
+            if small == p:
+                break
+            xs[p], xs[small] = xs[small], xs[p]
+            p = small
+        i = i - 1
+    return xs
+
+print("heap", heapify([5, 3, 8, 1, 9, 2]))
