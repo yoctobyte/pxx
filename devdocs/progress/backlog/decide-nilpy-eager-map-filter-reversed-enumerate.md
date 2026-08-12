@@ -122,6 +122,44 @@ This also says what the divergence is NOT: not a missing optimisation, not a
 perf gap. We return a different KIND of thing, and the difference is observable
 whenever the consumer does not run to the end.
 
+## What else cheats the same way — the scope of "build real objects"
+
+In CPython these builtins are **classes**, so `map(f, xs)` is a CONSTRUCTOR call
+and the value is an instance (which is why `print(x)` shows
+`<map object at 0x...>`):
+
+| | |
+| --- | --- |
+| classes | `map` `filter` `enumerate` `reversed` `zip` `range` `list` `dict` `set` `tuple` `str` `int` `float` `bool` `type` |
+| functions | `len` `print` `sorted` `sum` `abs` `round` `repr` `isinstance` `getattr` `open` `iter` `next` |
+
+pxx already models most of that class column properly — `list`/`dict`/`str`/
+`tuple`/`set` are real types here (TPyList, TPyDict, …). The gap is only the
+LAZY family, and it comes in two grades:
+
+**Wrong KIND of value** — `map`, `filter`, `enumerate`, `reversed`, `zip`:
+they are values, just eager lists instead of cursors. `z = zip([1],[2])` binds
+fine and `list(z)` works; only laziness is missing. This is what options B and D
+address.
+
+**Not a value at all** — `range`. Measured:
+
+| | pxx |
+| --- | --- |
+| `for i in range(3)` | works (a loop construct) |
+| `list(range(3))`, `len(range(3))` | work (special-cased) |
+| `r = range(3)` | **`undefined variable (range)`** |
+| `range(3)[1]` | **`undefined variable (range)`** |
+
+CPython's `range` is a lazy SEQUENCE — re-iterable, indexable, `len`-able — not
+a cursor, so it is a different shape from the family above and would not be
+fixed by an iterator protocol alone. It is also why `map(f, range(n))` does not
+compile at all, which is what keeps the unbounded-memory case out of reach today.
+
+Whoever takes this decision should know the two grades are separable: B or D
+can land for the cursor family without touching `range`, and `range`-as-a-value
+is its own (smaller, sequence-shaped) piece of work.
+
 ## The options
 
 **A — Document it as a divergence.** Add it to
