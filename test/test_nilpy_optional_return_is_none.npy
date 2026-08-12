@@ -1,0 +1,44 @@
+def fs(i):
+    if i > 1:
+        return None
+    return "ok"
+
+def fi(i):
+    if i > 1:
+        return None
+    return 7
+
+def plain(x):
+    return x is None
+
+print("lit", plain(None))
+sv = fs(2)
+print("direct", sv is None)
+print("param-str", plain(fs(2)))
+print("param-int", plain(fi(2)))
+print("param-via-var", plain(sv))
+lst = [fs(2)]
+print("list", lst[0] is None)
+print("type", type(fs(2)).__name__, type(fi(2)).__name__)
+print("str", str(fi(2)))
+vals = [fs(0), fs(2)]
+print("comp", len([x for x in vals if x is None]), len([x for x in vals if x is not None]))
+
+# a bare `return` on the guard path is the same thing in Python
+def fb(i):
+    if i > 1:
+        return
+    return 3.5
+
+print("bare", plain(fb(2)), fb(0))
+
+# ...and a def with ONLY bare returns keeps answering None, not a value
+def nothing(i):
+    if i > 1:
+        return
+    return
+
+print("novalue", plain(nothing(2)), nothing(0) is None)
+
+# the value paths still carry their values
+print("values", fs(0), fi(0), [fi(0), fs(0)])

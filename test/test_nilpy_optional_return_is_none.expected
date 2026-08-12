@@ -1,0 +1,12 @@
+lit True
+direct True
+param-str True
+param-int True
+param-via-var True
+list True
+type NoneType NoneType
+str None
+comp 1 1
+bare True 3.5
+novalue True True
+values ok 7 [7, 'ok']

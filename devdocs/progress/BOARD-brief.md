@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:223 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1680 rejected:35`
+`unfinished:10 blocked:3 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1681 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 206, ranked
+## Ready — top 30 of 205, ranked
 
 - `[p 62] [P]` bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -45,7 +45,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [N]` bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution
@@ -62,5 +61,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 52] [N]` bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse
 
-_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

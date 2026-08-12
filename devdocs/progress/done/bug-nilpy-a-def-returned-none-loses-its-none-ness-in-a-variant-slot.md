@@ -3,6 +3,7 @@ prio: 55
 track: N
 type: bug
 blocked-by: []
+status: done
 ---
 
 # A def-returned `None` stops being None once it crosses into a variant slot
@@ -10,7 +11,7 @@ blocked-by: []
 - **Type:** bug (NilPy, silent wrong value on ordinary code) — **Track N**
 - **Found:** 2026-08-11, sweeping shapes while fixing
   [[bug-nilpy-is-none-followed-by-and-or-else-takes-a-generic-compare]].
-- **Owner:** —
+- **Owner:** claude-AN
 
 ```python
 def fs(i):
@@ -150,3 +151,45 @@ Still prio 55 and still silent, but this is **not** a contained conversion fix
 and should not be picked up as one. It is adjacent to
 [[feature-n-nilpy-ast-typing-module-scope]] — same "what type does this
 expression really have" ground.
+
+## 2026-08-13 — FIXED, as the one typing rule the 08-11 analysis called for
+
+The banked diagnosis was right: (b) is return-type inference, not a conversion,
+and fixing (a) alone would have been the one-armed microfix. Both fall out of a
+single rule.
+
+`PyInferDefRetType` already widened `sawNone` + tyClass to a variant. That gate
+is now kind-blind:
+
+```
+if sawNone and (Result <> tyVariant) then   { was: and (Result = tyClass) }
+```
+
+A def that returns None on one path and a VALUE on another answers Any, whatever
+the value's kind — which is exactly what neither a static int (None became a
+plain `0`, indistinguishable from a real zero) nor a static str (a nil handle,
+boxed as VT_STRING+nil, which `is None` does not accept) can express. The str
+arm's information survived to the box and the int arm's did not, but with the
+return declared variant there is nothing left to lose on either.
+
+**The all-bare-return def is in scope too, and needed no extra work.** An
+unannotated def is never compiled as a procedure here, so `def f(): return` was
+handing back the tyInteger default's 0 and `plain(nothing(2))` said False. A
+variant `$pyresult` is zero-initialised, i.e. VT_EMPTY, so it reads as None with
+no store at all. That is why the rule is ungated rather than gated on
+`PyInferRetSeenAny` — the gated version was written first and left this row
+wrong for no benefit.
+
+Every row of both tables in this ticket now matches CPython, including
+`type(fi(2)).__name__` = NoneType, `str(fi(2))` = None, and the comprehension
+pair.
+
+Gate: `test/test_nilpy_optional_return_is_none.npy` + `.expected` from CPython,
+wired into `make test-nilpy` — the six boundary rows, both source kinds, the
+comprehension filters, a bare-`return` guard beside a float value, an
+all-bare-return def, and the value paths as controls. **`make test-nilpy`
+green** (the family sweep this ticket demanded, and the `test_nilpy_none_str_field`
+canary is in it), `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

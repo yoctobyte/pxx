@@ -791,6 +791,11 @@ test-nilpy: $(COMPILER)
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which
 	# has no class index at compile time: read, write, inheritance, getattr/hasattr,
 	# the plugin-registry shape, and the AttributeError. Diffed against CPython.
+	@# a def that returns None on one path and a value on another answers Any:
+	@# `return None` beside `return 7` used to store a plain 0, so `x is None` was
+	@# False and str(x) printed 0. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_optional_return_is_none.npy /tmp/test_nilpy_optret_none26
+	/tmp/test_nilpy_optret_none26 | diff -u test/test_nilpy_optional_return_is_none.expected -
 	@# rebinding a PARAMETER is local to the call: a variant param is const-by-ref
 	@# here, so `p = p + [9]` stored into the CALLER's slot. Mutation and `+=` on a
 	@# list must still reach the caller. Diffed against CPython.

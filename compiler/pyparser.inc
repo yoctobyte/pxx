@@ -22474,7 +22474,26 @@ begin
     WriteLn('PXXDBG n.ret def@', methodStart, ' ', GetTokenStr(methodStart + 1),
             ' tk=', Ord(Result), ' rec=', retRec, ' sawNone=', Ord(sawNone),
             ' trial=', Ord(PyTypingPass));
-  if sawNone and (Result = tyClass) then
+  { A def that returns None on one path and a VALUE on another answers Any, and
+    that is true of every kind — not only tyClass, which is all this rule used
+    to cover.
+
+    None has no representation inside a static scalar: `return None` beside
+    `return 7` stored a plain 0, so `fi(2) is None` was False and `str(fi(2))`
+    printed `0` — indistinguishable from a genuine zero, with nothing left for
+    any later conversion to recover. The str spelling loses it one step later
+    (a nil AnsiString handle IS a None sentinel, but boxing it into a variant
+    produced VT_STRING+nil, which `is None` does not accept). One rule fixes
+    both; fixing only the str arm would have left the int arm silently wrong and
+    made the bug harder to find, because str is the spelling people reproduce
+    with (bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot).
+
+    A def whose returns are ALL bare is the same rule with nothing on the other
+    side: it answers None in Python, and it was already compiled as a FUNCTION
+    (an unannotated def is never a procedure here), so it was handing back the
+    tyInteger default's 0 — `plain(nothing(2))` said False. A variant Result is
+    zero-initialised, i.e. VT_EMPTY, so it needs no store to be None. }
+  if sawNone and (Result <> tyVariant) then
   begin
     Result := tyVariant;
     retRec := REC_NONE;
