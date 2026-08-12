@@ -187,4 +187,4 @@ above for str/int/float/bool, inheritance, two calls deep, getattr/hasattr, the
 registry shape, the write side, and the AttributeError. `make test-nilpy` green.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 069a3b740.
