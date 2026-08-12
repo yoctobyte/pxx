@@ -1,12 +1,36 @@
 ---
 track: U
 prio: 55
+status: done
 type: decide
 blocked-by: []
 summary: "map/filter/reversed/enumerate return LISTS, not lazy iterators. MEASURED: `for v in map(risky, xs)` with an early break raises an exception CPython never reaches (f runs 1000x vs 4x), so a working CPython program crashes — this is an upward-compatibility break, not a perf note. Decide: fuse at the for-loop consumption site (recommended), full iterator protocol, or document"
 ---
 
 # Decide: eager `map` / `filter` / `reversed` / `enumerate`
+
+## DECIDED 2026-08-12 — build the real cursor objects (option B)
+
+**User's call, once the internals were on the table: "this totally looks
+solveable and is actually quite straightforward" — build the lazy evaluators
+properly rather than documenting the divergence.**
+
+Option **B**, not the cheaper **D** (fuse at the for-loop site). D was the
+recommendation while the fix looked expensive; it stops being the right trade
+once the object is understood to be an ordinary cursor — a source, a position
+and a `next` — because D leaves the bound form (`m = map(risky, xs)` then
+`for n in m`) with every symptom intact, including the raise, and that is not a
+corner case.
+
+**A** (divergence note) is rejected outright: it would mean shipping a known
+upward-compatibility break, which is the one thing the NilPy rule does not bend
+on. **C** was never live.
+
+Work is tracked in the umbrella
+[[feature-nilpy-lazy-iterator-objects]], which carries the landing order, the
+one behaviour removal to check first (`len(map(...))`), and the callable-
+representation landmines. `range` is explicitly out of its scope — it cheats
+differently and is a lazy SEQUENCE, not a cursor.
 
 - **Track U** (decision) — raised 2026-08-12 from the builtin sweep in
   [[bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep]].
