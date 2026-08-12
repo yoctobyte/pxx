@@ -83,6 +83,38 @@ corruption, not just a lost write.
 `getattr(cls, "name")` is worth a row too — it is the other spelling of the
 same read.
 
+## 2026-08-12 — read the model before starting; this is not a small fix
+
+A class attribute is NOT stored on the class. `PyClsAttrSlot` (pyparser.inc
+~4220) gives each one a hidden GLOBAL named after `(ci, name)` and registers it
+as a CLASS VAR of `ci`, and all three working access routes are compile-time
+lookups of that slot:
+
+  * `C.attr` — parser.inc's `ClassName.member` branch, via `FindClassVar`
+  * bare `attr` inside a method body
+  * `inst.attr` — the class-variable-through-an-instance branch
+
+Every one of those needs to know the CLASS at compile time. A class held as a
+value is a `VT_CLASSREF` variant, so `c.name` has no class index at the point
+of the read and falls through to the dynamic instance-attribute path, which
+reads at a field offset inside the RTTI blob — hence a 24 where 7 was stored,
+and an empty string for a str.
+
+So the runtime has nothing to consult: the attribute's value lives in a global
+whose name only the frontend knows, and the RTTI blob (which the class-as-a-
+value work already reflects for `create`) carries methods, not attributes.
+Fixing this properly means giving the RTTI blob a class-ATTRIBUTE table — name,
+kind, and the address of that hidden global — and routing the variant-receiver
+read and write through it, the same way `PyClassRefNew` reflects the
+constructor. That is the ticket, and it is a feature-sized one.
+
+**A cheaper partial exists and should be a deliberate choice, not a default:**
+the ALIAS row (`c = A`) could be typed at compile time — the pre-pass sees a
+bare-ident assignment from a known class name and could record `c` as a
+class-ref to that class, after which `c.attr` resolves exactly like `A.attr`.
+That fixes the row that is currently silent garbage and leaves the parameter /
+dict / list rows still wrong, which argues for doing the RTTI table instead.
+
 ## Gate
 
 A `.npy` diffed against CPython: every row of the table above for a str, an
