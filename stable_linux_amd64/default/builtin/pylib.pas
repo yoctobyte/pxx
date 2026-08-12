@@ -932,6 +932,11 @@ function pyiter_rev_str(const s: AnsiString): TPyIter;
   two-element TPyList, the same shape d.items() and the tuple literal build). }
 function pyiter_enum(const v: Variant; start: Int64): TPyIter;
 function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
+{ ...and the forms the frontend actually builds. Both take CURSORS, so the
+  arm converts each iterable once (PyMakeIterOf) instead of needing one entry
+  per combination of argument types — zip alone would otherwise want nine. }
+function pyiter_enum_i(up: TPyIter; start: Int64): TPyIter;
+function pyiter_zip_ii(a: TPyIter; b: TPyIter): TPyIter;
 { map(f, xs) / filter(f, xs). `key` is a callable in any of its four
   representations; filter's `key` may be nil, which is Python's own
   `filter(None, xs)` "keep the truthy elements" shorthand. }
@@ -1481,14 +1486,20 @@ function all(it: TPyIter): Boolean; overload;
 function Counter: TPyDict;
 function Counter(l: TPyList): TPyDict; overload;
 function Counter(const s: AnsiString): TPyDict; overload;
-{ `reversed(x)` — Python returns a lazy iterator; NilPy's `for` is a counted-loop
-  desugar with no iterator concept, so this is the reversed COPY, which behaves
-  identically for `for x in reversed(xs)` and `list(reversed(xs))`. }
-function reversed(l: TPyList): TPyList;
-function reversed(const s: AnsiString): TPyList; overload;
+{ `reversed(x)` — a CURSOR walking the source backwards, which is what CPython
+  returns (`list_reverseiterator`). It used to be the reversed COPY, on the
+  grounds that NilPy's `for` was a counted-loop desugar with no iterator
+  concept; TPyIter is that concept (feature-nilpy-lazy-iterator-objects), and
+  the only thing laziness buys HERE is the exhaustion rule, since the source is
+  already materialised. `[::-1]` does NOT come through this any more — it goes
+  to pylist_slice_step, which is what carries tupleness across
+  (bug-nilpy-derived-tuple-loses-tupleness). }
+function reversed(l: TPyList): TPyIter;
+function reversed(const s: AnsiString): TPyIter; overload;
 { reversed(<variant>) — a VARIANT receiver, same shape and same crash as
-  tuple(<variant>) above. }
-function reversed(const v: Variant): TPyList; overload;
+  tuple(<variant>) above. Declared AFTER the two typed forms, like every other
+  cursor overload here: order decides which one a variant unwraps into. }
+function reversed(const v: Variant): TPyIter; overload;
 { `hex(n)` — Python spells it with the 0x prefix and lower-case digits, and
   spells a negative as -0x… rather than in two's complement. }
 function hex(n: Int64): AnsiString;
@@ -9062,6 +9073,25 @@ begin
   Result.FStart := start;
 end;
 
+function pyiter_enum_i(up: TPyIter; start: Int64): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_ENUM;
+  Result.FUp := up;
+  PXXObjRetain(Pointer(up));
+  Result.FStart := start;
+end;
+
+function pyiter_zip_ii(a: TPyIter; b: TPyIter): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_ZIP;
+  Result.FUp := a;
+  PXXObjRetain(Pointer(a));
+  Result.FUp2 := b;
+  PXXObjRetain(Pointer(b));
+end;
+
 function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -11584,16 +11614,21 @@ begin
   Result.FKind := PYSEQ_TUPLE;
 end;
 
-function reversed(const v: Variant): TPyList; overload;
+function reversed(const v: Variant): TPyIter; overload;
 var o: TObject;
 begin
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
     if o is TPyList then begin Result := reversed(TPyList(o)); Exit; end;
+    { reversed(<cursor>) is a TypeError in CPython — an iterator has no known
+      end to walk back from — but NilPy is allowed to be laxer where CPython
+      REJECTS the code: drain and reverse what came out. }
+    if o is TPyIter then begin Result := reversed(pyiter_drain(TPyIter(o))); Exit; end;
+    if o is TPyDict then begin Result := reversed(TPyDict(o).keylist); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := reversed(pystr_of(v)); Exit; end;
-  Result := TPyList.Create;
+  Result := pyiter_of_list(TPyList.Create);
 end;
 
 function tuple(const s: AnsiString): TPyList; overload;
@@ -11772,28 +11807,14 @@ begin
   Result := r;
 end;
 
-function reversed(l: TPyList): TPyList;
-var r: TPyList; i: Integer;
+function reversed(l: TPyList): TPyIter;
 begin
-  r := TPyList.Create;
-  { Carries the tuple flag so `(1,2,3)[::-1]` is `(3, 2, 1)`: the reverse-slice
-    form lowers to this very function (see the `[::-1]` arm in pyparser), and a
-    slice of a tuple is a tuple. CPython's `reversed()` returns an ITERATOR
-    whose repr pxx already does not reproduce, so nothing that currently matches
-    the oracle moves — and `list(reversed(t))` still builds a fresh plain list.
-    (bug-nilpy-derived-tuple-loses-tupleness) }
-  if l <> nil then r.FKind := l.FKind;
-  if l <> nil then
-    for i := l.count - 1 downto 0 do r.append(l.at(i));
-  Result := r;
+  Result := pyiter_rev_list(l);
 end;
 
-function reversed(const s: AnsiString): TPyList; overload;
-var r: TPyList; i: Integer;
+function reversed(const s: AnsiString): TPyIter; overload;
 begin
-  r := TPyList.Create;
-  for i := Length(s) downto 1 do r.append(pystr_ofchar(s[i]));
-  Result := r;
+  Result := pyiter_rev_str(s);
 end;
 
 function hex(n: Int64): AnsiString;

@@ -82,9 +82,25 @@ print("filter saw", seen)
 # the identities CPython reports
 print(type(map(str, [])).__name__)
 print(type(filter(None, [])).__name__)
+print(type(enumerate([])).__name__)
+print(type(zip([], [])).__name__)
+print(type(reversed([])).__name__)
 print(str(map(str, []))[:4])
-# enumerate/zip/reversed are still eager here — they are the next steps of the
-# umbrella and get their rows when they land.
+
+# ...and each of those four parks and resumes like map does
+e = enumerate([1, 2, 3])
+for i, v in e:
+    if i == 1:
+        break
+print("enum rest", list(e))
+z = zip([1, 2, 3], "abc")
+for a, b in z:
+    break
+print("zip rest", list(z))
+r = reversed([1, 2, 3])
+for v in r:
+    break
+print("rev rest", list(r))
 
 # and every ordinary consuming shape still agrees
 print(list(enumerate(["a", "b"], 1)))

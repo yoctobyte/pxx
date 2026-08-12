@@ -322,14 +322,15 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
-	# map()/filter() are LAZY: an early break never reaches a raise past it,
-	# a bound cursor resumes where it parked, and len(map(...)) is a TypeError.
+	# map/filter/enumerate/zip/reversed are LAZY: an early break never reaches a
+	# raise past it, a bound cursor resumes where it parked, len(map(...)) is a
+	# TypeError, and each one reports CPython's own type name.
 	# The quote is spelled \0047 and not \047 here: in a printf %b ARGUMENT the
 	# escape is \0ddd, so \047 followed by a DIGIT swallows it as a fourth octal
 	# digit and prints garbage. (In a printf FORMAT string it is \ddd instead,
 	# which is why the older entries around here are spelled the other way.)
 	./$(COMPILER) test/test_nilpy_lazy_map_filter.npy /tmp/test_nilpy_lazymap26
-	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\n<map\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
+	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy /tmp/test_nilpy_itercur26
@@ -5416,14 +5417,15 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy /tmp/test_nilpy_fnvalue26
 	test "$$(/tmp/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
-	# map()/filter() are LAZY: an early break never reaches a raise past it,
-	# a bound cursor resumes where it parked, and len(map(...)) is a TypeError.
+	# map/filter/enumerate/zip/reversed are LAZY: an early break never reaches a
+	# raise past it, a bound cursor resumes where it parked, len(map(...)) is a
+	# TypeError, and each one reports CPython's own type name.
 	# The quote is spelled \0047 and not \047 here: in a printf %b ARGUMENT the
 	# escape is \0ddd, so \047 followed by a DIGIT swallows it as a fourth octal
 	# digit and prints garbage. (In a printf FORMAT string it is \ddd instead,
 	# which is why the older entries around here are spelled the other way.)
 	./$(COMPILER) test/test_nilpy_lazy_map_filter.npy /tmp/test_nilpy_lazymap26
-	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\n<map\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
+	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy /tmp/test_nilpy_itercur26

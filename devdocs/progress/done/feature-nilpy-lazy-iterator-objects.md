@@ -4,7 +4,7 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "UMBRELLA: map/filter/enumerate/zip/reversed return eager LISTS where CPython returns cursor objects, so a working CPython program can crash here (f runs for every element even when the loop breaks early, and a raise past the break point escapes). Build a real cursor — TPyIter in pylib, consumed by every for/list/sum/sorted site — and give iter()/next() somewhere to live"
-status: working
+status: done
 owner: claude-N
 ---
 
@@ -257,19 +257,48 @@ instead, which is why entries around it are spelled `\047`. The two forms are
 not interchangeable and a blanket rewrite of one into the other breaks the
 other family's tests.
 
-### NEXT — step 4
+### Step 4 — `enumerate`, `zip` and `reversed` are LAZY
 
-`enumerate` and `zip`, then `reversed` last. The cursor KINDS for all three
-already exist and are tested through `iter()`; what is left is rewiring their
-parser arms the way map's was, and they have more of them than map did —
-enumerate and zip each have a for-HEADER form (`PyParseForIn` enumMode,
-`PyParseForZip`) that is a counted loop and never builds a value at all. Those
-header forms are already correct and lazy by construction, so the work is only
-the VALUE forms (`list(enumerate(xs))`, `for i, s in reversed(list(enumerate(t)))`).
+All five cursor builtins now match CPython, and the acceptance test carries the
+park/resume row for each: an `enumerate`/`zip`/`reversed` bound to a name,
+broken out of, then drained, yields the REMAINDER.
 
-Watch for: `enumerate()`/`zip()` over a str are wrapped in `pystr_charlist` by
-the frontend today because those arms are built by a fixed FindProc index —
-the same non-overload-aware fact that shaped map's four spellings.
+The shape that kept this small: **one conversion, not a family of spellings.**
+`enumerate` and `zip` take CURSORS (`pyiter_enum_i`, `pyiter_zip_ii`) and the
+frontend converts each iterable once through `PyMakeIterOf` — otherwise zip
+alone would have needed nine entries to cover every pair of argument types,
+because these calls are FindProc-built and not overload-aware. That also
+deleted a workaround: `enumerate`/`zip` over a str used to be exploded through
+`pystr_charlist` so an AnsiString handle would not be dereferenced as an object
+([[bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle]]); a str cursor
+is the same idea with one representation instead of two.
 
-The acceptance test's three `type(...).__name__` rows for enumerate/zip/
-reversed were removed when map/filter landed and belong back with this step.
+`reversed` changed the RETURN TYPE of the existing overloads rather than adding
+new ones — the declaration-order lesson above says a second class overload is
+the dangerous move, and there was nothing to keep: `[::-1]` stopped routing
+through `reversed` when tuple-slicing was fixed, so the tuple-flag copy it was
+carrying had no consumer left. `reversed(<cursor>)` is a TypeError in CPython
+and drains here instead, which is laxity in the direction the rule allows.
+
+Two more `forwards.inc` entries were needed (`PyMakeIterOf`, `PyCallProc1`) and
+again ONLY the FPC seed canary saw it.
+
+### NEXT
+
+All six "done" rows of this ticket are met. What is deliberately NOT in scope
+and stays open:
+
+- **`range` as a value** — out of scope from the start (it is a lazy SEQUENCE,
+  not a cursor, and `r = range(3)` is still `undefined variable (range)`). Its
+  own ticket.
+- **[[bug-nilpy-map-over-a-bound-method-segfaults]]** — found here, measured
+  PRE-EXISTING against the eager map, filed rather than worked around.
+- **Generators (`yield`)** — the cursor object is now the machinery they would
+  want ([[feature-nilpy-yield-outside-a-for-loop]]); the decide ticket's "revisit
+  B when generators land" reads the other way round now, since B landed first.
+- `x in <cursor>` drains rather than stopping at the first match, so a hit calls
+  `f` more times than CPython does. The ANSWER is right and the cursor ends
+  exhausted either way; noted in pylib where it happens.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

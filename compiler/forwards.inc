@@ -37,6 +37,10 @@ function PyIterCtorName(const base: AnsiString; tk: TTypeKind;
 { Materialises a cursor where a real sequence is needed. Used by `in` and the
   str-method argument path, both of which sit above its definition. }
 function PyDrainIfCursor(node: Integer): Integer; forward;
+{ Wraps any iterable node in a cursor — enumerate()/zip() in parser.inc. }
+function PyMakeIterOf(node: Integer): Integer; forward;
+{ One-argument call to a plain pylib function; PyMakeIterOf sits above it. }
+function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer; forward;
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer; forward;
 procedure PyParseDefHeader; forward;

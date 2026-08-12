@@ -7617,19 +7617,43 @@ begin
   ASTRight[Result] := REC_UCLASS_BASE + FindUClass('TPyList');
 end;
 
+{ Wrap ANY iterable node in a cursor — the one conversion enumerate() and zip()
+  need, so that their pylib entries take TPyIter and there is no combinatorial
+  family of per-argument-type spellings (zip would want nine). A node that is
+  already a cursor is returned untouched, which is also CPython's iter() rule. }
+function PyMakeIterOf(node: Integer): Integer;
+var iterCi: Integer; tk: TTypeKind;
+begin
+  Result := node;
+  if node < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[node]);
+  iterCi := FindUClass('TPyIter');
+  if (tk = tyClass) and (iterCi >= 0) and
+     (ResolveNodeRec(node) = REC_UCLASS_BASE + iterCi) then Exit;
+  if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
+    Result := PyCallProc1('pyiter_of_str', node)
+  else if tk = tyClass then
+    Result := PyCallProc1('pyiter_of_list', node)
+  else
+    Result := PyCallProc1('pyiter_v', node);
+end;
+
 function PyMakeZip(aNode, bNode: Integer): Integer;
 var a0, a1: Integer;
 begin
-  aNode := PyIterArgAsList(aNode);
-  bNode := PyIterArgAsList(bNode);
+  { LAZY: `zip(a, b)` is a CURSOR over two cursors. Each side is converted
+    once, so there is one pylib entry instead of one per pair of argument
+    types — and a str side needs no charlist explosion. }
+  aNode := PyMakeIterOf(aNode);
+  bNode := PyMakeIterOf(bNode);
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := aNode;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := bNode; ASTRight[a1] := -1;
   ASTRight[a0] := a1;
   Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := FindProc('pyzip');
-  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pyzip) not loaded');
+  ASTIVal[Result] := FindProc('pyiter_zip_ii');
+  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pyiter_zip_ii) not loaded');
   ASTTk[Result] := Ord(tyClass);
-  ASTRight[Result] := REC_UCLASS_BASE + FindUClass('TPyList');
+  ASTRight[Result] := ProcRetRecId[ASTIVal[Result]];
   ASTLeft[Result] := a0;
 end;
 
