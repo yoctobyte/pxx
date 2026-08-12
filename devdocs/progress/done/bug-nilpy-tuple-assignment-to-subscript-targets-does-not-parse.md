@@ -148,4 +148,4 @@ variant base, the no-`__setitem__` TypeError, and a heapify that cannot be
 written without the idiom. `make test-nilpy` green, `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 5c8619f42.
