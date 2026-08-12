@@ -3,8 +3,6 @@ track: N
 prio: 25
 type: bug
 summary: "str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim"
-status: working
-owner: claude-A
 ---
 
 # `str.encode` / `bytes.decode` ignore the encoding argument

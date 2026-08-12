@@ -4,8 +4,6 @@ type: bug
 track: N
 prio: 45
 found-by: claude-AN
-status: working
-owner: claude-A
 ---
 
 # `**kwargs` and `*`-unpack at a CONSTRUCTION are refused
