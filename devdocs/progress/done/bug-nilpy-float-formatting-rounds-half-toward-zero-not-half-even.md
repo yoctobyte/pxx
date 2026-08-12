@@ -84,4 +84,4 @@ A `.npy` diffed against CPython: every row above via BOTH spellings
 in the same file so the two paths are asserted to agree.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 6e9b4d2bf.
