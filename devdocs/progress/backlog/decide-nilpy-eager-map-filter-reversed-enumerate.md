@@ -34,10 +34,23 @@ Three shapes of working CPython code CAN observe the difference:
 2. **An unbounded or expensive source**: `for x in map(f, huge)` in CPython
    never materialises the list; here it does, so memory and the cost of `f`
    both change, and an infinite generator source would hang.
-3. **Single consumption**: a CPython iterator is exhausted after one pass, so
-   `it = map(f, xs); list(it); list(it)` gives `[...]` then `[]`. Here both
-   passes give the full list — NilPy is *more* forgiving, which by the upward-
-   compatibility rule is a feature, not a defect.
+3. **Single consumption**: a CPython iterator is exhausted after one pass. All
+   four, measured:
+
+   ```python
+   it = map(str, [1, 2]);  print(list(it)); print(list(it))
+   ```
+
+   | | first pass | second pass |
+   | --- | --- | --- |
+   | CPython | `['1', '2']` | `[]` |
+   | pxx | `['1', '2']` | `['1', '2']` |
+
+   and identically for `enumerate`, `reversed` and `filter`. NilPy is *more*
+   forgiving here, which by the upward-compatibility rule is a feature, not a
+   defect — code that CPython accepts and runs cannot tell the difference,
+   because in CPython that second pass is empty and any program relying on it
+   would already be broken.
 
 Point 2 is the one that can make working code fail rather than differ.
 
