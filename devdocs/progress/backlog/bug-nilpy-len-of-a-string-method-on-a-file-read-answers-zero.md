@@ -71,6 +71,41 @@ consumer that gets the call-result form wrong. Compare what `len` receives for
 `f.read().upper()` versus `s.upper()` (`PXXDBG=a.ast` on the enclosing statement
 is the cheapest first look).
 
+## 2026-08-12 — narrowed to `read` itself, and the receiver kind is decisive
+
+Re-measured; the earlier "unbound receiver" framing is too broad. Everything
+below is `len(<receiver>.upper())`:
+
+| receiver | result |
+| --- | --- |
+| `f.read()` (a file) | **0** |
+| `f.readline()` (the same file object!) | 2 — correct |
+| a def returning str (`def g() -> str`) | 6 — correct |
+| a def returning a VARIANT (`return lst[0]`) | 3 — correct |
+| a method returning str (`C().m()`) | 6 — correct |
+| a string LITERAL | 6 — correct |
+
+So it is not "a call result", not "a managed string result", and not "an
+unbound receiver": `readline()` is the same receiver shape on the same object
+and is right. It is **`read` specifically**, and only under `len` — `repr`,
+`print`, an assignment and a `def` parameter all render the same expression
+correctly.
+
+`type(f.read()).__name__` and `type(f.read().upper()).__name__` both answer
+`str`, and `len(f.read())` alone answers 6, so the value and the tag are right
+in isolation.
+
+**The suspicion to test first:** `read` is OVERLOADED (`read()` and `read(n)`,
+and the ticket family around
+[[project_nilpy_open_returns_tpyfile_in_every_mode]] notes that a text `read(n)`
+still returns bytes). If the `len(...)` context steers overload resolution —
+Track A's resolver ranks by the argument fit, and `len` wants something
+countable — a DIFFERENT `read` overload may be binding inside `len(...)` than
+outside it. That would explain every row above at once, including why
+`readline` (not overloaded the same way) is fine.
+`PXXDBG=a.ast` on the two statements, or simply giving the overloads
+distinguishable return values, decides it in one measurement.
+
 ## Gate
 
 A `.npy` diffed against CPython: every row of the table above, plus `len` of a
