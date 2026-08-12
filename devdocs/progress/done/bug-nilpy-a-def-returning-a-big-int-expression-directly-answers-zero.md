@@ -68,4 +68,4 @@ so a zero cannot pass as a plausible total, plus the existing big-int tests
 still green.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit db312d5bc.
