@@ -2226,6 +2226,17 @@ BENCH_CPU_MIN_S = 0.03        # below this, wall/cpu is startup jitter -- don't 
 BENCH_QUIET_LOAD_FRAC = 0.60  # per-core load1 above this: box busy, wait to start
 BENCH_QUIET_WAIT_S = 10.0     # cap on that pre-run wait (no-op on a quiet host)
 BENCH_TSV_REL = "devdocs/progress/tstate/bench.tsv"
+# The clock a row was taken at, as a FACT rather than an inference
+# (bug-t-bench-slowdowns-are-quantized-by-cpu-p-state: on the E5-2620 v2 the
+# 2.6/2.1 GHz boost-to-base ratio is 1.238, and the slow rows land at a median
+# 1.242 — the inflation is a P-state step, not a contention continuum).
+#
+# A SIDE FILE, not more columns in bench.tsv, for the same reason
+# record_host_epoch() gave: bench.tsv is indexed POSITIONALLY and columns 6/7
+# are already uforth_sha/rss_kb on the cross-runtime rows, so a new column at 6
+# would silently reinterpret every uforth row. Joined on (date, host, workload,
+# level) — `date` is one timestamp per batch, so the join is exact.
+BENCH_CLOCK_TSV_REL = "devdocs/progress/tstate/bench-clock.tsv"
 COMPILER_SRC = "compiler/compiler.pas"
 # FPC comparison (feature-testmgr-fpc-compare-and-web-dashboard): the `fpc`
 # level in bench.tsv times the reference compiler on the same source so the
@@ -2340,37 +2351,73 @@ def _timed_run(argv, timeout):
     return (wall, ru.ru_utime + ru.ru_stime, p.returncode, ru.ru_maxrss)
 
 
+def cpu_mhz():
+    """Mean MHz across online CPUs right now, or None where cpufreq is absent.
+
+    None rather than a guess: a box without `cpufreq` (a VM, a container, some
+    ARM boards) must record NO clock rather than a fabricated one, because the
+    whole point of this column is that it is a measurement.
+    """
+    vals = []
+    for p in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/"
+                       "scaling_cur_freq"):
+        try:
+            with open(p) as f:
+                vals.append(int(f.read().strip()) / 1000.0)   # kHz -> MHz
+        except (OSError, ValueError):
+            continue
+    return sum(vals) / len(vals) if vals else None
+
+
 def bench_time(argv, runs, timeout, label=""):
-    """Min wall time over `runs` CLEAN runs. A run is discarded (and replaced,
-    up to runs+BENCH_EXTRA_TRIES attempts) when the child was descheduled --
-    wall > cpu*BENCH_CPU_WALL_MAX -- so a load spike is thrown away rather than
-    recorded. If too few come back clean, the min over whatever did is returned
-    and a `noisy` line is printed. Returns secs, or None on failure/timeout."""
+    """Min wall time over `runs` CLEAN runs, and the CPU clock it was taken at.
+
+    A run is discarded (and replaced, up to runs+BENCH_EXTRA_TRIES attempts)
+    when the child was descheduled -- wall > cpu*BENCH_CPU_WALL_MAX -- so a load
+    spike is thrown away rather than recorded. If too few come back clean, the
+    min over whatever did is returned and a `noisy` line is printed.
+
+    Returns (secs, clock) -- secs None on failure/timeout. `clock` is
+    (mhz, lo, hi): the clock during the run that PRODUCED the returned time,
+    plus the range seen across all clean runs. Pairing the clock with the
+    winning run specifically is the point: the reported number is a min, so the
+    clock that explains it is the one that run saw, not a batch average.
+    """
     _wait_quiet()
     max_tries = runs + BENCH_EXTRA_TRIES
     best_clean = best_any = None
+    best_mhz = None
+    seen = []
     clean = tries = 0
     while clean < runs and tries < max_tries:
         tries += 1
+        before = cpu_mhz()
         wall, cpu, rc, _rss = _timed_run(argv, timeout)
+        after = cpu_mhz()
         if wall is None or rc != 0:        # timeout, or the workload failed
-            return None
+            return None, None
         best_any = wall if best_any is None else min(best_any, wall)
         # descheduled? only judge once cpu is big enough that the ratio is signal
         if cpu is not None and cpu >= BENCH_CPU_MIN_S and \
            wall > cpu * BENCH_CPU_WALL_MAX:
             continue                       # contaminated -- discard, retry
         clean += 1
-        best_clean = wall if best_clean is None else min(best_clean, wall)
+        mhz = None
+        if before is not None and after is not None:
+            mhz = (before + after) / 2.0
+            seen.append(mhz)
+        if best_clean is None or wall < best_clean:
+            best_clean, best_mhz = wall, mhz
     if best_clean is None:                 # never got a clean run
         if label:
             print("  bench %-17s NOISY 0/%d clean in %d tries (box busy?)"
                   % (label, runs, tries))
-        return best_any
+        return best_any, None
     if clean < runs and label:
         print("  bench %-17s noisy: kept %d/%d clean in %d tries"
               % (label, clean, runs, tries))
-    return best_clean
+    clock = (best_mhz, min(seen), max(seen)) if seen and best_mhz else None
+    return best_clean, clock
 
 
 def fpc_build(src, out, tmp):
@@ -2421,9 +2468,15 @@ def run_bench():
     fpc_present = shutil.which(FPC_BIN) is not None
     if not fpc_present:
         print("  bench: fpc not found — skipping the `fpc` comparison level")
-    rows, slow, red = [], [], []
+    rows, slow, red, clocks = [], [], [], []
+    mhz_max = None
+    try:
+        with open("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq") as f:
+            mhz_max = int(f.read().strip()) / 1000.0
+    except (OSError, ValueError):
+        pass
 
-    def record(name, lvl, secs):
+    def record(name, lvl, secs, clock=None):
         ms = round(secs * 1000, 1)
         rows.append("%s\t%s\t%s\t%s\t%s\t%s" % (date, host, sha, name, lvl, ms))
         old = prev.get((name, lvl))
@@ -2431,6 +2484,15 @@ def run_bench():
         if old and ms > old * (1 + BENCH_SLOW_PCT / 100.0):
             note = "  SLOW (was %sms)" % old
             slow.append("%s %s %s -> %sms" % (name, lvl, old, ms))
+        if clock:
+            mhz, lo, hi = clock
+            clocks.append("%s\t%s\t%s\t%s\t%.0f\t%.0f\t%.0f"
+                          % (date, host, name, lvl, mhz, lo, hi))
+            # Say it at the time. A row taken off boost is not wrong, but it is
+            # not comparable to one taken on boost, and the number alone has
+            # never told anyone which it was.
+            if mhz_max and mhz < mhz_max * 0.97:
+                note += "  [%.0f MHz, %.0f%% of max]" % (mhz, 100.0 * mhz / mhz_max)
         print("  bench %-12s %-4s %8.1fms%s" % (name, lvl, ms, note), flush=True)
 
     for name, src, canary, timed, fpc_ok in BENCH_SUITE:
@@ -2455,12 +2517,13 @@ def run_bench():
                 print("  bench %-12s %-4s CANARY-DIFF vs -O0" % (name, lvl))
                 red.append("%s %s canary" % (name, lvl))
                 continue
-            dt = bench_time([b] + [a.format(tmp=tmp) for a in timed],
-                            BENCH_RUNS, timeout, label="%s %s" % (name, lvl))
+            dt, clk = bench_time([b] + [a.format(tmp=tmp) for a in timed],
+                                 BENCH_RUNS, timeout,
+                                 label="%s %s" % (name, lvl))
             if dt is None:
                 red.append("%s %s run" % (name, lvl))
                 continue
-            record(name, lvl, dt)
+            record(name, lvl, dt, clk)
 
         # fpc comparison level: same source under the reference compiler. Not
         # a regression signal (RED) if it fails — FPC just may not accept a
@@ -2483,11 +2546,12 @@ def run_bench():
                     print("  bench %-12s %-4s FPC-CANARY-DIFF vs -O0"
                           % (name, FPC_LEVEL))
                 else:
-                    dt = bench_time([fb] + [a.format(tmp=tmp) for a in timed],
-                                    BENCH_RUNS, timeout,
-                                    label="%s %s" % (name, FPC_LEVEL))
+                    dt, clk = bench_time([fb] + [a.format(tmp=tmp)
+                                                 for a in timed],
+                                         BENCH_RUNS, timeout,
+                                         label="%s %s" % (name, FPC_LEVEL))
                     if dt is not None:
-                        record(name, FPC_LEVEL, dt)
+                        record(name, FPC_LEVEL, dt, clk)
 
     # self-compile: the memory-bound big-program case. Timed = an -OL-built
     # compiler compiling the compiler source; canary = every stage's output
@@ -2515,13 +2579,14 @@ def run_bench():
             print("  bench %-12s %-4s CANARY-DIFF vs -O0" % ("selfcompile", lvl))
             red.append("selfcompile %s canary" % lvl)
             continue
-        dt = bench_time([stage, COMPILER_SRC, os.path.join(tmp, "selfout")],
-                        BENCH_SELF_RUNS, timeout * 5,
-                        label="selfcompile %s" % lvl)
+        dt, clk = bench_time([stage, COMPILER_SRC,
+                              os.path.join(tmp, "selfout")],
+                             BENCH_SELF_RUNS, timeout * 5,
+                             label="selfcompile %s" % lvl)
         if dt is None:
             red.append("selfcompile %s run" % lvl)
             continue
-        record("selfcompile", lvl, dt)
+        record("selfcompile", lvl, dt, clk)
 
     # selfcompile `fpc` level: time the REFERENCE compiler compiling the same
     # compiler source (the historic vs-FPC compile-speed metric, now per-SHA).
@@ -2535,10 +2600,10 @@ def run_bench():
             print("  bench %-12s %-4s FPC-COMPILE-FAIL" % ("selfcompile",
                                                            FPC_LEVEL))
         else:
-            dt = bench_time(argv, BENCH_SELF_RUNS, timeout * 5,
-                            label="selfcompile %s" % FPC_LEVEL)
+            dt, clk = bench_time(argv, BENCH_SELF_RUNS, timeout * 5,
+                                 label="selfcompile %s" % FPC_LEVEL)
             if dt is not None:
-                record("selfcompile", FPC_LEVEL, dt)
+                record("selfcompile", FPC_LEVEL, dt, clk)
 
     if rows:
         os.makedirs(os.path.dirname(out_tsv), exist_ok=True)
@@ -2547,6 +2612,17 @@ def run_bench():
             if fresh:
                 f.write("# date\thost\tsha\tworkload\tlevel\tms\n")
             f.write("\n".join(rows) + "\n")
+    if clocks:
+        # Same temp-file dance as the rows when running under twatch: the tree
+        # is detached there, and both files are tracked.
+        out_clk = (out_tsv + ".clock" if out_tsv != tsv
+                   else os.path.join(REPO, BENCH_CLOCK_TSV_REL))
+        os.makedirs(os.path.dirname(out_clk), exist_ok=True)
+        fresh = not os.path.exists(out_clk) or not os.path.getsize(out_clk)
+        with open(out_clk, "a") as f:
+            if fresh:
+                f.write("# date\thost\tworkload\tlevel\tmhz\tmhz_lo\tmhz_hi\n")
+            f.write("\n".join(clocks) + "\n")
     print("bench: %d rows -> %s%s%s" %
           (len(rows), out_tsv,
            "  SLOW: " + "; ".join(slow) if slow else "",

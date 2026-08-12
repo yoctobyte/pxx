@@ -2406,8 +2406,9 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
     clone.checkout(sha)
     tmp_tsv = os.path.join(tempfile.gettempdir(),
                            "twatch-bench-%d.tsv" % os.getpid())
-    if os.path.exists(tmp_tsv):
-        os.unlink(tmp_tsv)
+    for stale in (tmp_tsv, tmp_tsv + ".clock"):
+        if os.path.exists(stale):
+            os.unlink(stale)
     env = dict(os.environ, TESTMGR_BENCH_TSV=tmp_tsv)
     proc = subprocess.Popen([sys.executable,
                              os.path.join(clone.path, "tools/testmgr.py"),
@@ -2435,8 +2436,11 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
         print("twatch: bench ABANDONED at %s — %s; rows discarded (%d "
               "consecutive skip(s))" % (sha[:12], abandoned, rt["skips"]),
               flush=True)
-        if os.path.exists(tmp_tsv):
-            os.unlink(tmp_tsv)
+        # the clock rows are as void as the timings they describe — drop both,
+        # or an abandoned batch's clocks ride along with the next good one
+        for void in (tmp_tsv, tmp_tsv + ".clock"):
+            if os.path.exists(void):
+                os.unlink(void)
         clone_head_back(clone)
         return preempted        # a push must be tested NOW, not after a sleep
     rt["skips"] = 0
@@ -2465,6 +2469,21 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
                     f.write("# date\thost\tsha\tworkload\tlevel\tms\n")
                 f.writelines(new)
         os.unlink(tmp_tsv)
+    # The clock each row was taken at, joined on (date, host, workload, level).
+    # A side file because bench.tsv is indexed positionally and cols 6/7 are
+    # already uforth_sha/rss_kb — see BENCH_CLOCK_TSV_REL in testmgr.
+    if os.path.exists(tmp_tsv + ".clock"):
+        with open(tmp_tsv + ".clock") as f:
+            cnew = [ln for ln in f if not ln.startswith("#")]
+        if cnew:
+            ctsv = os.path.join(clone.path, TSTATE_REL, "bench-clock.tsv")
+            cfresh = not os.path.exists(ctsv) or not os.path.getsize(ctsv)
+            with open(ctsv, "a") as f:
+                if cfresh:
+                    f.write("# date\thost\tworkload\tlevel"
+                            "\tmhz\tmhz_lo\tmhz_hi\n")
+                f.writelines(cnew)
+        os.unlink(tmp_tsv + ".clock")
     conf_rows = 0
     if os.path.exists(conf_tmp):
         with open(conf_tmp) as f:

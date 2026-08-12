@@ -146,6 +146,42 @@ large working set — not of our compiler.
 Option 3 plus option 2's `mhz` column (as a cheap assertion that the pinning
 actually held) is probably the right end state.
 
+## MEASURED on plexus, 2026-08-12 — and it does not match the two-point model
+
+Watcher stopped, box otherwise quiet, N unpinned busy-loops, `scaling_cur_freq`
+across all 12 CPUs after 6s:
+
+| busy threads | max MHz | mean MHz |
+| --- | --- | --- |
+| 1 | 2096 | 2095 |
+| 2 | 2095 | 1797 |
+| 3 | 2095 | 1871 |
+| 4 | 2098 | 2095 |
+| 6 | **2395** | 2394 |
+| 12 | **2394** | 2394 |
+
+**2600 was never observed, and the clock goes UP with more active cores** —
+the opposite of a core-count turbo bin table. The mechanism is the governor,
+not the silicon: `scaling_driver` is `intel_cpufreq` (intel_pstate in **passive**
+mode, `status=passive`) driven by `schedutil`, which picks a P-state per CPU
+from *that CPU's* utilization. An unpinned single spinner migrates, so no one
+CPU sustains high utilization and nothing ramps; six do. `no_turbo=0`,
+`max_perf_pct=100`, `min_perf_pct=46`, `turbo_pct=34`, `num_pstates=15`.
+
+Under the watcher's own compile load, turbostat reports ~2394 MHz busy.
+
+So the two-state base/boost story is too simple for this box: 2395 is a middle
+bin the model does not have, and it is where real load actually lands. This
+does **not** refute the 1.238 finding in the recorded data — the ratio and the
+void in the histogram are facts about 798 rows — but it does mean the *causal*
+explanation ("boost vs base") should not be treated as settled. The `mhz`
+column below is what settles it, per row, from here on.
+
+Also note **borg is now retired as a tstate host** (2026-08-12; it is a dev
+station and Track T moved to plexus). Its 3251 rows keep their historical value
+but no new borg rows will arrive, so the "borg is unexplained and is not this"
+thread is closed by attrition rather than answered.
+
 ## The turbo mechanics are unknown and should be MEASURED, not looked up
 
 Open question from the user: what actually drives the throttle on this part —
@@ -195,8 +231,42 @@ above 1.20 (with a large pile past 1.40) say continuous variation, not a
 two-state clock. Worth its own look; different host, possibly different CPU,
 possibly genuinely contended or thermally limited.
 
+## DONE 2026-08-12: option 2 (record the frequency)
+
+`bench_time()` now samples `scaling_cur_freq` around every clean run and returns
+the clock **of the run that produced the reported time** — the reported number is
+a min, so a batch average would describe a different run than the one recorded.
+`testmgr --bench` writes `date host workload level mhz mhz_lo mhz_hi` and the
+watcher publishes it; a row taken below 97% of `cpuinfo_max_freq` also says so on
+the console at the time.
+
+It went to a **SIDE FILE** (`tstate/bench-clock.tsv`), not a new bench.tsv column,
+for the reason `record_host_epoch()` already documented: bench.tsv is indexed
+positionally and columns 6/7 are `uforth_sha`/`rss_kb` on the cross-runtime rows,
+so a new column at 6 would silently reinterpret every uforth row. Join on
+(date, host, workload, level) — `date` is one timestamp per batch, so it is exact.
+
+Verified live: one 3-run batch recorded 1977 / 2394 / 2394 MHz, i.e. **the same
+workload measured at two different clocks inside a single batch**, which is the
+phenomenon this ticket is about, now visible in the data instead of inferred
+from it.
+
+Option 1 (void by ratio) is deliberately NOT implemented: the ticket's own
+analysis shows a single threshold cannot mean the same thing for tight loops
+(1.239) and selfcompile (1.295), and with a measured clock the inference is
+unnecessary.
+
+## Still open: option 3 (pin the clock) — needs a human decision
+
+`intel_pstate/no_turbo` is writable only as root, and pinning changes the box's
+behaviour for everything the user runs on it, not just the bench. It is
+therefore a Track U call, not something Track T should do silently to a shared
+machine. Recommendation: leave turbo on and rely on the recorded `mhz` — the
+measurement makes the series analysable after the fact, which was the actual
+goal, and it costs no throughput.
+
 ## Gate
 
 Track T: `tools/testmgr.py --tier full` green for tooling changes. The real
-proof is behavioural — after the fix, re-run the analysis above and the >=1.20
-population should be empty (option 3) or fully labelled (options 1/2).
+proof is behavioural — once a few hundred plexus rows carry `mhz`, re-run the
+analysis above and check the >=1.20 population is fully labelled.
