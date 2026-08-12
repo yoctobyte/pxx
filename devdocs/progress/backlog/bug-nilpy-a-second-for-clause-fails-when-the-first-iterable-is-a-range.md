@@ -58,6 +58,41 @@ case two clauses. Check the `if` filter on the same path while there —
 `[x for x in range(4) if x > 1]` works, but `for x in range(2) for y in ... if
 ...` is worth a row in the test.
 
+## 2026-08-12 — attempted, reverted, and here is exactly where it stops
+
+Nothing landed. The obvious fix was implemented and measured; it does not work,
+and the measurement is the useful part.
+
+**What was tried.** The CONTAINER path already handles a second clause by
+recursing into `PyParseFor` (`if PyIsIdent('for') then node := PyParseFor`, the
+flatten-idiom fix). The counted-range path in `PyParseFor` has no such arm, so
+one was added at the same point — after the element-expression rename, before
+the `if` filter — plus a rename of the outer loop variable across the WHOLE
+remaining header (not just the element expression), since the inner clause's
+iterable and filter may mention it (`for y in range(x)`).
+
+**What happens.** The arm IS reached — probed, `CurTok.SVal = 'for'` and
+`PyIsIdent('for')` is True at that point, in the real parse, both inside a def
+and at module level. But after `bodyNode := PyParseFor` returns, a probe shows
+**the cursor is back ON the same `for`**, so the caller
+(`PyParseListComp`/`PyParseCompExprValue`) then fails its `Expect(tkRBrack)`
+with "Expected: ], but got: for". The recursive call is not consuming its
+clause.
+
+That is the whole question for the next session: *why does the recursive
+`PyParseFor` leave the cursor where it started, when the identical recursion
+from the container path works?* Both enter with `CurTok` on the `for`, and
+`PyParseFor` opens with `forTokIdx := TokPos - 1; Next;`. Suspects, in order:
+the inner clause's own `compSaved` restore (`TokPos := compSaved; Next`)
+computing a different token than expected because the outer range header left
+`TokPos` somewhere unusual; and the interaction with `PyCompHiddenLoopName`,
+which the range path uses for its counter and the container path does not.
+
+The reverse order — a CONTAINER first clause with a `range()` second — works
+today (`[x + y for x in [0,1] for y in range(2)]` is correct), which is the
+control that says the recursion mechanism itself is sound and it is the range
+path's own bookkeeping that is off.
+
 ## Gate
 
 A `.npy` diffed against CPython: every row of the table above, plus a
