@@ -4,6 +4,8 @@ prio: 57
 type: bug
 blocked-by: []
 summary: "`def a(): q = Item(5); return q.n` is typed tyClass (the RECEIVER's class) while the value it returns is the field's int. Printing is correct today only because the wrong type happens to render as an integer — the moment anything treats a tyClass node as an object, the same program SEGFAULTS. It is the blocker under bug-nilpy-str-of-a-plain-instance-prints-the-handle-and-a-class-typed-none-prints-zero"
+status: done
+owner: claude-AN
 ---
 
 # A def returning `obj.field` is typed as the receiver's CLASS
@@ -66,3 +68,6 @@ method spelling of each; the value asserted AND `type(...).__name__` asserted so
 the type is checked and not just the rendering; a def returning a CHAIN
 (`return q.inner.n`); and — the reason this is blocking — `print()`, `str()`
 and an f-string of each result.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

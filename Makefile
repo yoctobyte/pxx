@@ -1421,6 +1421,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lambda_returned26)" = "$$(printf '2 11 6 2\n2 101\n6 1005\n8 2\n2 21')"
 	./$(COMPILER) test/test_nilpy_annotated_module_global.npy /tmp/test_nilpy_annotated_module_global26
 	test "$$(/tmp/test_nilpy_annotated_module_global26)" = "$$(printf '2\n5 8 AB 2 1\n1 1 7 ab 3')"
+	@# a def whose whole return is a FIELD READ was typed as the RECEIVER's
+	@# class; it printed right by coincidence and type() on it segfaulted
+	./$(COMPILER) test/test_nilpy_def_returning_a_field.npy /tmp/test_nilpy_defretfield26
+	/tmp/test_nilpy_defretfield26 | diff -u test/test_nilpy_def_returning_a_field.expected -
 	@# `del d[k]` where d is an unannotated (variant) dict/list parameter — the
 	@# del lowering dispatched on the receiver's STATIC type and refused it
 	./$(COMPILER) test/test_nilpy_del_on_a_variant_receiver.npy /tmp/test_nilpy_delvar26

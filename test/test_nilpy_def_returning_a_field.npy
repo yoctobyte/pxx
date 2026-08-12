@@ -1,0 +1,113 @@
+# `def a(): q = Item(5); return q.n` was typed tyClass — the RECEIVER's class —
+# while the value returned is the field's own type. It PRINTED correctly, because
+# an integer field renders through the integer path and the value is an integer,
+# so the wrong type and the right value cancelled out. `type(a()).__name__` on
+# it SEGFAULTED, and so does anything else that treats a tyClass node as an
+# object (which is how this was found: a rendering fix turned it into a crash).
+# bug-nilpy-a-def-returning-a-field-is-typed-as-the-receivers-class
+# Every expectation is CPython's own output.
+
+
+class Item:
+    def __init__(self, n):
+        self.n = n
+
+
+class Ann:
+    def __init__(self):
+        self.n: int = 5
+        self.s: str = "x"
+
+
+class Inner:
+    def __init__(self):
+        self.v = 42
+
+    def get(self):
+        return self.v
+
+
+class Outer:
+    def __init__(self):
+        self.inner = Inner()
+        self.name = "o"
+        self.items = [1, 2]
+        self.ratio = 1.5
+        self.flag = True
+
+
+def unannotated():
+    q = Item(5)
+    return q.n
+
+
+def annotated_int():
+    q = Ann()
+    return q.n
+
+
+def annotated_str():
+    q = Ann()
+    return q.s
+
+
+def via_local():
+    q = Item(5)
+    v = q.n
+    return v
+
+
+print(type(unannotated()).__name__, unannotated())
+print(type(annotated_int()).__name__, annotated_int())
+print(type(annotated_str()).__name__, annotated_str())
+print(type(via_local()).__name__, via_local())
+
+
+def f_cls():
+    o = Outer()
+    return o.inner
+
+
+def f_str():
+    o = Outer()
+    return o.name
+
+
+def f_list():
+    o = Outer()
+    return o.items
+
+
+def f_float():
+    o = Outer()
+    return o.ratio
+
+
+def f_bool():
+    o = Outer()
+    return o.flag
+
+
+print(type(f_cls()).__name__, f_cls().v, f_cls().get())
+print(type(f_str()).__name__, f_str(), f_str().upper())
+print(type(f_list()).__name__, f_list(), len(f_list()), f_list()[0])
+print(type(f_float()).__name__, f_float(), f_float() + 0.5)
+print(type(f_bool()).__name__, f_bool())
+
+
+# the METHOD spelling of the same body — its signature is decided in a
+# different pass, and the two must agree
+class Node:
+    def __init__(self, n):
+        self.n = n
+
+    def field(self):
+        return self.n
+
+
+print(Node(7).field(), type(Node(7).field()).__name__)
+print(Node("s").field(), type(Node("s").field()).__name__)
+
+# the result is usable as its real type, not just printable
+print(unannotated() + 1, annotated_str() + "y", f_str() + "!")
+print(sum([f_list()[0], f_list()[1]]))

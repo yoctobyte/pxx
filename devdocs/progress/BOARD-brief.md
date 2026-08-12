@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:226 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1672 rejected:35`
+`unfinished:10 blocked:3 backlog:225 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1673 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -43,7 +43,6 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [N]` bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list
 - `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 57] [N]` bug-nilpy-a-def-returning-a-field-is-typed-as-the-receivers-class (unblocks 1)
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
@@ -62,5 +61,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-est-mem-from-measurement
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
+- `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 
 _178 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

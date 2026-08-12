@@ -21473,6 +21473,45 @@ end;
   A name rebound across kinds (`v = 3` then `v = 0.5`) reports the LAST kind,
   which is what the value at the return actually is in the straight-line case
   this can see. Returns tyUnknown when nothing typed. }
+function PyRetFieldType(scanFrom, scanTo: Integer; const recvNm, fldNm: AnsiString;
+                        var fldRec: Integer): TTypeKind;
+{ The type of `recv.fld` where `recv` is a local of this body — for a def whose
+  whole return is a FIELD READ.
+
+  `def a(): q = Item(5); return q.n` was typed tyClass (Item), the RECEIVER's
+  class, while the value returned is the field's int. It printed correctly only
+  because the wrong type renders through the integer path and the value happens
+  to be an integer; `type(a()).__name__` SEGFAULTS on it, and so does anything
+  else that treats a tyClass node as an object.
+  bug-nilpy-a-def-returning-a-field-is-typed-as-the-receivers-class
+
+  Token-only, like every other chase in this scan: PyInferExprType's own field
+  walk reads `PyLocals[..].RecCi`, which exists in the body pass and NOT in the
+  shell pre-pass, and the two passes answering differently is a silent ABI
+  mismatch. So the receiver's class is recovered the way the rest of this file
+  does it — from the `recv = ClassName(` assignment in the body — and the field
+  type from the class's own registered field. }
+var k, ci, fi: Integer;
+begin
+  PyRetFieldType := tyUnknown;
+  fldRec := REC_NONE;
+  ci := -1;
+  for k := scanFrom to scanTo - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
+       (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
+       (Tokens[k + 3].Kind = tkLParen) and
+       CaseEqual(GetTokenStr(k), recvNm) and
+       (FindUClassNonRecord(GetTokenStr(k + 2)) >= 0) then
+      { the LAST such binding wins, as everywhere else in this scan }
+      ci := FindUClassNonRecord(GetTokenStr(k + 2));
+  if ci < 0 then Exit;
+  fi := FindUField(ci, fldNm);
+  if fi < 0 then Exit;
+  PyRetFieldType := IntToTypeKind(UFldTk[fi]);
+  if (PyRetFieldType = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) then
+    fldRec := UFldRec_[fi];
+end;
+
 function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind;
 var k, e2: Integer; t2: TTypeKind;
 begin
@@ -21811,6 +21850,29 @@ begin
           end;
         if (cur = tyClass) and (rec2 >= 0) then
           PyInferLastCi := rec2;
+      end;
+      { `return q.n` — the whole return is a FIELD READ off a local. The scans
+        above answer the RECEIVER's class (tyClass Item) while the value is the
+        field's own type, and nothing downstream can tell: it prints correctly
+        because an integer field renders through the integer path, and
+        `type(...)` on it segfaults.
+        Resolved token-only through PyRetFieldType, so the shell pre-pass and
+        the body pass still agree.
+        bug-nilpy-a-def-returning-a-field-is-typed-as-the-receivers-class }
+      if (e = j + 4) and (Tokens[j + 1].Kind = tkIdent) and
+         (Tokens[j + 2].Kind = tkDot) and (Tokens[j + 3].Kind = tkIdent) then
+      begin
+        rec2 := REC_NONE;
+        t2 := PyRetFieldType(bodyScanStart, j, GetTokenStr(j + 1),
+                             GetTokenStr(j + 3), rec2);
+        if t2 <> tyUnknown then
+        begin
+          cur := t2;
+          if (t2 = tyClass) and (rec2 >= REC_UCLASS_BASE) then
+            PyInferLastCi := rec2 - REC_UCLASS_BASE
+          else
+            PyInferLastCi := -1;
+        end;
       end;
       { The same chase, for an EXPRESSION rather than a bare ident.
 
