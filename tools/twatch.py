@@ -161,6 +161,37 @@ def utcnow():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+LOG_CAP_BYTES = 64 * 1024 * 1024
+
+
+def rotate_log(clone_path, cap=LOG_CAP_BYTES):
+    """Cap our own log. Nothing else was ever going to do it.
+
+    `trackt install` points the unit's stdout at `<clone>.log` with
+    `append:`, and both that and `trackt start` then append forever: on plexus
+    it had reached 281 MB. No logrotate config covers a user unit's
+    `append:` file, and the daemon is the only writer, so it caps itself.
+
+    copytruncate, NOT rename: systemd opened that fd before ExecStart and would
+    keep writing into the renamed inode. Truncating in place keeps the fd
+    valid, and O_APPEND means the next write lands at the new end rather than
+    leaving a sparse hole.
+    """
+    path = clone_path.rstrip("/") + ".log"
+    try:
+        if os.path.getsize(path) < cap:
+            return False
+        shutil.copyfile(path, path + ".1")
+        os.truncate(path, 0)
+    except OSError as e:
+        print("twatch: could not rotate %s: %s" % (path, e), flush=True)
+        return False
+    # lands as the first line of the fresh log, which is where you want it
+    print("twatch: log passed %d MiB — previous content is now %s.1"
+          % (cap >> 20, path), flush=True)
+    return True
+
+
 # ------------------------------------------------------------------ git ----
 class Clone:
     def __init__(self, path, remote, branch):
@@ -176,6 +207,7 @@ class Clone:
         # refuse to watch a working dev checkout: we do detached checkouts of
         # arbitrary SHAs — running that under an active agent/dev tree would
         # yank files out from under them.  A watcher clone stays pristine.
+        self.heal_truncations()
         dirty = self.dirty()
         if dirty:
             sys.exit("twatch: %s has uncommitted changes — this looks like a "
@@ -186,6 +218,66 @@ class Clone:
         """Tracked changes only (-uno): untracked scratch (our own report
         file, corpus trees) is harmless — detached checkouts don't touch it."""
         return sh(["git", "status", "--porcelain", "-uno"], cwd=self.path)
+
+    def heal_truncations(self):
+        """Restore tracked files an unclean shutdown zeroed. Returns the list.
+
+        The guard above is right to refuse a dirty tree, but it cannot tell a
+        human editing this checkout from the tree being CORRUPTED underneath
+        it, and it fails the same way in both cases: exit 1, which under
+        `Restart=on-failure` is an invisible 30-second restart loop.
+
+        On 2026-08-11 plexus lost power mid-publish. ext4's delayed allocation
+        did what it always does after an unclean shutdown — the files most
+        recently written came back at length zero, seven of them, all tracked,
+        five of them ours. The daemon then refused to start and looped 326
+        times over 2h45m while nothing tested a single commit for 13.6 hours.
+        Nobody was editing anything; the guard just had no vocabulary for
+        "corrupt".
+
+        `size == 0 on disk AND non-empty at HEAD` is that vocabulary. It is a
+        narrow, evidence-based signature: no edit anyone makes on purpose looks
+        like this, and restoring is provably lossless — a zero-byte file has
+        nothing in it to lose. Anything else dirty still hits the refusal, so
+        an actual dev checkout is as protected as it was.
+
+        Deliberately not restricted to `tstate/**`: that power cut also zeroed
+        a backlog ticket, and healing only our own files would have left the
+        tree dirty and the daemon still looping. The signature is what makes
+        this safe, not the path.
+        """
+        healed = []
+        for line in (self.dirty() or "").splitlines():
+            # porcelain v1 is XY<space>path, but do NOT slice at a fixed offset:
+            # sh() strips the whole blob, so the FIRST line loses its leading
+            # space and everything after it shifts by one. In the incident that
+            # first line was the truncated backlog ticket, i.e. the fixed slice
+            # silently skipped one of the very files this exists to restore.
+            m = re.match(r"^\s*([A-Z?!]{1,2})\s+(.*)$", line)
+            if not m:
+                continue
+            code, rel = m.group(1), m.group(2).strip().strip('"')
+            if "R" in code or "D" in code:   # rename has ` -> `; delete has no file
+                continue
+            full = os.path.join(self.path, rel)
+            try:
+                if os.path.getsize(full) != 0:
+                    continue
+                head = sh(["git", "cat-file", "-s", "HEAD:" + rel],
+                          cwd=self.path)
+                if not head or int(head) == 0:
+                    continue
+            except (OSError, ValueError, RuntimeError):
+                # unreadable, or not in HEAD at all (a staged add): not ours
+                continue
+            healed.append(rel)
+        if healed:
+            sh(["git", "checkout", "--"] + healed, cwd=self.path)
+            print("twatch: %d tracked file(s) were zero-length on disk but "
+                  "non-empty at HEAD — an unclean shutdown truncated them. "
+                  "Restored from HEAD (a zero-byte file has nothing to lose): "
+                  "%s" % (len(healed), ", ".join(healed)), flush=True)
+        return healed
 
     def fetch(self):
         """Poll origin WITHOUT touching FETCH_HEAD.
@@ -3425,6 +3517,10 @@ def main():
             # re-check every cycle: an agent editing this checkout mid-run
             # must PAUSE the watcher, not feed it dirty sources (2026-07-07:
             # a dev edit leaked into a run, then killed the daemon on publish)
+            # a truncated file is corruption, not an edit to wait for: heal it
+            # here too, or an OOM kill mid-publish parks the daemon forever
+            clone.heal_truncations()
+            rotate_log(clone.path)
             dirty = clone.dirty()
             if dirty:
                 print("twatch: clone dirty — pausing this cycle (commit or "

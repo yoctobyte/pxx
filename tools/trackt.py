@@ -996,6 +996,18 @@ Description=Track T watcher daemon (pxx regression matrix)
 After=network-online.target
 Wants=network-online.target
 
+# Restart=on-failure below retries, but retrying FOREVER is its own failure
+# mode. On 2026-08-12 a startup refusal restarted 326 times over 2h45m and
+# looked, from outside, exactly like a healthy enabled unit: `is-enabled` said
+# enabled, `is-active` said activating, and nothing tested a commit for 13.6
+# hours. Ten tries over ten minutes is plenty for anything transient (a boot
+# race, a brief network outage); past that the cause is standing and a human has
+# to see it. Give up into `failed` — a state `systemctl --user status` and
+# `trackt health` both report, unlike an eternal restart loop.
+# (These are [Unit] keys, NOT [Service] — systemd ignores them under [Service].)
+StartLimitBurst=10
+StartLimitIntervalSec=600
+
 [Service]
 Type=simple
 WorkingDirectory={clone}
@@ -1063,6 +1075,8 @@ def cmd_install(clone, uninstall=False):
           % (sys.executable, clone, clone))
     print("  2. Restart=on-failure — a crash or OOM kill restarts after 30s;")
     print("     a deliberate `trackt stop` STAYS stopped. You keep the switch.")
+    print("     Capped at 10 tries / 10 min: a standing failure lands in")
+    print("     `failed` where you can SEE it, instead of looping silently.")
     print("  3. systemctl --user enable %s" % UNIT_NAME)
     print("     => starts on login. With auto-login, that means on boot.")
     print("  4. loginctl enable-linger %s" % user)
