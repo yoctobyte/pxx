@@ -116,6 +116,38 @@ assignment path versus a local, and what the list `+` lowering returns
 (a fresh TPyList or the left operand grown in place — the recursion symptom
 says the latter is at least reachable).
 
+## 2026-08-12 — re-measured after the field-typing fix; symptom 3 is an ABI mismatch
+
+Symptom 3 narrowed a long way, and it is not a rendering bug:
+
+| def body | result |
+| --- | --- |
+| `out = []; out = out + [1]; return out` (NO loop) | correct — `[1]` |
+| `out = [1]; out = out + [2]; return out` (no loop) | correct |
+| the same two lines inside a `for i in range(2)` | **pointer** |
+| ... inside a `for i in [0, 1]` | **pointer** |
+| ... inside a `while` | **pointer** |
+| `out.append(i)` in any loop | correct |
+
+So the LOOP is the trigger, not `+`. And the value is genuinely broken, not
+just its rendering: with `x = f()`, `len(x)` is 2 and `type(x).__name__` is
+`list` — the runtime tag is right — while `x[0]` reads **-1346371488** and
+`print(x)` shows the handle. A correct tag with a garbage element is what a
+caller reading the result from the wrong place looks like.
+
+That points at the signature/frame disagreement this file warns about
+repeatedly: the shell pre-pass and the body pass inferring different return
+types for the same def. `PyInferDefRetType`'s bare-ident chase folds a
+self-referential accumulator through `chainCur` (the `acc = acc + chr(97)`
+note), and the loop is what makes the two passes see different things —
+outside a loop the same two assignments type correctly in both.
+
+**Diagnostic shortcut for the next session:** a def whose result is used as a
+VALUE somewhere in the module (`for fn in [f, g]:`) prints correctly, because
+`PyDefUsedAsValue` normalises its return to a variant and the disagreement
+disappears. That is a clean A/B — same body, one line elsewhere in the file
+flips it — and it says the bug is in the return TYPE, not in the list.
+
 ## Gate
 
 A `.npy` diffed against CPython: every row of the table above, the recursive
