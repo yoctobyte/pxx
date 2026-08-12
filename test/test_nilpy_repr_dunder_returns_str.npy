@@ -1,0 +1,80 @@
+# A `__repr__` whose body is `return self.n` over an UNANNOTATED field infers a
+# VARIANT return, and the runtime renderer (PyUserObjStr) only calls a dunder
+# that reports an AnsiString result -- so repr(obj) came back EMPTY, and a list
+# of such objects printed as [, , ]. print(obj) was right, because that takes
+# the frontend's own class arm: two paths for one concept, one of them wrong.
+# Spelling `-> str` fixed it, which is what showed the annotation was doing
+# nothing the dunder's contract does not already say.
+# bug-nilpy-repr-returning-a-bare-string-field-is-empty
+# Every expectation is CPython's own output.
+
+
+class Bare:
+    def __init__(self, n):
+        self.n = n
+
+    def __repr__(self):
+        return self.n
+
+    def plain(self):
+        return self.n
+
+
+class ViaLocal:
+    def __init__(self, n):
+        self.n = n
+
+    def __repr__(self):
+        s = self.n
+        return s
+
+
+class Annotated:
+    def __init__(self, n):
+        self.n = n
+
+    def __repr__(self) -> str:
+        return self.n
+
+
+class Computed:
+    def __init__(self, n):
+        self.n = n
+
+    def __repr__(self):
+        return self.n + ""
+
+
+class Str:
+    def __init__(self, n):
+        self.n = n
+
+    def __str__(self):
+        return self.n
+
+
+class IntField:
+    def __init__(self, k):
+        self.k = k
+
+    def __repr__(self):
+        return str(self.k)
+
+
+b = Bare("a")
+print(repr(b), str(b), b.plain())
+print(repr(ViaLocal("v")), repr(Annotated("n")), repr(Computed("c")))
+print(str(Str("s")), repr(IntField(5)))
+
+# inside containers, where CPython renders elements with repr
+print([Bare("x"), Bare("y")])
+print({"k": Bare("d")}, (Bare("t"),))
+print([ViaLocal("l")], [IntField(7)])
+
+# and through the other rendering paths
+print("%r|%s" % (b, b), f"{b!r}|{b}")
+
+# sorting by a key still sees real objects, and their repr survives it
+xs = [Bare("c"), Bare("a"), Bare("b")]
+print(sorted(xs, key=lambda o: o.n))
+print(len(repr(b)), repr(b) == "a")

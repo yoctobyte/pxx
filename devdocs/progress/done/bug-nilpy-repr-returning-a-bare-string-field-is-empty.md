@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A `__repr__` whose body is `return self.n` (a bare string field, directly or through a local) yields the EMPTY string — so `repr(obj)` prints nothing and `print([obj])` prints `[, ]`. `return self.n + \"\"`, a literal, or `str(self.k)` are all fine, and the identical body in a PLAIN method or in `__str__` is fine, so it is repr's dispatch path losing the string"
+status: done
+owner: claude-AN
 ---
 
 # `__repr__` returning a bare string field comes back empty
@@ -71,3 +73,6 @@ A `.npy` diffed against CPython: every row of the table above, plus `repr` of an
 object inside a list / dict value / tuple, `"%r" % obj`, `f"{obj!r}"`, and a
 `__repr__` returning a field of a subclass — with the `__str__` and plain-method
 controls kept in the same file so a fix that breaks THEM is caught.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

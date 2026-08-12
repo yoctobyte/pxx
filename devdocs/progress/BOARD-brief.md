@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:224 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1670 rejected:35`
+`unfinished:10 blocked:3 backlog:224 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1671 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -47,7 +47,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot
 - `[p 55] [N]` bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero
-- `[p 55] [N]` bug-nilpy-repr-returning-a-bare-string-field-is-empty
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution
@@ -62,5 +61,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-est-mem-from-measurement
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
+- `[p 53] [S]` feature-esp-peripheral-callback-api
 
 _177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

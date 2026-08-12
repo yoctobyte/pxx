@@ -682,6 +682,15 @@ begin
     end;
 end;
 
+function PyStrDunderName(const n: AnsiString): Boolean;
+{ A dunder whose contract is "returns a str": CPython raises TypeError when
+  __repr__ or __str__ returns anything else, so inferring a variant for one is
+  never right — and the runtime renderer only calls a dunder that reports an
+  AnsiString result. See the forcing at both call sites. }
+begin
+  PyStrDunderName := StrEqual(n, '__repr__') or StrEqual(n, '__str__');
+end;
+
 function PyTypeFromTokenIndex(i: Integer): TTypeKind;
 var lo: AnsiString;
 begin
@@ -20484,6 +20493,23 @@ begin
     this looked like a receiver bug rather than an ABI one". Two arms of one
     rule that disagreed; this is the sibling.
     bug-nilpy-uforth-compiles-but-segfaults-at-runtime }
+  { `__repr__` and `__str__` MUST return a str — CPython raises TypeError if
+    they do not — and the runtime renderer (PyUserObjStr) will only call a
+    dunder whose RetKind is AnsiString. An unannotated `def __repr__(self):
+    return self.n` over an unannotated field infers VARIANT, so the renderer
+    declined it and `repr(obj)` came back EMPTY while `print(obj)` (which takes
+    the frontend's own class arm) was right. Spelling `-> str` fixed it, which
+    is the measurement that found this: the annotation is doing nothing the
+    dunder's contract does not already say.
+    Forced in BOTH passes -- here for the frame, and in PyMethodRetType for the
+    signature -- because a disagreement between them is a silent ABI mismatch.
+    bug-nilpy-repr-returning-a-bare-string-field-is-empty }
+  if PyStrDunderName(PyHdrName) and (not PyHdrIsProc) and
+     (PyHdrRetType <> tyAnsiString) then
+  begin
+    PyHdrRetType := tyAnsiString;
+    PyHdrRetCi := -1;
+  end;
   if PyDefUsedAsValue(PyHdrName) then
   begin
     if PyHdrIsProc or (PyHdrRetType <> tyVariant) then
@@ -22735,6 +22761,18 @@ begin
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
       mRet := PyMethodRetType(methodStart, mRetRec);
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
+      { __repr__/__str__ return a str by contract — the SIGNATURE half of the
+        forcing in PyParseDefHeader (see the note there). Without it an
+        unannotated `return self.n` over an unannotated field infers variant,
+        the runtime renderer declines a non-AnsiString dunder, and repr(obj)
+        comes back empty while print(obj) is right.
+        bug-nilpy-repr-returning-a-bare-string-field-is-empty }
+      if (not fieldsOnly) and (not isCtor) and PyStrDunderName(name) and
+         (mRet <> tyAnsiString) then
+      begin
+        mRet := tyAnsiString;
+        mRetRec := REC_NONE;
+      end;
       { `return self` types the method as its OWN class — the fluent-builder
         idiom, and the only way a chain's second link has something to resolve
         against. The scanner cannot get there on its own: `self` is a parameter

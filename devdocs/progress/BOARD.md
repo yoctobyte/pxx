@@ -75,7 +75,7 @@ _none_
 | bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list | N | 58 | bug | A list rebound with `+` and then RETURNED loses its value: returning a rebound PARAMETER yields the empty list, returning a LOCAL built by `out = out + [i]` in a loop yields a raw pointer printed as a 15-digit int, and in a recursion the rebinding leaks into the caller's list so a DFS prints '0-1-2-2-1-2' instead of '0-1-2'. append() and a copy-to-another-local are both correct | — |
-| bug-nilpy-repr-returning-a-bare-string-field-is-empty | N | 55 | bug | A `__repr__` whose body is `return self.n` (a bare string field, directly or through a local) yields the EMPTY string — so `repr(obj)` prints nothing and `print([obj])` prints `[, ]`. `return self.n + \"\"`, a literal, or `str(self.k)` are all fine, and the identical body in a PLAIN method or in `__str__` is fine, so it is repr's dispatch path losing the string | — |
+| bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse | N | 52 | bug | `h[i], h[j] = h[j], h[i]` — the in-place swap every sort and heap is built on — fails with 'expected expression'. A tuple assignment accepts NAME and ATTRIBUTE targets (`a, b = b, a` and `k.a, k.b = k.b, k.a` both work) but not a SUBSCRIPT, so the one idiom that needs it most is the one that does not parse | — |
 | bug-nilpy-two-argument-round-of-an-int-returns-a-float | N | 45 | bug | round(6, 2) answered 6.0 where CPython answers 6. PARTIALLY FIXED 2026-08-12 — a statically-typed int with a non-negative literal ndigits is now the identity; a VARIANT/promo argument, a negative ndigits and a computed one still take the float path, and round(2**70, 2) still loses the precision entirely. Finishing it is a pylib change (so: stabilize+pin) | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 45 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
@@ -411,9 +411,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1670)
+## done (1671)
 
-1670 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1671 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -472,7 +472,6 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot
 - [p 55] [N] bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero
-- [p 55] [N] bug-nilpy-repr-returning-a-bare-string-field-is-empty
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [A] feature-a-own-language-first-symbol-resolution
@@ -489,6 +488,7 @@ _none_
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
+- [p 52] [N] bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
