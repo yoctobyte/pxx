@@ -9263,7 +9263,7 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     seEtid, seOrd: Integer;
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
-    mapProc: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
+    mapProc, mapConv: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
     rndArg: Integer;   { first operand of NilPy round(x, n) }
     rndIntArg: Boolean;      { …and was it an INTEGER? then round is identity }
     rndArgTk: TTypeKind;     { its type, to restore after the identity }
@@ -10622,6 +10622,26 @@ begin
              (atRecv <> REC_UCLASS_BASE + FindUClass('TPyDict')) and
              (atRecv <> REC_UCLASS_BASE + FindUClass('TPyBytes')) then
           begin
+            { a CURSOR: CPython answers `object of type 'map' has no len()`,
+              not a generic "not a container". Same runtime-raise shape as the
+              no-__len__ arm below, just with the accurate message — and it is
+              the one row going lazy deliberately makes stricter. }
+            if (FindUClass('TPyIter') >= 0) and
+               (atRecv = REC_UCLASS_BASE + FindUClass('TPyIter')) then
+            begin
+              prevTok := FindProc('pyiter_no_len');
+              if prevTok < 0 then Error('Nil Python: pylib (pyiter_no_len) not loaded');
+              atDflt := AllocNode(AN_ARG);
+              ASTLeft[atDflt] := CurASTNode;
+              ASTRight[atDflt] := -1;
+              Expect(tkRParen, ')');
+              atRecv := AllocNode(AN_CALL);
+              ASTIVal[atRecv] := prevTok;
+              ASTTk[atRecv] := Ord(tyInt64);
+              ASTLeft[atRecv] := atDflt;
+              CurASTNode := atRecv; LastExprTk := tyInt64;
+              Exit;
+            end;
             atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__len__');
             if atFld >= 0 then
             begin
@@ -11127,10 +11147,9 @@ begin
         if CurTok.Kind = tkIdent then mapKind := LowerCase(CurTok.SVal);
         if (mapKind = 'int') or (mapKind = 'str') or (mapKind = 'float') then
         begin
-          if mapKind = 'int' then mapProc := FindProc('pymap_int')
-          else if mapKind = 'str' then mapProc := FindProc('pymap_str')
-          else mapProc := FindProc('pymap_float');
-          if mapProc < 0 then Error('Nil Python: pylib (pymap_*) not loaded');
+          if mapKind = 'int' then mapConv := 1
+          else if mapKind = 'str' then mapConv := 2
+          else mapConv := 3;
           Next;
           Expect(tkComma, ',');
           { the NilPy expression parser: the argument is normally a call with a
@@ -11138,11 +11157,24 @@ begin
             does not apply }
           PyParseBoolExpr;
           Expect(tkRParen, ')');
+          { LAZY, like every other map: the conversion forms carry no callable,
+            so they ride the same cursor with the conversion CODE in place of a
+            function pointer (pyiter_map_conv_*). The entry is picked by the
+            iterable's static type because FindProc is not overload-aware. }
+          mapProc := FindProc(PyIterCtorName('pyiter_map_conv', LastExprTk,
+                                             CurASTNode));
+          if mapProc < 0 then Error('Nil Python: pylib (pyiter_map_conv_*) not loaded');
           node := AllocNode(AN_CALL);
           ASTIVal[node] := mapProc;
+          exprNode := AllocNode(AN_INT_LIT);
+          ASTIVal[exprNode] := mapConv;
+          ASTTk[exprNode] := Ord(tyInt64);
           argSeq := AllocNode(AN_ARG);
-          ASTLeft[argSeq] := CurASTNode;
-          ASTRight[argSeq] := -1;
+          ASTLeft[argSeq] := exprNode;
+          argSeq2 := AllocNode(AN_ARG);
+          ASTLeft[argSeq2] := CurASTNode;
+          ASTRight[argSeq2] := -1;
+          ASTRight[argSeq] := argSeq2;
           ASTLeft[node] := argSeq;
           ASTTk[node] := Ord(tyClass);
           ASTRight[node] := ProcRetRecId[mapProc];
@@ -11152,13 +11184,13 @@ begin
         end
         else
         begin
-          mapProc := FindProc('pymap_call');
-          if mapProc < 0 then Error('Nil Python: pylib (pymap_call) not loaded');
           PyParseBoolExpr;
           exprNode := CurASTNode;
           Expect(tkComma, ',');
           PyParseBoolExpr;
           Expect(tkRParen, ')');
+          mapProc := FindProc(PyIterCtorName('pymap_iter', LastExprTk, CurASTNode));
+          if mapProc < 0 then Error('Nil Python: pyeval (pymap_iter_*) not loaded');
           node := AllocNode(AN_CALL);
           ASTIVal[node] := mapProc;
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
@@ -11179,8 +11211,6 @@ begin
           elements" shorthand). Same callable dispatch as map(), above.
           feature-nilpy-aggregate-builtins }
         Next; Expect(tkLParen, '(');
-        mapProc := FindProc('pyfilter_call');
-        if mapProc < 0 then Error('Nil Python: pylib (pyfilter_call) not loaded');
         if CurTok.Kind = tkNil then
         begin
           Next;
@@ -11196,6 +11226,8 @@ begin
         Expect(tkComma, ',');
         PyParseBoolExpr;
         Expect(tkRParen, ')');
+        mapProc := FindProc(PyIterCtorName('pyfilter_iter', LastExprTk, CurASTNode));
+        if mapProc < 0 then Error('Nil Python: pyeval (pyfilter_iter_*) not loaded');
         node := AllocNode(AN_CALL);
         ASTIVal[node] := mapProc;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;

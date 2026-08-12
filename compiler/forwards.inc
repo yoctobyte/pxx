@@ -30,6 +30,13 @@ function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer; forward;
 { NilPy frontend helpers used above their definition in pyparser.inc. }
 function PyIntLiteralText(n: Int64): AnsiString; forward;
 function PyIsPylibContainerCi(ci: Integer): Boolean; forward;
+{ Picks the cursor-constructor SPELLING that matches an iterable's static type
+  — see its definition; parser.inc's map()/filter() arms are above it. }
+function PyIterCtorName(const base: AnsiString; tk: TTypeKind;
+                        node: Integer): AnsiString; forward;
+{ Materialises a cursor where a real sequence is needed. Used by `in` and the
+  str-method argument path, both of which sit above its definition. }
+function PyDrainIfCursor(node: Integer): Integer; forward;
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer; forward;
 procedure PyParseDefHeader; forward;

@@ -117,6 +117,13 @@ function sorted(const v: Variant; key: Pointer = nil; reverse: Boolean = False):
   FIRST — so the scan keeps a strict > / < and never replaces on equality. }
 function min(l: TPyList; key: Pointer = nil): Variant; overload;
 function max(l: TPyList; key: Pointer = nil): Variant; overload;
+{ ...and over a CURSOR: drain, then the routine that already exists. Declared
+  AFTER the others on purpose — declaration order decides which class overload
+  a VARIANT argument unwraps into, and putting these first made sum(v)/min(v)
+  over a variant holding a list bind the cursor parameter and segfault. }
+function sorted(it: TPyIter; key: Pointer = nil; reverse: Boolean = False): TPyList; overload;
+function min(it: TPyIter; key: Pointer = nil): Variant; overload;
+function max(it: TPyIter; key: Pointer = nil): Variant; overload;
 
 { `map(f, xs)` / `filter(f, xs)` over an arbitrary callable VALUE -- the
   general form beside the existing map(int|str|float, xs) conversion shims.
@@ -132,6 +139,17 @@ function pyfilter_call(key: Pointer; l: TPyList): TPyList;
   no unit-initialisation order to depend on. }
 function pymap_iter(key: Pointer; const v: Variant): TPyIter;
 function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
+{ Four SPELLINGS, not four overloads: the parser arm reaches these through
+  FindProc, which answers one proc by bare name and never consults overloads
+  ([[project_findproc_by_name_ignores_overloads]]), so the arm has to name the
+  entry that matches the iterable's static type — exactly as the existing
+  pymap_int/str/float shims are chosen. }
+function pymap_iter_l(key: Pointer; l: TPyList): TPyIter;
+function pymap_iter_s(key: Pointer; const src: AnsiString): TPyIter;
+function pymap_iter_i(key: Pointer; up: TPyIter): TPyIter;
+function pyfilter_iter_l(key: Pointer; l: TPyList): TPyIter;
+function pyfilter_iter_s(key: Pointer; const src: AnsiString): TPyIter;
+function pyfilter_iter_i(key: Pointer; up: TPyIter): TPyIter;
 
 { Build a closure from raw SOURCE text — the compiled frontend's lowering of a
   Python `lambda`: `lambda vm: vm.push(A)` becomes
@@ -4948,6 +4966,57 @@ function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
 begin
   PyIterCallHook := @PyCallKey1;
   Result := pyiter_filter(key, v);
+end;
+
+function pymap_iter_l(key: Pointer; l: TPyList): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_map_l(key, l);
+end;
+
+function pymap_iter_s(key: Pointer; const src: AnsiString): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_map_s(key, src);
+end;
+
+function pymap_iter_i(key: Pointer; up: TPyIter): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_map_i(key, up);
+end;
+
+function pyfilter_iter_l(key: Pointer; l: TPyList): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_filter_l(key, l);
+end;
+
+function pyfilter_iter_s(key: Pointer; const src: AnsiString): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_filter_s(key, src);
+end;
+
+function pyfilter_iter_i(key: Pointer; up: TPyIter): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_filter_i(key, up);
+end;
+
+function sorted(it: TPyIter; key: Pointer; reverse: Boolean): TPyList; overload;
+begin
+  Result := sorted(pyiter_drain(it), key, reverse);
+end;
+
+function min(it: TPyIter; key: Pointer): Variant; overload;
+begin
+  Result := min(pyiter_drain(it), key);
+end;
+
+function max(it: TPyIter; key: Pointer): Variant; overload;
+begin
+  Result := max(pyiter_drain(it), key);
 end;
 
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;

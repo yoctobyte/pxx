@@ -2171,6 +2171,11 @@ begin
       else
         PyParseBitOr;
       right := CurASTNode;
+      { `x in map(f, xs)` — CPython consumes the cursor to answer, so drain it
+        here and let the ordinary container dispatch below treat it as the list
+        it now is. Done BEFORE that dispatch, whose user-class arm would
+        otherwise call a cursor "not a container". }
+      right := PyDrainIfCursor(right);
       { The container decides the helper, and getting it wrong is not a type
         error but a CRASH: pycontains would scan a TPyDict's or a string's
         header words as if they were variant slots.
@@ -6161,6 +6166,11 @@ begin
     Error('Nil Python: unsupported str method .' + mname + '()');
   procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  { `"-".join(map(str, xs))` — pystr_join takes a real TPyList and is reached by
+    NAME (FindProc, not overload resolution), so a cursor argument has to be
+    drained here. CPython consumes it too. }
+  if CaseEqual(pname, 'pystr_join') and (argCount = 1) and (ASTRight[argHead] >= 0) then
+    ASTLeft[ASTRight[argHead]] := PyDrainIfCursor(ASTLeft[ASTRight[argHead]]);
   argNode := argHead;
   i := argCount;
   { An EXPLICIT None separator — `s.split(None)`, `s.split(None, 1)` — means
@@ -14343,6 +14353,36 @@ end;
   (the .append/.count history), and the cursor is reached from the desugarer
   where the receiver's class is already known. Errors out naming the routine,
   because a missing pylib entry here means the unit did not load. }
+{ Which SPELLING of a cursor constructor fits this iterable. `base` is the
+  variant-taking entry (`pymap_iter`, `pyfilter_iter`, `pyiter_map_conv`) and
+  the suffixed ones take a concrete type. Needed because these calls are built
+  through FindProc, which answers one proc by bare name and never consults
+  overloads ([[project_findproc_by_name_ignores_overloads]]) — so the argument
+  shape has to be spelled into the NAME.
+
+  A class that is neither a list nor a cursor (a dict, say) takes `_l`: that is
+  what the eager pymap_call did with it, so this is no worse rather than a new
+  hazard, and it keeps a class handle out of a Variant parameter — which is the
+  one combination nothing in the tree exercises. }
+function PyIterCtorName(const base: AnsiString; tk: TTypeKind;
+                        node: Integer): AnsiString;
+var rec, iterCi: Integer;
+begin
+  if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
+  begin Result := base + '_s'; Exit; end;
+  if tk = tyClass then
+  begin
+    rec := ResolveNodeRec(node);
+    iterCi := FindUClass('TPyIter');
+    if (iterCi >= 0) and (rec = REC_UCLASS_BASE + iterCi) then
+      Result := base + '_i'
+    else
+      Result := base + '_l';
+    Exit;
+  end;
+  Result := base;      { a variant / untyped iterable — decided at run time }
+end;
+
 function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer;
 var pi, a: Integer;
 begin
@@ -14355,6 +14395,28 @@ begin
   ASTIVal[Result] := pi;
   ASTTk[Result] := Ord(Procs[pi].RetType);
   ASTLeft[Result] := a;
+  { carry the CLASS IDENTITY of the result too — without it ResolveNodeRec
+    answers "no identity" for the node and every consumer that dispatches on
+    the receiver's class (the unpack site, PyNodeListCi, the for-header) falls
+    into its untyped arm }
+  if Procs[pi].RetType = tyClass then ASTRight[Result] := ProcRetRecId[pi];
+end;
+
+{ Materialise a CURSOR where a real sequence is required — the tuple-unpack
+  target list, `"".join(...)`, anything reached through a FindProc-built call
+  that takes a TPyList. Any other node is returned untouched, so this is safe
+  to apply unconditionally at such a site. CPython does the same thing: a
+  cursor unpacked into names is consumed, and left exhausted. }
+function PyDrainIfCursor(node: Integer): Integer;
+var iterCi: Integer;
+begin
+  Result := node;
+  if node < 0 then Exit;
+  if IntToTypeKind(ASTTk[node]) <> tyClass then Exit;
+  iterCi := FindUClass('TPyIter');
+  if iterCi < 0 then Exit;
+  if ResolveNodeRec(node) <> REC_UCLASS_BASE + iterCi then Exit;
+  Result := PyCallProc1('pyiter_drain', node);
 end;
 
 function PyCallMeth2(ci: Integer; const mname: AnsiString;
@@ -17501,6 +17563,9 @@ begin
     PyParseBoolExpr;
     if nValues >= nTargets then
       Error('Nil Python: too many values to unpack');
+    { `w, h = map(int, s.split("x"))` — a cursor cannot be indexed, so it is
+      drained here first. CPython unpacks an iterator the same way. }
+    CurASTNode := PyDrainIfCursor(CurASTNode);
     tk := ASTTk[CurASTNode];
     if IntToTypeKind(tk) = tyString then tk := Ord(tyAnsiString);
     tmps[nValues] := AllocVar(PyHiddenName('unp'), IntToTypeKind(tk));

@@ -937,6 +937,26 @@ function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
   `filter(None, xs)` "keep the truthy elements" shorthand. }
 function pyiter_map(key: Pointer; const v: Variant): TPyIter;
 function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
+{ `map(int|str|float, xs)` — the CONVERSION forms, which is what real code
+  writes (`w, h = map(int, s.split("x"))`). They carry no callable at all, so
+  rather than manufacturing one they ride the MAP kind with FKey nil and the
+  conversion code in FStart: 1 = int, 2 = str, 3 = float. Same laziness, no
+  dependency on pyeval's callable dispatch. }
+function pyiter_map_conv(conv: Int64; const v: Variant): TPyIter;
+{ The same constructors reached by the iterable's STATIC type. The frontend
+  builds these calls through FindProc, which is not overload-aware, so each
+  argument shape needs its own NAME — the convention the pymap_int /
+  pystr_expandtabs_n families already follow here. `_i` is the primitive; `_l`
+  and `_s` just wrap a leaf cursor around the source first. }
+function pyiter_map_i(key: Pointer; up: TPyIter): TPyIter;
+function pyiter_map_l(key: Pointer; l: TPyList): TPyIter;
+function pyiter_map_s(key: Pointer; const src: AnsiString): TPyIter;
+function pyiter_filter_i(key: Pointer; up: TPyIter): TPyIter;
+function pyiter_filter_l(key: Pointer; l: TPyList): TPyIter;
+function pyiter_filter_s(key: Pointer; const src: AnsiString): TPyIter;
+function pyiter_map_conv_i(conv: Int64; up: TPyIter): TPyIter;
+function pyiter_map_conv_l(conv: Int64; l: TPyList): TPyIter;
+function pyiter_map_conv_s(conv: Int64; const src: AnsiString): TPyIter;
 function pyiter_has(it: TPyIter): Boolean;
 function pyiter_take(it: TPyIter): Variant;
 { `next(it)` / `next(it, default)`: advance one step. Exhaustion RAISES
@@ -955,6 +975,28 @@ function pyiter_is(const v: Variant): Boolean;
   a doctest or a logged debug line sees it. }
 function pyiter_repr(it: TPyIter): AnsiString;
 function pyiter_typename(it: TPyIter): AnsiString;
+{ `len(map(...))` — CPython's TypeError, word for word. A FUNCTION returning
+  Int64 so it can stand in for the whole len() expression at the call site, the
+  same shape PyIndexTypeError uses; and a RUNTIME raise rather than a compile
+  error, so `try: len(m) / except TypeError:` still compiles and runs. }
+function pyiter_no_len(it: TPyIter): Int64;
+{ The CONSUMING builtins over a cursor — sum/tuple/any/all here, sorted/min/max
+  in pyeval — are declared BESIDE their existing overloads further down, NOT
+  here. Declaration ORDER decides which class overload a VARIANT argument binds
+  to, and declaring the cursor entry first made `sum(v)` (v a variant holding a
+  list) unwrap into the TPyIter parameter and segfault — a crash in code that
+  never mentions cursors. See each of them below.
+
+  NO `pycontains(it: TPyIter; …)` overload anywhere, deliberately: the frontend
+  builds `x in c` through FindProc('pycontains'), which answers ONE proc by bare
+  name and never consults overloads, so adding one made `2 in [1, 2, 3]`
+  resolve to the cursor entry and segfault
+  ([[project_findproc_by_name_ignores_overloads]]). A cursor receiver is
+  drained at the `in` site instead (PyDrainIfCursor).
+
+  `len` deliberately has no cursor arm either: CPython raises
+  `TypeError: object of type 'map' has no len()` and going lazy is what makes
+  that answer available (the umbrella's one behaviour removal). }
 
 function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
 function pybound_code(const v: Variant): Pointer;
@@ -1285,6 +1327,7 @@ function tuple(b: TPyBytes): TPyList; overload;
   `list` never had the bug precisely because it has this overload.
   bug-nilpy-a-variant-argument-binds-a-class-overload-and-is-unwrapped-unchecked }
 function tuple(const v: Variant): TPyList; overload;
+function tuple(it: TPyIter): TPyList; overload;
 { pow(base, exp) — the function spelling of `**`, which already works. }
 function pow(const a: Variant; const b: Variant): Variant;
 { pow(base, exp, mod) — MODULAR exponentiation, and genuinely a different
@@ -1408,6 +1451,10 @@ function pymath_copysign(x, y: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
+{ ...and over a CURSOR, declared after the list forms on purpose — see the note
+  in the cursor block above. Drains, then the routine that already exists. }
+function sum(it: TPyIter): Variant; overload;
+function sum(it: TPyIter; const start: Variant): Variant; overload;
 { sum(iterable, start) — Python's optional second argument, the accumulator's
   initial value. `sum(xs, 10)` is an ordinary spelling and was rejected with
   "no overload of sum matches these arguments". }
@@ -1427,6 +1474,8 @@ function max(const s: AnsiString): AnsiString; overload;
 function min(const s: AnsiString): AnsiString; overload;
 function any(l: TPyList): Boolean;
 function all(l: TPyList): Boolean;
+function any(it: TPyIter): Boolean; overload;
+function all(it: TPyIter): Boolean; overload;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -9034,6 +9083,72 @@ begin
                            code address no-ops }
 end;
 
+function pyiter_map_conv(conv: Int64; const v: Variant): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_MAP;
+  Result.FUp := pyiter_v(v);
+  PXXObjRetain(Pointer(Result.FUp));
+  Result.FKey := nil;        { no callable — the code in FStart says what to do }
+  Result.FStart := conv;
+end;
+
+function pyiter_map_i(key: Pointer; up: TPyIter): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_MAP;
+  Result.FUp := up;
+  PXXObjRetain(Pointer(up));
+  Result.FKey := key;
+  PXXObjRetain(key);
+end;
+
+function pyiter_map_l(key: Pointer; l: TPyList): TPyIter;
+begin
+  Result := pyiter_map_i(key, pyiter_of_list(l));
+end;
+
+function pyiter_map_s(key: Pointer; const src: AnsiString): TPyIter;
+begin
+  Result := pyiter_map_i(key, pyiter_of_str(src));
+end;
+
+function pyiter_filter_i(key: Pointer; up: TPyIter): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_FILTER;
+  Result.FUp := up;
+  PXXObjRetain(Pointer(up));
+  Result.FKey := key;
+  PXXObjRetain(key);
+end;
+
+function pyiter_filter_l(key: Pointer; l: TPyList): TPyIter;
+begin
+  Result := pyiter_filter_i(key, pyiter_of_list(l));
+end;
+
+function pyiter_filter_s(key: Pointer; const src: AnsiString): TPyIter;
+begin
+  Result := pyiter_filter_i(key, pyiter_of_str(src));
+end;
+
+function pyiter_map_conv_i(conv: Int64; up: TPyIter): TPyIter;
+begin
+  Result := pyiter_map_i(nil, up);
+  Result.FStart := conv;
+end;
+
+function pyiter_map_conv_l(conv: Int64; l: TPyList): TPyIter;
+begin
+  Result := pyiter_map_conv_i(conv, pyiter_of_list(l));
+end;
+
+function pyiter_map_conv_s(conv: Int64; const src: AnsiString): TPyIter;
+begin
+  Result := pyiter_map_conv_i(conv, pyiter_of_str(src));
+end;
+
 function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -9102,9 +9217,29 @@ begin
   begin
     if not pyiter_has(it.FUp) then begin it.FEnd := True; Exit; end;
     ev := pyiter_take(it.FUp);
-    if PyIterCallHook = nil then
-      raise TypeError.Create('map(): callable dispatch is unavailable');
-    mv := PyIterCallHook(it.FKey, ev);
+    if it.FKey = nil then
+    begin
+      { a CONVERSION map — see pyiter_map_conv. int()/float() PARSE a str, as
+        CPython's do, which is the whole reason map(int, s.split(...)) works. }
+      if it.FStart = 1 then
+      begin
+        if pyvartag(ev) = 6 then mv := pystr_to_int(pystr_of(ev))
+        else mv := pyvar_to_int(ev);
+      end
+      else if it.FStart = 2 then mv := pystr_of(ev)
+      else if it.FStart = 3 then
+      begin
+        if pyvartag(ev) = 6 then mv := pyfloat_parse(pystr_of(ev))
+        else mv := pyvar_to_float(ev);
+      end
+      else mv := ev;
+    end
+    else
+    begin
+      if PyIterCallHook = nil then
+        raise TypeError.Create('map(): callable dispatch is unavailable');
+      mv := PyIterCallHook(it.FKey, ev);
+    end;
     it.FBox.put(0, mv);
     it.FHas := True;
     Result := True;
@@ -9233,6 +9368,38 @@ begin
     a := a div 16;
   end;
   Result := '<' + pyiter_typename(it) + ' object at 0x' + hx + '>';
+end;
+
+function pyiter_no_len(it: TPyIter): Int64;
+begin
+  raise TypeError.Create('object of type ' + Chr(39) + pyiter_typename(it) +
+                         Chr(39) + ' has no len()');
+  Result := 0;   { unreachable }
+end;
+
+function sum(it: TPyIter): Variant; overload;
+begin
+  Result := sum(pyiter_drain(it));
+end;
+
+function sum(it: TPyIter; const start: Variant): Variant; overload;
+begin
+  Result := sum(pyiter_drain(it), start);
+end;
+
+function tuple(it: TPyIter): TPyList; overload;
+begin
+  Result := tuple(pyiter_drain(it));
+end;
+
+function any(it: TPyIter): Boolean; overload;
+begin
+  Result := any(pyiter_drain(it));
+end;
+
+function all(it: TPyIter): Boolean; overload;
+begin
+  Result := all(pyiter_drain(it));
 end;
 
 type
@@ -9855,6 +10022,12 @@ begin
     if o is TPyList then begin Result := TPyList(o).count; Exit; end;
     if o is TPyDict then begin Result := TPyDict(o).count; Exit; end;
     if o is TPyBytes then begin Result := TPyBytes(o).count; Exit; end;
+    { a cursor has no length — CPython's own answer, word for word, and the one
+      row this change deliberately makes STRICTER. Allowed because CPython
+      REJECTS the code, so no working CPython program can depend on it. }
+    if o is TPyIter then
+      raise TypeError.Create('object of type ' + Chr(39) +
+        pyiter_typename(TPyIter(o)) + Chr(39) + ' has no len()');
   end;
   PyTypeError(t, 'a str, list, dict or bytes');
   Result := 0;
@@ -11303,6 +11476,10 @@ begin
     if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
     { bytes erased to a variant — the byte values, same as the static arm. }
     if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
+    { a cursor DRAINS. Every caller of this wants a materialised sequence, so
+      laziness cannot survive here — the lazy path for a `for` header is the
+      cursor loop in PyParseForIn, which never reaches this. }
+    if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
   end;
   PyTypeError(pyvartag(v), 'a str, a list or a dict');
   Result := TPyList.Create;
@@ -11400,6 +11577,7 @@ begin
       Exit;
     end;
     if o is TPyBytes then begin Result := tuple(TPyBytes(o)); Exit; end;
+    if o is TPyIter then begin Result := tuple(TPyIter(o)); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := tuple(pystr_of(v)); Exit; end;
   Result := TPyList.Create;      { None / empty }

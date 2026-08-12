@@ -37,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (223)
+## backlog (224)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -68,6 +68,7 @@ _none_
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
 | bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused | N | 45 | bug | Three construction-site argument shapes are refused with a diagnostic: `C(**kw)` on a `**kwargs` ctor, `C(*xs)` unpacking into one, and a keyword whose name matches a FIELD when the ctor takes `**kw`. All work at a plain `def` or an ordinary method; only the construction path is short. | — |
 | bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero | N | 50 | bug | `len(f.read().split('\\n'))` answers 1 and `len(f.read().upper())` answers 0 — as if the file were empty — while the identical expression printed, assigned, or iterated is correct. The read really happens (a following f.read() returns ''), so the string is produced and then lost on the way into len() alone | — |
+| bug-nilpy-map-over-a-bound-method-segfaults | N | 50 | bug | map(obj.method, xs) SEGFAULTS — a bound method is one of the four callable representations PyCallKey1 claims to handle, and it is the one that crashes. Pre-existing: measured identical on the eager map (pinned v263) and the lazy one, so laziness neither caused nor fixed it. list(map(f, xs)) with a def, a lambda or a builtin all work. | — |
 | bug-nilpy-math-surface-remaining-gaps-and-degrees-association | N | 35 | bug | Seven math names still resolve to 'undefined variable' — asin, acos, atan, fsum, modf, perm, dist, prod — and math.degrees(3.14) answers 179.90874767107852 where CPython answers 179.9087476710785, because it computes x*180/pi instead of CPython's x*(180/pi). The `random` module is absent entirely | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
@@ -496,6 +497,7 @@ _none_
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [N] bug-nilpy-a-second-for-clause-fails-when-the-first-iterable-is-a-range
 - [p 50] [N] bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero
+- [p 50] [N] bug-nilpy-map-over-a-bound-method-segfaults
 - [p 50] [P] bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build

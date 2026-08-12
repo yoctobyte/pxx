@@ -1,0 +1,98 @@
+# The acceptance program for feature-nilpy-lazy-iterator-objects: map/filter/
+# enumerate/zip/reversed are CURSORS, not lists.
+#
+# The row that makes this a correctness ticket rather than a perf note is the
+# first one. `risky` raises past 5; CPython never reaches element 6 because the
+# loop breaks at 3, and a lazy map only calls `risky` for what the loop asked
+# for. With an eager map (Python 2's, which is what NilPy shipped) the call
+# happens while the list is being BUILT, so a program CPython runs fine died
+# with ValueError here.
+#
+# Every expectation below is CPython's, checked with `python3` on this file.
+
+calls = []
+
+
+def risky(x):
+    if x > 5:
+        raise ValueError("too far: " + str(x))
+    calls.append(x)
+    return x
+
+
+out = []
+for v in map(risky, list(range(100))):
+    out.append(v)
+    if len(out) == 3:
+        break
+print("survived", out)
+print("calls", len(calls))
+
+# Binding first is the same program — the cursor is a VALUE, so nothing here
+# depends on the loop being able to see the map() call.
+calls2 = []
+
+
+def count(x):
+    calls2.append(x)
+    return x * 10
+
+
+m = map(count, [1, 2, 3, 4, 5])
+print("after binding:", len(calls2))
+for n in m:
+    if n == 30:
+        break
+print("after breaking at 3:", len(calls2))
+# ...and a SECOND pass over the same cursor yields the REMAINDER
+print("rest:", list(m))
+
+# the four callable representations a stored `f` can have
+def double(x):
+    return x * 2
+
+
+class Box:
+    def __init__(self, k):
+        self.k = k
+
+    def scale(self, x):
+        return x * self.k
+
+
+print(list(map(double, [1, 2])))
+print(list(map(lambda x: x + 1, [1, 2])))
+# NOT here: `map(obj.method, xs)` — a BOUND METHOD as the callable segfaults,
+# and it does so on the eager map too (measured against the pinned binary), so
+# it is a pre-existing gap in the callable dispatch rather than anything
+# laziness introduced. bug-nilpy-map-over-a-bound-method-segfaults.
+print(list(map(str, [1, 2])))
+
+# filter, including Python's own filter(None, xs) truthiness shorthand
+print(list(filter(lambda v: v % 2 == 1, [1, 2, 3, 4])))
+print(list(filter(None, [0, 1, "", "a", []])))
+
+# a filter cursor also stops early
+seen = []
+for v in filter(lambda v: seen.append(v) or True, [1, 2, 3, 4]):
+    if v == 2:
+        break
+print("filter saw", seen)
+
+# the identities CPython reports
+print(type(map(str, [])).__name__)
+print(type(filter(None, [])).__name__)
+print(str(map(str, []))[:4])
+# enumerate/zip/reversed are still eager here — they are the next steps of the
+# umbrella and get their rows when they land.
+
+# and every ordinary consuming shape still agrees
+print(list(enumerate(["a", "b"], 1)))
+print(list(zip([1, 2], "ab")))
+print(list(reversed([1, 2, 3])))
+print(sorted(map(double, [3, 1, 2])))
+print(sum(map(double, [1, 2, 3])))
+print("-".join(map(str, [1, 2, 3])))
+print([v for v in map(double, [1, 2])])
+w, h = map(int, "200x100".split("x"))
+print(w, h)

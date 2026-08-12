@@ -185,21 +185,91 @@ object.
   every existing use is spelled that way. The nilpy suite caught this and the
   ad-hoc `.npy` repros could not.
 
-### NEXT — step 3, one builtin per commit
+### Step 3 — `map` and `filter` are LAZY
 
-`map` first. Two things it needs that are not in yet:
+Both in one commit rather than one each. The umbrella asks for one builtin per
+commit so a regression is easy to place; these two differ ONLY in the cursor
+kind (`PYITER_MAP` vs `PYITER_FILTER`) and share every piece of new machinery —
+the constructor-name picker, the drain sites, the acceptance test — so
+splitting them would have re-run the same 20-minute sweep to isolate nothing.
+Deliberate, and stated here rather than silently.
 
-1. **The parser arm must pick the pylib entry by the iterable's STATIC type.**
-   `FindProc(name)` answers ONE proc and never consults overloads
-   ([[project_findproc_by_name_ignores_overloads]]), so `pymap_iter` cannot be
-   a single overloaded name reached from the arm — it needs distinct spellings
-   per argument shape (list / str / cursor / variant), the way the existing
-   `pymap_int|str|float` shims are chosen.
-2. **The tuple-unpack site must drain a cursor.** `w, h = map(int, s.split("x"))`
-   is in the corpus (`test_nilpy_optional_and_map.npy`,
-   `test_nilpy_method_on_call_result.npy`). `PyParseUnpackAssign` types its temp
-   from the RHS and demands a TPyList or a variant, so a `TPyIter` RHS reports
-   "cannot unpack this value into several names". Wrap it in `pyiter_drain` and
-   type the temp as TPyList.
+The acceptance program from the decide ticket now matches CPython line for
+line: `f` runs 3 times for a loop that breaks at 3, binding a cursor runs it 0
+times, breaking parks it and a second pass yields the remainder.
+`test/test_nilpy_lazy_map_filter.npy`, wired into `test-nilpy`.
 
-Then `filter`, `enumerate`, `zip`, and `reversed` last.
+`map(int|str|float, xs)` went lazy too, without needing a callable: those ride
+the MAP kind with `FKey` nil and the conversion code in `FStart`.
+
+#### The six things that actually cost time
+
+1. **`FindProc` picks a proc by BARE NAME and never consults overloads** — so
+   the parser arm cannot reach an overloaded `pymap_iter`; each argument shape
+   needs its own SPELLING (`_l` / `_s` / `_i`, and the bare name for a variant).
+   `PyIterCtorName` does that pick.
+2. **...and the same fact bites in the other direction.** Adding a harmless
+   looking `pycontains(it: TPyIter; …)` OVERLOAD made
+   `FindProc('pycontains')` — which the `in` operator uses — resolve to the
+   CURSOR entry, so `2 in [1, 2, 3]` segfaulted. Nothing in the change
+   mentioned lists. The overload is gone; a cursor receiver is drained at the
+   `in` site instead, and pylib carries a comment saying why that overload must
+   not come back.
+3. **Declaration ORDER decides which class overload a VARIANT argument
+   unwraps into.** `sum(it: TPyIter)` declared ABOVE the existing
+   `sum(l: TPyList)` made `sum(v)` — v a variant holding a list — bind the
+   cursor parameter and segfault, in a program containing no cursor at all.
+   New class overloads of an existing builtin go AFTER the old ones. This and
+   (2) are the same fact seen from two sides, and both are recorded in
+   [[project_nilpy_overload_declaration_order_decides_the_variant_unwrap]].
+4. **A cursor cannot be indexed**, so the sites that need a real sequence drain
+   it first: the tuple-unpack RHS (`w, h = map(int, s.split("x"))`) and
+   `"-".join(map(str, xs))`. `PyDrainIfCursor` is a no-op on anything else, so
+   it is safe to apply unconditionally at such a site.
+5. **`PyCallProc1` had to carry the result's CLASS IDENTITY** (`ASTRight :=
+   ProcRetRecId`). Without it `ResolveNodeRec` answers "no identity" for the
+   drain node and every consumer that dispatches on the receiver's class falls
+   into its untyped arm.
+6. **The FPC seed canary, not the pxx build, catches a missing forward.** pxx
+   prescans; FPC does not. `PyDrainIfCursor` is called from `pyparser.inc`
+   above its own definition and needed a `forwards.inc` entry —
+   `make compiler/pascal26` was green the whole time.
+
+Also in: `len(map(...))` raises CPython's exact
+`TypeError: object of type 'map' has no len()` (the one deliberate behaviour
+removal), `x in map(...)`, `sum`/`sorted`/`min`/`max`/`any`/`all`/`tuple` over
+a cursor.
+
+#### Found, not caused: [[bug-nilpy-map-over-a-bound-method-segfaults]]
+
+`map(obj.method, xs)` SEGFAULTS — and the control shows it does so on the
+**eager** map too (built with the pinned v263), so laziness neither caused nor
+fixed it. A `def`, a `lambda` and a builtin all work; the bound-pair arm of
+`PyCallKey1` is the one that faults. Filed, with the acceptance test carrying a
+comment where that row belongs.
+
+#### A Makefile escape trap, for the next person
+
+In a `printf '%b'` ARGUMENT the octal escape is `\0ddd`, so a single quote next
+to a DIGIT must be spelled `\0047` — `\047` swallows the digit as a fourth
+octal digit and prints garbage. In a printf FORMAT string it is `\ddd`
+instead, which is why entries around it are spelled `\047`. The two forms are
+not interchangeable and a blanket rewrite of one into the other breaks the
+other family's tests.
+
+### NEXT — step 4
+
+`enumerate` and `zip`, then `reversed` last. The cursor KINDS for all three
+already exist and are tested through `iter()`; what is left is rewiring their
+parser arms the way map's was, and they have more of them than map did —
+enumerate and zip each have a for-HEADER form (`PyParseForIn` enumMode,
+`PyParseForZip`) that is a counted loop and never builds a value at all. Those
+header forms are already correct and lazy by construction, so the work is only
+the VALUE forms (`list(enumerate(xs))`, `for i, s in reversed(list(enumerate(t)))`).
+
+Watch for: `enumerate()`/`zip()` over a str are wrapped in `pystr_charlist` by
+the frontend today because those arms are built by a fixed FindProc index —
+the same non-overload-aware fact that shaped map's four spellings.
+
+The acceptance test's three `type(...).__name__` rows for enumerate/zip/
+reversed were removed when map/filter landed and belong back with this step.
