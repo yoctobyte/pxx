@@ -5042,7 +5042,24 @@
   "date": "2026-08-11T15:28:25Z",
   "sha": "1413b872ee6275bf36f56cfb8e3a63417c4577d3"
  },
- "open_regressions": [],
+ "migrated_from": [
+  "borg"
+ ],
+ "open_regressions": [
+  {
+   "bad": "b1976742df2c57eca84cd069d4e8b16a43a204cf",
+   "good": "6f73c5a88befd087bf2d495819f499048d123e1e",
+   "job": "fpc-bootstrap#src:compiler/compiler.pas",
+   "migrated_at": "2026-08-12T07:46:31Z",
+   "migrated_from": "borg",
+   "name": "fpc-bootstrap#00",
+   "opened": "2026-07-22T17:28:47Z",
+   "range": [
+    "b1976742df2c57eca84cd069d4e8b16a43a204cf"
+   ],
+   "src": "compiler/compiler.pas"
+  }
+ ],
  "pin_shadow": {
   "at": "2026-08-11T15:22:38Z",
   "qualifies": true,
