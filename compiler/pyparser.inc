@@ -14336,6 +14336,27 @@ begin
   ASTLeft[Result] := selfArg;
 end;
 
+{ A one-argument call to a plain pylib FUNCTION (not a method) — the shape the
+  cursor protocol needs, since pyiter_has/pyiter_take are deliberately
+  functions rather than TPyIter methods: a method on a second class collides at
+  the name level with every dynamically-typed receiver that already has one
+  (the .append/.count history), and the cursor is reached from the desugarer
+  where the receiver's class is already known. Errors out naming the routine,
+  because a missing pylib entry here means the unit did not load. }
+function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer;
+var pi, a: Integer;
+begin
+  pi := FindProc(pname);
+  if pi < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  a := AllocNode(AN_ARG);
+  ASTLeft[a] := argNode;
+  ASTRight[a] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := pi;
+  ASTTk[Result] := Ord(Procs[pi].RetType);
+  ASTLeft[Result] := a;
+end;
+
 function PyCallMeth2(ci: Integer; const mname: AnsiString;
                      selfNode, arg1, arg2: Integer): Integer;
 var mmi, mpi, selfArg, a1, a2: Integer;
@@ -14623,13 +14644,13 @@ end;
 
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
                        forTokIdx: Integer): Integer;
-var contNode, ci, dictCi, listCi, fileCi, symIdx, cSym, iSym, nSym: Integer;
+var contNode, ci, dictCi, listCi, fileCi, iterCi, symIdx, cSym, iSym, nSym: Integer;
     enumStartNode, enumStartSym: Integer;   { `enumerate(xs, START)` }
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN, savedHoist, innerHoist: Integer;
     filtIdx, fj, fdepth, filtPair, filtN, closerPos: Integer;  { comprehension `if` filter }
-    isStr, pairMode: Boolean; contTk, tk: TTypeKind;
+    isStr, pairMode, isIter: Boolean; contTk, tk: TTypeKind;
     elemNode2, pairSym, plistSym, xi, nExtra, cci: Integer;
     extraSyms: array[0..5] of Integer;
     hName, hName2: AnsiString;
@@ -14750,6 +14771,8 @@ begin
   listCi := FindUClass('TPyList');
   dictCi := FindUClass('TPyDict');
   fileCi := FindUClass('TPyFile');
+  iterCi := FindUClass('TPyIter');
+  isIter := False;
   { A VARIANT container — `for n in num` where num is Any — is unboxed to
     TPyList via pylib pylist_v. The corpus reaches this only under an
     `isinstance(num, list)` guard, so the value really is a list at run time;
@@ -14832,6 +14855,14 @@ begin
       ASTRight[contNode] := REC_UCLASS_BASE + listCi;
       ci := listCi;
     end;
+    { A CURSOR — `for v in map(f, xs)`, or over a name bound to one. It has no
+      count/at protocol at all (deliberately: a cursor does not know its
+      length, which is exactly why len(map(...)) is a TypeError in CPython), so
+      the desugar below swaps the index walk for the two-call has/take protocol.
+      Everything else about the loop — the two-name pair unpack, enumerate's
+      counter, `continue`, `break` — is unchanged.
+      feature-nilpy-lazy-iterator-objects }
+    isIter := (iterCi >= 0) and (ci = iterCi);
     { `for line in f:` over a FILE. CPython iterates a file object by LINE, so
       read the lines and iterate that list — the same shape the dict arm just
       below uses to iterate its keys. Without it the loop reached the generic
@@ -15053,15 +15084,20 @@ begin
     ASTLeft[node] := PyMakeIdent(cSym);
     ASTLeft[lenNode] := node;
   end
-  else
+  else if not isIter then
   begin
     lenNode := PyCallMeth1(ci, 'count', PyMakeIdent(cSym), -1);
     if lenNode < 0 then Error('Nil Python: pylib (count) not loaded');
   end;
-  node := AllocNode(AN_ASSIGN);
-  ASTLeft[node] := PyMakeIdent(nSym);
-  ASTRight[node] := lenNode;
-  seq := PySeqAppend(seq, node);
+  { a cursor has no length to snapshot — and asking for one is the whole point
+    of it being a cursor }
+  if not isIter then
+  begin
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(nSym);
+    ASTRight[node] := lenNode;
+    seq := PySeqAppend(seq, node);
+  end;
 
   { __py_i := -1. The index starts BEFORE the first element and is advanced at
     the TOP of the body, so `continue` still advances it — with the increment
@@ -15102,6 +15138,10 @@ begin
     ASTLeft[node] := cmpNode;
     elemNode := node;
   end
+  else if isIter then
+    { the value the CONDITION already prefetched — take() hands it over and
+      clears the prefetch, so exactly one element is produced per body run }
+    elemNode := PyCallProc1('pyiter_take', PyMakeIdent(cSym))
   else
   begin
     elemNode := PyCallMeth1(ci, 'at', PyMakeIdent(cSym), PyMakeIdent(iSym));
@@ -15304,13 +15344,23 @@ begin
     unobserved rather than raising as CPython does; that is a separate gap. }
   if isStr then
     ASTRight[cmpNode] := PyMakeIdent(nSym)
-  else
+  else if not isIter then
   begin
     lenNode := PyCallMeth1(ci, 'count', PyMakeIdent(cSym), -1);
     if lenNode < 0 then Error('Nil Python: pylib (count) not loaded');
     ASTRight[cmpNode] := lenNode;
   end;
   ASTTk[cmpNode] := Ord(tyBoolean);
+  { A CURSOR replaces the whole `i + 1 < len(c)` comparison with a PREFETCH:
+    pyiter_has produces one value into the cursor and answers whether there was
+    one, and the body's take() consumes exactly that value. Idempotent, so the
+    condition may be evaluated without advancing; and because the fetch happens
+    in the condition, `f` is called once per body run and NOT AT ALL after a
+    break — which is the entire point of the umbrella. The `__py_i` counter is
+    still maintained at the top of the body, so enumerate() over a cursor and
+    `continue` both keep working unchanged. }
+  if isIter then
+    cmpNode := PyCallProc1('pyiter_has', PyMakeIdent(cSym));
   whileNode := AllocNode(AN_WHILE);
   ASTLeft[whileNode] := cmpNode;
   ASTRight[whileNode] := bodyNode;

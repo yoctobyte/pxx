@@ -1,0 +1,76 @@
+# iter() / next() and the cursor object they hand back — step 1 of
+# feature-nilpy-lazy-iterator-objects.
+#
+# A cursor is a SOURCE plus a POSITION, not a sequence: consuming part of one
+# leaves the rest, and exhaustion is permanent. That is the property the whole
+# umbrella rests on, so it is pinned here on the one shape that has no callable
+# in it at all — iter() over a plain list — before map/filter start returning
+# cursors and bring the callable-representation hazards with them.
+#
+# Every expectation below is CPython's, checked with `python3` on this file.
+
+xs = [1, 2, 3]
+it = iter(xs)
+print(next(it))
+print(next(it))
+# list() CONSUMES the rest and leaves it exhausted — a second drain is empty,
+# which is the half of single-consumption a working CPython program can see.
+print(list(it))
+print(list(it))
+print(next(it, "done"))
+
+# a str iterates by CHARACTER, and running off the end raises StopIteration
+si = iter("abc")
+print(next(si), next(si), next(si))
+try:
+    next(si)
+except StopIteration:
+    print("stopped")
+
+# a dict iterates its KEYS, as `for k in d` and list(d) both do
+d = {"a": 1, "b": 2}
+print(list(iter(d)))
+
+# iter() of an ITERATOR is that same iterator — idempotent, which is what lets
+# a consumption site call it unconditionally on whatever it was handed
+n = iter([4, 5])
+print(list(iter(n)) == [4, 5])
+
+# the object's own identity: one class here, but the NAME comes from the kind
+print(type(it).__name__)
+print(str(iter([]))[:14])
+
+print(next(iter([]), None))
+
+# --- a `for` header CONSUMES a cursor, and only as far as it goes ------------
+# The desugared loop swaps its index walk for the has/take protocol, so an
+# early break PARKS the cursor and a later loop over the same one continues
+# from there. That is the property the whole umbrella rests on: with it, a
+# map() whose function raises past the break point never reaches the raise.
+xs = [1, 2, 3, 4]
+out = []
+for v in iter(xs):
+    out.append(v)
+print(out)
+
+it2 = iter(xs)
+for v in it2:
+    if v == 2:
+        break
+print("parked at", v)
+for v in it2:
+    print("resumed", v)
+
+# `continue` still advances — the counter is maintained at the TOP of the body
+c = []
+for v in iter(xs):
+    if v % 2 == 0:
+        continue
+    c.append(v)
+print(c)
+
+# a two-name target unpacks each element, and enumerate() counts over one
+for n, s in iter([(1, "a"), (2, "b")]):
+    print(n, s)
+for i, w in enumerate(iter(["x", "y"])):
+    print(i, w)

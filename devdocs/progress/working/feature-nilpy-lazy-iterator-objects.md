@@ -4,6 +4,8 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "UMBRELLA: map/filter/enumerate/zip/reversed return eager LISTS where CPython returns cursor objects, so a working CPython program can crash here (f runs for every element even when the loop breaks early, and a raise past the break point escapes). Build a real cursor — TPyIter in pylib, consumed by every for/list/sum/sorted site — and give iter()/next() somewhere to live"
+status: working
+owner: claude-N
 ---
 
 # UMBRELLA: real lazy iterator objects for map / filter / enumerate / zip / reversed
@@ -126,3 +128,78 @@ Per step: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` +
 the six "done" rows above as one `.npy` diffed against CPython, and re-runs the
 early-break/raise program from the decide ticket, which is the acceptance test
 for the whole umbrella.
+
+---
+
+## Progress
+
+### Step 1 + the `for` consumption site — LANDED
+
+`TPyIter` lives in `compiler/builtin/pylib.pas`: one class, eight kinds
+(`PYITER_LIST/STR/REV/REVSTR/MAP/FILTER/ENUM/ZIP`), a source, a position and a
+one-slot prefetch box.
+
+**The protocol is TWO calls, not one** — `pyiter_has` prefetches and answers
+whether there was a value, `pyiter_take` hands that value over and clears the
+prefetch. That shape is what lets the desugared `for` keep its existing form:
+`has` goes in the while CONDITION (it is idempotent, so evaluating the
+condition does not advance) and `take` replaces `c.at(i)` at the top of the
+body. Everything else about the loop is untouched — the `__py_i` counter still
+increments at the top, so `continue` and `enumerate()` over a cursor both work
+unchanged. A single `next`-plus-exhausted-flag cannot sit in a condition
+without either losing the value or fetching twice.
+
+Call counts therefore match CPython exactly: one prefetch per body run, and
+**none after a break**.
+
+Also landed: `iter()` / `next()` / `next(it, default)` as ordinary OVERLOADED
+pylib functions (no parser arm — neither name is a Pascal keyword, so the
+normal call path resolves them by argument type and a user `def iter(...)`
+shadows them for free); `list(<cursor>)` drains; `print`/`str`/f-string all
+render `<map object at 0x…>`; `type(it).__name__` answers the CPython class
+name; StopIteration on exhaustion. Test: `test/test_nilpy_iter_next_cursor.npy`,
+diffed against CPython, wired into `test-nilpy` (both copies of the block).
+
+**pyeval owns the callable half.** A map cursor must CALL what it stored, and
+`PyCallKey1` (the one entry that knows all four callable representations) lives
+in pyeval, which USES pylib. So pylib carries a `PyIterCallHook` and pyeval's
+`pymap_iter` / `pyfilter_iter` install it at CONSTRUCTION — there is no
+unit-initialisation order to depend on, and a cursor cannot reach an unset hook.
+
+Ownership is explicit: the constructors `PXXObjRetain` the source, the
+upstream(s), the box and the stored callable, and `PyObjFinalize` grew a
+`TPyIter` arm that releases them. No new `VT_*` tag, so the
+four-places variant-tag list is NOT involved — a cursor is an ordinary tag-7
+object.
+
+#### Two things measured, not reasoned
+
+- **`len(map(...))` has NO uses in the tree.** Grepped `test/*.npy`,
+  `examples/**`, `lib/**` for `len(` over a map/filter/zip/enumerate result:
+  zero hits. The one behaviour removal is therefore free.
+- **A bare parameterless pylib function used as a CALL ARGUMENT does not
+  resolve** — `FBox.append(pynone)` compiled fine on the NilPy path and failed
+  with `undefined variable (pynone)` only when a `.pas` program `uses pylib`
+  directly (`test_uses_order_pylib_exception_a.pas`). `pynone()` with parens is
+  the fix. `Result := pynone` (assignment form) is unaffected, which is why
+  every existing use is spelled that way. The nilpy suite caught this and the
+  ad-hoc `.npy` repros could not.
+
+### NEXT — step 3, one builtin per commit
+
+`map` first. Two things it needs that are not in yet:
+
+1. **The parser arm must pick the pylib entry by the iterable's STATIC type.**
+   `FindProc(name)` answers ONE proc and never consults overloads
+   ([[project_findproc_by_name_ignores_overloads]]), so `pymap_iter` cannot be
+   a single overloaded name reached from the arm — it needs distinct spellings
+   per argument shape (list / str / cursor / variant), the way the existing
+   `pymap_int|str|float` shims are chosen.
+2. **The tuple-unpack site must drain a cursor.** `w, h = map(int, s.split("x"))`
+   is in the corpus (`test_nilpy_optional_and_map.npy`,
+   `test_nilpy_method_on_call_result.npy`). `PyParseUnpackAssign` types its temp
+   from the RHS and demands a TPyList or a variant, so a `TPyIter` RHS reports
+   "cannot unpack this value into several names". Wrap it in `pyiter_drain` and
+   type the temp as TPyList.
+
+Then `filter`, `enumerate`, `zip`, and `reversed` last.

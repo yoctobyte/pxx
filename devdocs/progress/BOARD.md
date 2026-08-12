@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-nilpy-lazy-iterator-objects | N | 55 | feature | UMBRELLA: map/filter/enumerate/zip/reversed return eager LISTS where CPython returns cursor objects, so a working CPython program can crash here (f runs for every element even when the loop breaks early, and a raise past the break point escapes). Build a real cursor — TPyIter in pylib, consumed by every for/list/sum/sorted site — and give iter()/next() somewhere to live | — |
 
 ## unfinished (10)
 
@@ -35,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (224)
+## backlog (223)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -163,7 +165,6 @@ _none_
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-iter-and-next-over-a-container | N | 35 | feature | `iter(xs)` is undefined — the explicit iterator protocol | — |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
-| feature-nilpy-lazy-iterator-objects | N | 55 | feature | UMBRELLA: map/filter/enumerate/zip/reversed return eager LISTS where CPython returns cursor objects, so a working CPython program can crash here (f runs for every element even when the loop breaks early, and a raise past the break point escapes). Build a real cursor — TPyIter in pylib, consumed by every for/list/sum/sorted site — and give iter()/next() somewhere to live | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
 | feature-nilpy-match-statement | N | 30 | feature | `match` / `case` — structural pattern matching is not parsed | — |
@@ -479,7 +480,6 @@ _none_
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-corpus-uforth
-- [p 55] [N] feature-nilpy-lazy-iterator-objects
 - [p 55] [N] feature-nilpy-text-string-kind
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [A] feature-pascal-type-helpers

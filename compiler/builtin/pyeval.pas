@@ -124,6 +124,15 @@ function max(l: TPyList; key: Pointer = nil): Variant; overload;
 function pymap_call(key: Pointer; l: TPyList): TPyList;
 function pyfilter_call(key: Pointer; l: TPyList): TPyList;
 
+{ The LAZY forms — CPython's `map` and `filter` are cursor objects, not lists
+  (feature-nilpy-lazy-iterator-objects). The cursor itself lives in pylib; these
+  two exist here only because a map cursor has to CALL the callable it stored
+  and PyCallKey1 lives in this unit. Installing PyIterCallHook at construction
+  is what guarantees the hook is set before any cursor can reach it — there is
+  no unit-initialisation order to depend on. }
+function pymap_iter(key: Pointer; const v: Variant): TPyIter;
+function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
+
 { Build a closure from raw SOURCE text — the compiled frontend's lowering of a
   Python `lambda`: `lambda vm: vm.push(A)` becomes
   pyclosure_src_new('vm', 'return vm.push(A)') with each free name's VALUE
@@ -4927,6 +4936,18 @@ begin
     end
     else if pyvar_to_bool(PyCallKey1(key, ev)) then Result.append(ev);
   end;
+end;
+
+function pymap_iter(key: Pointer; const v: Variant): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_map(key, v);
+end;
+
+function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
+begin
+  PyIterCallHook := @PyCallKey1;
+  Result := pyiter_filter(key, v);
 end;
 
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;

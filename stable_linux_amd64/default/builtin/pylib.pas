@@ -43,6 +43,18 @@ const
   PYSEQ_TUPLE = 1;
   PYSEQ_SET   = 2;
 
+  { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
+    value comes from, so it is the whole of the object's behaviour; there is no
+    per-kind subclass, because the frontend has to name ONE class in the AST. }
+  PYITER_LIST   = 0;   { a list, walked forward, LIVE (mutation is visible) }
+  PYITER_STR    = 1;
+  PYITER_REV    = 2;   { reversed(list) }
+  PYITER_REVSTR = 3;
+  PYITER_MAP    = 4;
+  PYITER_FILTER = 5;
+  PYITER_ENUM   = 6;
+  PYITER_ZIP    = 7;
+
 type
   TPyVarRec = record
     VType: Int64;
@@ -52,6 +64,9 @@ type
   { rawKind=2 (a pyeval closure object) forwards through this hook; installed
     by pyeval, which owns the closure registry. nil until pyeval initializes. }
   TPyClosureFinalize = procedure(objp: Pointer);
+  { pyeval's PyCallKey1, installed into PyIterCallHook: the one entry point
+    that knows all four callable representations. See that variable. }
+  TPyIterCall = function(key: Pointer; const a0: Variant): Variant;
   PInt64 = ^Int64;
   PPyAnsiString = ^AnsiString;
   PPyDouble = ^Double;
@@ -505,6 +520,45 @@ type
     procedure close;
   end;
 
+  { A CURSOR — CPython's `map` / `filter` / `enumerate` / `zip` / `reversed`
+    object, and what `iter(x)` hands back. Not a sequence: it holds a SOURCE, a
+    POSITION and a rule for producing the next value, so constructing one costs
+    nothing, breaking a loop parks it, and resuming continues from where it
+    stopped. NilPy returned eager lists (Python 2's `map`), which made a
+    program CPython runs fine crash here — `f` ran for every element even when
+    the loop broke at 3, so a raise past the break point escaped
+    (decide-nilpy-eager-map-filter-reversed-enumerate).
+
+    The protocol is TWO calls, not one, because that is what fits the desugared
+    `for`: `pyiter_has` PREFETCHES one value into FBox and answers whether
+    there was one; `pyiter_take` hands that value over and clears the prefetch.
+    A single `next`-plus-exhausted-flag cannot sit in a while CONDITION without
+    either losing the value or fetching twice. The call counts match CPython
+    exactly: one prefetch per body run, none after the break.
+
+    FBox is a one-slot TPyList rather than a `Variant` FIELD deliberately — no
+    class in this unit has a variant field, and the container path is the
+    tested one for holding a variant that may own an object.
+
+    Ownership is EXPLICIT (PXXObjRetain in the constructors, released in
+    PyObjFinalize's TPyIter arm): a cursor outlives the expression that built
+    its source — `for v in map(f, [1, 2, 3])` has nothing else holding that
+    list once the header has run. }
+  TPyIter = class
+  public
+    FKind: Integer;          { PYITER_* below }
+    FSrc: TPyList;           { leaf list source (LIST, REV) }
+    FStr: AnsiString;        { leaf str source (STR, REVSTR) }
+    FUp: TPyIter;            { upstream cursor (MAP, FILTER, ENUM, ZIP left) }
+    FUp2: TPyIter;           { ZIP right }
+    FKey: Pointer;           { the stored callable (MAP, FILTER) — see PyIterCallHook }
+    FPos: Integer;           { leaf position / ENUM counter }
+    FStart: Int64;           { enumerate(xs, START) }
+    FBox: TPyList;           { the one-slot prefetch }
+    FHas: Boolean;           { FBox holds a prefetched value }
+    FEnd: Boolean;           { the source is exhausted — never restarts }
+    constructor Create;
+  end;
 
 { Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
   spelling, which is the whole point: the shared str() intrinsic lowers every
@@ -853,6 +907,54 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
   merely not crash. }
 var
   PyClosureFinalizeHook: TPyClosureFinalize;
+  { map/filter cursors must CALL the callable they stored, and the callable
+    dispatch (PyCallKey1, which knows all four representations a NilPy callable
+    has) lives in pyeval — which USES this unit, so it cannot be called from
+    here. pyeval installs itself through this hook, exactly as the closure
+    finaliser above does. A cursor whose hook is unset raises rather than
+    silently yielding the unmapped element. }
+  PyIterCallHook: TPyIterCall;
+
+{ ---- cursors (TPyIter) -------------------------------------------------
+  The two-call protocol: `pyiter_has` prefetches, `pyiter_take` consumes. See
+  TPyIter's declaration for why it is two calls and not one. }
+function pyiter_of_list(l: TPyList): TPyIter;
+function pyiter_of_str(const s: AnsiString): TPyIter;
+{ `iter(x)` over a value whose type is only known at run time — a list, a str,
+  a dict (its KEYS, as Python iterates one), bytes, or a cursor, which answers
+  ITSELF because CPython's iter() is idempotent on an iterator. }
+function pyiter_v(const v: Variant): TPyIter;
+{ reversed(): a leaf cursor walking the source BACKWARDS. Its source is already
+  materialised, so the only thing laziness buys here is the exhaustion rule. }
+function pyiter_rev_list(l: TPyList): TPyIter;
+function pyiter_rev_str(const s: AnsiString): TPyIter;
+{ enumerate(xs[, start]) and zip(a, b) over any iterable, yielding PAIRS (a
+  two-element TPyList, the same shape d.items() and the tuple literal build). }
+function pyiter_enum(const v: Variant; start: Int64): TPyIter;
+function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
+{ map(f, xs) / filter(f, xs). `key` is a callable in any of its four
+  representations; filter's `key` may be nil, which is Python's own
+  `filter(None, xs)` "keep the truthy elements" shorthand. }
+function pyiter_map(key: Pointer; const v: Variant): TPyIter;
+function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
+function pyiter_has(it: TPyIter): Boolean;
+function pyiter_take(it: TPyIter): Variant;
+{ `next(it)` / `next(it, default)`: advance one step. Exhaustion RAISES
+  StopIteration for the one-argument form and answers the default otherwise,
+  as CPython does. }
+function pyiter_next(it: TPyIter): Variant;
+function pyiter_next_or(it: TPyIter; const dflt: Variant): Variant;
+{ Consume the REST of a cursor into a list — what list()/sorted()/sum()/`in`
+  and a tuple-unpack target do with one. Leaves the cursor exhausted, which is
+  the CPython-visible half of single consumption. }
+function pyiter_drain(it: TPyIter): TPyList;
+{ True when the variant holds a cursor — the run-time half of the static
+  `is TPyIter` test, for the consumption sites that take a Variant. }
+function pyiter_is(const v: Variant): Boolean;
+{ `<map object at 0x...>` — CPython prints the cursor's CLASS and address, and
+  a doctest or a logged debug line sees it. }
+function pyiter_repr(it: TPyIter): AnsiString;
+function pyiter_typename(it: TPyIter): AnsiString;
 
 function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
 function pybound_code(const v: Variant): Pointer;
@@ -1163,6 +1265,9 @@ function list(const v: Variant): TPyList; overload;
   `b[i]` were already right, so this is the constructor alone, not the
   iteration protocol. }
 function list(b: TPyBytes): TPyList; overload;
+{ `list(<cursor>)` — CONSUMES it, leaving it exhausted, which is CPython's
+  single-consumption rule. See pyiter_drain. }
+function list(it: TPyIter): TPyList; overload;
 { tuple(iterable) — the same sequence with the TUPLE flag set. The tuple TYPE
   existed (literals work, and FKind distinguishes it) but the CONSTRUCTOR did
   not, so `tuple([1, 2])` failed with 'undefined variable (tuple)'.
@@ -1367,6 +1472,23 @@ function len(const s: AnsiString): Integer; overload;
   overloads, which is a wall for ordinary Python. }
 function len(const v: Variant): Integer; overload;
 function next(c: TPyCounter): Int64;
+{ Python's `iter(x)` and `next(it[, default])` — the two builtins the cursor
+  family finally gives somewhere to live
+  (bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep). Spelled as
+  ordinary OVERLOADED pylib functions rather than parser arms, exactly as
+  list()/sorted()/min()/max() are: neither name is a Pascal keyword, so the
+  normal call path resolves them by argument type and a user `def iter(...)`
+  shadows them for free. `next` already had a TPyCounter overload above — an
+  itertools.count advance — and the two coexist because the ARGUMENT tells
+  them apart. }
+function iter(l: TPyList): TPyIter;
+function iter(it: TPyIter): TPyIter; overload;
+function iter(d: TPyDict): TPyIter; overload;
+function iter(b: TPyBytes): TPyIter; overload;
+function iter(const s: AnsiString): TPyIter; overload;
+function iter(const v: Variant): TPyIter; overload;
+function next(it: TPyIter): Variant; overload;
+function next(it: TPyIter; const dflt: Variant): Variant; overload;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 { `x in <bytes>`. Python allows BOTH a bytes subsequence (`b"ell" in b"hello"`)
@@ -2973,6 +3095,10 @@ begin
   begin
     if TPyBytes(o).FIsByteArray then Result := 'bytearray' else Result := 'bytes';
   end
+  { one class, eight cursor kinds — `type(map(f, xs)).__name__` is 'map' and
+    `type(reversed(xs)).__name__` is 'list_reverseiterator', so the NAME comes
+    from the kind, not from ClassName (which would answer 'TPyIter'). }
+  else if o is TPyIter then Result := pyiter_typename(TPyIter(o))
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -3196,6 +3322,49 @@ end;
 function next(c: TPyCounter): Int64;
 begin
   Result := c.nextval;
+end;
+
+function iter(l: TPyList): TPyIter;
+begin
+  Result := pyiter_of_list(l);
+end;
+
+function iter(it: TPyIter): TPyIter; overload;
+begin
+  { iter() of an iterator is that iterator — CPython's rule, and what lets a
+    consumption site call iter() unconditionally on whatever it was handed }
+  Result := it;
+end;
+
+function iter(d: TPyDict): TPyIter; overload;
+begin
+  if d = nil then Result := pyiter_of_list(TPyList.Create)
+  else Result := pyiter_of_list(d.keylist);
+end;
+
+function iter(b: TPyBytes): TPyIter; overload;
+begin
+  Result := pyiter_of_list(list(b));
+end;
+
+function iter(const s: AnsiString): TPyIter; overload;
+begin
+  Result := pyiter_of_str(s);
+end;
+
+function iter(const v: Variant): TPyIter; overload;
+begin
+  Result := pyiter_v(v);
+end;
+
+function next(it: TPyIter): Variant; overload;
+begin
+  Result := pyiter_next(it);
+end;
+
+function next(it: TPyIter; const dflt: Variant): Variant; overload;
+begin
+  Result := pyiter_next_or(it, dflt);
 end;
 
 procedure PyIndexError;
@@ -8748,6 +8917,324 @@ begin
   Result := v;
 end;
 
+{ ======================= cursors (TPyIter) ==============================
+  See TPyIter's declaration for the model and for why the protocol is two
+  calls (has/take) rather than one. }
+
+constructor TPyIter.Create;
+begin
+  { first construction installs the recursive finalizer, exactly as TPyList's
+    does — a cursor can be the first pylib object a program builds }
+  PXXObjFinalizeHook := @PyObjFinalize;
+  FBox := TPyList.Create;
+  { the one prefetch slot, allocated once. Spelled `pynone()` WITH parens: a
+    bare parameterless function name used as an ARGUMENT reads as a variable in
+    the Pascal expression parser and fails with "undefined variable (pynone)" —
+    which only shows up when a .pas program `uses pylib` directly, never on the
+    NilPy path. The `Result := pynone` assignment form below is fine. }
+  FBox.append(pynone());
+  PXXObjRetain(Pointer(FBox));
+  FPos := 0;
+  FStart := 0;
+  FHas := False;
+  FEnd := False;
+end;
+
+function pyiter_of_list(l: TPyList): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_LIST;
+  Result.FSrc := l;
+  PXXObjRetain(Pointer(l));
+end;
+
+function pyiter_of_str(const s: AnsiString): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_STR;
+  Result.FStr := s;
+end;
+
+function pyiter_rev_list(l: TPyList): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_REV;
+  Result.FSrc := l;
+  PXXObjRetain(Pointer(l));
+  { CPython's list_reverseiterator holds a DESCENDING index seeded at
+    len(seq) - 1 when it is built, so a list that grows afterwards is not
+    re-walked from its new end. }
+  if l = nil then Result.FPos := -1 else Result.FPos := l.count - 1;
+end;
+
+function pyiter_rev_str(const s: AnsiString): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_REVSTR;
+  Result.FStr := s;
+  Result.FPos := Length(s);      { 1-based, walked down to 1 }
+end;
+
+function pyiter_is(const v: Variant): Boolean;
+var o: TObject;
+begin
+  Result := False;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  Result := o is TPyIter;
+end;
+
+function pyiter_v(const v: Variant): TPyIter;
+var o: TObject;
+begin
+  if pyvartag(v) = 6 then begin Result := pyiter_of_str(VariantToStr(v)); Exit; end;
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    { iter() of an ITERATOR is that same iterator in CPython — idempotent, and
+      relied on by every `for` that calls iter() on whatever it was given. }
+    if o is TPyIter then begin Result := TPyIter(o); Exit; end;
+    if o is TPyList then begin Result := pyiter_of_list(TPyList(o)); Exit; end;
+    { a dict iterates its KEYS, as `for k in d` and `list(d)` both do }
+    if o is TPyDict then begin Result := pyiter_of_list(TPyDict(o).keylist); Exit; end;
+    if o is TPyBytes then begin Result := pyiter_of_list(list(TPyBytes(o))); Exit; end;
+    if o is TPyFile then begin Result := pyiter_of_list(TPyFile(o).readlines); Exit; end;
+  end;
+  PyTypeError(pyvartag(v), 'an iterable');
+  Result := pyiter_of_list(TPyList.Create);
+end;
+
+function pyiter_enum(const v: Variant; start: Int64): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_ENUM;
+  Result.FUp := pyiter_v(v);
+  PXXObjRetain(Pointer(Result.FUp));
+  Result.FStart := start;
+end;
+
+function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_ZIP;
+  Result.FUp := pyiter_v(a);
+  PXXObjRetain(Pointer(Result.FUp));
+  Result.FUp2 := pyiter_v(b);
+  PXXObjRetain(Pointer(Result.FUp2));
+end;
+
+function pyiter_map(key: Pointer; const v: Variant): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_MAP;
+  Result.FUp := pyiter_v(v);
+  PXXObjRetain(Pointer(Result.FUp));
+  Result.FKey := key;
+  PXXObjRetain(key);     { a lifted lambda / bound pair is refcounted; a bare
+                           code address no-ops }
+end;
+
+function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_FILTER;
+  Result.FUp := pyiter_v(v);
+  PXXObjRetain(Pointer(Result.FUp));
+  Result.FKey := key;    { nil is filter(None, xs) — Python's own shorthand }
+  PXXObjRetain(key);
+end;
+
+{ Prefetch ONE value into FBox. Idempotent: calling it twice without an
+  intervening take() does not advance, which is what lets it sit in a while
+  CONDITION. Every source is consulted LIVE — a list that grows during the
+  loop is seen, exactly as the eager index loop saw it. }
+function pyiter_has(it: TPyIter): Boolean;
+var l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
+begin
+  Result := False;
+  if it = nil then Exit;
+  if it.FHas then begin Result := True; Exit; end;
+  { exhaustion is PERMANENT — a CPython iterator never restarts, and this is
+    what makes a second pass over a bound cursor yield the remainder }
+  if it.FEnd then Exit;
+  if it.FKind = PYITER_LIST then
+  begin
+    l := it.FSrc;
+    if (l = nil) or (it.FPos >= l.count) then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, l.at(it.FPos));
+    Inc(it.FPos);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_STR then
+  begin
+    if it.FPos >= Length(it.FStr) then begin it.FEnd := True; Exit; end;
+    Inc(it.FPos);
+    it.FBox.put(0, pystr_ofchar(it.FStr[it.FPos]));
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_REV then
+  begin
+    l := it.FSrc;
+    if (l = nil) or (it.FPos < 0) then begin it.FEnd := True; Exit; end;
+    { a shrunk list must not be indexed past its end }
+    if it.FPos >= l.count then it.FPos := l.count - 1;
+    if it.FPos < 0 then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, l.at(it.FPos));
+    Dec(it.FPos);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_REVSTR then
+  begin
+    if it.FPos < 1 then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, pystr_ofchar(it.FStr[it.FPos]));
+    Dec(it.FPos);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_MAP then
+  begin
+    if not pyiter_has(it.FUp) then begin it.FEnd := True; Exit; end;
+    ev := pyiter_take(it.FUp);
+    if PyIterCallHook = nil then
+      raise TypeError.Create('map(): callable dispatch is unavailable');
+    mv := PyIterCallHook(it.FKey, ev);
+    it.FBox.put(0, mv);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_FILTER then
+  begin
+    while pyiter_has(it.FUp) do
+    begin
+      ev := pyiter_take(it.FUp);
+      if it.FKey = nil then kept := pyvar_to_bool(ev)
+      else
+      begin
+        if PyIterCallHook = nil then
+          raise TypeError.Create('filter(): callable dispatch is unavailable');
+        kept := pyvar_to_bool(PyIterCallHook(it.FKey, ev));
+      end;
+      if kept then
+      begin
+        it.FBox.put(0, ev);
+        it.FHas := True;
+        Result := True;
+        Exit;
+      end;
+    end;
+    it.FEnd := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_ENUM then
+  begin
+    if not pyiter_has(it.FUp) then begin it.FEnd := True; Exit; end;
+    ev := pyiter_take(it.FUp);
+    pair := TPyList.Create;
+    pair.FKind := PYSEQ_TUPLE;      { enumerate() yields (index, value) tuples }
+    pair.append(it.FStart + it.FPos);
+    pair.append(ev);
+    Inc(it.FPos);
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    it.FBox.put(0, pv);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_ZIP then
+  begin
+    { the LEFT element is consumed before the right is even asked for, which is
+      CPython's order and is observable when the two sides have side effects }
+    if not pyiter_has(it.FUp) then begin it.FEnd := True; Exit; end;
+    ev := pyiter_take(it.FUp);
+    if not pyiter_has(it.FUp2) then begin it.FEnd := True; Exit; end;
+    pair := TPyList.Create;
+    pair.FKind := PYSEQ_TUPLE;
+    pair.append(ev);
+    pair.append(pyiter_take(it.FUp2));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    it.FBox.put(0, pv);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  it.FEnd := True;
+end;
+
+function pyiter_take(it: TPyIter): Variant;
+begin
+  Result := pynone;
+  if it = nil then Exit;
+  if not it.FHas then
+    if not pyiter_has(it) then Exit;
+  Result := it.FBox.at(0);
+  it.FHas := False;
+end;
+
+function pyiter_next(it: TPyIter): Variant;
+begin
+  Result := pynone;
+  if (it = nil) or (not pyiter_has(it)) then
+    raise StopIteration.Create('next() on an exhausted iterator');
+  Result := pyiter_take(it);
+end;
+
+function pyiter_next_or(it: TPyIter; const dflt: Variant): Variant;
+begin
+  if (it = nil) or (not pyiter_has(it)) then begin Result := dflt; Exit; end;
+  Result := pyiter_take(it);
+end;
+
+function pyiter_drain(it: TPyIter): TPyList;
+begin
+  Result := TPyList.Create;
+  if it = nil then Exit;
+  while pyiter_has(it) do
+    Result.append(pyiter_take(it));
+end;
+
+function pyiter_typename(it: TPyIter): AnsiString;
+begin
+  Result := 'iterator';
+  if it = nil then Exit;
+  if it.FKind = PYITER_LIST then Result := 'list_iterator'
+  else if it.FKind = PYITER_STR then Result := 'str_iterator'
+  else if it.FKind = PYITER_REV then Result := 'list_reverseiterator'
+  else if it.FKind = PYITER_REVSTR then Result := 'reversed'
+  else if it.FKind = PYITER_MAP then Result := 'map'
+  else if it.FKind = PYITER_FILTER then Result := 'filter'
+  else if it.FKind = PYITER_ENUM then Result := 'enumerate'
+  else if it.FKind = PYITER_ZIP then Result := 'zip';
+end;
+
+function pyiter_repr(it: TPyIter): AnsiString;
+var a: NativeInt; d: Integer; hx: AnsiString;
+begin
+  if it = nil then begin Result := 'None'; Exit; end;
+  a := NativeInt(Pointer(it));
+  hx := '';
+  if a = 0 then hx := '0';
+  while a > 0 do
+  begin
+    d := a mod 16;
+    if d < 10 then hx := Chr(Ord('0') + d) + hx
+    else hx := Chr(Ord('a') + d - 10) + hx;
+    a := a div 16;
+  end;
+  Result := '<' + pyiter_typename(it) + ' object at 0x' + hx + '>';
+end;
+
 type
   TPyBoundRec = record Code, Recv: Pointer; IsFunc: Boolean; end;
   PPyBoundRec = ^TPyBoundRec;
@@ -8758,6 +9245,7 @@ var
   l: TPyList;
   d: TPyDict;
   by: TPyBytes;
+  it: TPyIter;
   o: TObject;
 begin
   if objp = nil then Exit;
@@ -8807,6 +9295,24 @@ begin
     by := TPyBytes(objp);
     if by.FData <> nil then FreeMem(by.FData);
     by.FData := nil; by.FLen := 0;
+    Exit;
+  end;
+  { a CURSOR owns its source, its upstream(s) and its prefetch box — every one
+    of them taken with an explicit PXXObjRetain in the constructor, because a
+    cursor routinely outlives the expression that built its source
+    (`for v in map(f, [1, 2, 3])` has nothing else holding that list). The
+    stored callable is released too: a lifted lambda / bound pair is a
+    refcounted block, and PXXObjRelease no-ops on a plain code address. }
+  if o is TPyIter then
+  begin
+    it := TPyIter(objp);
+    PXXObjRelease(Pointer(it.FSrc));
+    PXXObjRelease(Pointer(it.FUp));
+    PXXObjRelease(Pointer(it.FUp2));
+    PXXObjRelease(Pointer(it.FBox));
+    PXXObjRelease(it.FKey);
+    it.FSrc := nil; it.FUp := nil; it.FUp2 := nil; it.FBox := nil; it.FKey := nil;
+    it.FStr := '';
     Exit;
   end;
   { user class / anything else: release managed + variant fields via the
@@ -11028,9 +11534,18 @@ begin
     if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
     if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
+    { a CURSOR is consumed, not copied — list(map(f, xs)) is the shape that
+      makes a lazy map indistinguishable from the eager one it replaced, and
+      it leaves the cursor exhausted, as CPython does }
+    if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := list(pystr_of(v)); Exit; end;
   Result := TPyList.Create;   { None / empty }
+end;
+
+function list(it: TPyIter): TPyList; overload;
+begin
+  Result := pyiter_drain(it);
 end;
 
 function list(const s: AnsiString): TPyList; overload;
@@ -12184,6 +12699,9 @@ begin
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
+    { a cursor reprs as CPython's `<map object at 0x...>` — it does NOT render
+      its contents, because reading them would CONSUME it }
+    if o is TPyIter then begin Result := pyiter_repr(TPyIter(o)); Exit; end;
     if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
   { the scalar/string tail, INLINE rather than delegating to pyrepr_of. The two
@@ -12215,6 +12733,7 @@ begin
     if o is TPyList then begin Result := pylist_repr(TPyList(o)); Exit; end;
     if o is TPyDict then begin Result := pydict_repr(TPyDict(o)); Exit; end;
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
+    if o is TPyIter then begin Result := pyiter_repr(TPyIter(o)); Exit; end;
     { a bare print() of an instance prefers __str__, like CPython's str() }
     if PyUserObjStr(o, False, us) then begin Result := us; Exit; end;
   end;
