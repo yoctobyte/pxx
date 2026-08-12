@@ -2919,7 +2919,7 @@ def states_at(repo, ref):
     return out
 
 
-def retire_host(repo, old, into=None, tdir=None):
+def retire_host(repo, old, into=None, tdir=None, renamed=False):
     """Retire host `old`, optionally moving its open regressions `into` another.
 
     A regression only clears when a later run ON THAT HOST passes the job. That
@@ -2933,7 +2933,8 @@ def retire_host(repo, old, into=None, tdir=None):
     Renaming a box is not rare, so this is a general operation rather than a
     one-off edit of the JSON:
 
-      --retire-host xeon --into plexus   # same box, new name: migrate
+      --retire-host borg --into plexus   # T moved off borg: migrate entries
+      --retire-host xeon --into plexus --renamed   # same box, new name
       --retire-host oldbox               # box is gone: close its entries out
 
     With `--into`, entries move to the new host and clear normally there — the
@@ -2941,6 +2942,16 @@ def retire_host(repo, old, into=None, tdir=None):
     re-reports it honestly. Without it, they are closed as unclearable. Either
     way the tombstone stays: the host's tested shas keep counting toward
     coverage, because those runs really did happen.
+
+    `--renamed` is a SEPARATE, STRONGER claim and must not ride along with
+    `--into`. Two different things move a job off a host: the box was renamed
+    (`xeon` → `plexus`, one machine), or the work moved to a different box
+    (`borg` kept existing as a dev station; Track T moved to plexus). Both want
+    the entries migrated; only the first means `plexus` was ever called `borg`.
+    Recording `renamed_from: borg` on plexus would be a plain falsehood in the
+    permanent record — and this file IS the record — so the default is the
+    weaker claim that `--into` actually supports (`migrated_from`), and the
+    rename is opt-in.
     """
     tdir = tdir or os.path.join(repo, TSTATE_REL)
     op = os.path.join(tdir, old + ".json")
@@ -2973,13 +2984,15 @@ def retire_host(repo, old, into=None, tdir=None):
             r = dict(r, migrated_from=old, migrated_at=utcnow())
             nst.setdefault("open_regressions", []).append(r)
             moved += 1
-        nst["renamed_from"] = sorted(set(nst.get("renamed_from") or []) | {old})
+        key = "renamed_from" if renamed else "migrated_from"
+        nst[key] = sorted(set(nst.get(key) or []) | {old})
         with open(np_, "w") as f:
             json.dump(nst, f, indent=1, sort_keys=True)
             f.write("\n")
     ost["retired_at"] = utcnow()
     if into:
         ost["retired_into"] = into
+        ost["retired_kind"] = "rename" if renamed else "migration"
     # Nothing here is actionable any more: the entries either moved or are
     # closed, and the job map can never be diffed against again.
     ost["open_regressions"] = []
@@ -2988,7 +3001,9 @@ def retire_host(repo, old, into=None, tdir=None):
         json.dump(ost, f, indent=1, sort_keys=True)
         f.write("\n")
     print("twatch: retired host %s%s — %d open regression(s) %s"
-          % (old, " into %s" % into if into else "", len(regs),
+          % (old,
+             " into %s (%s)" % (into, "rename" if renamed else "migration")
+             if into else "", len(regs),
              "migrated (%d new)" % moved if into else "closed as unclearable"))
     print("twatch: commit %s (and %s) to publish the retirement."
           % (os.path.relpath(op, repo),
@@ -3345,7 +3360,12 @@ def main():
                          "checkout, then commit the tstate change")
     ap.add_argument("--into", metavar="HOST",
                     help="--retire-host: migrate the open regressions to this "
-                         "host (same box, new name). Omit to close them out")
+                         "host, which then clears or re-reports them normally. "
+                         "Omit to close them out as unclearable")
+    ap.add_argument("--renamed", action="store_true",
+                    help="--retire-host --into: the two names are the SAME box "
+                         "(xeon → plexus), not work moving between boxes. "
+                         "Records renamed_from instead of migrated_from")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="install any missing corpus trees at startup instead "
                          "of just warning (jobs whose corpus is absent SKIP, "
@@ -3356,7 +3376,10 @@ def main():
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if args.retire_host:
-            return retire_host(repo, args.retire_host, args.into)
+            if args.renamed and not args.into:
+                sys.exit("twatch: --renamed needs --into (renamed into WHAT?)")
+            return retire_host(repo, args.retire_host, args.into,
+                               renamed=args.renamed)
         if args.follow is not None:
             return follow(repo, args.follow, args.poll, args.branch, args.once)
         return status(repo, args.grace)
