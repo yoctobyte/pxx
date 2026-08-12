@@ -1421,6 +1421,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lambda_returned26)" = "$$(printf '2 11 6 2\n2 101\n6 1005\n8 2\n2 21')"
 	./$(COMPILER) test/test_nilpy_annotated_module_global.npy /tmp/test_nilpy_annotated_module_global26
 	test "$$(/tmp/test_nilpy_annotated_module_global26)" = "$$(printf '2\n5 8 AB 2 1\n1 1 7 ab 3')"
+	@# a field assigned from a module-level CONSTANT — `self.state = NEW`. Every
+	@# global type was rejected with "cannot infer the type of field"; CPython is
+	@# the oracle for the expectation
+	./$(COMPILER) test/test_nilpy_field_from_module_global.npy /tmp/test_nilpy_field_from_global26
+	/tmp/test_nilpy_field_from_global26 | diff -u test/test_nilpy_field_from_module_global.expected -
 	./$(COMPILER) test/test_nilpy_method_string_result_ownership.npy /tmp/test_nilpy_method_string_result26
 	test "$$(/tmp/test_nilpy_method_string_result26)" = "$$(printf 'lit 7 kk-7 kk 9\n3 1 4 2 1\nzz 99 zz\n300 zz-99')"
 	./$(COMPILER) test/test_nilpy_sorted_sequences.npy /tmp/test_nilpy_sorted_sequences26

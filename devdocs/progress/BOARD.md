@@ -35,7 +35,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (212)
+## backlog (221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -46,7 +46,11 @@ _none_
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot | N | 55 | bug | A def-returned `None` stops being None once it crosses into a variant slot | — |
-| bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type | N | 45 | bug | `self.state = NEW` where NEW is a module-level constant is a compile error — 'cannot infer the type of field self.state'. Uniform across every global type (str/int/float/list/bool), so module-level constants, the most ordinary Python idiom there is, cannot reach a field without an annotation | — |
+| bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero | N | 55 | bug | `def f(): return 2 ** 70` answers 0 — as does returning the equivalent literal, or `2 ** n`. Assigning to a local first and returning THAT is correct, and so is returning an expression over a big-int PARAMETER, so it is the return expression's own type inference narrowing an arbitrary-precision value to a machine int | — |
+| bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
+| bug-nilpy-a-second-for-clause-fails-when-the-first-iterable-is-a-range | N | 50 | bug | `[x + y for x in range(2) for y in [10]]` is 'undefined variable (y)' — a two-for comprehension works only when the FIRST clause iterates a list; a range() there takes a fast path that never binds the second clause's name. `for x in <list> for y in range(...)` is fine, so it is the first iterable alone that decides | — |
+| bug-nilpy-abs-keeps-the-sign-of-negative-zero-and-min-max-break-ties-backwards | N | 35 | bug | abs(-0.0) answers -0.0 (CPython: 0.0) — the sign bit is never cleared — and min()/max() return the LAST of several equal-comparing arguments where CPython returns the FIRST, observable as min(-0.0, 0.0) answering 0.0 instead of -0.0 | — |
+| bug-nilpy-an-override-returning-a-different-type-than-the-base-reads-float-bits | N | 58 | bug | An overriding method whose return type differs from the base's is stored into the BASE's return slot with no conversion: base `return 0` + override `return 1.5` prints 4609434218613702656 — the IEEE bits of 1.5 read as an integer — and arithmetic on it silently continues. The mirror direction (int override of a float base) either renders 6 as 6.0 or fails to compile with 'invalid IR node reference in store_sym' | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-def-returning-a-precreated-global-has-no-return-type | N | 35 | bug | `rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails | — |
@@ -60,12 +64,17 @@ _none_
 | bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
 | bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused | N | 45 | bug | Three construction-site argument shapes are refused with a diagnostic: `C(**kw)` on a `**kwargs` ctor, `C(*xs)` unpacking into one, and a keyword whose name matches a FIELD when the ctor takes `**kw`. All work at a plain `def` or an ordinary method; only the construction path is short. | — |
+| bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero | N | 50 | bug | `len(f.read().split('\\n'))` answers 1 and `len(f.read().upper())` answers 0 — as if the file were empty — while the identical expression printed, assigned, or iterated is correct. The read really happens (a following f.read() returns ''), so the string is produced and then lost on the way into len() alone | — |
+| bug-nilpy-math-surface-remaining-gaps-and-degrees-association | N | 35 | bug | Seven math names still resolve to 'undefined variable' — asin, acos, atan, fsum, modf, perm, dist, prod — and math.degrees(3.14) answers 179.90874767107852 where CPython answers 179.9087476710785, because it computes x*180/pi instead of CPython's x*(180/pi). The `random` module is absent entirely | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
+| bug-nilpy-module-name-reassigned-from-a-field-in-a-block-segfaults | N | 55 | bug | Linked-list traversal at MODULE level segfaults: `n = n.next` inside a while/if block keeps n's class-typed module binding while a variant field is written into it. The identical two statements straight-line are fine, and the identical loop inside a def is fine — it is the module-level block. Sibling of the fixed subscript case, one shape over | — |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
 | bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
+| bug-nilpy-repr-returning-a-bare-string-field-is-empty | N | 55 | bug | A `__repr__` whose body is `return self.n` (a bare string field, directly or through a local) yields the EMPTY string — so `repr(obj)` prints nothing and `print([obj])` prints `[, ]`. `return self.n + \"\"`, a literal, or `str(self.k)` are all fine, and the identical body in a PLAIN method or in `__str__` is fine, so it is repr's dispatch path losing the string | — |
+| bug-nilpy-sum-of-floats-has-no-compensated-summation | N | 45 | bug | CPython's builtin sum() uses Neumaier compensated summation for floats; NilPy's adds naively, so sum([1e16, 1.0, -1e16]) answers 0.0 where CPython answers 1.0, and sum([0.1]*10) answers 0.9999999999999999 where CPython answers 1.0. Ordinary averaging code disagrees with the oracle in the last digits, or loses a whole term | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 45 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
@@ -399,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1662)
+## done (1663)
 
-1662 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1663 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -454,11 +463,15 @@ _none_
 - [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [T] feature-t-testmgr-owns-pinning-interruptible
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
+- [p 58] [N] bug-nilpy-an-override-returning-a-different-type-than-the-base-reads-float-bits
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot
+- [p 55] [N] bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero
+- [p 55] [N] bug-nilpy-module-name-reassigned-from-a-field-in-a-block-segfaults
+- [p 55] [N] bug-nilpy-repr-returning-a-bare-string-field-is-empty
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes
 - [p 55] [A] feature-a-declaration-phase
@@ -479,6 +492,8 @@ _none_
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
+- [p 50] [N] bug-nilpy-a-second-for-clause-fails-when-the-first-iterable-is-a-range
+- [p 50] [N] bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-vla-via-alloca
@@ -493,9 +508,9 @@ _none_
 - [p 50] [T] task-t-xeon-host-local-health-alerting
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [N] bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+- [p 45] [N] bug-nilpy-sum-of-floats-has-no-compensated-summation
 - [p 45] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
@@ -536,6 +551,7 @@ _none_
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
+- [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
 - [p 40] [N] bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
@@ -567,10 +583,12 @@ _none_
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
+- [p 35] [N] bug-nilpy-abs-keeps-the-sign-of-negative-zero-and-min-max-break-ties-backwards
 - [p 35] [N] bug-nilpy-def-returning-a-precreated-global-has-no-return-type
 - [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 35] [N] bug-nilpy-input-has-two-lowerings-one-discards-the-prompt
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
+- [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization

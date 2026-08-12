@@ -19310,6 +19310,81 @@ begin
   end;
 end;
 
+function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
+{ What type does the module-level LITERAL global `name` hold — `NEW = "NEW"`,
+  `LIMIT = 7`? Answers tyUnknown for anything it cannot read straight off the
+  tokens.
+
+  Why a per-name scan instead of a pre-pass that types every global once:
+  PyLocals is the one table for inferred types, and it is shared with DEF-local
+  inference. Seeding module globals into it before the class-field pre-pass —
+  the obvious implementation, and the first one tried — made a def-local loop
+  target inherit the type of a same-named module global: `i = "not an int"` at
+  module level, `for i in range(n): t = t + i` in a method, and the method
+  stopped compiling ("invalid IR node reference in store_sym"). That collision
+  is exactly what `test_nilpy_loop_target_in_a_def_is_local.npy` exists to
+  catch, and it caught it. So this asks about ONE name, on demand, and stores
+  nothing.
+
+  Only shapes whose type is visible in the tokens, and whose literal is the
+  WHOLE right-hand side (PyBlkRhsEndsAt — the lesson of
+  `wrapped = "a-b".split("-")` typing as a string). Called once per field the
+  other scanners could not type at all, which is rare; the linear scan is not
+  on any hot path.
+
+  Deliberately NOT a constructor call, `G = K()`: recognising it here is easy
+  (PyRegisterClassShells has run) and the result is WRONG. Typed tyClass,
+  `self.k = G` then `C().k.z` printed 5887615 where CPython says 9; typed
+  tyVariant it printed 7. Measured, both. Whatever the field ends up holding is
+  not the instance, so the honest behaviour is the loud "cannot infer"
+  diagnostic rather than a plausible number —
+  bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage. }
+var k, d, rhs: Integer;
+    atStart: Boolean;
+begin
+  Result := tyUnknown;
+  d := 0;
+  k := PyScanLo;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(d)
+    else if Tokens[k].Kind = tkDedent then Dec(d)
+    else if d = 0 then
+    begin
+      atStart := (k = PyScanLo) or
+                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
+      if atStart and (Tokens[k].Kind = tkIdent) and
+         (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkAssign) and
+         (GetTokenStr(k) = name) then
+      begin
+        rhs := k + 2;
+        if (Tokens[rhs].Kind = tkString) and PyBlkRhsEndsAt(rhs) then
+          { AnsiString, not the tyString PyTypeFromTokenIndex answers for a
+            literal: this is a NAME holding a string, and that is what the
+            depth-0 arm of PyCollectModuleLocalsAST records for it too. }
+          Result := tyAnsiString
+        else if (Tokens[rhs].Kind = tkInteger) and PyBlkRhsEndsAt(rhs) then
+          Result := tyInt64
+        else if (Tokens[rhs].Kind = tkFloat) and PyBlkRhsEndsAt(rhs) then
+          Result := tyDouble
+        else if (Tokens[rhs].Kind in [tkTrue, tkFalse]) and PyBlkRhsEndsAt(rhs) then
+          Result := tyBoolean
+        else if (Tokens[rhs].Kind in [tkLBrack, tkBegin]) and
+                PyBlkRhsEndsAfterGroup(rhs) then
+          { a list or dict literal — variant, exactly as the depth>0 arm of
+            PyCollectModuleLocalsAST types the same shape }
+          Result := tyVariant
+        else
+          { the name IS bound here and this binding is unreadable: a LATER
+            rebinding cannot make it more certain, so stop rather than let a
+            second assignment of the same name answer for the first }
+          Result := tyUnknown;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 procedure PyCollectModuleLocalsAST;
 var rnd, i, si, depth, bodyIx, forJ, forCi: Integer;
     newCi, oldCi: Integer;
@@ -22951,6 +23026,22 @@ begin
                 if (tk = tyClass) and (PyInferLastCi >= 0) then
                   fldRec := REC_UCLASS_BASE + PyInferLastCi;
               end;
+            end;
+            { Assigned from a MODULE GLOBAL: `self.state = NEW`, the ordinary
+              Python module-level constant. None of the scanners above can see
+              it — the name is bound outside this class body — and the field was
+              rejected outright with "cannot infer the type of field", uniformly
+              for a str / int / float / list / bool global.
+              PyModuleGlobalLiteralType reads it straight off the module's
+              tokens — PyCollectModuleLocalsAST, which would know, does not run
+              until after this pre-pass.
+              bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type }
+            if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) and
+               PyBlkRhsEndsAt(j + 4) and
+               (not PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) then
+            begin
+              tk := PyModuleGlobalLiteralType(GetTokenStr(j + 4));
+              if tk <> tyUnknown then fldRec := REC_NONE;
             end;
             if tk = tyUnknown then
             begin

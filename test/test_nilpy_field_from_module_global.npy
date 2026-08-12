@@ -1,0 +1,57 @@
+# A field assigned from a MODULE-LEVEL constant — `self.state = NEW`, the most
+# ordinary Python constant idiom there is. Every global type was rejected with
+# "cannot infer the type of field", uniformly, so a class CPython runs unchanged
+# needed an annotation to compile at all.
+# bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type
+
+NEW = "NEW"
+LIMIT = 7
+RATE = 1.5
+DEFAULTS = [1, 2]
+VERBOSE = True
+
+
+class Order:
+    def __init__(self, customer):
+        self.customer = customer
+        self.state = NEW
+        self.limit = LIMIT
+        self.rate = RATE
+        self.tags = DEFAULTS
+        self.verbose = VERBOSE
+
+    def promote(self):
+        self.state = "SHIPPED"
+
+
+o = Order("bob")
+print(o.customer, o.state, o.limit, o.rate, o.verbose)
+print(o.tags[0], o.tags[1], len(o.tags))
+print(o.limit + 1, o.rate * 2)
+o.promote()
+print(o.state)
+
+# the global is read as a value, not copied by name: reassigning it afterwards
+# does not touch the field (CPython binds the value at __init__ time)
+NEW = "OLD"
+p = Order("ann")
+print(o.state, p.state)
+
+
+# an ANNOTATED field still wins over the global's inferred type
+class Ann:
+    def __init__(self):
+        self.n: int = LIMIT
+
+
+print(Ann().n)
+
+
+# a global holding a value assigned LATER in the module is still not typeable
+# here, and an unannotated ctor PARAMETER remains variant — both unchanged
+class Passthrough:
+    def __init__(self, v):
+        self.v = v
+
+
+print(Passthrough(3).v, Passthrough("x").v)

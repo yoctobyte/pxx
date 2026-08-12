@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`self.state = NEW` where NEW is a module-level constant is a compile error — 'cannot infer the type of field self.state'. Uniform across every global type (str/int/float/list/bool), so module-level constants, the most ordinary Python idiom there is, cannot reach a field without an annotation"
+status: done
+owner: claude-AN
 ---
 
 # A field assigned from a module global has no inferable type
@@ -81,3 +83,6 @@ module global, a field from a global holding a class instance, the annotated
 form still working, and a control that a genuinely uninferable field still
 produces the diagnostic (the message is useful and must not be traded away for
 a silent Variant).
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.
