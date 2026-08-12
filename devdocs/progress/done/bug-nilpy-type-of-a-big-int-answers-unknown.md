@@ -4,6 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "`type(2 ** 70).__name__` answers `<unknown>` where CPython answers `int` — an arbitrary-precision (promo/variant) integer has no name in the type() mapping, while a machine int, float, str, list and every user class do"
+status: done
+owner: claude-AN
 ---
 
 # `type()` of an arbitrary-precision int answers `<unknown>`
@@ -48,3 +50,6 @@ A `.npy` diffed against CPython: `type().__name__` of `2 ** 70`, of a wide
 literal, of a promo local, of a big int out of a def and out of a list element,
 plus the machine-int / float / str / bool / list / None / user-class rows in the
 same file as controls.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

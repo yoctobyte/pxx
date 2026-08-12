@@ -35,7 +35,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (224)
+## backlog (223)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,7 +76,6 @@ _none_
 | bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list | N | 58 | bug | A list rebound with `+` and then RETURNED loses its value: returning a rebound PARAMETER yields the empty list, returning a LOCAL built by `out = out + [i]` in a loop yields a raw pointer printed as a 15-digit int, and in a recursion the rebinding leaks into the caller's list so a DFS prints '0-1-2-2-1-2' instead of '0-1-2'. append() and a copy-to-another-local are both correct | — |
 | bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse | N | 52 | bug | `h[i], h[j] = h[j], h[i]` — the in-place swap every sort and heap is built on — fails with 'expected expression'. A tuple assignment accepts NAME and ATTRIBUTE targets (`a, b = b, a` and `k.a, k.b = k.b, k.a` both work) but not a SUBSCRIPT, so the one idiom that needs it most is the one that does not parse | — |
 | bug-nilpy-two-argument-round-of-an-int-returns-a-float | N | 45 | bug | round(6, 2) answered 6.0 where CPython answers 6. PARTIALLY FIXED 2026-08-12 — a statically-typed int with a non-negative literal ndigits is now the identity; a VARIANT/promo argument, a negative ndigits and a computed one still take the float path, and round(2**70, 2) still loses the precision entirely. Finishing it is a pylib change (so: stabilize+pin) | — |
-| bug-nilpy-type-of-a-big-int-answers-unknown | N | 35 | bug | `type(2 ** 70).__name__` answers `<unknown>` where CPython answers `int` — an arbitrary-precision (promo/variant) integer has no name in the type() mapping, while a machine int, float, str, list and every user class do | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 45 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
@@ -411,9 +410,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1675)
+## done (1676)
 
-1675 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1676 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -595,7 +594,6 @@ _none_
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
-- [p 35] [N] bug-nilpy-type-of-a-big-int-answers-unknown
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups

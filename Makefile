@@ -1426,6 +1426,10 @@ test-nilpy: $(COMPILER)
 	@# and a container element were right, so the rendering paths disagreed
 	./$(COMPILER) test/test_nilpy_str_of_an_instance_and_a_class_typed_none.npy /tmp/test_nilpy_strinst26
 	/tmp/test_nilpy_strinst26 | diff -u test/test_nilpy_str_of_an_instance_and_a_class_typed_none.expected -
+	@# type(2 ** 70).__name__ answered <unknown>: an arbitrary-precision int
+	@# wears a tag at or above VT_PROMO_BASE and the name mapping stopped below it
+	./$(COMPILER) test/test_nilpy_type_name_of_a_big_int.npy /tmp/test_nilpy_typebig26
+	/tmp/test_nilpy_typebig26 | diff -u test/test_nilpy_type_name_of_a_big_int.expected -
 	@# a def whose return is `2 ** 70` or a wide literal answered 0 — `**`
 	@# lowers to a variant-returning call while the scan read the literals
 	./$(COMPILER) test/test_nilpy_def_returning_a_big_int.npy /tmp/test_nilpy_defretbig26

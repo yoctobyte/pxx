@@ -1,0 +1,39 @@
+# `type(2 ** 70).__name__` answered `<unknown>`: an arbitrary-precision integer
+# wears a tag at or above VT_PROMO_BASE, and the type-name mapping stopped
+# below it. To Python it is just an `int`, and a program that branches on
+# type(x).__name__ took the wrong arm for exactly the values NilPy is proudest
+# of. bug-nilpy-type-of-a-big-int-answers-unknown
+# Every expectation is CPython's own output.
+
+x = 2 ** 70
+y = 1180591620717411303424
+lst = [2 ** 70]
+d = {"k": 2 ** 70}
+
+
+def f():
+    return 2 ** 70
+
+
+def g(n):
+    return n ** 2
+
+
+print(type(x).__name__, type(y).__name__, type(2 ** 70).__name__)
+print(type(f()).__name__, type(lst[0]).__name__, type(d["k"]).__name__)
+print(type(g(2 ** 35)).__name__, type(x + 1).__name__, type(x * 2).__name__)
+
+# the controls: every other kind already answered correctly and must keep doing so
+print(type(7).__name__, type(7.5).__name__, type("s").__name__, type(True).__name__)
+print(type([1]).__name__, type({}).__name__, type((1,)).__name__, type(None).__name__)
+
+
+class K:
+    pass
+
+
+print(type(K()).__name__, type(K).__name__)
+print(type(f).__name__)
+
+# and the values themselves are unchanged
+print(x, y, f(), lst[0], d["k"])

@@ -5400,6 +5400,14 @@ begin
   else if t = 8 then Result := 'method'
   else if (t = 9) or (t = 10) or (t = 12) then Result := 'function'
   else if t = 11 then Result := 'type'
+  { An ARBITRARY-PRECISION int, VT_PROMO_INT64 and anything else at or above
+    VT_PROMO_BASE (8192): to Python it is just an `int`, and answering
+    '<unknown>' made a program that branches on type(x).__name__ take the wrong
+    arm for exactly the values NilPy is proudest of. Tested as a RANGE because
+    that is how the promo tags are laid out — see the contiguity note on
+    VT_PROMO_BASE in defs.inc.
+    bug-nilpy-type-of-a-big-int-answers-unknown }
+  else if t >= 8192 then Result := 'int'
   else Result := '<unknown>';
 end;
 
