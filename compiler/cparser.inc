@@ -9143,8 +9143,11 @@ begin
     side (bug-a-duplicate-definition-silently-accepted). }
   if (Procs[procIdx].BodyAddr >= 0) and CProcHasLocalDef[procIdx]
      and (ProcUnitIdx[procIdx] = CurrentUnitIdx) then
-    Warn('duplicate definition of ''' + Procs[procIdx].Name +
-         ''' in the same translation unit — the later body wins');
+    Warn('duplicate definition of ''' + Procs[procIdx].Name
+      + ''' in the same translation unit; the later body wins for calls '
+      + 'written after it, calls written between the two bind to the '
+      + 'earlier one (a file-scope ''static'' defined in two separate '
+      + 'crtl modules is legal C and warns here spuriously)');
   ProcExternal[procIdx] := False;
   CProcHasLocalDef[procIdx] := True;
   Procs[procIdx].BodyAddr := CodeLen;

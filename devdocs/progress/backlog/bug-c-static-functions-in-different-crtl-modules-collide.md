@@ -131,3 +131,38 @@ answer.
 
 (`ldd` on the built binary still reports "not a dynamic executable", so the
 co-pulled modules are not leaking to glibc.)
+
+## 2026-08-12 — the message is now TRUE; the structural fix stays open
+
+The section above asked whoever took this to "scope the message to what is
+actually true or suppress it for this case". The message is fixed; the
+translation-unit-identity work in "Fix direction" is untouched and this ticket
+stays open for it.
+
+What the old text claimed — "the later body wins" — is false even inside ONE
+genuine translation unit. Measured on a single .c file with two same-named
+statics (gcc rejects it outright, pxx warns and compiles):
+
+```c
+static int helper(int x) { return x + 1;  }
+int fa(void){ return helper(1); }
+static int helper(int x) { return x + 10; }
+int fb(void){ return helper(1); }
+main -> printf("%d %d", fa(), fb())      /* pxx prints: 2 11 */
+```
+
+`fa` binds the FIRST body and `fb` the second, i.e. a call binds whichever body
+was current when the CALL was compiled — exactly what the Pascal-side warning
+(`parser.inc` ~28659) already says and the C copy had dropped. The C text now
+mirrors it, and adds the crtl caveat so a reader hitting the known false
+positive is not sent hunting for a miscompile:
+
+    duplicate definition of 'X' in the same translation unit; the later body
+    wins for calls written after it, calls written between the two bind to the
+    earlier one (a file-scope 'static' defined in two separate crtl modules is
+    legal C and warns here spuriously)
+
+Deliberately NOT suppressed for statics: no internal-linkage flag exists (see
+the 2026-08-05 investigation), and suppressing wholesale would trade a false
+positive for the lost true positive of two same-named statics in one real file
+— the case reproduced above.
