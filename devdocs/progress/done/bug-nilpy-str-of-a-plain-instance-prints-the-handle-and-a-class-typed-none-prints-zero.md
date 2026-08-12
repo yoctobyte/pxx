@@ -113,4 +113,4 @@ None from a top-level def (the row that already works); and `is None` asserted
 alongside each so a rendering fix cannot quietly change the semantics.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 6d2c45bac.
