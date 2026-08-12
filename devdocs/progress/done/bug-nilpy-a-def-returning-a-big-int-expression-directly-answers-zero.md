@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`def f(): return 2 ** 70` answers 0 — as does returning the equivalent literal, or `2 ** n`. Assigning to a local first and returning THAT is correct, and so is returning an expression over a big-int PARAMETER, so it is the return expression's own type inference narrowing an arbitrary-precision value to a machine int"
+status: done
+owner: claude-AN
 ---
 
 # A def returning a big-int EXPRESSION directly answers zero
@@ -64,3 +66,6 @@ A `.npy` diffed against CPython: every row of the table above, the method
 spelling of the same body, a return inside a branch, `f() + 1` and `f() * f()`
 so a zero cannot pass as a plausible total, plus the existing big-int tests
 still green.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

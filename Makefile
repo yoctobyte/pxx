@@ -1426,6 +1426,10 @@ test-nilpy: $(COMPILER)
 	@# and a container element were right, so the rendering paths disagreed
 	./$(COMPILER) test/test_nilpy_str_of_an_instance_and_a_class_typed_none.npy /tmp/test_nilpy_strinst26
 	/tmp/test_nilpy_strinst26 | diff -u test/test_nilpy_str_of_an_instance_and_a_class_typed_none.expected -
+	@# a def whose return is `2 ** 70` or a wide literal answered 0 — `**`
+	@# lowers to a variant-returning call while the scan read the literals
+	./$(COMPILER) test/test_nilpy_def_returning_a_big_int.npy /tmp/test_nilpy_defretbig26
+	/tmp/test_nilpy_defretbig26 | diff -u test/test_nilpy_def_returning_a_big_int.expected -
 	@# a def whose whole return is a FIELD READ was typed as the RECEIVER's
 	@# class; it printed right by coincidence and type() on it segfaulted
 	./$(COMPILER) test/test_nilpy_def_returning_a_field.npy /tmp/test_nilpy_defretfield26

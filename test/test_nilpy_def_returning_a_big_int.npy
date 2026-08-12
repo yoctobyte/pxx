@@ -1,0 +1,86 @@
+# `def f(): return 2 ** 70` answered 0 — 2^70 mod 2^64 — and `f() + 1` then
+# continued from 0. `**` has no binary token in this frontend: PyMakePow lowers
+# it to a pypow_v CALL whose result is a VARIANT (NilPy ints are arbitrary
+# precision), while the return-type token scan saw only the integer literals
+# and answered Int64, so the body handed a variant back through an Int64 slot.
+# A WIDE literal was the same fact one shape over.
+# Binding to a local first always worked, which is what made it hide.
+# bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero
+# Every expectation is CPython's own output.
+
+
+def pow_direct():
+    return 2 ** 70
+
+
+def pow_via_local():
+    x = 2 ** 70
+    return x
+
+
+def wide_literal():
+    return 1180591620717411303424
+
+
+def pow_of_param(n):
+    return 2 ** n
+
+
+def pow_expr(n):
+    return 2 ** n + 1
+
+
+print(pow_direct())
+print(pow_via_local())
+print(wide_literal())
+print(pow_of_param(70))
+print(pow_expr(70))
+
+# the arithmetic after it, which is where a 0 would keep going unnoticed
+print(pow_direct() + 1)
+print(pow_direct() * 2)
+print(pow_direct() == pow_via_local(), pow_direct() > 2 ** 69)
+print(len(str(pow_direct())))
+print(pow_direct() // (2 ** 60), pow_direct() % 1000007)
+
+
+# small powers keep their exact values, and a FLOAT base stays a float
+def small():
+    return 2 ** 3
+
+
+def flt():
+    return 2.0 ** 3
+
+
+def neg():
+    return (-2) ** 3
+
+
+print(small(), small() + 1, small() * 2)
+print(flt(), type(flt()).__name__)
+print(neg())
+
+
+# the METHOD spelling — its signature is decided in a different pass
+class K:
+    def p(self):
+        return 2 ** 70
+
+    def q(self, n):
+        return n ** 2
+
+
+print(K().p(), K().p() + 1)
+print(K().q(3), K().q(2 ** 35))
+
+
+# a recursive product that grows past 64 bits, the other way to get there
+def fact(n):
+    if n <= 1:
+        return 1
+    return n * fact(n - 1)
+
+
+print(fact(25))
+print(2 ** 70, (2 ** 70) + 1)

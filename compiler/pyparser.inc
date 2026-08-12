@@ -21655,6 +21655,7 @@ var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth: Integer;
     t2, cur, chainCur: TTypeKind;
     seenAny, tupComma: Boolean;
+    bigRet: Boolean;   { the return holds `**` or a wide literal — arbitrary precision }
 begin
   Result := tyInteger;
   retRec := REC_NONE;
@@ -21867,6 +21868,39 @@ begin
           end;
         if (cur = tyClass) and (rec2 >= 0) then
           PyInferLastCi := rec2;
+      end;
+      { `return 2 ** 70` — and any `**` at all. It has no binary token in this
+        frontend: PyMakePow lowers it to a `pypow_v` CALL, whose result is a
+        VARIANT (NilPy ints are arbitrary precision, so a power has to be). The
+        token scan sees only the integer literals and answers Int64, so the
+        body handed a variant back through an Int64 result slot and
+        `def f(): return 2 ** 70` printed **0** — 2^70 mod 2^64 — with
+        `f() + 1` then continuing from 0.
+
+        A WIDE integer literal is the same fact one shape over: the lexer marks
+        one that does not fit Int64 by setting SLen on the token (see the
+        literal arm in parser.inc), and `return 1180591620717411303424` was
+        truncated for want of reading that mark.
+
+        Binding to a local first always worked, because the local takes its
+        type from the NODE — which is the variant — rather than from this scan.
+        bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero }
+      if (cur = tyUnknown) or PyRetIsIntDefault(cur) then
+      begin
+        bigRet := False;
+        for k := j + 1 to e - 1 do
+        begin
+          if (Tokens[k].Kind = tkInteger) and (Tokens[k].SLen > 0) then
+            bigRet := True;
+          if (Tokens[k].Kind = tkStar) and (k + 1 < e) and
+             (Tokens[k + 1].Kind = tkStar) then
+            bigRet := True;
+        end;
+        if bigRet then
+        begin
+          cur := tyVariant;
+          PyInferLastCi := -1;
+        end;
       end;
       { `return q.n` — the whole return is a FIELD READ off a local. The scans
         above answer the RECEIVER's class (tyClass Item) while the value is the
