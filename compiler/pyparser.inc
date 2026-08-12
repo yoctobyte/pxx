@@ -21924,6 +21924,25 @@ end;
   CPython ignores annotations entirely, and uforth's finalize_definition is
   annotated `-> None` yet returns the new Word — trusting the annotation
   compiled it as a procedure and the caller read garbage (the :NONAME xt). }
+function PyIsScalarRetKind(tk: TTypeKind): Boolean;
+{ Is this a NUMERIC/boolean/variant method result — the kinds that fit a
+  register and that an override may legitimately disagree with its base about?
+  Deliberately NOT tyClass (a differing class result is covariance, a separate
+  question) and NOT a managed/aggregate kind: an AnsiString base with a variant
+  override is the configparser `optionxform` case the block above was written
+  for, where adopting the base's type is RIGHT, and a str result from a method
+  is rejected outright further down anyway.
+
+  tyVariant is IN because it is the common override shape — an unannotated
+  `def area(self): return self.w * self.h` over fields infers variant, and
+  against a `-> 0.0` base that meant the int product came back as 6.0 where
+  CPython says 6. Used by the override-signature block in
+  PyRegisterClassMembers. }
+begin
+  PyIsScalarRetKind := (tk = tyInteger) or (tk = tyInt64) or (tk = tyDouble) or
+                       (tk = tyBoolean) or TypeIsPromoInt(tk) or (tk = tyVariant);
+end;
+
 function PyMethodReturnsSelf(defIdx: Integer): Boolean;
 { Does this method's body `return self`? That is the fluent-builder idiom —
   `def add(self, x): ...; return self` — and its result type is the method's own
@@ -22741,8 +22760,39 @@ begin
           ovPi := UMthProc_[ovMmi];
           if (ovPi >= 0) and (Procs[ovPi].ParamCount = nparams) then
           begin
-            mRet := Procs[ovPi].RetType;
-            mRetRec := ProcRetRecId[ovPi];
+            { ...unless the two DISAGREE about a scalar result, in which case
+              taking the base's is not a fit but a reinterpretation. `def v:
+              return 0` in the base and `return 1.5` in the override printed
+              4609434218613702656 — 1.5's IEEE bits read as an integer, and the
+              `+ 1` after it kept going from there. The mirror direction was
+              worse in a different way: an int override of a float base either
+              rendered 6 as 6.0 or, for anything past a bare literal, failed to
+              emit at all ("invalid IR node reference in store_sym").
+
+              A VARIANT is the one answer that reproduces CPython for both
+              directions — B().v() really IS an int there, not a float — and the
+              VMT slot stays consistent because the BASE is widened too, which
+              is safe here: this is a pre-pass, no body has been compiled yet,
+              and a second subclass widening it again is idempotent.
+
+              Scalars only. A class result that differs is covariance, a
+              separate question, and the base's type is the defensible answer
+              there; a str result from a method is rejected outright further
+              down. bug-nilpy-an-override-returning-a-different-type-than-the-
+              base-reads-float-bits }
+            if (mRet <> Procs[ovPi].RetType) and
+               PyIsScalarRetKind(mRet) and PyIsScalarRetKind(Procs[ovPi].RetType) then
+            begin
+              Procs[ovPi].RetType := tyVariant;
+              ProcRetRecId[ovPi] := REC_NONE;
+              mRet := tyVariant;
+              mRetRec := REC_NONE;
+            end
+            else
+            begin
+              mRet := Procs[ovPi].RetType;
+              mRetRec := ProcRetRecId[ovPi];
+            end;
             for k := 1 to nparams - 1 do
               ptypes[k] := Procs[ovPi].Params[k].TypeKind;
           end;

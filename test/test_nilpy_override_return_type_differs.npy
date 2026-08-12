@@ -1,0 +1,126 @@
+# An overriding method whose return type differs from the base's used to be
+# fitted into the BASE's return slot with no conversion. `return 0` in the base
+# and `return 1.5` in the override printed 4609434218613702656 -- 1.5's IEEE
+# bits read as an integer -- and the arithmetic after it kept going from there.
+# The mirror direction either rendered 6 as 6.0 or failed to compile at all
+# ("invalid IR node reference in store_sym") for anything past a bare literal.
+# bug-nilpy-an-override-returning-a-different-type-than-the-base-reads-float-bits
+# Every expectation is CPython's own output.
+
+
+# int base, float override -- the silent one
+class A:
+    def v(self):
+        return 0
+
+
+class B(A):
+    def v(self):
+        return 1.5
+
+
+class C(A):
+    def v(self):
+        return 1.5 * 2
+
+
+print(A().v(), B().v(), C().v())
+print(B().v() + 1, C().v() * 2)
+for x in [A(), B(), C()]:
+    print(x.v())
+
+
+# float base, int override -- the loud one (a computed int did not compile)
+class D:
+    def v(self):
+        return 0.0
+
+
+class E(D):
+    def v(self):
+        return 6
+
+
+class F(D):
+    def v(self):
+        return 2 * 3
+
+
+class G(D):
+    def __init__(self):
+        self.w = 2
+        self.h = 3
+
+    def v(self):
+        return self.w * self.h
+
+
+print(D().v(), E().v(), F().v(), G().v())
+print(sorted([D().v(), F().v(), G().v()]))
+
+
+# the textbook shape this came from: an abstract-ish base with a float default
+class Shape:
+    def __init__(self, name):
+        self.name = name
+
+    def area(self):
+        return 0.0
+
+    def describe(self):
+        return self.name + ":" + str(self.area())
+
+
+class Rect(Shape):
+    def __init__(self, w, h):
+        Shape.__init__(self, "rect")
+        self.w = w
+        self.h = h
+
+    def area(self):
+        return self.w * self.h
+
+
+class Sq(Rect):
+    def __init__(self, s):
+        Rect.__init__(self, s, s)
+        self.name = "sq"
+
+
+for s in [Rect(2, 3), Sq(4), Shape("blob")]:
+    print(s.describe(), isinstance(s, Rect))
+
+
+# controls: an override that AGREES with its base keeps the specialised type,
+# and a method with no base is untouched
+class H:
+    def v(self):
+        return 1
+
+
+class I(H):
+    def v(self):
+        return 2
+
+
+class Solo:
+    def v(self):
+        return 2 * 3
+
+
+print(H().v(), I().v(), Solo().v())
+
+
+# a class result that differs is covariance, deliberately NOT widened here --
+# the base's type stays, and the call still works
+class Box:
+    def get(self):
+        return self
+
+
+class SubBox(Box):
+    def get(self):
+        return self
+
+
+print(Box().get() is not None, SubBox().get() is not None)

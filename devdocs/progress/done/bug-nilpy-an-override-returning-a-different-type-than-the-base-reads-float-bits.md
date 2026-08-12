@@ -4,6 +4,8 @@ prio: 58
 type: bug
 blocked-by: []
 summary: "An overriding method whose return type differs from the base's is stored into the BASE's return slot with no conversion: base `return 0` + override `return 1.5` prints 4609434218613702656 — the IEEE bits of 1.5 read as an integer — and arithmetic on it silently continues. The mirror direction (int override of a float base) either renders 6 as 6.0 or fails to compile with 'invalid IR node reference in store_sym'"
+status: done
+owner: claude-AN
 ---
 
 # An override returning a different type than the base reads float BITS as an int
@@ -97,3 +99,6 @@ A `.npy` diffed against CPython covering every row of the matrix above:
 both directions, literal and computed, dispatch through a base-typed container
 AND on the static subclass type, plus arithmetic on the result so a bit pattern
 cannot pass as a plausible number.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

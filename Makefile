@@ -1421,6 +1421,12 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lambda_returned26)" = "$$(printf '2 11 6 2\n2 101\n6 1005\n8 2\n2 21')"
 	./$(COMPILER) test/test_nilpy_annotated_module_global.npy /tmp/test_nilpy_annotated_module_global26
 	test "$$(/tmp/test_nilpy_annotated_module_global26)" = "$$(printf '2\n5 8 AB 2 1\n1 1 7 ab 3')"
+	@# an override whose return type differs from its base's: the base's slot
+	@# used to take the value with no conversion, so a float override of an int
+	@# base printed 1.5's IEEE BITS and an int override of a float base either
+	@# rendered 6 as 6.0 or failed to emit at all
+	./$(COMPILER) test/test_nilpy_override_return_type_differs.npy /tmp/test_nilpy_ovrret26
+	/tmp/test_nilpy_ovrret26 | diff -u test/test_nilpy_override_return_type_differs.expected -
 	@# a module-level name rebound from a FIELD READ inside a block — the
 	@# textbook linked-list walk, which segfaulted on its second iteration
 	./$(COMPILER) test/test_nilpy_module_name_from_a_field_in_a_block.npy /tmp/test_nilpy_modfield26
