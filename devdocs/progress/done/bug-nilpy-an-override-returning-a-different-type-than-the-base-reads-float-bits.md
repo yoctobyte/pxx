@@ -101,4 +101,4 @@ AND on the static subclass type, plus arithmetic on the result so a bit pattern
 cannot pass as a plausible number.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 82a336f40.
