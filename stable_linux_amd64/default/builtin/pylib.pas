@@ -1452,6 +1452,8 @@ function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
   at run time. Dispatch on the boxed object: dict fetch/store by key, list index
   by an integer key. }
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
+{ `del v[k]` on a variant receiver — see the implementation. }
+function pyvar_delitem(const v: Variant; const key: Variant): Variant;
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
 { DYNAMIC instance attributes: `obj.name = v` / `obj.name` where `name` is not a
   declared field (Python adds them freely). Stored in one global dict keyed by
@@ -3060,6 +3062,42 @@ begin
   end
   else
     raise TypeError.Create('object is not subscriptable');
+end;
+
+{ `del v[k]` where v is a VARIANT — the runtime twin of pyvar_getitem, and for
+  the same reason: an unannotated dict/list PARAMETER is a variant, so a helper
+  that removes a key from a dict handed to it (`def drop(d, k): del d[k]`, a
+  recursion guard's `del seen[node]`) could not be written at all. The frontend
+  refused it at compile time, with a message that listed the very form being
+  used, because the del lowering dispatched on the receiver's STATIC type.
+
+  Returns a Variant so the frontend can drop it in place of the pyvar_getitem
+  call the read already lowered to — the del statement rewrites that node's
+  proc, exactly as it does for TPyList.at and TPyDict.fetch.
+  bug-nilpy-del-on-a-variant-receiver-is-refused }
+function pyvar_delitem(const v: Variant; const key: Variant): Variant;
+var o: TObject; ki: Int64;
+begin
+  Result := pyvar_of_int(0);
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('object does not support item deletion');
+  o := TObject(pyvarobj(v));
+  if o is TPyDict then
+  begin
+    TPyDict(o).remove(key);
+    Exit;
+  end;
+  if o is TPyList then
+  begin
+    ki := PPyVarRec(@key)^.Payload;
+    pylist_del_at(TPyList(o), ki);
+    Exit;
+  end;
+  { a USER class arriving as a bare variant handle keeps the RUNTIME TypeError.
+    A statically-typed receiver already dispatches __delitem__ in the frontend,
+    and routing this one through the RTTI dunder table needs a two-argument
+    dispatcher that does not exist yet — loud beats a silent no-op. }
+  raise TypeError.Create('object does not support item deletion');
 end;
 
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;

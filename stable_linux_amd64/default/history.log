@@ -257,3 +257,4 @@
 2026-08-11T16:18:30Z  v257  b2ec8a9f0ec28408e8d239db5e7df84fb6f7e0681717d985085e2f29381c3082  96b4b40ab6c5f0cda96864dee86ed47d50cfb57b  tickets(N): feature-nilpy-parallel-for-in had no track: frontmatter — resolved to A
 2026-08-12T09:34:10Z  v258  cd8e8d4ec367a9b621b8f2ad819ac213edda2060ca7a39f070b6726dc94a4f60  8362883e9743be8d8a6b182f08f83731ce6f7f3c  fix(N): round(x, n) keeps an int's type for a literal non-negative n
 2026-08-12T10:11:18Z  v259  754662d738b5ec3845dfdea43ce094d3c03617b806c591ef113c26dd02dcd029  4cc5a96fe2f92f5468a963fde81b0af9ee9e9807  docs(progress): record the shas the resolves landed as
+2026-08-12T11:23:50Z  v260  c373e36630770900381c1bf8ac5d6e877bf322d7f8f45969033fc0691bf3d88a  1ef4c2d88994fb74a9922eacc5c1761420c692c7  tickets(N): scope the tuple-subscript-target ticket — the store fork must be extracted first

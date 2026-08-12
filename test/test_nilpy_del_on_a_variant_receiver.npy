@@ -1,0 +1,71 @@
+# `del d[k]` inside a def whose dict parameter is UNANNOTATED was a compile
+# error -- an unannotated parameter is a variant, and the del lowering
+# dispatched on the receiver's static type, so it matched none of its arms.
+# The message even listed the form being used. A recursion guard's
+# `del seen[node]` is the shape that found it.
+# bug-nilpy-del-on-a-variant-receiver-is-refused
+# Every expectation is CPython's own output.
+
+
+def drop(d, k):
+    del d[k]
+    return len(d)
+
+
+m = {"a": 1, "b": 2, "c": 3}
+print(drop(m, "a"), sorted(m.keys()))
+print(drop(m, "c"), sorted(m.items()))
+
+
+def drop_idx(xs, i):
+    del xs[i]
+    return xs
+
+
+lst = [10, 20, 30, 40]
+print(drop_idx(lst, 1), len(lst))
+print(drop_idx(lst, -1), lst)
+
+
+# the recursion-guard shape, which is why this matters
+graph = {"a": ["b"], "b": ["c"], "c": ["a"]}
+paths = []
+
+
+def walk(node, seen, trail):
+    if node in seen:
+        paths.append("-".join(trail) + "|cycle")
+        return
+    seen[node] = True
+    trail.append(node)
+    for nxt in graph[node]:
+        walk(nxt, seen, trail)
+    trail.pop()
+    del seen[node]
+
+
+walk("a", {}, [])
+print(paths)
+
+
+# an annotated parameter and a local still work, unchanged
+def annotated(d: dict, k):
+    del d[k]
+    return sorted(d.keys())
+
+
+print(annotated({"x": 1, "y": 2}, "x"))
+
+n = {"p": 1, "q": 2}
+del n["p"]
+print(sorted(n.keys()))
+
+local = {"u": 1}
+del local["u"]
+print(len(local))
+
+# a missing key still raises, through the variant path too
+try:
+    drop({"only": 1}, "nope")
+except KeyError:
+    print("keyerror")

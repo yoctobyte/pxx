@@ -4,6 +4,8 @@ prio: 48
 type: bug
 blocked-by: []
 summary: "`del d[k]` inside a def whose parameter `d` is unannotated is refused at compile time — the receiver is a variant, and the del lowering only knows statically-typed dicts/lists. The same statement at module level, on a name the pre-pass typed, compiles. Passing a dict to a helper that removes a key is ordinary Python and cannot be written"
+status: done
+owner: claude-AN
 ---
 
 # `del d[k]` on a VARIANT receiver is refused
@@ -56,3 +58,6 @@ A `.npy` diffed against CPython: `del` on a dict and a list through an
 unannotated parameter, an annotated one (`d: dict`), a variant local, a
 class-attribute receiver, a chained receiver (`del obj.d[k]`), the KeyError /
 IndexError a missing key raises, and the existing static forms still working.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

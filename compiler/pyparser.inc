@@ -17998,6 +17998,25 @@ begin
       if Result < 0 then Error('Nil Python: pylib (PyNoDelitemError) not loaded');
       Exit;
     end;
+    { `del v[k]` on a VARIANT receiver — an unannotated dict/list PARAMETER is
+      a variant, so `def drop(d, k): del d[k]` and a recursion guard's
+      `del seen[node]` were compile ERRORS, with a message that listed the very
+      form being used. The read lowered to pyvar_getitem; swap the proc for the
+      runtime delete, exactly as the TPyList.at and TPyDict.fetch arms above do
+      with theirs, so the key expression is evaluated once.
+      bug-nilpy-del-on-a-variant-receiver-is-refused }
+    symIdx := FindProc('pyvar_getitem');
+    if (symIdx >= 0) and (ASTKind[delBase] = AN_CALL) and
+       (ASTIVal[delBase] = symIdx) then
+    begin
+      symIdx := FindProc('pyvar_delitem');
+      if symIdx < 0 then Error('Nil Python: pylib (pyvar_delitem) not loaded');
+      ASTIVal[delBase] := symIdx;
+      ASTTk[delBase] := Ord(Procs[symIdx].RetType);
+      ASTRight[delBase] := ProcRetRecId[symIdx];
+      Result := delBase;
+      Exit;
+    end;
     ci := FindUClass('TPyDict');
     symIdx := -1;
     if ci >= 0 then symIdx := FindUMeth(ci, 'fetch');
