@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1663 rejected:35`
+`unfinished:10 blocked:3 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:64 done:1664 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -42,13 +42,13 @@ _none — no lane is locked._
 - `[p 60] [T]` feature-t-testmgr-owns-pinning-interruptible
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [N]` bug-nilpy-an-override-returning-a-different-type-than-the-base-reads-float-bits
+- `[p 58] [N]` bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot
 - `[p 55] [N]` bug-nilpy-a-def-returning-a-big-int-expression-directly-answers-zero
-- `[p 55] [N]` bug-nilpy-module-name-reassigned-from-a-field-in-a-block-segfaults
 - `[p 55] [N]` bug-nilpy-repr-returning-a-bare-string-field-is-empty
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [T]` bug-t-optdiff-skips-tests-that-need-compile-flags-the-makefile-passes

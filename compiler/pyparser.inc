@@ -19557,6 +19557,39 @@ begin
            ((PyFindModuleConstraint(GetTokenStr(blkJ)) >= 0) or
             (PyProgSym(GetTokenStr(blkJ)) >= 0)) then
           blkTk := tyVariant;
+        { ...and a FIELD READ of such a name, `n = n.next` — the subscript case
+          one token over, and the shape a linked-list walk has:
+
+              n = head
+              while n is not None:
+                  n = n.next        <-- SEGFAULT on the second iteration
+
+          `next` is a variant field (`self.next = None` declares it), so the
+          variant went into the slot n's module-level binding had typed `Node`,
+          and reading `n.v` through it faulted. The same loop inside a DEF was
+          always fine, and so were the same two statements straight-line at
+          module level — it is specifically a module name rebound from a member
+          read inside a block, exactly like the subscript above.
+
+          Variant for the same reason too: it is what a field of unknown type
+          honestly holds, and the dynamic path then handles `n.v`. A CHAIN
+          (`n = n.next.next`) matches this test as well — the receiver is still
+          the visible identifier, and everything after it only makes the answer
+          more variant, never less.
+          bug-nilpy-module-name-reassigned-from-a-field-in-a-block-segfaults }
+        if (blkTk = tyUnknown) and (blkJ < MainProgramTokCount) and
+           (Tokens[blkJ].Kind = tkIdent) and
+           (blkJ + 2 < MainProgramTokCount) and
+           (Tokens[blkJ + 1].Kind = tkDot) and
+           (Tokens[blkJ + 2].Kind = tkIdent) and
+           { a METHOD CALL is not this shape — `n = n.pop()` yields whatever the
+             method returns, and the arms below (and the real parse) already
+             have opinions about that. Only a plain member READ. }
+           ((blkJ + 3 >= MainProgramTokCount) or
+            (Tokens[blkJ + 3].Kind <> tkLParen)) and
+           ((PyFindModuleConstraint(GetTokenStr(blkJ)) >= 0) or
+            (PyProgSym(GetTokenStr(blkJ)) >= 0)) then
+          blkTk := tyVariant;
         { ...and a CONSTRUCTOR CALL of an already-declared class, `name =
           Cls(...)`. It belongs in this safe list for the same reason the
           literals do: recognising it needs no PARSE, only that the identifier

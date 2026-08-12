@@ -1,0 +1,76 @@
+# A module-level name rebound from a FIELD READ inside a block. The textbook
+# linked-list walk SEGFAULTED on its second iteration: `next` is a variant field
+# (`self.next = None` declares it), and the variant went into the slot that n's
+# module-level binding had typed `Node`.
+# The straight-line spelling and the same loop inside a def were always fine,
+# which is what kept this hidden.
+# bug-nilpy-module-name-reassigned-from-a-field-in-a-block-segfaults
+# Sibling of bug-nilpy-module-name-reassigned-from-a-subscript-in-a-block-reads-garbage
+# Every expectation is CPython's own output.
+
+
+class Node:
+    def __init__(self, v):
+        self.v = v
+        self.next = None
+
+
+head = Node(1)
+head.next = Node(2)
+head.next.next = Node(3)
+
+# the shape that crashed: a while loop at MODULE level
+n = head
+total = 0
+while n is not None:
+    total += n.v
+    n = n.next
+print("while", total)
+
+# an `if` block, and a `for` block — the same arm, different headers
+m = head
+if True:
+    m = m.next
+print("if", m.v)
+
+k = head
+for _ in [0]:
+    k = k.next
+print("for", k.v)
+
+# a CHAIN of field reads inside a block
+c = head
+while c.next is not None and c.next.next is not None:
+    c = c.next.next
+print("chain", c.v)
+
+# controls: the straight-line spelling, and the same walk inside a def
+s = head
+s = s.next
+print("straight", s.v)
+
+
+def walk(h):
+    p = h
+    t = 0
+    while p is not None:
+        t += p.v
+        p = p.next
+    return t
+
+
+print("def", walk(head))
+
+# the sibling shape must still work: a name rebound from a SUBSCRIPT in a block
+table = {"a": [1, 2], "b": [3]}
+cur = []
+for key in ["a", "b"]:
+    cur = table[key]
+    print("sub", key, len(cur))
+
+# and a name rebound from a method CALL result in a block is untouched
+lst = [1, 2, 3]
+val = 0
+while len(lst) > 1:
+    val = lst.pop()
+print("pop", val, lst)

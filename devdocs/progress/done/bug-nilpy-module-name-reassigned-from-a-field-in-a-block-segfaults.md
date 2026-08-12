@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "Linked-list traversal at MODULE level segfaults: `n = n.next` inside a while/if block keeps n's class-typed module binding while a variant field is written into it. The identical two statements straight-line are fine, and the identical loop inside a def is fine — it is the module-level block. Sibling of the fixed subscript case, one shape over"
+status: done
+owner: claude-AN
 ---
 
 # A module name reassigned from a FIELD inside a block segfaults
@@ -75,3 +77,6 @@ be left as a third case.
 A `.npy` diffed against CPython: the traversal above at module level and in a
 def, the straight-line control, a field read inside `if` / `for` / `while`, a
 chained field read, and the sibling's subscript case still working.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.
