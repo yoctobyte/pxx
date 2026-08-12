@@ -563,16 +563,27 @@ do not "fix" them** — rewriting a session record falsifies history. If a live
 reference doc (`devdocs/dev/*.md`) contradicts this section, that doc is the bug:
 fix the doc, not the loop.
 
-- **Run the gate with `tools/gate.sh` (quick | lib | full | check), and background
-  THAT — never poll a `make` you started.** It runs the whole gate to completion,
-  prints one line per step, and exits with the result, so the completion
-  notification is the answer. Polling a long run with repeated `sleep N; tail log`
+- **`tools/gate.sh` is the PIN GATE, not the dev loop.** The dev loop is the
+  three lines above: `make compiler/pascal26` plus your repro. `gate.sh quick`
+  belongs in it (~30s) and `gate.sh full` does not — reading this line as "run
+  gate.sh between edits" is what pulled agents into 554-second runs twice in one
+  session on 2026-08-01. Reach for the heavy modes when you are about to
+  **bless** a binary, not while you are still changing it.
+- **When you DO run one, background THAT — never poll a `make` you started.** It
+  runs the whole gate to completion, prints one line per step, and exits with the
+  result, so the completion notification is the answer. Polling a long run with
+  repeated `sleep N; tail log`
   burns a turn per poll and learns nothing; and `until ! pgrep -f "make test"`
   never exits, because the watcher's own command line matches the pattern. It
   also warns when Track T's watcher is running on this box (every compile then
   takes 2-3x longer — slow, not stuck). Full note, including why an expected
   output must never contain an absolute `/tmp` path (testmgr rewrites it):
   **`devdocs/dev/gating-and-waiting.md`**.
+- **Pinning: `tools/testmgr.py --pin`** (gate + `stabilize-fast` + an atomic
+  pin + `git add` of the stable tree, all in one interruptible command). SIGINT
+  leaves either a completed pin or an untouched tree, so it is safe to stop.
+  An operator command on a dev box — the watcher never pins, it writes only
+  `tstate/`. `make pin` by hand still works and is still four non-atomic steps.
 - **Don't idle on a gate — snapshot and proceed, but verify against a KNOWN
   sha.** The gate/pin/matrix runs in the background; you keep bughunting the
   next thing. Fire the background job (`tools/gate.sh` — background *that*, never

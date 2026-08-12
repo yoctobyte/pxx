@@ -64,6 +64,49 @@ loop is `make compiler/pascal26` plus your repro.
 
 Related: [[feature-t-quick-gate-must-be-quick-and-gate-lines-must-not-name-long-suites]].
 
+## DONE 2026-08-12 — `tools/testmgr.py --pin`
+
+One command: gate (`--tier full` as a child, keeping the process-group teardown)
+→ `make stabilize-fast` → atomic pin → `git add` of the stable tree.
+
+**Atomicity is a two-phase split, not care.** `make pin` is four separate
+mutations and an interrupt between any two leaves a pin nobody can reason about;
+the `rm -rf builtin` is the sharp one, because interrupted there the pinned
+compiler resolves `uses builtin` against a half-written directory and every
+`$(PXX_STABLE)` consumer silently builds against the wrong RTL. So the whole new
+pin is staged OUTSIDE the live names (slow, fully interruptible — an abort there
+deletes a staging dir and nothing else), then SIGINT/SIGTERM are blocked with
+`pthread_sigmask` and the flip is renames only: microseconds, and a signal
+arriving inside it is *deferred* rather than delivered into the middle of it.
+
+**Answering the ticket's open question explicitly, as it asked:** this is an
+**operator command on a dev box**. The watcher never pins. Face 1's write scope
+stays exactly `tstate/`, which is worth more than the convenience of automating
+the one step whose blast radius is every other lane.
+
+`stabilize-fast`, not `stabilize` (user, 2026-08-09). Resumability comes from
+that being ~35s plus a `.testmgr/pin-state.json` note that skips a gate already
+green for this exact sha with a clean tree — so an interrupt costs the gate, not
+an hour.
+
+Landmines, both handled: the pin `git add`s the stable tree (the recorded past
+miss — a pin nobody else can see), and `compiler/builtin/**` is re-frozen every
+time, so a builtin change cannot be pinned without its RTL.
+
+### Gate — met
+
+- **byte-identical to `make pin`**: both run against scratch trees seeded
+  identically (`make pin STABLE_ROOT=…` redirects cleanly). `diff -r
+  --no-dereference` reports the resulting trees identical — `stable_pinned`, the
+  `pinned` symlink and all 7 frozen builtin sources — with `pin.log` differing
+  only in the commit field, where the test passed a literal `HEADSHA`.
+- **SIGINT leaves no half-applied pin**: `tools/devtest_pin_atomic.py`, three
+  cases — applies fully; interrupted while staging leaves the tree byte-identical
+  to before; and a SIGINT raised *inside* the critical section is proven not to
+  run there (the test asserts the handler has not fired) and is delivered after
+  the flip completes.
+- CLAUDE.md's gate.sh line now says pin gate, not dev loop.
+
 ## Gate
 
 A pin driven through testmgr produces a pin byte-identical to one driven through

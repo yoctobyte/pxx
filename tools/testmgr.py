@@ -2445,6 +2445,188 @@ def bench_prev(tsv, host):
     return prev
 
 
+STABLE_ROOT_REL = "stable_linux_amd64"
+STABLE_DEFAULT_REL = STABLE_ROOT_REL + "/default"
+PIN_STATE_REL = ".testmgr/pin-state.json"   # untracked scratch, like live.json
+
+
+def _pin_paths():
+    d = os.path.join(REPO, STABLE_DEFAULT_REL)
+    return {"dir": d,
+            "latest": os.path.join(d, "stable_latest"),
+            "pinned_file": os.path.join(d, "stable_pinned"),
+            "pinned_link": os.path.join(d, "pinned"),
+            "builtin": os.path.join(d, "builtin"),
+            "log": os.path.join(d, "pin.log"),
+            "version": os.path.join(d, "VERSION")}
+
+
+def _git(*a):
+    return subprocess.run(["git"] + list(a), cwd=REPO, capture_output=True,
+                          text=True)
+
+
+def apply_pin_atomic(p, sha):
+    """Flip the pin. Either it completed, or the tree is untouched.
+
+    `make pin` is four separate mutations -- copy the binary, move the symlink,
+    append pin.log, `rm -rf builtin` then repopulate it -- and a SIGINT between
+    any two leaves a pin nobody can reason about. The `rm -rf` is the sharp one:
+    interrupted there, the pinned compiler resolves `uses builtin` against a
+    directory that is empty or half-written, and every consumer of $(PXX_STABLE)
+    silently builds against the wrong RTL.
+
+    So: stage everything OUTSIDE the live names (slow, fully interruptible --
+    an abort here deletes a staging directory and nothing else), then block
+    SIGINT/SIGTERM and do only renames. Every step in the critical section is
+    rename(2) or an append, the whole of it is microseconds, and the signals
+    that arrive during it are delivered after it, not into the middle of it.
+    """
+    stage = os.path.join(p["dir"], ".pin-staging.%d" % os.getpid())
+    old_builtin = os.path.join(p["dir"], ".pin-old-builtin.%d" % os.getpid())
+    shutil.rmtree(stage, ignore_errors=True)
+    os.makedirs(stage)
+    try:
+        # --- interruptible: build the whole new pin off to the side ---
+        shutil.copy2(p["latest"], os.path.join(stage, "stable_pinned"))
+        sbuiltin = os.path.join(stage, "builtin")
+        os.makedirs(sbuiltin)
+        srcs = sorted(glob.glob(os.path.join(REPO, "compiler/builtin/*.pas")))
+        if not srcs:
+            raise RuntimeError("no compiler/builtin/*.pas to freeze")
+        for s in srcs:
+            shutil.copy2(s, sbuiltin)
+        newsha = hashlib.sha256(
+            open(os.path.join(stage, "stable_pinned"), "rb").read()).hexdigest()
+        try:
+            with open(p["pinned_link"], "rb") as f:
+                oldsha = hashlib.sha256(f.read()).hexdigest()[:12]
+        except OSError:
+            oldsha = "none"
+        try:
+            with open(p["version"]) as f:
+                ver = f.read().strip()
+        except OSError:
+            ver = "?"
+        line = ("%s  pinned v%s  %s  (was %s)  %s\n"
+                % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                   ver, newsha, oldsha, sha))
+        # --- uninterruptible: renames only ---
+        blocked = {signal.SIGINT, signal.SIGTERM}
+        signal.pthread_sigmask(signal.SIG_BLOCK, blocked)
+        try:
+            os.replace(os.path.join(stage, "stable_pinned"), p["pinned_file"])
+            tmplink = os.path.join(p["dir"], ".pinned.new.%d" % os.getpid())
+            os.symlink("stable_pinned", tmplink)
+            os.replace(tmplink, p["pinned_link"])   # atomic symlink swap
+            have_old = os.path.isdir(p["builtin"])
+            if have_old:
+                os.rename(p["builtin"], old_builtin)
+            os.rename(sbuiltin, p["builtin"])
+            with open(p["log"], "a") as f:
+                f.write(line)
+        finally:
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, blocked)
+        shutil.rmtree(old_builtin, ignore_errors=True)
+        return newsha, len(srcs)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
+def run_pin(args):
+    """Gate, stabilize, pin -- scheduled, resource-aware and INTERRUPTIBLE.
+
+    feature-t-testmgr-owns-pinning-interruptible. `tools/gate.sh` is the pin
+    gate, not the dev loop; the dev loop is `make compiler/pascal26` plus your
+    repro. Pinning is the one step that must stay properly gated, because
+    stable_linux_amd64/default/pinned is the ground Track B and every
+    $(PXX_STABLE) consumer builds on: a red master is cheap and recoverable, a
+    bad pin poisons another lane for hours.
+
+    DELIBERATELY NOT A WATCHER CAPABILITY. The ticket asks this be decided
+    explicitly rather than allowed to leak in: face 1 of Track T writes ONLY
+    tstate/, and pinning writes the stable tree. So `--pin` is an operator
+    command run on a dev box, and twatch never invokes it. Keeping the daemon's
+    write scope to one directory is worth more than the convenience.
+    """
+    p = _pin_paths()
+    sha = _git("rev-parse", "HEAD").stdout.strip()
+    if not os.path.exists(p["latest"]):
+        print("testmgr --pin: no %s yet — run `make stabilize-fast` first"
+              % os.path.relpath(p["latest"], REPO), file=sys.stderr)
+        return 1
+    dirty = _git("status", "--porcelain", "--", "compiler/").stdout.strip()
+    if dirty and not args.force:
+        print("testmgr --pin: compiler/ has uncommitted changes — pinning them "
+              "would bless a binary built from sources nobody can check out:\n%s"
+              % dirty[:500], file=sys.stderr)
+        print("         commit them, or --force if you mean it.", file=sys.stderr)
+        return 1
+
+    # Resumability is cheap because the expensive half is skippable, not
+    # because the pin is checkpointed: a gate that already passed for THIS sha
+    # with a clean tree does not need re-running, and stabilize-fast is ~35s.
+    # (stabilize-fast, not stabilize -- user, 2026-08-09: all-target
+    # verification belongs to a RELEASE, not to a pin.)
+    state_path = os.path.join(REPO, PIN_STATE_REL)
+    prior = {}
+    try:
+        with open(state_path) as f:
+            prior = json.load(f)
+    except (OSError, ValueError):
+        pass
+    gated = prior.get("gated_sha") == sha and not dirty
+
+    if gated and not args.force:
+        print("testmgr --pin: gate already green for %s (%s) — skipping it"
+              % (sha[:12], prior.get("gated_at", "?")), flush=True)
+    else:
+        tier = args.tier or "full"
+        print("testmgr --pin: gate — tier %s at %s" % (tier, sha[:12]),
+              flush=True)
+        # A child, so the gate keeps the process-group teardown twatch.kill_child
+        # relies on; --force because THIS process holds the repo lock for the
+        # whole pin, which is the point (nothing else may build meanwhile).
+        rc = subprocess.run([sys.executable, os.path.abspath(__file__),
+                             "--tier", tier, "--force"], cwd=REPO).returncode
+        if rc != 0:
+            print("testmgr --pin: gate RED (rc %d) — nothing pinned, tree "
+                  "untouched" % rc, file=sys.stderr)
+            return rc
+        os.makedirs(os.path.dirname(state_path), exist_ok=True)
+        with open(state_path, "w") as f:
+            json.dump({"gated_sha": sha, "gated_at": utcnow_iso()}, f)
+        print("testmgr --pin: gate GREEN", flush=True)
+
+    print("testmgr --pin: stabilize-fast", flush=True)
+    if subprocess.run(["make", "stabilize-fast"], cwd=REPO).returncode != 0:
+        print("testmgr --pin: stabilize-fast FAILED — nothing pinned",
+              file=sys.stderr)
+        return 1
+
+    print("testmgr --pin: applying the pin (uninterruptible from here — "
+          "microseconds)", flush=True)
+    newsha, nbuiltin = apply_pin_atomic(p, sha)
+
+    # `make pin` must git-add the stable tree -- a recorded past miss: an
+    # automated pin that skips it produces a pin nobody else can see.
+    add = _git("add", "-u", STABLE_ROOT_REL)
+    if add.returncode != 0:
+        print("testmgr --pin: WARNING git add failed: %s" % add.stderr.strip(),
+              file=sys.stderr)
+    _git("add", STABLE_DEFAULT_REL + "/builtin")
+    staged = _git("diff", "--cached", "--name-only", "--",
+                  STABLE_ROOT_REL).stdout.split()
+    print("testmgr --pin: pinned %s (%d builtin source(s) frozen), %d file(s) "
+          "STAGED — commit them, they are the pin"
+          % (newsha[:12], nbuiltin, len(staged)), flush=True)
+    return 0
+
+
+def utcnow_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
 def run_bench():
     import socket
     if not build_compiler():
@@ -2693,6 +2875,11 @@ def reexec_scoped():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--tier", choices=sorted(TIERS))
+    ap.add_argument("--pin", action="store_true",
+                    help="gate, stabilize-fast and PIN, as one interruptible "
+                         "operation: SIGINT leaves either a completed pin or an "
+                         "untouched tree. Operator command on a dev box — the "
+                         "watcher daemon never pins (it writes only tstate/)")
     ap.add_argument("--bench", action="store_true",
                     help="tracked benchmark run: fixed suite at -O0/-O2/-O3, "
                          "canary-checked then timed, rows appended to "
@@ -2790,13 +2977,20 @@ def main():
             print("testmgr: reaped %d, kept %d" % (n, skipped))
         return 0
 
+    if args.pin:
+        # The repo lock is held for the WHOLE pin, gate included: a concurrent
+        # tier run would rebuild compiler/pascal26 under stabilize-fast's feet.
+        if not acquire_lock(args.force):
+            return 2
+        atexit.register(release_lock)
+        return run_pin(args)
     if args.bench:
         # deliberately unscoped: --bench appends to the tracked timing series in
         # tstate/bench.tsv, and it is serial, so it was never the thing that ate
         # the box.  Don't perturb a history that spans hundreds of rows.
         return run_bench()
     if not args.tier:
-        ap.error("--tier is required (unless --bench)")
+        ap.error("--tier is required (unless --bench or --pin)")
 
     # --list does no work; TESTMGR_NO_SCOPE=1 is the escape hatch (self-tests)
     if not args.list and os.environ.get("TESTMGR_NO_SCOPE") != "1":
