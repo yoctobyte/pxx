@@ -75,4 +75,4 @@ object inside a list / dict value / tuple, `"%r" % obj`, `f"{obj!r}"`, and a
 controls kept in the same file so a fix that breaks THEM is caught.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 73c5d7c81.
