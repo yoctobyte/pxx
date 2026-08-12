@@ -79,4 +79,4 @@ def, the straight-line control, a field read inside `if` / `for` / `while`, a
 chained field read, and the sibling's subscript case still working.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 1830f6c21.
