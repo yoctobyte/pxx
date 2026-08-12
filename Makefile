@@ -1421,6 +1421,10 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lambda_returned26)" = "$$(printf '2 11 6 2\n2 101\n6 1005\n8 2\n2 21')"
 	./$(COMPILER) test/test_nilpy_annotated_module_global.npy /tmp/test_nilpy_annotated_module_global26
 	test "$$(/tmp/test_nilpy_annotated_module_global26)" = "$$(printf '2\n5 8 AB 2 1\n1 1 7 ab 3')"
+	@# float formatting rounds ties to EVEN: "%.0f" % 7.5 is 8, not 7 — it used
+	@# to round the FRACTION alone, which loses the parity half-even needs
+	./$(COMPILER) test/test_nilpy_format_half_even.npy /tmp/test_nilpy_halfeven26
+	/tmp/test_nilpy_halfeven26 | diff -u test/test_nilpy_format_half_even.expected -
 	@# round(x, n) keeps x's TYPE: round(6, 2) is 6, not 6.0 — the two-argument
 	@# form used to disagree with the one-argument one in the same program
 	./$(COMPILER) test/test_nilpy_round_ndigits_keeps_int.npy /tmp/test_nilpy_roundint26

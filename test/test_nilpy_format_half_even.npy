@@ -1,0 +1,29 @@
+# Float formatting rounds ties to EVEN, as CPython (and glibc's printf) do.
+# The formatter used to split the value and round the FRACTION alone, which
+# loses the parity half-even needs: 7.5 at precision 0 asked round(0.5), which
+# is 0 because zero is even, and printed 7 where CPython prints 8. Every tie
+# whose lower candidate was odd came out one low -- while the round() BUILTIN
+# was right on the same values, so the two disagreed inside one program.
+# bug-nilpy-float-formatting-rounds-half-toward-zero-not-half-even
+# Every expectation is CPython's own output.
+
+for v in [0.5, 1.5, 2.5, 3.5, 7.5, 8.5, -0.5, -1.5, -2.5, -3.5]:
+    print(v, "%.0f" % v, f"{v:.0f}", round(v))
+
+# the same ties one digit over, where the value IS exactly representable
+for v in [0.125, 0.375, 0.625, 0.875, 1.125, -1.125]:
+    print(v, "%.2f" % v, f"{v:.2f}", "%.1f" % v)
+
+# non-ties are untouched, in both directions
+for v in [2.675, 1.005, 0.045, 2.345, 123.456, 9.9999, 99.995, 0.0001]:
+    print(v, "%.0f" % v, "%.2f" % v, "%.3f" % v)
+
+# integral and large values keep their exact rendering
+for v in [0.0, 1.0, 2.0, 100.0, 1e10, 1e15]:
+    print(v, "%.0f" % v, "%.2f" % v)
+
+# the exponential form shares the digit rule
+print("%.2e" % 1234.5, f"{1.5:.0e}", f"{0.5:.0e}")
+
+# and the percent form
+print(f"{0.125:.1%}", f"{0.5:.0%}", f"{0.045:.1%}")

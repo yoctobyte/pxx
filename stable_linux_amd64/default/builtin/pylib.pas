@@ -724,6 +724,13 @@ procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant
   frontend REJECTS anything else rather than silently ignoring it. }
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
+{ `n.bit_length()` / `n.bit_count()`. Both are defined on the MAGNITUDE — the
+  sign is ignored, so (-8) answers as 8 — and both take a Variant rather than
+  an Int64 so an arbitrary-precision receiver stays exact: `(2**70)` is outside
+  Int64, and an Int64 parameter would narrow it mod 2^64 and answer confidently
+  wrong, which is the trap pyvar_to_float records. }
+function pyint_bit_length(const v: Variant): Int64;
+function pyint_bit_count(const v: Variant): Int64;
 { Python's two-argument int(s, base). RAISES ValueError on a bad parse rather
   than halting, which is the whole point: a Forth interpreter tries EVERY input
   word as a number, so a non-numeric token is the ordinary case and a fatal
@@ -1280,6 +1287,19 @@ function pyround_n(x: Double; n: Integer): Double;
 function pymath_floor(x: Double): Int64;
 function pymath_ceil(x: Double): Int64;
 function pymath_fabs(x: Double): Double;
+{ math.trunc — the SAME int/float contract mismatch that put floor/ceil here,
+  and the reason a Double->Double `Trunc` was deliberately NOT added to
+  lib/rtl/math.pas: it would resolve ahead of everything and hand every caller
+  the wrong type quietly. Rounds toward ZERO, which is floor only for
+  positives (trunc(-2.5) is -2, floor(-2.5) is -3).
+  bug-n-math-trunc-and-log-need-frontend-intercepts }
+function pymath_trunc(x: Double): Int64;
+{ math.copysign — cannot live in lib/rtl/math.pas under this name at all: a
+  Pascal `copysign` there hijacks libc's in every C program through pxxcio
+  (bug-c-pascal-math-names-hijack-libc-through-pxxcio, measured — copysign(3,-1)
+  answered atan2's result). The sign is read from the BIT PATTERN, not from
+  `y < 0`, so copysign(3, -0.0) is -3.0 as CPython has it. }
+function pymath_copysign(x, y: Double): Double;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -4640,6 +4660,25 @@ begin
   Result := Abs(x);
 end;
 
+function pymath_trunc(x: Double): Int64;
+begin
+  { Pascal's Trunc already rounds toward zero AND yields an integer type, so
+    the whole fix is that this returns Int64 rather than Double. }
+  Result := Trunc(x);
+end;
+
+function pymath_copysign(x, y: Double): Double;
+var m: Double; pb: PInt64;
+begin
+  m := Abs(x);
+  { The SIGN BIT, not `y < 0`: negative zero compares equal to zero, so a
+    comparison would answer +3.0 for copysign(3, -0.0) where CPython answers
+    -3.0. Reading the double's bits as Int64 makes the sign bit the sign of
+    that integer. }
+  pb := PInt64(@y);
+  if pb^ < 0 then Result := -m else Result := m;
+end;
+
 function pyenumerate(a: TPyList): TPyList;
 var r, pair: TPyList; i: Integer; pv: Variant;
 begin
@@ -7082,6 +7121,83 @@ end;
   raises OverflowError when the value does not fit in n bytes; that check is
   kept, because uforth stores fixed-width Forth cells and a silent truncation
   there would corrupt the data space rather than fail. }
+{ The binary digits of a heap-tier promotable int's MAGNITUDE, no '0b' prefix
+  and no sign. PXXPromoToBase spells it Python's way ('0b1010', '-0b1010'), so
+  the digits are simply everything after the 'b' — counting '0'/'1' characters
+  instead would also count the prefix's own leading '0'. }
+function PromoMagBits(const v: Variant): AnsiString;
+var pslot: array[0..1] of NativeInt;
+    s: AnsiString;
+    i: Integer;
+begin
+  PXXPromoInit(@pslot);
+  PXXPromoFromVariant(@pslot, @v);
+  s := PXXPromoToBase(@pslot, 2);
+  PXXPromoClear(@pslot);
+  for i := 1 to Length(s) do
+    if (s[i] = 'b') or (s[i] = 'B') then
+    begin
+      PromoMagBits := Copy(s, i + 1, Length(s) - i);
+      Exit;
+    end;
+  PromoMagBits := s;   { no prefix seen — take it as already bare }
+end;
+
+{ Is this variant a heap-tier promotable int, i.e. a value that may be outside
+  Int64 and must not be read through pyvar_to_int? }
+function VarIsPromo(const v: Variant): Boolean;
+begin
+  VarIsPromo := PPyVarRec(@v)^.VType = 8193;
+end;
+
+function pyint_bit_length(const v: Variant): Int64;
+var m: Int64; n: Integer; s: AnsiString;
+begin
+  if VarIsPromo(v) then
+  begin
+    s := PromoMagBits(v);
+    { PXXPromoToBase renders zero as '0b0'; bit_length(0) is 0, not 1. A
+      heap-tier promo is never zero in practice, but the guard costs nothing
+      and keeps the two paths agreeing. }
+    if (Length(s) = 1) and (s[1] = '0') then pyint_bit_length := 0
+    else pyint_bit_length := Length(s);
+    Exit;
+  end;
+  m := pyvar_to_int(v);
+  { Low(Int64) has no positive counterpart, so negating it overflows. Its
+    magnitude is 2^63, whose bit_length is 64. }
+  if m = Low(Int64) then begin pyint_bit_length := 64; Exit; end;
+  if m < 0 then m := -m;
+  n := 0;
+  while m <> 0 do begin Inc(n); m := m shr 1; end;
+  pyint_bit_length := n;
+end;
+
+function pyint_bit_count(const v: Variant): Int64;
+var m: Int64; n, i: Integer; s: AnsiString;
+begin
+  if VarIsPromo(v) then
+  begin
+    s := PromoMagBits(v);
+    n := 0;
+    for i := 1 to Length(s) do
+      if s[i] = '1' then Inc(n);
+    pyint_bit_count := n;
+    Exit;
+  end;
+  m := pyvar_to_int(v);
+  { see pyint_bit_length: 2^63 has exactly one set bit. }
+  if m = Low(Int64) then begin pyint_bit_count := 1; Exit; end;
+  if m < 0 then m := -m;
+  n := 0;
+  while m <> 0 do
+  begin
+    if (m and 1) <> 0 then Inc(n);
+    m := m shr 1;
+  end;
+  pyint_bit_count := n;
+end;
+
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 var k: Integer; p: PByte; u: Int64; fits: Boolean;
 begin
@@ -9839,19 +9955,49 @@ end;
 
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 { Fixed-point rendering with `prec` digits after the point — pylib's own, since
-  pylib may not pull sysutils in (see the FmtArgStr note above). Half-up
-  rounding with carry, which is what Python's `.Nf` prints for the values a
-  format spec is used on. }
+  pylib may not pull sysutils in (see the FmtArgStr note above). Rounding is
+  half-to-EVEN, which is what CPython (and glibc's printf) do.
+
+  It used to split the value first — Trunc for the integer part, Round for the
+  fraction — and that loses the parity half-even needs: `7.5` at prec 0 asked
+  Round(0.5), which is 0 because ZERO is even, and printed 7 where CPython
+  prints 8. Every tie whose lower candidate was odd came out one low (1.5->1,
+  3.5->3, -1.5->-1), while the round() BUILTIN was right on the same values —
+  so the two disagreed inside one program.
+  bug-nilpy-float-formatting-rounds-half-toward-zero-not-half-even
+
+  The split has to STAY, though — scaling the whole value in one step is what
+  Round would need to see the parity, and it also amplifies the representation
+  error into a tie that is not there: `2.675 * 100` is exactly 267.5 as a
+  double (so it would print 2.68), while `(2.675 - 2) * 100` is
+  67.49999999999999 and prints CPython's 2.67. Measured, both, against CPython.
+  So the fraction is scaled first and the tie is broken HERE, against the digit
+  that is actually being kept: fp's last digit, or the integer part when
+  prec = 0. }
 var neg: Boolean; ip: Int64; fp: Int64; scale: Double; i: Integer; fs: AnsiString;
+    powr: Int64; frac, rem: Double;
 begin
   if prec < 0 then prec := 0;
   neg := d < 0.0;
   if neg then d := -d;
   scale := 1.0;
   for i := 1 to prec do scale := scale * 10.0;
+  powr := Round(scale);
   ip := Trunc(d);
-  fp := Round((d - ip) * scale);
-  if fp >= Round(scale) then begin ip := ip + 1; fp := 0; end;
+  frac := (d - ip) * scale;
+  fp := Trunc(frac);
+  rem := frac - fp;
+  if rem > 0.5 then fp := fp + 1
+  else if rem = 0.5 then
+  begin
+    { the exact tie — round to EVEN, on the last digit KEPT }
+    if prec = 0 then
+    begin
+      if Odd(ip) then fp := fp + 1;
+    end
+    else if Odd(fp) then fp := fp + 1;
+  end;
+  if fp >= powr then begin ip := ip + 1; fp := 0; end;
   Result := PyFmtBase(ip, 10, False);
   if prec > 0 then
   begin

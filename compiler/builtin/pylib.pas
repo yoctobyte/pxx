@@ -9955,19 +9955,49 @@ end;
 
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 { Fixed-point rendering with `prec` digits after the point — pylib's own, since
-  pylib may not pull sysutils in (see the FmtArgStr note above). Half-up
-  rounding with carry, which is what Python's `.Nf` prints for the values a
-  format spec is used on. }
+  pylib may not pull sysutils in (see the FmtArgStr note above). Rounding is
+  half-to-EVEN, which is what CPython (and glibc's printf) do.
+
+  It used to split the value first — Trunc for the integer part, Round for the
+  fraction — and that loses the parity half-even needs: `7.5` at prec 0 asked
+  Round(0.5), which is 0 because ZERO is even, and printed 7 where CPython
+  prints 8. Every tie whose lower candidate was odd came out one low (1.5->1,
+  3.5->3, -1.5->-1), while the round() BUILTIN was right on the same values —
+  so the two disagreed inside one program.
+  bug-nilpy-float-formatting-rounds-half-toward-zero-not-half-even
+
+  The split has to STAY, though — scaling the whole value in one step is what
+  Round would need to see the parity, and it also amplifies the representation
+  error into a tie that is not there: `2.675 * 100` is exactly 267.5 as a
+  double (so it would print 2.68), while `(2.675 - 2) * 100` is
+  67.49999999999999 and prints CPython's 2.67. Measured, both, against CPython.
+  So the fraction is scaled first and the tie is broken HERE, against the digit
+  that is actually being kept: fp's last digit, or the integer part when
+  prec = 0. }
 var neg: Boolean; ip: Int64; fp: Int64; scale: Double; i: Integer; fs: AnsiString;
+    powr: Int64; frac, rem: Double;
 begin
   if prec < 0 then prec := 0;
   neg := d < 0.0;
   if neg then d := -d;
   scale := 1.0;
   for i := 1 to prec do scale := scale * 10.0;
+  powr := Round(scale);
   ip := Trunc(d);
-  fp := Round((d - ip) * scale);
-  if fp >= Round(scale) then begin ip := ip + 1; fp := 0; end;
+  frac := (d - ip) * scale;
+  fp := Trunc(frac);
+  rem := frac - fp;
+  if rem > 0.5 then fp := fp + 1
+  else if rem = 0.5 then
+  begin
+    { the exact tie — round to EVEN, on the last digit KEPT }
+    if prec = 0 then
+    begin
+      if Odd(ip) then fp := fp + 1;
+    end
+    else if Odd(fp) then fp := fp + 1;
+  end;
+  if fp >= powr then begin ip := ip + 1; fp := 0; end;
   Result := PyFmtBase(ip, 10, False);
   if prec > 0 then
   begin
