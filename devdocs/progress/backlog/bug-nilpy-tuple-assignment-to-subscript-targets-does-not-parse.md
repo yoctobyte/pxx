@@ -50,6 +50,38 @@ right-hand side is evaluated BEFORE any target is stored, which is what makes
 the swap work without a temporary, and a naive left-to-right lowering would
 break `h[i], h[j] = h[j], h[i]` silently rather than loudly.
 
+## 2026-08-12 — scoped, not started: why it is bigger than it looks
+
+Read both halves before starting; the parse is the easy one.
+
+**Target parse** (`PyParseUnpackAssign`, pyparser.inc ~17400): the target list
+is hand-parsed as `ident [ '.' ident ]`, into parallel `names[]` / `flds[]`
+arrays with a cap of 8. Adding `[expr]` there is straightforward — but it
+changes what a target IS, from a pair of strings to a node, so `flds[]` wants
+to become a node array and `PyUnpackTargetStore` a builder over it.
+
+**The store** is where the work is. There is no reusable "store into this
+subscript lvalue" builder: the `x[k] = v` lowering lives INLINE in
+`parser.inc` (~4890-4970), inside the postfix loop, keyed on seeing `=` right
+after the `]`, and it forks four ways — a static list (AN_INDEX), a dict
+(TPyDict.setitem), a variant (PyMakeVariantSetItem), and a user class
+(`__setitem__`, or PyClassErrCallNode when it declares none). A tuple target
+list needs all four, from a context that has already consumed the `]` and has
+a comma next.
+
+So the honest shape is: **extract that fork into a `PyMakeSubscriptStore(base,
+idx, val)` builder** in pyparser.inc, make the existing inline path call it,
+and then the tuple-target case is a few lines on top. That refactor is the
+ticket; doing it any other way grows a fifth copy of a fork that already has
+four arms (devdocs/dev/normalise-dont-special-case.md).
+
+Also required by Python's semantics, and easy to get wrong in the store: every
+value is evaluated into a temp BEFORE any target is stored. The existing
+unpack code already does this for names — the new stores must stay inside that
+same phase, or `h[i], h[j] = h[j], h[i]` silently degrades to `h[i] = h[j];
+h[j] = h[i]`, which is the exact bug the idiom exists to avoid and which no
+error would report.
+
 ## Gate
 
 A `.npy` diffed against CPython: a list swap, a dict swap, a mixed
