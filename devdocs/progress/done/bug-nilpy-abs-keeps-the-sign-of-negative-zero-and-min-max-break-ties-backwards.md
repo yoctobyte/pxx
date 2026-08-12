@@ -47,4 +47,4 @@ with a `key=`, over a list, and over objects that compare equal but are
 distinguishable (so "returns the first" is actually asserted).
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 1c1c223a7.

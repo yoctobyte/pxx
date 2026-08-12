@@ -66,4 +66,4 @@ int/float sum, an empty sum, a sum with a `start` argument, and a sum over a
 generator/comprehension — plus `math.fsum` if it exists, which must agree too.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 1c1c223a7.
