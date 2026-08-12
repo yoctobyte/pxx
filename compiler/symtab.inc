@@ -5568,6 +5568,7 @@ end;
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
     userOnly: Boolean; ownM, anyM: Integer; pass: Integer;
+    variantArg: Boolean;    { some argument is a Variant -- see Phase 1c1 }
     dropLateDef: Boolean;   { NilPy: a def below this call site is not bound yet }
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
@@ -5723,6 +5724,59 @@ begin
       end;
     end;
     i := ProcHashNext[i];
+  end;
+
+  { Phase 1c1: a VARIANT argument prefers a VARIANT parameter. FPC's rule, and
+    the one phase the ladder was missing: a Variant is TypesCompatible with
+    every scalar parameter, so without this the compatible phases below bind
+    whichever overload happens to be DECLARED FIRST and the exact Variant
+    candidate is never reached.
+
+    Measured against fpc 3.2.2 with overloads (Int64 | AnsiString | Double |
+    Variant) and a Variant argument: FPC binds Variant, pxx bound Int64 — and
+    then coerced, so a Variant holding 7.5 printed as 7 and one holding a
+    string raised. It only stayed hidden because an all-exact call (a Variant
+    argument AND an AnsiString spec) already won in Phase 1; the moment a
+    second argument was merely compatible — a ShortString literal against an
+    AnsiString parameter, which is what NilPy's f-string rewrite emits — the
+    whole call fell through to Phase 1d and the first candidate took it.
+    bug-a-a-variant-argument-binds-the-first-compatible-overload
+
+    Every other argument must still be compatible, so this only REORDERS
+    candidates that would all have matched below; it never makes a call match
+    that did not. A Variant argument against an untyped parameter is neutral,
+    as it is in every other phase. }
+  variantArg := False;
+  for j := 0 to nArgs-1 do
+    if argTypes[j] = tyVariant then variantArg := True;
+  if variantArg then
+  begin
+    i := ProcChainHead(name);
+    while i >= 0 do
+    begin
+      if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) and
+         ProcArityMatches(i, nArgs) then
+      begin
+        match := True;
+        for j := 0 to nArgs-1 do
+        begin
+          if ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
+            { untyped: neutral }
+          else if (argTypes[j] = tyVariant) and
+                  (Procs[i].Params[j].TypeKind <> tyVariant) then
+            match := False
+          else if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then
+            match := False;
+          if MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+      i := ProcHashNext[i];
+    end;
   end;
 
   { Phase 1c2: an INTEGER-valued argument prefers an INTEGER parameter over a

@@ -1,0 +1,54 @@
+# An f-string format spec on a value whose STATIC type is a variant — a list or
+# dict element, an unannotated parameter, an unannotated attribute.
+#
+# The spec rewrite emits `pyformat_of(expr, "spec")`, and the spec literal is a
+# ShortString against pyformat_of's AnsiString parameter. That one merely-
+# compatible argument dropped the whole call out of the exact-match phase, and
+# a Variant is compatible with EVERY scalar parameter, so the first-declared
+# overload — Int64 — took it. A float printed as its integer part and a string
+# raised TypeError, both silently wrong for ordinary Python.
+# bug-a-a-variant-argument-binds-the-first-compatible-overload
+#
+# Every expectation is CPython's own output.
+
+
+class Rec:
+    def __init__(self, name, num, flo):
+        self.name = name
+        self.num = num
+        self.flo = flo
+
+
+def viaparam(x):
+    return f"[{x:6.2f}]"
+
+
+def viastr(x):
+    return f"[{x:<6}]"
+
+
+r = Rec("Ada", 2, 7.5)
+lst = [7.5, "Ada", 2]
+d = {"f": 7.5, "s": "Ada", "i": 2}
+
+print(f"[{r.flo:6.2f}]")
+print(f"[{r.name:<6}]")
+print(f"[{r.num:>4}]")
+print(f"[{lst[0]:6.2f}]")
+print(f"[{lst[1]:<6}]")
+print(f"[{lst[2]:>4}]")
+print(f"[{d['f']:6.2f}]")
+print(f"[{d['s']:<6}]")
+print(f"[{d['i']:>4}]")
+print(viaparam(7.5))
+print(viastr("Ada"))
+
+# a variant that carries no spec is unchanged, and so is a statically typed one
+plain = 7.5
+print(f"[{lst[0]}]")
+print(f"[{plain:6.2f}]")
+
+# the float must keep its fractional part under a width-only spec too, which is
+# where the int overload printed a bare truncated integer
+print(f"[{lst[0]:>8}]")
+print(f"[{d['f']:>8}]")

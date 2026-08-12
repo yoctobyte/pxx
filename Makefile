@@ -1519,6 +1519,11 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_mathfloor26)" = "$$(printf '%b' '2 3\n-3 -2\n2 2\n3\n3 2 2.7\n-2 2 -2 0\n2 -2 0\n-6\n-3.0 3.0\n-3.0 3.0\n-3.0 3.0')"
 	@# f-string format specs: precision, exponential, width/alignment incl. ^
 	@# (center) and an explicit fill char
+	@# the same specs on values whose STATIC type is a variant (list/dict element,
+	@# unannotated param or attribute) — these bound the Int64 overload and
+	@# truncated a float / raised on a str
+	./$(COMPILER) test/test_nilpy_fstring_spec_on_variant.npy /tmp/test_nilpy_fmtspecvar26
+	/tmp/test_nilpy_fmtspecvar26 | diff -u test/test_nilpy_fstring_spec_on_variant.expected -
 	./$(COMPILER) test/test_nilpy_fstring_format_spec.npy /tmp/test_nilpy_fmtspec26
 	test "$$(/tmp/test_nilpy_fmtspec26)" = "$$(printf '%b' '3.14\n    F\n   42\n3\n1.23e+03\n    hi    \n    hi     \n********hi\nhi********\n****hi****\n  7  \n00007\n-0003\n000-3\n3.142\n***3.1****\nx    |\n    3|')"
 	@# a managed STRING local minted after the prologue zero-init pass was never
@@ -2700,6 +2705,10 @@ test-core: $(COMPILER)
 	# (fpjson: ten Insert(Index,...) bodies clobbered the one-arg Insert; verified vs FPC)
 	./$(COMPILER) test/test_method_overload_arity_rebind_b315.pas /tmp/test_method_overload_b31526
 	test "$$(/tmp/test_method_overload_b31526)" = "oneintstr(x)bool(T)dbl"
+	# a VARIANT argument binds a VARIANT parameter, not the first merely-compatible
+	# overload (a Variant is compatible with every scalar; verified against FPC)
+	./$(COMPILER) test/test_variant_arg_prefers_variant_overload.pas /tmp/test_variant_overload26
+	test "$$(/tmp/test_variant_overload26)" = "$$(printf 'variant\nvariant\nvariant\nvariant\nint\nstr\nfloat\nvariant\nint\nint')"
 	# untyped string constants must be SCOPED: a routine's const must not leak into the
 	# next routine and beat ITS const of the same name (verified against FPC)
 	./$(COMPILER) test/test_string_const_scoping_b314.pas /tmp/test_string_const_scoping_b31426
