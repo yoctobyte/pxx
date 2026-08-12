@@ -85,4 +85,4 @@ produces the diagnostic (the message is useful and must not be traded away for
 a silent Variant).
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit aef2c7e8e.
