@@ -106,4 +106,4 @@ frontend, which is the one case a family sweep is actually warranted —
 `make test-nilpy` and `make test`.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 423094eca.
