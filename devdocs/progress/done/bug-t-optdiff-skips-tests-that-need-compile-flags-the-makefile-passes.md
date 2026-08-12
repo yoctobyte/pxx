@@ -71,4 +71,4 @@ the skip list itemized; `tools/testmgr.py --tier full` green (Track T's own
 gate for tooling changes).
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit d80bea5a4.

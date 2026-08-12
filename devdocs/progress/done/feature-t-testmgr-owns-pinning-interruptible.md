@@ -115,4 +115,4 @@ A pin driven through testmgr produces a pin byte-identical to one driven through
 a clean, un-pinned state every time.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit d80bea5a4.
