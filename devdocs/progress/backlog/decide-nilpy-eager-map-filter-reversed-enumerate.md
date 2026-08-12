@@ -89,6 +89,39 @@ Point 2 is the one that makes working code FAIL rather than differ — measured
 above, not reasoned. Points 1 and 3 are cosmetic and laxer-than-CPython
 respectively; point 2 alone is what this decision is really about.
 
+## The model, in one measurement — it is a CURSOR, not an array
+
+The clearest way to see what `map` actually IS. `f` counts its calls:
+
+```python
+m = map(f, xs)                 # xs = list(range(10))
+print("after binding m:", calls)
+for n in m:                    # break after 3
+    ...
+print("after breaking at 3:", calls)
+for n in m:                    # a SECOND pass over the same m
+    ...
+```
+
+| | after binding | after breaking at 3 | second pass yields |
+| --- | --- | --- | --- |
+| CPython | **0 calls** | 3 calls | **7** more (elements 4-10) |
+| pxx | **10 calls** | 10 | **10** again |
+
+CPython's `map` is an **enumerator/cursor** — `IEnumerator`, or a database
+cursor — and `for n in m` calls Next. Constructing one costs nothing; breaking
+parks it at position 3; resuming continues FROM there, which is why the second
+pass yields the remaining 7 rather than all 10 or none.
+
+Nothing is detected or optimised: CPython does no flow analysis and cannot know
+a `break` is coming. `map` is simply DEFINED to return that object. Python 2's
+`map` returned a list, exactly like ours — so the honest one-line statement of
+this ticket is **we implemented Python 2's `map`**.
+
+This also says what the divergence is NOT: not a missing optimisation, not a
+perf gap. We return a different KIND of thing, and the difference is observable
+whenever the consumer does not run to the end.
+
 ## The options
 
 **A — Document it as a divergence.** Add it to
@@ -124,6 +157,22 @@ is already a materialised sequence.
 This gets the break, the side effects and the raise right without an iterator
 protocol, without `__next__` dispatch, and without touching the value's type —
 `map(...)` in every other position stays the list it is today.
+
+**What D does NOT fix, and it is not a corner:** binding first.
+
+```python
+m = map(risky, xs)
+for n in m:          # a different statement — nothing to fuse
+    ...
+    break            # still eager, still raises
+```
+
+D keys on the syntactic `for x in map(...)`; once the call is bound to a name
+the loop has no call to fuse, so that form keeps every symptom in this ticket.
+Only real cursor objects (B) fix it. D is therefore the cheap fix for the
+COMMON shape, not a complete one — and choosing it means saying so in the
+divergences page, since the bound form is the shape a reader will reach for
+next when the direct one starts behaving.
 
 ## Recommendation — REVISED after measuring shape 2
 
