@@ -9265,6 +9265,8 @@ var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiSt
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
     mapProc: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
     rndArg: Integer;   { first operand of NilPy round(x, n) }
+    rndIntArg: Boolean;      { …and was it an INTEGER? then round is identity }
+    rndArgTk: TTypeKind;     { its type, to restore after the identity }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
@@ -11450,8 +11452,30 @@ begin
         begin
           Next;
           rndArg := CurASTNode;
+          { CPython's `round(x, n)` keeps x's TYPE: an int in, an int out,
+            whatever n is. `round(6, 2)` is 6, not 6.0, and a report that
+            rounds an integral total to two places printed 6.0 where every
+            other implementation prints 6 — while the ONE-argument round(6)
+            was right, so the two spellings disagreed with each other.
+            bug-nilpy-two-argument-round-of-an-int-returns-a-float }
+          rndIntArg := (LastExprTk = tyInteger) or (LastExprTk = tyInt64) or
+                       TypeIsPromoInt(LastExprTk);
+          rndArgTk := LastExprTk;
           ParseExpr;
           Expect(tkRParen, ')');
+          { …and with a non-negative ndigits the rounding cannot change an
+            integer at all, so the whole call is the identity. A NEGATIVE
+            ndigits does round (`round(1234, -2)` is 1200, still an int) and a
+            computed one is unknown here; both keep the float path below, which
+            is what shipped — the int-typed answer for those needs a pylib
+            routine and is recorded on the ticket. }
+          if rndIntArg and (ASTKind[CurASTNode] = AN_INT_LIT) and
+             (ASTIVal[CurASTNode] >= 0) then
+          begin
+            CurASTNode := rndArg;
+            LastExprTk := rndArgTk;
+            Exit;
+          end;
           argSeq := FindProc('pyround_n');
           if argSeq < 0 then Error('Nil Python: pylib (pyround_n) not loaded');
           node := AllocNode(AN_CALL);

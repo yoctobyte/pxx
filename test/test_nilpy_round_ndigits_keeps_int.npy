@@ -1,0 +1,28 @@
+# CPython's round(x, n) keeps x's TYPE: an int in, an int out. NilPy's
+# two-argument form always went through the float path, so `round(6, 2)` was
+# 6.0 while the one-argument `round(6)` was 6 -- the two spellings disagreeing
+# with each other in the same program.
+# bug-nilpy-two-argument-round-of-an-int-returns-a-float
+# Only the statically-typed int with a non-negative literal ndigits is fixed;
+# a variant argument, a computed ndigits and a negative one still take the
+# float path and are recorded on the ticket.
+# Every expectation is CPython's own output.
+
+print(round(6, 2), round(6), round(6.5, 2), round(6.5))
+print(str(round(6, 2)), round(6, 2) + 1)
+
+
+def total(n):
+    return round(n * 2, 2)
+
+
+print(total(3), str(total(3)))
+
+count = 7
+print(round(count, 0), round(count, 5), str(round(count, 3)))
+
+# a float argument is unaffected -- still a float, still rounded
+print(round(2.345, 2), round(2.0, 2), str(round(2.0, 2)))
+
+# and the one-argument form over both kinds
+print(round(2.5), round(3.5), round(-2.5), round(7))
