@@ -3320,6 +3320,17 @@ function PyHasAttr(const obj: Variant; const name: AnsiString): Boolean;
 var cls: PClassRTTI; kind: Int64; p: Pointer;
 begin
   PyHasAttr := False;
+  { a CLASS held as a value: its attributes live in the bind registry, and its
+    METHODS are in the blob it points at (no instance to walk from).
+    bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+  if PPyRec(@obj)^.VType = 11 then
+  begin
+    cls := PClassRTTI(Pointer(PPyRec(@obj)^.Payload));
+    if cls = nil then Exit;
+    PyHasAttr := (PyClsAttrSlotOf(Pointer(cls), name, kind) <> nil) or
+                 (PyFindMethCI(cls, name) <> nil);
+    Exit;
+  end;
   if PPyRec(@obj)^.VType <> 7 then Exit;
   cls := GetInstanceRTTI(Pointer(PPyRec(@obj)^.Payload));
   if cls = nil then Exit;

@@ -7537,17 +7537,29 @@ begin
   ASTLeft[Result] := a0;
 end;
 
-{ `obj.name = val` (dynamic attribute write) -> pydynattr_set(obj, "name", val). }
+{ `obj.name = val` (dynamic attribute write) -> pydynattr_set(obj, "name", val),
+  or pydynattr_set_v(v, "name", val) for a VARIANT receiver — whose runtime tag
+  decides whether the payload is an instance at all. A class held as a value has
+  an RTTI blob there, and PyMakeObjPtr's unwrap would key the write on the blob
+  address: `c.num = 9` then wrote a slot nothing ever reads back, so the class,
+  its instances and every other reference all kept the old value.
+  bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer;
-var procIdx, a0, a1, a2, nameNode: Integer;
+var procIdx, a0, a1, a2, nameNode: Integer; isVariantRecv: Boolean;
 begin
-  procIdx := FindProc('pydynattr_set');
-  if procIdx < 0 then Error('Nil Python: pylib (pydynattr_set) not loaded');
+  isVariantRecv := IntToTypeKind(ASTTk[baseNode]) = tyVariant;
+  if isVariantRecv then
+    procIdx := FindProc('pydynattr_set_v')
+  else
+    procIdx := FindProc('pydynattr_set');
+  if procIdx < 0 then Error('Nil Python: pylib (pydynattr_set/_v) not loaded');
   nameNode := AllocNode(AN_STR_LIT);
   ASTSOffset[nameNode] := PyStoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
-  a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
+  a0 := AllocNode(AN_ARG);
+  if isVariantRecv then ASTLeft[a0] := baseNode
+  else ASTLeft[a0] := PyMakeObjPtr(baseNode);
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
   a2 := AllocNode(AN_ARG); ASTLeft[a2] := valNode;
   ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
@@ -7555,6 +7567,61 @@ begin
   ASTIVal[Result] := procIdx;
   ASTTk[Result] := Ord(tyUnknown);
   ASTLeft[Result] := a0;
+end;
+
+{ Publish this class's class ATTRIBUTES to the run time, one
+  `pyclsattr_bind(<RTTI blob>, "name", @slot, kind)` per attribute, hoisted where
+  the class statement runs.
+
+  It exists because a class attribute is not stored on the class: PyClsAttrSlot
+  gives each one a hidden GLOBAL, and all three compile-time access routes
+  (`C.attr`, bare `attr` in a method, `inst.attr`) resolve that global by a name
+  only the frontend knows. A class held as a VALUE has no class index at the
+  point of the read, so nothing was left for it to consult and the read fell
+  through to an instance-field path that indexed INSIDE the RTTI blob — a
+  plausible integer where 7 was stored, and the empty string for a str. The bind
+  is the missing link: name and slot ADDRESS, so the read and the write reach the
+  same memory the three static routes do.
+  bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+procedure PyEmitClsAttrBinds(ci: Integer);
+var i, procIdx, clsNode, nameNode, addrNode, kindNode: Integer;
+    a0, a1, a2, a3, callNode: Integer;
+    nm: AnsiString;
+begin
+  procIdx := FindProc('pyclsattr_bind');
+  if procIdx < 0 then Exit;          { pylib not loaded — nothing to publish to }
+  for i := 0 to ClassVarCount - 1 do
+  begin
+    if ClassVarCi[i] <> ci then Continue;
+    if ClassVarSym[i] < 0 then Continue;
+    nm := GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]);
+    { the class's RTTI blob as a raw POINTER — ASTRight 0, i.e. NOT the
+      VT_CLASSREF-variant lowering the `cls = A` builder asks for }
+    clsNode := AllocNode(AN_CLASSREF);
+    ASTIVal[clsNode] := ci;
+    ASTRight[clsNode] := 0;
+    ASTTk[clsNode] := Ord(tyPointer);
+    nameNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[nameNode] := PyStoredName(nm);
+    ASTSLen[nameNode] := Length(nm);
+    ASTTk[nameNode] := Ord(tyString);
+    addrNode := AllocNode(AN_ADDR);
+    ASTLeft[addrNode] := PyMakeIdent(ClassVarSym[i]);
+    ASTTk[addrNode] := Ord(tyPointer);
+    kindNode := AllocNode(AN_INT_LIT);
+    ASTIVal[kindNode] := Ord(Syms[ClassVarSym[i]].TypeKind);
+    ASTTk[kindNode] := Ord(tyInt64);
+    a0 := AllocNode(AN_ARG); ASTLeft[a0] := clsNode;
+    a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
+    a2 := AllocNode(AN_ARG); ASTLeft[a2] := addrNode;
+    a3 := AllocNode(AN_ARG); ASTLeft[a3] := kindNode;
+    ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := a3; ASTRight[a3] := -1;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := procIdx;
+    ASTTk[callNode] := Ord(tyUnknown);
+    ASTLeft[callNode] := a0;
+    PyHoistStmt(callNode);
+  end;
 end;
 
 function PyMakeVariantGetItem(baseNode, idxNode: Integer): Integer;
@@ -10052,7 +10119,7 @@ begin
   end;
 end;
 
-function PyClassUsedAsValue(const nm: AnsiString): Boolean;
+function PyClassUsedAsValueEx(const nm: AnsiString; precise: Boolean): Boolean;
 { True iff the module mentions the CLASS `nm` as a VALUE — a bare name that is
   not construction, not the `class` header, not a type test and not an
   attribute. `cls = A`, `{"a": A}[k]`, `register(A)`.
@@ -10069,11 +10136,27 @@ function PyClassUsedAsValue(const nm: AnsiString): Boolean;
   The excluded shapes each have their own intercept and must not trip it:
   `A(...)` construction, the `class A:` / `class B(A):` header line,
   `isinstance(x, A)` and `issubclass(t, A)`, `except A:`, an import line, a
-  `: A` / `-> A` annotation, and `o.A` as an attribute. }
+  `: A` / `-> A` annotation, and `o.A` as an attribute.
+
+  `precise` narrows it to the uses that genuinely have no class index at
+  compile time, in the two ways this scan is deliberately loose:
+
+    - it ALSO skips `A.attr` — a class NAME, resolved statically by the
+      ClassName.member branch, needing nothing at run time;
+    - it matches the name case-SENSITIVELY, as NilPy does. CaseEqual made
+      `k = K()` a value use OF K (the receiver `k` matched the class `K`), which
+      is the third appearance of the case-insensitive-lookup family already
+      recorded in bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class.
+
+  The default scan keeps both, because for CONSTRUCTOR widening a false positive
+  costs only boxing; the class-attribute LOWERING has no such luxury (it trades a
+  per-instance copy for one shared slot), so neither `print(Plain.n)` nor a local
+  spelled like its class may demote a class nobody ever holds.
+  bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
 var j: Integer;
     atStmtStart, inSkipStmt: Boolean;
 begin
-  PyClassUsedAsValue := False;
+  PyClassUsedAsValueEx := False;
   if nm = '' then Exit;
   j := 0;
   atStmtStart := True;
@@ -10096,7 +10179,8 @@ begin
       atStmtStart := False;
     end;
     if (not inSkipStmt) and (Tokens[j].Kind = tkIdent) and
-       CaseEqual(GetTokenStr(j), nm) then
+       (((not precise) and CaseEqual(GetTokenStr(j), nm)) or
+        (precise and (GetTokenStr(j) = nm))) then
     begin
       { An ANNOTATION (`x: A`, `-> A`) is deliberately NOT excluded. The obvious
         exclusion is "preceded by a colon", and it is wrong: a dict literal
@@ -10108,9 +10192,11 @@ begin
         already makes. }
       if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
               ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
+              (precise and (j + 1 < MainProgramTokCount) and
+               (Tokens[j + 1].Kind = tkDot)) or
               PyInTypeTestCall(j)) then
       begin
-        PyClassUsedAsValue := True;
+        PyClassUsedAsValueEx := True;
         Exit;
       end;
     end;
@@ -10118,7 +10204,12 @@ begin
   end;
 end;
 
-function PyClassKinUsedAsValue(ci: Integer): Boolean;
+function PyClassUsedAsValue(const nm: AnsiString): Boolean;
+begin
+  PyClassUsedAsValue := PyClassUsedAsValueEx(nm, False);
+end;
+
+function PyClassKinUsedAsValueEx(ci: Integer; precise: Boolean): Boolean;
 { …and the same question over the whole line of descent through ci — the class
   itself, its ancestors, and its DESCENDANTS.
 
@@ -10133,7 +10224,7 @@ function PyClassKinUsedAsValue(ci: Integer): Boolean;
 var d, c: Integer;
     kin: Boolean;
 begin
-  PyClassKinUsedAsValue := True;
+  PyClassKinUsedAsValueEx := True;
   for d := 0 to UClsCount - 1 do
   begin
     if UClsIsRecord[d] then continue;
@@ -10154,9 +10245,15 @@ begin
       if c = d then kin := True;
       c := UClsParent[c];
     end;
-    if kin and PyClassUsedAsValue(PyRawName(UClsNOff[d], UClsNLen[d])) then Exit;
+    if kin and PyClassUsedAsValueEx(PyRawName(UClsNOff[d], UClsNLen[d]),
+                                    precise) then Exit;
   end;
-  PyClassKinUsedAsValue := False;
+  PyClassKinUsedAsValueEx := False;
+end;
+
+function PyClassKinUsedAsValue(ci: Integer): Boolean;
+begin
+  PyClassKinUsedAsValue := PyClassKinUsedAsValueEx(ci, False);
 end;
 
 function PyNoClassDeclares(const mname: AnsiString): Boolean;
@@ -22675,6 +22772,15 @@ begin
       if PyClsAttrRedeclaredInChain(PyRawName(UClsNOff[ci], UClsNLen[ci]),
                                     GetTokenStr(i)) then
         caClassW := True;
+      { ...and so does a class used as a VALUE. A reference has no class index
+        at compile time, so its writes have to land in the shared slot at run
+        time (pylib's PyClsAttrRefSet) — and under the copy-at-construction
+        lowering an instance built earlier would keep its own copy and never see
+        one, which is the difference between `c.num = 9` being invisible and
+        being Python. Kin-wide for the same reason the ctor widening below is:
+        the attribute may be declared on an ancestor of the class that is held.
+        bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+      if PyClassKinUsedAsValueEx(ci, True) then caClassW := True;
       PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, REC_NONE,
                             caClassW and caInstW);
       { The attribute is a real FIELD on the instance (typed from its literal),
@@ -22756,6 +22862,7 @@ begin
       { same lowering choice as the literal branch above }
       PyClsAttrWriteScan(PyRawName(UClsNOff[ci], UClsNLen[ci]), GetTokenStr(i),
                          caClassW, caInstW);
+      if PyClassKinUsedAsValueEx(ci, True) then caClassW := True;
       PyClsAttrEnsureGlobal(ci, Tokens[i].SOffset, Tokens[i].SLen, tk, k,
                             caClassW and caInstW);
       if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
@@ -24773,6 +24880,10 @@ begin
   end;
   Expect(tkDedent, 'dedent');
   if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); end;
+  { AFTER the body: the attribute slots' types are only final once every
+    initialiser has been parsed (PyEmitClassAttrExpr retypes them), and the bind
+    carries the kind. }
+  PyEmitClsAttrBinds(ci);
 end;
 
 { One run of `import` / `from ... import` statements, wherever they appear.

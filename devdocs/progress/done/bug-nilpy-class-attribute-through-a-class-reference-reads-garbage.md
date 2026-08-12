@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`c = A` then `c.num` answers 24 where CPython answers 7 and `c.name` answers the empty string: a class attribute read through any class REFERENCE (alias, parameter, dict or list element) is garbage, while the literal `A.num` is correct. The WRITE side is lost too — `c.num = 9` leaves A.num at 7. The plugin-registry shape: register(cls), then registry[k].name"
+status: done
+owner: claude-AN
 ---
 
 # A class attribute read through a class REFERENCE reads garbage
@@ -122,3 +124,67 @@ int and a float attribute; a class reference passed through two calls; a
 registry dict keyed by `cls.name` (the shape that found this); an inherited
 class attribute read through a reference to the SUBCLASS; the write side; and
 `A.attr` / `A().attr` kept in the same file as the controls.
+
+## 2026-08-12 — FIXED, and not by the cheap partial
+
+Done as the ticket asked: the run time can now be *told* where a class
+attribute lives, instead of the alias row being special-cased.
+
+**The link that was missing.** A class attribute's value is in a hidden GLOBAL
+named `$clsattr.<Class>.<attr>`; the RTTI blob carries methods and instance
+fields and could never name it. So the frontend now PUBLISHES it: `PyParseClass`
+emits one `pyclsattr_bind(<RTTI blob>, "attr", @slot, kind)` per class attribute,
+hoisted where the class statement runs (`PyEmitClsAttrBinds`, pyparser.inc). The
+bind carries the slot ADDRESS, so a reference reaches the very memory the three
+compile-time routes reach — the read and the write cannot drift apart.
+
+Deliberately a runtime registry keyed on the blob pointer, NOT a new table
+inside the blob: a blob-resident table would need a data→BSS fixup kind that
+does not exist, in every ELF writer for every target. The registry is filled at
+class-definition time and walks `ParentRTTI`, so an inherited attribute is found
+through a reference to the subclass.
+
+**The five routes now agree:** `pydynattr_get_v` / the new `pydynattr_set_v` /
+the new `pydynattr_has_v` check tag 11 FIRST (the old code unwrapped the payload
+as an instance pointer and read at a field offset INSIDE the blob — the 24), and
+`PyHasAttr` answers for a class object. A miss raises CPython's wording,
+`type object 'A' has no attribute 'x'`.
+
+**The write side needed a lowering change too.** Writing the shared slot is only
+the whole answer if instances read that slot, so a class whose kin is used as a
+VALUE now takes the shared-slot lowering rather than copy-at-construction
+(`PyClassKinUsedAsValueEx(ci, precise)`).
+
+`precise` is the load-bearing word, and both halves of it were found by a RED
+suite, not by reading:
+
+  * the existing scan does not skip `A.attr`, so `print(Plain.n)` demoted every
+    class anyone reads an attribute off — `p1.bag.append(1)` then died with
+    "object is not callable";
+  * the existing scan matches case-INSENSITIVELY, so `k = K()` counted the
+    receiver `k` as a value use of `K`, and `hasattr(k, "pass2")` went False.
+    Same family as
+    [[bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class]].
+
+The coarse form is unchanged and still what constructor widening uses, where a
+false positive costs only boxing.
+
+**Found while doing it, filed, not worked around:**
+[[bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting]] —
+`Int64(v)` on a Variant answers the tag word `1` where FPC answers 9, and
+`Double(v)` segfaults. It is what made the first cut store 1 into `c.num = 9`
+and read stack addresses out of the registry. The runtime code here assigns
+through a typed local instead; the cast bug is a Track P ticket of its own.
+
+**Residual, deliberate:** an instance built BEFORE a class-attribute write still
+answers the old value if the class is never used as a value elsewhere — that is
+the pre-existing copy-at-construction model
+([[decide-nilpy-class-attribute-instance-read-model]]), untouched here.
+
+Gate: `test/test_nilpy_class_attribute_through_a_class_reference.npy` (+
+`.expected` from CPython, wired into `make test-nilpy`) — every row of the table
+above for str/int/float/bool, inheritance, two calls deep, getattr/hasattr, the
+registry shape, the write side, and the AttributeError. `make test-nilpy` green.
+
+## Log
+- 2026-08-12 — resolved, commit PENDING-COMMIT.

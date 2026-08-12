@@ -3080,6 +3080,66 @@ begin
   end;
 end;
 
+function PyBoxByKind(a: Pointer; k: Int64; var found: Boolean): Variant;
+{ The value at `a`, read as the pxx TypeKind `k` and boxed into a Variant.
+
+  Shared by every reflective read: an instance FIELD reached through the class
+  RTTI (PyDeclaredAttrGet below) and a CLASS ATTRIBUTE reached through a class
+  REFERENCE (PyClsAttrRefGet). One chain, because the two differ only in where
+  the address comes from — and a second copy of it is how one kind ends up
+  supported on one route and silently wrong on the other. }
+begin
+  found := True;
+  if k = 23 then Result := PPyAnsiString(a)^          { AnsiString }
+  else if k = 19 then Result := PPyFD(a)^             { Double }
+  else if k = 18 then Result := PPyFS(a)^             { Single }
+  else if k = 2 then Result := PPyFB(a)^              { Boolean }
+  else if k = 3 then Result := PPyFC(a)^              { Char }
+  else if (k = 13) or (k = 14) then Result := PPyF8(a)^        { Int64/QWord }
+  else if (k = 1) or (k = 11) then Result := PPyF4(a)^         { Integer/LongInt }
+  else if k = 12 then Result := PPyU4(a)^                       { Cardinal }
+  else if k = 9 then Result := PPyF2(a)^                        { SmallInt }
+  else if k = 10 then Result := PPyU2(a)^                       { Word }
+  else if k = 7 then Result := PPyF1(a)^                        { ShortInt }
+  else if k = 8 then Result := PPyU1(a)^                        { Byte }
+  else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
+  else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
+  else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
+  else
+    { a kind with no Python value shape yet (a record, a set, a frozen string,
+      a static array). Answering with SOMETHING would be a wrong value; report
+      it as not-found so the caller raises, which is at least loud. }
+    found := False;
+end;
+
+function PyStoreByKind(a: Pointer; k: Int64; const v: Variant): Boolean;
+{ The write twin of PyBoxByKind: unbox `v` into the slot at `a` as kind `k`.
+  False for a kind with no Python value shape, so the caller raises rather than
+  writing a plausible pattern over memory it does not understand. }
+{ ASSIGNED out of the variant into a typed local, never cast — `Int64(v)` is a
+  hard cast of the variant RECORD and stores its tag word, which wrote 1 where
+  the program said 9. Same trap as PyClsAttrSlotOf's fetch. }
+var iv: Int64; dv: Double; bv: Boolean; cv: Char;
+begin
+  Result := True;
+  if k = 23 then PPyAnsiString(a)^ := pystr_of(v)
+  else if k = 19 then begin dv := v; PPyFD(a)^ := dv; end
+  else if k = 18 then begin dv := v; PPyFS(a)^ := dv; end
+  else if k = 2 then begin bv := v; PPyFB(a)^ := bv; end
+  else if k = 3 then begin cv := v; PPyFC(a)^ := cv; end
+  else if (k = 13) or (k = 14) then begin iv := v; PPyF8(a)^ := iv; end
+  else if (k = 1) or (k = 11) then begin iv := v; PPyF4(a)^ := iv; end
+  else if k = 12 then begin iv := v; PPyU4(a)^ := iv; end
+  else if k = 9 then begin iv := v; PPyF2(a)^ := iv; end
+  else if k = 10 then begin iv := v; PPyU2(a)^ := iv; end
+  else if k = 7 then begin iv := v; PPyF1(a)^ := iv; end
+  else if k = 8 then begin iv := v; PPyU1(a)^ := iv; end
+  else if (k = 15) or (k = 16) then begin iv := v; PPyFN(a)^ := iv; end
+  else if k = 22 then PPyFV(a)^ := v
+  else if k = 6 then PPyFP(a)^ := pyvarobj(v)
+  else Result := False;
+end;
+
 function PyDeclaredAttrGet(obj: Pointer; const name: AnsiString;
                            var found: Boolean): Variant;
 { A field DECLARED by the class, read out of the instance through its RTTI and
@@ -3105,27 +3165,99 @@ begin
   if fi = nil then Exit;
   a := Pointer(NativeInt(obj) + NativeInt(fi^.Offset));
   k := fi^.TypeKind;
-  found := True;
-  if k = 23 then Result := PPyAnsiString(a)^          { AnsiString }
-  else if k = 19 then Result := PPyFD(a)^             { Double }
-  else if k = 18 then Result := PPyFS(a)^             { Single }
-  else if k = 2 then Result := PPyFB(a)^              { Boolean }
-  else if k = 3 then Result := PPyFC(a)^              { Char }
-  else if (k = 13) or (k = 14) then Result := PPyF8(a)^        { Int64/QWord }
-  else if (k = 1) or (k = 11) then Result := PPyF4(a)^         { Integer/LongInt }
-  else if k = 12 then Result := PPyU4(a)^                       { Cardinal }
-  else if k = 9 then Result := PPyF2(a)^                        { SmallInt }
-  else if k = 10 then Result := PPyU2(a)^                       { Word }
-  else if k = 7 then Result := PPyF1(a)^                        { ShortInt }
-  else if k = 8 then Result := PPyU1(a)^                        { Byte }
-  else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
-  else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
-  else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
-  else
-    { a kind with no Python value shape yet (a record, a set, a frozen string,
-      a static array). Answering with SOMETHING would be a wrong value; report
-      it as not-found so the caller raises, which is at least loud. }
-    found := False;
+  Result := PyBoxByKind(a, k, found);
+end;
+
+var
+  { A CLASS ATTRIBUTE's one shared slot, keyed "<class RTTI blob>:<name>".
+    Filled at class-definition time by pyclsattr_bind (pyparser emits one call
+    per attribute), because the slot itself is a hidden GLOBAL whose name only
+    the frontend knows — the RTTI blob carries methods and instance fields, and
+    nothing in it could name this. The three compile-time access routes (`C.attr`,
+    bare `attr` in a method, `inst.attr`) resolve that global directly and never
+    consult this; it exists for the one route that has no class index at compile
+    time, a class held as a VALUE.
+    bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+  PyClsAttrAddrStore: TPyDict;   { key -> the hidden global's address, as Int64 }
+  PyClsAttrKindStore: TPyDict;   { key -> Ord(TTypeKind) of that global }
+
+procedure pyclsattr_bind(cls: Pointer; const name: AnsiString;
+                         addr: Pointer; kind: Int64);
+begin
+  if PyClsAttrAddrStore = nil then
+  begin
+    PyClsAttrAddrStore := TPyDict.Create;
+    PyClsAttrKindStore := TPyDict.Create;
+  end;
+  PyClsAttrAddrStore.store(PyDynAttrKey(cls, name), Int64(NativeInt(addr)));
+  PyClsAttrKindStore.store(PyDynAttrKey(cls, name), kind);
+end;
+
+function PyClsAttrSlotOf(cls: Pointer; const name: AnsiString;
+                         var kind: Int64): Pointer;
+{ The bound slot for `name` on `cls` or any ancestor — the same parent walk
+  PyFindFieldCI does for fields, so an inherited class attribute is reachable
+  through a reference to the SUBCLASS. }
+var curr: PClassRTTI; k: AnsiString; av, kv: Variant; ai: Int64;
+begin
+  Result := nil;
+  kind := 0;
+  if PyClsAttrAddrStore = nil then Exit;
+  curr := PClassRTTI(cls);
+  while curr <> nil do
+  begin
+    k := PyDynAttrKey(Pointer(curr), name);
+    if PyClsAttrAddrStore.indexof(k) >= 0 then
+    begin
+      { ASSIGNED out of the variant, never `Int64(v)` — that spelling is a hard
+        CAST of the variant RECORD and yields the address of the temporary, so
+        both the slot address and the kind came back as stack pointers. }
+      av := PyClsAttrAddrStore.fetch(k);
+      kv := PyClsAttrKindStore.fetch(k);
+      ai := av;
+      kind := kv;
+      Result := Pointer(NativeInt(ai));
+      Exit;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyClsAttrRefGet(const v: Variant; const name: AnsiString;
+                         var found: Boolean): Variant;
+{ `cls.attr` where `cls` holds a VT_CLASSREF variant. }
+var a: Pointer; k: Int64;
+begin
+  found := False;
+  a := PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k);
+  if a = nil then Exit;
+  Result := PyBoxByKind(a, k, found);
+end;
+
+function PyClsRefName(const v: Variant): AnsiString;
+{ The class's own name out of the blob a VT_CLASSREF points at — for the
+  AttributeError message, which names the TYPE and not an instance. PyClassRefStr
+  below builds CPython's `<class '__main__.A'>` from the same word, but it is
+  declared far past the attribute routes that need this. }
+var cls: PClassRTTI;
+begin
+  cls := PClassRTTI(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+  if cls = nil then Result := 'type' else Result := cls^.NamePtr^;
+end;
+
+function PyClsAttrRefSet(const v: Variant; const name: AnsiString;
+                         const val: Variant): Boolean;
+{ `cls.attr = x` through a class reference — writes the ONE shared slot, so the
+  class name, every instance and every other reference see it. That is only true
+  because a class used as a value has its attributes lowered to the shared slot
+  (pyparser's PyClassUsedAsValue gate); under the copy-at-construction lowering
+  an already-built instance would keep its own copy. }
+var a: Pointer; k: Int64;
+begin
+  Result := False;
+  a := PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k);
+  if a = nil then Exit;
+  Result := PyStoreByKind(a, k, val);
 end;
 
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
@@ -3168,13 +3300,25 @@ begin
     real object pointer when the tag says so (VT_OBJECT); for any other tag
     (str/int/float/bool) it is scalar bits reinterpreted as an address, and
     ClassName on that would dereference garbage. Check the tag first. }
+  tg := pyvartag(v);
+  { A CLASS held as a value (VT_CLASSREF) — its payload is an RTTI blob address,
+    not an instance, so the object routes below would read at a field's offset
+    INSIDE the blob and answer a plausible integer for what was stored as 7.
+    Ask the class-attribute registry first and never fall through to them.
+    bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+  if tg = 11 then
+  begin
+    Result := PyClsAttrRefGet(v, name, declFound);
+    if declFound then Exit;
+    raise AttributeError.Create('type object ''' + PyClsRefName(v)
+      + ''' has no attribute ''' + name + '''');
+  end;
   obj := pyvarobj(v);
   if pydynattr_has(obj, name) then
   begin
     Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name));
     Exit;
   end;
-  tg := pyvartag(v);
   if tg = 7 then
   begin
     { a declared field of the object the variant holds — same fallback the
@@ -3188,6 +3332,38 @@ begin
   else
     cn := PyVarTypeName(tg);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
+end;
+
+function pydynattr_has_v(const v: Variant; const name: AnsiString): Boolean;
+{ hasattr's twin of pydynattr_get_v: a CLASS held as a value keeps its
+  attributes in the bind registry, not in the per-object dynamic store the
+  unwrapped-pointer form asks — `hasattr(cls, "name")` answered False for an
+  attribute the very next line read fine.
+  bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+var k: Int64;
+begin
+  if pyvartag(v) = 11 then
+    Result := PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k) <> nil
+  else
+    Result := pydynattr_has(pyvarobj(v), name);
+end;
+
+procedure pydynattr_set_v(const v: Variant; const name: AnsiString;
+                          const val: Variant);
+{ The write twin of pydynattr_get_v, for a receiver whose runtime tag decides
+  what it is. Only a CLASS REFERENCE needs telling apart here: its payload is an
+  RTTI blob, so the dynamic store below would key the write on the blob's
+  address and the value would then be invisible to the class, to its instances
+  and to every other reference — which is what `c.num = 9` did.
+  bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+begin
+  if pyvartag(v) = 11 then
+  begin
+    if PyClsAttrRefSet(v, name, val) then Exit;
+    raise AttributeError.Create('type object ''' + PyClsRefName(v)
+      + ''' has no attribute ''' + name + '''');
+  end;
+  pydynattr_set(pyvarobj(v), name, val);
 end;
 
 { `type(x).__name__` for ANY value. Two things the frontend cannot do itself:

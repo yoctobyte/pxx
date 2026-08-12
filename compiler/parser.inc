@@ -10878,9 +10878,18 @@ begin
           if atIsGet then CurASTNode := PyMakeDynAttrGet(atRecv, atName)
           else
           begin
-            idx := FindProc('pydynattr_has');
+            { a VARIANT receiver keeps its tag: a class held as a value has its
+              attributes in the bind registry, and the unwrapped-pointer form
+              would key the question on the RTTI blob's address and answer False
+              (bug-nilpy-class-attribute-through-a-class-reference-reads-garbage) }
+            if IntToTypeKind(ASTTk[atRecv]) = tyVariant then
+              idx := FindProc('pydynattr_has_v')
+            else
+              idx := FindProc('pydynattr_has');
             if idx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
-            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
+            argSeq := AllocNode(AN_ARG);
+            if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
+            else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
             argSeq2 := AllocNode(AN_STR_LIT);
             ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
             ASTTk[argSeq2] := Ord(tyString);
@@ -10919,9 +10928,15 @@ begin
         if (atFld < 0) and (atDflt >= 0) and
            (IntToTypeKind(ASTTk[atRecv]) in [tyVariant, tyClass]) then
         begin
-          idx := FindProc('pydynattr_has');
+          { same tag-preserving choice as the hasattr branch above }
+          if IntToTypeKind(ASTTk[atRecv]) = tyVariant then
+            idx := FindProc('pydynattr_has_v')
+          else
+            idx := FindProc('pydynattr_has');
           if idx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
-          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
+          argSeq := AllocNode(AN_ARG);
+          if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
+          else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
           argSeq2 := AllocNode(AN_STR_LIT);
           ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
           ASTTk[argSeq2] := Ord(tyString);

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:224 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1678 rejected:35`
+`unfinished:10 blocked:3 backlog:224 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1679 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,8 +32,8 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 207, ranked
 
+- `[p 62] [P]` bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-class-attribute-through-a-class-reference-reads-garbage
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
 - `[p 60] [A]` feature-inline-asm-xtensa

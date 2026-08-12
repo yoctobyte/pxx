@@ -1,0 +1,42 @@
+class A:
+    name = "a"
+    num = 7
+    ratio = 1.5
+    flag = True
+
+class B(A):
+    name = "b"
+    extra = "x"
+
+def f(cls):
+    return cls.name
+
+def g(cls):
+    return f(cls)
+
+c = A
+print("write-before", A.num, c.num, A().num)
+c.num = 9
+print("write-after", A.num, c.num, A().num)
+
+b = B
+print("inherit", b.name, b.num, b.extra)
+
+print("twocall", g(A), g(B))
+print("getattr", getattr(c, "name"), getattr(b, "extra"))
+print("hasattr", hasattr(c, "name"), hasattr(c, "nope"))
+
+reg = {}
+def register(cls):
+    reg[cls.name] = cls
+register(A)
+register(B)
+print("registry", sorted(reg.keys()))
+print("via-reg", reg["a"].num, reg["b"].extra)
+lst = [A, B]
+print("list", lst[0].ratio, lst[1].name, lst[0].flag)
+
+try:
+    print(c.missing)
+except AttributeError as e:
+    print("raised AttributeError")
