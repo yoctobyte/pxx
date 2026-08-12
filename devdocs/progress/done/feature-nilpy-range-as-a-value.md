@@ -109,4 +109,4 @@ which had no path at all before.
 `test-nilpy`.
 
 ## Log
-- 2026-08-12 — resolved, commit PENDING-COMMIT.
+- 2026-08-12 — resolved, commit 6e961b500.
