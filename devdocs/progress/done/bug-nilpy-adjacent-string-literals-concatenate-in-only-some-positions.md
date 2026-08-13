@@ -4,6 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "Python's adjacent-string-literal concatenation (`\"a\" \"b\"` is `\"ab\"`) works at an assignment and in a pylib call, but yields an EMPTY string as an argument to a user def, an unterminated/garbage string inside a list literal, and a PARSE ERROR inside a dict literal. Two of those are silent wrong values; the list one reads far past the string. Found compiling html5lib/constants.py, where the idiom is everywhere."
+status: done
 ---
 
 # Adjacent string literals concatenate in some positions and corrupt in others
@@ -117,3 +118,6 @@ separately if it blocks.
 Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` GREEN + the full
 `make test-nilpy` family sweep (this moves a variant-boxing path, which is what
 the sweep exists for).
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
