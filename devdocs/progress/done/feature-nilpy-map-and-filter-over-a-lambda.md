@@ -2,6 +2,8 @@
 track: N
 prio: 40
 type: feature
+status: done
+owner: claude-A-N
 ---
 
 # `map(lambda ...)` is unimplemented and `filter` does not exist
@@ -58,3 +60,27 @@ via this ticket's own repro until the representation fix lands.
 `make test-nilpy` + self-host byte-identical, plus `map`/`filter` over a
 lambda, a named def and a bound method, each consumed by `list()` and by a
 `for` loop.
+
+## DONE 2026-08-13 — the third gate shape works now; closing
+
+The one case left open above — `map(c.double, xs)` with a BOUND METHOD as the
+callable — no longer segfaults. The shared representation gap it was waiting on
+([[bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter]]) has since
+been closed, and this call site went with it, which is exactly why the ticket
+was left as a live pointer rather than closed at 2 out of 3.
+
+Re-measured, not assumed: all three callables (lambda, named def, bound method)
+x both consumers (`list()` and a `for` loop) x both builtins — twelve rows,
+every one matching CPython. `sorted(key=)`, `min(key=)` and `max(key=)` over a
+lambda match too.
+
+`test/test_nilpy_map_filter_lambda_def.npy` gains the four bound-method rows it
+deliberately omitted, with the note about why they were absent replaced by why
+they are now there. The receiver carries state (`self.k`) on purpose: a
+truncated receiver — the original failure — would still compute something for a
+stateless method.
+
+Gate: self-host fixedpoint + `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

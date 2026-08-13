@@ -163,3 +163,21 @@ confirming the retired recipes are gone and the nested ones still run.
 The NESTED half — `a, (b, c) = ...` and `for n, (p, q) in xs:` — is untouched.
 Its shape is a target TREE, so the flat name-list scan has to recurse. Both
 still refuse themselves by name.
+
+## Re-measured 2026-08-13 — the STARRED half now works; only the nested target is left
+
+```python
+first, *rest = [1, 2, 3]     # -> 1 [2, 3], matching CPython
+```
+
+Landed since this was filed. The other half still refuses, and now by name
+rather than as a parse error:
+
+```
+Nil Python: a NESTED loop target (`for n, (p, q) in ...`) is not supported yet
+— loop over the outer level and unpack the inner in the body
+```
+
+So what remains of this ticket is exactly the nested-target row. Left open and
+NOT retitled: the two halves were filed together because they are one feature
+to a reader, and splitting the record now would lose that.

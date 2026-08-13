@@ -3,6 +3,8 @@ track: N
 prio: 35
 type: bug
 summary: "`rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails"
+status: done
+owner: claude-A-N
 ---
 
 # A def returning a pre-created global has no usable return type
@@ -164,3 +166,21 @@ known, since it would only re-ask when the answer was `tyUnknown`.
 Annotate the def (`-> K`) or bind the call result to a name first. Both are
 verified working above, and the annotation is the documented escape hatch for
 anything this pre-pass cannot resolve.
+
+## FIXED — verified 2026-08-13, closing with the regression it lacked
+
+`rd().z` parses and answers 7. Fixed by the return-type inference / selector
+work since this was filed, not by anything done here; re-measured directly
+rather than assumed, and swept past the one shape the ticket recorded: a field,
+a method call, a subscript, a chain mixing two such calls, and the
+bind-to-a-local control all match CPython.
+
+`test/test_nilpy_selector_off_call_returning_a_global.{npy,expected}`
+(`.expected` from CPython), wired into `test-nilpy` — the rows vary what
+FOLLOWS the call, because each is a different selector arm and the original
+failure was in the parse.
+
+Gate: self-host fixedpoint + `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

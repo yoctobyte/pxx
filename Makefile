@@ -1214,7 +1214,7 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_lambdareal26)" = "$$(printf '6\n12')"
 	@# map()/filter() over a lambda and a named def, via list() and via for
 	./$(COMPILER) test/test_nilpy_map_filter_lambda_def.npy /tmp/test_nilpy_mapfilterld26
-	test "$$(/tmp/test_nilpy_mapfilterld26)" = "$$(printf '%b' '[2, 3, 4]\n[2, 3, 4]\n[2, 3]\n2\n4\n6\n2\n3')"
+	test "$$(/tmp/test_nilpy_mapfilterld26)" = "$$(printf '%b' '[2, 3, 4]\n[2, 3, 4]\n[2, 3]\n2\n4\n6\n2\n3\n[2, 4, 6]\n[2, 3]\n2\n4\n6\n2\n3')"
 	@# list.sort(reverse=) -- the in-place method, not just the sorted() function
 	./$(COMPILER) test/test_nilpy_list_sort_method.npy /tmp/test_nilpy_sortmethod26
 	/tmp/test_nilpy_sortmethod26 | diff -u test/test_nilpy_list_sort_method.expected -
@@ -1431,6 +1431,12 @@ test-nilpy: $(COMPILER)
 	# break / continue: implemented after the ticket was filed and never given a
 	# test. Rows are what a loop-exit lowering can break independently: nesting,
 	# an exit crossing a try (finally must still run), `while True`, for/else.
+	# `rd().z` did not PARSE when rd() returns a module global pre-created by a
+	# def above it, while binding the result first was fine. Rows vary what
+	# follows the call -- field, method, subscript, chain -- since each is a
+	# different selector arm and the failure was in the parse.
+	./$(COMPILER) test/test_nilpy_selector_off_call_returning_a_global.npy /tmp/test_nilpy_selglob26
+	/tmp/test_nilpy_selglob26 | diff -u test/test_nilpy_selector_off_call_returning_a_global.expected -
 	./$(COMPILER) test/test_nilpy_break_continue.npy /tmp/test_nilpy_brkcont26
 	/tmp/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -
 	./$(COMPILER) test/test_nilpy_set_update_methods.npy /tmp/test_nilpy_setupd26

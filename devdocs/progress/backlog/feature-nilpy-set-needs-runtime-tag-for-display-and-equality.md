@@ -61,3 +61,24 @@ operators/methods, checking both `print()` output uses `{...}`/`set()` and
 that `==` is order-independent — diffed against CPython, gated in
 `test-nilpy` + `--tier quick` + self-host byte-identical (`ir.inc` is a
 compiler-internal file).
+
+## Re-measured 2026-08-13 — the TAG exists and half 1 is done; half 2 is not
+
+`TPyList.FKind` (PYSEQ_LIST / PYSEQ_TUPLE / PYSEQ_SET) is the runtime tag this
+ticket asks for, and it landed with the display half:
+
+```python
+print({1, 2, 3})   # {1, 2, 3} — correct, brackets and all
+print(str({1}))    # {1}       — correct
+```
+
+Half 2 is unchanged and is now the whole ticket:
+
+```python
+print({1, 2} == {2, 1})   # CPython True — pxx still False
+```
+
+The tag being present is what makes this cheap now: `pylist_eq` can ask
+`FKind = PYSEQ_SET` on both sides and compare by membership instead of by
+position, with no frontend change. Note it is a `compiler/builtin/**` edit, so
+it carries the stabilize+pin obligation.

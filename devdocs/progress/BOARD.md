@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (217)
+## backlog (215)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,7 +53,6 @@ _none_
 | bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep | N | 40 | bug | A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=)) | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
-| bug-nilpy-def-returning-a-precreated-global-has-no-return-type | N | 35 | bug | `rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords | N | 40 | bug | `d.update(a=1)` lowers correctly for ONE keyword and SEGFAULTS for two, through the same builder that makes `dict(a=1, b=2)` correct — so the method-argument path mishandles the builder's hoisted setitem statements. Not shipped for that reason; `dict(...)` is. Also: `d.update(**e)` is refused by a route that is none of parser.inc's five argument loops. | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
@@ -164,7 +163,6 @@ _none_
 | feature-nilpy-iter-and-next-over-a-container | N | 35 | feature | `iter(xs)` is undefined — the explicit iterator protocol | — |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
-| feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
 | feature-nilpy-match-statement | N | 30 | feature | `match` / `case` — structural pattern matching is not parsed | — |
 | feature-nilpy-methods-on-int-and-float | N | 35 | feature | No methods on `int` or `float` — `x.bit_length()`, `x.is_integer()`, `x.hex()` | — |
 | feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
@@ -407,9 +405,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1716)
+## done (1718)
 
-1716 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1718 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -568,7 +566,6 @@ _none_
 - [p 40] [N] feature-nilpy-dataclass-expression-field-default
 - [p 40] [N] feature-nilpy-enum-class
 - [p 40] [N] feature-nilpy-hasattr-per-instance-assigned-tracking
-- [p 40] [N] feature-nilpy-map-and-filter-over-a-lambda
 - [p 40] [N] feature-nilpy-set-needs-runtime-tag-for-display-and-equality
 - [p 40] [N] feature-nilpy-starred-and-nested-unpacking
 - [p 40] [O] feature-opt-rtti-emit-on-use
@@ -579,7 +576,6 @@ _none_
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
-- [p 35] [N] bug-nilpy-def-returning-a-precreated-global-has-no-return-type
 - [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association

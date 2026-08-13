@@ -1,8 +1,13 @@
-# map()/filter() over a lambda and a named def -- feature-nilpy-map-and-
-# filter-over-a-lambda. NOT covered here: a BOUND METHOD as the callable
-# segfaults (a separate representation gap, see
-# bug-nilpy-bound-method-cannot-pass-through-a-callable-parameter) -- left
-# out deliberately rather than asserting a crash.
+# map()/filter() over a lambda, a named def and a BOUND METHOD --
+# feature-nilpy-map-and-filter-over-a-lambda, the whole gate.
+#
+# The bound-method rows were excluded when this file was written, because they
+# SEGFAULTED: pymap_call/pyfilter_call take the callable as a Pointer and a
+# bound method is a {code, receiver} PAIR, so the receiver half was truncated.
+# The shared representation fix has since landed and they match CPython --
+# added here so the crash cannot come back unnoticed. The receiver carries
+# state (self.k) on purpose: a truncated receiver would still compute
+# SOMETHING for a stateless method.
 # Every expectation is CPython's own output.
 
 xs = [1, 2, 3]
@@ -17,4 +22,24 @@ print(list(filter(lambda v: v > 1, xs)))
 for v in map(lambda v: v * 2, xs):
     print(v)
 for v in filter(lambda v: v > 1, xs):
+    print(v)
+
+
+class C:
+    def __init__(self):
+        self.k = 2
+
+    def double(self, v):
+        return v * self.k
+
+    def big(self, v):
+        return v > 1
+
+
+c = C()
+print(list(map(c.double, xs)))
+print(list(filter(c.big, xs)))
+for v in map(c.double, xs):
+    print(v)
+for v in filter(c.big, xs):
     print(v)

@@ -578,6 +578,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-def-local-assignment-widens-module-global-to-variant | N | 70 | bug | NilPy: a name assigned as a LOCAL inside a def widens the same-named module global to tyVariant, killing its class identity and every compile-time dunder dispatch | — |
 | bug-nilpy-def-named-sizeof-is-hijacked-by-the-pascal-intrinsic | N | 20 | bug | A NilPy `def sizeof(...)` is claimed by Pascal's SizeOf intrinsic — 'SizeOf: expected type name'. Loud and exotic, but the guard its sibling intrinsics already have is missing | — |
 | bug-nilpy-def-return-coerces-a-float-to-the-inferred-int-result | N | 55 | bug | A def whose result type was inferred (or annotated) as int TRUNCATES a float it returns: `def g() -> int: v = 1; v = 2.5; return v` gives 2 where CPython gives 2.5. Python annotations are not enforcement. Pinned returned the raw IEEE BITS (4612811918334230528) for the same program — improved to truncation by the widen-binding fix, not resolved by it. | — |
+| bug-nilpy-def-returning-a-precreated-global-has-no-return-type | N | 35 | bug | `rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails | — |
 | bug-nilpy-def-value-in-a-variable-is-not-callable | N | 75 | bug | A def stored in a NAME and then called SEGFAULTS | — |
 | bug-nilpy-defaulted-param-before-star-args-rejects-short-call | N | 60 | bug | `def f(a, b=2, *rest)` cannot be called as `f(1)` | — |
 | bug-nilpy-del-on-a-variant-receiver-is-refused | N | 48 | bug | `del d[k]` inside a def whose parameter `d` is unannotated is refused at compile time — the receiver is a variant, and the del lowering only knows statically-typed dicts/lists. The same statement at module level, on a name the pre-pass typed, compiles. Passing a dict to a helper that removes a key is ordinary Python and cannot be written | — |
@@ -1380,6 +1381,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
 | feature-nilpy-list-repeat | N | 40 | feature | NilPy: `[0] * 4` (list repeat) is not lowered | — |
 | feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
+| feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
 | feature-nilpy-min-max-over-a-string | N | 30 | feature | `min("cab")` / `max("cab")` do not compile | — |
 | feature-nilpy-min-max-variadic-more-than-two-args | N | 30 | feature | `min(a, b, c)` / `max(a, b, c)` — only the 2-argument and iterable forms exist | — |
 | feature-nilpy-missing-builtins | N | 45 | feature | NilPy: the remaining missing builtins — min/max, list(), reversed(), enumerate(), hex() | — |

@@ -1,0 +1,44 @@
+# bug-nilpy-def-returning-a-precreated-global-has-no-return-type
+#
+# `rd().z` did not PARSE ("unexpected token") when rd() returns a module global
+# that was pre-created because a def above reads it — while binding the result
+# to a name first was fine, so the value and its class were always right and
+# only the direct selector-off-a-call-result form failed.
+#
+# Fixed by the return-type inference work since; this is the regression, and it
+# varies what follows the call — a field, a method, a chain, a subscript — since
+# each is a different selector arm and the original failure was in the parse.
+#
+# Expectations are CPython's own output.
+
+
+class K:
+    def __init__(self):
+        self.z = 7
+        self.items = [10, 20]
+
+    def twice(self):
+        return self.z * 2
+
+
+def rd():
+    return g
+
+
+def rd2():
+    return h
+
+
+g = K()
+h = K()
+h.z = 9
+
+print("field    ", rd().z)
+print("method   ", rd().twice())
+print("subscript", rd().items[1])
+print("chain    ", rd().items[0] + rd2().z)
+print("bound too", rd2().twice())
+
+# the spelling that always worked, as the control
+r = rd()
+print("via local", r.z, r.twice())
