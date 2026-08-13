@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-12T11:03:54Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "202cfb1f6d0c86532d46c85c09b6c6eea6a97a1f",
-   "tier": "limited",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-12T11:16:29Z",
    "fixed": [],
    "new_red": [],
@@ -403,6 +395,17 @@
    "sha": "9cc1116fad6c9cedfcda998d79c45baedf7ebc60",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-13T12:40:51Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_nilpy_c_define_const.npy",
+    "test-core#src:test/test_nilpy_c_pointer.npy"
+   ],
+   "sha": "67015a8cf7d83b33d76eb9867abe59d78f27f6a9",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -3862,8 +3865,8 @@
   "test-core#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "pass",
   "test-core#src:test/test_nilpy_bound_method_in_module.npy": "pass",
   "test-core#src:test/test_nilpy_builtin_shadow_slice.npy": "pass",
-  "test-core#src:test/test_nilpy_c_define_const.npy": "pass",
-  "test-core#src:test/test_nilpy_c_pointer.npy": "pass",
+  "test-core#src:test/test_nilpy_c_define_const.npy": "fail",
+  "test-core#src:test/test_nilpy_c_pointer.npy": "fail",
   "test-core#src:test/test_nilpy_call_return_infer.npy": "pass",
   "test-core#src:test/test_nilpy_class.npy": "pass",
   "test-core#src:test/test_nilpy_class_attr.npy": "pass",
@@ -5120,11 +5123,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-13T12:25:01Z",
-  "sha": "9cc1116fad6c9cedfcda998d79c45baedf7ebc60",
+  "date": "2026-08-13T12:40:51Z",
+  "sha": "67015a8cf7d83b33d76eb9867abe59d78f27f6a9",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 167.0
+  "verdict": "RED",
+  "wall": 169.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5153,7 +5156,38 @@
  "migrated_from": [
   "borg"
  ],
- "open_regressions": [],
+ "open_regressions": [
+  {
+   "bad": "67015a8cf7d83b33d76eb9867abe59d78f27f6a9",
+   "good": "9cc1116fad6c9cedfcda998d79c45baedf7ebc60",
+   "job": "test-core#src:test/test_nilpy_c_define_const.npy",
+   "name": "test-core#1074",
+   "opened": "2026-08-13T12:40:51Z",
+   "range": [
+    "f7c7924f37ce0bfe44e50f47f3fea407c072f1a7",
+    "6b822bdfc76295fa0712e68169ce683683cb2df1",
+    "bf212d9754ba973dd4feac6cab9be4dc681618d0",
+    "3f5511820e4601a8732f7d370ea4a7d1788093f2",
+    "67015a8cf7d83b33d76eb9867abe59d78f27f6a9"
+   ],
+   "src": "test/test_nilpy_c_define_const.npy"
+  },
+  {
+   "bad": "67015a8cf7d83b33d76eb9867abe59d78f27f6a9",
+   "good": "9cc1116fad6c9cedfcda998d79c45baedf7ebc60",
+   "job": "test-core#src:test/test_nilpy_c_pointer.npy",
+   "name": "test-core#1075",
+   "opened": "2026-08-13T12:40:51Z",
+   "range": [
+    "f7c7924f37ce0bfe44e50f47f3fea407c072f1a7",
+    "6b822bdfc76295fa0712e68169ce683683cb2df1",
+    "bf212d9754ba973dd4feac6cab9be4dc681618d0",
+    "3f5511820e4601a8732f7d370ea4a7d1788093f2",
+    "67015a8cf7d83b33d76eb9867abe59d78f27f6a9"
+   ],
+   "src": "test/test_nilpy_c_pointer.npy"
+  }
+ ],
  "pin_shadow": {
   "at": "2026-08-13T11:52:59Z",
   "qualifies": true,
