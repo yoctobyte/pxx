@@ -1,0 +1,9 @@
+e         1.0
+1         0.0
+10        2.302585092994046
+log10     3.0
+log2      3.0
+floor/ceil -3 -2
+trunc     -2 2
+copysign  -3.0
+base by hand 2.9999999999999996

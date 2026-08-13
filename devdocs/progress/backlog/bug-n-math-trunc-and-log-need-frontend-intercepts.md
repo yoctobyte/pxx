@@ -161,3 +161,34 @@ stands for all three.
 does NOT compile pylib** — the `Ln` failure above only appears when a `.npy`
 program is compiled, so a pylib edit must be checked by compiling a NilPy
 program, not by building the compiler.
+
+## Re-measured 2026-08-13 — three of the five names are done; log(x, base) is what is left
+
+`math.trunc` and `math.copysign` are in the stdlib call table and correct
+(`trunc(-2.5)` is -2, an int; `copysign(3, -1)` is -3.0), and `math.pow` /
+`math.atan2` answer CPython's values today. So four of this ticket's five names
+no longer need anything.
+
+**Fixed here: `math.log(x)`**, which was not in the ticket's list and was worse
+than any of them — `undefined variable (log)`, while `log10` and `log2` worked.
+The RTL spells the natural log `Ln`, so `import math` had nothing to resolve
+`log` to. That is a pure NAME difference (both Double->Double, both agree), so
+it is one line in the same table, and the ticket's own contract-mismatch
+reasoning does not apply to it.
+
+**Still refused, deliberately: `math.log(x, base)`.** The measured table above
+stands — CPython computes an unsnapped `log(x)/log(base)` (2.9999999999999996
+for `log(1000, 10)`) and the RTL's `LogN` snaps to 3.0 — so mapping it to LogN
+would be a silently wrong value in the last place, which is worse than a
+refusal. It now refuses by name:
+
+    Nil Python: math.log(x, base) is not supported yet — CPython computes it as
+    an unsnapped log(x)/log(base), which the RTL's LogN does not reproduce.
+    Write math.log(x) / math.log(base)
+
+rather than through the generic arity error, which named `Ln` — an internal
+spelling the program never wrote. The suggested workaround is exact: measured,
+`math.log(1000) / math.log(10)` gives CPython's own 2.9999999999999996.
+
+Test `test/test_nilpy_math_log.{npy,expected}`, wired into `test-nilpy`. The
+ticket stays open for the two-argument form only.

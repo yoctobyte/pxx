@@ -8903,6 +8903,17 @@ begin
     bug-n-math-trunc-and-log-need-frontend-intercepts }
   else if dotted = 'math.trunc' then Result := 'pymath_trunc'
   else if dotted = 'math.copysign' then Result := 'pymath_copysign'
+  { math.log -- the RTL spells the natural log `Ln`, so `import math` had
+    nothing to resolve `log` to and it died as `undefined variable (log)` while
+    log10 and log2 (same names in both languages) worked. This is a pure NAME
+    difference, not a contract one: both are Double->Double and agree.
+    The TWO-argument form `math.log(x, base)` is NOT answered by this -- it
+    reaches Ln with two arguments and is refused by arity, which is honest.
+    CPython computes it as an unsnapped log(x)/log(base) and the RTL's LogN
+    snaps, so mapping it there would be a silently WRONG value; it needs a
+    helper that cannot live in a builtin unit (see the ticket).
+    bug-n-math-trunc-and-log-need-frontend-intercepts }
+  else if dotted = 'math.log' then Result := 'Ln'
   else Result := '';
 end;
 
@@ -8979,6 +8990,15 @@ begin
 
     Type-based selection is still not reachable this way; see FindProc's own
     note for what to do then. }
+  { math.log(x, base): the shim is the RTL's one-argument Ln, so the generic
+    arity error below would name `Ln` — an internal spelling the program never
+    wrote. Say what is actually unsupported, and why, since the workaround is
+    one line of user code.
+    bug-n-math-trunc-and-log-need-frontend-intercepts }
+  if (pname = 'Ln') and (nArgs = 2) then
+    Error('Nil Python: math.log(x, base) is not supported yet — CPython '
+        + 'computes it as an unsnapped log(x)/log(base), which the RTL''s LogN '
+        + 'does not reproduce. Write math.log(x) / math.log(base)');
   if nArgs <> Procs[procIdx].ParamCount then
   begin
     i := FindProcArity(pname, nArgs);
