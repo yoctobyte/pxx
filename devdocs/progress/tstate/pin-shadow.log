@@ -67,3 +67,4 @@
 2026-08-13T10:00:14Z	plexus	95b246618f703234b4c3c8fbac2832d5aa79f9c2	would-pin PENDING 95b246618f70 — qualifies, streak 1/2
 2026-08-13T10:32:54Z	plexus	f253eaa405a15e2bb1a7fd20f0ab6971f65c2741	WOULD PIN f253eaa405a1 — 0 red(s), all allowlisted, self-host clean, streak 2/2
 2026-08-13T11:52:59Z	plexus	5acdd021f6a0cfc87ceace0b6efa579c3d672cbc	WOULD PIN 5acdd021f6a0 — 0 red(s), all allowlisted, self-host clean, streak 3/2
+2026-08-13T12:55:07Z	plexus	67015a8cf7d83b33d76eb9867abe59d78f27f6a9	would NOT pin 67015a8cf7d8 — 4 red(s) not in the allowlist: test-core#src:test/test_nilpy_c_define_const.npy, test-core#src:test/test_nilpy_c_pointer.npy, test-nilpy#src:test/test_nilpy_import_sqlite.npy, test-nilpy#src:test/test_nilpy_sqlite_crud.npy

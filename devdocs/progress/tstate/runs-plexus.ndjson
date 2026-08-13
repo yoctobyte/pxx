@@ -711,3 +711,4 @@
 {"date": "2026-08-13T12:20:30Z", "fixed": [], "full": false, "new_red": [], "sha": "92d83041a54449f8bc8f0670aaaa728778a18a49", "tier": "native", "verdict": "GREEN", "wall": 165.8}
 {"date": "2026-08-13T12:25:01Z", "fixed": [], "full": false, "new_red": [], "sha": "9cc1116fad6c9cedfcda998d79c45baedf7ebc60", "tier": "native", "verdict": "GREEN", "wall": 167.0}
 {"date": "2026-08-13T12:40:51Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_nilpy_c_define_const.npy", "test-core#src:test/test_nilpy_c_pointer.npy"], "sha": "67015a8cf7d83b33d76eb9867abe59d78f27f6a9", "tier": "native", "verdict": "RED", "wall": 169.3}
+{"date": "2026-08-13T12:55:07Z", "fixed": [], "full": true, "new_red": ["test-nilpy#src:test/test_nilpy_import_sqlite.npy", "test-nilpy#src:test/test_nilpy_sqlite_crud.npy"], "sha": "67015a8cf7d83b33d76eb9867abe59d78f27f6a9", "tier": "full", "verdict": "RED", "wall": 802.6}
