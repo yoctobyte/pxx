@@ -770,3 +770,4 @@
 {"date": "2026-08-13T22:52:38Z", "fixed": [], "full": false, "new_red": [], "sha": "b2cb54156a1fe38197653b46a50226ded9d15fde", "tier": "native", "verdict": "RED", "wall": 163.2}
 {"date": "2026-08-13T23:05:14Z", "fixed": ["test-core#src:test/test_uses_order_pylib_exception_a.pas"], "full": false, "new_red": [], "sha": "cd2651290c69e990ad77a145b9e084955e905e50", "tier": "native", "verdict": "RED", "wall": 164.5}
 {"date": "2026-08-13T23:11:10Z", "fixed": [], "full": false, "new_red": [], "sha": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94", "tier": "native", "verdict": "RED", "wall": 163.5}
+{"date": "2026-08-13T23:24:37Z", "fixed": ["test-arm32#src:examples/net/httpdemo.pas", "test-i386#src:examples/net/httpdemo.pas", "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas"], "full": true, "new_red": ["test-nilpy#src:examples/tk/callbacks.npy"], "sha": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94", "tier": "full", "verdict": "RED", "wall": 764.1}
