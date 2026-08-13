@@ -1,0 +1,114 @@
+# feature-nilpy-break-continue — the regression the ticket's acceptance asks
+# for. Both were implemented at some point after the ticket was filed and
+# measured satisfied by Track B (2026-08-09) without a test of their own; this
+# is that test, so a later loop-lowering change cannot quietly take them away.
+#
+# Rows are the shapes a loop-exit lowering can get wrong independently: which
+# loop a break targets when nested, an exit crossing a try (the finally must
+# still run), continue inside try/except, `while True` whose only exit is the
+# break, and for/else — whose else runs ONLY when no break fired.
+#
+# Expectations are CPython's own output.
+
+i = 0
+while i < 10:
+    if i == 3:
+        break
+    i = i + 1
+print("while    ", i)
+
+out = []
+for x in [1, 2, 3, 4]:
+    if x == 2:
+        continue
+    if x == 4:
+        break
+    out.append(x)
+print("for      ", out)
+
+# nesting: break targets the INNERMOST loop only
+res = []
+for a in range(3):
+    for b in range(3):
+        if b == 1:
+            break
+        res.append((a, b))
+print("nested br", res)
+
+res2 = []
+for a in range(3):
+    for b in range(3):
+        if b == 1:
+            continue
+        res2.append((a, b))
+print("nested co", res2)
+
+k = 0
+total = 0
+while k < 5:
+    k = k + 1
+    m = 0
+    while m < 5:
+        m = m + 1
+        if m == 2:
+            break
+        total = total + 1
+    if k == 3:
+        break
+print("nested wh", k, total)
+
+
+def f(n):
+    acc = 0
+    for j in range(n):
+        if j % 2 == 0:
+            continue
+        if j > 6:
+            break
+        acc = acc + j
+    return acc
+
+
+print("in a def ", f(10))
+
+# the only exit is the break
+w = 0
+while True:
+    w = w + 1
+    if w > 3:
+        break
+print("while Tru", w)
+
+# crossing a try: finally still runs on the way out
+log = []
+for j in range(5):
+    try:
+        if j == 2:
+            break
+        log.append(j)
+    finally:
+        log.append("f")
+print("try/final", log)
+
+log2 = []
+for j in range(4):
+    try:
+        if j == 1:
+            continue
+        log2.append(j)
+    except ValueError:
+        log2.append("e")
+print("try/excep", log2)
+
+# for/else: the else runs only when NO break fired
+for j in range(3):
+    if j == 5:
+        break
+else:
+    print("else     ", "no break")
+for j in range(3):
+    if j == 1:
+        break
+else:
+    print("else     ", "unreachable")
+print("done")

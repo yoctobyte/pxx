@@ -1,0 +1,11 @@
+while     3
+for       [1, 3]
+nested br [(0, 0), (1, 0), (2, 0)]
+nested co [(0, 0), (0, 2), (1, 0), (1, 2), (2, 0), (2, 2)]
+nested wh 3 3
+in a def  9
+while Tru 4
+try/final [0, 'f', 1, 'f', 'f']
+try/excep [0, 2, 3]
+else      no break
+done

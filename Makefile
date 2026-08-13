@@ -1428,6 +1428,11 @@ test-nilpy: $(COMPILER)
 	# by every resolution path, so the receiver SHAPES are the rows; the
 	# subscript one also fixed a segfault (only TPyDict declared `update`, so a
 	# set was walked as a dict).
+	# break / continue: implemented after the ticket was filed and never given a
+	# test. Rows are what a loop-exit lowering can break independently: nesting,
+	# an exit crossing a try (finally must still run), `while True`, for/else.
+	./$(COMPILER) test/test_nilpy_break_continue.npy /tmp/test_nilpy_brkcont26
+	/tmp/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -
 	./$(COMPILER) test/test_nilpy_set_update_methods.npy /tmp/test_nilpy_setupd26
 	/tmp/test_nilpy_setupd26 | diff -u test/test_nilpy_set_update_methods.expected -
 	# `xs[0].update(d)` on a dict element SEGFAULTED: a variant receiver picked an

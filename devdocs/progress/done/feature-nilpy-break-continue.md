@@ -8,10 +8,10 @@ prio: 40
 # NilPy `break` / `continue`
 
 - **Type:** feature (Track N — Nil-Python frontend; `pyparser.inc` loop lowering).
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-17, building the NilPy Tk poll loop for the IDE demo — a natural
   `while ...: if ...: break` did not compile.
-- **Owner:** —
+- **Owner:** claude-A-N
 
 ## Gap
 
@@ -63,3 +63,23 @@ Both loop kinds accept `break` and `continue` and produce CPython's answers
 (`0`, and `n = 8`). Evidence only — Track N owns closing this. Found while
 sweeping Track B's blocked tickets for stale blockers;
 [[feature-demo-nilpy-ide]] listed this as a blocker.
+
+## CLOSED 2026-08-13 — already implemented; the missing piece was the test
+
+Nothing to build. `break` and `continue` work in both loop kinds, and the
+ticket's other two scope lines hold too: nesting targets the innermost loop, and
+outside a loop each is refused by name (`break outside loop` /
+`continue outside loop`) rather than by a parse error.
+
+Swept beyond the acceptance, all matching CPython: nested for and nested while,
+break and continue inside a `def`, `while True` whose only exit is the break, an
+exit crossing a `try`/`finally` (the finally still runs), `continue` inside
+`try`/`except`, and **for/else** — where the else must run only when no break
+fired, which is the row a naive lowering gets wrong.
+
+`test/test_nilpy_break_continue.{npy,expected}` (`.expected` from CPython),
+wired into `test-nilpy`, so a later loop-lowering change cannot quietly take
+this away. Gate: self-host fixedpoint + `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

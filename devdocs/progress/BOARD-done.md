@@ -1344,6 +1344,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-augmented-subscript-assign | N | 55 | feature | nilpy: augmented assignment to a subscript — d[k] += 1, xs[i] += 5 — does not parse | — |
 | feature-nilpy-bin-oct-and-enumerate-start-offset | N | 35 | feature | bin()/oct() missing; enumerate(xs, start) had no offset form | — |
 | feature-nilpy-bound-method-value | N | 65 | feature | NilPy: a BOUND METHOD as a value (`self.push` carries self) | — |
+| feature-nilpy-break-continue | N | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-builtin-exceptions | N | 55 | feature | NilPy: Python's builtin exception classes, and `int(s, base)` that raises | — |
 | feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
 | feature-nilpy-catchable-runtime-errors | N | 55 | feature | nilpy: builtin runtime errors must raise catchable exceptions (int(), division by zero) | — |
