@@ -110,4 +110,4 @@ object.
 Gate: self-host fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit a7a890f42.
