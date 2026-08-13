@@ -30704,6 +30704,44 @@ end;
   (bug-nilpy-import-inside-def-clobbers-proc-context). }
 procedure ParseUsesUnitBody(const name: AnsiString); forward;
 
+{ The two HOST-HEADER probes of the unit resolver, in one place because they are
+  now called from two positions: early for every non-NilPy frontend, and late
+  for NilPy (after the .py/.npy library lookup and the mimic_ shim, so a Python
+  stdlib name that also names a C header does not lose to the header).
+  Two call sites, one body — a second copy is exactly how the two positions
+  would drift.
+  bug-nilpy-python-import-resolves-against-c-headers }
+procedure PyTryHostHeader(const cName: AnsiString; var path: AnsiString;
+                          var content: AnsiString;
+                          var isCUnit, isCHeader: Boolean);
+begin
+  if Length(content) > 0 then Exit;
+  ConcatThree('/usr/include/', cName, '.h', path);
+  LoadFile(path, content);
+  if Length(content) = 0 then
+  begin
+    ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
+    LoadFile(path, content);
+  end;
+  if Length(content) > 0 then begin isCUnit := True; isCHeader := True; end;
+end;
+
+{ Does a `mimic_<name>` shim exist as a FILE? Asked before falling back to a
+  host header for a NilPy import: the shim mapping itself runs later still, and
+  by then the header would already have won. A file probe rather than a
+  registry, because the shim is not loaded at this point — the question is only
+  whether one is there to be loaded. }
+function PyMimicShimExists(const lo: AnsiString): Boolean;
+var p, c: AnsiString;
+begin
+  Result := False;
+  ConcatThree('lib/pcl/mimic_', lo, '.pas', p); LoadFile(p, c);
+  if Length(c) > 0 then begin Result := True; Exit; end;
+  ConcatThree('lib/rtl/mimic_', lo, '.pas', p); LoadFile(p, c);
+  if Length(c) > 0 then begin Result := True; Exit; end;
+end;
+
+
 procedure ParseUsesUnit(const name: AnsiString);
 var savedProc, savedFrame, savedSelf, vsym: Integer;
 begin
@@ -31221,19 +31259,20 @@ begin
     end;
   end;
 
-  if Length(UnitContent) = 0 then
-  begin
-    ConcatThree('/usr/include/', cName, '.h', path);
-    LoadFile(path, UnitContent);
-    if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
-  end;
-
-  if Length(UnitContent) = 0 then
-  begin
-    ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
-    LoadFile(path, UnitContent);
-    if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
-  end;
+  { HOST HEADERS. `import <c-header>` is a DESIGNED NilPy feature — the
+    wrapper-free NilPy-to-C arc that `import sqlite3` and `import stdlib`
+    (test_nilpy_import_sqlite, test_nilpy_c_pointer) depend on — so this route
+    stays. What was wrong is its POSITION: it ran before the .py/.npy library
+    lookup and before the mimic_ shim, so a Python stdlib name that ALSO names
+    a C header lost to the header. `import string` found /usr/include/string.h
+    and the failure surfaced later as `undefined variable (ascii_lowercase)`,
+    pointing at the attribute rather than at the import.
+    For a NilPy import these probes therefore run LATER — see the second call
+    below, after everything Python-shaped has had its turn. Every other
+    frontend keeps the original order.
+    bug-nilpy-python-import-resolves-against-c-headers }
+  if (Length(UnitContent) = 0) and (not isNilPy) then
+    PyTryHostHeader(cName, path, UnitContent, isCUnit, isCHeader);
 
   { A NilPy module SHIPPED IN A LIBRARY ROOT. The sibling probe far above is
     Python's own rule (the importing file's directory wins), but when it misses,
@@ -31288,6 +31327,14 @@ begin
     end;
     if Length(UnitContent) > 0 then isPyUnit := True;
   end;
+
+  { …and NOW the host headers for a NilPy import — but only when no mimic_ shim
+    of that name exists, since a shim we ship IS the Python module and must beat
+    a same-named C header. `import sqlite3` still reaches sqlite3.h (nothing
+    ships a mimic_sqlite3), and `import string` will reach mimic_string the
+    moment it is written. }
+  if (Length(UnitContent) = 0) and isNilPy and (not PyMimicShimExists(lo)) then
+    PyTryHostHeader(cName, path, UnitContent, isCUnit, isCHeader);
 
   { NilPy SHIM MAPPING. A Python module we implement ourselves lives under OUR
     name — `mimic_<module>` — so no file in the tree carries an upstream package

@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A NilPy `import X` is satisfied by a C HEADER from lib/crtl/include: `import string` pulls string.h (and warns about host features.h), `import stdio` compiles clean. So a module that does not exist appears to import, and the failure surfaces later as `undefined variable (ascii_lowercase)` — pointing at the wrong thing entirely."
+status: working
+owner: claude-A-N
 ---
 
 # `import string` in a .npy resolves to crtl's `string.h`

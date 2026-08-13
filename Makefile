@@ -1484,6 +1484,12 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_ctor_star_and_kwargs.npy /tmp/test_nilpy_ctorargs26
 	# ...and the full ctor shape (fixed + defaulted + *rest + **kw at once): b=5
 	# must still bind to the PARAMETER while z=6 falls through to the dict.
+	# `import <c-header>` from a .npy is a DESIGNED feature (the wrapper-free
+	# NilPy-to-C arc). An earlier attempt to stop `import string` finding
+	# string.h gated the route off entirely and turned four tests red; only its
+	# POSITION moved. This goes red immediately if that happens again.
+	./$(COMPILER) test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26
+	test "$$(/tmp/test_nilpy_imphdr26)" = "$$(printf 'malloc/free ok\nabs         3')"
 	./$(COMPILER) test/test_nilpy_ctor_kwargs_fallthrough.npy /tmp/test_nilpy_ctorkwf26
 	/tmp/test_nilpy_ctorkwf26 | diff -u test/test_nilpy_ctor_kwargs_fallthrough.expected -
 	/tmp/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -

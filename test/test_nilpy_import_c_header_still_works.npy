@@ -1,0 +1,28 @@
+# bug-nilpy-python-import-resolves-against-c-headers
+#
+# The guard for a REORDERING, so the row that matters is what must NOT change.
+#
+# `import <c-header>` is a DESIGNED NilPy feature — the wrapper-free NilPy-to-C
+# arc. An earlier attempt at this ticket gated the /usr/include route on
+# `not isNilPy` and turned four tests red, because the ticket's premise ("import
+# stdio must be no module named stdio") was simply wrong. The route stays; only
+# its POSITION moved, so that a Python stdlib name which also names a C header
+# (string, math) reaches the Python module first instead of losing to the
+# header.
+#
+# So this file imports C headers from a .npy and uses them, exactly as the
+# feature intends. If the reordering ever turns into a removal again, this goes
+# red immediately rather than four unrelated-looking tests going red later.
+#
+# The sqlite and c-pointer tests cover the same property from other angles —
+# and two of those live in test-core, not test-nilpy, which is the process
+# lesson this ticket recorded: a change to the IMPORT RESOLVER is a test-core
+# change too, whatever frontend it looks like it belongs to.
+
+import stdlib
+import stdio
+
+p = malloc(64)
+free(p)
+print("malloc/free ok")
+print("abs        ", abs(-3))
