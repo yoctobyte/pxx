@@ -101,6 +101,14 @@ function VariantToInt64(const v: Variant): Int64;
 function VariantToDouble(const v: Variant): Double;
 function VariantToBool(const v: Variant): Boolean;
 function VariantToChar(const v: Variant): Char;
+{ --strict-fpc ONLY: FPC's Variant->Char, which routes through the variant's
+  STRING form and takes character 1 — Char(65) = '6', Char(122) = '1',
+  Char(True) = 'T', Char(2.5) = '2'. The DEFAULT dialect uses VariantToChar
+  above (Chr(n)); this exists so the conformance sweep can assert FPC parity.
+  Selected by name at the lowering seam (IRLowerVariantAsScalar), which is why
+  no strict flag has to be visible to the runtime.
+  bug-p-variant-to-int-and-char-conversion-diverges-from-fpc }
+function VariantToCharFPC(const v: Variant): Char;
 function PCharToString(p: PChar): AnsiString;
 
 { WideChar -> UTF-8 conversion, backing the frontend's widechar-in-string-context
@@ -613,6 +621,14 @@ begin
     Result := StrInt(p^.Payload, 0)
   else if p^.VType = 3 then
     Result := FloatToStr(PDouble(@p^.Payload)^)
+  else if p^.VType = 4 then
+    { VT_BOOL. Missing until 2026-08-13, so `s := v` on a boolean variant fell
+      off this chain into the trailing '' — silently, while writeln(v) rendered
+      True through the OTHER variant->text path. FPC prints True/False here.
+      bug-a-variant-to-string-drops-the-boolean-tag }
+    begin
+      if p^.Payload <> 0 then Result := 'True' else Result := 'False';
+    end
   else if p^.VType = 5 then
     Result := Chr(p^.Payload)
   else if p^.VType = 6 then
@@ -649,7 +665,21 @@ var
   vcode: Integer;
 begin
   p := @v;
-  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 5) then
+  if p^.VType = 4 then
+    { VT_BOOL -> OLE's VARIANT_TRUE: True is -1, not 1. FPC's rule, adopted
+      2026-08-13 (user) — it is self-consistent across the whole variant
+      conversion table (Int64 -1, Byte 255, Double -1.0) and is what every OLE
+      consumer expects. Scoped to the VARIANT conversion: Ord(True) and
+      Integer(someBooleanVar) stay 1, exactly as in FPC.
+
+      NilPy MUST NOT reach this: Python's True IS 1 (sum([True, True]) == 2),
+      and pylib's four direct calls here were rerouted to pyvar_to_int in the
+      same change. The lowering seam keeps every other NilPy path on pylib's
+      helper set. bug-p-variant-to-int-and-char-conversion-diverges-from-fpc }
+    begin
+      if p^.Payload <> 0 then Result := -1 else Result := 0;
+    end
+  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 5) then
     Result := p^.Payload
   else if p^.VType = 3 then
     Result := Trunc(PDouble(@p^.Payload)^)
@@ -693,7 +723,14 @@ begin
   p := @v;
   if p^.VType = 3 then
     Result := PDouble(@p^.Payload)^
-  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 5) then
+  else if p^.VType = 4 then
+    { VARIANT_TRUE = -1 here too — the whole point of adopting FPC's rule is
+      that it is consistent across the table (Double(True) = -1.0). See
+      VariantToInt64. }
+    begin
+      if p^.Payload <> 0 then Result := -1.0 else Result := 0.0;
+    end
+  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 5) then
     Result := p^.Payload
   else if p^.VType = 0 then
     Result := 0.0
@@ -752,6 +789,29 @@ begin
   end
   else
     Result := Chr(p^.Payload and $FF);
+end;
+
+function VariantToCharFPC(const v: Variant): Char;
+{ See the interface note. Deliberately built ON TOP of VariantToStr rather than
+  duplicating the tag walk: FPC's rule IS "render, then index", and the two
+  staying in step is the whole point — the boolean row (Char(True) = 'T') only
+  works because VariantToStr learned VT_BOOL in this same change. }
+var
+  p: PVariantRecord;
+  s: AnsiString;
+begin
+  p := @v;
+  if p^.VType = 0 then
+  begin
+    { FPC raises here, and its message names String rather than Char — the
+      diagnostic leaks the intermediate step. Reproduced verbatim: under a
+      parity flag the error text is part of the behaviour being matched. }
+    writeln('Runtime error: EVariantTypeCastError, Could not convert variant ',
+            'of type (Null) into type (String)');
+    Halt(219);
+  end;
+  s := VariantToStr(v);
+  if s = '' then Result := #0 else Result := s[1];
 end;
 
 function StrQWord(v: QWord; width: Integer): AnsiString;
