@@ -30,3 +30,33 @@
 2026-08-13T10:44:02Z	plexus	selfcompile	-O3	1469	1469	1581
 2026-08-13T10:44:02Z	plexus	selfcompile	fpc	1911	1613	1911
 # 2026-08-13 MEASUREMENT BASIS CHANGED — `mhz` above this line is cpu_mhz(), the mean across ALL CPUs, which a single-threaded bench leaves dominated by idle cores at the ~1196 MHz floor: those rows read 1283-1911 on a box whose busy clock is 2394, i.e. they record OCCUPANCY, not the clock the workload ran at. Below this line `mhz` is the clock of the CPU the workload actually ran on (testmgr.TaskClock), and the old number is kept as `box_mhz`. Do not compare across this line.
+2026-08-13T14:21:39Z	plexus	mandelbrot	-O0	2494	2314	2502	1485
+2026-08-13T14:21:39Z	plexus	mandelbrot	-O2	2558	2437	2558	1580
+2026-08-13T14:21:39Z	plexus	mandelbrot	-O3	2180	2180	2505	1477
+2026-08-13T14:21:39Z	plexus	mandelbrot-p	-O0	2545	2418	2545	1505
+2026-08-13T14:21:39Z	plexus	mandelbrot-p	-O2	2380	2380	2529	1446
+2026-08-13T14:21:39Z	plexus	mandelbrot-p	-O3	2514	2232	2514	1518
+2026-08-13T14:21:39Z	plexus	mandelbrot-p	fpc	2420	1897	2499	1585
+2026-08-13T14:21:39Z	plexus	raytracer	-O0	2544	2541	2560	1635
+2026-08-13T14:21:39Z	plexus	raytracer	-O2	2563	2530	2563	1638
+2026-08-13T14:21:39Z	plexus	raytracer	-O3	2567	2546	2567	1491
+2026-08-13T14:21:39Z	plexus	raytracer-p	-O0	2103	1866	2473	1717
+2026-08-13T14:21:39Z	plexus	raytracer-p	-O2	2495	2094	2497	1405
+2026-08-13T14:21:39Z	plexus	raytracer-p	-O3	2490	2166	2490	1830
+2026-08-13T14:21:39Z	plexus	raytracer-p	fpc	2194	1535	2307	1345
+2026-08-13T14:21:39Z	plexus	sieve	-O0	2365	1976	2394	1528
+2026-08-13T14:21:39Z	plexus	sieve	-O2	1342	1342	2354	1457
+2026-08-13T14:21:39Z	plexus	sieve	-O3	2292	1354	2324	1464
+2026-08-13T14:21:39Z	plexus	sieve	fpc	2014	1200	2355	1393
+2026-08-13T14:21:39Z	plexus	nbody	-O0	2423	2367	2535	1423
+2026-08-13T14:21:39Z	plexus	nbody	-O2	2518	2237	2541	1425
+2026-08-13T14:21:39Z	plexus	nbody	-O3	2546	2262	2546	1705
+2026-08-13T14:21:39Z	plexus	nbody	fpc	2340	1200	2377	1445
+2026-08-13T14:21:39Z	plexus	fib	-O0	2323	1904	2453	1401
+2026-08-13T14:21:39Z	plexus	fib	-O2	2147	1645	2410	1413
+2026-08-13T14:21:39Z	plexus	fib	-O3	2366	1964	2436	1318
+2026-08-13T14:21:39Z	plexus	fib	fpc	2339	1220	2339	1541
+2026-08-13T14:21:39Z	plexus	selfcompile	-O0	2537	2537	2552	1525
+2026-08-13T14:21:39Z	plexus	selfcompile	-O2	2536	2535	2551	1450
+2026-08-13T14:21:39Z	plexus	selfcompile	-O3	2557	2545	2559	1733
+2026-08-13T14:21:39Z	plexus	selfcompile	fpc	1315	1315	1543	1506
