@@ -65,3 +65,4 @@
 2026-08-13T07:17:27Z	plexus	4636171e082162674ea611aca6871828e730d6f3	would NOT pin 4636171e0821 — 1 red(s) not in the allowlist: test-core#src:test/test_conformance_1.pas
 2026-08-13T08:29:38Z	plexus	fbf50755c1d4ed83fcb9e4ab02c8a3a8da7c82c6	would NOT pin fbf50755c1d4 — 1 red(s) not in the allowlist: test-core#src:test/test_conformance_1.pas
 2026-08-13T10:00:14Z	plexus	95b246618f703234b4c3c8fbac2832d5aa79f9c2	would-pin PENDING 95b246618f70 — qualifies, streak 1/2
+2026-08-13T10:32:54Z	plexus	f253eaa405a15e2bb1a7fd20f0ab6971f65c2741	WOULD PIN f253eaa405a1 — 0 red(s), all allowlisted, self-host clean, streak 2/2
