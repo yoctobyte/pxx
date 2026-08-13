@@ -35,7 +35,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (222)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -98,6 +98,7 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
+| doc-variant-conversion-rules-and-the-fpc-char-divergence | D | 45 | doc | Document the Variant->scalar conversion rules now that they are settled: a boolean variant converts to -1 (OLE VARIANT_TRUE, matching FPC) while Ord(True) stays 1, and Variant->Char answers Chr(n) by default where FPC takes character 1 of the variant's string form ('65' -> '6') — the one row that deliberately diverges, available under --strict-fpc. Also CORRECTS an existing note in docs/language/types.md that is factually wrong. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
@@ -514,6 +515,7 @@ _none_
 - [p 45] [T] bug-t-pydiff-cpython-arm-fails-on-a-relative-path
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [A] chore-makefile-testtmp-parameterize
+- [p 45] [D] doc-variant-conversion-rules-and-the-fpc-char-divergence
 - [p 45] [C] feature-c-entry-stub-must-run-initializers-for-environ
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
