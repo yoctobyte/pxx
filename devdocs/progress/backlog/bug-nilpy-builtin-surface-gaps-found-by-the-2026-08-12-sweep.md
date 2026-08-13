@@ -94,3 +94,35 @@ A `.npy` diffed against CPython per item as it lands: `key=None` on
 `sorted`/`min`/`max` (plus the existing diagnostic still firing for a genuinely
 unassigned name), three- and four-way `zip`, and one asserting call per builtin
 added.
+
+## Item 1 DONE 2026-08-13 — `sorted(key=None)`; min/max still open
+
+`sorted(xs, key=None)` sorts, in every spelling swept: explicit, with
+`reverse=`, over strings, over a dict, over an empty list, and — the shape that
+matters — threaded through a helper's own `key=None` default, both passed on
+blindly and branched on with `if key is None`.
+
+**Fixed at the coercion, keyed on the CALLEE'S DEFAULT.** A variant argument
+heading for a `Pointer` parameter is coerced by `pyvar_callable_ptr`, which
+raises on None. That is right for a parameter with no default — CPython refuses
+`map(None, xs)` too, and the map row is in the test to keep it that way — and
+wrong for `sorted(l; key: Pointer = nil)`, where nil ALREADY means "no key
+function", which is exactly what CPython says `key=None` means. So the call
+path now picks a None-tolerant twin when `ProcParamHasDefault` says the callee
+declares one. Keyed on the declared default rather than on the parameter being
+called `key`: the name is not what makes nil meaningful.
+
+Test `test/test_nilpy_sorted_key_none.{npy,expected}`, wired into `test-nilpy`.
+
+### Still open in item 1: `min`/`max` with `key=None`
+
+`min([3, 1], key=None)` still raises `TypeError: expected a number, got
+object`, and by a different mechanism — nothing to do with the coercion. It
+picks the two-argument NUMERIC overload `min(const a, const b)` and compares
+the list against None, the same mis-resolution `PyMinMaxByKey` already works
+around for a callable held in a variable (it detects a callable second argument;
+None is not callable, so it falls through). Whoever takes it should decide
+between routing an explicit `key=` keyword at the frontend and widening that
+runtime detection — `min(x, None)` positional is a TypeError in CPython, so the
+runtime arm cannot simply treat a None second argument as "no key" without
+turning that into a silently wrong answer.

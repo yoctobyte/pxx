@@ -14804,7 +14804,17 @@ begin
             if (Procs[procIdx].Params[i].TypeKind = tyPointer) and
                (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyVariant) then
             begin
-              capSym := FindProc('pyvar_callable_ptr');
+              { A parameter that DECLARES a default of nil means "not given" by
+                nil, so None is a legal value for it — `sorted(xs, key=None)` is
+                CPython's own no-key spelling and was raising a TypeError. The
+                strict form stays for a parameter with no default, where None
+                really is an error (map/filter refuse it in CPython too).
+                bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
+              if (i < MAX_PROC_PARAMS) and
+                 ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
+                capSym := FindProc('pyvar_callable_ptr_opt')
+              else
+                capSym := FindProc('pyvar_callable_ptr');
               if capSym >= 0 then
               begin
                 identNode := AllocNode(AN_STR_LIT);

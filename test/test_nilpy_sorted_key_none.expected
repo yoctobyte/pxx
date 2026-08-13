@@ -1,0 +1,11 @@
+explicit  [1, 3]
++reverse  [3, 1]
+strings   ['a', 'bb']
+a dict    ['a', 'b']
+empty     []
+threaded  [1, 3]
+given     [3, 1]
+branched  [1, 3] ['a', 'bb']
+real key  ['a', 'bb']
+no key    [1, 3]
+map(None) TypeError

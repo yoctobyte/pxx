@@ -1,0 +1,49 @@
+# bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep, item 1
+#
+# `sorted(xs, key=None)` RAISED "parameter key is not callable — the value is
+# None". CPython defines key=None as the DEFAULT, i.e. no key function, so
+# passing it explicitly is legal and ordinary: it is what an optional key
+# threaded through a helper hands over (`def show(xs, key=None)`), which is the
+# shape the last rows here are.
+#
+# The coercion of a variant argument into a Pointer parameter now picks a
+# None-tolerant form when the CALLEE declares a default of nil — chosen by the
+# declared default, not by the parameter's name, since nil is only meaningful
+# because the callee says so. A parameter with no default keeps the strict
+# form, which is why the map() row below must still raise: CPython refuses
+# map(None, xs) too.
+#
+# Expectations are CPython's own output.
+
+print("explicit ", sorted([3, 1], key=None))
+print("+reverse ", sorted([3, 1], key=None, reverse=True))
+print("strings  ", sorted(["bb", "a"], key=None))
+print("a dict   ", sorted({"b": 1, "a": 2}, key=None))
+print("empty    ", sorted([], key=None))
+
+
+def show(xs, key=None):
+    return sorted(xs, key=key)
+
+
+print("threaded ", show([3, 1]))
+print("given    ", show([3, 1], key=lambda v: -v))
+
+
+def show2(xs, key=None):
+    if key is None:
+        return sorted(xs)
+    return sorted(xs, key=key)
+
+
+print("branched ", show2([3, 1]), show2(["bb", "a"], key=len))
+
+# controls: a real key still works, and no-key is unchanged
+print("real key ", sorted(["bb", "a"], key=len))
+print("no key   ", sorted([3, 1]))
+
+# None for a parameter with NO default is still an error, as in CPython
+try:
+    print(list(map(None, [1, 2])))
+except TypeError:
+    print("map(None) TypeError")
