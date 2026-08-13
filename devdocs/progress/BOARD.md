@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (222)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ _none_
 | feature-nilpy-cycle-collector | A | 35 | feature | NilPy: collect reference cycles (the reserved half of the GC decision) | feature-nilpy-object-reclamation |
 | feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-enum-class | N | 40 | feature | `from enum import Enum` — enum classes are not supported | — |
+| feature-nilpy-file-dunder-from-the-executable | N | 50 | feature | Implement the decided __file__ rule: derive it from the RESOLVED executable path at run time (/proc/self/exe, not raw argv[0]) — main module = the executable itself, imported module = <exe_dir>/<basename>.py — and add sys.executable. Decision and reasoning in decide-nilpy-dunder-file-for-a-compiled-program. | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-frozenset | N | 45 | feature | `frozenset(...)` is undefined — html5lib/constants.py's next wall after the adjacent-string-literal fix (line 305). A set is already a TPyList marked PYSEQ_SET, so the value side is nearly free; the question the ticket has to answer is repr and type name, where frozenset is VISIBLY different from set. | — |
 | feature-nilpy-fstring-nested-spec-and-nested-fstring | N | 30 | feature | f-string: a nested format spec and a nested f-string | — |
@@ -494,6 +495,7 @@ _none_
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
+- [p 50] [N] feature-nilpy-file-dunder-from-the-executable
 - [p 50] [P] feature-p-read-text-into-a-char-arm
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
