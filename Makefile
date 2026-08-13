@@ -3403,6 +3403,14 @@ test-core: $(COMPILER)
 	# clobber an unrelated register instead.
 	./$(COMPILER) test/test_signal_pc_rewrite.pas /tmp/test_signal_pcrw26
 	test "$$(/tmp/test_signal_pcrw26)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	# Float-exception mask control (feature-float-exception-mask-control):
+	# the default stays quiet IEEE (Inf/NaN propagate -- a deliberate decision,
+	# so this half is a PIN test), the mask round-trips, and with a cause
+	# unmasked the SSE instruction traps SIGFPE with the si_code that says
+	# WHICH -- FLTDIV 3 / FLTOVF 4 / FLTUND 5 / FLTRES 6 / FLTINV 7, the fact
+	# an FPC-style runtime error 205/206/207/208 mapping is built out of.
+	./$(COMPILER) test/test_float_exception_mask.pas /tmp/test_float_exc_mask26
+	test "$$(/tmp/test_float_exc_mask26)" = "$$(printf 'default mask=63\nquiet 1/0= Inf\nquiet overflow= Inf\nquiet 0/0= Nan\nprev=63 now=59\nafter restore=63 (returned 59)\ntrapped si_code=3\ntrapped si_code=4\ntrapped si_code=7\ntrapped si_code=5\ntrapped si_code=6\nmask after=63\nquiet again= Inf\nFPE_FLTDIV=3 FLTOVF=4 FLTUND=5 FLTRES=6 FLTINV=7')"
 	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
 	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
 	./$(COMPILER) test/test_rust_else_if.rs /tmp/test_rust_else_if26

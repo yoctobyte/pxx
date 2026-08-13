@@ -12533,6 +12533,66 @@ begin
         Exit;
       end;
 
+      { __pxxGetFPUMask / __pxxSetFPUMask(m): the float-exception MASK.
+
+        The value is a 6-bit set in FPC's TFPUException order — bit 0
+        exInvalidOp, 1 exDenormalized, 2 exZeroDivide, 3 exOverflow,
+        4 exUnderflow, 5 exPrecision — where 1 means MASKED, i.e. the quiet
+        IEEE behaviour (inf/NaN propagate) that is pxx's default and stays it.
+        Clearing a bit UNMASKS: the offending SSE instruction then traps
+        SIGFPE, and __pxxSigCode says which (FPE_FLTDIV/OVF/UND/INV) — the
+        MXCSR status flags cannot, they read 0x00 inside a handler because
+        Linux hands it a clean FP state (measured, see the ticket).
+
+        SET returns the PREVIOUS mask, so save/restore is one expression and
+        this family needs no statement-position hook — the same call
+        __pxxSigPCPtr made by handing back a pointer instead of adding a setter.
+
+        x86-64 only for now, and REFUSED elsewhere rather than accepted as a
+        no-op. On aarch64/arm32 the FPCR/FPSCR trap-enable bits are permitted
+        to be RES0 (most implementations never trap), and RISC-V has no
+        trapping FP at all — only sticky flags. Accepting the call there would
+        report a mask that does nothing, which is the silent wrong answer this
+        dialect refuses to invent. feature-float-exception-mask-control }
+      if (CaseEqual(name, '__pxxGetFPUMask') or CaseEqual(name, '__pxxSetFPUMask')) and
+         (FindProc(name) < 0) and (FindSym(name) < 0) then
+      begin
+        if TargetArch = TARGET_I386 then
+          Error(name + ' is not ported to i386 yet: it does its float '
+                + 'arithmetic in SSE too, so MXCSR is the same mechanism, but '
+                + 'its x87 control word (used for the int conversions) would '
+                + 'have to move with it '
+                + '(feature-float-exception-mask-control)')
+        else if TargetArch <> TARGET_X86_64 then
+          Error(name + ' is x86-64 only: this target has no architecturally '
+                + 'guaranteed float-exception trap enable '
+                + '(feature-float-exception-mask-control)');
+        node := AllocNode(AN_FPUMASK);
+        ASTTk[node] := Ord(tyInteger);
+        if CaseEqual(name, '__pxxGetFPUMask') then
+        begin
+          ASTIVal[node] := 0;
+          Next;
+          if (TokPos <= TokCount) and (CurTok.Kind = tkLParen) then
+          begin
+            Next;
+            Expect(tkRParen, ')');
+          end;
+        end
+        else
+        begin
+          ASTIVal[node] := 1;
+          Next;
+          Expect(tkLParen, '(');
+          ParseExpr;
+          ASTLeft[node] := CurASTNode;
+          Expect(tkRParen, ')');
+        end;
+        LastExprTk := tyInteger;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__pxxmulhi_u64') then
       begin
         { __pxxmulhi_u64(a, b): the HIGH 64 bits of the unsigned 128-bit product

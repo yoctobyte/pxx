@@ -397,6 +397,15 @@ const
                            no backend op and all six backends carry it unchanged. Reserved-prefix
                            names, so they cannot collide with user routines.
                            feature-signal-siginfo-ucontext }
+  AN_FPUMASK       = 93; { __pxxGetFPUMask / __pxxSetFPUMask(m): the float-exception MASK, as a
+                           6-bit set in FPC's TFPUException order with 1 = masked (quiet).
+                           ASTIVal selects the direction: 0 = get, 1 = set (Left = the new mask)
+                           and RETURN the previous one, so a save/restore round trip is one
+                           expression and the family needs no statement-position hook — the same
+                           reason __pxxSigPCPtr hands back a pointer rather than adding a setter.
+                           Reserved-prefix names; the FPC-compatible Get/SetExceptionMask set
+                           surface is an RTL wrapper over these.
+                           feature-float-exception-mask-control }
   AN_PARFOR        = 91; { `parallel for` data-parallel loop (feature-parallel-processing).
                            A thin marker over the parse-time desugaring: ASTLeft = the
                            synthesized `PXXParallelFor(lo, hi, @__pf_K, ctx)` AN_CALL that
@@ -548,6 +557,17 @@ const
                            restores the stack pointer from the frame pointer (x86-64 `leave`);
                            the other backends Error at codegen until ported
                            (feature-c-alloca-dynamic-stack). }
+
+  IR_FPU_MASK      = 72; { float-exception MASK control (feature-float-exception-mask-control).
+                           IRC selects the direction: 0 = read the current mask, 1 = IRA is the
+                           new mask and the PREVIOUS one is returned. The value is a 6-bit set in
+                           FPC's TFPUException order (bit 0 = exInvalidOp, 1 = exDenormalized,
+                           2 = exZeroDivide, 3 = exOverflow, 4 = exUnderflow, 5 = exPrecision),
+                           1 = MASKED (quiet), which is exactly MXCSR's bits 7..12 shifted down
+                           — the two orders coincide, so the neutral encoding costs one shift.
+                           x86-64 only: IRLowerAST rejects it elsewhere, so no other backend sees
+                           this op. pxx does all float arithmetic in SSE, so MXCSR is the whole
+                           story on x86-64 (no x87 control word to keep in step). }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one

@@ -125,6 +125,7 @@ begin
     IR_MULHI: Result := 'mulhi';
     IR_FRAME: Result := 'frame';
     IR_ALLOCA: Result := 'alloca';
+    IR_FPU_MASK: Result := 'fpu_mask';
   else
     Result := 'unknown';
   end;
@@ -495,6 +496,9 @@ begin
 
       IR_ALLOCA:
         IRRequireNode(IRA[i], 'alloca size');
+
+      IR_FPU_MASK:
+        if IRC[i] = 1 then IRRequireNode(IRA[i], 'fpu mask value');
 
     else
       Error('unknown IR opcode');
@@ -6448,6 +6452,22 @@ begin
     begin
       left := IRLowerAST(ASTLeft[node]);
       Result := IRAppend(IR_ALLOCA, left, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_FPUMASK:
+    begin
+      { __pxxGetFPUMask / __pxxSetFPUMask. x86-64 only — the parser already
+        refuses the intrinsic elsewhere, and this second guard is what keeps
+        the promise that no other backend ever sees IR_FPU_MASK (the same
+        arrangement IR_MULHI has for the 32-bit targets). }
+      if TargetArch <> TARGET_X86_64 then
+        Error('float-exception mask control is x86-64 only '
+              + '(feature-float-exception-mask-control)');
+      if ASTIVal[node] = 1 then
+        left := IRLowerAST(ASTLeft[node])
+      else
+        left := -1;
+      Result := IRAppend(IR_FPU_MASK, left, -1, ASTIVal[node], 0, Ord(tyInteger));
     end;
 
     AN_NOT:

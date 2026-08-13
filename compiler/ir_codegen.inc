@@ -4240,6 +4240,42 @@ begin
         EmitB($48); EmitB($89); EmitB($E0);              { mov rax, rsp }
       end;
 
+    IR_FPU_MASK:
+      begin
+        { Float-exception mask, through MXCSR bits 7..12 (IM DM ZM OM UM PM).
+          That order IS FPC's TFPUException order, so the neutral 6-bit value
+          this op trades in is just those bits shifted down by 7 — no table.
+          [rsp-8] is the red zone; the fenv stubs above use it the same way.
+          The operand is evaluated BEFORE the stmxcsr, not after: it is an
+          arbitrary expression that may CALL, and a call writes below rsp —
+          straight through the red-zone word the mask would have been sitting
+          in. }
+        if IRC[node] = 1 then
+        begin
+          { SET: rax = new mask (0..63) -> splice into MXCSR, return the old. }
+          IREmitNode(IRA[node]);
+          EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($F8); { stmxcsr [rsp-8] }
+          EmitB($8B); EmitB($4C); EmitB($24); EmitB($F8);           { mov ecx, [rsp-8] }
+          EmitB($89); EmitB($CA);                                   { mov edx, ecx (old) }
+          EmitB($83); EmitB($E0); EmitB($3F);                       { and eax, 63 }
+          EmitB($C1); EmitB($E0); EmitB($07);                       { shl eax, 7 }
+          EmitB($81); EmitB($E1); EmitB($7F); EmitB($E0);
+          EmitB($FF); EmitB($FF);                                   { and ecx, ~$1F80 }
+          EmitB($09); EmitB($C1);                                   { or ecx, eax }
+          EmitB($89); EmitB($4C); EmitB($24); EmitB($F8);           { mov [rsp-8], ecx }
+          EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($F8); { ldmxcsr [rsp-8] }
+          EmitB($89); EmitB($D0);                                   { mov eax, edx }
+        end
+        else
+        begin
+          { GET: the current word is the answer. }
+          EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($F8); { stmxcsr [rsp-8] }
+          EmitB($8B); EmitB($44); EmitB($24); EmitB($F8);           { mov eax, [rsp-8] }
+        end;
+        EmitB($C1); EmitB($E8); EmitB($07);                         { shr eax, 7 }
+        EmitB($83); EmitB($E0); EmitB($3F);                         { and eax, 63 }
+      end;
+
     IR_NOT:
       begin
         IREmitNode(IRA[node]);
