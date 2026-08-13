@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -27,3 +28,16 @@ pascal26:7: error: import: no unit named stdlib and no shim mimic_stdlib
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triaged 2026-08-13 — one cause, consolidated
+
+Not a separate regression. All four red jobs (`c_define_const`, `c_pointer`,
+`sqlite_crud`, `import_sqlite`) fail at the same point — the `import` of a C
+header — and all trace to the single semantic commit in the range,
+`3f5511820 fix(N): a Python import can no longer resolve to a C header`.
+
+Diagnosis, repro and the design fork are in
+[[bug-n-blocking-c-header-imports-broke-the-four-tests-that-depend-on-them]]
+(Track N, urgent). Closed here as a duplicate of it: three stubs for one commit
+is the pile the ledger exists to prevent.
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

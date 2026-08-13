@@ -5,11 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:3 backlog:224 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1706 rejected:35`
+`urgent:1 unfinished:11 blocked:3 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1709 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
+
+## urgent (1) — jump the queue
+
+- `bug-n-blocking-c-header-imports-broke-the-four-tests-that-depend-on-them` [N]
 
 ## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
@@ -31,12 +35,10 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 206, ranked
+## Ready — top 30 of 204, ranked
 
+- `[p 75] [N]` bug-n-blocking-c-header-imports-broke-the-four-tests-that-depend-on-them
 - `[p 70] [P]` regression-test-core-test-conformance-1
-- `[p 70] [T]` regression-test-core-test-nilpy-c-define-const
-- `[p 70] [T]` regression-test-core-test-nilpy-c-pointer
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-sqlite-crud
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -63,5 +65,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
+- `[p 53] [S]` feature-esp-peripheral-callback-api
+- `[p 53] [A]` feature-threadsafe-heap-optimize
 
-_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
