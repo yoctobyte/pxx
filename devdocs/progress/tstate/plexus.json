@@ -5150,14 +5150,12 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-13T06:39:42Z",
-  "red": [
-   "test-core#706"
-  ],
-  "sha": "db8a1a4fc7d380051ce90e40e97d6a7babc0c220",
-  "tier": "limited",
-  "ver": "v268",
-  "verdict": "RED"
+  "date": "2026-08-13T09:45:27Z",
+  "red": [],
+  "sha": "f746633b5f2a78f4b9a54b2d7d772383a63833d6",
+  "tier": "full",
+  "ver": "v269",
+  "verdict": "GREEN"
  },
  "renamed_from": [
   "xeon"
