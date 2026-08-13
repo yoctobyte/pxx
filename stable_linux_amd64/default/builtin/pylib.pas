@@ -1708,6 +1708,7 @@ function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
   says so plainly instead of borrowing the dynamic-call path's arity message
   (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
+function pyvar_callable_ptr_opt(const v: Variant; const what: AnsiString): Pointer;   { ...for a parameter whose default is nil: None means "not given", not an error }
 { `v[key]` / `v[key] = val` where v is a VARIANT holding a container — a dict
   entry that was itself a `.get()` result, so its container type is only known
   at run time. Dispatch on the boxed object: dict fetch/store by key, list index
@@ -2990,6 +2991,24 @@ begin
   if Result = nil then
     raise TypeError.Create(nm + ' is not callable — the value '
       + 'is None (an import that did not resolve, or a name never assigned)');
+end;
+
+function pyvar_callable_ptr_opt(const v: Variant; const what: AnsiString): Pointer;
+{ The same coercion for a Pointer parameter that DECLARES a default of nil —
+  `sorted(l; key: Pointer = nil)` and its min/max siblings. There, nil already
+  means "no key function", which is CPython's own definition of `key=None`, so
+  passing None explicitly is legal and ordinary: it is what an optional key
+  threaded through a helper (`def show(xs, key=None)`) hands over. The strict
+  form above kept raising a TypeError on it, which was right for a parameter
+  with no default (map/filter, where CPython also refuses None) and wrong here.
+  Chosen by the CALLEE's declared default rather than by the parameter's name —
+  the name is not what makes nil meaningful.
+  Same signature as the strict form on purpose: the one call site picks between
+  them and builds one argument chain.
+  bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
+begin
+  if what = '' then ;      { same shape as its strict twin; nothing to report }
+  Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
 function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
