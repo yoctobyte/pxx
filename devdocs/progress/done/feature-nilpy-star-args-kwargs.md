@@ -254,4 +254,4 @@ CPython), wired into `test-nilpy`; the four existing star/kwargs tests re-run
 unchanged. Gate: self-host fixedpoint + `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 3b7aae09c.
