@@ -174,3 +174,30 @@ at its mutation site (both compilers, p_3 identical) → pinpointed `(int8)g_15 
 Fixed 4de51285 (sub-int compare promotion). Now 3 miscompiles found+fixed
 (574fcac1 signed/unsigned-64, 4f4aceb3 struct-array-ptr, 4de51285 sub-int-promote);
 only the PXX_COMPILE_FAIL (seed 5004, kind-5 AN_BINOP) remains open.
+
+
+## RESUMED 2026-08-13 — one new bug, found and fixed
+
+First run since the 2026-07-13 pause. 60 seeds warm-up: nothing. 250 seeds:
+**one** `MISCOMPILE_VS_GCC` (seed 79), reduced and fixed as
+[[bug-c-csmith-seed-79-miscompile-vs-gcc]] — an integer literal's `l/L` suffix
+was widening the rung the unsuffixed ladder picked instead of RE-RUNNING the
+ladder, so `0x9745DC78L` was an unsigned long and `0x9745DC78L > <negative
+int32>` silently answered 0.
+
+Confirmation run after the fix: 80 seeds, **seed 79 among them, all ok, no
+findings**.
+
+Scoreboard: 390 seeds this session, 1 finding, 1 fixed. That ratio is the point
+of the campaign — the previous nine came in one sitting because the low-hanging
+gaps were still there; the tail is one bug per few hundred programs, and none of
+them is reachable from the human-written corpora.
+
+### The reduction guards are the real cost, and they are now written down
+
+Three reductions were discarded before a valid one: two read uninitialised
+locals (gcc's `-Wuninitialized` does not fire at `-O0`; UBSan cannot see them —
+valgrind can) and one compared an int with a pointer, making the checksum depend
+on where the globals land (caught by requiring gcc PIE and `-no-pie` to agree).
+The five-layer interestingness test is in that ticket; copy it rather than
+re-deriving it.
