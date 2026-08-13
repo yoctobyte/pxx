@@ -102,4 +102,4 @@ controls, so a fix cannot trade the 2-argument min for the key form.
 `make test-nilpy` green, `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 256b21957.
