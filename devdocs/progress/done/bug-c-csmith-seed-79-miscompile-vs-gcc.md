@@ -152,4 +152,4 @@ Track A note: this is a C-frontend typing bug (`cparser.inc`), no IR or backend
 involvement.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit f61544c1f.
