@@ -271,7 +271,7 @@ The user-facing CLI reference row is `docs/**` (Track D) and is filed as
   an implementation one.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit c8ed386f7.
 
 ## Resolved 2026-08-13 — acceptance met, three follow-ups filed
 
