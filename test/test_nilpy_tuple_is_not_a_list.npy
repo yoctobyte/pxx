@@ -1,0 +1,63 @@
+# bug-nilpy-a-tuple-compares-equal-to-a-list
+#
+# `(1, 2) == [1, 2]` answered True; CPython says False. Same tag-blind
+# positional walk that made a set equal to a list, and it was held back when the
+# set half landed for one stated reason: the set arm only fires for values
+# explicitly built as sets, while a tuple-vs-list guard fires for EVERY value
+# whose FKind was never stamped, and that population had not been swept.
+#
+# So the sweep is the second half of this file, and it is what licensed the
+# guard: every constructor that yields a tuple or a list is asked for
+# `type(x).__name__` — dict items, zip, divmod, tuple()/list(), a slice of each,
+# concatenation of each, a comprehension, sorted(), and all three literals — and
+# every one already agrees with CPython. There is no unstamped population to
+# protect, so the guard costs nothing and the divergence goes.
+#
+# The rows that would catch a guard that went too far are the ones where a tuple
+# must still compare EQUAL: tuple-vs-tuple, a tuple as a dict KEY (hashed by
+# content), a tuple in a set, .index()/.count() over tuples, and the nested and
+# `in` routes — all of which reach the same comparison from different sides.
+#
+# Expectations are CPython's own output.
+
+print("t vs l  ", (1, 2) == [1, 2], [1, 2] == (1, 2))
+print("t vs t  ", (1, 2) == (1, 2), (1, 2) == (2, 1))
+print("l vs l  ", [1, 2] == [1, 2], [1, 2] == [2, 1])
+print("s vs l  ", {1, 2} == [1, 2])
+print("s vs s  ", {1, 2} == {2, 1})
+print("nested  ", [(1, 2)] == [(1, 2)], [(1, 2)] == [[1, 2]])
+print("in      ", (1, 2) in [(1, 2)], (1, 2) in [[1, 2]])
+print("ne      ", (1, 2) != [1, 2])
+d = {"a": 1}
+print("items   ", list(d.items()) == [("a", 1)], list(d.items()) == [["a", 1]])
+print("zip     ", list(zip([1], [2])) == [(1, 2)])
+print("divmod  ", divmod(7, 2) == (3, 1), divmod(7, 2) == [3, 1])
+print("slice   ", (1, 2, 3)[0:2] == (1, 2), [1, 2, 3][0:2] == [1, 2])
+print("concat  ", (1,) + (2,) == (1, 2), [1] + [2] == [1, 2])
+print("empty   ", () == [], () == (), [] == [])
+d = {"a": 1}
+print("items elem  ", type(list(d.items())[0]).__name__)
+print("tuple lit   ", type((1, 2)).__name__)
+print("list lit    ", type([1, 2]).__name__)
+print("set lit     ", type({1, 2}).__name__)
+print("zip elem    ", type(list(zip([1], [2]))[0]).__name__)
+print("divmod      ", type(divmod(7, 2)).__name__)
+print("sorted      ", type(sorted([2, 1])).__name__)
+print("list comp   ", type([x for x in [1]]).__name__)
+print("tuple()     ", type(tuple([1, 2])).__name__)
+print("list(t)     ", type(list((1, 2))).__name__)
+print("slice of t  ", type((1, 2, 3)[0:2]).__name__)
+print("slice of l  ", type([1, 2, 3][0:2]).__name__)
+print("t + t       ", type((1,) + (2,)).__name__)
+print("l + l       ", type([1] + [2]).__name__)
+
+# a tuple key is hashed by CONTENT and must keep working
+kd = {}
+kd[(1, 2)] = "a"
+kd[(3, 4)] = "b"
+print("tuple key   ", kd[(1, 2)], (1, 2) in kd, (9, 9) in kd)
+st = set()
+st.add((1, 2))
+print("tuple in set", (1, 2) in st, (2, 1) in st)
+xs = [(1, 2), (3, 4)]
+print("index/count ", xs.index((3, 4)), xs.count((1, 2)))

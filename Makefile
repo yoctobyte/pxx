@@ -1521,6 +1521,12 @@ test-nilpy: $(COMPILER)
 	# set EQUALITY is by MEMBERSHIP, not position ({1,2} == {2,1}), and a set is
 	# never equal to a sequence. Both routes must agree: the operator and the
 	# container walk used to carry two copies of the positional compare.
+	# (1, 2) == [1, 2] answered True. The guard was held back when the set half
+	# landed because it fires for every value whose FKind was never stamped -- so
+	# the second half of this file sweeps every tuple/list constructor for
+	# type(x).__name__, and all of them already agree with CPython.
+	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
+	/tmp/test_nilpy_tupnotlist26 | diff -u test/test_nilpy_tuple_is_not_a_list.expected -
 	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26
 	/tmp/test_nilpy_seteq26 | diff -u test/test_nilpy_set_equality_is_membership.expected -
 	./$(COMPILER) test/test_nilpy_set_update_methods.npy /tmp/test_nilpy_setupd26

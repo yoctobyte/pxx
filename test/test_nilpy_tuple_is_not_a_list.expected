@@ -1,0 +1,31 @@
+t vs l   False False
+t vs t   True False
+l vs l   True False
+s vs l   False
+s vs s   True
+nested   True False
+in       True False
+ne       True
+items    True False
+zip      True
+divmod   True False
+slice    True True
+concat   True True
+empty    False True True
+items elem   tuple
+tuple lit    tuple
+list lit     list
+set lit      set
+zip elem     tuple
+divmod       tuple
+sorted       list
+list comp    list
+tuple()      tuple
+list(t)      list
+slice of t   tuple
+slice of l   list
+t + t        tuple
+l + l        list
+tuple key    a True False
+tuple in set True False
+index/count  1 1
