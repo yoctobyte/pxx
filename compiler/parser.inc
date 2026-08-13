@@ -942,6 +942,7 @@ function PyParseSetComp: Integer; forward;
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer; forward; { `Cls().m(...)` (pyparser.inc) } { Nil Python expression-position comprehension (pyparser.inc) }
 function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at `sys.stdout`/`sys.stderr`? (pyparser.inc) }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean; forward; { Nil Python: at a mapped os./sys. call? (pyparser.inc) }
+function PyUnboundStrMethodValue: Integer; forward; { Nil Python: `str.lower` as an unbound-method VALUE (pyparser.inc) }
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer; forward; { Nil Python os./sys. call -> pylib shim (pyparser.inc) }
 function PyParseVariadicMinMax(const nm: AnsiString): Integer; forward; { Nil Python min/max at 3+ args (pyparser.inc) }
 function PyParseRangeList: Integer; forward;      { Nil Python: list(range(...)) materialised (pyparser.inc) }
@@ -964,6 +965,10 @@ function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString; var ci: Integer): Integer; forward; { Nil Python obj.PROPERTY on a VARIANT receiver: the unboxed class-cast receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
+function PyKwDictArgNode(mpi: Integer): Integer; forward; { Nil Python: `dict(a=1)` / `d.update(a=1)` keywords are KEYS (pyparser.inc) }
+function PyKeywordsAreKeys(mpi: Integer): Boolean; forward; { Nil Python: is this the dict()/update() callee? (pyparser.inc) }
+function PyDictKwArgsAhead: Boolean; forward; { Nil Python: at `name=` or `**expr` in an argument list? (pyparser.inc) }
+function PyBuildKeywordDict: Integer; forward; { Nil Python: the dict `a=1, **e` describes (pyparser.inc) }
 function PyKwNamesTokPos: Integer; forward; { Nil Python: '(' token index of the call at the current parse position, or -1 (pyparser.inc) }
 function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer; forward; { Nil Python: pick the UMeth overload a keyword argument names (pyparser.inc) }
 function PyPromoteProcOverloadByKwAt(procIdx, firstParam, parenTok: Integer): Integer; forward; { Nil Python: pick the Procs[] overload a keyword argument names (pyparser.inc) }
@@ -6444,6 +6449,19 @@ begin
                       ' argument(s), none given');
               mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
             end;
+            { `d.update(a=1)` / `d.update(**e)` on a plain NAME receiver — the
+              route this shape actually takes. Same builder as the other loops
+              (four of them ask it now; that they are four is the shape
+              devdocs/dev/normalise-dont-special-case.md warns about, and asking
+              ONE function is how it is kept honest). }
+            if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+            begin
+              margSeq := AllocNode(AN_ARG);
+              ASTLeft[margSeq] := PyBuildKeywordDict;
+              ASTIVal[margSeq] := 0;
+              ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+              mai := Procs[mpi].ParamCount;
+            end;
             { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
               parameters; the star is on the CALL). A star is not an expression, so
               the arity loop below cannot parse it: hand the whole argument list to
@@ -6558,6 +6576,18 @@ begin
                       ' argument(s), none given');
               mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
             end;
+            { `d.update(**e)` — before the star branches below, because for
+              `update` a `**` is not a kwargs pack to bind: its keys ARE the
+              dict to merge. The plain-keyword form is caught in the loop, and
+              both go through the one builder. }
+            if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+            begin
+              margSeq := AllocNode(AN_ARG);
+              ASTLeft[margSeq] := PyBuildKeywordDict;
+              ASTIVal[margSeq] := 0;
+              ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+              mai := Procs[mpi].ParamCount;    { the argument list is complete }
+            end;
             { A method with `*args` / `**kwargs` has no fixed arity, so the
               arity-driven loop below cannot parse its call. Hand the whole
               argument list to the NilPy path, which packs the surplus. }
@@ -6572,6 +6602,17 @@ begin
               PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
+              { `d.update(a=1)` / `d.update(**e)` — the method half of the
+                keywords-are-KEYS case above; same builder, so the two forms
+                cannot drift. }
+              mexprNode := PyKwDictArgNode(mpi);
+              if mexprNode >= 0 then
+              begin
+                margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+                ASTIVal[margSeq] := 0;                { positional, not a keyword }
+                ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+                Break;
+              end;
               { NilPy `key=expr` on the METHOD path. Params[0] is Self, so names
                 resolve from 1 up; mslot is the parameter this argument actually
                 fills, which drives the by-ref / open-array decisions below. }
@@ -9886,6 +9927,16 @@ begin
                   FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
                 mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
               end;
+              { `d.update(a=1)` / `d.update(**e)` — the keywords-are-KEYS case,
+                asked the same way every other argument loop asks it. }
+              if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+              begin
+                margSeq := AllocNode(AN_ARG);
+                ASTLeft[margSeq] := PyBuildKeywordDict;
+                ASTIVal[margSeq] := 0;
+                ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+                mai := Procs[mpi].ParamCount;
+              end;
               { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
                 parameters; the star is on the CALL). A star is not an expression, so
                 the arity loop below cannot parse it: hand the whole argument list to
@@ -11327,7 +11378,12 @@ begin
         Next; Expect(tkLParen, '(');
         mapKind := '';
         if CurTok.Kind = tkIdent then mapKind := LowerCase(CurTok.SVal);
-        if (mapKind = 'int') or (mapKind = 'str') or (mapKind = 'float') then
+        { …and it really is the bare CONVERSION only when a comma follows it:
+          `map(str.upper, xs)` starts with the same token and is an unbound
+          METHOD (a callable value), which this arm would have consumed as
+          `str` and then failed on the dot. }
+        if ((mapKind = 'int') or (mapKind = 'str') or (mapKind = 'float')) and
+           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkComma) then
         begin
           if mapKind = 'int' then mapConv := 1
           else if mapKind = 'str' then mapConv := 2
@@ -14560,11 +14616,31 @@ begin
         argsHead := -1;
         lastArg := -1;
         nArgs := 0;
+        { `dict(**src)` — before the star-forward branch below, because for
+          `dict` a `**` is not a forwarded kwargs pack: its keys ARE the dict
+          being built, so the spread merges rather than binding parameters.
+          The keyword form is handled inside the loop; both go through the one
+          builder. }
+        if isNilPy and PyKeywordsAreKeys(procIdx) and
+           (PyDictKwArgsAhead or
+            (CaseEqual(Procs[procIdx].Name, 'dict') and (CurTok.Kind = tkRParen))) then
+        begin
+          { The empty `dict()` rides the same builder: it is the keyword form
+            with no keywords, and pylib's `dict` has no zero-argument overload
+            (`dict()` answered "no overload of dict matches these arguments"
+            before this, on the pinned binary too). }
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := PyBuildKeywordDict;
+          ASTIVal[argSeq] := 0;
+          argsHead := argSeq;
+          lastArg := argSeq;
+          nArgs := 1;
+        end
         { `f(*args, **kwargs)` FORWARDED into this callee's ordinary parameters:
           the argument count is a run-time fact, so it desugars to a dispatch on
           len(args) (PyStarForwardCall). Detected before the argument loop —
           which parses expressions, and `*x` is not one. }
-        if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] < 0) then
+        else if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] < 0) then
         begin
           Next;                          { the '*' }
           ParseArgExpr;
@@ -14590,6 +14666,21 @@ begin
         end;
         while CurTok.Kind <> tkRParen do
         begin
+          { `dict(a=1, b=2)` / `dict(**e)` — in Python the keyword NAMES are dict
+            KEYS, not parameter names, so this is not keyword binding at all:
+            the run becomes the one dict argument `dict()` already takes.
+            The whole run up to `)` is consumed here. }
+          node := PyKwDictArgNode(procIdx);
+          if node >= 0 then
+          begin
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := node;
+            ASTIVal[argSeq] := 0;
+            if argsHead = -1 then argsHead := argSeq else ASTRight[lastArg] := argSeq;
+            lastArg := argSeq;
+            Inc(nArgs);
+            Break;
+          end;
           { NilPy `key=expr`: consumes the name, yields paramIndex+1 (0 = positional) }
           kwIdx := PyKwArgIndex(procIdx, 0);
           if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := nArgs;
@@ -15040,6 +15131,20 @@ begin
             begin
               Next;
               i := 1;
+              { `d.update(**e)` reaches THIS loop (the plain class-method one,
+                which has no keyword handling at all and met the `*` with
+                "expected expression"), while `d.update(a=1)` reaches the
+                arity-driven loop above — the same construct through two paths,
+                so both ask the one builder. }
+              if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+              begin
+                argSeq := AllocNode(AN_ARG);
+                ASTLeft[argSeq] := PyBuildKeywordDict;
+                ASTIVal[argSeq] := 0;
+                ASTRight[mlastArg] := argSeq;
+                mlastArg := argSeq;
+                Inc(i);
+              end;
               while CurTok.Kind <> tkRParen do
               begin
                 ParseExpr;
@@ -15208,6 +15313,22 @@ begin
   else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
     { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
     CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'str') and
+          (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+          (Tokens[TokPos + 1].Kind = tkIdent) and (FindSym('str') < 0) and
+          not ((TokPos + 2 < TokCount) and (Tokens[TokPos + 2].Kind = tkLParen)) then
+  begin
+    { `str.lower` with no call after it — an UNBOUND METHOD as a value, which
+      is what `sorted(xs, key=str.lower)` and `map(str.strip, xs)` are made of.
+      The CALLED form (`str.maketrans(...)`) is the arm above; this one exists
+      only for the value form, which the ordinary factor path cannot reach
+      because `str` is a type name and not a variable. }
+    CurASTNode := PyUnboundStrMethodValue;
+    if CurASTNode < 0 then
+      Error('Nil Python: str.' + GetTokenStr(TokPos + 1) + ' cannot be taken '
+            + 'as a value — only the str methods that take no arguments can');
+    LastExprTk := tyVariant;
+  end
   else if PyExprMode and (PyIsIdent('min') or PyIsIdent('max')) and
           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
           (FindSym(CurTok.SVal) < 0) and (CountCallArgsAhead >= 3) and

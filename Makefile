@@ -454,6 +454,19 @@ test-nilpy: $(COMPILER)
 	# `from __future__ import annotations` is a no-op, not a missing unit.
 	./$(COMPILER) test/test_nilpy_future_import.npy /tmp/test_nilpy_future26
 	/tmp/test_nilpy_future26 | diff -u test/test_nilpy_future_import.expected -
+	# `str.lower` as a VALUE -- an UNBOUND method, which is what
+	# `sorted(xs, key=str.lower)` and `map(str.upper, xs)` are made of. Both
+	# entry points (the factor path and PyMakeFuncValue) build it, and the
+	# `map(str, xs)` CONVERSION rows are in the same file because the two
+	# forms start with the same token and are told apart by a comma.
+	./$(COMPILER) test/test_nilpy_unbound_str_method.npy /tmp/test_nilpy_unbstrm26
+	/tmp/test_nilpy_unbstrm26 | diff -u test/test_nilpy_unbound_str_method.expected -
+	# `dict(a=1)` / `dict(**e)` / `dict()` -- Python's keywords-are-KEYS special
+	# case: the keyword NAMES are dict keys, not parameter names, so the run
+	# becomes the one dict argument dict() already takes. (The d.update(a=1)
+	# half is deliberately NOT shipped -- see the ticket.)
+	./$(COMPILER) test/test_nilpy_dict_keyword_args.npy /tmp/test_nilpy_dictkw26
+	/tmp/test_nilpy_dictkw26 | diff -u test/test_nilpy_dict_keyword_args.expected -
 	# @staticmethod: registered WITH the hidden class receiver slot 0 that the
 	# existing UMthIsStatic dispatch already fills. Both parser passes must agree.
 	./$(COMPILER) test/test_nilpy_staticmethod.npy /tmp/test_nilpy_staticm26

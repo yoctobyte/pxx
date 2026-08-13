@@ -1,0 +1,31 @@
+# `str.lower` and friends as a VALUE — the UNBOUND method form of a callable.
+# CPython hands back the method's function object; NilPy hands back the pylib
+# routine the ordinary `s.lower()` already desugars to, wrapped for the Variant
+# callable ABI. Same table (PyStrMethodInfo) for both forms, so they cannot
+# drift apart.
+#
+# The `map(str, xs)` rows are here on purpose: the conversion form starts with
+# the same token as `map(str.upper, xs)`, and telling them apart is a comma.
+# Expectations from CPython.
+
+xs = ["Banana", "apple", "Cherry"]
+
+print(sorted(xs, key=str.lower))
+print(list(map(str.upper, xs)))
+print(list(map(str.lower, xs)))
+print(list(map(str.isdigit, ["12", "a", ""])))
+print(list(map(str.isspace, [" ", "a"])))
+
+# taken as a value, then called
+f = str.upper
+print(f("hi"))
+g = str.lower
+print(g("HI"), g("Mixed"))
+
+# the conversion forms still take the conversion path
+print(list(map(int, ["3", "1"])))
+print(list(map(str, [1, 2])))
+print(list(map(float, ["1.5"])))
+
+# the CALLED dotted form is untouched
+print("a-b".split("-"))

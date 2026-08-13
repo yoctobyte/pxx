@@ -10189,6 +10189,14 @@ begin
   Result := -1;
   if not isNilPy then Exit;
   if CurTok.Kind <> tkIdent then Exit;
+  { `str.lower` — an UNBOUND method is a callable value exactly like a def name,
+    and this is the other entry point that builds one (the factor path in
+    parser.inc is the first). Both, or `key=str.lower` would work and
+    `map(str.lower, xs)` would not — the two-paths-for-one-construct shape
+    devdocs/dev/normalise-dont-special-case.md is about. Answers -1 and consumes
+    nothing unless the tokens really are that shape. }
+  Result := PyUnboundStrMethodValue;
+  if Result >= 0 then Exit;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;  { a CALL }
   if FindSym(CurTok.SVal) >= 0 then Exit;                                 { a variable }
   { A NESTED def is registered under its enclosing qualifier (`A.build.on_resize`),
@@ -10208,6 +10216,60 @@ begin
   if pi < 0 then Exit;
   Result := PyMakeFuncValueFor(pi, CurTok.SVal);
   if Result >= 0 then Next;  { consume the name }
+end;
+
+function PyUnboundStrMethodValue: Integer;
+{ `str.lower` / `str.upper` / `str.isdigit` ... as a VALUE — the UNBOUND method
+  form of a callable, which is what `sorted(xs, key=str.lower)` and
+  `map(str.strip, xs)` are made of. CurTok is `str`.
+
+  CPython hands back the function object of the method; NilPy has the function
+  already — the str-method table (PyStrMethodInfo) names the pylib routine the
+  ordinary `s.lower()` desugars to, so this is that same routine taken as a
+  value. One table, both forms, no second list to drift.
+
+  Through PyGetOrMakeCallableWrapper explicitly: pylib's `pystr_lower` takes an
+  AnsiString, and every callable-value dispatcher calls through the Variant ABI.
+  The wrapper's hand-built `return realproc(a0)` body already applies the
+  ordinary argument coercion (that is exactly what it is for), so this needs no
+  new runtime and no per-method pylib entry point — but the wrapper must be
+  asked for HERE rather than by widening PyMakeFuncValueFor's all-Variant-params
+  gate, which decides the same question for every other callable value.
+
+  Only the methods whose pylib entry takes the receiver and NOTHING else. A
+  one-argument str method (`str.split`, `str.replace`) is a callable of arity 2
+  in Python, which this shape cannot express, so it is left to the existing
+  error rather than silently made into something else.
+
+  Returns -1 (consuming nothing) when the tokens are not this shape. }
+var mname, pname: AnsiString;
+    retTk: TTypeKind;
+    want, realPi, wrapPi: Integer;
+begin
+  Result := -1;
+  if not isNilPy then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if CurTok.SVal <> 'str' then Exit;            { Python is case-sensitive here }
+  if FindSym('str') >= 0 then Exit;             { a variable named str wins }
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
+  if (TokPos + 1 >= TokCount) or (Tokens[TokPos + 1].Kind <> tkIdent) then Exit;
+  { A following '(' is a CALL (`str.maketrans(...)`), handled elsewhere. }
+  if (TokPos + 2 < TokCount) and (Tokens[TokPos + 2].Kind = tkLParen) then Exit;
+  mname := GetTokenStr(TokPos + 1);
+  retTk := tyUnknown; want := 0; pname := '';
+  if not PyStrMethodInfo(mname, pname, retTk, want) then Exit;
+  if want <> 0 then Exit;                       { takes arguments — see above }
+  realPi := FindProc(pname);
+  if realPi < 0 then Exit;
+  if Procs[realPi].ParamCount <> 1 then Exit;
+  if not Procs[realPi].IsFunc then Exit;
+  wrapPi := PyGetOrMakeCallableWrapper(realPi);
+  if wrapPi < 0 then Exit;
+  Result := PyMakeFuncValueFor(wrapPi, Procs[wrapPi].Name);
+  if Result >= 0 then
+  begin
+    Next; Next; Next;                           { `str` `.` name }
+  end;
 end;
 
 function PyEvalOnce(node: Integer): Integer;
@@ -12880,6 +12942,153 @@ begin
   end;
   Expect(tkEnd, 'close brace');
   CurASTNode := PyMakeIdent(tmpSym);
+end;
+
+function PyDictKwArgsAhead: Boolean;
+{ Positioned at `name=` or at `**expr` inside an argument list. }
+begin
+  Result := False;
+  if not isNilPy then Exit;
+  if (CurTok.Kind = tkIdent) and (TokPos <= TokCount) and
+     (Tokens[TokPos].Kind = tkAssign) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkStar) then
+    Result := True;
+end;
+
+function PyKeywordsAreKeys(mpi: Integer): Boolean;
+{ The callees for which Python's keyword arguments are dict KEYS rather than
+  parameter names. This is a special case in the LANGUAGE, not a gap in keyword
+  binding — `update` really has no parameter called `a`, and PyKwArgIndex is
+  right to say so.
+
+  `dict` ONLY, deliberately. `d.update(a=1)` wants exactly the same lowering and
+  was built and measured, and it is NOT shipped: with ONE keyword it is correct,
+  with TWO it SEGFAULTS, while the identical dict handed over as a literal
+  (`d.update({"z": 7, "y": 8})`) is fine — so the builder is right and something
+  on the METHOD-argument path mishandles its hoisted setitem statements (the
+  trial-parse-rewind-replays-hoists shape is the suspect). A form that works for
+  one keyword and corrupts memory for two is worse than the compile error it
+  would replace, so update() keeps the error until that is understood. Measured
+  notes in bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep. }
+begin
+  Result := isNilPy and (mpi >= 0) and (mpi < ProcCount) and
+            CaseEqual(Procs[mpi].Name, 'dict');
+end;
+
+function PyBuildKeywordDict: Integer;
+{ Build the TPyDict that `a=1, b=2, **e` describes and yield an AN_IDENT of it.
+  Stops AT the closing ')' without consuming it.
+
+  Both callees above already take exactly one dict argument, so turning the
+  keywords into that dict is the whole lowering — no second update path, no new
+  pylib entry point, and `dict(a=1)` and `d.update(a=1)` cannot drift apart
+  because they are the same code. Construction mirrors PyParseDictLiteral (a
+  hoisted temp plus one setitem per pair, pydict_merge for a `**` spread), which
+  is what a dict literal already is.
+
+  bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep }
+var ci, recId, node, argNode, sizeNode, callNode, selfArg, keyArg, valArg,
+    mmi, mpi, keyNode, tmpSym, asgn: Integer;
+    nm: AnsiString;
+begin
+  ci := FindUClass('TPyDict');
+  if ci < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  tmpSym := AllocVar(PyHiddenName('kwd'), tyClass);
+  Syms[tmpSym].RecName := recId;
+  SymSyncTypeRef(tmpSym);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(tmpSym);
+  ASTRight[asgn] := node;
+  PyHoistStmt(asgn);
+  mmi := FindUMeth(ci, 'setitem');
+  if mmi < 0 then Error('Nil Python: TPyDict.setitem not found');
+  mpi := UMthProc_[mmi];
+  while CurTok.Kind <> tkRParen do
+  begin
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkStar) then
+    begin
+      { `**e` — merge that dict's pairs in, later keys winning, exactly as the
+        `{**a, **b}` literal spread does. }
+      Next; Next;
+      PyParseBoolExpr;
+      valArg := AllocNode(AN_ARG);
+      ASTLeft[valArg] := CurASTNode;
+      selfArg := AllocNode(AN_ARG);
+      ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+      ASTRight[selfArg] := valArg;
+      callNode := AllocNode(AN_CALL);
+      ASTIVal[callNode] := FindProc('pydict_merge');
+      if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pydict_merge) not loaded');
+      ASTTk[callNode] := Ord(tyInteger);
+      ASTLeft[callNode] := selfArg;
+      PyHoistStmt(callNode);
+      if not Eat(tkComma) then Break;
+      Continue;
+    end;
+    if (CurTok.Kind <> tkIdent) or (TokPos > TokCount) or
+       (Tokens[TokPos].Kind <> tkAssign) then
+      Error('Nil Python: dict()/update() takes keyword arguments (a=1) or a '
+            + 'single dict — a positional argument cannot be mixed with them here');
+    nm := CurTok.SVal;
+    Next;                    { the name }
+    Next;                    { the '=' }
+    keyNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[keyNode] := PyStoredName(nm);
+    ASTSLen[keyNode] := Length(nm);
+    ASTTk[keyNode] := Ord(tyString);
+    if PyBareNoneHere then
+    begin
+      Next;
+      CurASTNode := PyMakeNone;
+    end
+    else
+      PyParseBoolExpr;
+    valArg := AllocNode(AN_ARG);
+    ASTLeft[valArg] := CurASTNode;
+    keyArg := AllocNode(AN_ARG);
+    ASTLeft[keyArg] := keyNode;
+    ASTRight[keyArg] := valArg;
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+    ASTRight[selfArg] := keyArg;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := mpi;
+    ASTTk[callNode] := Ord(tyClass);
+    ASTLeft[callNode] := selfArg;
+    PyHoistStmt(callNode);
+    if not Eat(tkComma) then Break;
+  end;
+  Result := PyMakeIdent(tmpSym);
+end;
+
+function PyKwDictArgNode(mpi: Integer): Integer;
+{ The ONE entry point the argument loops call: -1 unless this callee's keywords
+  are dict keys AND we are standing at one, in which case the whole keyword run
+  is consumed and the dict it describes is returned as the single argument.
+  Every loop that can reach `dict(` or `.update(` asks this the same way, so
+  they cannot answer differently. }
+begin
+  Result := -1;
+  if not PyKeywordsAreKeys(mpi) then Exit;
+  if not PyDictKwArgsAhead then Exit;
+  Result := PyBuildKeywordDict;
 end;
 
 procedure PyParseSetLiteral;

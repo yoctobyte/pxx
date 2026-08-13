@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,6 +55,7 @@ _none_
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-def-returning-a-precreated-global-has-no-return-type | N | 35 | bug | `rd().field` does not PARSE when rd() returns a module global that was pre-created because a def above reads it — 'unexpected token'. Binding the call result to a name first works, so only the direct selector-off-call-result form fails | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
+| bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords | N | 40 | bug | `d.update(a=1)` lowers correctly for ONE keyword and SEGFAULTS for two, through the same builder that makes `dict(a=1, b=2)` correct — so the method-argument path mishandles the builder's hoisted setitem statements. Not shipped for that reason; `dict(...)` is. Also: `d.update(**e)` is refused by a route that is none of parser.inc's five argument loops. | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-exception-args-attribute-missing | N | 30→40 | bug | `e.args` is missing on exceptions | — |
@@ -547,6 +548,7 @@ _none_
 - [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
 - [p 40] [N] bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep
 - [p 40] [N] bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword
+- [p 40] [N] bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [N] bug-nilpy-float-formatting-manufactures-ties-by-scaling
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse

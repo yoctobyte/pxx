@@ -1,0 +1,31 @@
+# Python's keywords-are-KEYS special case: in `dict(a=1)` and `d.update(a=1)`
+# the keyword NAMES are dict keys, not parameter names. Both forms build the
+# same dict through the same code, so they cannot drift apart.
+# Expectations from CPython.
+
+d = dict(a=1, b=2)
+print(d)
+print(sorted(d.keys()), d["a"], d["b"])
+
+# a `**` spread, on both forms
+src = {"p": 1, "q": 2}
+f = dict(**src)
+print(sorted(f.keys()), f["p"], f["q"])
+# NOTE: the `d.update(a=1)` / `d.update(**e)` half is NOT here — it is built
+# and measured but not shipped (one keyword correct, two segfault). See the
+# ticket; `dict(**src)` above is the same spread through the working path.
+
+# a later explicit key wins over an earlier spread of a DIFFERENT name
+h = dict(**src, r=9)
+print(sorted(h.keys()), h["r"])
+
+# the ordinary positional forms are untouched
+i = dict()
+print(len(i))
+j = {}
+j.update({"k": 3})
+print(j["k"])
+
+# values are ordinary expressions, None included
+k = dict(n=None, s="x", m=1 + 2)
+print(k["n"] is None, k["s"], k["m"])
