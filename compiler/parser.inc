@@ -11295,7 +11295,7 @@ begin
         Exit;
       end
       else if isNilPy and CaseEqual(name, 'format') and (FindSym(name) < 0) and
-              ((FindProc(name) < 0) or (ProcUnitIdx[FindProc(name)] <> -1)) and
+              (not PyUserShadowsProc(name)) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { format(v[, spec]) -> PyParseFormatCall (pyformat_v). Intercepted even
@@ -11304,13 +11304,17 @@ begin
           anything reaching sysutils — and a later unit SHADOWS the name rather
           than joining an overload set, so declaring the builtin in pylib made
           `format(7.5, ".1f")` compile until you added `import json`.
-          ProcUnitIdx = -1 is the main program, i.e. the .npy's OWN `def
-          format`, which must still win — Python lets a def shadow a builtin. }
+          The .npy's OWN `def format` must still win — Python lets a def
+          shadow a builtin — and that question is PyUserShadowsProc's, not this
+          arm's: it is the one predicate every name-keyed lowering asks, and it
+          also knows Python rebinds the name only from the `def` statement
+          onward. An arm that answers it itself is how `open` came to ignore a
+          user def entirely. }
         CurASTNode := PyParseFormatCall;
         LastExprTk := tyAnsiString;
         Exit;
       end
-      else if isNilPy and (name = 'open') then
+      else if isNilPy and (name = 'open') and (not PyUserShadowsProc(name)) then
       begin
         { open(path[, mode]) -> a TPyFile, whatever the mode. The no-mode form
           goes through pyopen, which is now just pyfile_open(path, 'r') —
@@ -13097,7 +13101,7 @@ begin
         Exit;
       end;
       if PyExprMode and CaseEqual(name, 'format') and
-         ((procIdx < 0) or (ProcUnitIdx[procIdx] <> -1)) and
+         (not PyUserShadowsProc(name)) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         CurASTNode := PyParseFormatCall;  { the shared builder, see the arm above }
@@ -15296,7 +15300,8 @@ begin
     __pxxRttiOf + __pxxClassName pair `obj.ClassName` uses.
     feature-nilpy-aggregate-builtins }
   if PyExprMode and isNilPy and PyIsIdent('type') and (TokPos < TokCount) and
-     (Tokens[TokPos].Kind = tkLParen) and (FindSym('type') < 0) then
+     (Tokens[TokPos].Kind = tkLParen) and (FindSym('type') < 0) and
+     (not PyUserShadowsProc('type')) then
   begin
     Next; Expect(tkLParen, '(');
     ParseExpr;
@@ -15460,7 +15465,8 @@ begin
     LastExprTk := tyClass;
   end
   else if PyExprMode and PyIsIdent('zip') and (TokPos < TokCount) and
-          (Tokens[TokPos].Kind = tkLParen) then
+          (Tokens[TokPos].Kind = tkLParen) and
+          (not PyUserShadowsProc('zip')) then
   begin
     { `zip(a, b)` as a VALUE — `list(zip(chords, chords[1:]))`. The for-header
       form is recognised earlier (PyParseForZip) and walks both containers by

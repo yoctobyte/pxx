@@ -17390,7 +17390,7 @@ begin
     pairs already takes.
     bug-nilpy-zip-in-a-comprehension-fails-to-parse }
   if (name2 <> '') and (PyForExtraCount = 0) and (PyCompTarget < 0) and
-     PyIsIdent('zip') and
+     PyIsIdent('zip') and (not PyUserShadowsProc('zip')) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     Result := PyParseForZip(name, name2);

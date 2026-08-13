@@ -1,0 +1,39 @@
+# A module-level def shadows a builtin — CPython's rule, since builtins are the
+# LAST scope searched. Four intercepts used to answer this question themselves
+# and `open` never asked, so `def open()` was silently ignored and the builtin
+# raised FileNotFoundError. They all go through PyUserShadowsProc now.
+# bug-nilpy-a-user-def-named-open-is-silently-ignored
+def len(x):
+    return "USER-len"
+
+
+def sorted(x):
+    return "USER-sorted"
+
+
+def format(x):
+    return "USER-format"
+
+
+def zip(x):
+    return "USER-zip"
+
+
+def type(x):
+    return "USER-type"
+
+
+def open(x):
+    return "USER-open:" + x
+
+
+def enumerate(x):
+    return "USER-enumerate"
+
+
+def input(x):
+    return "USER-input"
+
+
+print(len([1, 2]), sorted([2, 1]), format(7.5))
+print(zip(1), type(1), open("f"), enumerate([1]), input("p"))

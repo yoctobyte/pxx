@@ -1550,6 +1550,10 @@ test-nilpy: $(COMPILER)
 	# a computed precision inside a format spec -- f"{x:.{n}f}"
 	./$(COMPILER) test/test_nilpy_fstring_computed_spec.npy /tmp/test_nilpy_fscomp26
 	/tmp/test_nilpy_fscomp26 | diff -u test/test_nilpy_fstring_computed_spec.expected -
+	# a module-level def shadows a builtin (CPython's rule) -- every name-keyed
+	# intercept must ask PyUserShadowsProc, not answer it itself.
+	./$(COMPILER) test/test_nilpy_user_def_shadows_a_builtin.npy /tmp/test_nilpy_defshadow26
+	/tmp/test_nilpy_defshadow26 | diff -u test/test_nilpy_user_def_shadows_a_builtin.expected -
 	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
 	/tmp/test_nilpy_tupnotlist26 | diff -u test/test_nilpy_tuple_is_not_a_list.expected -
 	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26
