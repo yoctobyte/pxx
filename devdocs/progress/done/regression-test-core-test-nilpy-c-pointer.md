@@ -40,4 +40,4 @@ Diagnosis, repro and the design fork are in
 [[bug-n-blocking-c-header-imports-broke-the-four-tests-that-depend-on-them]]
 (Track N, urgent). Closed here as a duplicate of it: three stubs for one commit
 is the pile the ledger exists to prevent.
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit e2dbbcc22.
