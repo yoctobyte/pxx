@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-12T08:34:06Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "185f70d7b0f03c1930b76206cd7b3fe7a76033cb",
-   "tier": "limited",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-12T08:46:36Z",
    "fixed": [],
    "new_red": [],
@@ -401,6 +393,14 @@
    ],
    "new_red": [],
    "sha": "82a6089ad5e2a128a98e3d46105d574906dff942",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-13T09:19:30Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "55379bc84ca993b471873762515b386c883729d6",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1306,6 +1306,7 @@
   "test-core#src:test/test_flexcolumn.pas": "native",
   "test-core#src:test/test_float.pas": "native",
   "test-core#src:test/test_float_const_and_cast.pas": "native",
+  "test-core#src:test/test_float_exception_mask.pas": "native",
   "test-core#src:test/test_float_intrinsics.pas": "native",
   "test-core#src:test/test_float_literals.pas": "native",
   "test-core#src:test/test_float_result_loop.pas": "native",
@@ -3654,6 +3655,7 @@
   "test-core#src:test/test_flexcolumn.pas": "pass",
   "test-core#src:test/test_float.pas": "pass",
   "test-core#src:test/test_float_const_and_cast.pas": "pass",
+  "test-core#src:test/test_float_exception_mask.pas": "pass",
   "test-core#src:test/test_float_intrinsics.pas": "pass",
   "test-core#src:test/test_float_literals.pas": "pass",
   "test-core#src:test/test_float_result_loop.pas": "pass",
@@ -5102,11 +5104,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-13T09:05:44Z",
-  "sha": "82a6089ad5e2a128a98e3d46105d574906dff942",
+  "date": "2026-08-13T09:19:30Z",
+  "sha": "55379bc84ca993b471873762515b386c883729d6",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 172.1
+  "wall": 168.4
  },
  "last_bench": {
   "conf_rows": 550,
