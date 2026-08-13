@@ -342,3 +342,35 @@ The triage command in this ticket should therefore gain a second line: a package
 with no `.so` is class 1 **only if it also imports nothing C-backed** — grep its
 imports against the stdlib-C list (`codecs re zlib json hashlib socket ssl`)
 before calling it cheap.
+
+## The html5lib ladder's stdlib bill, MEASURED 2026-08-13
+
+Collected every `import` across `six.py`, `webencodings/`, `tinycss2/` and
+`html5lib/` (the ladder this ticket plans), then tried each one as a one-line
+`.npy` against HEAD. This is the class-4 cost in numbers rather than in
+principle:
+
+```
+present today:  collections io itertools json math re sys types
+MISSING:        bisect codecs copy functools operator string warnings weakref xml
+```
+
+(Third-party names in that sweep — `genshi`, `lxml` — are optional treewalker
+backends html5lib imports lazily; `webencodings` and `six` are the ladder
+itself.)
+
+So **nine** stdlib modules stand between HEAD and html5lib, and the ordering
+falls out of the ladder:
+
+1. `functools itertools operator` — `six.py` stops at its first import
+   (`functools`, line 25) and needs these three plus `sys`/`types`, which are
+   present. six is 1003 lines of pure Python and is html5lib's FIRST wall.
+2. `codecs` — webencodings ([[feature-b-mimic-codecs-for-nilpy]], surface
+   already measured).
+3. `string` — html5lib/constants.py (and see
+   [[bug-nilpy-python-import-resolves-against-c-headers]]: `import string`
+   used to resolve to `/usr/include/string.h`, which is why this was invisible).
+4. `copy warnings weakref bisect xml` — the rest of html5lib.
+
+None of these is a per-library problem: the same nine serve every future Python
+app, which is the point the class-4 row of this ticket already makes.
