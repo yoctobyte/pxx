@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-12T08:23:23Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "185f70d7b0f03c1930b76206cd7b3fe7a76033cb",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-12T08:34:06Z",
    "fixed": [],
    "new_red": [],
@@ -401,6 +393,16 @@
    "sha": "4d875e0cc9f40134ad7a7cb259b0b1f563e432bf",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-13T09:05:44Z",
+   "fixed": [
+    "test-core#src:test/test_conformance_1.pas"
+   ],
+   "new_red": [],
+   "sha": "82a6089ad5e2a128a98e3d46105d574906dff942",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -3544,7 +3546,7 @@
   "test-core#src:test/test_concat_intrinsic.pas": "pass",
   "test-core#src:test/test_concat_loop_stack.pas": "pass",
   "test-core#src:test/test_cond_comment_skip.pas": "pass",
-  "test-core#src:test/test_conformance_1.pas": "fail",
+  "test-core#src:test/test_conformance_1.pas": "pass",
   "test-core#src:test/test_conformance_2.pas": "pass",
   "test-core#src:test/test_const_array_of_record.pas": "pass",
   "test-core#src:test/test_const_array_of_string.pas": "pass",
@@ -5100,11 +5102,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-13T09:02:24Z",
-  "sha": "4d875e0cc9f40134ad7a7cb259b0b1f563e432bf",
+  "date": "2026-08-13T09:05:44Z",
+  "sha": "82a6089ad5e2a128a98e3d46105d574906dff942",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 166.5
+  "verdict": "GREEN",
+  "wall": 172.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5129,24 +5131,7 @@
  "migrated_from": [
   "borg"
  ],
- "open_regressions": [
-  {
-   "bad": "f9e4e1c44edacc0dc08cc20f45c44944e0168105",
-   "good": "8e5ed5e8b075ce7dc15326f45f9f82a18a96dfde",
-   "job": "test-core#src:test/test_conformance_1.pas",
-   "name": "test-core#706",
-   "opened": "2026-08-13T06:14:44Z",
-   "range": [
-    "3f5548fc307062b8ce6b7dcca5bedf0130130980",
-    "1a164c0f9bdb9cb9c1bc24f5037bbc02f7a87c9a",
-    "0379acdc687e5bf8abd12bd9b3f18175a69f7b5b",
-    "493c9aac2e5f3de9812c21a160840683fa38c67f",
-    "24204e10dd67b315271192a00d35c840baa1fd56",
-    "f9e4e1c44edacc0dc08cc20f45c44944e0168105"
-   ],
-   "src": "test/test_conformance_1.pas"
-  }
- ],
+ "open_regressions": [],
  "pin_shadow": {
   "at": "2026-08-13T08:29:38Z",
   "qualifies": false,
