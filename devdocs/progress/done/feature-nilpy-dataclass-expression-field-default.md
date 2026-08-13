@@ -117,4 +117,4 @@ tests were re-run against their exact expectations.
 Gate: self-host fixedpoint + `tools/gate.sh quick` GREEN (seed canary included).
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit b08d0e66d.
