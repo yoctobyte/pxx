@@ -105,4 +105,4 @@ than stored into a `float` lvalue. Correct from the Pascal frontend in the same
 position, so it is the C cast lowering, not the IR — Track C.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit ec711cdec.

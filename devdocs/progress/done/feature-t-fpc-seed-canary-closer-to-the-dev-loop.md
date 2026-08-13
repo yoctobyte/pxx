@@ -181,4 +181,4 @@ gate. That was a deliberate choice in `bed641cf8` and it is defensible (a seed
 drift is a one-line fix, and the person gating is the person who caused it), but
 it is not what this ticket asked for. Left as-is: flipping a gate's strictness
 is not a change to make in passing.
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit ec711cdec.

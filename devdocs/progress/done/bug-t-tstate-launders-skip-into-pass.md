@@ -94,4 +94,4 @@ still closes wrongly, because skip is pass-like for closing. Publishing skip as
 its own status did not change that, and `reg_open`'s docstring says so.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit ec711cdec.
