@@ -82,4 +82,4 @@ wired into `test-nilpy`, so a later loop-lowering change cannot quietly take
 this away. Gate: self-host fixedpoint + `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit f1192065b.
