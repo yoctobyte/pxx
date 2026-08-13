@@ -89,4 +89,4 @@ already-working suffix-filter / no-filter / single-clause forms as controls.
 `make test-nilpy` green, `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit d168d1fbf.
