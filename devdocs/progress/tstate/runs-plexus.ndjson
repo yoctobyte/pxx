@@ -772,3 +772,4 @@
 {"date": "2026-08-13T23:11:10Z", "fixed": [], "full": false, "new_red": [], "sha": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94", "tier": "native", "verdict": "RED", "wall": 163.5}
 {"date": "2026-08-13T23:24:37Z", "fixed": ["test-arm32#src:examples/net/httpdemo.pas", "test-i386#src:examples/net/httpdemo.pas", "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas"], "full": true, "new_red": ["test-nilpy#src:examples/tk/callbacks.npy"], "sha": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94", "tier": "full", "verdict": "RED", "wall": 764.1}
 {"date": "2026-08-13T23:30:09Z", "fixed": [], "full": false, "new_red": [], "sha": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94", "tier": "slow", "verdict": "GREEN", "wall": 289.8}
+{"date": "2026-08-13T23:35:13Z", "fixed": [], "full": false, "new_red": [], "sha": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94", "tier": "opt", "verdict": "GREEN", "wall": 261.6}
