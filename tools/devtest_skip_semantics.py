@@ -64,11 +64,30 @@ def main():
         check(pred(n, nr, f, sr), name, why)
 
     print("\nreg_open — skip is pass-like for closing, but never opens anything")
-    check(tw.reg_open({"job": "a", "bad": "x"}, ["a"], {"a": "skip"}) is False,
+    check(tw.reg_open({"job": "a", "bad": "x"}, {"a": "skip"}) is False,
           "per-job entry closes on skip", "red -> skip must not stay open")
-    check(tw.reg_open({"cascade": ["a", "b"], "bad": "x"}, [],
+    check(tw.reg_open({"cascade": ["a", "b"], "bad": "x"},
                       {"a": "skip", "b": "fail"}) is True,
           "cascade held open by a real fail", "one skip must not close the sweep")
+
+    # An entry can enter the ledger without THIS host ever seeing the red:
+    # retire_host() migrates a dead host's open regressions into the survivor.
+    # Closing on the red->pass transition therefore never fires, and the entry
+    # is immortal — borg's fpc-bootstrap#00 sat open from 2026-07-22 to
+    # 2026-08-13 while the same file recorded the job as `pass`.
+    print("\nreg_open — a migrated entry closes on STATUS, not on a transition")
+    check(tw.reg_open({"job": "fpc-bootstrap#src:compiler/compiler.pas",
+                       "bad": "b1976742d", "migrated_from": "borg"},
+                      {"fpc-bootstrap#src:compiler/compiler.pas": "pass"}) is False,
+          "migrated entry closes when the job passes here",
+          "no transition can ever happen for a job that was never red here")
+    check(tw.reg_open({"job": "a", "bad": "x", "migrated_from": "borg"},
+                      {"a": "fail"}) is True,
+          "migrated entry stays open while the job is red",
+          "provenance must not close a REAL regression")
+    check(tw.reg_open({"job": "a", "bad": "x"}, {}) is True,
+          "a job the map has never carried stays open",
+          "absent != passing; gone_keys is what retires unrunnable jobs")
 
     print("\nPASSLIKE is the single definition both paths share")
     check(tw.PASSLIKE == ("pass", "skip"), "PASSLIKE", str(tw.PASSLIKE))

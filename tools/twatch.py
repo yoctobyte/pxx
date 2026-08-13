@@ -865,20 +865,21 @@ def orphan_keys(st, now, tier):
             if k not in now and jt.get(k, tier) in cov}
 
 
-def reg_open(r, fixed, authoritative, gone=frozenset()):
+def reg_open(r, authoritative, gone=frozenset()):
     """Is this ledger entry still an open regression after the latest run?
 
     `gone` names keys no tier carries any more (see gone_keys). Such an entry
-    can never be closed the normal way — `fixed` can only name keys a run
-    REPORTED — so without this it stays open forever, asking agents to act on a
-    job that cannot be run. Same shape as a quiet host's immortal entries
+    can never be closed by status — no run will ever REPORT that key again — so
+    without this it stays open forever, asking agents to act on a job that
+    cannot be run. Same shape as a quiet host's immortal entries
     (task-t-borg-open-regression-is-permanently-stale), reached through job
     identity instead of host identity.
 
-    A per-job entry closes when its job is in `fixed`.  A CASCADE entry names
-    no single job (its "job" is a synthetic cascade@<sha> key that can never
-    appear in `fixed`), so it closes only once every job it swept up is
-    genuinely passing again — otherwise it would pin itself open forever.
+    Both branches ask ONE question of ONE map: does the merged status still say
+    red? A per-job entry closes when its job is passing; a CASCADE entry names
+    no single job (its "job" is a synthetic cascade@<sha> key no run can
+    report), so it closes only once every job it swept up is genuinely passing
+    again — otherwise it would pin itself open forever.
 
     `authoritative` is the MERGED per-job status (persisted st["jobs"] overlaid
     with this run's results), NOT just this run's `now`.  Using this run alone
@@ -905,7 +906,21 @@ def reg_open(r, fixed, authoritative, gone=frozenset()):
                    for j in r["cascade"] if j not in gone)
     if r["job"] in gone:
         return False
-    return r["job"] not in fixed
+    # Ask the merged map, exactly as the cascade branch above does — NOT "is
+    # this job in `fixed`". `fixed` names red->pass TRANSITIONS THIS HOST
+    # OBSERVED, and an entry can enter the ledger without this host ever having
+    # seen the red: retire_host() migrates a dead host's open regressions into
+    # the survivor. If the job already passes here, the transition can never
+    # happen, so the entry is immortal — the fpc-bootstrap#00 entry migrated
+    # from borg sat open from 2026-07-22 to 2026-08-13 with the job reading
+    # `pass` in the same file. Same immortality as
+    # task-t-borg-open-regression-is-permanently-stale, reached through a third
+    # door (host identity, then job identity, now provenance).
+    #
+    # Equivalent to the old test for every entry this host opened itself — a
+    # job in `fixed` is passlike in `now` and therefore in the merged map — so
+    # this only closes entries the old test could never reach.
+    return authoritative.get(r["job"], "red") not in PASSLIKE
 
 
         # PASS-LIKE, not pass. A skipped job did not fail, so it must not gate
@@ -1439,12 +1454,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
               "as GONE (renamed/removed test, or an @N selector shift): %s"
               % (len(gone), ", ".join(sorted(gone)[:5])), flush=True)
     regs = [r for r in st["open_regressions"]
-            if reg_open(r, fixed, authoritative, gone)]
+            if reg_open(r, authoritative, gone)]
     # The entries this filter DROPS are exactly the regressions the ledger
     # considers closed, so they are also exactly the stubs face 1 may retire —
     # one rule, not a second invented one that could disagree with it.
     closed_regs = [r for r in st["open_regressions"]
-                   if not reg_open(r, fixed, authoritative, gone)]
+                   if not reg_open(r, authoritative, gone)]
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]
