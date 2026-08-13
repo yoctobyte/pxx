@@ -1514,6 +1514,8 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_mathlog26 | diff -u test/test_nilpy_math_log.expected -
 	./$(COMPILER) test/test_nilpy_callable_builtin.npy /tmp/test_nilpy_callable26
 	/tmp/test_nilpy_callable26 | diff -u test/test_nilpy_callable_builtin.expected -
+	./$(COMPILER) test/test_nilpy_min_max_key_none.npy /tmp/test_nilpy_mmkeynone26
+	/tmp/test_nilpy_mmkeynone26 | diff -u test/test_nilpy_min_max_key_none.expected -
 	./$(COMPILER) test/test_nilpy_sorted_key_none.npy /tmp/test_nilpy_keynone26
 	/tmp/test_nilpy_keynone26 | diff -u test/test_nilpy_sorted_key_none.expected -
 	./$(COMPILER) test/test_nilpy_break_continue.npy /tmp/test_nilpy_brkcont26

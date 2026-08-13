@@ -7648,15 +7648,48 @@ begin
   callable := PyFindDunder(cls, '__call__') <> nil;
 end;
 
+function PyMinMaxNoneKey(const a: Variant; const b: Variant): Boolean;
+{ `min(xs, key=None)` — CPython DEFINES key=None as "no key function", so it is
+  the documented default and passing it explicitly is ordinary, most often when
+  an optional key is threaded through a helper's own `key=None` parameter.
+
+  It lands on the two-argument NUMERIC overload for exactly the reason a
+  callable key did (see PyMinMaxByKey above): the value is variant-typed, so
+  `b: Variant` matches exactly while the intended `key: Pointer` candidate needs
+  a coercion applied only after a proc is chosen. The numeric compare then
+  raised "expected a number, got object", comparing the LIST against None.
+
+  Same escape as the callable case, and the same argument justifies it:
+  comparing None with a container is a TypeError in CPython too, so a None
+  second argument beside a SEQUENCE can only ever have meant the key form. A
+  program CPython accepts cannot observe the difference — `min(x, None)` is
+  rejected there — so answering it is laxity in the direction this dialect
+  takes deliberately, not a silently wrong answer.
+  Restricted to a SEQUENCE first argument on purpose: `min(3, None)` keeps
+  raising, because that one really is a comparison someone wrote by mistake.
+  bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item 1 }
+var o: TObject;
+begin
+  PyMinMaxNoneKey := False;
+  if pyvartag(b) <> 0 then Exit;          { not None }
+  if pyvartag(a) = 6 then begin PyMinMaxNoneKey := True; Exit; end;   { a str }
+  if pyvartag(a) <> 7 then Exit;
+  if PPyVarRec(@a)^.Payload = 0 then Exit;
+  o := TObject(Pointer(NativeInt(PPyVarRec(@a)^.Payload)));
+  PyMinMaxNoneKey := (o is TPyList) or (o is TPyIter) or (o is TPyRange);
+end;
+
 function min(const a: Variant; const b: Variant): Variant; overload;
 begin
   if PyVarIsCallable(b) then begin Result := PyMinMaxByKey(a, b, False); Exit; end;
+  if PyMinMaxNoneKey(a, b) then begin Result := min(a); Exit; end;
   if pyvar_gt(a, b) then Result := b else Result := a;
 end;
 
 function max(const a: Variant; const b: Variant): Variant; overload;
 begin
   if PyVarIsCallable(b) then begin Result := PyMinMaxByKey(a, b, True); Exit; end;
+  if PyMinMaxNoneKey(a, b) then begin Result := max(a); Exit; end;
   if pyvar_gt(b, a) then Result := b else Result := a;
 end;
 
