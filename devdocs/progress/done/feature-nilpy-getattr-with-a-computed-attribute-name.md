@@ -118,4 +118,4 @@ CPython), wired into `test-nilpy`; the 72-file NilPy attr/method/callable/bound
 test family re-run. Gate: self-host fixedpoint + `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 26a81d58b.
