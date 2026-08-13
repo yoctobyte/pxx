@@ -5250,17 +5250,14 @@
    "src": "examples/net/httpdemo.pas"
   },
   {
-   "bad": "80d61373e108c70b88ffd057469f2e183640f61f",
+   "bad": "67910b097bafa4e8acb496ead3156e10b3ac079d",
    "good": "432867370a9eefe623d0aa5fd63076dc097f8a92",
    "job": "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas",
    "name": "test-nilpy#10",
    "opened": "2026-08-13T20:31:20Z",
    "range": [
     "983104cae716ca9031686f798abf51a33ef886a3",
-    "67910b097bafa4e8acb496ead3156e10b3ac079d",
-    "f5a7353f8fe8efb203a217ea2ebfde285c5bdae7",
-    "1df75aad5458bf3ab272964dea010a8ff15f26c0",
-    "80d61373e108c70b88ffd057469f2e183640f61f"
+    "67910b097bafa4e8acb496ead3156e10b3ac079d"
    ],
    "src": "test/test_uses_order_pylib_exception_a.pas"
   }
