@@ -7336,13 +7336,75 @@ begin
   if b > a then Result := b else Result := a;
 end;
 
+function PyVarIsCallable(const v: Variant): Boolean;
+{ Any of the callable TAGS a NilPy function value can wear — a bound method or
+  a bare def (8), a pyeval closure (9), a lifted bound-fn (10), a callable
+  object (12). The same set PyVarTypeName answers 'method'/'function' for, which
+  is the definition of "callable" this dialect already commits to. }
+var t: Int64;
+begin
+  t := pyvartag(v);
+  PyVarIsCallable := (t = 8) or (t = 9) or (t = 10) or (t = 12);
+end;
+
+function PyCallKeyVar(const key: Variant; const a0: Variant): Variant;
+{ Call a callable VARIANT of any of the four shapes with one argument. A bound
+  pair (tag 8) is callable from here; a closure, a lifted bound-fn and a
+  callable object are pyeval's to dispatch, and pyeval publishes PyCallKey1 into
+  PyIterCallHook for exactly that reason. }
+begin
+  if (pyvartag(key) = 8) or (PyIterCallHook = nil) then
+    PyCallKeyVar := pybound_callv1(key, a0)
+  else
+    PyCallKeyVar := PyIterCallHook(pyvar_callable_ptr(key, 'key'), a0);
+end;
+
+function PyMinMaxByKey(const c: Variant; const key: Variant;
+                       wantMax: Boolean): Variant;
+{ `min(xs, key=f)` / `max(xs, key=f)` where the KEY is a callable held in a
+  VARIABLE. Those spellings picked THIS two-argument numeric overload — a
+  variant argument matches `b: Variant` exactly while the intended
+  `key: Pointer` candidate needs a coercion the resolver applies only after a
+  proc is chosen — and the numeric compare then raised
+  "expected a number, got object" while comparing the LIST against the
+  FUNCTION. `key=<def name>` and `key=lambda ...` were unaffected because those
+  are pointer-typed nodes.
+
+  Answered here rather than by widening overload resolution: comparing a
+  function is a TypeError in CPython too, so a callable second argument can
+  only ever have meant the key form, and this is the one place both receiver
+  shapes (a static list boxed into a variant, and a variant container) arrive
+  at. bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload }
+var i, n: Integer; cur, curK, bestK: Variant; better: Boolean;
+begin
+  n := Integer(pylen_v(c));
+  if n = 0 then
+    raise ValueError.Create('min() arg is an empty sequence');
+  Result := pyvar_getitem(c, pyvar_of_int(0));
+  bestK := PyCallKeyVar(key, Result);
+  for i := 1 to n - 1 do
+  begin
+    cur := pyvar_getitem(c, pyvar_of_int(i));
+    curK := PyCallKeyVar(key, cur);
+    if wantMax then better := pyvar_gt(curK, bestK)
+    else better := pyvar_gt(bestK, curK);
+    if better then
+    begin
+      bestK := curK;
+      Result := cur;
+    end;
+  end;
+end;
+
 function min(const a: Variant; const b: Variant): Variant; overload;
 begin
+  if PyVarIsCallable(b) then begin Result := PyMinMaxByKey(a, b, False); Exit; end;
   if pyvar_gt(a, b) then Result := b else Result := a;
 end;
 
 function max(const a: Variant; const b: Variant): Variant; overload;
 begin
+  if PyVarIsCallable(b) then begin Result := PyMinMaxByKey(a, b, True); Exit; end;
   if pyvar_gt(b, a) then Result := b else Result := a;
 end;
 

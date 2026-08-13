@@ -5147,4 +5147,14 @@ begin
     l.store(MakeStr('__body__'), pyvar_of_callable(Pointer(@PyBodyTramp)));
 end;
 
+initialization
+  { The ONE callable dispatcher, published to pylib for the whole run rather
+    than only while a map/filter cursor is alive. pylib is the lower unit and
+    cannot see PyCallKey1, so anything down there that must CALL a callable
+    variant of any of the four shapes (min/max with a `key=` held in a variable)
+    goes through this hook — and it was previously installed only by
+    pymap_iter/pyfilter_iter, i.e. exactly when a map happened to be running.
+    bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload }
+  PyIterCallHook := @PyCallKey1;
+
 end.

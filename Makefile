@@ -800,6 +800,10 @@ test-nilpy: $(COMPILER)
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy /tmp/test_nilpy_mapbound26
 	/tmp/test_nilpy_mapbound26 | diff -u test/test_nilpy_map_over_a_bound_method.expected -
+	@# min/max with a `key=` held in a VARIABLE — every callable shape, plus a
+	@# variant container and the plain numeric forms as controls. vs CPython.
+	./$(COMPILER) test/test_nilpy_min_max_key_in_a_variable.npy /tmp/test_nilpy_minmaxkey26
+	/tmp/test_nilpy_minmaxkey26 | diff -u test/test_nilpy_min_max_key_in_a_variable.expected -
 	@# a filter BETWEEN two for-clauses gates the inner LOOP, on both comprehension
 	@# paths — container-first and range-first. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_filter_between_for_clauses.npy /tmp/test_nilpy_filtbetween26

@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`min(xs, key=f)` where f is a NAME holding a callable raises `TypeError: expected a number, got object` — the two-argument numeric min/max overload is picked and compares the list against the function. `key=<def name>` and `key=lambda ...` both work, because those are pointer-typed nodes; only a callable held in a VARIABLE (any kind — a plain def, a bound method) loses"
+status: done
+owner: claude-AN
 ---
 
 # `min(xs, key=f)` picks the numeric overload when the key is in a variable
@@ -63,3 +65,41 @@ that decides something by static type has to know it can become a pointer
 A `.npy` diffed against CPython: every row of the table above for both `min` and
 `max`, plus `key=` holding a lambda in a variable, and `sorted` kept in the same
 file as the control.
+
+## 2026-08-13 — FIXED at the meaning, not at the resolver
+
+The wrong pick is real, but widening overload resolution to prefer a
+`key: Pointer` candidate over an exact `b: Variant` one is a Track A change with
+a blast radius far past this bug. The observation that makes it unnecessary:
+**comparing a function is a TypeError in CPython too**, so a callable second
+argument to `min`/`max` can only ever have meant the key form. pylib's
+two-argument `min`/`max` now answer it directly (`PyMinMaxByKey`), which is also
+the ONE place both receiver shapes arrive at — a static list boxed on the way in,
+and a variant container.
+
+`PyVarIsCallable` is the callable test: tags 8/9/10/12, i.e. exactly the set
+`PyVarTypeName` already answers 'method'/'function' for, so "callable" means the
+same thing in both places.
+
+**The layering needed one bridge.** pylib is the lower unit and cannot see
+pyeval's `PyCallKey1`, so it could only invoke a bound PAIR itself — a lambda
+held in a variable is a pyeval CLOSURE, and `max(xs, key=h)` answered 3 where
+CPython says 1 (every key came back the same, so the first element won). pyeval
+already publishes `PyCallKey1` into `PyIterCallHook`… but only from
+`pymap_iter`/`pyfilter_iter`, i.e. only while a map cursor happened to be alive.
+It is now installed in pyeval's `initialization`, which is where a hook meant to
+be available for the whole run belongs, and `PyCallKeyVar` routes every non-pair
+shape through it.
+
+### Gate
+
+`test/test_nilpy_min_max_key_in_a_variable.npy` + `.expected` from CPython,
+wired into `make test-nilpy`: `key=` as a def NAME, an inline lambda, a def in a
+variable, a lambda in a variable, a bound method in a variable, an inline bound
+method, over a static list and over a VARIANT container, for both `min` and
+`max` — plus `sorted` with the same key and the plain numeric/string forms as
+controls, so a fix cannot trade the 2-argument min for the key form.
+`make test-nilpy` green, `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

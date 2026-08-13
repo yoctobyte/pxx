@@ -1,0 +1,42 @@
+# `min(xs, key=f)` with the key held in a VARIABLE raised
+# "TypeError: expected a number, got object": the two-argument numeric overload
+# matched (a variant argument fits `b: Variant` exactly, while the intended
+# `key: Pointer` candidate needs a coercion applied only after a proc is chosen)
+# and then compared the LIST against the FUNCTION. `key=<def name>` and
+# `key=lambda ...` were fine, being pointer-typed nodes.
+# bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload
+# Every expectation is CPython's own output.
+
+class Box:
+    def key(self, x):
+        return -x
+
+def pk(x):
+    return -x
+
+b = Box()
+f = pk
+g = b.key
+lam = lambda x: -x
+h = lam
+
+xs = [3, 1, 2]
+
+print("name-key", min(xs, key=pk), max(xs, key=pk))
+print("lambda-key", min(xs, key=lambda x: -x), max(xs, key=lambda x: -x))
+print("var-def", min(xs, key=f), max(xs, key=f))
+print("var-lambda", min(xs, key=h), max(xs, key=h))
+print("bound", min(xs, key=g), max(xs, key=g))
+print("inline-bound", min(xs, key=b.key), max(xs, key=b.key))
+
+def get(v):
+    return v
+
+vx = get(xs)
+print("variant-container", min(vx, key=f), max(vx, key=f))
+
+print("sorted", sorted(xs, key=f))
+print("plain", min(xs), max(xs), min(3, 1), max(3, 1), min(2.5, 1.5))
+print("strings", min(["b", "a"]), max(["b", "a"], key=len))
+words = ["bb", "a", "ccc"]
+print("bylen", min(words, key=len), max(words, key=len))
