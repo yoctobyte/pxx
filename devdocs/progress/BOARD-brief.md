@@ -31,8 +31,8 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 194, ranked
 
+- `[p 70] [A]` bug-pascal-uses-order-breaks-pylib-exception
 - `[p 70] [P]` regression-test-core-test-conformance-1
-- `[p 70] [T]` regression-test-core-test-uses-order-pylib-exception-a
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing

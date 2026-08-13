@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -27,3 +28,20 @@ pascal26:4806: error: "argsv": no such member on this record/class
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGED 2026-08-13 by Track T — consolidated into the Track A ticket
+
+Reproduced at HEAD with a freshly rebuilt compiler:
+`pascal26:4824: error: "argsv": no such member on this record/class`.
+
+Not a new bug. This is [[bug-pascal-uses-order-breaks-pylib-exception]]
+returning — that ticket's own two-line repro fails again, with a different
+field. **Reopened at prio 70 and moved back to backlog**; everything is
+recorded there.
+
+Attribution, so nobody re-derives it: the range holds one semantic commit,
+`67910b097 feat(N): e.args, and the KeyError repr it unblocked`, which added the
+`argsv` field to pylib's `Exception`. That is the TRIGGER, not the cause —
+adding a field to your own unit's class is ordinary code, and reverting it would
+only re-arm the trap for the next field. Do not route this to Track N.
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

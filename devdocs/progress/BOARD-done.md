@@ -949,7 +949,6 @@ should not read it to find out what to do. Grep it freely._
 | bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | bug-pascal-uses-is-transitive | A | 65 | bug | Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace) | — |
-| bug-pascal-uses-order-breaks-pylib-exception | A | 45 | bug | `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine | — |
 | bug-pascal-widechar-var-to-string-other-contexts | A | 48 | bug | WideChar var → string still broken in CONCAT (segfault) and as a string ARG (overload error) — only assign was fixed | — |
 | bug-pascal-widechar-var-to-string-segfault | A | 50 | bug | SEGFAULT: assigning a WideChar VARIABLE to an AnsiString crashes (direct widechar(x) value works) | — |
 | bug-pascal-writeln-shortstring-param | A | 40 | bug | writeln of a ShortString/frozen-string PARAM prints wild memory | — |
@@ -1669,6 +1668,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-stmt-call-result-selector-b318 | T | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at 33cd0117f9f9 (auto-filed by twatch) | — |
 | regression-test-core-test-string-to-pchar-auto | A | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
 | regression-test-core-test-syncobjs | T | 70 | regression | regression: test-core#src:test/test_syncobjs.pas red at 9df868bf3680 (auto-filed by twatch) | — |
+| regression-test-core-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_a.pas red at 1df75aad5458 (auto-filed by twatch) | — |
 | regression-test-core-test-widechar-to-utf8-b319 | T | 70 | regression | regression: test-core#src:test/test_widechar_to_utf8_b319.pas red at d94db8d6b0cc (auto-filed by twatch) | — |
 | regression-test-core-test-writeln-nonfinite-float | T | 70 | regression | regression: test-core#src:test/test_writeln_nonfinite_float.pas red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
