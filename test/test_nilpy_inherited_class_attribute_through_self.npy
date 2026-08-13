@@ -1,0 +1,56 @@
+# `self.kind` inside a method DECLARED ON THE BASE read the BASE's class
+# attribute for a Derived instance: FindClassVar walks UPWARD from the class
+# that declares the METHOD, so every subclass behaved like its base — silently,
+# with a perfectly good value. The template-method pattern (a base method
+# reading a constant each subclass redefines) is exactly this shape.
+# bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value
+# Every expectation is CPython's own output.
+
+class A:
+    kind = "a"
+    tag = 1
+    def describe(self):
+        return self.kind + ":" + str(self.tag)
+class B(A):
+    kind = "b"
+
+class C(B):
+    kind = "c"
+    tag = 3
+
+class D(A):
+    pass
+
+print(A().describe(), B().describe(), C().describe(), D().describe())
+print(A.kind, B.kind, C.kind, D.kind)
+print(A().kind, B().kind, C().kind, D().kind)
+print(C().tag, D().tag, A().tag)
+
+class Base2:
+    sep = ","
+    def join(self, xs):
+        return self.sep.join(xs)
+
+class Semi(Base2):
+    sep = ";"
+
+print(Base2().join(["a", "b"]), Semi().join(["a", "b"]))
+
+class P:
+    n = 1
+    def get(self):
+        return self.n
+class Q(P):
+    n = 2
+    def get2(self):
+        return super().get()
+print(Q().get(), Q().get2(), P().get())
+
+# an attribute NOT redeclared keeps working through the same method
+class R:
+    only = "r"
+    def f(self):
+        return self.only
+class S(R):
+    pass
+print(R().f(), S().f())

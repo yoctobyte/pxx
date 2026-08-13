@@ -4342,6 +4342,73 @@ begin
   Inc(ClassVarCount);
 end;
 
+function PyClassIsKinOf(a, b: Integer): Boolean;
+{ Is a an ancestor or a descendant of b (or b itself)? The same walk
+  PyClassKinUsedAsValueEx does inline. }
+var c: Integer;
+begin
+  Result := False;
+  c := a;
+  while c >= 0 do begin if c = b then begin Result := True; Exit; end; c := UClsParent[c]; end;
+  c := b;
+  while c >= 0 do begin if c = a then begin Result := True; Exit; end; c := UClsParent[c]; end;
+end;
+
+function PyClsAttrRedeclaredCi(ci: Integer; const nm: AnsiString): Boolean;
+{ Do TWO classes in ci's line of descent declare a class attribute of this name?
+  Then a read through an instance cannot be resolved at COMPILE time: which slot
+  is right depends on the receiver's runtime class, and resolving it against the
+  class that declares the METHOD is what made `self.kind` inside a base method
+  answer the base's value for a Derived instance.
+
+  Asked of the CLASSVAR table rather than by re-scanning tokens (which is what
+  PyClsAttrRedeclaredInChain does, in the pre-pass, before the table exists):
+  by the time a method BODY is parsed every declaring class has its slot.
+  bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value }
+var i, c, n: Integer;
+begin
+  Result := False;
+  if ci < 0 then Exit;
+  n := 0;
+  for c := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[c] then Continue;
+    if not (PyClassIsKinOf(c, ci)) then Continue;
+    for i := 0 to ClassVarCount - 1 do
+      if (ClassVarCi[i] = c) and
+         (GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]) = nm) then
+      begin
+        Inc(n);
+        Break;
+      end;
+  end;
+  Result := n > 1;
+end;
+
+function PyMakeClsAttrInstGet(baseNode: Integer; const fname: AnsiString): Integer;
+{ `self.attr` / `obj.attr` where attr is a class attribute REDECLARED in the
+  chain — read it off the RECEIVER's runtime class instead of the declaring
+  one. Built here so both the `self.` site and the instance site in parser.inc
+  emit the same call.
+  bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value }
+var procIdx, a0, a1, nameNode: Integer;
+begin
+  Result := -1;
+  procIdx := FindProc('pyclsattr_inst_get');
+  if procIdx < 0 then Exit;
+  nameNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[nameNode] := PyStoredName(fname);
+  ASTSLen[nameNode] := Length(fname);
+  ASTTk[nameNode] := Ord(tyString);
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode; ASTRight[a1] := -1;
+  ASTRight[a0] := a1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyVariant);
+  ASTLeft[Result] := a0;
+end;
+
 function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer;
 { The shared slot of a class attribute that ALSO needs per-instance overrides —
   written through the class name AND through an instance. -1 for every other

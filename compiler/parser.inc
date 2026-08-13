@@ -952,6 +952,8 @@ function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a valu
 function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
 function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer; forward; { Nil Python: a callable VALUE heading for a Pointer parameter (pyparser.inc) }
+function PyClsAttrRedeclaredCi(ci: Integer; const nm: AnsiString): Boolean; forward; { Nil Python: is this class attribute redeclared down the chain? (pyparser.inc) }
+function PyMakeClsAttrInstGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python: read it off the RECEIVER's runtime class (pyparser.inc) }
 function PyHoistPark: Integer; forward; { Nil Python: take the hoist queue away for a TRIAL parse (pyparser.inc) }
 procedure PyHoistRestore(saved: Integer); forward; { Nil Python: put a parked queue back, dropping the trial's (pyparser.inc) }
 procedure PyHoistMerge(saved, trial: Integer); forward; { Nil Python: re-queue a parked trial parse's hoists (pyparser.inc) }
@@ -6643,6 +6645,28 @@ begin
         fldIdx := FindClassVar(recName - REC_UCLASS_BASE, fieldName);
         if fldIdx >= 0 then
         begin
+          { …unless a SUBCLASS redeclares it. FindClassVar walks UPWARD from the
+            static receiver class, so inside a base method `self.kind` found the
+            BASE's slot and every Derived instance read the base's value —
+            silently, and it is the template-method pattern that breaks.
+            Which slot is right is a run-time fact about the receiver, so the
+            read becomes one (PyExprMode only; Pascal's own class vars keep the
+            static resolution FPC gives them).
+            bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value }
+          if PyExprMode and (CurTok.Kind <> tkAssign) and
+             (PyAugBinTok(CurTok.Kind) = tkEOF) and
+             PyClsAttrRedeclaredCi(recName - REC_UCLASS_BASE, fieldName) then
+          begin
+            cvIdx := PyMakeClsAttrInstGet(node, fieldName);
+            if cvIdx >= 0 then
+            begin
+              node := cvIdx;
+              tk := tyVariant;
+              recName := REC_NONE;
+              Next;   { consume field name }
+              Continue;
+            end;
+          end;
           node := AllocNode(AN_IDENT);
           ASTIVal[node] := fldIdx;
           ASTTk[node] := Ord(Syms[fldIdx].TypeKind);

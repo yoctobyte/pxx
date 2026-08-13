@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`self.kind` inside a method DECLARED ON THE BASE reads the base's class attribute even for a Derived instance — `Derived(3).describe()` says 'base:3' where CPython says 'derived:3'. `d.kind` and `Derived.kind` are both correct, so only the read through `self` in an inherited method is wrong. The template-method pattern (a base method reading a subclass's constant) silently uses the wrong constant"
+status: done
+owner: claude-AN
 ---
 
 # `self.<class attribute>` in an INHERITED method reads the base's value
@@ -75,3 +77,41 @@ subclass that does NOT redefine it (must still see the base's), the same
 attribute read through the instance and the class name as controls, a
 `super().describe()` call, and an attribute written on the class after
 construction.
+
+## 2026-08-13 — FIXED, using the registry the class-ref work had just landed
+
+`FindClassVar` walks UPWARD from the class that declares the METHOD, so inside
+`Base.describe` it found Base's slot and stopped — the subclass's own slot,
+allocated by the same mechanism, was never reachable from there. Which slot is
+right is a fact about the RECEIVER, so the read is now one at run time whenever
+the attribute is redeclared down the chain:
+
+  * `PyClsAttrRedeclaredCi(ci, name)` asks the CLASSVAR table (not a token
+    re-scan like the pre-pass's `PyClsAttrRedeclaredInChain`, which runs before
+    that table exists) whether two classes in one line of descent declare the
+    name;
+  * `pyclsattr_inst_get(obj, name)` reads it off the instance's own class,
+    walking `ParentRTTI` — the same walk `Derived.kind` does, which is why THAT
+    spelling was always right. It reuses `PyClsAttrSlotOf` and the bind registry
+    landed earlier today for
+    [[bug-nilpy-class-attribute-through-a-class-reference-reads-garbage]], so
+    this needed no new metadata;
+  * the static resolution is kept for every attribute NOT redeclared (no cost
+    where there is no ambiguity), for assignments and augmented assignments, and
+    for Pascal, which keeps the class-var semantics FPC gives it.
+
+A bare `kind` inside a method is deliberately NOT touched: in Python that is a
+global lookup, not the class attribute.
+
+### Gate
+
+`test/test_nilpy_inherited_class_attribute_through_self.npy` + `.expected` from
+CPython, wired into `make test-nilpy`: a base method reading a redeclared
+attribute, a THREE-level chain each redefining it, a subclass that does not
+redefine it (must see the base's), a second attribute redefined only two levels
+down, `super().get()`, the `sep.join` shape this pattern is usually written as,
+and the instance/class-name reads as controls. `make test-nilpy` green,
+`gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

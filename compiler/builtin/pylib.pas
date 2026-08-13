@@ -3275,6 +3275,28 @@ begin
   Result := PyBoxByKind(a, k, found);
 end;
 
+function pyclsattr_inst_get(obj: Pointer; const name: AnsiString): Variant;
+{ A class ATTRIBUTE read through an INSTANCE, resolved on the receiver's RUNTIME
+  class. The compile-time route resolves it on the class that declares the
+  METHOD, so `self.kind` inside a base method answered the BASE's value for a
+  Derived instance -- the template-method pattern silently using the wrong
+  constant. Walks ParentRTTI from the instance's own class, which is the same
+  walk `Derived.kind` does and the reason that spelling was always right.
+  bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value }
+var a: Pointer; k: Int64; found: Boolean;
+begin
+  Result := pynone;
+  if obj = nil then Exit;
+  a := PyClsAttrSlotOf(Pointer(GetInstanceRTTI(obj)), name, k);
+  if a = nil then
+    raise AttributeError.Create('''' + TObject(obj).ClassName +
+      ''' object has no attribute ''' + name + '''');
+  Result := PyBoxByKind(a, k, found);
+  if not found then
+    raise AttributeError.Create('class attribute ''' + name +
+      ''' has a type this read cannot box');
+end;
+
 function PyClsRefName(const v: Variant): AnsiString;
 { The class's own name out of the blob a VT_CLASSREF points at — for the
   AttributeError message, which names the TYPE and not an instance. PyClassRefStr

@@ -759,6 +759,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-runtime-raised-errors-bypass-try-except | N | 65 | bug | Runtime-raised errors bypass try/except entirely (division by zero, index, key) | — |
 | bug-nilpy-same-kind-undefined-operators-still-compute | N | 60 | bug | Same-kind undefined operators still compute silently (`"ab" - "ab"` → 0) | — |
 | bug-nilpy-same-named-nested-defs-in-two-methods-collide | N | 45 | bug | Two methods of one class cannot both declare a nested def of the same name — the second call binds the first method's def and fails on arity. Pre-existing; loud. | — |
+| bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value | N | 55 | bug | `self.kind` inside a method DECLARED ON THE BASE reads the base's class attribute even for a Derived instance — `Derived(3).describe()` says 'base:3' where CPython says 'derived:3'. `d.kind` and `Derived.kind` are both correct, so only the read through `self` in an inherited method is wrong. The template-method pattern (a base method reading a subclass's constant) silently uses the wrong constant | — |
 | bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic | N | 45 | bug | `&`/`\|`/`-`/`^` on sets, `\|` on dicts silently did raw pointer arithmetic | — |
 | bug-nilpy-set-augmented-union-does-nothing | N | 50 | bug | `a \|= <set>` silently does nothing (and mixing it with `+=` segfaults) | — |
 | bug-nilpy-set-comprehension-over-range-does-not-deduplicate | N | 55 | bug | A set comprehension over `range()` does not deduplicate | — |

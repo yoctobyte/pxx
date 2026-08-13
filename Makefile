@@ -800,6 +800,11 @@ test-nilpy: $(COMPILER)
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy /tmp/test_nilpy_mapbound26
 	/tmp/test_nilpy_mapbound26 | diff -u test/test_nilpy_map_over_a_bound_method.expected -
+	@# self.<class attribute> inside a method declared on the BASE must read the
+	@# RECEIVER's class value — a 3-level chain, a non-redeclaring subclass, and
+	@# super(). Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_inherited_class_attribute_through_self.npy /tmp/test_nilpy_inhclsattr_self26
+	/tmp/test_nilpy_inhclsattr_self26 | diff -u test/test_nilpy_inherited_class_attribute_through_self.expected -
 	@# round(x, n) keeps x's INTNESS — static ints, negative/computed ndigits, a
 	@# bool, a variant element and an arbitrary-precision int. vs CPython.
 	./$(COMPILER) test/test_nilpy_round_keeps_intness.npy /tmp/test_nilpy_roundint26
