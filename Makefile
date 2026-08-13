@@ -1456,6 +1456,12 @@ test-nilpy: $(COMPILER)
 	# type(self).__name__ -- the same question -- worked. Lowers to that same
 	# call; the rows are receiver SHAPES, since a bare name and a call result
 	# take different parsers and both had to learn it.
+	# Optional[str] collapsed to plain str, so the CALL SITE converted a None
+	# argument into a string -- it arrived tagged VT_STRING and `is None` was
+	# correctly False about it. The "" rows are the ones a fix that boxed a nil
+	# str handle as None would get wrong.
+	./$(COMPILER) test/test_nilpy_optional_str_none.npy /tmp/test_nilpy_optstr26
+	/tmp/test_nilpy_optstr26 | diff -u test/test_nilpy_optional_str_none.expected -
 	./$(COMPILER) test/test_nilpy_class_name_chain.npy /tmp/test_nilpy_clsname26
 	/tmp/test_nilpy_clsname26 | diff -u test/test_nilpy_class_name_chain.expected -
 	./$(COMPILER) test/test_nilpy_frozenset.npy /tmp/test_nilpy_frozenset26

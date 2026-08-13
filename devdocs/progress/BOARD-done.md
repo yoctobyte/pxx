@@ -1391,6 +1391,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-none-variant | N | 45 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-operators | N | 55 | feature | NilPy: bitwise operators + augmented assignment | — |
 | feature-nilpy-optional-return-annotation | N | 55 | feature | NilPy: `-> ret` is MANDATORY on every def; Python makes it optional | — |
+| feature-nilpy-optional-string-param-accepts-none | N | 50 | feature | nilpy: passing None to an Optional[str] / str\|None PARAMETER does not match the overload | — |
 | feature-nilpy-percent-format-with-a-mapping | N | 30 | feature | `"%(k)s" % {...}` — the mapping form of %-formatting | — |
 | feature-nilpy-power-operator-and-divmod | N | 45 | feature | The `**` and `/=` operators and `divmod()` are missing | — |
 | feature-nilpy-print-kwargs | N | 55 | feature | NilPy: keyword arguments on the `print` builtin (`file=`, `flush=`, `sep=`, `end=`) | — |

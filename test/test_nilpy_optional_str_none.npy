@@ -1,0 +1,55 @@
+# feature-nilpy-optional-string-param-accepts-none
+#
+# `g(None)` where g takes `x: Optional[str]` ran the NOT-None branch. The
+# parked measurement is what made this a one-line fix rather than a hunt: a
+# pyvartag probe showed the argument arriving inside the callee tagged
+# VT_STRING (6), identical to "a", while a bare None is VT_EMPTY (0). Nothing
+# in the callee was wrong -- `is None` answered correctly about a value that
+# was no longer None by the time it saw it. The fault was the ARGUMENT.
+#
+# Optional[str] collapsed to plain str, and the call site then CONVERTED the
+# None to a string. It stays a variant now, in parameter scope as it already
+# did in return scope. Why str specifically: a NilPy str that is None is a nil
+# AnsiString handle and so is "" (bug-nilpy-empty-str-and-none-are-the-same-
+# value), so the type simply has no room for the distinction.
+#
+# The "" rows are here for that reason -- they are the ones a fix that boxed
+# "a nil str handle" as None would get wrong, which is how the earlier attempt
+# recorded in that ticket failed.
+#
+# Expectations are CPython's own output.
+
+from typing import Optional
+
+def g(x: Optional[str]) -> str:
+    if x is None:
+        return "NONE"
+    return x
+
+def h(x: Optional[str] = None) -> str:
+    if x is None:
+        return "dflt"
+    return x.upper()
+
+def concat(a: str, b: Optional[str]) -> str:
+    if b is None:
+        return a
+    return a + b
+
+class C:
+    def __init__(self, name: Optional[str] = None):
+        self.name = name
+    def show(self) -> str:
+        if self.name is None:
+            return "anon"
+        return self.name
+
+print(g("a"), g(None), g(""))
+print(h(), h("hi"), h(None))
+print(concat("x", None), concat("x", "y"), concat("x", ""))
+print(C().show(), C("bob").show(), C(None).show())
+print(g("a") == "a", len(g("a")))
+n = None
+print(g(n))
+opt: Optional[str] = None
+print(g(opt))

@@ -3,12 +3,13 @@ summary: "nilpy: passing None to an Optional[str] / str|None PARAMETER does not 
 type: feature
 track: N
 prio: 50
+owner: claude-A-N
 ---
 
 # nilpy: `f(None)` where the parameter is `Optional[str]`
 
 - **Type:** feature (Nil-Python frontend, Optional lowering) — **Track N**
-- **Status:** unfinished
+- **Status:** done
 - **Opened:** 2026-07-26 — found while adding PEP 604 unions
   ([[feature-demo-songformatter-pxx-target]]). PRE-EXISTING: reproduces on the
   pinned stable with the `Optional[...]` spelling, so it is not a union-specific
@@ -157,3 +158,37 @@ parameter that stays a variant changes which overload it is, so re-run it
 against `PyPickOverloadByArgTypes` (landed 2026-08-10) — a variant parameter now
 exactly matches a variant argument, which is likely to be what makes the
 matching work honestly rather than by conversion.
+
+## DONE 2026-08-13 — one line, exactly where the parked measurement said
+
+The parked note did the whole job: the `pyvartag` probe showed the argument
+arriving inside the callee tagged VT_STRING, identical to `"a"`, so the fault
+was the ARGUMENT and not the `is None` test, and the fix belonged at the
+Optional lowering. It did.
+
+`Optional[T]` in PARAMETER scope now yields a variant when T is `str`, as it
+already did for `Optional[int]` in RETURN scope and for the same reason: the
+target type has no room for the distinction. A NilPy str that is None is a nil
+AnsiString handle — and so is `""`
+([[bug-nilpy-empty-str-and-none-are-the-same-value]]) — so collapsing
+`Optional[str]` to `str` let the call site convert the None on the way in, which
+is what destroyed it.
+
+Measured after: `g(None)`, `g("")` and `g("a")` all answer CPython's values, in
+every shape swept — a bare parameter, one with a `None` default, an
+`Optional[str]` beside a plain `str` parameter, a constructor storing it in a
+field, a None held in a local first, and an annotated `opt: Optional[str] =
+None`. The `""` rows are the point: a fix that boxed "a nil str handle" as None
+would pass every None row and fail those, which is how the attempt recorded in
+this ticket's history failed.
+
+The interaction this ticket flagged — `PyPickOverloadByArgTypes` now seeing a
+variant parameter where it used to see a str — was re-run: the 29-file
+NilPy annotation / str / None / typing test family is unchanged.
+
+Test `test/test_nilpy_optional_str_none.{npy,expected}` (`.expected` from
+CPython), wired into `test-nilpy`. Gate: self-host fixedpoint + `gate.sh quick`
+GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

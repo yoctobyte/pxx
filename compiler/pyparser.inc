@@ -1042,6 +1042,16 @@ begin
         `if x is not None` took the wrong branch on a valid 0 (uforth's
         _lookup_local_slot, slot 0 read as absent). }
       if PyAnnRetScope and (Result = tyInt64) then Result := tyVariant;
+      { ...and Optional[str] is a VARIANT everywhere, parameters included. A
+        NilPy str that is None is a nil AnsiString handle and an EMPTY string is
+        one too (bug-nilpy-empty-str-and-none-are-the-same-value), so collapsing
+        Optional[str] to str let the CALL SITE convert the None into a string:
+        it arrived inside the callee tagged VT_STRING, indistinguishable from
+        "a", and `x is None` correctly answered False about a value that was no
+        longer None. Measured with pyvartag, which is what located it — the fault
+        was at the argument, not at the test.
+        feature-nilpy-optional-string-param-accepts-none }
+      if Result = tyAnsiString then Result := tyVariant;
     end;
     Exit;
   end;
