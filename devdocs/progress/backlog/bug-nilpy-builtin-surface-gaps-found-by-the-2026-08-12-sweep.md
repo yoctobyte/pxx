@@ -209,3 +209,28 @@ refusal.
 
 Test `test/test_nilpy_zip_n_way.{npy,expected}`, wired into `test-nilpy`; the
 nine existing zip-using tests re-run by name and unchanged.
+
+## Item 3 DONE 2026-08-13 — a computed precision in a format spec
+
+`f"{x:.{n}f}"` works, as do a computed WIDTH (`f"{'x':>{w}}"`), an expression
+(`.{n + 1}f`), a whole conversion character (`{255:{'x'}}`) and a precision of
+zero. The plain-literal spec and the no-spec hole are in the test as controls.
+
+The spec stays a STRING handed to the formatter: the nested hole becomes a
+CONCATENATION in the rewritten source, so the spec mini-language still has
+exactly one implementation and the lexer never learns what "05x" means. That is
+the same reason the spec was captured verbatim in the first place.
+
+Worth recording because it cost two failed builds: the explanatory comment
+originally CONTAINED the shape it described, and a Pascal brace comment ends at
+the first closing brace in it — so the comment terminated inside itself and the
+lexer met a stray quote nine lines later, reporting `unexpected character` at a
+line whose text looked perfectly fine. The comment now spells the shape out in
+words.
+
+Test `test/test_nilpy_fstring_computed_spec.{npy,expected}`, wired into
+`test-nilpy`; the five existing f-string tests re-run and unchanged.
+
+**This closes items 2 and 3. Remaining: item 1's `min`/`max` with `key=None`,
+and item 4's id, slice, complex, ascii, eval, dir, vars, memoryview,
+`max(default=)` and `type(x) == int`.**
