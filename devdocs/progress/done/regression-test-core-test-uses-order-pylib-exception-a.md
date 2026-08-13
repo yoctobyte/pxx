@@ -44,4 +44,4 @@ Attribution, so nobody re-derives it: the range holds one semantic commit,
 `argsv` field to pylib's `Exception`. That is the TRIGGER, not the cause —
 adding a field to your own unit's class is ordinary code, and reverting it would
 only re-arm the trap for the next field. Do not route this to Track N.
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit f1e778649.
