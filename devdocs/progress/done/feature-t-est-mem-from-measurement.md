@@ -160,4 +160,4 @@ be assumed**: the ILP32 argument is still a prediction, the numbers above are
 x86_64, and the floor bug means the Pi case has never actually been exercised.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 84e779e25.
