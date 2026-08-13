@@ -856,6 +856,7 @@ function PyClassWantsIntIndex(ci: Integer): Boolean; forward;  { does a subscrip
 function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Integer; forward;  { the one shared class-attribute slot of that name, for a VARIANT receiver (pyparser.inc) }
 function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forward;  { that slot, when the attribute also needs per-instance overrides (pyparser.inc) }
 function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString; gsym: Integer): Integer; forward;  { instance read of an overridable class attribute: has? get : slot (pyparser.inc) }
+function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString; forward;  { the name to look up on this class for a Python method spelling — pylib's alias when the class does not declare it as written (pyparser.inc) }
 function PyForceVariant(node: Integer): Integer; forward;  { box a value into a variant (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
 function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer; forward;  { `str % args` (pyparser.inc) }
@@ -5612,6 +5613,15 @@ begin
            (FindUMeth(recName - REC_UCLASS_BASE, fieldName + '_') >= 0) then
           fieldName := fieldName + '_';
       end;
+      { ...and the same for a pylib container method pylib declares under
+        another name — `s.update(other)` on a set, which pylib spells
+        setupdate. One table, shared with PyParseClassMethodCall's copy of this
+        resolution (bug-nilpy-set-update-method-is-not-mapped). Guarded to
+        names the class does NOT declare as written, so nothing that resolves
+        today moves. }
+      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+        fieldName := PyMethNameFor(recName - REC_UCLASS_BASE, fieldName);
       { A class attribute written BOTH through its class name and through an
         instance: the one row where Python's model is visibly different from
         copy-at-construction, so it is spelled out. The instance's own override

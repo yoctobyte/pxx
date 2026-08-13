@@ -10989,24 +10989,68 @@ begin
   mai := Procs[mpi].ParamCount;
 end;
 
+{ The Python spelling of a pylib container method that pylib declares under a
+  DIFFERENT name — in ONE table, because a class-typed receiver is resolved by
+  two paths (parser.inc's member access and PyParseClassMethodCall below) and a
+  name added to only one of them is exactly the shape this frontend keeps
+  paying for (devdocs/dev/normalise-dont-special-case.md). Answers '' when the
+  class already spells the name as written.
+
+  TPyDict: the three view methods dodge Pascal's default `Items[]` property.
+  TPyList: a set IS a TPyList here, and the four in-place set operations are
+  spelled set*  because `update`/`difference` would collide with the list and
+  dict surfaces on a case-insensitive language. The operator forms (`|=`, `&=`,
+  `^=`, `-=`) already reach them; the METHOD spellings did not, so
+  `s.update(other)` was a compile error while `s |= other` worked
+  (bug-nilpy-set-update-method-is-not-mapped). The alias applies to any
+  TPyList, set or not: telling a set from a list is a RUN-TIME fact (FKind)
+  that this compile-time path does not have, and NilPy accepting a call CPython
+  rejects is laxness, not a defect — the opposite direction is the one that
+  matters (devdocs/dev/nilpy-semantics-divergences.md). }
+function PyPylibMethodAlias(ci: Integer; const mname: AnsiString): AnsiString;
+begin
+  Result := '';
+  if (FindUClass('TPyDict') >= 0) and (ci = FindUClass('TPyDict')) then
+  begin
+    if mname = 'items' then Result := 'itemlist'
+    else if mname = 'keys' then Result := 'keylist'
+    else if mname = 'values' then Result := 'vallist';
+    Exit;
+  end;
+  if (FindUClass('TPyList') >= 0) and (ci = FindUClass('TPyList')) then
+  begin
+    if mname = 'update' then Result := 'setupdate'
+    else if mname = 'intersection_update' then Result := 'setintersect'
+    else if mname = 'difference_update' then Result := 'setdiff'
+    else if mname = 'symmetric_difference_update' then Result := 'setsymdiff';
+  end;
+end;
+
+{ The name to LOOK UP on this class for a Python method spelling: the alias
+  when the class does not declare the name as written and does declare the
+  alias, the name itself otherwise. Every resolution path calls this instead of
+  applying the table by hand, so a class that spells the Python name directly
+  is untouched. }
+function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString;
+var al: AnsiString;
+begin
+  Result := mname;
+  if ci < 0 then Exit;
+  if FindUMeth(ci, mname) >= 0 then Exit;
+  al := PyPylibMethodAlias(ci, mname);
+  if (al <> '') and (FindUMeth(ci, al) >= 0) then Result := al;
+end;
+
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs: Integer;
     anyKw: Boolean;
     mn: AnsiString;
 begin
-  mn := mname;
-  { TPyDict spells the three view methods keylist/vallist/itemlist. The VARIANT
-    receiver path (PyParseVariantMethod, below) already maps the Python names
-    onto them; this CLASS-TYPED path did not, so a dict whose static type is
-    known — most visibly a LITERAL — failed with "TPyDict has no method
-    .items()" while the identical call through a variable worked
-    (bug-nilpy-dict-method-on-a-literal-receiver-not-found). }
-  if (FindUClass('TPyDict') >= 0) and (ci = FindUClass('TPyDict')) then
-  begin
-    if mn = 'items' then mn := 'itemlist'
-    else if mn = 'keys' then mn := 'keylist'
-    else if mn = 'values' then mn := 'vallist';
-  end;
+  { A dict whose static type is known — most visibly a LITERAL — failed with
+    "TPyDict has no method .items()" while the identical call through a
+    variable worked (bug-nilpy-dict-method-on-a-literal-receiver-not-found).
+    The table is shared with parser.inc's typed member access. }
+  mn := PyMethNameFor(ci, mname);
   mmi := FindUMeth(ci, mn);
   if mmi < 0 then
     Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
@@ -11283,7 +11327,14 @@ begin
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsIsRecord[ci] then Continue;
-    mmi := FindUMeth(ci, mname);
+    { PyMethNameFor, not FindUMeth(ci, mname): a class that spells this Python
+      name differently is still a CANDIDATE. Without it, `xs[0].update(...)` on
+      a variant element found only TPyDict — the one class declaring `update`
+      as written — and called TPyDict.update on whatever the receiver actually
+      was, which SEGFAULTED for a set. Now TPyList joins the candidate list via
+      setupdate and the ordinary two-container runtime dispatch below decides.
+      bug-nilpy-set-update-method-is-not-mapped }
+    mmi := FindUMeth(ci, PyMethNameFor(ci, mname));
     if mmi < 0 then Continue;
     mpi := UMthProc_[mmi];
     if hitCi < 0 then begin hitCi := ci; hitMmi := mmi; hitPi := mpi; end
@@ -11699,7 +11750,7 @@ begin
     (crash). Re-resolve within the chosen class by arity now that `i` is known. }
   if hitCi >= 0 then
   begin
-    mmi := FindUMethArity(hitCi, mname, i);
+    mmi := FindUMethArity(hitCi, PyMethNameFor(hitCi, mname), i);
     if mmi >= 0 then begin hitMmi := mmi; hitPi := UMthProc_[mmi]; end;
   end;
 
@@ -11824,7 +11875,7 @@ begin
   dualRetMixed := False;
   for di := 0 to nDual - 1 do
   begin
-    mmi := FindUMethArity(dualCis[di], mname, i);
+    mmi := FindUMethArity(dualCis[di], PyMethNameFor(dualCis[di], mname), i);
     if mmi < 0 then mmi := dualMmis[di];
     if mmi < 0 then Continue;
     { The KIND is not enough: two candidates can both return tyClass and return
@@ -11845,7 +11896,7 @@ begin
   if (nDual > 0) and (i <= High(argExprs) + 1) then
     for di := 0 to nDual - 1 do
     begin
-      mmi := FindUMethArity(dualCis[di], mname, i);
+      mmi := FindUMethArity(dualCis[di], PyMethNameFor(dualCis[di], mname), i);
       if mmi < 0 then mmi := dualMmis[di];
       if mmi < 0 then Continue;
       dualPi := UMthProc_[mmi];
@@ -27400,6 +27451,13 @@ begin
         end;
       end;
 
+      { A pylib container method pylib declares under another name, reached
+        through a SELECTOR rather than a bare identifier — `mk().update({4})`,
+        `sets[0].update(...)`. Same one table the two other resolution paths
+        consult (PyPylibMethodAlias); without this arm the alias worked for a
+        plain receiver only, which is the double-case shape
+        normalise-dont-special-case.md is about. }
+      if ci >= 0 then fieldName := PyMethNameFor(ci, fieldName);
       mmi := -1;
       if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
       if mmi >= 0 then

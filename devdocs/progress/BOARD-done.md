@@ -771,6 +771,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-set-comprehension-over-range-does-not-deduplicate | N | 55 | bug | A set comprehension over `range()` does not deduplicate | — |
 | bug-nilpy-set-is-a-list-not-a-set | N | 55 | bug | set() returns a TPyList: elements are NOT deduplicated and it prints with list syntax, so set([1,2,2,3]) gives [1, 2, 2, 3] instead of {1, 2, 3} — silently wrong | decide-nilpy-set-as-a-distinct-type-or-a-list |
 | bug-nilpy-set-literal-does-not-deduplicate | N | 60 | bug | A set LITERAL keeps duplicates; `set().add()` removes them | — |
+| bug-nilpy-set-update-method-is-not-mapped | N | 40 | bug | `s.update(other)` on a SET is a compile error (\"TPyList has no method update\") though CPython accepts it. The operator spelling `s \|= other` works and lowers to TPyList.setupdate, so only the METHOD NAME is missing — the same Python-name-to-pylib-name mapping dict already has for items/keys/values. | — |
 | bug-nilpy-setitem-without-getitem-write-does-not-compile | N | 40 | bug | `obj[k] = v` does not compile when the class has `__setitem__` but no `__getitem__` | — |
 | bug-nilpy-settings-editor-segfaults-on-bound-method-field | N | 80 | bug | SettingsEditor segfaults reading a bound method off a field | — |
 | bug-nilpy-slice-of-variant-local-returned-is-unusable | N | 75 | bug | Returning a SLICE of a variant local gives the caller an unusable value | — |

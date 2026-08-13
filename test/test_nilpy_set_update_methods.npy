@@ -1,0 +1,113 @@
+# bug-nilpy-set-update-method-is-not-mapped
+#
+# `s.update(other)` on a set was a compile error ("TPyList has no method
+# update") while the operator spelling `s |= other` worked — the two spellings
+# of one operation again. A set IS a TPyList here and pylib spells the four
+# in-place set operations set*, because `update`/`difference` collide with the
+# list and dict surfaces on a case-insensitive language; the METHOD spellings
+# were simply never mapped onto them.
+#
+# Fixed with ONE table (PyPylibMethodAlias) consulted through ONE lookup
+# (PyMethNameFor) by every path that resolves a method on a class: parser.inc's
+# typed member access, PyParseClassMethodCall, PyParseClassRecordSelectors, and
+# the variant-receiver candidate scan. Building it in one of them is the
+# double-case shape this frontend keeps paying for — which is why the receiver
+# SHAPES below (bare name, field, subscript, call result, variant) are each a
+# row: they take four different routes to the same lookup.
+#
+# The subscript row also fixes a PRE-EXISTING SEGFAULT: `xs[0].update(...)` on
+# a variant element found only TPyDict — the one class declaring `update` as
+# written — and called TPyDict.update on a set. Now TPyList is a candidate too
+# and the ordinary runtime container dispatch decides.
+#
+# A plain LIST accepts these calls, which CPython rejects. Deliberate: set vs
+# list is a run-time fact (FKind) that this compile-time path does not have,
+# and NilPy accepting what CPython rejects is laxness, not a defect
+# (devdocs/dev/nilpy-semantics-divergences.md). The dict CONTROLS below are the
+# ones that matter — `update` must still reach TPyDict.update for a dict.
+#
+# Expectations are CPython's own output.
+
+a = {1, 2, 3}
+a.update({4, 5})
+print("update   ", sorted(a))
+
+b = {1, 2, 3, 4}
+b.intersection_update({2, 4, 9})
+print("intersect", sorted(b))
+
+c = {1, 2, 3}
+c.difference_update({1, 3})
+print("differenc", sorted(c))
+
+d = {1, 2, 3}
+d.symmetric_difference_update({3, 9})
+print("symdiff  ", sorted(d))
+
+# they MUTATE, like the operator forms — an alias taken first must see it
+al = {1}
+alias = al
+al.update({2})
+print("alias    ", sorted(al), sorted(alias), al is alias)
+
+# the operator spelling, unchanged: the two must agree
+op = {1, 2}
+op |= {5}
+me = {1, 2}
+me.update({5})
+print("op vs me ", sorted(op), sorted(me))
+
+
+# --- receiver SHAPES: each takes a different route to the lookup ---
+class Box:
+    def __init__(self):
+        self.s = {1, 2}
+
+
+bx = Box()
+bx.s.update({3})
+print("field    ", sorted(bx.s))
+
+
+def mk():
+    return {1, 2}
+
+
+e = mk()
+e.update({7})
+print("inferred ", sorted(e))
+
+mk().update({4})          # a call result: parses, result discarded
+
+sets = [{1}, {2}]
+sets[0].update({8})       # a variant element — used to SEGFAULT
+print("subscript", sorted(sets[0]))
+
+
+# --- the methods that already worked, as controls ---
+u = {1, 2, 3}
+print("union    ", sorted(u.union({4})))
+print("inter    ", sorted(u.intersection({2, 9})))
+print("diff     ", sorted(u.difference({1})))
+print("symdiff2 ", sorted(u.symmetric_difference({3, 9})))
+print("subset   ", u.issubset({1, 2, 3, 4}), u.issuperset({1}), u.isdisjoint({9}))
+u.add(7)
+u.discard(7)
+print("add/disc ", sorted(u))
+print("unchanged", sorted(u))
+
+
+# --- dict CONTROLS: `update` must still mean TPyDict.update ---
+dd = {"a": 1}
+dd.update({"b": 2})
+print("dict upd ", sorted(dd.items()))
+print("dict view", sorted(dd.keys()), sorted(dd.values()))
+
+# A DICT through that same variant path — `dvs[0].update(...)` — SEGFAULTS,
+# on the pinned binary too, and is untouched by this change: the variant
+# receiver picks the first arity-1 `update` overload (the TPyList arm) whatever
+# the argument is, so a dict is walked as a list. Filed separately as
+# bug-nilpy-dict-update-through-a-variant-receiver-picks-the-list-overload;
+# not asserted here because it is not this ticket's defect.
+dvs = [{"a": 1}]
+print("dict sub ", sorted(dvs[0].items()))

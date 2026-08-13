@@ -1422,6 +1422,14 @@ test-nilpy: $(COMPILER)
 	# never reached the set path). In place, like +=/extend -- aliases must see it.
 	./$(COMPILER) test/test_nilpy_set_augmented_union.npy /tmp/test_nilpy_setaug26
 	/tmp/test_nilpy_setaug26 | diff -u test/test_nilpy_set_augmented_union.expected -
+	# ...and the METHOD spellings of the same four operations (update,
+	# intersection_update, difference_update, symmetric_difference_update),
+	# which pylib declares as set* and nothing mapped onto. One table consulted
+	# by every resolution path, so the receiver SHAPES are the rows; the
+	# subscript one also fixed a segfault (only TPyDict declared `update`, so a
+	# set was walked as a dict).
+	./$(COMPILER) test/test_nilpy_set_update_methods.npy /tmp/test_nilpy_setupd26
+	/tmp/test_nilpy_setupd26 | diff -u test/test_nilpy_set_update_methods.expected -
 	# a module name rebound INSIDE a block from a subscript / .values() loop /
 	# list() wrapper kept the module binding's type -- len() read a pointer.
 	./$(COMPILER) test/test_nilpy_module_name_rebound_in_a_block.npy /tmp/test_nilpy_modrebind26
