@@ -9246,6 +9246,7 @@ end;
 
 procedure ParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
+    rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
@@ -9270,7 +9271,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     mapProc, mapConv: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
     rndArg: Integer;   { first operand of NilPy round(x, n) }
     rndIntArg: Boolean;      { …and was it an INTEGER? then round is identity }
-    rndArgTk: TTypeKind;     { its type, to restore after the identity }
+    rndArgTk, rndRawTk: TTypeKind;   { its type, to restore after the identity }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
@@ -11533,6 +11534,13 @@ begin
           `x * 255` types integer but lowers to a variant multiply — so the
           codegen's own IRTk = tyVariant check is the real backstop; this one
           only covers the plainly-typed cases.) }
+        { …but the two-argument `round` must NOT be unboxed: its answer keeps the
+          argument's INTNESS, and a double is where that information dies —
+          `round(2 ** 70, 2)` came back as 1.18e+21. Remember the raw node and
+          hand THAT to the variant-aware routine below.
+          bug-nilpy-two-argument-round-of-an-int-returns-a-float }
+        rndRawArg := CurASTNode;
+        rndRawTk := LastExprTk;
         if isNilPy and (LastExprTk = tyVariant) then
         begin
           node := AllocNode(AN_CALL);
@@ -11558,9 +11566,10 @@ begin
             other implementation prints 6 — while the ONE-argument round(6)
             was right, so the two spellings disagreed with each other.
             bug-nilpy-two-argument-round-of-an-int-returns-a-float }
-          rndIntArg := (LastExprTk = tyInteger) or (LastExprTk = tyInt64) or
-                       TypeIsPromoInt(LastExprTk);
-          rndArgTk := LastExprTk;
+          rndIntArg := (rndRawTk = tyInteger) or (rndRawTk = tyInt64) or
+                       (rndRawTk = tyBoolean) or TypeIsPromoInt(rndRawTk);
+          rndArgTk := rndRawTk;
+          rndArg := rndRawArg;               { the un-unboxed argument }
           ParseExpr;
           Expect(tkRParen, ')');
           { …and with a non-negative ndigits the rounding cannot change an
@@ -11569,11 +11578,53 @@ begin
             computed one is unknown here; both keep the float path below, which
             is what shipped — the int-typed answer for those needs a pylib
             routine and is recorded on the ticket. }
-          if rndIntArg and (ASTKind[CurASTNode] = AN_INT_LIT) and
+          { a statically-typed int with a non-negative LITERAL ndigits needs no
+            call at all — rounding an integer up cannot change it. NOT a bool:
+            `round(True, 2)` is 1 in CPython, an int, so the identity would keep
+            a value that PRINTS as True. }
+          if rndIntArg and (rndArgTk <> tyBoolean) and
+             (ASTKind[CurASTNode] = AN_INT_LIT) and
              (ASTIVal[CurASTNode] >= 0) then
           begin
             CurASTNode := rndArg;
             LastExprTk := rndArgTk;
+            Exit;
+          end;
+          { a statically-typed INT with any other ndigits: an int result, so
+            `round(1234, -2)` is 1200 and not 1200.0 }
+          if rndIntArg and (not TypeIsPromoInt(rndArgTk)) then
+          begin
+            argSeq := FindProc('pyround_int');
+            if argSeq < 0 then Error('Nil Python: pylib (pyround_int) not loaded');
+            node := AllocNode(AN_CALL);
+            ASTIVal[node] := argSeq;
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := rndArg;
+            prevTok := AllocNode(AN_ARG); ASTLeft[prevTok] := CurASTNode;
+            ASTRight[prevTok] := -1;
+            ASTRight[argSeq] := prevTok;
+            ASTLeft[node] := argSeq;
+            ASTTk[node] := Ord(tyInt64);
+            CurASTNode := node;
+            LastExprTk := tyInt64;
+            Exit;
+          end;
+          { a VARIANT or a PROMO argument: the intness is a run-time fact, so the
+            variant-aware routine decides — and it gets the RAW argument, before
+            the float unbox that would have thrown that fact away }
+          if isNilPy and ((rndRawTk = tyVariant) or TypeIsPromoInt(rndRawTk)) then
+          begin
+            argSeq := FindProc('pyround_v');
+            if argSeq < 0 then Error('Nil Python: pylib (pyround_v) not loaded');
+            node := AllocNode(AN_CALL);
+            ASTIVal[node] := argSeq;
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := rndRawArg;
+            prevTok := AllocNode(AN_ARG); ASTLeft[prevTok] := CurASTNode;
+            ASTRight[prevTok] := -1;
+            ASTRight[argSeq] := prevTok;
+            ASTLeft[node] := argSeq;
+            ASTTk[node] := Ord(tyVariant);
+            CurASTNode := node;
+            LastExprTk := tyVariant;
             Exit;
           end;
           argSeq := FindProc('pyround_n');
@@ -11602,6 +11653,26 @@ begin
            TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
         begin
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
+        { …and the same value reached through a VARIANT — a module global
+          holding `2 ** 70` types tyVariant here, not promo, so the guard above
+          missed it and the SSE conversion of the unboxed double answered
+          -9223372036854775808. The variant routine keeps a promo exact, an int
+          an int, and rounds a float half-to-even into one.
+          bug-nilpy-two-argument-round-of-an-int-returns-a-float }
+        if isNilPy and (prevTok = -204) and (rndRawTk = tyVariant) then
+        begin
+          argSeq := FindProc('pyround1_v');
+          if argSeq < 0 then Error('Nil Python: pylib (pyround1_v) not loaded');
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := argSeq;
+          prevTok := AllocNode(AN_ARG); ASTLeft[prevTok] := rndRawArg;
+          ASTRight[prevTok] := -1;
+          ASTLeft[node] := prevTok;
+          ASTTk[node] := Ord(tyVariant);
+          CurASTNode := node;
+          LastExprTk := tyVariant;
           Exit;
         end;
         node := AllocNode(AN_CALL); ASTIVal[node] := prevTok;

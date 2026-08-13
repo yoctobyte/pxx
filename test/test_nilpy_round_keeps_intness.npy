@@ -1,0 +1,33 @@
+# CPython's rule: round(x, n) keeps x's TYPE — an int in is an int out, whatever
+# n is, and a NEGATIVE n really rounds (round(1234, -2) is 1200, an int). pxx
+# routed the two-argument form through the float path, so round(6, 2) printed
+# 6.0, round(True, 2) printed 1.0, and round(2**70, 2) lost the value entirely
+# (the variant was unboxed to a double before the intness could be seen).
+# bug-nilpy-two-argument-round-of-an-int-returns-a-float
+# Every expectation is CPython's own output.
+
+# static ints
+print(round(6, 2), round(6), round(6, 0), round(1234, -2), round(1234, -3))
+print(round(-1234, -2), round(1250, -2), round(1350, -2), round(15, -1), round(25, -1))
+n = 2
+m = -2
+print(round(6, n), round(1234, m), round(0, m))
+# floats
+print(round(6.5, 2), round(2.675, 2), round(6.0, 2), round(-2.5), round(2.5))
+# variants
+lst = [6, 6.5, True]
+print(round(lst[0], 2), round(lst[1], 2), round(lst[2], 2))
+print(round(lst[0], m))
+# bools
+print(round(True, 2), round(False, 2), round(True))
+# arbitrary precision
+big = 2 ** 70
+print(round(big, 2), round(big))
+print(round(big + 1, 5))
+# the int/float distinction actually asserted
+print(str(round(6, 2)), str(round(6.0, 2)), str(round(lst[0], 2)), str(round(1234, -2)))
+print(type(round(6, 2)).__name__, type(round(6.0, 2)).__name__, type(round(1234, -2)).__name__)
+# one-argument round over every receiver kind, incl. the halves
+vals = [2.5, 3.5, -2.5, -0.5, 6, 6.5]
+print([round(v) for v in vals])
+print(round(2.5), round(3.5), round(-2.5), round(-0.5), round(0.5))

@@ -1489,6 +1489,19 @@ procedure pyassert(ok: Boolean; const msg: AnsiString);
   the double's EXACT decimal value, which is CPython's rule; the body sits far
   below, next to the exact-decimal core it is built on. }
 function pyround_n(x: Double; n: Integer): Double;
+{ `round(x, ndigits)` where x's INTNESS must survive: an int in is an int out,
+  whatever ndigits is, and a variant is the shape that carries either. The
+  frontend hands the RAW argument here (it defers its own unbox for the
+  two-argument form) so a promotable int keeps its precision instead of being
+  flattened to a double on the way in.
+  bug-nilpy-two-argument-round-of-an-int-returns-a-float }
+function pyround_v(const x: Variant; n: Int64): Variant;
+{ The ONE-argument `round(x)` over a variant: an int stays itself, an
+  arbitrary-precision int stays EXACT (the float path narrowed 2**70 to
+  -9223372036854775808), and a float rounds half-to-EVEN into an int, as
+  CPython does. }
+function pyround1_v(const x: Variant): Variant;
+function pyround_int(x: Int64; n: Int64): Int64;
 { Python's math.floor/math.ceil return an int, unlike the RTL Math unit's
   Floor/Ceil (Double->Double, shared with the Pascal frontend and left alone
   here) -- these are the NilPy-specific int-returning shims, dispatched by
@@ -8544,6 +8557,72 @@ end;
   before the rounding position is an implicit 0, which is even, so an exact
   tie goes to zero — round(0.5, 0) is 0.0 in Python, and this gets that for
   the same reason CPython does rather than by a special case. }
+function pyround_v(const x: Variant; n: Int64): Variant;
+{ The variant twin: an int-tagged value (int, bool, or an arbitrary-precision
+  int) keeps its intness, a float rounds as a float. Reached whenever the
+  argument's static type is a variant or a promo int — a list element, an
+  unannotated parameter, `2 ** 70`. }
+var t: Int64;
+begin
+  t := pyvartag(x);
+  { arbitrary precision: a non-negative ndigits cannot change it, and flattening
+    it to a double to "round" it is what lost 2**70 entirely }
+  if t >= 8192 then
+  begin
+    if n >= 0 then pyround_v := x
+    else
+      raise TypeError.Create('round() of an arbitrary-precision int with a '
+        + 'negative ndigits is not supported yet');
+    Exit;
+  end;
+  if (t = 1) or (t = 2) or (t = 4) then         { int / int64 / bool }
+    pyround_v := pyvar_of_int(pyround_int(pyvar_to_int(x), n))
+  else
+    pyround_v := pyround_n(pyvar_to_float(x), Integer(n));
+end;
+
+function pyround1_v(const x: Variant): Variant;
+var t: Int64; d, fl: Double; iv: Int64;
+begin
+  t := pyvartag(x);
+  if (t >= 8192) or (t = 1) or (t = 2) then begin pyround1_v := x; Exit; end;
+  if t = 4 then begin pyround1_v := pyvar_of_int(pyvar_to_int(x)); Exit; end;
+  d := pyvar_to_float(x);
+  iv := Trunc(d);
+  if (d < 0) and (d <> iv) then iv := iv - 1;     { floor, not truncation }
+  fl := iv;
+  d := d - fl;
+  { half-to-EVEN, which is what Python rounds with: 2.5 -> 2, 3.5 -> 4 }
+  if (d > 0.5) or ((d = 0.5) and ((iv and 1) = 1)) then iv := iv + 1;
+  pyround1_v := pyvar_of_int(iv);
+end;
+
+function pyround_int(x: Int64; n: Int64): Int64;
+{ CPython's `round(int, ndigits)`: an int in, an int out, whatever ndigits is.
+  A non-negative ndigits cannot change an integer, so it is the identity; a
+  NEGATIVE one really does round — `round(1234, -2)` is 1200, an INT, and pxx
+  answered 1200.0. Banker's rounding at the half, as CPython does.
+  bug-nilpy-two-argument-round-of-an-int-returns-a-float }
+var p, half, r, q: Int64; i: Integer; neg: Boolean;
+begin
+  if n >= 0 then begin pyround_int := x; Exit; end;
+  p := 1;
+  for i := 1 to -n do
+  begin
+    { past 19 zeros every int64 rounds to 0 — stop rather than overflow p }
+    if p > 922337203685477580 then begin pyround_int := 0; Exit; end;
+    p := p * 10;
+  end;
+  neg := x < 0;
+  if neg then x := -x;
+  q := x div p;
+  r := x - q * p;
+  half := p div 2;
+  if (r > half) or ((r = half) and ((q and 1) = 1)) then q := q + 1;
+  pyround_int := q * p;
+  if neg then pyround_int := -pyround_int;
+end;
+
 function pyround_n(x: Double; n: Integer): Double;
 var
   av, r: Double;

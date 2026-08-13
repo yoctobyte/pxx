@@ -800,6 +800,10 @@ test-nilpy: $(COMPILER)
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy /tmp/test_nilpy_mapbound26
 	/tmp/test_nilpy_mapbound26 | diff -u test/test_nilpy_map_over_a_bound_method.expected -
+	@# round(x, n) keeps x's INTNESS — static ints, negative/computed ndigits, a
+	@# bool, a variant element and an arbitrary-precision int. vs CPython.
+	./$(COMPILER) test/test_nilpy_round_keeps_intness.npy /tmp/test_nilpy_roundint26
+	/tmp/test_nilpy_roundint26 | diff -u test/test_nilpy_round_keeps_intness.expected -
 	@# min/max with a `key=` held in a VARIABLE — every callable shape, plus a
 	@# variant container and the plain numeric forms as controls. vs CPython.
 	./$(COMPILER) test/test_nilpy_min_max_key_in_a_variable.npy /tmp/test_nilpy_minmaxkey26
