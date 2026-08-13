@@ -191,4 +191,4 @@ CPython), wired into `test-nilpy`. Gate: self-host fixedpoint + `gate.sh quick`
 GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 93a1d07ab.
