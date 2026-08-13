@@ -19246,6 +19246,47 @@ begin
   Result := False;   { no `=` on this line — not an assignment target }
 end;
 
+{ Does the statement start `name[...]` and CONTINUE into `.member`? That is a
+  STORE target this parser never admitted — `xs[0].n = 9`, the ordinary Python
+  spelling for mutating an object held in a list — because the branch below is
+  entered only on `name .`. Reading the same chain always worked, and so did
+  `xs[0].n += 1`, which is why it failed loudly and narrowly: only the plain-`=`
+  spelling had nowhere to go.
+  Deliberately NOT true for a bare `xs[0] = v`, which has its own lowering
+  (setitem) and must keep it — the '.' after the closing bracket is the whole
+  test.
+  bug-nilpy-assigning-to-an-attribute-of-a-list-element-does-not-parse }
+function PySubscriptThenMemberAhead: Boolean;
+var j, depth: Integer;
+begin
+  Result := False;
+  if (CurTok.Kind <> tkIdent) or (TokPos >= TokCount) then Exit;
+  if Tokens[TokPos].Kind <> tkLBrack then Exit;
+  j := TokPos;
+  depth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLBrack then Inc(depth)
+    else if Tokens[j].Kind = tkRBrack then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        { another subscript may follow — `grid[i][j].n` }
+        if (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkLBrack) then
+        begin
+          Inc(j);
+          Continue;
+        end;
+        Result := (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkDot);
+        Exit;
+      end;
+    end
+    else if Tokens[j].Kind in [tkNewline, tkEOF] then Exit;
+    Inc(j);
+  end;
+end;
+
 function PyParseStatement: Integer;
 var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
     unpStar: Boolean;   { the unsupported-unpack diagnostic below }
@@ -19713,7 +19754,7 @@ begin
     Exit;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
-     (Tokens[TokPos].Kind = tkDot) then
+     ((Tokens[TokPos].Kind = tkDot) or PySubscriptThenMemberAhead) then
   begin
     PyParseBoolExpr;
     lhsNode := CurASTNode;

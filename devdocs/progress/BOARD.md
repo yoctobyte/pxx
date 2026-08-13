@@ -34,7 +34,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (213)
+## backlog (212)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,7 +48,6 @@ _none_
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
 | bug-nilpy-a-tuple-compares-equal-to-a-list | N | 35 | bug | `(1, 2) == [1, 2]` answers True where CPython says False — pylist_eq compares by position without asking the FKind tag, so a tuple and a list of the same contents are indistinguishable to it. Same root cause as the set half, which is fixed; the tuple half was left because tightening it moves code paths that never set an explicit kind. | — |
-| bug-nilpy-assigning-to-an-attribute-of-a-list-element-does-not-parse | N | 45 | bug | `xs[0].n = 9` is a compile error (\"expected expression\") on any list of objects — assigning THROUGH a subscript to an attribute does not parse at all. Reading it (`xs[0].n`) is fine, and so is binding the element first (`e = xs[0]; e.n = 9`), so only the store-through-subscript spelling is missing. | — |
 | bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep | N | 40 | bug | A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=)) | — |
 | bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
@@ -401,9 +400,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1724)
+## done (1725)
 
-1724 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1725 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -492,7 +491,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [N] bug-nilpy-assigning-to-an-attribute-of-a-list-element-does-not-parse
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3

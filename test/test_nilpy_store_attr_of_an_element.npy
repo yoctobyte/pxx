@@ -1,0 +1,54 @@
+# bug-nilpy-assigning-to-an-attribute-of-a-list-element-does-not-parse
+#
+# `xs[0].n = 9` — the ordinary Python spelling for mutating an object held in a
+# list — did not parse. What makes the diagnosis short is what already worked:
+# READING the same chain, `xs[0].n += 1` (the augmented form), and binding the
+# element to a name first. So the chain itself is fine and only the plain-`=`
+# STORE had nowhere to go: the statement branch that parses an lvalue target
+# was entered on `name .` alone, and this target starts `name [`.
+#
+# The entry test is now "does it continue into a `.member` after the closing
+# bracket", which is deliberately false for a bare `xs[0] = v` — that has its
+# own setitem lowering and must keep it. The last two rows are that control.
+#
+# The alias row is the one that would catch a fix that stored into a COPY of
+# the element rather than through the shared object.
+#
+# Expectations are CPython's own output.
+
+class B:
+    def __init__(self, n):
+        self.n = n
+
+xs = [B(3), B(4)]
+xs[0].n = 9
+print(xs[0].n, xs[1].n)
+xs[1].n += 1
+print(xs[1].n)
+
+d = {"k": B(3)}
+d["k"].n = 7
+print(d["k"].n)
+
+grid = [[B(1), B(2)]]
+grid[0][1].n = 5
+print(grid[0][1].n)
+
+def mk():
+    return [B(6)]
+ys = mk()
+ys[0].n = 8
+print(ys[0].n)
+
+# aliasing: the store must hit the SHARED object
+e = xs[0]
+xs[0].n = 42
+print(e.n)
+
+# controls that must not move
+plain = [1, 2]
+plain[0] = 9
+print(plain)
+dd = {"a": 1}
+dd["a"] = 2
+print(dd)

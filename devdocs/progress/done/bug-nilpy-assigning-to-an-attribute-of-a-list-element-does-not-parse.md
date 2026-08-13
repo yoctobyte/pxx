@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`xs[0].n = 9` is a compile error (\"expected expression\") on any list of objects — assigning THROUGH a subscript to an attribute does not parse at all. Reading it (`xs[0].n`) is fine, and so is binding the element first (`e = xs[0]; e.n = 9`), so only the store-through-subscript spelling is missing."
+status: done
+owner: claude-A-N
 ---
 
 # Assigning to an attribute of a list element does not parse
@@ -76,3 +78,36 @@ may need the arm in a second place.
 `make test-nilpy` + self-host fixedpoint; a `.npy` diffed against CPython
 covering plain `=`, `+=`, a list-literal receiver, a call-result receiver, a
 dict receiver, and the bound-name control.
+
+## FIXED 2026-08-13
+
+`xs[0].n = 9` parses and stores. So do the shapes this ticket's boundary table
+listed as unmeasured or broken: a dict receiver (`d["k"].n = 7`), a nested
+subscript (`grid[0][1].n = 5`), a call-result list, and `+=` on the same target.
+
+### The diagnosis was short because of what already WORKED
+
+Reading `xs[0].n`, writing `xs[0].n += 1`, and binding the element first were
+all fine. So the chain is not the problem and neither is the store's lowering —
+only the plain-`=` spelling had nowhere to go. The statement branch that parses
+an lvalue TARGET (the one the augmented forms come through) is entered on
+`name .` alone, and this target starts `name [`.
+
+The entry test is now "starts `name[...]` and CONTINUES into `.member` after
+the closing bracket", repeated for a chain of subscripts. Deliberately FALSE
+for a bare `xs[0] = v`: that has its own setitem lowering and must keep it, so
+the `.` is the whole test. Both are rows in the test.
+
+The ticket's note about augmented assignment splitting across two parsers did
+not bite here — `+=` on this target already worked, which is itself what
+located the missing arm.
+
+Test `test/test_nilpy_store_attr_of_an_element.{npy,expected}` (`.expected`
+from CPython), wired into `test-nilpy`. The alias row is the one that would
+catch a fix storing into a COPY of the element rather than through the shared
+object.
+
+Gate: self-host fixedpoint + `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

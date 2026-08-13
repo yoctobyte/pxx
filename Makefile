@@ -1473,6 +1473,12 @@ test-nilpy: $(COMPILER)
 	# one of the three that collides with TPyDict's default Items[] PROPERTY, so
 	# the remap of a Python spelling to pylib's name has to run BEFORE property
 	# resolution, not beside the method lookup.
+	# xs[0].n = 9 did not parse, while READING it, `xs[0].n += 1` and binding the
+	# element first all worked: the lvalue branch was entered on `name .` alone.
+	# The entry test is now "continues into .member after the bracket", which is
+	# false for a bare xs[0] = v -- that keeps its own setitem lowering.
+	./$(COMPILER) test/test_nilpy_store_attr_of_an_element.npy /tmp/test_nilpy_elemattr26
+	/tmp/test_nilpy_elemattr26 | diff -u test/test_nilpy_store_attr_of_an_element.expected -
 	./$(COMPILER) test/test_nilpy_selector_on_a_dict_returning_call.npy /tmp/test_nilpy_dictsel26
 	/tmp/test_nilpy_dictsel26 | diff -u test/test_nilpy_selector_on_a_dict_returning_call.expected -
 	./$(COMPILER) test/test_nilpy_getattr_computed_name.npy /tmp/test_nilpy_getattrc26
