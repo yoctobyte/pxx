@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (217)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -94,6 +94,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
+| decide-nilpy-dunder-file-for-a-compiled-program | U | 55 | decide | What should __file__ be in a COMPILED NilPy program? Today it is argv[0] (the binary), CPython says the source path. The idiom that cares is `os.path.dirname(os.path.abspath(__file__))` to find data files next to the script — it is how uforth locates STD.UFO, and it fails today when the binary and the sources live in different directories. | — |
 | decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
 | doc-variant-conversion-rules-and-the-fpc-char-divergence | D | 45 | doc | Document the Variant->scalar conversion rules now that they are settled: a boolean variant converts to -1 (OLE VARIANT_TRUE, matching FPC) while Ord(True) stays 1, and Variant->Char answers Chr(n) by default where FPC takes character 1 of the variant's string form ('65' -> '6') — the one row that deliberately diverges, available under --strict-fpc. Also CORRECTS an existing note in docs/language/types.md that is factually wrong. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
@@ -466,6 +467,7 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
+- [p 55] [U] decide-nilpy-dunder-file-for-a-compiled-program
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [A] feature-a-own-language-first-symbol-resolution
 - [p 55] [E] feature-demo-portable-userland
