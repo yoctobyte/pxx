@@ -475,6 +475,14 @@ def lock_state():
 def kill_run(pid, why):
     """Kill a wedged/superseded testmgr, WITHOUT killing the caller.
 
+    Nor the caller's PARENT. `--pin` holds the repo lock for the whole pin and
+    runs the gate as a child; that child reaching a kill path here means it is
+    about to SIGKILL the pin that spawned it (exit 137, nothing pinned —
+    bug-t-testmgr-pin-force-kills-its-own-parent). The lock-inheritance path in
+    acquire_lock() is what makes the child never GET here; this is the backstop
+    for whatever else learns to call kill_run. Weak after reexec_scoped() —
+    systemd adopts the run, so getppid() becomes 1 — hence backstop, not fix.
+
     Group-killing is what we want -- a testmgr that dies leaving orphaned qemu
     or compiler children behind is half the reason the box gets starved in the
     first place. But `killpg(getpgid(pid))` is a loaded gun: if that process
@@ -488,6 +496,10 @@ def kill_run(pid, why):
     back to killing the single pid.
     """
     if not pid_alive(pid):
+        return
+    if pid in (os.getpid(), os.getppid()):
+        print("testmgr: refusing to kill pid %d (%s) — it is us or our parent"
+              % (pid, why), file=sys.stderr, flush=True)
         return
     try:
         pgid = os.getpgid(pid)
@@ -673,6 +685,23 @@ def release_lock():
             pass
 
 
+LOCK_INHERIT_ENV = "TESTMGR_LOCK_INHERITED"
+
+
+def inherited_lock_owner():
+    """The pid that holds the repo lock ON OUR BEHALF, if any.
+
+    Set by run_pin() on the gate child it spawns. Survives reexec_scoped(),
+    because that re-exec inherits os.environ -- the same property TESTMGR_SCOPED
+    already relies on to avoid re-scoping forever.
+    """
+    try:
+        pid = int(os.environ.get(LOCK_INHERIT_ENV, ""))
+    except ValueError:
+        return None
+    return pid if pid > 0 else None
+
+
 def acquire_lock(force):
     """Refuse to pile onto a live run; reclaim a dead one. Returns True if ours.
 
@@ -680,7 +709,35 @@ def acquire_lock(force):
     second run does not merely queue behind the first -- it competes with it,
     and both starve. "Re-running doesn't kill the old one" and "testmgr hangs"
     are the same bug seen from two ends.
+
+    INHERITED LOCKS. `--pin` holds the lock for the whole pin -- gate included,
+    deliberately, so nothing rebuilds compiler/pascal26 under stabilize-fast's
+    feet -- and then runs the gate as a child of itself. That child must neither
+    take the lock nor kill its holder: the holder is its own parent, and killing
+    it is exit 137 with nothing pinned. `--force` meant "the lock you will find
+    is mine, proceed"; it was implemented as "kill whoever holds it".
+
+    So ownership is passed DOWN explicitly instead. The child does not acquire,
+    does not release (release_lock already no-ops on a pid that is not ours) and
+    does not heartbeat (start_heartbeat's beat loop returns for the same reason)
+    -- the parent does all three for the whole window.
     """
+    owner = inherited_lock_owner()
+    if owner is not None:
+        info = read_lock()
+        if info and info.get("pid") == owner and pid_alive(owner):
+            print("testmgr: using the repo lock held by pid %d (inherited)"
+                  % owner, flush=True)
+            return True
+        # The lock we were promised is gone -- force-taken by a third run, or
+        # its holder died. Refusing is right either way: the window this run was
+        # supposed to be protected by no longer exists, and the alternative is
+        # to start killing processes on behalf of a parent that may itself be
+        # dead. The pin above us reports the gate rc and pins nothing.
+        print("testmgr: the inherited lock (pid %d) is gone — refusing to "
+              "take one of my own" % owner, file=sys.stderr)
+        return False
+
     state, info = lock_state()
     if state == "live" and not force:
         ago = int(time.time() - info.get("started", time.time()))
@@ -2633,10 +2690,13 @@ def run_pin(args):
                  "— pass --tier quick to override" if down else ""),
               flush=True)
         # A child, so the gate keeps the process-group teardown twatch.kill_child
-        # relies on; --force because THIS process holds the repo lock for the
-        # whole pin, which is the point (nothing else may build meanwhile).
+        # relies on. It INHERITS this process's lock rather than taking one:
+        # --force here used to mean "the lock is mine, proceed" and was executed
+        # as "kill the holder", i.e. this process
+        # (bug-t-testmgr-pin-force-kills-its-own-parent).
+        env = dict(os.environ, **{LOCK_INHERIT_ENV: str(os.getpid())})
         rc = subprocess.run([sys.executable, os.path.abspath(__file__),
-                             "--tier", tier, "--force"], cwd=REPO).returncode
+                             "--tier", tier], cwd=REPO, env=env).returncode
         if rc != 0:
             print("testmgr --pin: gate RED (rc %d) — nothing pinned, tree "
                   "untouched" % rc, file=sys.stderr)
@@ -3032,6 +3092,11 @@ def main():
         if not acquire_lock(args.force):
             return 2
         atexit.register(release_lock)
+        # A pin outlives HEARTBEAT_STALE easily (gate + stabilize-fast), and a
+        # lock that never beats is reaped as wedged by ANY reader — including,
+        # before this, its own gate child. Liveness is a property of the
+        # process, so the pin must beat like a tier run does.
+        start_heartbeat("pin")
         return run_pin(args)
     if args.bench:
         # deliberately unscoped: --bench appends to the tracked timing series in
