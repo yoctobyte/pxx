@@ -2,6 +2,7 @@
 track: N
 prio: 40
 type: bug
+blocked-by: [bug-nilpy-exception-args-attribute-missing]
 ---
 
 # Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09)
@@ -117,3 +118,33 @@ it short-circuits before the dunder lookup and never enters `PyUserObjStr`. See
 
 **So `str()`/`repr()` of an exception had THREE routes**, and that is the shape
 worth remembering here rather than any individual fix.
+
+
+## 2026-08-13 — the residue is KeyError-only, and it is BLOCKED on `e.args`
+
+Re-measured across six exception types. The boundary is sharper than the top
+table (a pre-work snapshot) shows, and everything below is now correct:
+
+| | str | repr |
+| --- | --- | --- |
+| ValueError / TypeError / IndexError / RuntimeError | correct | correct |
+| a real missing-key lookup | correct — `'nope'`, quoted | **address** |
+| a user-constructed `KeyError("k")` | **`k`**, unquoted | **address** |
+
+So the only thing left is KeyError, in both directions, and both directions are
+the SAME missing fact: a pxx Exception carries one Message string where Python
+carries an `args` tuple. The message is stored already-repr'd on the raise path
+(so `str()` matches CPython's quirk) and raw on the construct path, so no
+rendering rule can be right for both — as `pylib.pas` records at the exclusion
+site, quoting gives `KeyError("'nope'")` and not quoting gives `KeyError(k)`.
+
+**That dependency existed only in prose**, in this file and in a code comment
+("the real fix is `e.args`, which is its own open item"), so the ranker could
+not see it: this ticket sat at prio 40 in the ready queue while the blocker it
+cannot be finished without sat at 30, twenty rows below, looking optional. Now
+declared in frontmatter, which is what `tools/progress.sh` reads, so 40
+propagates down the edge and [[bug-nilpy-exception-args-attribute-missing]]
+ranks as what it is: the thing to do first.
+
+Nothing here needs re-investigating once args lands — the rendering site is
+already written and already has KeyError carved out of it by name.

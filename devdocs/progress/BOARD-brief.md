@@ -31,7 +31,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 199, ranked
+## Ready — top 30 of 198, ranked
 
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -64,4 +64,4 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
-_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

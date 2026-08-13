@@ -57,8 +57,8 @@ _none_
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
-| bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | — |
+| bug-nilpy-exception-args-attribute-missing | N | 30→40 | bug | `e.args` is missing on exceptions | — |
+| bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | bug-nilpy-exception-args-attribute-missing |
 | bug-nilpy-float-formatting-manufactures-ties-by-scaling | N | 40 | bug | `\"%.1f\" % 0.15` answers 0.2 where CPython answers 0.1, and 0.45 answers 0.4 where CPython answers 0.5: scaling the fraction by a power of ten lands exactly on .5 for values whose binary expansion is just below or just above it, so the formatter rounds a tie that does not exist — and gets it wrong in BOTH directions. Needs exact decimal digit generation, not a rounding tweak | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
@@ -539,12 +539,12 @@ _none_
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
+- [p 40] [N] bug-nilpy-exception-args-attribute-missing (unblocks 1)
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
 - [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
 - [p 40] [N] bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep
 - [p 40] [N] bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
-- [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
 - [p 40] [N] bug-nilpy-float-formatting-manufactures-ties-by-scaling
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [N] bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses
@@ -603,7 +603,6 @@ _none_
 - [p 30] [N] bug-nilpy-dataclass-keyword-arguments-do-not-parse
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
-- [p 30] [N] bug-nilpy-exception-args-attribute-missing
 - [p 30] [N] bug-nilpy-getattr-dunder-not-supported
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [D] docs-publish-the-three-language-rounding-table
@@ -658,6 +657,7 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
+- **1** — bug-nilpy-exception-args-attribute-missing
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
