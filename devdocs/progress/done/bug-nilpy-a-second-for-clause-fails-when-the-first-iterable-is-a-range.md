@@ -4,6 +4,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`[x + y for x in range(2) for y in [10]]` is 'undefined variable (y)' — a two-for comprehension works only when the FIRST clause iterates a list; a range() there takes a fast path that never binds the second clause's name. `for x in <list> for y in range(...)` is fine, so it is the first iterable alone that decides"
+status: done
+owner: claude-AN
 ---
 
 # A second `for` clause fails when the FIRST iterable is a `range()`
@@ -99,3 +101,52 @@ A `.npy` diffed against CPython: every row of the table above, plus a
 three-clause comprehension, a filter on each clause, a dict and a set
 comprehension with the same header, and the tuple-element form (the shape that
 found this).
+
+## 2026-08-13 — FIXED. The 08-12 attempt was right; it was never calling itself
+
+The parked handoff asked one question — *why does the recursive `PyParseFor`
+leave the cursor where it started, when the identical recursion from the
+container path works?* — and listed `compSaved` bookkeeping and
+`PyCompHiddenLoopName` as suspects. Both are innocent.
+
+**There was no recursive call.** `bodyNode := PyParseFor;` INSIDE `PyParseFor`
+reads the function's own RESULT variable in this dialect; it does not recurse.
+`PyParseFor()`, with the parentheses, does. That is why the cursor never
+moved and why nothing was consumed — and it is exactly the trap recorded in
+`project_bare_funcname_result_partial`, which the compiler now warns about by
+default (the warning is not raised here because this file is compiled by the
+PINNED binary during a self-host round, so it never reached the terminal).
+
+The container path's recursion works because it lives in `PyParseForIn` — a
+DIFFERENT function — where the bare name really is a call.
+
+Probing beat reading again: the trace showed the inner `PyParseFor` printing no
+entry line at all, which is what turned "the recursion returns wrong" into "the
+recursion did not happen".
+
+**The second half of the fix is real, though**, and the 08-12 note had it: the
+outer loop variable must be renamed over the WHOLE remaining header, not just
+the element expression, because the inner clause's iterable may name it
+(`for y in range(x)`). `PyParseForIn` renames up to `closerPos` for exactly
+this; the range path renamed only the element range and its own filter. Both
+now do the same thing.
+
+### One row of the matrix stays red, and it was already red
+
+`[x + y for x in xs if x > 0 for y in ys]` — a filter BETWEEN clauses — fails
+on the CONTAINER path too, at the pin, so it is not this bug and not a
+regression from this fix. Filed as
+[[bug-nilpy-a-filter-between-two-for-clauses-is-not-supported]] with the
+measurement, and the row is not in this ticket's test.
+
+### Gate
+
+`test/test_nilpy_two_for_clauses_over_range.npy` + `.expected` from CPython,
+wired into `make test-nilpy`: every row of this ticket's table, a three-clause
+comprehension, the outer variable used in the inner ITERABLE
+(`for y in range(x)`), a trailing filter, dict and set comprehensions with the
+same header, the tuple- and list-element forms, and a `sum()` over the result.
+`make test-nilpy` green, `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

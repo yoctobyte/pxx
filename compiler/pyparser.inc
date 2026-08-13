@@ -16331,6 +16331,38 @@ begin
       comprehension, target.store(KEY, VALUE). EXPR re-parsed from before the
       `for`, the same shape PyParseForIn uses. Header ends at a bracket. }
     compSaved := TokPos - 1;
+    { A SECOND `for` clause — `[x + y for x in range(2) for y in [10]]`.
+
+      The container path handles this by recursing into PyParseFor, which
+      re-parses the element expression with BOTH variables bound and appends
+      there; this path had no such arm, so the header's remainder was never
+      consumed and the second target never bound ("undefined variable (y)").
+
+      Two things have to happen BEFORE the recursion, and the second is what an
+      earlier attempt at this fix was missing: the outer variable is renamed over
+      the WHOLE remaining header, not just the element expression, because the
+      inner clause's iterable and filter may name it (`for y in range(x)`) —
+      exactly what PyParseForIn renames up to closerPos for.
+      bug-nilpy-a-second-for-clause-fails-when-the-first-iterable-is-a-range }
+    if (Tokens[compSaved].Kind = tkFor) or
+       ((Tokens[compSaved].Kind = tkIdent) and
+        StrEqual(GetTokenStr(compSaved), 'for')) then
+    begin
+      PyRenameIdentRange(PyCompExprStart, forTokIdx, name, hName);
+      closerPos2 := PyCompFindClose(compSaved, filtDummy);
+      if closerPos2 > compSaved then
+        PyRenameIdentRange(compSaved, closerPos2, name, hName);
+      TokPos := compSaved; Next;
+      { `PyParseFor()`, WITH the parentheses — a bare own-function name in this
+        dialect reads the RESULT variable, it does not recurse. That is why the
+        08-12 attempt measured "the recursive call leaves the cursor where it
+        started": there was no call, only a read of an uninitialised Result.
+        project_bare_funcname_result_partial }
+      bodyNode := PyParseFor();
+      compSaved := -1;
+    end
+    else
+    begin
     { Rename BOTH the element expression and the filter condition (if any)
       BEFORE parsing either — same order PyParseForIn uses. Renaming the
       filter lazily, only once its own `if` is reached (after the element
@@ -16408,6 +16440,7 @@ begin
       ASTRight[pair1] := -1;
       ASTRight[node] := pair1;
       bodyNode := node;
+    end;
     end;
   end
   else

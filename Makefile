@@ -791,6 +791,10 @@ test-nilpy: $(COMPILER)
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which
 	# has no class index at compile time: read, write, inheritance, getattr/hasattr,
 	# the plugin-registry shape, and the AttributeError. Diffed against CPython.
+	@# a SECOND for-clause when the FIRST iterable is a range(): the counted path
+	@# had no arm for the rest of the header. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_two_for_clauses_over_range.npy /tmp/test_nilpy_twofor26
+	/tmp/test_nilpy_twofor26 | diff -u test/test_nilpy_two_for_clauses_over_range.expected -
 	@# `h[i], h[j] = h[j], h[i]` — a tuple assignment to SUBSCRIPT targets, incl.
 	@# a dict, a nested subscript, an attribute base, __setitem__, a variant base
 	@# and a heapify that cannot be written without it. Diffed against CPython.
