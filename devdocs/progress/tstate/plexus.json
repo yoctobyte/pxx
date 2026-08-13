@@ -5236,17 +5236,14 @@
    "src": "examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy"
   },
   {
-   "bad": "3b8ec9ce92c3765f13b9b9a856649e5f605dc896",
+   "bad": "3758489b1746e559dfd831f07476035c13ce9c37",
    "good": "73e38bb6bed0b3983d8f7f674bb313e2e6d52c11",
    "job": "test-nilpy#src:examples/tk/callbacks.npy",
    "name": "test-nilpy#07",
    "opened": "2026-08-13T23:24:37Z",
    "range": [
     "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79",
-    "3758489b1746e559dfd831f07476035c13ce9c37",
-    "bde0c50dd1ef16a4e2dd30bda784925cc18e87b7",
-    "b2cb54156a1fe38197653b46a50226ded9d15fde",
-    "3b8ec9ce92c3765f13b9b9a856649e5f605dc896"
+    "3758489b1746e559dfd831f07476035c13ce9c37"
    ],
    "src": "examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy"
   }
