@@ -11675,53 +11675,78 @@ function PyFmtFixed(d: Double; prec: Integer): AnsiString;
   pylib may not pull sysutils in (see the FmtArgStr note above). Rounding is
   half-to-EVEN, which is what CPython (and glibc's printf) do.
 
-  It used to split the value first — Trunc for the integer part, Round for the
-  fraction — and that loses the parity half-even needs: `7.5` at prec 0 asked
-  Round(0.5), which is 0 because ZERO is even, and printed 7 where CPython
-  prints 8. Every tie whose lower candidate was odd came out one low (1.5->1,
-  3.5->3, -1.5->-1), while the round() BUILTIN was right on the same values —
-  so the two disagreed inside one program.
-  bug-nilpy-float-formatting-rounds-half-toward-zero-not-half-even
+  NO FLOAT ARITHMETIC. Every earlier version scaled the value — by the whole
+  power of ten, or (to dodge that) by splitting off the integer part first —
+  and scaling is what MANUFACTURES ties: `0.15 * 10` is exactly 1.5 as a
+  double, so the formatter was asked to break a tie that the value does not
+  have, and answered 0.2 where CPython says 0.1. The error runs BOTH ways —
+  `0.45` is just ABOVE its midpoint and flattened to 4.5 rounds down to 0.4
+  where CPython says 0.5 — which is why no tie-break rule could have fixed it.
+  bug-nilpy-float-formatting-manufactures-ties-by-scaling
 
-  The split has to STAY, though — scaling the whole value in one step is what
-  Round would need to see the parity, and it also amplifies the representation
-  error into a tie that is not there: `2.675 * 100` is exactly 267.5 as a
-  double (so it would print 2.68), while `(2.675 - 2) * 100` is
-  67.49999999999999 and prints CPython's 2.67. Measured, both, against CPython.
-  So the fraction is scaled first and the tie is broken HERE, against the digit
-  that is actually being kept: fp's last digit, or the integer part when
-  prec = 0. }
-var neg: Boolean; ip: Int64; fp: Int64; scale: Double; i: Integer; fs: AnsiString;
-    powr: Int64; frac, rem: Double;
+  So the digits come from the exact binary value. PyExDecDigits expands the
+  double's mantissa and exponent into its full decimal expansion (that is what
+  the ExDec family exists for — it is the same machinery that reads decimals
+  back correctly rounded), and PyExDecRound rounds that DIGIT STRING half-even
+  on an exact remainder, so a tie is a tie only when the value really sits on
+  one. This is what CPython and glibc do, for the same reason. }
+var neg: Boolean; ds, ip, fs: AnsiString; decExp, sig, i: Integer;
 begin
   if prec < 0 then prec := 0;
-  neg := d < 0.0;
+  if d <> d then begin Result := 'nan'; Exit; end;
+  { the SIGN BIT, not `d < 0.0` — CPython prints `-0.00` for a negative zero,
+    and -0.0 is not less than 0.0 }
+  neg := PyExDecDoubleToBits(d) < 0;
   if neg then d := -d;
-  scale := 1.0;
-  for i := 1 to prec do scale := scale * 10.0;
-  powr := Round(scale);
-  ip := Trunc(d);
-  frac := (d - ip) * scale;
-  fp := Trunc(frac);
-  rem := frac - fp;
-  if rem > 0.5 then fp := fp + 1
-  else if rem = 0.5 then
+  if d = 0.0 then
   begin
-    { the exact tie — round to EVEN, on the last digit KEPT }
-    if prec = 0 then
+    Result := '0';
+    if prec > 0 then
     begin
-      if Odd(ip) then fp := fp + 1;
-    end
-    else if Odd(fp) then fp := fp + 1;
+      Result := Result + '.';
+      for i := 1 to prec do Result := Result + '0';
+    end;
+    if neg then Result := '-' + Result;
+    Exit;
   end;
-  if fp >= powr then begin ip := ip + 1; fp := 0; end;
-  Result := PyFmtBase(ip, 10, False);
-  if prec > 0 then
+
+  PyExDecDigits(d, ds, decExp);
+  { digits to KEEP: everything down to the 10^-prec place. `decExp` is the
+    power of ten the FIRST digit stands for, so that count is decExp+1+prec. }
+  sig := decExp + 1 + prec;
+  { A value below the last kept place — 0.04 at prec 1 — has no kept digit to
+    round against. Prepending a leading zero gives the rounder the position it
+    needs and costs nothing: 0.04 becomes 0.04 with the point one place left,
+    and the half-even rule then answers 0.0 or 0.1 exactly as CPython does for
+    0.04 and for 0.05. }
+  while sig < 1 do
   begin
-    fs := PyFmtBase(fp, 10, False);
-    while Length(fs) < prec do fs := '0' + fs;
-    Result := Result + '.' + fs;
+    ds := '0' + ds;
+    decExp := decExp + 1;
+    sig := sig + 1;
   end;
+  PyExDecRound(ds, decExp, sig);
+  { a carry out of the leading digit (999 -> 100) moved decExp, so re-derive }
+  while Length(ds) < decExp + 1 + prec do ds := ds + '0';
+
+  if decExp >= 0 then
+  begin
+    ip := Copy(ds, 1, decExp + 1);
+    fs := Copy(ds, decExp + 2, Length(ds) - decExp - 1);
+  end
+  else
+  begin
+    ip := '0';
+    fs := ds;
+    for i := 1 to -(decExp + 1) do fs := '0' + fs;
+  end;
+  while Length(fs) < prec do fs := fs + '0';
+  fs := Copy(fs, 1, prec);
+  { strip a leading-zero run the expansion may carry (`0` prefixes added above
+    are only there to give the rounder a place to stand) }
+  while (Length(ip) > 1) and (ip[1] = '0') do ip := Copy(ip, 2, Length(ip) - 1);
+  Result := ip;
+  if prec > 0 then Result := Result + '.' + fs;
   if neg then Result := '-' + Result;
 end;
 
