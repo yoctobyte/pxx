@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-11T14:58:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "179ab0fd481a799f4aa00a27823487d262c7cd43",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-11T15:03:44Z",
    "fixed": [],
    "new_red": [],
@@ -399,6 +391,14 @@
     "test-core#src:test/test_conformance_1.pas"
    ],
    "sha": "f9e4e1c44edacc0dc08cc20f45c44944e0168105",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-13T06:24:34Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "db8a1a4fc7d380051ce90e40e97d6a7babc0c220",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1494,6 +1494,7 @@
   "test-core#src:test/test_nilpy_augmented_assign_class_field.npy": "native",
   "test-core#src:test/test_nilpy_bitwise_on_booleans.npy": "native",
   "test-core#src:test/test_nilpy_bool.npy": "native",
+  "test-core#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "native",
   "test-core#src:test/test_nilpy_bound_method_in_module.npy": "native",
   "test-core#src:test/test_nilpy_builtin_shadow_slice.npy": "native",
   "test-core#src:test/test_nilpy_c_define_const.npy": "native",
@@ -1818,6 +1819,7 @@
   "test-core#src:test/test_variant_string.pas": "native",
   "test-core#src:test/test_variant_string_ops.pas": "native",
   "test-core#src:test/test_variant_typecast.pas": "native",
+  "test-core#src:test/test_variant_typecast_strict.pas": "native",
   "test-core#src:test/test_varrec_alloc_after.pas": "native",
   "test-core#src:test/test_varrec_branch.pas": "native",
   "test-core#src:test/test_varrec_pchar_object_b320.pas": "native",
@@ -3828,6 +3830,7 @@
   "test-core#src:test/test_nilpy_augmented_assign_class_field.npy": "pass",
   "test-core#src:test/test_nilpy_bitwise_on_booleans.npy": "pass",
   "test-core#src:test/test_nilpy_bool.npy": "pass",
+  "test-core#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "pass",
   "test-core#src:test/test_nilpy_bound_method_in_module.npy": "pass",
   "test-core#src:test/test_nilpy_builtin_shadow_slice.npy": "pass",
   "test-core#src:test/test_nilpy_c_define_const.npy": "pass",
@@ -4152,6 +4155,7 @@
   "test-core#src:test/test_variant_string.pas": "pass",
   "test-core#src:test/test_variant_string_ops.pas": "pass",
   "test-core#src:test/test_variant_typecast.pas": "pass",
+  "test-core#src:test/test_variant_typecast_strict.pas": "pass",
   "test-core#src:test/test_varrec_alloc_after.pas": "pass",
   "test-core#src:test/test_varrec_branch.pas": "pass",
   "test-core#src:test/test_varrec_pchar_object_b320.pas": "pass",
@@ -5074,11 +5078,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-13T06:14:44Z",
-  "sha": "f9e4e1c44edacc0dc08cc20f45c44944e0168105",
+  "date": "2026-08-13T06:24:34Z",
+  "sha": "db8a1a4fc7d380051ce90e40e97d6a7babc0c220",
   "tier": "native",
   "verdict": "RED",
-  "wall": 165.2
+  "wall": 173.1
  },
  "last_bench": {
   "conf_rows": 550,
