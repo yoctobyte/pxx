@@ -126,3 +126,32 @@ between routing an explicit `key=` keyword at the frontend and widening that
 runtime detection — `min(x, None)` positional is a TypeError in CPython, so the
 runtime arm cannot simply treat a None second argument as "no key" without
 turning that into a silently wrong answer.
+
+## Item 4, first name DONE 2026-08-13 — `callable(x)`
+
+Answers, matching CPython on every shape swept: a def, a lambda, a bound method,
+an instance of a class defining `__call__`, a plain instance, ints / strs /
+floats / None, all four containers, held in a variable, passed as an argument,
+and used as a VALUE rather than only as an `if` condition.
+
+Two halves, and only the first was free. `PyVarIsCallable` — the definition of
+"callable" this unit already commits to for min/max's key detection — had been
+in pylib all along and simply was not in the interface, so declaring it under
+its Python name is the whole fix for functions and methods; no frontend
+intercept. But it answers from the variant TAG, and an instance of a class with
+`__call__` is an ordinary VT_OBJECT, indistinguishable there from a plain
+instance, so that case asks the class RTTI (`PyFindDunder(cls, '__call__')`)
+when the tag says object. The plain-instance row in the test is what keeps that
+from degenerating into "any object is callable".
+
+Test `test/test_nilpy_callable_builtin.{npy,expected}`, wired into `test-nilpy`.
+
+**Noted, not fixed:** `callable(print)` and `callable(len)` do not PARSE — a
+BUILTIN taken as a value, which is its own gap and unrelated to `callable`
+(`print` as a bare name fails the same way anywhere). Not filed separately here
+because [[bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep]]
+already covers builtins-as-values for the str methods; worth folding in there if
+it comes up again.
+
+Still absent from item 4: frozenset (own ticket), id, slice, complex, format,
+ascii, eval, dir, vars, memoryview, and `max(default=)`.

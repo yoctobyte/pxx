@@ -1709,6 +1709,13 @@ function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
   (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
 function pyvar_callable_ptr_opt(const v: Variant; const what: AnsiString): Pointer;   { ...for a parameter whose default is nil: None means "not given", not an error }
+{ Python's `callable(x)`. It was simply absent (`undefined variable`), while the
+  predicate it needs — PyVarIsCallable, the same "callable" this dialect
+  already commits to for min/max's key detection — has been in this unit all
+  along, just not in its interface. Declared by its PYTHON name so ordinary
+  name resolution finds it; no frontend intercept.
+  bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
+function callable(const v: Variant): Boolean;
 { `v[key]` / `v[key] = val` where v is a VARIANT holding a container — a dict
   entry that was itself a `.get()` result, so its container type is only known
   at run time. Dispatch on the boxed object: dict fetch/store by key, list index
@@ -7487,6 +7494,24 @@ begin
       Result := cur;
     end;
   end;
+end;
+
+function callable(const v: Variant): Boolean;
+var o: TObject; cls: PClassRTTI;
+begin
+  callable := PyVarIsCallable(v);
+  if callable then Exit;
+  { ...and an INSTANCE of a class that declares __call__, which Python calls
+    callable too. PyVarIsCallable answers from the variant TAG alone, and such
+    an instance is an ordinary VT_OBJECT — indistinguishable there from a plain
+    object, so the question has to be asked of its class. }
+  if pyvartag(v) <> 7 then Exit;
+  if PPyVarRec(@v)^.Payload = 0 then Exit;
+  o := TObject(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  callable := PyFindDunder(cls, '__call__') <> nil;
 end;
 
 function min(const a: Variant; const b: Variant): Variant; overload;

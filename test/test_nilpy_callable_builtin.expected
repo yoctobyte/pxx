@@ -1,0 +1,10 @@
+def/lambda True True
+methods    True True
+__call__   True
+plain obj  False
+values     False False False False
+containers False False False False
+as values  [True, False]
+composed   ok
+via name   True
+via param  True False True

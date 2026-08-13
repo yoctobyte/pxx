@@ -1,0 +1,62 @@
+# bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep, item 4:
+# `callable(x)` was absent entirely (`undefined variable`).
+#
+# The predicate it needs had been in pylib all along — PyVarIsCallable, the
+# same definition of "callable" this dialect already commits to for min/max's
+# key detection — just not in the unit's interface, so declaring it under its
+# Python name is the whole of the first half. No frontend intercept.
+#
+# The second half is NOT free: PyVarIsCallable answers from the variant TAG,
+# and an instance of a class defining __call__ is an ordinary VT_OBJECT,
+# indistinguishable there from a plain instance. Python calls it callable, so
+# the question is asked of the class RTTI when the tag says object. The C() row
+# below is that case, and the plain-instance row beside it is what keeps the
+# answer from becoming "any object".
+#
+# Expectations are CPython's own output.
+
+
+def f():
+    return 1
+
+
+class C:
+    def m(self):
+        return 2
+
+    def __call__(self):
+        return 3
+
+
+class Plain:
+    def m(self):
+        return 4
+
+
+c = C()
+p = Plain()
+g = lambda v: v
+
+print("def/lambda", callable(f), callable(g))
+print("methods   ", callable(c.m), callable(p.m))
+print("__call__  ", callable(c))
+print("plain obj ", callable(p))
+print("values    ", callable(3), callable("s"), callable(None), callable(3.5))
+print("containers", callable([1]), callable({1: 2}), callable({1}), callable((1,)))
+
+# it is a value like any other predicate, not just an if-condition
+flags = [callable(f), callable(p)]
+print("as values ", flags)
+if callable(f) and not callable(p):
+    print("composed  ", "ok")
+
+# a callable held in a variable, and one passed as an argument
+h = f
+print("via name  ", callable(h))
+
+
+def takes(x):
+    return callable(x)
+
+
+print("via param ", takes(f), takes(3), takes(c))
