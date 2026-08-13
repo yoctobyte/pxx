@@ -27,3 +27,6 @@ pascal26:4874: error: "argsv": no such member on this record/class
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-13 — auto-closed by the plexus watcher: `test-nilpy#src:test/test_uses_order_pylib_exception_a.pas` passes at 30dc68bc02bb (tier full); it was red at 67910b097baf. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
