@@ -112,4 +112,4 @@ Thanks to the watcher: filed, consolidated to one cause, and correctly
 attributed to the single semantic commit in its range.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 3e67b0092.
