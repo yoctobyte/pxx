@@ -1367,6 +1367,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-exceptions | N | 60 | feature | NilPy: `raise` and `try` / `except` | — |
 | feature-nilpy-fallback-import | N | 50 | feature | nilpy: fallback import (try/except ImportError) — soft-fail an unresolvable import, take the alternative | — |
 | feature-nilpy-file-io-and-comprehensions | N | 55 | feature | NilPy: file I/O (`with open`), list comprehensions, and dict literals-in-args | — |
+| feature-nilpy-frozenset | N | 45 | feature | `frozenset(...)` is undefined — html5lib/constants.py's next wall after the adjacent-string-literal fix (line 305). A set is already a TPyList marked PYSEQ_SET, so the value side is nearly free; the question the ticket has to answer is repr and type name, where frozenset is VISIBLY different from set. | — |
 | feature-nilpy-fstring-format-spec | N | 50 | feature | nilpy: f-string format specs — {x:.2f}, alignment/width {s:>5} | — |
 | feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
 | feature-nilpy-function-values-spellings | N | 45 | feature | NilPy: a function is a VALUE — bind it to a name, store it, call it back | — |

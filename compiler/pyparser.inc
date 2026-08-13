@@ -1847,6 +1847,7 @@ begin
     else if nm = 'list' then term := KindEq(PYSEQ_LIST)
     else if nm = 'tuple' then term := KindEq(PYSEQ_TUPLE)
     else if nm = 'set' then term := KindEq(PYSEQ_SET)
+    else if nm = 'frozenset' then term := KindEq(PYSEQ_FROZENSET)
     { ...and the same for the two TPyBytes-backed kinds. Answering from the
       CLASS made `isinstance(bytearray(), bytes)` and `isinstance(b'', bytearray)`
       BOTH True, where CPython says False both ways: they are distinct types
@@ -5266,9 +5267,19 @@ end;
   definition must win over a builtin spelling where it is in scope. }
 function PyIsSetCall: Boolean;
 begin
-  Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'set') and
+  Result := (CurTok.Kind = tkIdent) and
+            (CaseEqual(CurTok.SVal, 'set') or CaseEqual(CurTok.SVal, 'frozenset')) and
             (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-            (not PyUserNameShadowsHere('set'));
+            (not PyUserNameShadowsHere(CurTok.SVal));
+end;
+
+{ Is the set call being parsed the FROZEN spelling? The value a frozenset holds
+  is a set's, so both go down one parse path and differ only in the stamp —
+  and in what that stamp makes VISIBLE: repr, type().__name__ and isinstance.
+  feature-nilpy-frozenset }
+function PyIsFrozenSetCall: Boolean;
+begin
+  Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'frozenset');
 end;
 
 { Stamp a TPyList-producing node as a SET (pylib's pylist_mark_set). Every form
@@ -5276,12 +5287,12 @@ end;
   and a `{x for x in xs}` comprehension — because a bare TPyList is a LIST by
   default, and the FKind tag is what the repr, isinstance and the set operators
   all read. Returns the node unchanged when pylib is not loaded. }
-function PyMarkAsSet(node: Integer): Integer;
+function PyMarkAsSeqKind(node: Integer; const marker: AnsiString): Integer;
 var mkPi, markArg, markCall, ci: Integer;
 begin
-  PyMarkAsSet := node;
+  PyMarkAsSeqKind := node;
   if node < 0 then Exit;
-  mkPi := FindProc('pylist_mark_set');
+  mkPi := FindProc(marker);
   if mkPi < 0 then Exit;
   markArg := AllocNode(AN_ARG);
   ASTLeft[markArg] := node;
@@ -5292,7 +5303,17 @@ begin
   ci := FindUClass('TPyList');
   if ci >= 0 then ASTRight[markCall] := REC_UCLASS_BASE + ci;
   ASTLeft[markCall] := markArg;
-  PyMarkAsSet := markCall;
+  PyMarkAsSeqKind := markCall;
+end;
+
+function PyMarkAsSet(node: Integer): Integer;
+begin
+  PyMarkAsSet := PyMarkAsSeqKind(node, 'pylist_mark_set');
+end;
+
+function PyMarkAsFrozenSet(node: Integer): Integer;
+begin
+  PyMarkAsFrozenSet := PyMarkAsSeqKind(node, 'pylist_mark_frozenset');
 end;
 
 function PyIsEmptySetCall: Boolean;
@@ -5307,7 +5328,9 @@ end;
   characters), like CPython. }
 function PyParseEmptySet: Integer;
 var ci, recId, sizeNode, argNode, mkPi, markArg, markCall: Integer;
+    isFrozen: Boolean;
 begin
+  isFrozen := PyIsFrozenSetCall;
   if not PyIsEmptySetCall then
   begin
     Next;                          (* set *)
@@ -5332,6 +5355,9 @@ begin
     ASTRight[Result] := REC_UCLASS_BASE + FindUClass('TPyList');
     ASTLeft[Result] := argNode;
     Expect(tkRParen, ')');
+    { pyset_of stamps a SET; the frozen spelling re-stamps on the way out. One
+      parse path, one value, two tags — see PyIsFrozenSetCall. }
+    if isFrozen then Result := PyMarkAsFrozenSet(Result);
     CurASTNode := Result;
     Exit;
   end;
@@ -5352,7 +5378,8 @@ begin
   { ...and stamp it a SET. A bare TPyList allocation is a LIST by default, so
     without this `set()` reprs as `[]` and answers isinstance(x, list) True.
     The non-empty arm above gets its kind inside pyset_of. }
-  Result := PyMarkAsSet(Result);
+  if isFrozen then Result := PyMarkAsFrozenSet(Result)
+  else Result := PyMarkAsSet(Result);
   CurASTNode := Result;
 end;
 

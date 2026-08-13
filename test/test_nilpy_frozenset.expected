@@ -1,0 +1,12 @@
+frozenset({1, 2})
+frozenset({1, 2})
+[1, 2] 2 True False
+frozenset
+True False False
+True False
+True True False
+frozenset()
+True
+True
+3
+[1, 2]

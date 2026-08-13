@@ -1,0 +1,38 @@
+# feature-nilpy-frozenset
+#
+# frozenset() was `undefined variable`, and the ticket's own framing is what
+# this test is shaped by: the VALUE is nearly free — a NilPy set is a TPyList
+# stamped PYSEQ_SET and a frozenset holds exactly that — while what is NOT free
+# is everything that makes the difference VISIBLE, because ordinary working
+# code observes it. So the rows are repr, type(x).__name__ and isinstance both
+# ways, not just construction and membership.
+#
+# A third kind (PYSEQ_FROZENSET) rather than reusing the set stamp, which is
+# the same call bug-nilpy-list-tuple-and-set-are-indistinguishable-to-isinstance
+# already made once for set-vs-list. Equality is the row where the kinds must
+# NOT be strict: CPython's frozenset({1, 2}) == {1, 2} is True — frozenset is a
+# different TYPE, not a different value — while both stay unequal to a list.
+#
+# Immutability is deliberately NOT enforced: a mutable frozenset is the dialect
+# being laxer than CPython, which no program CPython accepts can observe
+# (devdocs/dev/nilpy-semantics-divergences.md).
+#
+# Expectations are CPython's own output.
+
+f = frozenset([1, 2])
+print(f)
+print(repr(f))
+print(sorted(f), len(f), 1 in f, 9 in f)
+print(type(f).__name__)
+print(isinstance(f, frozenset), isinstance(f, set), isinstance(f, list))
+s = {1, 2}
+print(isinstance(s, set), isinstance(s, frozenset))
+print(f == {1, 2}, f == frozenset([2, 1]), f == [1, 2])
+print(frozenset())
+print(frozenset("ab") == frozenset(["a", "b"]))
+print(frozenset((3, 4)) == frozenset([4, 3]))
+tot = 0
+for v in f:
+    tot = tot + v
+print(tot)
+print(sorted(frozenset(x for x in [1, 1, 2])))

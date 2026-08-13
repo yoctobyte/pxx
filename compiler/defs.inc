@@ -768,6 +768,7 @@ const
   PYSEQ_LIST  = 0;
   PYSEQ_TUPLE = 1;
   PYSEQ_SET   = 2;
+  PYSEQ_FROZENSET = 3;   { a frozenset: the same value as a set, its own kind because repr, type() and isinstance all SHOW the difference }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;

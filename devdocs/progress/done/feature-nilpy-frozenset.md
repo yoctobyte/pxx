@@ -4,6 +4,8 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "`frozenset(...)` is undefined — html5lib/constants.py's next wall after the adjacent-string-literal fix (line 305). A set is already a TPyList marked PYSEQ_SET, so the value side is nearly free; the question the ticket has to answer is repr and type name, where frozenset is VISIBLY different from set."
+status: done
+owner: claude-A-N
 ---
 
 # `frozenset(...)`
@@ -50,3 +52,48 @@ A `.npy` diffed against CPython: construction from a list/tuple/generator,
 `in`, `len`, iteration, equality with a set, `repr`, `type(x).__name__`,
 `isinstance(x, frozenset)` and `isinstance(x, set)` (CPython: a frozenset is
 NOT a set instance), plus `html5lib/constants.py` getting past line 305.
+
+## DONE 2026-08-13
+
+`frozenset(...)` constructs, prints, compares and answers `isinstance` — every
+row of this ticket's gate matching CPython: construction from a list, a tuple, a
+string and a generator expression, `in`, `len`, iteration, equality with a set,
+`repr`, `type(x).__name__`, `isinstance(x, frozenset)`, `isinstance(x, set)`
+(False, as CPython has it) and the empty `frozenset()`.
+
+Built exactly as the ticket said to: a THIRD sequence kind, `PYSEQ_FROZENSET`,
+rather than reusing the set stamp. The value side is the shared path — one
+parse, one `pyset_of`, then a different stamp on the way out — and the three
+places the kind is VISIBLE each grew an arm:
+
+- **repr**: `frozenset({1, 2})` and the empty `frozenset()`. Written as a
+  prefix/suffix around the SET display rather than a third bracket pair,
+  because that is what it is.
+- **`type().__name__`**: `PySeqKindName` answers `frozenset`.
+- **isinstance**: `frozenset` is `KindEq(PYSEQ_FROZENSET)`, so a frozenset is
+  not a set and a set is not a frozenset — both directions checked.
+
+**Equality is the row where kind identity is WRONG**, and it was the one worth
+thinking about: CPython's `frozenset({1, 2}) == {1, 2}` is True — frozenset is a
+different TYPE, not a different value — while both stay unequal to a list. So
+`pylist_eq`'s guard (added hours earlier for set-vs-sequence) tests
+set-LIKENESS, not kind equality.
+
+Immutability is not enforced, per the ticket's own reasoning: a mutable
+frozenset is the dialect being laxer than CPython, which no program CPython
+accepts and runs can observe.
+
+`PyMarkAsSet` was generalised to `PyMarkAsSeqKind(node, marker)` with the two
+stamps as thin wrappers — one builder, so a fourth kind is a line rather than a
+copy.
+
+Test `test/test_nilpy_frozenset.{npy,expected}` (`.expected` from CPython),
+wired into `test-nilpy`; the four existing set tests re-run unchanged. Gate:
+self-host fixedpoint + `gate.sh quick` GREEN.
+
+**Not verified here:** whether `html5lib/constants.py` now gets past line 305 —
+that belongs to [[feature-nilpy-thirdparty-libraries-as-targets]], which owns
+the corpus run.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

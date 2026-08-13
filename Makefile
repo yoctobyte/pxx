@@ -1449,6 +1449,11 @@ test-nilpy: $(COMPILER)
 	# two-argument form stays refused on purpose: CPython's is an unsnapped
 	# quotient and the RTL's LogN snaps, so mapping it would be wrong in the last
 	# place. The last row is the exact quotient a user writes instead.
+	# frozenset: the VALUE is a set's, so the rows that matter are the ones that
+	# make the difference visible -- repr, type().__name__, isinstance both ways.
+	# Equality is where the kinds must NOT be strict: frozenset({1,2}) == {1,2}.
+	./$(COMPILER) test/test_nilpy_frozenset.npy /tmp/test_nilpy_frozenset26
+	/tmp/test_nilpy_frozenset26 | diff -u test/test_nilpy_frozenset.expected -
 	./$(COMPILER) test/test_nilpy_math_log.npy /tmp/test_nilpy_mathlog26
 	/tmp/test_nilpy_mathlog26 | diff -u test/test_nilpy_math_log.expected -
 	./$(COMPILER) test/test_nilpy_callable_builtin.npy /tmp/test_nilpy_callable26
