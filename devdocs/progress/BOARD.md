@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (222)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ _none_
 | feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-enum-class | N | 40 | feature | `from enum import Enum` — enum classes are not supported | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
+| feature-nilpy-frozenset | N | 45 | feature | `frozenset(...)` is undefined — html5lib/constants.py's next wall after the adjacent-string-literal fix (line 305). A set is already a TPyList marked PYSEQ_SET, so the value side is nearly free; the question the ticket has to answer is repr and type name, where frozenset is VISIBLY different from set. | — |
 | feature-nilpy-fstring-nested-spec-and-nested-fstring | N | 30 | feature | f-string: a nested format spec and a nested f-string | — |
 | feature-nilpy-getattr-with-a-computed-attribute-name | N | 45 | feature | `getattr(self, 'do_' + verb)` — a COMPUTED attribute name — is refused with 'hasattr/getattr needs a literal attribute name'. That is the whole point of getattr: a command dispatcher, a plugin table, a serializer walking field names. The literal form works and the RTTI the dynamic form needs already exists (PyFindDunder dispatches by name at run time) | — |
 | feature-nilpy-hasattr-per-instance-assigned-tracking | N | 40 | feature | hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit. | — |
@@ -528,6 +529,7 @@ _none_
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [B] feature-lib-reportlab-fidelity-vs-oracle
 - [p 45] [A] feature-move-fillchar-intrinsics
+- [p 45] [N] feature-nilpy-frozenset
 - [p 45] [N] feature-nilpy-getattr-with-a-computed-attribute-name
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
