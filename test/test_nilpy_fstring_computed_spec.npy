@@ -1,0 +1,16 @@
+# A nested replacement field INSIDE a format spec — a computed precision. The
+# spec was captured verbatim, so the formatter met a spec ending mid-field and
+# raised at run time. This is how a report makes its decimal places
+# configurable.
+# bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item 3
+n = 3
+print(f"{7.5:.{n}f}")
+w = 8
+print(f"[{'x':>{w}}]")
+print(f"{3.14159:.{n}f} and {2.5:.1f}")
+print(f"{255:{'x'}}")
+prec = 0
+print(f"{9.87:.{prec}f}")
+print(f"{1.5:.{n + 1}f}")
+# controls: a plain literal spec, and a hole with no spec at all
+print(f"{7.5:.2f} {7.5} {'a':>3}|")

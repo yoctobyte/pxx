@@ -626,8 +626,38 @@ begin
           begin
             if (Source[i] = #10) or (Source[i] = '"') then
               ErrorAt(ln, 'Nil Python: an f-string format spec must be a plain literal');
-            PyFsPutCh(Source[i]);
-            Inc(i);
+            { A NESTED replacement field inside the spec — a computed
+              precision, which is how a report makes its decimal places
+              configurable. The spec is still a string handed to the formatter,
+              so the nested hole becomes a CONCATENATION rather than a second
+              grammar: a spec of dot, open-brace, n, close-brace, f emits
+              '"." + pystr_of(n) + "f"'. Taken literally before this, the
+              formatter met a spec ending mid-field and said so at run time.
+              (The shape is spelled out in words here on purpose: a brace
+              comment ENDS at the first closing brace it contains, which is how
+              this very block first failed to compile.)
+              bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item 3 }
+            if Source[i] = '{' then
+            begin
+              PyFsPut('" + pystr_of(');
+              Inc(i);
+              while (i <= n) and (Source[i] <> '}') do
+              begin
+                if (Source[i] = #10) or (Source[i] = '"') then
+                  ErrorAt(ln, 'Nil Python: a nested f-string spec field must be '
+                            + 'a plain expression');
+                PyFsPutCh(Source[i]);
+                Inc(i);
+              end;
+              if i > n then ErrorAt(ln, 'Nil Python: an unterminated f-string hole');
+              PyFsPut(') + "');
+              Inc(i);        { step past the nested field's closing brace }
+            end
+            else
+            begin
+              PyFsPutCh(Source[i]);
+              Inc(i);
+            end;
           end;
           if i > n then ErrorAt(ln, 'Nil Python: an unterminated f-string hole');
           PyFsPut('")');
