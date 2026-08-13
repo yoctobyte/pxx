@@ -213,7 +213,6 @@ _none_
 | feature-pascal-set-symmetric-difference-operator | P | 35 | feature | The set symmetric-difference operator `><` is not parsed | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-pasmith-divergence-signature-granularity | T | 35 | feature | pasmith divergence signatures are too coarse: end-of-program divergences all collapse to pxx-vs-fpc_trace-length, so distinct bugs can over-dedup and hide each other | — |
-| feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-qplus-rplus-rungs | T | 30 | feature | pasmith rungs for {$Q+}/{$R+}: generate checked regions + try/except EIntOverflow/ERangeError harnesses, differential vs FPC | — |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-pcl-tk-windows-compat | M | 25 | feature | NilPy tk on Windows — quarantine the Tcl/Tk-DLL-swarm problem behind a {$ifdef WINDOWS} include in tk.pas; emulate/wrap, stub now fill later. Linux keeps the real embed | feature-port-windows-pe |
@@ -258,6 +257,7 @@ _none_
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
 | regression-test-core-test-nilpy-c-define-const | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_define_const.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -413,9 +413,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1705)
+## done (1706)
 
-1705 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1706 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -462,6 +462,7 @@ _none_
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 70] [T] regression-test-core-test-nilpy-c-define-const
 - [p 70] [T] regression-test-core-test-nilpy-c-pointer
+- [p 70] [T] regression-test-nilpy-test-nilpy-sqlite-crud
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -486,7 +487,6 @@ _none_
 - [p 55] [N] feature-nilpy-text-string-kind
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [A] feature-pascal-type-helpers
-- [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 53] [S] feature-esp-peripheral-callback-api
