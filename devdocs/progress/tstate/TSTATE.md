@@ -7,7 +7,7 @@
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `1df75aad5458`, last good `432867370a9e`, 4 commit(s) in range
+- **test-core#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `67910b097baf`, last good `432867370a9e`, 2 commit(s) in range
 - **test-arm32#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas test/test_arm32_record_byval_wide.pas +1 (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range
 - **test-i386#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range
 - **test-nilpy#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range
