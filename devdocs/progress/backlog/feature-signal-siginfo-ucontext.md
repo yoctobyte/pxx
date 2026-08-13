@@ -143,3 +143,81 @@ Still NOT done, and needed for the *catchable* fault work
 ([[bug-integer-div-zero-sigfpe-uncatchable]],
 [[decide-int-div-zero-behavior-unification]]): the ucontext pointer is parked
 but nothing rewrites the saved RIP yet. That is the rest of item 1.
+
+## What the OTHER FOUR targets need (survey, 2026-08-13)
+
+Written after landing x86-64 so the remaining work is a checklist, not a
+rediscovery. Every arch needs the same three things — **set SA_SIGINFO in the
+install stub's flags**, **park si_code/si_addr/ucontext from the handler's
+argument registers into BSS_SIG_CODE/ADDR/CTX**, and **drop the per-target
+`Error` guard in parser.inc's `__pxxSig*` arm** — and then each has its own
+catch.
+
+### The data layout, which is NOT the same on 32-bit
+
+`siginfo_t` is `{ int si_signo; int si_errno; int si_code; union _sifields; }`,
+so **si_code is at offset 8 everywhere**. `si_addr` is the union's first
+member, and the union is pointer-aligned, so the preamble is padded on 64-bit
+(`__ARCH_SI_PREAMBLE_SIZE` = 4*sizeof(int)) and not on 32-bit:
+
+| | si_code | si_addr |
+| --- | --- | --- |
+| x86-64, aarch64 | 8 | **16** — measured (offsetof, and the $DEAD0000 assert) |
+| i386, arm32, riscv32 | 8 | **12** — expected; MEASURE before trusting |
+
+The 12 is from the asm-generic definition, not from a probe on this box (no
+cross toolchains and no 32-bit headers installed). It is cheap to confirm once
+SA_SIGINFO is on: the existing test faults on `$DEAD0000` and asserts si_addr
+equals it, so a wrong offset shows up immediately under
+`tools/run_target.sh <arch>`.
+
+### Per target
+
+- **aarch64 — easiest, no catches.** No SA_RESTORER (the kernel supplies the
+  trampoline), so it is purely: add SA_SIGINFO to the flags word, and park
+  x1 (siginfo*) / x2 (ucontext*) at the top of dispatch. si_addr @16.
+
+- **riscv32 — same shape as aarch64.** No restorer; flags live at offset 4 in
+  its ILP32 `struct sigaction`. Park a1/a2. si_addr @12.
+
+- **arm32 — one real catch.** Handler args r0/r1/r2, si_addr @12, *and the
+  restorer MUST flip from **sigreturn (119)** to **rt_sigreturn (173)***. ARM
+  picks the signal FRAME SHAPE by SA_SIGINFO, not by which syscall installed
+  the handler, so the moment the flag is set the old restorer is restoring a
+  plain `struct sigframe` as if it were an rt frame — garbage context,
+  pc=sp=lr=0, instant SIGSEGV (observed at b371). The existing code comment
+  already says "(If SA_SIGINFO is ever set here, this MUST become 173.)"
+
+- **i386 — TWO coupled changes, the riskiest.** Same 119 -> 173 flip as arm32,
+  **plus the leading `pop eax` in the restorer must go.** That pop exists
+  because `sys_sigreturn` recovers the frame at `sp - 8` while the plain
+  frame's `ret` leaves esp at frame+4; the rt frame + `sys_rt_sigreturn` do not
+  have that skew (glibc's i386 restorers differ in exactly this way — the
+  non-rt one opens with `popl %eax`, the rt one does not). Get one of the two
+  right and not the other and the context is garbage.
+  Also note i386's handler arguments arrive **on the stack**, not in registers:
+  with the rt frame, `[esp]` = pretcode, `[esp+4]` = sig, `[esp+8]` = siginfo*,
+  `[esp+12]` = ucontext*. si_addr @12.
+
+- **xtensa / ESP — N/A, and should stay refused.** FreeRTOS is not a Unix;
+  there is no signal runtime there at all (`EmitSignalRuntime*` has no xtensa
+  sibling), which is the same reason 33 PAL entry points are refused under IDF.
+
+### One cross-cutting decision to make first
+
+`__pxxSigCode` is typed **tyInt64** today (si_code is a signed 32-bit field and
+the x86-64 stub sign-extends into an 8-byte slot). On the ILP32 targets an
+Int64 is a register PAIR, so their stubs must write BOTH words — the value and
+its sign word — or the slot reads as a huge positive number for the negative
+SI_* codes. The alternative is retyping the intrinsic to **tyInteger** (32-bit,
+signed) which is the field's real width and sidesteps the pair entirely; that
+is a small change now and a breaking one later, so decide it before the first
+32-bit target lands rather than after.
+
+### Verification, per target
+
+`tools/run_target.sh <arch> /tmp/<bin>` (qemu-arm / qemu-aarch64 / qemu-i386 /
+qemu-riscv32 are all present on this box). `test/test_signal_siginfo.pas` is
+already arch-independent — its si_addr assert against `$DEAD0000` is precisely
+the offset canary, and its SI_TKILL half is the sign canary. Wire a per-arch
+copy into each `test-<arch>` target the way the b371 signal tests already are.
