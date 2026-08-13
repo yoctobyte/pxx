@@ -5236,7 +5236,7 @@
    "src": "examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy"
   },
   {
-   "bad": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94",
+   "bad": "3b8ec9ce92c3765f13b9b9a856649e5f605dc896",
    "good": "73e38bb6bed0b3983d8f7f674bb313e2e6d52c11",
    "job": "test-nilpy#src:examples/tk/callbacks.npy",
    "name": "test-nilpy#07",
@@ -5246,13 +5246,7 @@
     "3758489b1746e559dfd831f07476035c13ce9c37",
     "bde0c50dd1ef16a4e2dd30bda784925cc18e87b7",
     "b2cb54156a1fe38197653b46a50226ded9d15fde",
-    "3b8ec9ce92c3765f13b9b9a856649e5f605dc896",
-    "2277bf34978bba41335c793c7fbad4af4b3bb104",
-    "cd2651290c69e990ad77a145b9e084955e905e50",
-    "64f21366c4dd175fb8521b4d8c1096287d8e654f",
-    "32e2ba1c25cca859ecd2168eddfb38d5626b9332",
-    "b8027ac7cb44eb71c1248849d811d41ddd598307",
-    "30dc68bc02bb5fe4dfc84187ffe2644f99763f94"
+    "3b8ec9ce92c3765f13b9b9a856649e5f605dc896"
    ],
    "src": "examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy"
   }
