@@ -1534,8 +1534,6 @@ test-nilpy: $(COMPILER)
 	# both directions.
 	./$(COMPILER) test/test_nilpy_float_format_exact.npy /tmp/test_nilpy_ffexact26
 	/tmp/test_nilpy_ffexact26 | diff -u test/test_nilpy_float_format_exact.expected -
-	./$(COMPILER) test/test_nilpy_exception_args.npy /tmp/test_nilpy_excargs26
-	/tmp/test_nilpy_excargs26 | diff -u test/test_nilpy_exception_args.expected -
 	# `raise KeyError(42)` SEGFAULTED: every builtin exception ctor took an
 	# AnsiString, so a non-string single argument was read as a string handle.
 	./$(COMPILER) test/test_nilpy_exception_non_string_argument.npy /tmp/test_nilpy_excnonstr26

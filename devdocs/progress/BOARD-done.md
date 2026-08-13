@@ -605,7 +605,6 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-escaping-closure-captures-unbound-unless-arity-is-one | N | 65 | bug | A returned closure reads GARBAGE for its captures unless it takes exactly one argument | — |
 | bug-nilpy-every-lambda-is-interpreted-instead-of-compiled | N | 60 | bug | Every NilPy lambda lowers to a pyeval SOURCE closure re-walked by the tree-walker per call — 6.9x slower than the same body as a nested def, and 69x slower than CPython, which is an interpreter. Even a capture-free lambda takes this path; the native pyboundfn lowering is never attempted. | — |
 | bug-nilpy-except-as-binder-leaks-and-collides-with-a-later-name | N | 55 | bug | An `except ... as e` binder leaks and collides with a later ordinary `e` | — |
-| bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
 | bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | bug-nilpy-exception-args-attribute-missing |
 | bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory | N | 75 | bug | `f.write()` silently writes nothing, and once a "w" open exists, `print(f.read())` dumps RTTI MEMORY to stdout | — |
 | bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument | N | 55 | bug | `f.write(x)` picks the BYTES overload whenever x is not statically a str | — |

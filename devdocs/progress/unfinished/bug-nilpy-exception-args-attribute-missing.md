@@ -2,7 +2,7 @@
 prio: 30
 track: N
 type: bug
-blocked-by: []
+blocked-by: [decide-pylib-exception-vs-sysutils-exception]
 status: done
 owner: claude-A-N
 ---
@@ -116,3 +116,32 @@ Gate: self-host fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
 - 2026-08-13 — resolved, commit 67910b097.
+
+
+## REVERTED 2026-08-13, same day it shipped — and why it cannot be re-landed as written
+
+Track T's NATIVE tier turned `test_uses_order_pylib_exception_a` RED against
+this work. It is a real breakage, not a flake: the PINNED compiler reproduces
+it, and `gate.sh quick` cannot see it (the test runs only in the native tier),
+which is why it shipped and pinned green.
+
+`args` was a field (`argsv`) plus a method (`GetArgs`) on pylib's `Exception`.
+Under `uses sysutils, pylib` those are unreachable from pylib's own code,
+because the name `Exception` deliberately resolves to SYSUTILS' class even
+while pylib is being compiled — four spellings tried, four different compile
+errors, all inside pylib. Full measurement and the four ways out:
+[[decide-pylib-exception-vs-sysutils-exception]], which this ticket is now
+blocked on.
+
+**What was kept:** the KeyError constructor still takes a Variant, so
+`str(KeyError(42))` is `42` and `repr` is `KeyError(42)` — both CPython-exact,
+and correct now on BOTH construction paths, which is what the args-based
+renderer arm had been written to achieve. That part needed no new member.
+
+**What was removed:** `argsv`, `GetArgs`, `property args`, the two renderer arms
+that read them, and `test/test_nilpy_exception_args` with its Makefile row.
+
+**For whoever picks this up:** do not re-add a member to pylib's `Exception`.
+Read the decide ticket first; option 3 there (a pointer-keyed side table reached
+through plain functions) is the shape that satisfies the constraint if the two
+classes must stay separate.
