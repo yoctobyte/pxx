@@ -5,17 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:10 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1701 rejected:35`
+`unfinished:11 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1701 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep` [N] — owner: claude-A-C-N
+_none — no lane is locked._
 
-## unfinished (10) — parked mid-flight; re-claim, do not duplicate
+## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
 - `bug-n-a-type-name-is-not-a-first-class-value` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
+- `bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep` [N]
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]

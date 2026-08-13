@@ -91,3 +91,44 @@ at once if it ever bites.
 
 Test `test/test_nilpy_issubclass.npy`, expectations from CPython, wired into
 `test-nilpy`. Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` GREEN.
+
+
+## Parked 2026-08-13 after row 1 — measured notes on the remaining three
+
+Moved to `unfinished/` rather than left in `working/`: row 1 is landed and
+pushed, the other three are untouched, and none of them is the small job the
+"small gaps" framing suggests.
+
+### The table's diagnostics are out of date for two rows
+
+Both now produce a precise message rather than the recorded "unexpected token",
+so do not go looking for a parser crash:
+
+    d.update(z=6)  ->  TPyDict.update has no parameter named 'z'
+    d.update(**e)  ->  expected expression
+
+### `d.update(z=6)` is not a keyword-binding gap — the keywords are KEYS
+
+This is the trap in that row. `PyKwArgIndex` is behaving correctly: `update`
+really has no parameter called `z`, and no amount of fixing keyword binding will
+change that. Python's `dict.update(**kw)` / `dict(a=1)` is a **special case in
+the language itself** — the keyword NAMES become dict keys, not parameter names
+— so the lowering wanted is `recv.setitem("z", 6)` per keyword, not a binder
+change.
+
+That makes it a design question rather than a fix: the arm has to live where the
+receiver's class is known (the method-call site), and it must not become a
+second path that later diverges from the ordinary keyword path — the failure
+mode `devdocs/dev/normalise-dont-special-case.md` describes and this file's
+sibling tickets keep paying for. `dict(a=1)` wants the same arm, so whoever does
+it should do both at once.
+
+Related: [[bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused]] is
+the `**` half and should probably be taken together with this.
+
+### The other two are unchanged in scope
+
+`sorted(xs, key=str.lower)` still wants the unbound-method-as-value treatment
+(the bound form was fixed by [[bug-nilpy-map-over-a-bound-method-segfaults]]),
+and the unicode case mappings are already scoped by this ticket to the wider
+unicode question rather than to themselves.
