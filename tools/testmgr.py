@@ -27,6 +27,7 @@ Usage:
 
 import argparse
 import atexit
+import collections
 import filecmp
 import fnmatch
 import hashlib
@@ -172,16 +173,49 @@ OPT_SHARDS = 12
 # Do the same next time.
 
 # ---------------------------------------------------------- cost classes ---
-# est_mem: bytes we expect the job to occupy at peak (pascal26 maps a large
-# BSS; corpus compiles are the heaviest).  timeout: seconds at scale 1.0 on
-# the reference box; multiplied by the calibration factor at startup.
+# est_mem: bytes we expect the job to occupy at peak.  timeout: seconds at
+# scale 1.0 on the reference box; multiplied by the calibration factor at
+# startup.
+#
+# MEASURED, NOT GUESSED (feature-t-est-mem-from-measurement). The previous
+# table was estimated from the ELF header, and pascal26 RESERVES ~151 MB of
+# bss — a reservation is not residency, only touched pages land in RSS, so
+# every entry was wrong in the same direction. Derived 2026-08-13 from 891
+# jobs the runner actually measured (`peak_rss`, a /proc sweep over the job's
+# whole session, so it counts make + compiler + the test together):
+#
+#   class         n    median   p99    max      was      now
+#   unit        749     49 MB   83 MB  355 MB   700 MB   550 MB
+#   qemu         25     25 MB   48 MB   48 MB   800 MB   256 MB
+#   selfhost     21    167 MB  328 MB  328 MB  1200 MB   500 MB
+#   corpus       48    199 MB  257 MB  257 MB  1400 MB   400 MB
+#   conformance  36     30 MB   36 MB   36 MB  1000 MB   256 MB
+#   opt          12     54 MB  517 MB  517 MB   700 MB   800 MB
+#
+# Rule: max(observed_max * 1.5, MIN_EST_MEM). Max rather than mean, and 1.5x
+# on top, because the two errors are not symmetric — under-packing wastes a
+# box, under-ESTIMATING invites the OOM killer into a run that then reports
+# fake reds. `opt` went UP: it was the one class whose guess was nearly right,
+# and 517 MB observed against a 700 MB estimate is not the margin it looks
+# like. MIN_EST_MEM keeps a thin sample (qemu n=25, opt n=12) from collapsing
+# the estimate to something a single unmeasured heavy job could blow past.
+#
+# x86_64 only. The ticket's arm32 prediction (ILP32, so pointer-heavy
+# structures get cheaper) stays unmeasured — confirm on hardware before
+# trusting a small-box admission decision to it.
+#
+# The table is self-correcting: any job whose measured peak exceeds its class
+# estimate is reported at the end of the run (see the est_mem accuracy line),
+# because that is both the OOM warning and exactly the datum needed to fix
+# the row.
+MIN_EST_MEM = 256 << 20
 CLASSES = {
-    "unit":        {"est_mem": 700 << 20,  "timeout": 90},
-    "qemu":        {"est_mem": 800 << 20,  "timeout": 240},
-    "selfhost":    {"est_mem": 1200 << 20, "timeout": 600},
-    "corpus":      {"est_mem": 1400 << 20, "timeout": 1200},
-    "conformance": {"est_mem": 1000 << 20, "timeout": 1200},
-    "opt":         {"est_mem": 700 << 20,  "timeout": 900},
+    "unit":        {"est_mem": 550 << 20,  "timeout": 90},
+    "qemu":        {"est_mem": 256 << 20,  "timeout": 240},
+    "selfhost":    {"est_mem": 500 << 20,  "timeout": 600},
+    "corpus":      {"est_mem": 400 << 20,  "timeout": 1200},
+    "conformance": {"est_mem": 256 << 20,  "timeout": 1200},
+    "opt":         {"est_mem": 800 << 20,  "timeout": 900},
 }
 # Runtime-nondeterministic classes: they RUN a program whose scheduling/socket/
 # thread timing can flake under a loaded full-matrix run (asyncecho = qemu,
@@ -1268,6 +1302,44 @@ def uforth_shards():
 # ordinary again; it is a workaround with an expiry condition, not a policy.
 SLOW_SHARDS = {"test-uforth": ("blocktest",)}
 SLOW_TIER = "slow"
+
+
+def print_est_mem_accuracy(jobs):
+    """Per-class measured peak against the estimate that scheduled it.
+
+    The gate for feature-t-est-mem-from-measurement: the table above is derived
+    from measurements, so every run has to publish the measurements that would
+    revise it — otherwise it drifts back into a guess the moment the workloads
+    change, which is how it got 8x wrong the first time.
+
+    OVER is the line that matters. A job whose real peak exceeded its class
+    estimate was admitted on a promise the box did not have to keep, and if
+    enough of them run together the OOM killer arrives — which does not read as
+    "the estimate was low", it reads as a mysterious red. Loud, and it names the
+    job, because that job's number is exactly what the row should become.
+    """
+    seen = collections.defaultdict(list)
+    for j in jobs:
+        if j.peak_rss and j.peak_rss > 0:
+            seen[j.cls].append((j.peak_rss, j.name))
+    if not seen:
+        return
+    mb = 1 << 20
+    over = []
+    parts = []
+    for cls in sorted(seen):
+        v = sorted(seen[cls])
+        est = CLASSES.get(cls, {}).get("est_mem", 0)
+        peak, who = v[-1]
+        parts.append("%s %d/%d" % (cls, peak // mb, est // mb))
+        if est and peak > est:
+            over.append((cls, peak, est, who))
+    print("  est_mem peak/est MB: %s" % "  ".join(parts))
+    for cls, peak, est, who in over:
+        print("  !! est_mem TOO LOW for class %s: %s peaked at %d MB against a "
+              "%d MB estimate — the scheduler admitted it on a promise the box "
+              "did not have to keep. Raise the row (max*1.5) in CLASSES."
+              % (cls, who, peak // mb, est // mb))
 
 
 def generate(tier):
@@ -3387,6 +3459,7 @@ def main():
                                 ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
     if flaky:
         print("  flaky (recovered on retry, NOT red): %s" % " ".join(flaky))
+    print_est_mem_accuracy(jobs)
     # Co-tenancy belongs in the REPORT, not just the scrollback: twatch turns
     # this text into a tstate report someone reads days later while deciding
     # whether a red is real. "The box was shared" is the first thing that
