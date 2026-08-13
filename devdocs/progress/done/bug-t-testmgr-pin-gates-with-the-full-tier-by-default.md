@@ -131,4 +131,4 @@ case in `tools/devtest_pin_atomic.py`, run against a scratch tree per Track T's
 "QUICK tiers and a scratch repo, never long runs" rule.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit c894096dc.
