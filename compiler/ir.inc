@@ -8232,8 +8232,25 @@ begin
         else
         begin
           value := IRLowerAST(ASTRight[node]);
-          Result := IRAppend(IR_VAR_STORE, leftAddr, value,
-                             Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
+          { IRC is the SOURCE KIND the variant store boxes by, and it must
+            describe the value that was actually produced — not what the AST
+            expected. A literal-concat (`'p' + 'q'`) is folded above into a
+            single IR_CONST_STR tagged tyString, deliberately (a static literal
+            pointer must not be treated as a heap handle); the AST node stays
+            tyAnsiString. Boxing it AS tyAnsiString read a length word that is
+            not there, so `Show('p' + 'q')` handed over an EMPTY variant while
+            `Show('pq')` and `s := 'p' + 'q'; Show(s)` were both correct —
+            silently, in plain Pascal as well as NilPy.
+            Taking the kind from the folded literal puts it on exactly the
+            known-good one-line-literal path.
+            bug-nilpy-adjacent-string-literals-concatenate-in-only-some-positions }
+          if (IRKind[value] = IR_CONST_STR) and
+             (IntToTypeKind(ASTTk[ASTRight[node]]) = tyAnsiString) then
+            Result := IRAppend(IR_VAR_STORE, leftAddr, value,
+                               Ord(IntToTypeKind(IRTk[value])), 0, Ord(tyVariant))
+          else
+            Result := IRAppend(IR_VAR_STORE, leftAddr, value,
+                               Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
         end;
       end
       else

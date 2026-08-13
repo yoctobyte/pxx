@@ -1,0 +1,35 @@
+# Python folds adjacent string literals at compile time ("a" "b" is "ab"), and
+# the same fold applies to an explicit "a" + "b" of two literals. Both used to
+# be right in some positions and silently wrong in others: an EMPTY string as
+# an argument to a user def, a zero-length element inside a list literal (whose
+# printing walked kilobytes of the data segment), and a parse error inside a
+# dict literal spanning two lines. Expectations from CPython.
+
+def f(x):
+    return x
+
+print("abc" "def")
+print("p" "q", len("p" "q"))
+print(f("p" "q"), len(f("p" "q")))
+print(f("p" + "q"), len(f("p" + "q")))
+
+x = "p" "q"
+print(x, len(x))
+t = ("one "
+     "two")
+print(t)
+
+xs = ["p" "q", "c"]
+print(xs, len(xs[0]))
+ys = ["p" + "q"]
+print(ys, len(ys[0]))
+
+d = {"k": "aa "
+          "bb"}
+print(d["k"], len(d["k"]))
+e = {"k": "aa " + "bb"}
+print(sorted(e.keys()), e["k"])
+
+# a runtime concat in the same positions, which was always correct
+y = "p"
+print([y + "q"], f(y + "q"))

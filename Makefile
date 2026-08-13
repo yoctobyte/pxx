@@ -467,6 +467,12 @@ test-nilpy: $(COMPILER)
 	# half is deliberately NOT shipped -- see the ticket.)
 	./$(COMPILER) test/test_nilpy_dict_keyword_args.npy /tmp/test_nilpy_dictkw26
 	/tmp/test_nilpy_dictkw26 | diff -u test/test_nilpy_dict_keyword_args.expected -
+	# Adjacent / folded string literals ("a" "b" and "a" + "b") in EVERY
+	# position: as a user-def argument, a list-literal element and a dict value
+	# they used to be empty, zero-length or a parse error. Found compiling
+	# html5lib/constants.py, which is written in the idiom throughout.
+	./$(COMPILER) test/test_nilpy_adjacent_string_literals.npy /tmp/test_nilpy_adjstr26
+	/tmp/test_nilpy_adjstr26 | diff -u test/test_nilpy_adjacent_string_literals.expected -
 	# @staticmethod: registered WITH the hidden class receiver slot 0 that the
 	# existing UMthIsStatic dispatch already fills. Both parser passes must agree.
 	./$(COMPILER) test/test_nilpy_staticmethod.npy /tmp/test_nilpy_staticm26
@@ -3422,6 +3428,12 @@ test-core: $(COMPILER)
 	# unmasked the SSE instruction traps SIGFPE with the si_code that says
 	# WHICH -- FLTDIV 3 / FLTOVF 4 / FLTUND 5 / FLTRES 6 / FLTINV 7, the fact
 	# an FPC-style runtime error 205/206/207/208 mapping is built out of.
+	# A literal-concat passed to a Variant parameter: IR folds 'p' + 'q' to one
+	# tyString literal, and the variant store took its source kind from the AST
+	# (tyAnsiString) -- so it boxed a static literal as a heap handle and the
+	# argument arrived EMPTY. Plain-Pascal reachable; found through NilPy.
+	./$(COMPILER) test/test_variant_literal_concat_arg.pas /tmp/test_var_litcat26
+	test "$$(/tmp/test_var_litcat26)" = "$$(printf '[pq]\n[pq]\n[pq]\n[xy]\n[pqr]\n[ab]\ndirect: pq')"
 	./$(COMPILER) test/test_float_exception_mask.pas /tmp/test_float_exc_mask26
 	test "$$(/tmp/test_float_exc_mask26)" = "$$(printf 'default mask=63\nquiet 1/0= Inf\nquiet overflow= Inf\nquiet 0/0= Nan\nprev=63 now=59\nafter restore=63 (returned 59)\ntrapped si_code=3\ntrapped si_code=4\ntrapped si_code=7\ntrapped si_code=5\ntrapped si_code=6\nmask after=63\nquiet again= Inf\nFPE_FLTDIV=3 FLTOVF=4 FLTUND=5 FLTRES=6 FLTINV=7')"
 	# --fpc-float-errors: the opt-in FPC emulation on top of that mask. The

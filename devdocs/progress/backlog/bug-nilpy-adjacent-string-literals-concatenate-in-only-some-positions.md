@@ -60,3 +60,60 @@ keyword-argument work in
 
 A `.npy` diffed against CPython covering all seven rows above, plus
 `html5lib/constants.py` getting past line 20.
+
+## FIXED 2026-08-13 — and the root cause is Track A, not the adjacency idiom
+
+All seven rows now match CPython. The adjacency idiom was the *messenger*: the
+NilPy lexer already splices ` + ` between adjacent literals, so `"a" "b"` and
+`"a" + "b"` are the same construct by the time the parser sees them — and the
+explicit `+` form was broken in exactly the same positions, **in plain Pascal
+too**:
+
+```pascal
+procedure Show(const v: Variant); ...
+Show('pq');          { [pq] }
+Show('p' + 'q');     { []   <- silent, and this is ordinary Pascal }
+s := 'p' + 'q'; Show(s);  { [pq] }
+```
+
+### The cause: IRC described what the AST expected, not what was produced
+
+IR folds a literal-concat into ONE interned literal and deliberately tags it
+**tyString**, not tyAnsiString — the comment at that fold explains why: a static
+literal pointer treated as a heap handle gets released at scope exit and
+crashes. But the variant store took its source kind from the **AST** node, which
+is tyAnsiString, so it boxed the folded literal as a managed string and read a
+length word that is not there. Hence empty (`len` 0), and hence the list-literal
+print walking the data segment: the payload is a raw `.data` address with no
+header.
+
+One line in `ir.inc`'s AN_ASSIGN variant-target arm: when the lowered value IS a
+folded `IR_CONST_STR` and the AST said tyAnsiString, take the kind from the
+value. That puts it on the byte-for-byte path a one-line literal already takes —
+the known-good form — rather than inventing a third.
+
+**The general rule worth carrying:** a store that is told a KIND separately from
+its VALUE must take the kind from the value once anything in between can rewrite
+it. Constant folding is exactly such a rewrite.
+
+### The dict-literal parse error was a second, unrelated bug
+
+`{"k": "aa "\n      "bb"}` failed to parse because the lexer's adjacency scan
+counted `(` and `[` as "still on the same logical line" and **not `{`**. A dict
+or set display continues a line exactly as the other two do. One character class
+added in `pylexer.inc`.
+
+### Tests
+
+- `test/test_nilpy_adjacent_string_literals.npy` + `.expected` (CPython), all
+  seven positions plus the runtime-concat control, in `test-nilpy`.
+- `test/test_variant_literal_concat_arg.pas` in `make test` — the Track A half,
+  because the bug is reachable without NilPy at all.
+
+`html5lib/constants.py` now compiles past line 20 (where this stopped it) to
+line 305, where it meets `frozenset` — an ordinary missing builtin, filed
+separately if it blocks.
+
+Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` GREEN + the full
+`make test-nilpy` family sweep (this moves a variant-boxing path, which is what
+the sweep exists for).

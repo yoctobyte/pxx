@@ -649,8 +649,14 @@ begin
       continue;
     end;
     if c = #10 then Inc(ln);
-    if (c = '(') or (c = '[') then Inc(pdepth)
-    else if (c = ')') or (c = ']') then begin if pdepth > 0 then Dec(pdepth); end;
+    { Braces count too: a dict/set display continues a logical line exactly as
+      parentheses and brackets do, so a string literal wrapped across lines
+      inside one is still ADJACENT. Without `{`/`}` here,
+      `{"k": "aa "\n      "bb"}` spliced nothing and the parser met the second
+      literal where it wanted the closing brace — a compile error, and the
+      idiom html5lib/constants.py is written in. }
+    if (c = '(') or (c = '[') or (c = '{') then Inc(pdepth)
+    else if (c = ')') or (c = ']') or (c = '}') then begin if pdepth > 0 then Dec(pdepth); end;
     PyFsPutCh(c);
     Inc(i);
   end;
