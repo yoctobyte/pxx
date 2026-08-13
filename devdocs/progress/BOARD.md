@@ -35,7 +35,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (219)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -51,6 +51,7 @@ _none_
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
 | bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep | N | 40 | bug | A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=)) | — |
+| bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising | N | 25 | bug | `min(3, None)` answers None where CPython raises TypeError — pyvar_gt orders None against a number instead of refusing. Low priority: comparing None is a bug in the calling program, and every shape CPython accepts is unaffected. But it is the wrong DIRECTION of laxity: we answer a question CPython refuses to answer, silently. | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords | N | 40 | bug | `d.update(a=1)` lowers correctly for ONE keyword and SEGFAULTS for two, through the same builder that makes `dict(a=1, b=2)` correct — so the method-argument path mishandles the builder's hoisted setitem statements. Not shipped for that reason; `dict(...)` is. Also: `d.update(**e)` is refused by a route that is none of parser.inc's five argument loops. | — |
@@ -626,6 +627,7 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 30] [D] task-d-document-warn-ignored-directives
+- [p 25] [N] bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off

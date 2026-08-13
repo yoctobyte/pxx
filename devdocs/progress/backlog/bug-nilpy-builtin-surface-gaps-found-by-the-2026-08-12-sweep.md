@@ -234,3 +234,35 @@ Test `test/test_nilpy_fstring_computed_spec.{npy,expected}`, wired into
 **This closes items 2 and 3. Remaining: item 1's `min`/`max` with `key=None`,
 and item 4's id, slice, complex, ascii, eval, dir, vars, memoryview,
 `max(default=)` and `type(x) == int`.**
+
+## Item 1 CLOSED 2026-08-13 — `min`/`max` with `key=None`
+
+All three spellings work now: the literal, a variable holding None, and the
+helper-default case (`def show(xs, key=None): return min(xs, key=key)`), over a
+list, a string and a range. Controls in the test: a real key function, the plain
+one-argument forms, and the two-argument numeric form.
+
+The ticket's own note asked whoever took it to choose between routing `key=` at
+the frontend and widening the runtime detection, warning that the runtime arm
+"cannot simply treat a None second argument as no-key without turning that into
+a silently wrong answer". **It can, with one guard, and the warning does not
+survive the dialect's own rule:** `min(xs, None)` positionally is a TypeError in
+CPython, so no program CPython ACCEPTS can observe the difference — the same
+argument `PyMinMaxByKey` already makes one function above for a callable second
+argument. Guarded on a SEQUENCE first argument, so `min(3, None)` keeps raising:
+that one really is a comparison someone wrote by mistake.
+
+**Noted, pre-existing, not touched:** `min(3, None)` answers `None` where
+CPython raises `TypeError` (the pinned compiler agrees, so it predates this).
+Filed as [[bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising]].
+
+**Still open in item 1's neighbourhood: `max(xs, default=0)`.** It needs an
+overload carrying a `default` parameter, and every shape of that collides with
+the existing `key=` arity — `max(l, key: Pointer = nil)` and
+`max(l, const default: Variant, key: Pointer = nil)` are ambiguous for a
+one-argument call, and Pascal will not take a non-defaulted parameter after a
+defaulted one. It wants the keyword to be resolved against the overload SET
+rather than the chosen member (bug-nilpy-keyword-arg-vs-overload-set), so it is
+filed there rather than bodged here.
+
+Test `test/test_nilpy_min_max_key_none.{npy,expected}`, wired into `test-nilpy`.

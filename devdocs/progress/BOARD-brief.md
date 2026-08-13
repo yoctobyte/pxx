@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1733 rejected:35`
+`unfinished:10 blocked:3 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1733 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 201, ranked
+## Ready — top 30 of 202, ranked
 
 - `[p 70] [A]` bug-pascal-uses-order-breaks-pylib-exception
 - `[p 70] [T]` regression-test-arm32-httpdemo
@@ -63,4 +63,4 @@ _none — no lane is locked._
 - `[p 55] [N]` feature-nilpy-text-string-kind
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 
-_171 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
