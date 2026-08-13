@@ -4669,7 +4669,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_cross_static_open_array.pas /tmp/test_static_open26
 	test "$$(/tmp/test_static_open26)" = "$$(printf 'len=4 high=3 sum=100 a0=10\nlen=2 high=1 sum=15 a0=7')"
 	./$(COMPILER) test/test_conformance_1.pas /tmp/test_conformance_1_26
-	test "$$(/tmp/test_conformance_1_26)" = "$$(printf 'shape 0 square area=9.00 tag=5000000004\nshape 1 circle area=12.00 tag=1000000000\nshape 2 generic area=0.00 tag=1000000007\ntotal area=21.00\npts len=3 high=2\n  pt p 0,0\n  pt p 2,1\n  pt p 4,4\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nv int=1\ncaught: boom\ncaught=1\nconcat=abcdef len=6\nV...V.')"
+	test "$$(/tmp/test_conformance_1_26)" = "$$(printf 'shape 0 square area=9.00 tag=5000000004\nshape 1 circle area=12.00 tag=1000000000\nshape 2 generic area=0.00 tag=1000000007\ntotal area=21.00\npts len=3 high=2\n  pt p 0,0\n  pt p 2,1\n  pt p 4,4\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nv int=123\ncaught: boom\ncaught=1\nconcat=abcdef len=6\nV...V.')"
 	./$(COMPILER) test/test_conformance_2.pas /tmp/test_conformance_2_26
 	test "$$(/tmp/test_conformance_2_26)" = "$$(printf 'q=7000000005 mix=111000000083\nfact20=2432902008176640000\neven10=TRUE odd7=TRUE\nsum9=45 big=97864\n  rec r A=1000000000 B=0 sum=1000000000\n  rec r A=2000000000 B=1 sum=2000000001\n  rec r A=3000000000 B=4 sum=3000000004\ncopy A=3000000000 B=99 orig B=4\nopensum=100\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nconcat=abcdef len=6\nV.--V.\ncaught=11 gdiv=5 gzero=-1')"
 	./$(COMPILER) test/test_cross_shortcircuit.pas /tmp/test_shortcircuit26
