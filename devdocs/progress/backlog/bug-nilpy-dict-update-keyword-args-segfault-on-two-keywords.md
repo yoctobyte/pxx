@@ -60,3 +60,64 @@ construct, two routes — `devdocs/dev/normalise-dont-special-case.md`.)
 `d.update(other, a=1)` (CPython allows the mixed form; today's builder does not
 and says so) all diffed against CPython, plus the existing
 `test/test_nilpy_dict_keyword_args.npy` rows staying green.
+
+## 2026-08-13 — the ENABLING CONDITION found, and the segfault reproduced behind it
+
+Nothing shipped; this is the diagnosis, banked. Two facts, both measured.
+
+### 1. `PyKeywordsAreKeys` could never have matched a METHOD
+
+It compares `Procs[mpi].Name` against `'dict'`. A method's Procs entry is named
+**qualified** — `TPyDict.update` — so the predicate answered False for every
+method, whatever the call site did. That is why the earlier session's
+instrumentation "was not reached by any of the five argument loops": the loops
+were fine, the predicate said no before any of them mattered.
+
+Measured with a one-shot probe (a `PyKwSite` global set at each of the nine
+`PyKwArgIndex` call sites and printed in its error): `d.update(z=6)` reaches
+**parser.inc's arity-driven method loop**, which has consulted
+`PyKwDictArgNode` all along. So there was never a missing call site — only a
+name comparison that could not succeed.
+
+### 2. With the name fixed, the reported symptom reproduces exactly
+
+`CaseEqual(Procs[mpi].Name, 'TPyDict.update')`:
+
+| shape | result |
+| --- | --- |
+| `d.update(z=6)` | correct |
+| `d.update(z=7)` onto an existing `z` | correct |
+| `d.update(z=7, y=8)` | **SEGFAULT** |
+| `d.update(z=7, y=8, x=9)` | **SEGFAULT** |
+| `d.update({"z": 7, "y": 8})` | correct |
+| `dict(z=7, y=8)` | correct |
+
+So the ticket's headline is confirmed rather than explained: one keyword is
+fine, two corrupt memory, and the SAME builder feeding `dict(...)` in the same
+program is correct with two.
+
+The faulting instruction is `mov (%rax),%rax` after `rax := ptr - 8` — a
+length/refcount word read through a bad handle, the shape of a use-after-free,
+inside pylib (no DWARF there).
+
+### Ruled out while here
+
+The obvious suspect — the hoisted `setitem` statement being typed `tyClass`, so
+each hoisted statement releases the returned Self and two releases free the dict
+— is **not** it, or not it alone: `PyParseDictLiteral` builds `{"z": 7, "y": 8}`
+with an identically-typed, identically-hoisted `setitem` per pair, in the same
+argument position, and is correct.
+
+### What to try next
+
+Diff the two hoist SEQUENCES rather than the builders — dump `PXXDBG a.ir` for
+`d.update({...})` and for the keyword form with the predicate re-enabled, and
+compare where the temp is assigned relative to the receiver's evaluation. The
+one structural difference left is that the keyword form's hoists are queued
+*while the method's argument list is being parsed* and the literal's are queued
+*while its own literal is*, which is the trial-parse/hoist-queue interaction
+[[project_trial_parse_rewind_leaves_its_hoists_queued]] describes.
+
+Reverted rather than shipped: a form correct with one keyword and corrupting
+memory with two is worse than the compile error it replaces, which is the same
+call the earlier session made.
