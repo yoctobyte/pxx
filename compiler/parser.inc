@@ -31189,14 +31189,21 @@ begin
     end;
   end;
 
-  if Length(UnitContent) = 0 then
+  { A C HEADER can satisfy a Pascal `uses` or a C `#include`, but NEVER a Python
+    `import`: `import string` found /usr/include/string.h and pulled the host's
+    features.h into a NilPy build (the ABI warning was the only sign), and
+    `import stdio` — not a Python module at all — compiled clean. A module that
+    does not exist then reads as PRESENT, and the real failure surfaces later
+    somewhere else entirely ("undefined variable (ascii_lowercase)").
+    bug-nilpy-python-import-resolves-against-c-headers }
+  if (Length(UnitContent) = 0) and (not isNilPy) then
   begin
     ConcatThree('/usr/include/', cName, '.h', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
 
-  if Length(UnitContent) = 0 then
+  if (Length(UnitContent) = 0) and (not isNilPy) then
   begin
     ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
     LoadFile(path, UnitContent);

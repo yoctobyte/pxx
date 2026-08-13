@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A NilPy `import X` is satisfied by a C HEADER from lib/crtl/include: `import string` pulls string.h (and warns about host features.h), `import stdio` compiles clean. So a module that does not exist appears to import, and the failure surfaces later as `undefined variable (ascii_lowercase)` — pointing at the wrong thing entirely."
+status: done
 ---
 
 # `import string` in a .npy resolves to crtl's `string.h`
@@ -74,3 +75,36 @@ html5lib/constants.py actually wants.
 either resolves to a real shim or errors, and neither pulls a host header; a
 `.npy` build emits no `features.h` warning; the existing NilPy import tests stay
 green.
+
+## FIXED 2026-08-13 — the two `/usr/include` arms are Pascal/C only
+
+A C header can satisfy a Pascal `uses` or a C `#include`; it can never satisfy a
+Python `import`. The two `/usr/include` lookups in the unit resolver are now
+gated on `not isNilPy`, which is the narrowest change that closes it:
+
+```
+import stdio   ->  import: no unit named stdio and no shim mimic_stdio
+import string  ->  import: no unit named string and no shim mimic_string
+import math    ->  still resolves (lib/rtl/math.pas), and no longer warns
+```
+
+C compilation is untouched (`#include <stdio.h>` builds and runs), and the
+features.h warning is gone from NilPy builds — a Python program can no longer
+reach the host include path at all.
+
+`import string` now says what is true. Making it WORK is a `mimic_string`
+(`ascii_lowercase`, `ascii_uppercase`, `digits`, `punctuation`, `whitespace`,
+`capwords`), which is html5lib/constants.py's actual need and belongs to
+whoever picks that up — the same shape as
+[[feature-b-mimic-codecs-for-nilpy]].
+
+Left deliberately in place: the `lib/rtl/*.h` / `lib/pcl/*.h` / `compiler/*.h`
+arms, which only run under the CWD-relative fallback and are how the C frontend
+finds pxx's own headers. Only the host-include arms could turn a Python import
+into a `/usr/include` file.
+
+Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` GREEN + full
+`make test-nilpy` sweep green.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
