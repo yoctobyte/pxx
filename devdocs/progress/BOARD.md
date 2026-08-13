@@ -34,10 +34,11 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (211)
+## backlog (212)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
@@ -491,6 +492,7 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
