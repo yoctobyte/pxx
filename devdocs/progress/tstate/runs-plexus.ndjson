@@ -757,3 +757,4 @@
 {"date": "2026-08-13T19:31:21Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_uses_order_pylib_exception_a.pas"], "sha": "1df75aad5458bf3ab272964dea010a8ff15f26c0", "tier": "native", "verdict": "RED", "wall": 163.3}
 {"date": "2026-08-13T19:38:39Z", "fixed": [], "full": false, "new_red": [], "sha": "3e22a413d81789c1e7d3d8f914ac2ccf2a50c24c", "tier": "native", "verdict": "RED", "wall": 204.8}
 {"date": "2026-08-13T19:48:10Z", "fixed": [], "full": false, "new_red": [], "sha": "bb2edb073c1d5b5c4b43017e5a1a449211e56734", "tier": "native", "verdict": "RED", "wall": 163.6}
+{"date": "2026-08-13T19:58:46Z", "fixed": [], "full": false, "new_red": [], "sha": "9c6c3a7cd395f39400de8cef9cb0e9924aca6257", "tier": "native", "verdict": "RED", "wall": 165.2}
