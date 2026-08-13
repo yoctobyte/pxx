@@ -120,4 +120,4 @@ Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` GREEN + the full
 the sweep exists for).
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit b516a818c.
