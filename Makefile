@@ -1525,6 +1525,11 @@ test-nilpy: $(COMPILER)
 	# landed because it fires for every value whose FKind was never stamped -- so
 	# the second half of this file sweeps every tuple/list constructor for
 	# type(x).__name__, and all of them already agree with CPython.
+	# e.args -- derived from the Message, since a pxx Exception carries one
+	# string; KeyError stores the raw key instead, because its message is already
+	# repr'd, and that is what also settled repr(KeyError(...)).
+	./$(COMPILER) test/test_nilpy_exception_args.npy /tmp/test_nilpy_excargs26
+	/tmp/test_nilpy_excargs26 | diff -u test/test_nilpy_exception_args.expected -
 	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
 	/tmp/test_nilpy_tupnotlist26 | diff -u test/test_nilpy_tuple_is_not_a_list.expected -
 	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26

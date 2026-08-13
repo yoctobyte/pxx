@@ -53,7 +53,6 @@ _none_
 | bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords | N | 40 | bug | `d.update(a=1)` lowers correctly for ONE keyword and SEGFAULTS for two, through the same builder that makes `dict(a=1, b=2)` correct — so the method-argument path mishandles the builder's hoisted setitem statements. Not shipped for that reason; `dict(...)` is. Also: `d.update(**e)` is refused by a route that is none of parser.inc's five argument loops. | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
-| bug-nilpy-exception-args-attribute-missing | N | 30→40 | bug | `e.args` is missing on exceptions | — |
 | bug-nilpy-exception-str-and-repr-diverge-from-cpython | N | 40 | bug | Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09) | bug-nilpy-exception-args-attribute-missing |
 | bug-nilpy-float-formatting-manufactures-ties-by-scaling | N | 40 | bug | `\"%.1f\" % 0.15` answers 0.2 where CPython answers 0.1, and 0.45 answers 0.4 where CPython answers 0.5: scaling the fraction by a power of ten lands exactly on .5 for values whose binary expansion is just below or just above it, so the formatter rounds a tie that does not exist — and gets it wrong in BOTH directions. Needs exact decimal digit generation, not a rounding tweak | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
@@ -67,6 +66,7 @@ _none_
 | bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-python-import-resolves-against-c-headers | N | 55 | bug | A NilPy `import X` is satisfied by a C HEADER from lib/crtl/include: `import string` pulls string.h (and warns about host features.h), `import stdio` compiles clean. So a module that does not exist appears to import, and the failure surfaces later as `undefined variable (ascii_lowercase)` — pointing at the wrong thing entirely. | — |
+| bug-nilpy-raise-keyerror-with-a-non-string-argument-segfaults | N | 40 | bug | `raise KeyError(42)` SEGFAULTS — an integer argument reaches Exception.Create(const m: AnsiString) as a string handle. Identical on pinned. Every builtin exception ctor takes a string, so this is the whole family, and CPython accepts any object. | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
@@ -399,9 +399,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1729)
+## done (1730)
 
-1729 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1730 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -530,15 +530,16 @@ _none_
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
-- [p 40] [N] bug-nilpy-exception-args-attribute-missing (unblocks 1)
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
 - [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
 - [p 40] [N] bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep
 - [p 40] [N] bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
+- [p 40] [N] bug-nilpy-exception-str-and-repr-diverge-from-cpython
 - [p 40] [N] bug-nilpy-float-formatting-manufactures-ties-by-scaling
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [N] bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses
+- [p 40] [N] bug-nilpy-raise-keyerror-with-a-non-string-argument-segfaults
 - [p 40] [P] bug-p-bare-all-defaulted-routine-refused-in-argument-position
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result
@@ -645,7 +646,6 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-n-a-type-name-is-not-a-first-class-value
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
-- **1** — bug-nilpy-exception-args-attribute-missing
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
