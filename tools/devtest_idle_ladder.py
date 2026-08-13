@@ -71,6 +71,26 @@ def main():
         st["last_full"] = {"sha": SHA, "tier": nxt}
     check(seen == ["limited", "full"], "exactly two rungs, in order", str(seen))
 
+    # The checks above all pass tiers in explicitly, so they say nothing about
+    # which ladder the daemon actually climbs. That is the thing that went
+    # stale: `limited` was a cheap preview of `full` when it was a third of it,
+    # the matrix doubled, and nobody re-measured — by 2026-08-13 limited cost
+    # 84% of a full run (686s vs 821s) to cover 78% of its jobs, so the middle
+    # rung was spending ~41% of the box to buy 135s of notice.
+    print("\nthe SHIPPED ladder, not just the function")
+    st, seen = {}, []
+    mid, deep = tw.CONF_DEFAULTS["mid_tier"], tw.CONF_DEFAULTS["tier"]
+    for _ in range(6):
+        nxt = tw.idle_phase(st, SHA, mid, deep)
+        if nxt is None:
+            break
+        seen.append(nxt)
+        st["last_full"] = {"sha": SHA, "tier": nxt}
+    check(seen == ["full"],
+          "default ladder is native -> full, one idle rung",
+          "re-measure the tier ratio before adding a rung back: "
+          "`--tier <t> --list | wc -l` and the wall from a report")
+
     print("\nthe tiers behind the ladder")
     lim, full = tw.covered_tiers("limited"), tw.covered_tiers("full")
     check("full" not in lim,

@@ -69,7 +69,29 @@ INDEX_REL = TSTATE_REL + "/TSTATE.md"  # generated; the ONE co-written tstate fi
 WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
 PUBHEALTH_REL = ".testmgr/pubhealth.json"  # publish outcome: quiet vs stuck
 CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
-CONF_DEFAULTS = {"tier": "full", "mid_tier": "limited",
+# mid_tier == tier COLLAPSES the escalation ladder to native -> full, and that
+# is the measured default now. `limited` was a cheap preview of `full` when it
+# was a third of it; the matrix has since doubled (1084 jobs on 2026-07-08 ->
+# 2343 on 2026-08-13) and the growth landed on both tiers, so measured on
+# plexus 2026-08-13:
+#
+#     native   1224 jobs   170 s   (53% of the jobs, 21% of the wall)
+#     limited  1811 jobs   686 s   (78% of the jobs, 84% of the wall)
+#     full     2329 jobs   821 s
+#
+# Running all three costs 1677 s per sha where native -> full costs 991 s for
+# the SAME final coverage — 41% of the box spent buying 135 s of notice. The
+# wall is dominated by a few long serial jobs (selfhost alone is 131 s) that
+# `limited` already pays for in full, while full's extra 518 jobs are
+# parallel-friendly and nearly free. native still earns its rung: half the jobs
+# for a fifth of the wall, because it excludes the qemu/cross matrix.
+#
+# `limited` is NOT removed — testmgr still defines it, `--tier limited` still
+# runs it by hand, and setting `mid_tier` in twatch.conf restores the three-rung
+# ladder. What changed is which default the measurements support. RE-MEASURE
+# THIS RATIO when the matrix grows again; it is the thing that went stale
+# silently last time, because nothing ever re-checked it.
+CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  "fast_tier": "native", "interval": 60,
                  "debounce": 20, "no_bisect": False,
                  "autoticket": True,   # stub regression tickets (face 1)
@@ -2672,6 +2694,13 @@ def idle_phase(st, tested, mid_tier, deep_tier):
                                   happens if nothing has landed meanwhile.
         still idle -> opt         the O-level differential (handled by caller)
 
+    SHIPPED DEFAULT: mid_tier == deep_tier == full, so the middle rung is
+    collapsed and the ladder is native -> full (see CONF_DEFAULTS for the
+    measurements). The three-rung shape stays here, parameterised, because it
+    is right whenever the mid tier is genuinely cheaper than the deep one —
+    which is a ratio to re-measure, not a property to assume. Setting
+    `mid_tier` in twatch.conf brings it back.
+
     A push preempts whatever is running and the ladder restarts at the bottom
     for the new sha — which is the intent, not a cost: fresh commits outrank
     breadth on an old one.
@@ -3655,7 +3684,10 @@ def main():
     if args.fast_tier is None:
         args.fast_tier = conf["fast_tier"]
     if getattr(args, "mid_tier", None) is None:
-        args.mid_tier = conf.get("mid_tier", "limited")
+        # CONF_DEFAULTS, not a second literal: load_conf already merges the
+        # defaults, so a hardcoded fallback here is a silent override waiting
+        # to disagree with the table above.
+        args.mid_tier = conf.get("mid_tier", CONF_DEFAULTS["mid_tier"])
     if args.interval is None:
         args.interval = conf["interval"]
     if args.debounce is None:
@@ -3766,6 +3798,13 @@ def main():
                 # pin to fall back to — pin_is_green() requires a `full` run,
                 # and without one the recovery half of the fast-pin trade has
                 # no target.
+                #
+                # UNREACHABLE under the shipped default, and that is correct
+                # rather than dead: mid_tier == tier makes pin_mid and pin_deep
+                # the same query, so the branch above already gave the pin its
+                # full run — one verification instead of limited-then-full. It
+                # comes back the moment a clone configures a distinct mid_tier,
+                # which is why it stays.
                 verify_pin(clone, host, st, *pin_deep,
                            abort_check=make_preempted(clone, tested))
                 did_work = True
