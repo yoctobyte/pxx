@@ -1475,6 +1475,16 @@ var
   StrictVariantChar : Boolean; { --strict-fpc: reproduce FPC's Variant->Char rule, which goes through the variant's STRING form and takes character 1 — `Char(v)` with v=65 is '6', with v=122 is '1', with v=True is 'T'. Provenance is Microsoft's OLE Automation VARIANT (no char type in it) by way of Delphi; the DEFAULT dialect answers Chr(n), which is the coherent reading and what anyone writing that line means. Note FPC contradicts ITSELF here — the same variant converts numerically for Byte/Word/Int64 — and the string hop is UNWRITABLE by hand (`c := someAnsiString` is an FPC type error), so this is inherited history rather than a rule worth reproducing by default (user, 2026-08-13). Selected at the LOWERING seam (IRLowerVariantAsScalar picks VariantToCharFPC), so no flag is threaded into the runtime. bug-p-variant-to-int-and-char-conversion-diverges-from-fpc }
   StrictShiftWidth : Boolean;  { --strict-fpc: reproduce FPC's SHIFT widths exactly, asymmetry and all — `shr`/`shl` happen at the operand's declared width and `shl` masks its count to 5 bits, where the default dialect shifts at NATIVE width and never truncates (decide-shift-operator-promotion-width). FPC's own constant FOLDER contradicts its runtime path here and keeps 64-bit answers; ConstEval is Int64, so that half needs no flag. bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
   StrictCase : Boolean;  { --strict-case / {$STRICT_CASE ON}: FPC-parity case-label validation -- reject inverted ranges and duplicate/overlapping labels. Default off: PXX's dialect keeps first-match semantics for overlapping labels and treats an inverted range as never-matching. Label TYPE checks are always on. }
+  { --strict-python: the CPython-parity umbrella, peer of --strict-fpc. NilPy is
+    deliberately LAX where CPython is strict for reasons of its own — a mutable
+    tuple, keyword-only parameters passed positionally, a dict mutated while
+    iterated — because a program CPython ACCEPTS must run here, and one it
+    rejects costs us nothing to accept. This flag asks for CPython's refusals
+    back, for code that must stay portable, and is the declared home for
+    dialect EXTENSIONS (parallel-for and friends) to be refused under.
+    Rules are wired one at a time, each with its own test; PyStrictRefuse is
+    the single diagnostic shape they all use. Default False, always. }
+  StrictPython     : Boolean;
   StrictVisibility : Boolean;  { --strict-visibility / {$STRICT_VISIBILITY ON}: FPC-parity member access control -- enforce private/protected/strict private/strict protected. Default off: PXX's dialect parses the markers but grants access from anywhere (the deliberate lax ergonomics -- same-unit access and the cracker cast still work under FPC semantics when on). Scoping: private/protected are UNIT-scoped (declaring unit sees all), strict private is type-scoped (declaring class only), strict protected adds descendants. }
   DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;

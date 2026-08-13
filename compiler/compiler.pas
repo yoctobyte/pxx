@@ -582,6 +582,20 @@ begin
       StrictCase := True;
       Inc(i);
     end
+    else if option = '--strict-python' then
+    begin
+      { CPython-parity umbrella for the NilPy frontend — the peer of
+        --strict-fpc, and deliberately shipped BEFORE the rules that will use
+        it (user, 2026-08-13): the dialect's laxities and its EXTENSIONS both
+        need a declared place to be refused, and adding the flag with the first
+        rule would mean the first rule also has to invent the flag. NilPy stays
+        lax by default: CPython is strict for its own reasons, and where we
+        have no reason of our own we do not copy the restriction.
+        Wired rules live in devdocs/dev/nilpy-semantics-divergences.md; each
+        lands with its own test and its own diagnostic through PyStrictRefuse. }
+      StrictPython := True;
+      Inc(i);
+    end
     else if option = '--strict-visibility' then
     begin
       { FPC-parity member access control (private/protected/strict). PXX's lax
@@ -782,7 +796,7 @@ begin
     users who accept degraded debug info. See feature-optimization-levels. }
   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}

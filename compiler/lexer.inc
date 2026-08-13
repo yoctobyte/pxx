@@ -639,6 +639,7 @@ begin
   StrictOverload := False;
   StrictOperator := False;
   StrictCase := False;
+  StrictPython := False;
   StrictShiftWidth := False;
   StrictVisibility := False;
   DelphiMode := False;

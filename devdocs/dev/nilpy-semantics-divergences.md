@@ -276,3 +276,63 @@ habit compiles a program in its source directory and runs it there — so "the
 CWD" and "where the source lives" coincide and any `__file__`-based resolution
 silently agrees with the CWD-based one. Finding one needs a program that BOTH
 reaches the fallback AND runs from somewhere else.
+
+
+---
+
+## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
+
+Every divergence on this page is a **laxity**: NilPy accepts something CPython
+refuses. That direction is deliberate and is the rule of the frontend — *if code
+works on CPython it must work on NilPy*, one direction only — so the default
+dialect will not grow these checks.
+
+But a program that must stay portable wants to be told, and so does a program
+using a dialect EXTENSION (`parallel for` and friends) that CPython has no
+notion of. `--strict-python` is that switch, the peer of `--strict-fpc`.
+
+**It was shipped deliberately empty** (user, 2026-08-13: *"we want and/or should
+implement strict-python even if we don't use it today"*). The reason is
+structural rather than tidy-minded: if the flag arrives with its first rule,
+then that rule's author also has to invent the flag, the diagnostic wording, and
+the place rules are listed — and the second rule copies whatever the first one
+guessed. Shipping the frame first makes every rule a small, uniform change.
+
+What exists today:
+
+| piece | where |
+| --- | --- |
+| `StrictPython` global, default False, always | `defs.inc`, reset in `PasInitDefines` |
+| `--strict-python` option | `compiler.pas`, listed in the usage line |
+| `PyStrictRefuse(feature, cpythonSays)` | `pyparser.inc` — the ONE diagnostic shape |
+
+`PyStrictRefuse` checks the flag itself, so a rule cannot accidentally refuse
+something for everybody, and its message always names three things: the
+construct, what CPython does, and that the default dialect accepts it.
+
+### Adding a rule
+
+1. Find the single site where the construct is accepted.
+2. Call `PyStrictRefuse('a mutable tuple', 'raises TypeError')` there.
+3. Add a `.npy` test that passes by default and is refused under the flag —
+   both directions, or the rule is not tested.
+4. Add a row to this page.
+
+**Do not half-wire a rule.** If a construct is reachable through several sites
+(argument binding, for one, has separate paths for plain calls, methods and
+constructors), refusing it at one of them is worse than not refusing it at all:
+the flag would then mean "sometimes". Either cover every site or file the rule
+and leave it unwired.
+
+### Candidate rules, in the order they are worth doing
+
+- **keyword-only parameters passed positionally** — the bare `*` marker is
+  currently consumed and dropped, so nothing records the boundary; needs a
+  parallel array plus a check at each argument-binding path
+  ([[decide-nilpy-builtin-keyword-only-parameters]]).
+- **a mutable tuple** — `t[0] = 9`, `t.append(4)`, `del t[0]`; needs the store
+  paths to see the receiver's `FKind`, which is a run-time tag, so this one is
+  probably a runtime check the flag has to reach.
+- **dict mutated while iterating** — runtime, same problem.
+- **dialect extensions** (`parallel for`) — the cheapest of the four, because
+  each extension has exactly one parse site.

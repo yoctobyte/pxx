@@ -6558,6 +6558,27 @@ begin
   Result := node;
 end;
 
+procedure PyStrictRefuse(const feature: AnsiString; const cpythonSays: AnsiString);
+{ The ONE diagnostic shape for every --strict-python rule. Called only when
+  StrictPython is on; a caller that forgets the guard turns a laxity into a
+  refusal for everybody, so the guard is here rather than at each site.
+
+  Why a shared helper for a flag with no rules yet: the flag's value is that
+  rules can be added uniformly later, and "uniformly" means the message tells
+  the reader three things every time — what construct, what CPython does about
+  it, and that pxx accepts it by default. A rule that invents its own wording
+  is a rule someone has to read twice.
+
+  Extensions use it too, and that is not a stretch of the name: `parallel for`
+  is something CPython would reject, so a program that must stay portable wants
+  to be told, in exactly this shape, that it has left the language. }
+begin
+  if not StrictPython then Exit;
+  Error('Nil Python: --strict-python refuses ' + feature + ' — CPython '
+        + cpythonSays + '. The default dialect accepts it; drop the flag to '
+        + 'keep it.');
+end;
+
 function PyParseFormatCall: Integer;
 { `format(v)` / `format(v, spec)` -> pyformat_v, the SAME implementation the
   f-string holes use. An intercept rather than a pylib function named `format`,
