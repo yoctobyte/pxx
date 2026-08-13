@@ -3416,6 +3416,37 @@ begin
   else Result := BSS_EXC_OBJ;
 end;
 
+function UContextPCOffset: Integer;
+{ Byte offset of the saved PROGRAM COUNTER inside the `ucontext_t` the kernel
+  hands a SA_SIGINFO handler — the one fact behind __pxxSigPCPtr, and the only
+  piece of per-arch signal-frame knowledge the compiler carries. Writing this
+  word is what turns a fault into a catchable raise: point it at a Pascal proc
+  that raises, return from the handler, and the kernel resumes THERE.
+
+  MEASURED, not read off a header (feature-signal-siginfo-ucontext, 2026-08-13).
+  A probe faulted two ways under each target's qemu — by WRITING $DEAD0000 and
+  by CALLING it — and dumped every ucontext word equal to that sentinel. A word
+  that matches in BOTH runs is a fault-address field; the one that matches ONLY
+  when the fault was a jump is the saved PC. Each answer below also equals what
+  the kernel's struct definitions predict, so two independent sources agree:
+
+    x86-64   168 = uc_mcontext(40) + gregs[REG_RIP=16]*8
+    aarch64  440 = uc_mcontext(176) + fault_address(8) + regs[31]*8 + sp(8)
+    arm32     92 = uc_mcontext(20)  + arm_pc(72)
+    i386      76 = uc_mcontext(20)  + gregs[REG_EIP=14]*4
+    riscv32  160 = uc_mcontext(160) + sc_regs.pc, which is its first field
+
+  xtensa never reaches here — the parser refuses every __pxxSig* on it, because
+  FreeRTOS has no signal runtime at all. }
+begin
+  if TargetArch = TARGET_X86_64 then Result := 168
+  else if TargetArch = TARGET_AARCH64 then Result := 440
+  else if TargetArch = TARGET_ARM32 then Result := 92
+  else if TargetArch = TARGET_I386 then Result := 76
+  else if TargetArch = TARGET_RISCV32 then Result := 160
+  else Result := -1;   { unreachable: the parser refused this target already }
+end;
+
 { OPEN-WORLD is-a, at RUNTIME: given a symbol already holding an instance pointer,
   emit IR computing a Boolean temp = inst is a `targetCi` (or any descendant),
   by walking the RTTI blobs' PARENT CHAIN — the same __pxxInheritsFrom machinery
@@ -6099,10 +6130,21 @@ begin
       { The dispatch stub parked si_code / si_addr / ucontext* before calling the
         hook; ASTIVal picks which (0/1/2), mapping to IRC 2/3/4 — the same slot
         load AN_EXCEPTADDR uses. si_code is an ordinal (already sign-extended in
-        the stub), the other two are addresses. }
+        the stub), the other two are addresses.
+
+        ASTIVal 3 (__pxxSigPCPtr) is the ucontext slot PLUS the per-arch byte
+        offset of the saved PC inside it — a plain pointer add on the loaded
+        slot, so it still costs no backend anything. }
       eaSym := AllocVar('', IntToTypeKind(ASTTk[node]));
-      IRAppend(IR_EXC_STORE, eaSym, -1, ASTIVal[node] + 2, 0, 0);
+      if ASTIVal[node] = 3 then
+        IRAppend(IR_EXC_STORE, eaSym, -1, 4, 0, 0)      { the ucontext pointer }
+      else
+        IRAppend(IR_EXC_STORE, eaSym, -1, ASTIVal[node] + 2, 0, 0);
       Result := IRAppend(IR_LOAD_SYM, eaSym, -1, -1, 0, ASTTk[node]);
+      if ASTIVal[node] = 3 then
+        Result := IRAppend(IR_BINOP, Result,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, UContextPCOffset, Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer));
     end;
 
     AN_TYPEINFO:

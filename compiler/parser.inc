@@ -12326,8 +12326,27 @@ begin
         is exactly the silent wrong value this dialect refuses to invent — the
         same call the ESP PAL makes with PAL_ERR_UNSUPPORTED.
         feature-signal-siginfo-ucontext }
+      { __pxxSigPCPtr joins them: the ADDRESS of the saved program counter inside
+        that ucontext — the one word whose location is per-arch knowledge the
+        compiler already has and a Pascal program does not.
+
+        A POINTER rather than a read/write pair on purpose. Handing back the slot
+        address makes reading it (`PPtrUInt(__pxxSigPCPtr)^`) and rewriting it
+        (`PPtrUInt(__pxxSigPCPtr)^ := PtrUInt(@Recover)`) ordinary Pascal, so one
+        intrinsic covers both directions and the compiler owns exactly one fact:
+        the offset. Rewriting it is what turns a fault into a catchable raise —
+        the handler points the PC at a Pascal proc that raises, and the exception
+        runtime's shadow stack (BSS_EXC_TOP, a setjmp chain) unwinds from there
+        regardless of the interrupted SP. WHICH exception to raise stays a
+        library question, deliberately: see
+        decide-int-div-zero-behavior-unification, still open on where a builtin
+        exception class should live.
+
+        Meaningful only while a handler is running (ctx is nil otherwise, so the
+        pointer would be a small bogus address) — same caller-must-know contract
+        as si_addr being a pid for a kill()-delivered signal. }
       if (CaseEqual(name, '__pxxSigCode') or CaseEqual(name, '__pxxSigAddr') or
-          CaseEqual(name, '__pxxSigContext')) and
+          CaseEqual(name, '__pxxSigContext') or CaseEqual(name, '__pxxSigPCPtr')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
         { Every hosted Linux target now installs with SA_SIGINFO; only xtensa/ESP
@@ -12361,9 +12380,13 @@ begin
         begin
           ASTIVal[node] := 1; ASTTk[node] := Ord(tyPointer);
         end
-        else
+        else if CaseEqual(name, '__pxxSigContext') then
         begin
           ASTIVal[node] := 2; ASTTk[node] := Ord(tyPointer);
+        end
+        else
+        begin
+          ASTIVal[node] := 3; ASTTk[node] := Ord(tyPointer);
         end;
         LastExprTk := IntToTypeKind(ASTTk[node]);
         CurASTNode := node;

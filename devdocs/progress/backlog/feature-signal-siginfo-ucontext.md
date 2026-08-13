@@ -25,10 +25,10 @@ niceties around it.
 
 ## Remaining work
 
-1. **SA_SIGINFO + ucontext.** *(ACCESS HALF DONE on all five hosted targets
-   2026-08-13 — the flag is set and si_code/si_addr/ucontext* are readable via
-   `__pxxSigCode`/`__pxxSigAddr`/`__pxxSigContext` everywhere. What REMAINS here:
-   the PC rewrite that turns a fault into a catchable raise.)*
+1. **SA_SIGINFO + ucontext.** *(DONE on all five hosted targets 2026-08-13 —
+   flag set, si_code/si_addr/ucontext* readable, and the saved PC rewritable via
+   `__pxxSigPCPtr`, so a hardware fault reaches a Pascal `except`. Nothing
+   remains in item 1; items 2-5 keep this ticket open.)*
    Handler sees `siginfo_t` + register state
    (`ucontext_t`). This is the load-bearing piece for turning a fault into a
    *catchable* Pascal raise: modify ucontext RIP/PC to point at a raise stub
@@ -293,3 +293,76 @@ NOT need and therefore did not establish.
 Also worth noting for [[feature-float-exception-mask-control]]: its
 `blocked-by` on "x86-64 only" is gone — `__pxxSigCode` now answers everywhere
 it could.
+
+
+## Progress — slice 3 landed (PC rewrite: a fault reaches a Pascal `except`), 2026-08-13
+
+**Item 1 is now DONE on all five hosted targets.** Items 2-5 (threadsafe masks,
+sigaltstack, FPC-compat `Signal()`, SIGPIPE policy) are untouched and keep this
+ticket open.
+
+### `__pxxSigPCPtr` — one intrinsic, a POINTER, not a read/write pair
+
+It returns the ADDRESS of the saved program counter inside the parked ucontext.
+Handing back the slot address rather than adding `__pxxSigPC` + `__pxxSetSigPC`
+means reading (`PPtrUInt(__pxxSigPCPtr)^`) and rewriting
+(`PPtrUInt(__pxxSigPCPtr)^ := PtrUInt(@Handler)`) are both ordinary Pascal, and
+the compiler owns exactly ONE fact: the per-arch offset. It also sidestepped
+needing a statement-position intrinsic, which the expression-only `__pxxSig*`
+family has no hook for.
+
+Same guard as its three siblings: refused on xtensa and under `--no-signals`.
+Meaningful only while a handler runs (ctx is nil otherwise) — the same
+caller-must-know contract as si_addr being a pid for a kill()-delivered signal.
+
+### The offsets, MEASURED — and the probe worth reusing
+
+| target | offset | independently predicted by |
+| --- | --- | --- |
+| x86-64 | 168 | `uc_mcontext(40) + gregs[REG_RIP=16]*8` |
+| aarch64 | 440 | `uc_mcontext(176) + fault_address + regs[31] + sp` |
+| arm32 | 92 | `uc_mcontext(20) + arm_pc(72)` |
+| i386 | 76 | `uc_mcontext(20) + gregs[REG_EIP=14]*4` |
+| riscv32 | 160 | `uc_mcontext(160) + sc_regs.pc`, its first field |
+
+The measurement technique generalises to any other ucontext field worth
+reaching. Fault TWICE at the same sentinel address — once by WRITING it, once by
+CALLING it — and dump every ucontext word equal to it. A word that matches in
+both runs is a fault-address field; the word that matches only on the jump is
+the saved PC. That separated the PC from three decoys per target (a general
+register holding the call target, `cr2`/`fault_address`, and the FP-state
+mirror). Both sources agree on all five, which is the second-source check
+`devdocs/dev/debugging-playbook.md` asks for before writing a conclusion down.
+
+### Why a raise from a kernel-resumed context is legal here
+
+The exception runtime unwinds through its own **shadow stack** — `BSS_EXC_TOP`,
+a chain of setjmp buffers — not through the hardware call stack. `ExcRaiseAddr`
+loads that chain and longjmps, restoring SP from the buffer, so it does not care
+that the kernel resumed us at an arbitrary PC with the faulting frame's SP. Had
+the unwinder been frame-pointer- or DWARF-based this slice would have been a far
+bigger job.
+
+The redirect target must never RETURN, though: it is entered with a link
+register full of pre-fault garbage. Raise or Halt.
+
+### Cost in the backends: still zero
+
+`__pxxSigPCPtr` lowers to the existing slot load plus an `IR_BINOP` pointer add
+against an `IR_CONST_INT`. No new IR op, no new AST node, no backend edit — the
+same invariant slices 1 and 2 held. `UContextPCOffset` in `ir.inc` is the only
+new per-arch knowledge in the compiler.
+
+### What this does NOT decide
+
+WHICH exception a fault should raise. The new test raises a bare ordinal
+(`raise 42`), which needs no exception class and no sysutils, precisely so the
+mechanism could land without pre-empting
+[[decide-int-div-zero-behavior-unification]] — still open on where a builtin
+exception class should live. That decision now has a working mechanism under it
+rather than a design sketch; whoever resolves it writes RTL, not codegen.
+
+Test `test/test_signal_pc_rewrite.pas`, wired into all five suites: it faults by
+CALLING $DEAD0000 (so the saved PC must BE that address — an exact check of the
+offset), rewrites the PC to a raising proc, and the fault is caught by the
+try/except the faulting code was already inside, with execution continuing after.

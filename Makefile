@@ -3375,6 +3375,13 @@ test-core: $(COMPILER)
 	# (SI_TKILL = -6), which is what the stub's sign-extension exists for.
 	./$(COMPILER) test/test_signal_siginfo.pas /tmp/test_signal_siginfo26
 	test "$$(/tmp/test_signal_siginfo26)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
+	# that raises, and the fault is caught by the try/except the faulting
+	# code was already inside. The pc-is-the-fault line is the exact check
+	# of the per-arch PC offset -- rewriting the wrong ucontext word would
+	# clobber an unrelated register instead.
+	./$(COMPILER) test/test_signal_pc_rewrite.pas /tmp/test_signal_pcrw26
+	test "$$(/tmp/test_signal_pcrw26)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
 	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
 	./$(COMPILER) test/test_rust_else_if.rs /tmp/test_rust_else_if26
@@ -6216,6 +6223,13 @@ test-i386: $(COMPILER)
 	# frame's `pop eax`) both landed with it.
 	./$(COMPILER) --target=i386 test/test_signal_siginfo.pas /tmp/test_i386_siginfo
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
+	# that raises, and the fault is caught by the try/except the faulting
+	# code was already inside. The pc-is-the-fault line is the exact check
+	# of the per-arch PC offset -- rewriting the wrong ucontext word would
+	# clobber an unrelated register instead.
+	./$(COMPILER) --target=i386 test/test_signal_pc_rewrite.pas /tmp/test_i386_pcrw
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas /tmp/test_i386_cdeclind
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=i386 test/test_extern_c.pas /tmp/test_i386_extern
@@ -6571,6 +6585,13 @@ test-aarch64: $(COMPILER)
 	# (16 here, 12 on ILP32) cannot pass; the negative SI_TKILL is the sign canary.
 	./$(COMPILER) --target=aarch64 test/test_signal_siginfo.pas /tmp/test_aarch64_siginfo
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
+	# that raises, and the fault is caught by the try/except the faulting
+	# code was already inside. The pc-is-the-fault line is the exact check
+	# of the per-arch PC offset -- rewriting the wrong ucontext word would
+	# clobber an unrelated register instead.
+	./$(COMPILER) --target=aarch64 test/test_signal_pc_rewrite.pas /tmp/test_aarch64_pcrw
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
 	./$(COMPILER) --target=aarch64 test/test_cdecl_indirect.pas /tmp/test_aarch64_cdeclind
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
@@ -6720,6 +6741,13 @@ test-riscv32: $(COMPILER)
 	# measured that. The negative SI_TKILL is the sign canary.
 	./$(COMPILER) --target=riscv32 test/test_signal_siginfo.pas /tmp/test_riscv32_siginfo
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
+	# that raises, and the fault is caught by the try/except the faulting
+	# code was already inside. The pc-is-the-fault line is the exact check
+	# of the per-arch PC offset -- rewriting the wrong ucontext word would
+	# clobber an unrelated register instead.
+	./$(COMPILER) --target=riscv32 test/test_signal_pc_rewrite.pas /tmp/test_riscv32_pcrw
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# by-value record params over 4 bytes (up to 8): both words must cross
 	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
 	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas /tmp/test_riscv32_recwide
@@ -7323,6 +7351,13 @@ test-arm32: $(COMPILER)
 	# the restorer's sigreturn->rt_sigreturn flip landed with it.
 	./$(COMPILER) --target=arm32 test/test_signal_siginfo.pas /tmp/test_arm32_siginfo
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
+	# that raises, and the fault is caught by the try/except the faulting
+	# code was already inside. The pc-is-the-fault line is the exact check
+	# of the per-arch PC offset -- rewriting the wrong ucontext word would
+	# clobber an unrelated register instead.
+	./$(COMPILER) --target=arm32 test/test_signal_pc_rewrite.pas /tmp/test_arm32_pcrw
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas /tmp/test_arm32_cdeclind
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=arm32 test/test_extern_c.pas /tmp/test_arm32_extern
