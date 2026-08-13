@@ -50,3 +50,27 @@ Reduce it. 1588 lines is not a diagnosis; `creduce`/`cvise` against the
 "checksums differ" property is the standard move, and the campaign ticket
 records that the previous nine all reduced to a few lines each. Then the fix
 lands in whichever lane the reduction points at (IR/codegen → A, C frontend → C).
+
+## Reduction in progress 2026-08-13 — and the interestingness test is the hard part
+
+Two reductions were run and **both thrown away**, because the reducer found the
+cheapest way to make the checksums differ: introduce **undefined behaviour**.
+Recording the layers, because the obvious test is not enough and this is
+reusable for the next csmith finding:
+
+| guard | catches | does NOT catch |
+| --- | --- | --- |
+| `-Werror=uninitialized` at **-O0** | nothing useful — gcc's analysis needs the optimiser, so it silently never fires | uninitialised reads |
+| `-Werror=uninitialized`/`maybe-uninitialized` at **-O2** | most uninitialised locals | |
+| UBSan + ASan | signed overflow, OOB, bad shifts | **uninitialised reads** |
+| gcc `-O0` output == gcc `-O2` output | a lot, cheaply — a UB-free program cannot notice the optimiser | UB that happens to be stable across -O |
+| **valgrind** `--error-exitcode` | the uninitialised reads everything above misses | |
+
+First run (UBSan only) reduced 1588 lines to a loop over uninitialised
+`i`/`j`/`k`. Second run (plus -O0/-O2 agreement) reduced to *the same shape*
+with the locals hoisted to globals-by-another-name and one still uninitialised —
+gcc had not warned at -O0. Only valgrind rejects it.
+
+The current run uses all five layers. The check script lives beside the repro
+in the scratch tree; it is 30 lines and worth copying into the next reduction
+rather than re-deriving.
