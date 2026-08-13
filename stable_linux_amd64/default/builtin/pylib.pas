@@ -4394,15 +4394,14 @@ begin
     pl := TObject(Pointer(NativeInt(p^.Payload)));
     ql := TObject(Pointer(NativeInt(q^.Payload)));
     if (pl is TPyList) and (ql is TPyList) then
-    begin
-      la := TPyList(pl).FLen;
-      lb := TPyList(ql).FLen;
-      if la <> lb then Exit;
-      for k := 0 to Integer(la) - 1 do
-        if not PyVarEq(PPyVarRec(NativeInt(TPyList(pl).FItems) + k * 16),
-                       PPyVarRec(NativeInt(TPyList(ql).FItems) + k * 16)) then Exit;
-      Result := True;
-    end
+      { pylist_eq, not a second positional walk. This arm used to carry its own
+        copy of that loop, so when pylist_eq learned that a SET compares by
+        MEMBERSHIP the operator agreed and every container route did not:
+        `{1, 2} == {2, 1}` was True while `[{1, 2}] == [{2, 1}]` and
+        `{1, 2} in [{2, 1}]` stayed False. One comparison, one place — the
+        sibling-of-a-double-case rule
+        (devdocs/dev/normalise-dont-special-case.md). }
+      Result := pylist_eq(TPyList(pl), TPyList(ql))
     else if (pl is TPyDict) and (ql is TPyDict) then
       { …and two DICTS by contents, for the same reason. This is what makes a
         NESTED dict compare correctly: the outer pydict_eq reaches its values
@@ -5874,12 +5873,40 @@ end;
 
 function pylist_eq(a: TPyList; b: TPyList): Boolean;
 var
-  i: Integer;
+  i, j: Integer;
+  found: Boolean;
 begin
   Result := False;
   if a = b then begin Result := True; Exit; end;
   if (a = nil) or (b = nil) then Exit;
   if a.FLen <> b.FLen then Exit;
+  { A SET compares by MEMBERSHIP, not by position: CPython's {1, 2} == {2, 1}
+    is True and this answered False, because a set is a TPyList here and the
+    positional walk below is the LIST rule (which is correct for lists — Python
+    list equality really is ordered). FKind is the tag that tells them apart;
+    it exists now, which is what makes this cheap.
+    A set is also never equal to a sequence: {1, 2} == [1, 2] is False in
+    CPython and answered True. Only the SET side of the kind check is enforced
+    here — tuple-vs-list is the same root cause and is filed separately, since
+    tightening it moves code that sets no explicit kind.
+    feature-nilpy-set-needs-runtime-tag-for-display-and-equality }
+  if (a.FKind = PYSEQ_SET) or (b.FKind = PYSEQ_SET) then
+  begin
+    if a.FKind <> b.FKind then Exit;
+    { equal lengths and no duplicates on either side (add() dedups), so
+      "every element of a is in b" is enough }
+    for i := 0 to a.FLen - 1 do
+    begin
+      found := False;
+      for j := 0 to b.FLen - 1 do
+        if PyVarEq(PPyVarRec(NativeInt(a.FItems) + i * 16),
+                   PPyVarRec(NativeInt(b.FItems) + j * 16)) then
+        begin found := True; Break; end;
+      if not found then Exit;
+    end;
+    Result := True;
+    Exit;
+  end;
   for i := 0 to a.FLen - 1 do
     if not PyVarEq(PPyVarRec(NativeInt(a.FItems) + i * 16),
                    PPyVarRec(NativeInt(b.FItems) + i * 16)) then Exit;
