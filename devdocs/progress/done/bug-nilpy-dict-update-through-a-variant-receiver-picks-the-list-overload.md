@@ -135,4 +135,4 @@ this repo's dev loop, however shared the code being touched
 tests").
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 12f9b3b6c.
