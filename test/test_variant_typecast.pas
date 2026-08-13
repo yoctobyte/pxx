@@ -31,13 +31,14 @@ begin
 
   v := True;
   writeln(Boolean(v));     { TRUE }
-  { 1, where FPC says -1. A DIVERGENCE IN THE CONVERSION ITSELF, not in the
-    cast: `i := v` answers 1 here too. Same for Char(65) below, which FPC
-    renders via the string ('65' -> '6') and we answer 'A'. Asserted as-is so
-    this file keeps proving the property it is about — the cast agrees with the
-    assignment — and the conversion's own FPC parity is
-    bug-p-variant-to-int-and-char-conversion-diverges-from-fpc. }
-  writeln(Int64(v));       { 1  (FPC: -1) }
+  { -1, matching FPC: a boolean variant is OLE's VARIANT_TRUE. Adopted
+    2026-08-13; scoped to the VARIANT conversion, so Ord(True) and
+    Integer(someBooleanVar) are still 1. }
+  writeln(Int64(v));       { -1 }
+  writeln(Byte(v));        { 255 — the same -1 through the narrowing mask }
+  writeln(Double(v):0:1);  { -1.0 }
+  writeln(String(v));      { True — VariantToStr knows VT_BOOL as of the same
+                             change; it used to answer '' }
 
   v := 'A';
   writeln(Char(v));        { A }
@@ -46,8 +47,13 @@ begin
   writeln(String(v));      { text }
   writeln(AnsiString(v));  { text }
 
+  { Char is the one row that deliberately does NOT track FPC: FPC renders the
+    variant and takes character 1 ('65' -> '6'), which is inherited OLE history
+    and contradicts its own numeric Byte/Word/Int64 conversions of the same
+    value. The default dialect answers Chr(n); FPC's rule lives behind
+    --strict-fpc and is covered by test_variant_typecast_strict.pas. }
   v := 65;
-  writeln(Char(v));        { A  (FPC: 6 — see the note above) }
+  writeln(Char(v));        { A  (FPC, and --strict-fpc: 6) }
 
   { the cast in EXPRESSION position, not just as the RHS of an assignment —
     the reinterpret used to leak the tag word into arithmetic }

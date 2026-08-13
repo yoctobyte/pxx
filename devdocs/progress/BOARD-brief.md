@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1691 rejected:35`
+`unfinished:10 blocked:3 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1693 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,6 +32,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 203, ranked
 
+- `[p 70] [T]` regression-test-core-test-conformance-1
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-float-exception-mask-control
@@ -44,6 +45,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [N]` bug-n-inline-multi-entry-dict-literal-arg-loses-its-values
 - `[p 55] [N]` bug-nilpy-attribute-off-a-subscript-of-a-call-result-yields-the-variant-tag
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
@@ -60,7 +62,5 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-fpc-seed-canary-closer-to-the-dev-loop
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 - `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 53] [A]` feature-threadsafe-heap-optimize
-- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
 _173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

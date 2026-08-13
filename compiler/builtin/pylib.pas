@@ -5675,7 +5675,16 @@ begin
     if FCounterMode then
     begin
       k := l.at(i);
-      store(k, VariantToInt64(fetch(k)) + 1);
+      { pyvar_to_int, NOT the Pascal VariantToInt64: NilPy code must not reach
+        the Pascal helper set at all. The lowering seam
+        (IRLowerVariantAsScalar) already routes NilPy to pylib's helpers, but a
+        DIRECT call here walks around that seam — and the Pascal helper is
+        about to read a boolean variant as OLE's -1, which would make
+        Counter(...) over booleans count DOWN and break CPython's True == 1.
+        pyvar_to_int reads VT_BOOL as its payload (1) and raises a Python
+        TypeError for a str/object, which is what CPython's Counter arithmetic
+        does. bug-p-variant-to-int-and-char-conversion-diverges-from-fpc }
+      store(k, pyvar_to_int(fetch(k)) + 1);
     end
     else
     begin
@@ -5719,7 +5728,10 @@ begin
   begin
     k := ks.at(i);
     if FCounterMode then
-      store(k, VariantToInt64(fetch(k)) + VariantToInt64(vs.at(i)))
+      { pyvar_to_int on BOTH sides — see the note in the list arm above. The
+        VALUE side matters most here: `Counter.update(someDict)` merges the
+        other dict's values, which may be booleans. }
+      store(k, pyvar_to_int(fetch(k)) + pyvar_to_int(vs.at(i)))
     else
       store(k, vs.at(i));
   end;
@@ -5741,7 +5753,7 @@ begin
   begin
     j := i;
     while (j > 0) and
-          (VariantToInt64(vs.at(idx[j])) > VariantToInt64(vs.at(idx[j - 1]))) do
+          (pyvar_to_int(vs.at(idx[j])) > pyvar_to_int(vs.at(idx[j - 1]))) do
     begin
       t := idx[j];
       idx[j] := idx[j - 1];
@@ -5793,7 +5805,7 @@ begin
   c := TPyDict.Create;
   c.FCounterMode := True;
   for i := 1 to Length(s) do
-    c.store(s[i], VariantToInt64(c.fetch(s[i])) + 1);
+    c.store(s[i], pyvar_to_int(c.fetch(s[i])) + 1);
   Result := c;
 end;
 

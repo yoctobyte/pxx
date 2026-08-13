@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "DECIDED (user, 2026-08-13) — plain work now. The Variant->scalar CONVERSION itself disagrees with FPC in two rows: a boolean variant answers 1 where FPC answers -1, and an integer variant converted to Char answers Chr(n) where FPC renders the number as a string and takes its first character ('65' -> '6'). Both spellings (`i := v` and `Int64(v)`) agree with each other — the conversion is what differs. Ruling: boolean adopts FPC's -1; Char keeps Chr(n) by default with FPC's format-then-index rule behind --strict-fpc."
+status: done
+owner: agent-apn
 ---
 
 # Variant->Int64 and Variant->Char conversions diverge from FPC in two rows
@@ -155,3 +157,69 @@ flag into builtin.
 `make test` + self-host fixedpoint, then re-pin. Updates
 `test/test_variant_typecast.pas` and its Makefile assert: the `Int64(v)` row
 under `v := True` becomes `-1`, and the Char row keeps `A`.
+
+## Progress (2026-08-13)
+
+**Both rows landed, as decided.**
+
+### 1. Boolean adopts OLE's VARIANT_TRUE
+
+`VariantToInt64` and `VariantToDouble` answer -1 / -1.0 for VT_BOOL. `Byte(v)`
+gives 255 for free — the existing narrowing mask in the AN_PTR_CAST path turns
+the -1 into it, no second change. Diffed against FPC: Int64 -1, Byte 255,
+Double -1.0, all matching.
+
+**The NilPy hazard was real and is closed FIRST.** The four `VariantToInt64`
+calls in `pylib.pas` (dict/Counter update, most_common's sort, the string
+counter) were rerouted to `pyvar_to_int` BEFORE the -1 went in, so NilPy never
+observes it. `pyvar_to_int` reads VT_BOOL as its payload (1) and raises a
+Python TypeError for a str/object, which is what CPython's Counter arithmetic
+does — so the reroute is not merely defensive, it is the more correct helper at
+those sites. `grep VariantToInt64 compiler/builtin/pylib.pas` now matches only
+the comment explaining why not.
+
+New regression: `test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy`, diffed
+against CPython, covering `sum([True, True, False])`, `int(True)+int(True)`,
+Counter construction, a Counter merged from a boolean-valued mapping, dict
+value arithmetic and `True + True`. Registered in BOTH `test-nilpy` and
+`test-core`, like its sibling boolean tests.
+
+### 2. Char keeps Chr(n); FPC's rule behind --strict-fpc
+
+No flag threaded into the runtime. `StrictVariantChar` (defs.inc, set by
+`EnableStrictFpc` and the `{$STRICT_FPC ON}` directive) is read at the LOWERING
+SEAM — `IRLowerVariantAsScalar` already picks helper NAMES per mode for the
+Pascal/pylib split, so strictness costs one more name there and the runtime
+stays flag-free. The strict helper `VariantToCharFPC` is built ON TOP of
+`VariantToStr` rather than walking the tags again, so "render then index" and
+"render" cannot drift.
+
+`--strict-fpc` output is byte-identical to an FPC build across the whole table
+including the edges: 65→'6', 7→'7', 122→'1', 2.5→'2', True→'T', 'hi'→'h',
+''→#0. FPC's `Null` error text is reproduced verbatim (it names *String*, not
+Char — under a parity flag the message is part of the behaviour).
+
+New test `test/test_variant_typecast_strict.pas` (run with `--strict-fpc` in
+`make test`); `test_variant_typecast.pas` updated for the -1/255/-1.0/True rows
+and now states the Char row as the one deliberate divergence.
+
+### Fixed in passing
+
+`{$STRICT_FPC OFF}` did not clear `StrictShiftWidth` — it was omitted from the
+OFF list when it was added, so an ON...OFF region left the shift rule latched
+on. Corrected along with the new flag, since otherwise `StrictVariantChar` had
+to pick which of the two behaviours to copy.
+
+### Found and filed, NOT fixed here
+
+[[bug-n-inline-multi-entry-dict-literal-arg-loses-its-values]] — an inline
+`{...}` with 2+ entries passed as an argument drops its values (`c.update({"x":
+5, "y": 0})` counts each key once). Pre-existing (reproduces on pinned), Track
+N, and it briefly masked the boolean test until the mapping was moved through a
+variable.
+
+**Gate:** `tools/gate.sh quick` + the three new asserts; builtin changed, so
+this needs `tools/testmgr.py --pin` before Track B's ground moves.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

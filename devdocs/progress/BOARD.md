@@ -39,12 +39,12 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-variant-to-string-drops-the-boolean-tag | A | 50 | bug | `s := v` on a BOOLEAN variant yields the EMPTY STRING — VariantToStr has no arm for VType=4 and falls off its if-chain into ''. `writeln(v)` on the same variant correctly prints True, so variant->text has two renderers and only one of them knows about booleans. Silent wrong value, no diagnostic. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
+| bug-n-inline-multi-entry-dict-literal-arg-loses-its-values | N | 55 | bug | `c.update({\"x\": 5, \"y\": 0})` counts each KEY once and throws the values away (answers 1 1 where CPython answers 5 0). The SAME dict passed through a variable is correct, and a SINGLE-entry literal is correct — so it is the inline multi-entry `{...}` argument that is mislowered, most likely read as a set/iterable of keys rather than a mapping. | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
@@ -75,7 +75,6 @@ _none_
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 45 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
-| bug-p-variant-to-int-and-char-conversion-diverges-from-fpc | P | 45 | bug | DECIDED (user, 2026-08-13) — plain work now. The Variant->scalar CONVERSION itself disagrees with FPC in two rows: a boolean variant answers 1 where FPC answers -1, and an integer variant converted to Char answers Chr(n) where FPC renders the number as a string and takes its first character ('65' -> '6'). Both spellings (`i := v` and `Int64(v)`) agree with each other — the conversion is what differs. Ruling: boolean adopts FPC's -1; Char keeps Chr(n) by default with FPC's format-then-index rule behind --strict-fpc. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
@@ -252,6 +251,7 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
+| regression-test-core-test-conformance-1 | T | 70 | regression | regression: test-core#src:test/test_conformance_1.pas red at f9e4e1c44eda (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -408,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1691)
+## done (1693)
 
-1691 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1693 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -454,6 +454,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-core-test-conformance-1
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -466,6 +467,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [N] bug-n-inline-multi-entry-dict-literal-arg-loses-its-values
 - [p 55] [N] bug-nilpy-attribute-off-a-subscript-of-a-call-result-yields-the-variant-tag
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
@@ -485,7 +487,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [A] bug-a-variant-to-string-drops-the-boolean-tag
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [P] bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
@@ -505,7 +506,6 @@ _none_
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-- [p 45] [P] bug-p-variant-to-int-and-char-conversion-diverges-from-fpc
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-nilpy-isnumeric-red-at-T-not-reproducible-locally

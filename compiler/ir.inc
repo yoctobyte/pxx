@@ -4598,7 +4598,17 @@ begin
   else if target = tyBoolean then
   begin vuName := 'VariantToBool'; vuRet := tyBoolean; end
   else if target = tyChar then
-  begin vuName := 'VariantToChar'; vuRet := tyChar; end
+  begin
+    { --strict-fpc swaps in FPC's rule (render the variant, take character 1:
+      Char(65) = '6') by picking a different HELPER NAME here. Doing it at the
+      seam — the same place the Pascal/pylib helper sets already diverge — is
+      what keeps the strict flag invisible to the runtime; the alternative was
+      threading a compiler flag into builtin.pas.
+      bug-p-variant-to-int-and-char-conversion-diverges-from-fpc }
+    if StrictVariantChar then vuName := 'VariantToCharFPC'
+    else vuName := 'VariantToChar';
+    vuRet := tyChar;
+  end
   else if (target = tyString) or (target = tyAnsiString) then
   { str() under NilPy is routed to pylib pystr_of by the -201 lowering before
     it reaches here; this is the Pascal path. }

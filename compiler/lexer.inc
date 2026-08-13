@@ -621,6 +621,13 @@ begin
     decide-shift-operator-promotion-width, whose default half deliberately
     diverges. bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
   StrictShiftWidth := True;
+  { …and FPC's Variant->Char rule, which routes through the variant's STRING
+    form: Char(65) = '6', Char(True) = 'T'. The default dialect answers Chr(n)
+    — a deliberate exception to "semantics of accepted code track FPC", made
+    because FPC contradicts itself here (the same variant converts numerically
+    for Byte/Word/Int64) and the rule is inherited OLE history (user,
+    2026-08-13). bug-p-variant-to-int-and-char-conversion-diverges-from-fpc }
+  StrictVariantChar := True;
 end;
 
 procedure PasInitDefines;
@@ -1534,9 +1541,13 @@ begin
       if CaseEqual(name, 'on') then EnableStrictFpc
       else if CaseEqual(name, 'off') then
       begin
-        { clears the umbrella set only; StrictOverload is independent (standalone) }
+        { clears the umbrella set only; StrictOverload is independent (standalone).
+          StrictShiftWidth and StrictVariantChar are part of the umbrella and
+          must clear with it — ShiftWidth was omitted here when it was added, so
+          {$STRICT_FPC ON}...{$STRICT_FPC OFF} left the shift rule latched on. }
         StrictOperator := False; StrictCase := False;
         StrictVisibility := False; RequireForward := False;
+        StrictShiftWidth := False; StrictVariantChar := False;
       end
       else Error('strict_fpc requires on or off');
     end

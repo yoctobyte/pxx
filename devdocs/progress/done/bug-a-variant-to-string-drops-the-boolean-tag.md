@@ -4,6 +4,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`s := v` on a BOOLEAN variant yields the EMPTY STRING — VariantToStr has no arm for VType=4 and falls off its if-chain into ''. `writeln(v)` on the same variant correctly prints True, so variant->text has two renderers and only one of them knows about booleans. Silent wrong value, no diagnostic."
+status: done
+owner: agent-apn
 ---
 
 # Variant->string drops the boolean tag (empty string, silently)
@@ -60,3 +62,30 @@ there — VType 7 (object) also lands in the `''` else.
 `make test` + self-host fixedpoint, then re-pin (`tools/testmgr.py --pin`) —
 builtin changes do not reach the gate's fixedpoint until pinned. Add the repro
 above to the variant tests, diffed against FPC.
+
+## Progress (2026-08-13)
+
+**Fixed.** `VariantToStr` grew the missing VT_BOOL arm (`'True'` / `'False'`,
+FPC's spelling). Done as a DEPENDENCY of
+[[bug-p-variant-to-int-and-char-conversion-diverges-from-fpc]] rather than on
+its own: FPC's `Char(True)` is `'T'` — character 1 of the string form — so the
+`--strict-fpc` Char path could not be right until the string path was.
+
+On the "should the two renderers merge?" question the ticket raised: **not
+merged, deliberately.** The `writeln` path and `VariantToStr` are not
+duplicates that drifted — `writeln` renders straight to the output buffer with
+no AnsiString temp, which is why it exists separately. Merging would put an
+allocation in every variant write. What the change DOES do is make the new
+`VariantToCharFPC` build on `VariantToStr` instead of walking the tags a third
+time, so the strict-Char rule and the string rule cannot drift apart.
+
+VType 7 (object) still lands in the trailing `''` — left as-is: unlike a
+boolean, an object has no obvious text form, and FPC raises rather than
+rendering. Filing that as a separate question would be inventing work; if it
+bites, the tag walk is one place.
+
+**Verified:** `s := v` on a boolean now yields `True`/`False`, matching FPC;
+covered by the new rows in `test/test_variant_typecast.pas` (in `make test`).
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

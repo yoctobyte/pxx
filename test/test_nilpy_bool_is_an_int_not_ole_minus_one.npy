@@ -1,0 +1,41 @@
+# Python's True IS 1 — bool subclasses int — so a boolean in a numeric slot
+# counts UP. This is the guard for the Pascal side adopting OLE's
+# VARIANT_TRUE = -1 (bug-p-variant-to-int-and-char-conversion-diverges-from-fpc):
+# NilPy must never reach the Pascal VariantToInt64. The insulation lives at the
+# lowering seam (IRLowerVariantAsScalar picks pylib's pyvar_to_int), but pylib
+# itself used to call the Pascal helper DIRECTLY in four places, walking around
+# that seam — Counter arithmetic among them. With -1 in place those would have
+# counted DOWN, and no test covered it.
+# Every line diffed against CPython.
+from collections import Counter
+
+xs = [True, True, False]
+print(sum(xs))                 # 2, not -2
+print(int(True) + int(True))   # 2
+
+c = Counter(["a", "a", "b"])
+print(c["a"], c["b"])          # 2 1
+
+# the value side of a Counter merge: pylib's update() reads the OTHER mapping's
+# values, which is exactly where a boolean can arrive
+c.update({"a": True})
+print(c["a"])                  # 3
+
+d = {"x": True}
+print(d["x"] + 1)              # 2
+
+print(True == 1, True + True)  # True 2
+
+# a boolean-valued Counter built from scratch — the mapping goes through a
+# VARIABLE deliberately: an inline multi-entry dict literal in argument
+# position drops its values, which is a separate pre-existing bug
+# (bug-n-inline-multi-entry-dict-literal-arg-loses-its-values) and would mask
+# what this file is testing.
+# The counter is NON-EMPTY on purpose: CPython's update() only ADDS in that
+# case (on an empty counter it stores the raw values, so it would print
+# `True False` and say nothing about arithmetic). Adding is what has to read
+# True as +1 rather than OLE's -1.
+m = {"lo": True, "hi": False}
+b = Counter(["lo", "hi"])
+b.update(m)
+print(b["lo"], b["hi"])        # 2 1 — counts went UP

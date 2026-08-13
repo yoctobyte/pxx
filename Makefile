@@ -410,6 +410,14 @@ test-nilpy: $(COMPILER)
 	# still be refused -- that is the precedence typo the guard exists for.
 	./$(COMPILER) test/test_nilpy_bitwise_on_booleans.npy /tmp/test_nilpy_bitwise_on_booleans26
 	test "$$(/tmp/test_nilpy_bitwise_on_booleans26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
+	# ...and the OTHER half of "bool is an int": True counts as +1, never as
+	# OLE's VARIANT_TRUE = -1. The guard for the Pascal side adopting FPC's -1
+	# (bug-p-variant-to-int-and-char-conversion-diverges-from-fpc): NilPy must
+	# never reach the Pascal VariantToInt64, and pylib used to call it DIRECTLY
+	# in four places, walking around the lowering seam that keeps NilPy on
+	# pylib's helpers. Counter arithmetic was among them. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy /tmp/test_nilpy_bool_int26
+	test "$$(/tmp/test_nilpy_bool_int26)" = "$$(printf '2\n2\n2 1\n3\n2\nTrue 2\n2 1')"
 	# Python's dot-edge float spellings `.5` and `5.` (and `.5e3` / `5.e-3`),
 	# which the shared Pascal scanner cannot lex -- NilPy has its own lexer.
 	./$(COMPILER) test/test_nilpy_dot_edge_float_literals.npy /tmp/test_nilpy_dot_edge_float26
@@ -5400,7 +5408,13 @@ test-core: $(COMPILER)
 	# kinds segfaulted. Diffed against an FPC build of the same file except
 	# the two lines its own comments flag as conversion-level divergences.
 	./$(COMPILER) test/test_variant_typecast.pas /tmp/test_variant_typecast26
-	test "$$(/tmp/test_variant_typecast26)" = "$$(printf '9\n9\n9\n9\n9\n9\n9\n9.00\n9.00\nTRUE\n2.50\n2.50\n2\n2\nTRUE\n1\nA\ntext\ntext\nA\n21\n2.500')"
+	test "$$(/tmp/test_variant_typecast26)" = "$$(printf '9\n9\n9\n9\n9\n9\n9\n9.00\n9.00\nTRUE\n2.50\n2.50\n2\n2\nTRUE\n-1\n255\n-1.0\nTrue\nA\ntext\ntext\nA\n21\n2.500')"
+	# ...and FPC's Variant->Char rule under --strict-fpc: render the variant,
+	# take character 1 (Char(65) = '6'). The DEFAULT dialect answers Chr(n) —
+	# the one row that deliberately does not track FPC. Diffed against an FPC
+	# build of the same file.
+	./$(COMPILER) --strict-fpc test/test_variant_typecast_strict.pas /tmp/test_variant_typecast_strict26
+	test "$$(/tmp/test_variant_typecast_strict26)" = "$$(printf '6\n7\n1\n2\nT\nh\n0\n9\n-1\n255')"
 	./$(COMPILER) test/test_variant_string.pas /tmp/test_variant_string26
 	test "$$(/tmp/test_variant_string26)" = "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
 	./$(COMPILER) test/test_variant_string_ops.pas /tmp/test_variant_string_ops26
@@ -5572,6 +5586,14 @@ test-core: $(COMPILER)
 	# still be refused -- that is the precedence typo the guard exists for.
 	./$(COMPILER) test/test_nilpy_bitwise_on_booleans.npy /tmp/test_nilpy_bitwise_on_booleans26
 	test "$$(/tmp/test_nilpy_bitwise_on_booleans26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
+	# ...and the OTHER half of "bool is an int": True counts as +1, never as
+	# OLE's VARIANT_TRUE = -1. The guard for the Pascal side adopting FPC's -1
+	# (bug-p-variant-to-int-and-char-conversion-diverges-from-fpc): NilPy must
+	# never reach the Pascal VariantToInt64, and pylib used to call it DIRECTLY
+	# in four places, walking around the lowering seam that keeps NilPy on
+	# pylib's helpers. Counter arithmetic was among them. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy /tmp/test_nilpy_bool_int26
+	test "$$(/tmp/test_nilpy_bool_int26)" = "$$(printf '2\n2\n2 1\n3\n2\nTrue 2\n2 1')"
 	# Python's dot-edge float spellings `.5` and `5.` (and `.5e3` / `5.e-3`),
 	# which the shared Pascal scanner cannot lex -- NilPy has its own lexer.
 	./$(COMPILER) test/test_nilpy_dot_edge_float_literals.npy /tmp/test_nilpy_dot_edge_float26
