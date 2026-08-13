@@ -402,6 +402,14 @@
   }
  ],
  "host": "plexus",
+ "infra": {
+  "count": 1,
+  "last": "2026-08-12T12:58:47Z",
+  "reason": "no report (rc=2)",
+  "sha": "e690d5b02eb3f34a5e612d6885006436cdf2d5d2",
+  "since": "2026-08-12T12:58:47Z",
+  "tier": "full"
+ },
  "job_tier": {
   "fpc-bootstrap#src:compiler/compiler.pas": "limited",
   "lib-fpc-clean#00": "limited",
