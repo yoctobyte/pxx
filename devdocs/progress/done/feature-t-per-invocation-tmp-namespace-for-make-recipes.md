@@ -105,4 +105,4 @@ absolute `/tmp` path — held up: no `.expected` file contains one, and the
 expansion diff would have caught it.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit d94548ca5.
