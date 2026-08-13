@@ -115,4 +115,4 @@ RECEIVER travels). The row that this ticket removed from
 visible together there too. `make test-nilpy` green, `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit cf5788933.
