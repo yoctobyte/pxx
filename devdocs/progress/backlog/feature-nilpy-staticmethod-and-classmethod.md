@@ -126,3 +126,19 @@ testmgr quick).
 ### Remaining
 The @classmethod half. Retitle/refile as `feature-nilpy-classmethod` when picked
 up; retire the refusal test then.
+
+## 2026-08-13 — `@staticmethod` is DONE; `@classmethod` is now a Track U question
+
+Re-measured: `@staticmethod` works (declared, called through the class and
+through an instance, with the metaclass slot injected at 0), and
+`@classmethod` is refused BY NAME rather than by a parse error, which is this
+ticket's own recommendation already applied.
+
+What is left is not work but a decision, so it is filed as one:
+[[decide-nilpy-classmethod-cls-binding]]. The short version — the mechanism is
+closer than this ticket implies, since `@staticmethod` already injects a hidden
+`$clsrecv` at slot 0 and the dispatch already passes A class there. The open
+question is WHICH class arrives for an inherited classmethod reached through an
+INSTANCE, and that is one measurement away from either dissolving the question
+or confirming the silent-subclass hazard. Do not guess it; measure it.
+
