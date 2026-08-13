@@ -88,4 +88,4 @@ bites, the tag walk is one place.
 covered by the new rows in `test/test_variant_typecast.pas` (in `make test`).
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 86410fdd1.

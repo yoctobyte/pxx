@@ -222,4 +222,4 @@ variable.
 this needs `tools/testmgr.py --pin` before Track B's ground moves.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 86410fdd1.
