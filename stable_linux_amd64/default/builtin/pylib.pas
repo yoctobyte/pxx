@@ -42,6 +42,7 @@ const
   PYSEQ_LIST  = 0;
   PYSEQ_TUPLE = 1;
   PYSEQ_SET   = 2;
+  PYSEQ_FROZENSET = 3;   { a frozenset: the same value as a set, its own kind because repr, type() and isinstance all SHOW the difference }
 
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
@@ -661,6 +662,7 @@ function pyvar_mark_list(const v: Variant): Variant;
 function pyunpack_check(have, need: Integer): Integer;
 function pylist_mark_tuple(l: TPyList): TPyList;
 function pylist_mark_set(l: TPyList): TPyList;
+function pylist_mark_frozenset(l: TPyList): TPyList;   { ...and the frozenset stamp }
 { The Python type name of a sequence kind: 'list' / 'tuple' / 'set'. }
 function PySeqKindName(k: Integer): AnsiString;
 { The sequence kind of a VARIANT, or -1 when it does not hold a TPyList. The
@@ -5916,9 +5918,14 @@ begin
     here — tuple-vs-list is the same root cause and is filed separately, since
     tightening it moves code that sets no explicit kind.
     feature-nilpy-set-needs-runtime-tag-for-display-and-equality }
-  if (a.FKind = PYSEQ_SET) or (b.FKind = PYSEQ_SET) then
+  if (a.FKind = PYSEQ_SET) or (b.FKind = PYSEQ_SET) or
+     (a.FKind = PYSEQ_FROZENSET) or (b.FKind = PYSEQ_FROZENSET) then
   begin
-    if a.FKind <> b.FKind then Exit;
+    { a frozenset and a set with the same elements ARE equal in CPython —
+      frozenset is a different TYPE, not a different value — so the kind check
+      here is set-likeness, not kind identity. }
+    if (a.FKind = PYSEQ_LIST) or (b.FKind = PYSEQ_LIST) or
+       (a.FKind = PYSEQ_TUPLE) or (b.FKind = PYSEQ_TUPLE) then Exit;
     { equal lengths and no duplicates on either side (add() dedups), so
       "every element of a is in b" is enough }
     for i := 0 to a.FLen - 1 do
@@ -13733,10 +13740,17 @@ begin
   pylist_mark_set := l;
 end;
 
+function pylist_mark_frozenset(l: TPyList): TPyList;
+begin
+  if l <> nil then l.FKind := PYSEQ_FROZENSET;
+  pylist_mark_frozenset := l;
+end;
+
 function PySeqKindName(k: Integer): AnsiString;
 begin
   if k = PYSEQ_TUPLE then PySeqKindName := 'tuple'
   else if k = PYSEQ_SET then PySeqKindName := 'set'
+  else if k = PYSEQ_FROZENSET then PySeqKindName := 'frozenset'
   else PySeqKindName := 'list';
 end;
 
@@ -13775,7 +13789,16 @@ begin
     Result := 'set()';
     Exit;
   end;
-  if l.FKind = PYSEQ_TUPLE then Result := '('
+  { ...and CPython's empty frozenset is `frozenset()`, its non-empty one
+    `frozenset({1, 2})` — the braces are the SET display with the type name
+    wrapped round it, which is why this is a prefix/suffix rather than a third
+    bracket pair. }
+  if l.FKind = PYSEQ_FROZENSET then
+  begin
+    if l.count = 0 then begin Result := 'frozenset()'; Exit; end;
+    Result := 'frozenset({';
+  end
+  else if l.FKind = PYSEQ_TUPLE then Result := '('
   else if l.FKind = PYSEQ_SET then Result := '{'
   else Result := '[';
   for i := 0 to l.count - 1 do
@@ -13786,7 +13809,8 @@ begin
   { Python's one-element tuple keeps its comma — `(1,)` — because `(1)` is just
     a parenthesised value. }
   if (l.FKind = PYSEQ_TUPLE) and (l.count = 1) then Result := Result + ',';
-  if l.FKind = PYSEQ_TUPLE then Result := Result + ')'
+  if l.FKind = PYSEQ_FROZENSET then Result := Result + '})'
+  else if l.FKind = PYSEQ_TUPLE then Result := Result + ')'
   else if l.FKind = PYSEQ_SET then Result := Result + '}'
   else Result := Result + ']';
 end;

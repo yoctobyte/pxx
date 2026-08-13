@@ -270,3 +270,4 @@
 2026-08-13T16:58:33Z  v270  f3def8c1a0a026cdf4f120d6eb196dde37379ae9eb974e0e9a6b64377eab76af  ac5aa3a417068ffd79afcd5ddff9b01ccf7b695c  fix(N): set equality compares by MEMBERSHIP, and a set is never equal to a sequence
 2026-08-13T17:05:04Z  v271  993d6851cc577cd4cdcc47209c240d98f5d55ba3d04432f0d444f61f044b5ad0  213964c4408605fdb844d96673c0cff99c0f13a8  fix(N): sorted(xs, key=None) sorts instead of raising
 2026-08-13T17:09:26Z  v272  993d6851cc577cd4cdcc47209c240d98f5d55ba3d04432f0d444f61f044b5ad0  cd2b0efc529f3e4cab380b12e14066ee78238414  feat(N): callable(x)
+2026-08-13T17:17:34Z  v273  5a6087053e7445b3029bec22d0271a633bf5a7464ab8c9abb1d82d9ebc1e8038  60ca2815778f3be8cea63bbc40505dc0bd70bbfb  feat(N): frozenset
