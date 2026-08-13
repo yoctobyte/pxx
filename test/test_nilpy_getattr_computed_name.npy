@@ -1,0 +1,105 @@
+# feature-nilpy-getattr-with-a-computed-attribute-name
+#
+# `getattr(self, "do_" + verb)` was refused with "needs a literal attribute
+# name" — which is the only reason to call getattr at all rather than writing
+# `o.field`. The canonical use, a command dispatcher, is the first block here.
+#
+# Nothing new was needed underneath. pydynattr_get_v already resolves a name at
+# RUN time against the dynamic-attribute store, the class's declared fields (via
+# RTTI) and its methods, returning a bound pair for the last and raising
+# CPython's AttributeError otherwise — it exists for a variant receiver whose
+# class is only known at run time, which is the position a computed name puts
+# every receiver in.
+#
+# TWO things did have to be built, and both are rows here:
+#
+#  - hasattr needed a predicate that asks what the GETTER resolves. The existing
+#    one answers the dynamic store only, which is right for the literal path
+#    (that asks the compile-time field check first) and wrong here: it said
+#    False for a method the very next getattr returned.
+#  - a method read by a name no TOKEN spells cannot be seen by the scan that
+#    normalises bound methods to the function-object ABI, so a module using a
+#    computed getattr normalises all of them. Coarse on purpose; the cost is
+#    boxing, paid only by a module that dispatches by a runtime name. Without
+#    it `getattr(self, name)("north")` returned an empty value rather than
+#    crashing, which is why the dispatcher's RESULT is asserted and not just
+#    its arity.
+#
+# The literal forms are rows too: they must keep their compile-time fast path.
+# A string EXPRESSION that starts with a literal ("zz" + "z") is a computed
+# name, not a literal one — reading it as the literal choked on the '+'.
+#
+# Expectations are CPython's own output.
+
+class Game:
+    def __init__(self):
+        self.hp = 10
+        self.name = "hero"
+
+    def do_look(self, arg):
+        return "look:" + arg
+
+    def do_go(self, arg):
+        return "go:" + arg
+
+    def dispatch(self, verb):
+        name = "do_" + verb
+        if hasattr(self, name):
+            return getattr(self, name)("north")
+        return "unknown verb"
+
+g = Game()
+print(g.dispatch("look"))
+print(g.dispatch("go"))
+print(g.dispatch("dance"))
+f = "hp"
+print(getattr(g, f), getattr(g, "na" + "me"))
+print(hasattr(g, f), hasattr(g, "zz" + "z"))
+print(getattr(g, "zz" + "z", 42))
+print(getattr(g, f, 99))
+try:
+    getattr(g, "zz" + "z")
+except AttributeError:
+    print("AttributeError")
+class P:
+    def __init__(self, n):
+        self.n = n
+        self.tag = "t" + str(n)
+
+    def double(self):
+        return self.n * 2
+
+    def plus(self, k):
+        return self.n + k
+
+ps = [P(1), P(2)]
+for f in ["n", "tag"]:
+    print(f, getattr(ps[0], f), getattr(ps[1], f))
+
+for m in ["double"]:
+    print(m, getattr(ps[0], m)(), getattr(ps[1], m)())
+
+print(getattr(ps[0], "pl" + "us")(10))
+
+# a dynamic attribute set at run time
+p = P(3)
+p.extra = 7
+k = "extra"
+print(getattr(p, k), hasattr(p, k))
+
+# defaults and misses
+print(getattr(p, "no" + "pe", "dflt"))
+print(hasattr(p, "no" + "pe"))
+
+# the literal forms must keep their fast path
+print(getattr(p, "n"), hasattr(p, "n"), hasattr(p, "zzz"), getattr(p, "zzz", 5))
+
+# a name built in a loop, the serializer shape
+def to_dict(o, names):
+    out = {}
+    for nm in names:
+        out[nm] = getattr(o, nm)
+    return out
+
+d4 = to_dict(P(4), ["n", "tag"])
+print(sorted(d4.items()))

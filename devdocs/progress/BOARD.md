@@ -71,6 +71,7 @@ _none_
 | bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-python-import-resolves-against-c-headers | N | 55 | bug | A NilPy `import X` is satisfied by a C HEADER from lib/crtl/include: `import string` pulls string.h (and warns about host features.h), `import stdio` compiles clean. So a module that does not exist appears to import, and the failure surfaces later as `undefined variable (ascii_lowercase)` — pointing at the wrong thing entirely. | — |
+| bug-nilpy-selector-on-a-call-returning-a-dict-does-not-parse | N | 35 | bug | `mk().items()` where mk() returns a dict built in the body does not parse ('unexpected token'), while binding the result to a local first works. Pre-existing (identical on pinned). Same SHAPE as bug-nilpy-def-returning-a-precreated-global-has-no-return-type, which was fixed for the class case. | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
@@ -154,7 +155,6 @@ _none_
 | feature-nilpy-file-dunder-from-the-executable | N | 50 | feature | Implement the decided __file__ rule: derive it from the RESOLVED executable path at run time (/proc/self/exe, not raw argv[0]) — main module = the executable itself, imported module = <exe_dir>/<basename>.py — and add sys.executable. Decision and reasoning in decide-nilpy-dunder-file-for-a-compiled-program. | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-fstring-nested-spec-and-nested-fstring | N | 30 | feature | f-string: a nested format spec and a nested f-string | — |
-| feature-nilpy-getattr-with-a-computed-attribute-name | N | 45 | feature | `getattr(self, 'do_' + verb)` — a COMPUTED attribute name — is refused with 'hasattr/getattr needs a literal attribute name'. That is the whole point of getattr: a command dispatcher, a plugin table, a serializer walking field names. The literal form works and the RTTI the dynamic form needs already exists (PyFindDunder dispatches by name at run time) | — |
 | feature-nilpy-hasattr-per-instance-assigned-tracking | N | 40 | feature | hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit. | — |
 | feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition | N | 30 | feature | NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on every test. A provably-constant container build is loop-invariant and should be hoisted to a variable once — what a person would write by hand — while everything else keeps being folded into the condition. | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
@@ -402,9 +402,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1722)
+## done (1723)
 
-1722 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1723 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -517,7 +517,6 @@ _none_
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [B] feature-lib-reportlab-fidelity-vs-oracle
 - [p 45] [A] feature-move-fillchar-intrinsics
-- [p 45] [N] feature-nilpy-getattr-with-a-computed-attribute-name
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
 - [p 45] [N] feature-nilpy-no-type-inference-switch
@@ -576,6 +575,7 @@ _none_
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
+- [p 35] [N] bug-nilpy-selector-on-a-call-returning-a-dict-does-not-parse
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups

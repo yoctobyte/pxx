@@ -933,6 +933,7 @@ function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: inte
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
 function PyHasAttrClassChain(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr over a VARIANT receiver: run-time class test (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
+function PyMakeDynAttrByExpr(recvNode, nameNode, dfltNode: Integer; wantHas: Boolean): Integer; forward; { ...and the COMPUTED-name form, resolved at run time (pyparser.inc) }
 function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }
 procedure PyParseListLiteralT(opener, closer: TTokenKind; dedup: Boolean); forward; { Nil Python list/tuple literal (pyparser.inc) }
 function PyIsListCompAhead: Boolean; forward; { Nil Python: is `[ ... for ... ]` a comprehension? (pyparser.inc) }
@@ -11075,6 +11076,33 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr;
         atRecv := CurASTNode;
+        { A COMPUTED name — `getattr(self, "do_" + verb)` — cannot be answered
+          from the receiver's declared fields at compile time, which is what
+          the whole path below does. Route it to the runtime resolver instead
+          of refusing it. }
+        { A string LITERAL is only the literal path when the whole argument is
+          that literal — `"zz" + "z"` starts with a string token and is still a
+          computed name, and reading it as the literal choked on the '+'. }
+        if (CurTok.Kind = tkComma) and (TokPos < TokCount) and
+           ((Tokens[TokPos].Kind <> tkString) or
+            ((TokPos + 1 < TokCount) and
+             (not (Tokens[TokPos + 1].Kind in [tkComma, tkRParen])))) then
+        begin
+          Expect(tkComma, ',');
+          ParseExpr;
+          atFld := CurASTNode;             { the name EXPRESSION }
+          atDflt := -1;
+          if CurTok.Kind = tkComma then
+          begin
+            Next;
+            ParseExpr;
+            atDflt := CurASTNode;
+          end;
+          Expect(tkRParen, ')');
+          CurASTNode := PyMakeDynAttrByExpr(atRecv, atFld, atDflt, not atIsGet);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
         atName := PyParseAttrName;
         atFld := PyAttrFieldIdx(atRecv, atName);
         atDflt := -1;

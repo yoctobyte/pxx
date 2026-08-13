@@ -1464,6 +1464,13 @@ test-nilpy: $(COMPILER)
 	# keywords the argument COUNT no longer says WHICH parameters are filled
 	# (dflt(1, c=9) fills a and c, skipping b), so the count-dispatch is dropped
 	# and every parameter is passed, falling back to the callee's own default.
+	# getattr/hasattr with a COMPUTED name -- a command dispatcher, the canonical
+	# use. The runtime resolver already existed; what had to be built was a
+	# hasattr predicate asking what the GETTER resolves, and normalising bound
+	# methods in a module that dispatches by a runtime name (a method read by a
+	# name no token spells is invisible to the scan that normally does it).
+	./$(COMPILER) test/test_nilpy_getattr_computed_name.npy /tmp/test_nilpy_getattrc26
+	/tmp/test_nilpy_getattrc26 | diff -u test/test_nilpy_getattr_computed_name.expected -
 	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy /tmp/test_nilpy_kwfwd26
 	/tmp/test_nilpy_kwfwd26 | diff -u test/test_nilpy_kwargs_forwarded.expected -
 	./$(COMPILER) test/test_nilpy_optional_str_none.npy /tmp/test_nilpy_optstr26

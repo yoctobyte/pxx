@@ -1,0 +1,17 @@
+look:north
+go:north
+unknown verb
+10 hero
+True False
+42
+10
+AttributeError
+n 1 2
+tag t1 t2
+double 2 4
+11
+7 True
+dflt
+False
+3 True False 5
+[('n', 4), ('tag', 't4')]

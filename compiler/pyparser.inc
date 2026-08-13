@@ -9158,6 +9158,71 @@ begin
   ASTTk[Result] := Ord(tyBoolean);
 end;
 
+{ `getattr(o, name)` / `hasattr(o, name)` where the NAME IS COMPUTED — the only
+  reason to call getattr at all rather than writing `o.field`: a command
+  dispatcher (`getattr(self, "do_" + verb)`), a plugin table, a serializer
+  walking field names. It used to be refused outright ("needs a literal
+  attribute name") because the literal path answers from the receiver's
+  DECLARED fields at compile time, which a runtime string cannot do.
+
+  Nothing new was needed underneath: `pydynattr_get_v` already resolves a name
+  at run time against the dynamic-attribute store, the class's DECLARED fields
+  (via RTTI) and its METHODS — returning a bound pair for the last — and raises
+  CPython's AttributeError otherwise, with `pydynattr_has_v` as its predicate.
+  Those exist for a VARIANT receiver whose class is only known at run time,
+  which is exactly the position a computed name puts every receiver in.
+
+  The three-argument `getattr(o, n, d)` is has ? get : d, so a miss yields the
+  default rather than raising — CPython's rule, and the same shape the literal
+  path already builds for its own default case.
+  feature-nilpy-getattr-with-a-computed-attribute-name }
+function PyMakeDynAttrByExpr(recvNode, nameNode, dfltNode: Integer;
+                             wantHas: Boolean): Integer;
+var vRecv, a0, a1, getCall, hasCall, pairNode: Integer;
+
+  function CallWith(const pname: AnsiString; tk: TTypeKind): Integer;
+  var pi: Integer;
+  begin
+    pi := FindProc(pname);
+    if pi < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+    a0 := AllocNode(AN_ARG);
+    ASTLeft[a0] := vRecv;
+    a1 := AllocNode(AN_ARG);
+    ASTLeft[a1] := nameNode;
+    ASTRight[a1] := -1;
+    ASTRight[a0] := a1;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := pi;
+    ASTTk[Result] := Ord(tk);
+    ASTLeft[Result] := a0;
+  end;
+
+begin
+  vRecv := PyForceVariant(recvNode);
+  { read once: the has/get pair below reads both operands twice }
+  if (dfltNode >= 0) or wantHas then vRecv := PyEvalOnce(vRecv);
+  if wantHas then
+  begin
+    Result := CallWith('pydynattr_has_any_v', tyBoolean);
+    Exit;
+  end;
+  if dfltNode < 0 then
+  begin
+    Result := CallWith('pydynattr_get_v', tyVariant);
+    Exit;
+  end;
+  hasCall := CallWith('pydynattr_has_any_v', tyBoolean);
+  nameNode := PyEvalOnce(nameNode);
+  getCall := CallWith('pydynattr_get_v', tyVariant);
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := getCall;
+  ASTRight[pairNode] := dfltNode;
+  Result := AllocNode(AN_TERNARY);
+  ASTLeft[Result] := hasCall;
+  ASTRight[Result] := pairNode;
+  ASTTk[Result] := Ord(tyVariant);
+end;
+
 { Reads the string-literal attribute name; CurTok is the ',' before it. }
 function PyParseAttrName: AnsiString;
 begin
@@ -10414,6 +10479,61 @@ begin
   end;
 end;
 
+var
+  PyComputedGetattrScanned: Boolean = False;
+  PyComputedGetattrSeen: Boolean = False;
+
+function PyModuleHasComputedGetattr: Boolean;
+{ Does this module call `getattr`/`hasattr` with a name it computes at RUN time?
+  Scanned once over the token stream, by the same rule the parse uses: the
+  argument after the comma is the literal form only when it is a string token
+  and the very next token closes or separates it — `"zz" + "z"` starts with a
+  string and is still computed.
+  feature-nilpy-getattr-with-a-computed-attribute-name }
+var j, depth: Integer;
+begin
+  if PyComputedGetattrScanned then
+  begin
+    Result := PyComputedGetattrSeen;
+    Exit;
+  end;
+  PyComputedGetattrScanned := True;
+  PyComputedGetattrSeen := False;
+  j := 0;
+  while j < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[j].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
+       (Tokens[j + 1].Kind = tkLParen) then
+    begin
+      { walk to the receiver's closing comma at depth 1 }
+      depth := 1;
+      Inc(j, 2);
+      while (j < MainProgramTokCount) and (depth > 0) do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then Dec(depth)
+        else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+        begin
+          if (j + 2 >= MainProgramTokCount) or
+             (Tokens[j + 1].Kind <> tkString) or
+             (not (Tokens[j + 2].Kind in [tkComma, tkRParen])) then
+          begin
+            PyComputedGetattrSeen := True;
+            Result := True;
+            Exit;
+          end;
+          Break;
+        end;
+        Inc(j);
+      end;
+      Continue;
+    end;
+    Inc(j);
+  end;
+  Result := PyComputedGetattrSeen;
+end;
+
 function PyMethodUsedAsValue(const nm: AnsiString): Boolean;
 { True iff the module reads `<something>.nm` WITHOUT calling it — `cb = self.on_key`,
   `root.after(50, self.tick)`. That is a bound-method value, and calling one back
@@ -10431,6 +10551,18 @@ var j: Integer;
 begin
   Result := False;
   if nm = '' then Exit;
+  { A COMPUTED getattr reads a method by a name no token spells, so the scan
+    below cannot see it — and the pair it hands back must still be callable
+    through the function-object ABI. Normalise every method in a module that
+    does this. Coarse on purpose and in the same spirit as the note above: the
+    cost is boxing, both passes still agree, and it is paid only by a module
+    that actually dispatches by a runtime name.
+    feature-nilpy-getattr-with-a-computed-attribute-name }
+  if PyModuleHasComputedGetattr then
+  begin
+    Result := True;
+    Exit;
+  end;
   j := 1;
   while j < MainProgramTokCount do
   begin
