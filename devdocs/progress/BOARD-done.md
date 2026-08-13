@@ -457,6 +457,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-mixed-signature-vmt-misdispatch | A | 50 | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
 | bug-movslq-on-64bit-pointer-load | A | 50 | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-multi-interface-method-corruption | A | 50 | bug | Memory/String corruption when calling methods on secondary interfaces | — |
+| bug-n-blocking-c-header-imports-broke-the-four-tests-that-depend-on-them | N | 75 | bug | `fix(N): a Python import can no longer resolve to a C header` (3f5511820) took out `import sqlite3` and `import stdlib` too, so four tests that exist to assert C-header imports WORK now fail to compile. The fix cannot tell an accidental resolution (`import stdio`) from the intended binding path (`import sqlite3`) — it blocked both. | — |
 | bug-n-fpc-seed-drift-pybytesci-used-before-forward | N | 60 | bug | FPC cold-start broken again: PyBytesCi is called at pyparser.inc:1508 but not defined until 5236, with no forward. One-line fix, verified — FPC then compiles the whole compiler in 10.7s | — |
 | bug-n-fpc-seed-drift-pywiden-needs-a-forward-in-parser-inc | N | 60 | bug | Third FPC seed drift in two days: parser.inc calls PyWiden, defined in pyparser.inc which is included 14 files later. Verified one-line fix. The rule is mechanical and worth stating once | — |
 | bug-n-hash-builtin-is-not-implemented | N | 35 | bug | `hash(x)` is not implemented | — |

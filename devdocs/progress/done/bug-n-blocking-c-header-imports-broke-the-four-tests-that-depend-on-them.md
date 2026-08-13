@@ -3,6 +3,7 @@ track: N
 prio: 75
 type: bug
 summary: "`fix(N): a Python import can no longer resolve to a C header` (3f5511820) took out `import sqlite3` and `import stdlib` too, so four tests that exist to assert C-header imports WORK now fail to compile. The fix cannot tell an accidental resolution (`import stdio`) from the intended binding path (`import sqlite3`) — it blocked both."
+status: done
 ---
 
 # Blocking C-header imports also blocked the four tests that exist to prove they work
@@ -82,3 +83,33 @@ compiler binary** — the tests appear to pass if `compiler/pascal26` predates
 3f5511820, which is exactly the trap CLAUDE.md's "hunt async, verify against a
 known sha" is about. Run `make compiler/pascal26` before believing either
 result.
+
+## RESOLVED 2026-08-13 by REVERT (1ca15d0e6)
+
+Confirmed exactly as filed, and reverted rather than patched: `import
+<c-header>` is a DESIGNED NilPy feature (the wrapper-free nilpy↔C arc), which
+`test_nilpy_import_sqlite.npy` states in its own first comment. The premise of
+the change was wrong, so the change had to go, not be narrowed in place —
+`devdocs/dev/` "no compiler-appeasement workarounds", applied to my own commit.
+
+Verified after the revert on a self-hosted binary at HEAD:
+`test_nilpy_import_sqlite` prints `3045001`, `test_nilpy_c_pointer` prints `1`.
+`gate.sh quick` GREEN.
+
+What survives is only the COLLISION half — `import string` finds
+`/usr/include/string.h` instead of the Python `string` module, and the failure
+surfaces later as `undefined variable (ascii_lowercase)`. That is rewritten
+into [[bug-nilpy-python-import-resolves-against-c-headers]] with the corrected
+fix shape: **order** the candidates (a NilPy module / `mimic_*` unit before a C
+header) so `mimic_string` wins while `import sqlite3` still reaches its header.
+
+Why the local sweep missed it, recorded there too: `make test-nilpy` does NOT
+cover the NilPy C-interop tests — `test_nilpy_c_pointer` and
+`test_nilpy_c_define_const` live in **test-core**. An import-resolver change is
+a test-core change whatever frontend it looks like it belongs to.
+
+Thanks to the watcher: filed, consolidated to one cause, and correctly
+attributed to the single semantic commit in its range.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
