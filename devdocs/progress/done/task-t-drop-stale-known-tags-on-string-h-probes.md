@@ -8,7 +8,7 @@ prio: 50
 # Drop the stale `known` tags on the string.h and _Bool probes
 
 - **Type:** task — Track T (test tooling: `tools/gcc_diff_probe.sh`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Filed by:** Track A, on closing
   `bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit`.
@@ -64,3 +64,45 @@ carry the fix — so re-running with the default will still show 3 known until
 Track A runs `make pin`. Verify with
 `PXX_STABLE=./compiler/pascal26 tools/gcc_diff_probe.sh --target i386`, or wait
 for the pin.
+
+## Done — 2026-08-13
+
+All four tags dropped: `str-chr-nul`, `str-str-empty`, `mem-chr-miss` (:173,
+:184, :247) and `bool-and-negative-zero-int` (:1348).
+
+Measured immediately before and after the change, same tree, with
+`PXX_STABLE=./compiler/pascal26` as the ticket's note prescribes:
+
+| target | before | after |
+|---|---|---|
+| i386 | 112 cases, 0 NEW, **0 known**, 1 skipped, 5 model | 112 cases, 0 NEW, **0 known**, 1 skipped, 5 model |
+| arm32 | 112 cases, 0 NEW, **0 known**, 1 skipped, 5 model | 112 cases, 0 NEW, **0 known**, 1 skipped, 5 model |
+| x86-64 | 117 cases, **1 NEW**, 0 known | 117 cases, **1 NEW**, 0 known |
+
+Byte-identical summaries either side, which is the proof the ticket wanted: a
+`known` tag only counts when its probe actually diverges, so `0 known` before
+the drop means all four were already suppressing nothing. The change is
+therefore a no-op today and a re-arming for tomorrow — which was the whole
+point, since a tag whose bug is fixed has flipped from hiding a known issue to
+hiding a regression.
+
+`int64-to-double` keeps its tag: it did not diverge on i386 or arm32 in this
+sweep either, so it is probably stale too, but it belongs to an open ticket
+(`bug-c-int64-to-double-cast-truncates-on-32bit`) and dropping a tag out from
+under a live bug is how the tag gets re-added later by someone with less
+context. It goes when that ticket closes — noted in the header comment, which
+now also states the general rule: **drop a tag as part of fixing its bug.**
+
+## The 1 NEW divergence on x86-64, which nobody had filed
+
+Both runs report it, so it is not caused by this change — but it was sitting in
+the probe's output unfiled, which is the same "signal nobody looks at" failure
+this ticket is about. Narrowed and filed as
+[[bug-c-cast-to-float-in-value-position-does-not-round-to-single]]:
+`(float)16777217` yields 16777217 where C requires 16777216, for every integer
+width and signedness, whenever the cast's result is consumed as a value rather
+than stored into a `float` lvalue. Correct from the Pascal frontend in the same
+position, so it is the C cast lowering, not the IR — Track C.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

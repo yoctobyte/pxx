@@ -168,9 +168,23 @@ case "$MODE" in
     # sources are untouched (nothing else can break the seed) and when FPC is
     # absent, which must be a SKIP and never a failure — the watcher boxes are
     # not required to have it.
+    #
+    # ARMED AGAINST THE MERGE-BASE, not against HEAD. `git diff HEAD` only sees
+    # an UNCOMMITTED change, and the loop this gate belongs to is edit -> gate
+    # -> commit -> push OR edit -> commit -> gate -> push. In the second order
+    # the canary skipped precisely when it mattered: the change is finished, it
+    # is about to be pushed, and the tree is clean, so the check that exists to
+    # catch it reported "no uncommitted compiler/ changes" and stood down. That
+    # is the hole this canary was added to close, reopened one step later.
+    # The merge-base is the right question — "what have I changed that origin
+    # has not seen", covering committed-but-unpushed — and it deliberately does
+    # NOT arm for a sibling's compiler commit that I merely have not pulled:
+    # their push already ran this, and arming on it would fire on nearly every
+    # gate in a repo this busy.
     seed_pid=
+    seed_base=$(git merge-base origin/master HEAD 2>/dev/null) || seed_base=HEAD
     if command -v fpc >/dev/null 2>&1 && \
-       ! git diff --quiet HEAD -- compiler/ 2>/dev/null; then
+       ! git diff --quiet "$seed_base" -- compiler/ 2>/dev/null; then
       ( rm -rf "$LOGDIR/seed_u" && mkdir -p "$LOGDIR/seed_u" && \
         fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU"$LOGDIR/seed_u" \
             -FE"$LOGDIR/seed_u" -o"$LOGDIR/seed26" compiler/compiler.pas \
@@ -196,7 +210,7 @@ case "$MODE" in
         RC=1
       fi
     elif command -v fpc >/dev/null 2>&1; then
-      echo "  SKIP  FPC seed canary (no uncommitted compiler/ changes)"
+      echo "  SKIP  FPC seed canary (compiler/ unchanged vs origin/master)"
     else
       echo "  SKIP  FPC seed canary (fpc not installed)"
     fi

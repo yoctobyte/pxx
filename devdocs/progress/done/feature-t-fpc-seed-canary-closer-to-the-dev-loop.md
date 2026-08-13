@@ -3,6 +3,7 @@ summary: "The FPC seed build breaks every couple of days, always the same way, a
 type: feature
 track: T
 prio: 55
+status: done
 ---
 
 # The FPC seed canary is 11 seconds and lives where nobody looks
@@ -122,3 +123,62 @@ worst of both worlds. The ask here is latency and visibility, not enforcement.
   tier's end (~2 min), not "at the next full cycle". The gap this ticket closes
   is ~11s vs ~2 min — real, but smaller than the framing suggests, and worth
   confirming against an actual drift before spending the publish-path work.
+
+## 2026-08-13 — the arming hole, and closing the ticket
+
+Found by hitting it: a `gate.sh quick` run on this box printed
+
+```
+  SKIP  FPC seed canary (no uncommitted compiler/ changes)
+```
+
+for a session that had every intention of pushing. The canary was armed by
+`git diff HEAD -- compiler/`, which only sees an **uncommitted** change — and
+half the dev loop is `edit -> commit -> gate -> push`, not `edit -> gate ->
+commit -> push`. In that order the canary stood down at exactly the moment it
+was built for: the change is finished, the tree is clean, the push is next.
+
+That is the ticket's own premise ("a signal placed where the person who can act
+on it never looks") reproduced one step further along, and it is why option 1's
+"add it to quick" never actually took effect for committed work.
+
+**Fixed:** armed against `git merge-base origin/master HEAD` instead — *what
+have I changed that origin has not seen* — which covers uncommitted AND
+committed-but-unpushed. It deliberately does not arm for a sibling's compiler
+commit I merely have not pulled: their push already ran this, and arming on it
+would fire on nearly every gate in a repo this busy. Verified across all four
+states in a scratch repo (clean / uncommitted / committed-unpushed / pushed);
+the only behaviour that changes is the third.
+
+### Closing this as DONE
+
+Options 1 and 2 are in (`gate.sh`, concurrent, ~3s of wall, now armed
+correctly). Option 3's front-of-queue half is in. Option 4 stays rejected.
+
+The one thing left — publishing the canary's red MID-RUN — is closed as **not
+worth building**, by this ticket's own measurements rather than by fatigue:
+
+- the gap it buys is **~11s vs ~2min**, since the canary has been in the
+  `native` tier since `eb63555d9` and its red already reaches the author at the
+  fast tier's end;
+- it cannot reuse the existing early-publish machinery, which works by
+  **aborting** the run — unavailable here by design, since the canary must never
+  gate the watcher;
+- so it needs genuinely new mid-run publish machinery in the publish path,
+  which is the code with the documented false-RED incident family behind it.
+
+Trading a fresh failure mode in the publish path for 110 seconds of latency is
+a bad trade, and the ticket already said so ("worth confirming against an actual
+drift before spending the publish-path work"). Re-open if seed drift returns at
+the 2026-08-01..03 rate of four in three days; at that frequency the arithmetic
+changes. It has not recurred since.
+
+### One discrepancy worth recording, not acted on
+
+This ticket says "Not in scope: making the canary a GATE — it is advisory on
+purpose", but `gate.sh` sets `RC=1` on a canary failure, so locally it *is* a
+gate. That was a deliberate choice in `bed641cf8` and it is defensible (a seed
+drift is a one-line fix, and the person gating is the person who caused it), but
+it is not what this ticket asked for. Left as-is: flipping a gate's strictness
+is not a change to make in passing.
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

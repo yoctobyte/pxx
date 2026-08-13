@@ -123,3 +123,30 @@ docs/website, frame them honestly — "competitive with CPython on a
 dispatch-heavy Forth VM" is fair; "as fast as CPython" is not (it is 0.16-0.43x
 here), and the numbers are workload-specific. State the workload and that pxx
 AOT-compiles a program whose hot path is dynamic dispatch.
+
+## 2026-08-13 — triage: the DATA exists, the HARNESS does not
+
+Worth recording before this ticket is picked up, because the bench series makes
+it look done. `tstate/bench.tsv` carries 45 rows across three of this ticket's
+workloads:
+
+```
+uforth-prelim            15 rows
+uforth-microbench-doloop 15 rows
+uforth-core              15 rows   (levels: pxx, cpython, cpython-O)
+```
+
+All 45 are dated **2026-07-23**, all from host **borg**, and there have been
+none since — borg is the dev station now and Track T moved to plexus.
+
+`grep -rn 'uforth-prelim' tools/` finds nothing, and `git log -S` finds it in no
+commit that ever touched `tools/`. So the numbers were produced by something run
+outside this repo (the uforth project dir), not by a harness anyone can re-run.
+That is the actual gap: the ticket is not "build a benchmark", it is **land the
+thing that made those rows, so a second run is possible** — one host, one day,
+unreproducible is the same as no baseline.
+
+Anyone picking this up: the 45 rows are still a useful sanity check on the
+harness's output shape, but do not treat them as a comparable baseline. They
+predate the 2026-08-02 MEASUREMENT BASIS CHANGED line at the top of bench.tsv,
+which explicitly says not to compare across it.

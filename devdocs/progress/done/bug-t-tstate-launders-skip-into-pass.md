@@ -3,6 +3,7 @@ summary: "tstate records a SKIPPED job as \"pass\", so a green published state c
 type: bug
 track: T
 prio: 50
+status: done
 ---
 
 # `skip` is published as `pass`, so green does not mean "ran"
@@ -61,3 +62,36 @@ Green must mean "ran and passed". Concretely:
 
 `tools/testmgr.py --tier quick` green, plus a devtest over `diff_jobs` covering:
 skip is not new-red; red → skip closes the regression; skip → red opens one.
+
+## Stale — the fix landed 2026-08-08 and the ticket was never moved
+
+`25c539758 fix(T): publish 'skip' as its own status — green must mean "ran and
+passed"` (tools/twatch.py, tools/twatch_web.py, tools/devtest_skip_semantics.py).
+Checked against this ticket's own four-point shape at 2026-08-13:
+
+1. **Published as itself** — `diff_jobs` keeps the literal status:
+   `now = {job_key(j): j["status"] ...}`, with the laundering conditional gone.
+2. **Non-gating** — `PASSLIKE = ("pass", "skip")` is now the single shared
+   definition; `new_red` / `still_red` test membership in it, so a skip opens
+   nothing, and red -> skip still closes an open regression.
+3. **Migration in the safe order** — the code comment records it explicitly:
+   readers (`reg_open`, `gone_keys`, the status and index summaries) were taught
+   the third state *before* anything wrote it, so states carrying `pass` for
+   former skips stay readable and merely under-report coverage until the host
+   publishes again.
+4. **Visible count** — `tstate: coverage — N job(s) SKIPPED on <host>` in the
+   summary, silent when a host skips nothing, plus the dashboard half in
+   `twatch_web.py`.
+
+Gate as specified: `devtest_skip_semantics.py` covers skip-is-not-new-red,
+red -> skip closes, skip -> red opens. Still green today (it also grew three
+cases for [[bug-t-testmgr-pin-force-kills-its-own-parent]]'s sibling fix to
+`reg_open`).
+
+Closed as **done**. Worth noting the known residual the fix left standing, since
+it is not recorded anywhere else: a CASCADE entry whose jobs only ever SKIP
+still closes wrongly, because skip is pass-like for closing. Publishing skip as
+its own status did not change that, and `reg_open`'s docstring says so.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

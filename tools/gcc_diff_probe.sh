@@ -76,15 +76,26 @@ vis() { sed -e 's/\r/<CR>/g' -e 's/\t/<TAB>/g' | awk 'NR>1{printf "<LF>"}{printf
 
 # probe NAME [known|lp64] -- full C program on stdin
 #   known -- a filed divergence; tagged so a clean run shows only NEW ones.
-#            Currently: str-chr-nul / str-str-empty / mem-chr-miss are all one
-#            bug and it is NOT in string.h — they pass a bare pointer difference
-#            inline to printf, which pushes 8 bytes on 32-bit and shifts every
-#            later argument (bug-a-pointer-difference-as-vararg-pushes-8-bytes-
-#            on-32bit). int64-to-double is bug-c-int64-to-double-cast-truncates-
-#            on-32bit. Both are native-clean and only fire under --target.
-#            bool-and-negative-zero-int is
-#            bug-a-bool-conversion-does-not-normalise-to-0-or-1 — that one fires
-#            on EVERY target, native included.
+#            A TAG IS A LIABILITY, NOT A RECORD: it says "diverges, do not be
+#            surprised", so the moment the bug behind it is fixed the tag stops
+#            suppressing a known issue and starts suppressing a REGRESSION —
+#            the exact failure a differential oracle exists to prevent. Drop a
+#            tag as part of fixing its bug, and re-measure the survivors when
+#            you touch this file.
+#            Currently: int64-to-double is bug-c-int64-to-double-cast-truncates-
+#            on-32bit — native-clean, fires only under --target. It is the last
+#            one; it did NOT diverge on i386 or arm32 in the 2026-08-13 sweep
+#            either, so it may be stale too, but it keeps its tag until its
+#            ticket is closed.
+#            Dropped 2026-08-13 (task-t-drop-stale-known-tags-on-string-h-probes),
+#            all four measured at 0 known on i386 / arm32 / x86-64:
+#            str-chr-nul, str-str-empty and mem-chr-miss were never string.h
+#            bugs at all — one pointer difference passed inline to printf,
+#            pushed at 8 bytes on ILP32, shifting every later argument
+#            (bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit);
+#            bool-and-negative-zero-int was
+#            bug-a-bool-conversion-does-not-normalise-to-0-or-1, which fired on
+#            every target including native.
 #   lp64  -- output depends on the data model; not judged in cross mode.
 #            atoi-family: atol("2147483648") overflows `long` on ILP32.
 #   charsign -- output depends on whether plain `char` is signed. It is on
@@ -170,7 +181,7 @@ probe str-ncmp-zero <<'C'
 #include <string.h>
 int main(void) { printf("%d\n", strncmp("abc","xyz",0)); return 0; }
 C
-probe str-chr-nul known <<'C'
+probe str-chr-nul <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
@@ -181,7 +192,7 @@ int main(void) {
   return 0;
 }
 C
-probe str-str-empty known <<'C'
+probe str-str-empty <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
@@ -244,7 +255,7 @@ int main(void) {
   return 0;
 }
 C
-probe mem-chr-miss known <<'C'
+probe mem-chr-miss <<'C'
 #include <stdio.h>
 #include <string.h>
 int main(void) {
@@ -1345,7 +1356,7 @@ int main(void) {
   return 0;
 }
 C
-probe bool-and-negative-zero-int known <<'C'
+probe bool-and-negative-zero-int <<'C'
 #include <stdio.h>
 int main(void) {
   _Bool t = 5, f = 0;
