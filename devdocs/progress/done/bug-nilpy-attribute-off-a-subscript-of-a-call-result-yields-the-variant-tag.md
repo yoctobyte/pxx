@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`mk()[0].n` answers 7 for EVERY field — including a str field — where CPython answers 3. 7 is VT_OBJECT, the variant's TAG word: the attribute read off a subscript of a CALL RESULT yields the receiver's tag instead of reading the attribute. Binding the element to a name first is correct, and so is `[B(8)][0].n` on a literal list"
+status: done
+owner: claude-A-C-N
 ---
 
 # An attribute off a subscript of a call result yields the variant TAG
@@ -113,3 +115,71 @@ expression — further evidence that the chain never reaches that loop.
 
 Left claim-free with the measurement so the next session starts from the
 ruled-out list rather than re-deriving it.
+
+
+## FIXED 2026-08-13 — the fourth path was the selector loop's MISSING arm
+
+The previous session's ruled-out list was right and did the hard part: three
+candidate paths eliminated, and the note that "a FOURTH path builds this read"
+pointed straight at `PyParseClassRecordSelectors`. It is that loop, and what was
+wrong with it is an ABSENCE, which is why probes placed on builders never fired
+— there was no builder to instrument.
+
+### The measurement that located it
+
+```
+mk()[0].n       -> 7      wrong
+mk()[0].get()   -> 3      RIGHT
+```
+
+The loop has a variant arm for `.name(` — a METHOD on a variant receiver, which
+must dispatch at run time — and its guard requires `Tokens[TokPos + 1]` to be
+`(`. A bare attribute has no paren, so it fell through to the class/field path
+below, which built an `AN_FIELD` over the variant SLOT: offset 0, the tag word,
+7 for VT_OBJECT, for every field regardless of type.
+
+That single asymmetry explains the whole table. The method spelling working is
+not a curiosity — it is the proof, because both spellings share the receiver,
+the subscript and the class; only the arm differs.
+
+### One row of the table above was wrong, and it mattered
+
+`d["k"][0].n` was recorded as "7 — right by accident". It is not a coincidence
+row at all: it was measured through a NAME receiver, and a name never enters
+this loop (`PyEvalOnce` and the loop are reached for an `AN_CALL` base). Through
+a call it is wrong like everything else:
+
+```
+d = mkd(); d["k"].n   -> 42   correct
+mkd()["k"].n          -> 7    wrong
+```
+
+So the rule is **call-result receiver**, not list-vs-dict — which also explains
+the `xs = mk(); xs[0].n` and `(mk())[0].n` control rows without needing them to
+be special.
+
+### The fix
+
+A sibling arm for the bare attribute, routed through **`PyMakeAttrLoad`** — the
+shared builder that keeps the static-field path when the receiver has a known
+class and falls back to `pydynattr_get_v` for a variant. Reusing it is the point:
+this adds an arm, not a lowering, so there is no second copy of attribute access
+to keep in sync (the failure mode
+[[project_nilpy_lvalue_vs_selector_path_must_both_know]] warns about).
+
+Assignment targets are deliberately excluded from the arm: a store through this
+chain does not parse today at all, which is loud rather than silent, and is
+filed on its own as
+[[bug-nilpy-assigning-to-an-attribute-of-a-list-element-does-not-parse]].
+
+### Verified
+
+`test/test_nilpy_attr_off_subscript_of_call_result.npy`, expectations generated
+by CPython, wired into `test-nilpy`: int / str / float fields, the second
+element, a nested attribute (`mk()[0].inner.n`), a method after the subscript,
+the dict-through-a-call row, a `reversed()` chain, and six controls that always
+worked (bound element, bound expression, parenthesised, list literal, dict
+through a name, plain call attribute).
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

@@ -1378,6 +1378,20 @@ test-nilpy: $(COMPILER)
 	# unannotated parameter matches neither, so it read a dict as a list.
 	./$(COMPILER) test/test_nilpy_dict_update_variant.npy /tmp/test_nilpy_dictupdv26
 	/tmp/test_nilpy_dictupdv26 | diff -u test/test_nilpy_dict_update_variant.expected -
+	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma
+	# inside a dict/set literal argument counted as an argument SEPARATOR: a
+	# 2-entry literal made update() look 2-arity, no overload matched, and
+	# resolution fell back to the first-declared one (TPyList) which read a dict
+	# as a list. A trailing comma miscounted identically with no literal at all.
+	./$(COMPILER) test/test_nilpy_call_arg_count_braces_and_trailing_comma.npy /tmp/test_nilpy_argcnt26
+	/tmp/test_nilpy_argcnt26 | diff -u test/test_nilpy_call_arg_count_braces_and_trailing_comma.expected -
+	# An attribute off a subscript of a CALL RESULT answered 7 -- VT_OBJECT, the
+	# variant TAG word -- for every field whatever its type. The NilPy selector
+	# loop had a variant arm for `.name(` but none for a bare `.name`, so the
+	# attribute fell through to the field builder and read slot offset 0. The
+	# method spelling always worked, which is what located the missing arm.
+	./$(COMPILER) test/test_nilpy_attr_off_subscript_of_call_result.npy /tmp/test_nilpy_attrsub26
+	/tmp/test_nilpy_attrsub26 | diff -u test/test_nilpy_attr_off_subscript_of_call_result.expected -
 	# `a |= <set>` silently did nothing (the desugar used the general or-token and
 	# never reached the set path). In place, like +=/extend -- aliases must see it.
 	./$(COMPILER) test/test_nilpy_set_augmented_union.npy /tmp/test_nilpy_setaug26

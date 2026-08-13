@@ -26900,6 +26900,45 @@ begin
       tk := IntToTypeKind(ASTTk[node]);
       Continue;
     end;
+
+    { …and the same receiver with a BARE ATTRIBUTE, `.n` with no parentheses.
+      The method arm above requires a '(' after the name, so an attribute fell
+      straight through to the class/field path below, which built an AN_FIELD
+      over the variant SLOT and read its first word — the TAG. Every field
+      answered 7 (VT_OBJECT) whatever its declared type, which is what named the
+      cause: `mk()[0].n` printed 7 where CPython prints 3, and so did a str
+      field. The METHOD spelling `mk()[0].get()` was always right, which is
+      exactly the asymmetry that pins it to this missing arm rather than to the
+      subscript or the attribute read.
+
+      Only a CALL receiver reaches here (PyEvalOnce above runs for AN_CALL),
+      which is why `xs = mk(); xs[0].n` was correct all along and why the dict
+      spelling `d["k"].n` looked correct too — it is a name receiver. Through a
+      call, `mkd()["k"].n` was wrong the same way.
+
+      PyMakeAttrLoad is the shared builder: it keeps the static-field path when
+      the receiver has a known class and falls back to pydynattr_get_v for a
+      variant, so this arm does not duplicate a lowering.
+
+      An assignment TARGET is left alone — a store through this chain does not
+      parse today at all (a loud error, filed as
+      bug-nilpy-assigning-to-an-attribute-of-a-list-element-does-not-parse), and
+      turning it into a dynattr READ here would only move the diagnostic.
+      bug-nilpy-attribute-off-a-subscript-of-a-call-result-yields-the-variant-tag }
+    if (tk = tyVariant) and (CurTok.Kind = tkDot) and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+       ((TokPos + 1 >= TokCount) or
+        not (Tokens[TokPos + 1].Kind in [tkLParen, tkAssign])) then
+    begin
+      Next;                       { consume '.'; CurTok = the attribute name }
+      i := TokPos - 1;
+      Next;                       { consume the name }
+      node := PyMakeAttrLoad(node, GetTokenStr(i));
+      tk := IntToTypeKind(ASTTk[node]);
+      recId := REC_NONE;
+      Continue;
+    end;
+
     if CurTok.Kind = tkDot then
     begin
       Next;

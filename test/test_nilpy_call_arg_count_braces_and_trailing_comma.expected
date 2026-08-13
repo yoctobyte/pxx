@@ -1,0 +1,14 @@
+counter inline  5 0
+counter var     5 0
+counter 1 entry 5
+dict 3 entries  1 2 3 3
+dict 2nd        3
+nested literal  2
+trailing lit    2
+trailing var    2
+def 2 args      2
+param default   2
+set literal     3
+get 2 args      2
+dict(literal)   2
+len(literal)    2

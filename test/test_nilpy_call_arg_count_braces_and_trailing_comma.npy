@@ -1,0 +1,80 @@
+# bug-n-inline-multi-entry-dict-literal-arg-loses-its-values
+#
+# `c.update({"x": 5, "y": 0})` answered 1 1 where CPython answers 5 0, and the
+# same call on a plain dict SEGFAULTED. It looked like a dict-literal bug: the
+# same dict through a VARIABLE was right, and a ONE-entry literal was right.
+#
+# It was neither. CountCallArgsAhead -- the shared parser's argument counter,
+# used to pick a method overload by arity -- tracked nesting for parens and
+# brackets but not for BRACES. In Pascal an opening brace is a comment, so this
+# never showed; in Nil Python it is a dict or set literal, and every comma
+# inside one counted as an ARGUMENT separator. A two-entry literal made
+# `update(...)` look like a 2-argument call; no update overload has that arity,
+# so the arity-viable candidate set came back EMPTY and resolution fell back to
+# the first-declared overload -- update(TPyList) -- which read a TPyDict as a
+# list. One entry has no comma, which is the whole reason it worked.
+#
+# The same counter scored a TRAILING comma as an extra argument, so
+# `d.update(m, )` segfaulted the identical way with no literal involved. Both
+# are asserted here: they are one counting bug with two spellings.
+#
+# Expectations are CPython's own output.
+
+from collections import Counter
+
+# the reported shape: Counter.update dropped the values and counted keys
+b = Counter()
+b.update({"x": 5, "y": 0})
+print("counter inline ", b["x"], b["y"])
+
+a = Counter()
+m = {"x": 5, "y": 0}
+a.update(m)
+print("counter var    ", a["x"], a["y"])
+
+one = Counter()
+one.update({"x": 5})
+print("counter 1 entry", one["x"])
+
+# a plain dict took the list arm and segfaulted
+d = {}
+d.update({"a": 1, "b": 2, "c": 3})
+print("dict 3 entries ", d["a"], d["b"], d["c"], len(d))
+
+# a literal that is not the first argument, and a nested one
+e = {"z": 9}
+e.update({"a": 1, "b": 2})
+print("dict 2nd       ", len(e))
+print("nested literal ", len({"a": {"x": 1, "y": 2}, "b": 3}))
+
+# TRAILING comma, with and without a literal -- same counter, same crash
+g = {}
+g.update({"a": 1, "b": 2}, )
+print("trailing lit   ", len(g))
+
+h = {}
+h.update(m, )
+print("trailing var   ", len(h))
+
+
+# a multi-entry literal reaching an ordinary def, and as a parameter default
+def two_args(first, second=None):
+    return len(first)
+
+
+print("def 2 args     ", two_args({"p": 1, "q": 2}, 7))
+
+
+def with_default(mm={"k": 1, "j": 2}):
+    return len(mm)
+
+
+print("param default  ", with_default())
+
+# a set literal's commas are the same token shape as a dict's
+print("set literal    ", len({1, 2, 3}))
+
+# controls: the shapes that always worked stay working
+print("get 2 args     ", {"a": 1, "b": 2}.get("b", 0))
+print("dict(literal)  ", len(dict({"x": 5, "y": 0})))
+print("len(literal)   ", len({"x": 5, "y": 0}))

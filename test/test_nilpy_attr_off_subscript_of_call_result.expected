@@ -1,0 +1,14 @@
+int field   3
+str field   s3
+float field 3.5
+second elem 1
+nested attr 30
+method      B3
+dict call   42
+reversed    5
+bound elem  3 s3
+bound expr  3 s3
+parenthesd  3
+literal     8
+dict name   42
+call attr   5

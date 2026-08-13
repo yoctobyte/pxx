@@ -2848,6 +2848,23 @@ begin
             ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constref'));
 end;
 
+function TrailingCommaAt(i: Integer): Boolean;
+{ Is the comma at token i a TRAILING one — nothing but the closing paren after
+  it? Python allows `f(a, )` and so does this parser, but the argument COUNTER
+  scored it as a second argument, which is the same silent miscount a
+  brace-nested comma caused: no overload has the inflated arity, the candidate
+  set comes back empty, and the caller falls back to the first-declared
+  overload. `d.update(m, )` segfaulted for exactly that reason, with no dict
+  literal in sight. Newlines are skipped so a comma trailing the last argument
+  of a multi-line call reads the same as a single-line one. }
+var k: Integer;
+begin
+  k := i + 1;
+  while (k < TokCount) and (Tokens[k].Kind in [tkNewline, tkIndent, tkDedent]) do
+    Inc(k);
+  Result := (k < TokCount) and (Tokens[k].Kind = tkRParen);
+end;
+
 function CountCallArgsAhead: Integer;
 var i, d: Integer;
 begin
@@ -2865,14 +2882,28 @@ begin
   d := 0;
   while i < TokCount do
   begin
-    if Tokens[i].Kind in [tkLParen, tkLBrack] then Inc(d)
-    else if Tokens[i].Kind in [tkRParen, tkRBrack] then
+    { tkBegin/tkEnd count as a nesting level too. In Pascal they are the
+      begin/end KEYWORDS — an opening brace is a comment there, so it never
+      reaches the token stream — and only an anonymous-method argument brings
+      them here, where nesting is what you want anyway. In NIL PYTHON they are
+      the BRACES, and leaving them out meant every comma inside a dict or set
+      literal counted as an ARGUMENT separator: a two-entry dict literal passed
+      to d.update(...) was read as a 2-argument call, no update overload has
+      that arity, so the arity-viable candidate set came back EMPTY and the
+      caller fell back to the first-declared overload — update(TPyList) — which
+      read a TPyDict as a list and segfaulted. A one-entry literal has no comma
+      and was therefore always fine, which is what made this look like a
+      dict-literal bug rather than a counting one.
+      bug-n-inline-multi-entry-dict-literal-arg-loses-its-values }
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
     begin
       Dec(d);
       if d = 0 then Exit;
     end
     else if (Tokens[i].Kind = tkSemicolon) or (Tokens[i].Kind = tkEOF) then Exit
-    else if (Tokens[i].Kind = tkComma) and (d = 1) then Inc(Result);
+    else if (Tokens[i].Kind = tkComma) and (d = 1) and
+            not TrailingCommaAt(i) then Inc(Result);
     Inc(i);
   end;
 end;

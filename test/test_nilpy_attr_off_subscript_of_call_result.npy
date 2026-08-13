@@ -1,0 +1,72 @@
+# bug-nilpy-attribute-off-a-subscript-of-a-call-result-yields-the-variant-tag
+#
+# `mk()[0].n` answered 7 for EVERY field, whatever its declared type -- 7 is
+# VT_OBJECT, the variant's TAG word, so the expression was yielding the
+# receiver's first slot word instead of reading an attribute at all.
+#
+# PyParseClassRecordSelectors (the NilPy selector loop) had a variant arm for
+# `.name(` -- a METHOD on a variant receiver, which dispatches at run time --
+# but none for a bare `.name`. The attribute therefore fell through to the
+# class/field path, which built an AN_FIELD over the variant SLOT at offset 0.
+# The method spelling `mk()[0].get()` was always correct, and that asymmetry is
+# what pins the cause to the missing arm rather than to the subscript or the
+# attribute read.
+#
+# Only a CALL receiver reaches that loop, which is why `xs = mk(); xs[0].n` was
+# right all along -- and why the dict spelling looked right too, until it was
+# measured through a call rather than a name.
+#
+# Expectations are CPython's own output.
+
+
+class Inner:
+    def __init__(self, n):
+        self.n = n
+
+
+class B:
+    def __init__(self, n):
+        self.n = n
+        self.m = "s" + str(n)
+        self.f = n + 0.5
+        self.inner = Inner(n * 10)
+
+    def describe(self):
+        return "B" + str(self.n)
+
+
+def mk():
+    return [B(3), B(1)]
+
+
+def mkd():
+    return {"k": B(42)}
+
+
+# the reported shape, one row per field TYPE -- all three answered 7 before
+print("int field  ", mk()[0].n)
+print("str field  ", mk()[0].m)
+print("float field", mk()[0].f)
+print("second elem", mk()[1].n)
+
+# a nested attribute, and a method after the subscript (the control that worked)
+print("nested attr", mk()[0].inner.n)
+print("method     ", mk()[0].describe())
+
+# a DICT subscript of a call result -- the row the ticket recorded as "right by
+# accident"; it was measured with the value 7, and is wrong for any other value
+print("dict call  ", mkd()["k"].n)
+
+# a call result reached through a chain that is not a plain call
+print("reversed   ", list(reversed([B(4), B(5)]))[0].n)
+
+# controls that were always correct and must stay so
+xs = mk()
+print("bound elem ", xs[0].n, xs[0].m)
+e = mk()[0]
+print("bound expr ", e.n, e.m)
+print("parenthesd ", (mk())[0].n)
+print("literal    ", [B(8)][0].n)
+d = mkd()
+print("dict name  ", d["k"].n)
+print("call attr  ", B(5).n)
