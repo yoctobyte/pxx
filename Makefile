@@ -1460,6 +1460,12 @@ test-nilpy: $(COMPILER)
 	# argument into a string -- it arrived tagged VT_STRING and `is None` was
 	# correctly False about it. The "" rows are the ones a fix that boxed a nil
 	# str handle as None would get wrong.
+	# **kwargs re-expanded at a FORWARDED call site. The recorded lesson: with
+	# keywords the argument COUNT no longer says WHICH parameters are filled
+	# (dflt(1, c=9) fills a and c, skipping b), so the count-dispatch is dropped
+	# and every parameter is passed, falling back to the callee's own default.
+	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy /tmp/test_nilpy_kwfwd26
+	/tmp/test_nilpy_kwfwd26 | diff -u test/test_nilpy_kwargs_forwarded.expected -
 	./$(COMPILER) test/test_nilpy_optional_str_none.npy /tmp/test_nilpy_optstr26
 	/tmp/test_nilpy_optstr26 | diff -u test/test_nilpy_optional_str_none.expected -
 	./$(COMPILER) test/test_nilpy_class_name_chain.npy /tmp/test_nilpy_clsname26

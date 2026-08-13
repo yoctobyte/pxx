@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1721 rejected:35`
+`unfinished:9 blocked:3 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1722 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (10) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
 - `bug-n-a-type-name-is-not-a-first-class-value` [N]
@@ -20,7 +20,6 @@ _none — no lane is locked._
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
-- `feature-nilpy-star-args-kwargs` [N]
 - `feature-pascal-corpus-generics` [P]
 - `feature-real-dynlib-loader` [B]
 

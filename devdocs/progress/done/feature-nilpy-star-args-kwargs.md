@@ -3,12 +3,13 @@ summary: "nilpy: *args / **kwargs in a def signature"
 type: feature
 track: N
 prio: 50
+owner: claude-A-N
 ---
 
 # nilpy: `*args` / `**kwargs` parameters
 
 - **Type:** feature (Nil-Python frontend) — **Track N**
-- **Status:** unfinished
+- **Status:** done
 - **Opened:** 2026-07-26 — probing songformatter under nilpy
   ([[feature-demo-songformatter-pxx-target]]).
 
@@ -202,3 +203,55 @@ priority need not rise.
 
 Retitle-worthy: the remaining work is "`**kwargs` re-expansion at a forwarded
 call site", not "star-args/kwargs".
+
+## DONE 2026-08-13 — the last live failure closed
+
+`fwd(1, 2, c=9)` answers 129. The 2026-08-10 re-measurement had narrowed this
+ticket to exactly one row — `**kwargs` re-expansion at a forwarded call site —
+and that row is now correct in every shape swept: keywords filling the tail,
+mixed positional-and-keyword, all-keyword, a callee with DEFAULTS, and string
+parameters.
+
+### What made it more than plumbing
+
+The forwarding is a DESUGARING, not a runtime feature: the argument count is
+only known at run time, so it was a dispatch on `len(args)` over the arities the
+callee accepts. **Keywords break that shape at the root** — with keywords the
+argument COUNT no longer says WHICH parameters are filled. `dflt(1, c=9)` with
+`def dflt(a, b=5, c=6)` supplies two arguments and fills a and c, skipping b; a
+count-dispatch calls `dflt(a, b)` and puts 9 in b. That row is in the test for
+that reason, and it is the one that fails under any count-based scheme.
+
+So when a kwargs dict is forwarded there is no dispatch at all: the widest
+arity is built once and every slot asks `pystar_has(args, kwargs, k, '<name>')`
+— supplied positionally at k, or present by name? — falling back to
+`DefaultArgValueNode` when it was not. The parameter NAMES are the thing the
+frontend has and the runtime does not, so they travel as literals.
+
+The arity guard counts both halves (`pystar_check_arity_kw`), and
+`pystar_no_kwargs` — the refusal this ticket was about — is gone from this path.
+
+### A keyword the callee does not declare
+
+Raises, and the reasoning is worth keeping: the slot reads are EAGER (every
+slot the widest arity could use is read before any arm is chosen), so a slot
+past the supplied count is a defaulted parameter and must answer None rather
+than raise. Within the supplied count it is a real error — that many arguments
+arrived and this parameter got none of them, so one of the keywords went
+nowhere. That is CPython's "unexpected keyword argument", caught at the only
+point it is detectable here.
+
+### Left open, and now the only rung above this
+
+Forwarding into a callee that ITSELF takes `*args`/`**kwargs` —
+`def outer(*a, **k): return fwd(*a, **k)` — does not parse (`expected
+expression`). Recorded in the test's header; it is a separate shape (the callee
+has no fixed parameter list to bind against at all) and nothing measured here
+depends on it.
+
+Test `test/test_nilpy_kwargs_forwarded.{npy,expected}` (`.expected` from
+CPython), wired into `test-nilpy`; the four existing star/kwargs tests re-run
+unchanged. Gate: self-host fixedpoint + `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

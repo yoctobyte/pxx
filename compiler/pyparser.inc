@@ -12554,6 +12554,7 @@ end;
   onto named parameters needs a call protocol NilPy does not have. }
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer;
 var required, total, n, k, i, argNode, lastArg, callNode, elemNode: Integer;
+    nameNode, headNode, hasArg, hasCall: Integer;   { the parameter's name literal and the was-it-supplied test, for a kwargs fetch; the arg chain's head }
     lenNode, cntNode, condNode, pairNode, ternNode, chkArg, a2, a3: Integer;
     listSym, dictSym, asgn, listCi, dictCi: Integer;
     slotSyms: array[0..15] of Integer;
@@ -12602,23 +12603,29 @@ begin
   ASTTk[ASTLeft[a3]] := Ord(tyInteger);
   ASTRight[chkArg] := a2;
   ASTRight[a2] := a3;
+  { With a **kwargs dict in play the guard counts BOTH — a forwarded
+    `f(1, 2, c=9)` supplies three arguments, two of them positional — and the
+    dict is spliced in ahead of the two counts. The keyword half used to be
+    REFUSED here (pystar_no_kwargs), which is why `fwd(1, 2, c=9)` died with
+    "got 2 arguments, expected 3 to 3": the keyword was collected at the callee
+    and then dropped at the forwarded call site.
+    feature-nilpy-star-args-kwargs }
+  if dictSym >= 0 then
+  begin
+    a3 := AllocNode(AN_ARG);
+    ASTLeft[a3] := PyMakeIdent(dictSym);
+    ASTRight[a3] := ASTRight[chkArg];
+    ASTRight[chkArg] := a3;
+  end;
   callNode := AllocNode(AN_CALL);
-  ASTIVal[callNode] := FindProc('pystar_check_arity');
+  if dictSym >= 0 then
+    ASTIVal[callNode] := FindProc('pystar_check_arity_kw')
+  else
+    ASTIVal[callNode] := FindProc('pystar_check_arity');
   if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_check_arity) not loaded');
   ASTTk[callNode] := Ord(tyInteger);
   ASTLeft[callNode] := chkArg;
   PyHoistStmt(callNode);
-  if dictSym >= 0 then
-  begin
-    chkArg := AllocNode(AN_ARG);
-    ASTLeft[chkArg] := PyMakeIdent(dictSym);
-    callNode := AllocNode(AN_CALL);
-    ASTIVal[callNode] := FindProc('pystar_no_kwargs');
-    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_no_kwargs) not loaded');
-    ASTTk[callNode] := Ord(tyInteger);
-    ASTLeft[callNode] := chkArg;
-    PyHoistStmt(callNode);
-  end;
 
   { Every slot the widest arity could use, read ONCE into a hidden variant local.
     The arms are alternatives but the reads are not — a ternary arm cannot carry
@@ -12632,16 +12639,80 @@ begin
     slotSyms[k] := AllocVar(PyHiddenName('fwda'), tyVariant);
     elemNode := AllocNode(AN_ARG);
     ASTLeft[elemNode] := PyMakeIdent(listSym);
+    { with kwargs, a slot past the positional run is fetched by the parameter's
+      NAME — which the frontend knows and the runtime does not, so the name
+      travels as a literal argument }
+    headNode := elemNode;          { the call's argument HEAD stays the list }
+    if dictSym >= 0 then
+    begin
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := PyMakeIdent(dictSym);
+      ASTRight[elemNode] := argNode;
+      elemNode := argNode;
+    end;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := AllocNode(AN_INT_LIT);
     ASTIVal[ASTLeft[argNode]] := k;
     ASTTk[ASTLeft[argNode]] := Ord(tyInteger);
     ASTRight[elemNode] := argNode;
+    if dictSym >= 0 then
+    begin
+      nameNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[nameNode] := PyStoredName(Procs[procIdx].Params[k].Name);
+      ASTSLen[nameNode] := Length(Procs[procIdx].Params[k].Name);
+      ASTTk[nameNode] := Ord(tyString);
+      a2 := AllocNode(AN_ARG);
+      ASTLeft[a2] := nameNode;
+      ASTRight[a2] := -1;
+      ASTRight[argNode] := a2;
+    end;
     callNode := AllocNode(AN_CALL);
-    ASTIVal[callNode] := FindProc('pystar_arg');
+    if dictSym >= 0 then
+      ASTIVal[callNode] := FindProc('pystar_arg_kw')
+    else
+      ASTIVal[callNode] := FindProc('pystar_arg');
     if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_arg) not loaded');
     ASTTk[callNode] := Ord(tyVariant);
-    ASTLeft[callNode] := elemNode;
+    ASTLeft[callNode] := headNode;
+    { Which parameters a keyword call fills is NOT what its argument count says
+      — `f(1, c=9)` fills a and c and skips b — so with a kwargs dict every
+      slot falls back to the callee's own DEFAULT when it was not supplied,
+      and the single full-arity call below replaces the count-dispatch chain. }
+    if (dictSym >= 0) and (k < MAX_PROC_PARAMS) and
+       ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + k] then
+    begin
+      hasArg := AllocNode(AN_ARG);
+      ASTLeft[hasArg] := PyMakeIdent(listSym);
+      a2 := AllocNode(AN_ARG);
+      ASTLeft[a2] := PyMakeIdent(dictSym);
+      ASTRight[hasArg] := a2;
+      a3 := AllocNode(AN_ARG);
+      ASTLeft[a3] := AllocNode(AN_INT_LIT);
+      ASTIVal[ASTLeft[a3]] := k;
+      ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+      ASTRight[a2] := a3;
+      nameNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[nameNode] := PyStoredName(Procs[procIdx].Params[k].Name);
+      ASTSLen[nameNode] := Length(Procs[procIdx].Params[k].Name);
+      ASTTk[nameNode] := Ord(tyString);
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := nameNode;
+      ASTRight[argNode] := -1;
+      ASTRight[a3] := argNode;
+      hasCall := AllocNode(AN_CALL);
+      ASTIVal[hasCall] := FindProc('pystar_has');
+      if ASTIVal[hasCall] < 0 then Error('Nil Python: pylib (pystar_has) not loaded');
+      ASTTk[hasCall] := Ord(tyBoolean);
+      ASTLeft[hasCall] := hasArg;
+      pairNode := AllocNode(AN_PAIR);
+      ASTLeft[pairNode] := callNode;
+      ASTRight[pairNode] := DefaultArgValueNode(procIdx, k);
+      ternNode := AllocNode(AN_TERNARY);
+      ASTLeft[ternNode] := hasCall;
+      ASTRight[ternNode] := pairNode;
+      ASTTk[ternNode] := Ord(tyVariant);
+      callNode := ternNode;
+    end;
     asgn := AllocNode(AN_ASSIGN);
     ASTLeft[asgn] := PyMakeIdent(slotSyms[k]);
     ASTRight[asgn] := callNode;
@@ -12653,6 +12724,9 @@ begin
   Result := -1;
   for n := required to total do
   begin
+    { with kwargs every slot is filled (supplied or defaulted), so only the
+      widest arity is built and there is no count dispatch }
+    if (dictSym >= 0) and (n < total) then Continue;
     lastArg := -1;
     callNode := AllocNode(AN_CALL);
     ASTIVal[callNode] := procIdx;
@@ -12684,14 +12758,33 @@ begin
       else ASTRight[lastArg] := argNode;
       lastArg := argNode;
     end;
-    if n = required then
+    if (n = required) or (dictSym >= 0) then
     begin
       Result := callNode;
       Continue;
     end;
-    { cond: pylist.count = n }
-    lenNode := PyCallMeth1(listCi, 'count', PyMakeIdent(listSym), -1);
-    if lenNode < 0 then Error('Nil Python: pylib (TPyList.count) not loaded');
+    { cond: the EFFECTIVE argument count = n — positional plus keyword when a
+      dict is forwarded, since `f(1, 2, c=9)` must select the 3-argument arm }
+    if dictSym >= 0 then
+    begin
+      lenNode := AllocNode(AN_ARG);
+      ASTLeft[lenNode] := PyMakeIdent(listSym);
+      a2 := AllocNode(AN_ARG);
+      ASTLeft[a2] := PyMakeIdent(dictSym);
+      ASTRight[a2] := -1;
+      ASTRight[lenNode] := a2;
+      argNode := AllocNode(AN_CALL);
+      ASTIVal[argNode] := FindProc('pystar_argc');
+      if ASTIVal[argNode] < 0 then Error('Nil Python: pylib (pystar_argc) not loaded');
+      ASTTk[argNode] := Ord(tyInteger);
+      ASTLeft[argNode] := lenNode;
+      lenNode := argNode;
+    end
+    else
+    begin
+      lenNode := PyCallMeth1(listCi, 'count', PyMakeIdent(listSym), -1);
+      if lenNode < 0 then Error('Nil Python: pylib (TPyList.count) not loaded');
+    end;
     cntNode := AllocNode(AN_INT_LIT);
     ASTIVal[cntNode] := n;
     ASTTk[cntNode] := Ord(tyInteger);

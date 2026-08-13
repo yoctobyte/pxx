@@ -1293,6 +1293,10 @@ function pydict_v(const v: Variant): TPyDict;
   arguments were forwarded — binding those by name would need a runtime call
   protocol, so it FAILS rather than dropping them silently. }
 procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+function pystar_argc(l: TPyList; d: TPyDict): Integer;
+function pystar_has(l: TPyList; d: TPyDict; i: Integer; const nm: AnsiString): Boolean;
+function pystar_arg_kw(l: TPyList; d: TPyDict; i: Integer; const nm: AnsiString): Variant;
+procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer);
 procedure pystar_no_kwargs(d: TPyDict);
 { One forwarded argument, or None when the caller passed fewer. The dispatch
   evaluates every slot up to the callee's widest arity before choosing an arm,
@@ -12211,6 +12215,72 @@ begin
                            ' arguments, expected ' + pystr_of(Int64(lo)) +
                            ' to ' + pystr_of(Int64(hi)));
   end;
+end;
+
+{ The three routines the FORWARDED-call desugaring needs once **kwargs may
+  actually be BOUND (feature-nilpy-star-args-kwargs, its last rung): the
+  effective argument count is positional PLUS keyword, and a slot past the
+  positional run is fetched by the parameter's NAME.
+  A slot that is neither positional nor present by name RAISES rather than
+  quietly passing None. The arity check has already established that this many
+  arguments were supplied, so a missing name means one of them was a keyword
+  the callee does not declare — CPython's "unexpected keyword argument",
+  reported at the point where it is detectable. }
+function pystar_argc(l: TPyList; d: TPyDict): Integer;
+begin
+  Result := 0;
+  if l <> nil then Result := l.count;
+  if d <> nil then Result := Result + d.count;
+end;
+
+function pystar_has(l: TPyList; d: TPyDict; i: Integer;
+                   const nm: AnsiString): Boolean;
+{ Was this parameter actually SUPPLIED — positionally at i, or by name? With
+  keywords the argument COUNT no longer says WHICH parameters are filled
+  (`f(1, c=9)` fills a and c and skips b), so the desugaring passes every
+  parameter and asks this per slot, falling back to the callee's own default
+  where the answer is no. }
+begin
+  Result := (l <> nil) and (i >= 0) and (i < l.count);
+  if Result then Exit;
+  Result := (d <> nil) and (d.indexof(nm) >= 0);
+end;
+
+function pystar_arg_kw(l: TPyList; d: TPyDict; i: Integer;
+                       const nm: AnsiString): Variant;
+begin
+  if (l <> nil) and (i >= 0) and (i < l.count) then
+  begin
+    Result := l.at(i);
+    Exit;
+  end;
+  if (d <> nil) and (d.indexof(nm) >= 0) then
+  begin
+    Result := d.fetch(nm);
+    Exit;
+  end;
+  { Past the supplied count this is a DEFAULTED parameter the chosen arm will
+    not pass, and the slot reads are eager — every slot the widest arity could
+    use is read before the arm is picked — so it must answer None rather than
+    raise, exactly as pystar_arg does.
+    WITHIN the supplied count it is a genuine error: that many arguments were
+    given, this parameter got none of them, so one of the keywords names a
+    parameter the callee does not have. CPython's "unexpected keyword
+    argument", caught at the only point it is detectable here. }
+  if i < pystar_argc(l, d) then
+    raise TypeError.Create('forwarded call has no value for parameter ''' + nm +
+      ''' — an unexpected keyword argument was passed');
+  Result := pynone;
+end;
+
+procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer);
+var n: Integer;
+begin
+  n := pystar_argc(l, d);
+  if (n < lo) or (n > hi) then
+    raise TypeError.Create('forwarded call got ' + pystr_of(Int64(n)) +
+                           ' arguments, expected ' + pystr_of(Int64(lo)) +
+                           ' to ' + pystr_of(Int64(hi)));
 end;
 
 procedure pystar_no_kwargs(d: TPyDict);

@@ -1,0 +1,59 @@
+# feature-nilpy-star-args-kwargs — the last rung: **kwargs RE-EXPANDED at a
+# forwarded call site.
+#
+# `fwd(1, 2, c=9)` where `def fwd(*args, **kwargs): return target(*args,
+# **kwargs)` died with "forwarded call got 2 arguments, expected 3 to 3": the
+# keyword was collected correctly at the callee and then DROPPED at the
+# forwarded call, which refused kwargs outright (pystar_no_kwargs).
+#
+# The forwarding is a DESUGARING, not a runtime feature — the argument count is
+# only known at run time, so it was a dispatch on len(args) over the arities the
+# callee accepts. That shape is what keywords break, and it is the part worth
+# recording: with keywords the argument COUNT no longer says WHICH parameters
+# are filled. `dflt(1, c=9)` supplies two arguments and fills a and c, skipping
+# b — a count-dispatch would have called dflt(a, b) and put 9 in b.
+#
+# So when a kwargs dict is forwarded there is no dispatch at all: every
+# parameter is passed, each slot asking "was this one supplied — positionally
+# or by name?" and falling back to the callee's OWN default when it was not.
+# The fwd2 rows are that case, and `fwd2(1, c=9)` is the one that fails under
+# any count-based scheme.
+#
+# A keyword naming a parameter the callee does not have is a TypeError, raised
+# where it is detectable: the count says N arguments arrived, so a slot within
+# that count with no value means one of them went nowhere.
+#
+# NOT supported, and not asserted: forwarding into a callee that ITSELF takes
+# *args/**kwargs (`def outer(*a, **k): return fwd(*a, **k)`) — that does not
+# parse, and is a separate rung.
+#
+# Expectations are CPython's own output.
+
+def target(a, b, c):
+    return a * 100 + b * 10 + c
+
+def fwd(*args, **kwargs):
+    return target(*args, **kwargs)
+
+print(fwd(1, 2, 3), fwd(1, 2, c=9), fwd(1, b=2, c=3), fwd(a=1, b=2, c=3))
+
+def dflt(a, b=5, c=6):
+    return a * 100 + b * 10 + c
+
+def fwd2(*args, **kwargs):
+    return dflt(*args, **kwargs)
+
+print(fwd2(1), fwd2(1, 2), fwd2(1, 2, 3), fwd2(1, c=9), fwd2(a=2), fwd2(1, b=7))
+
+def s_target(name, greet="hi"):
+    return greet + " " + name
+
+def fwd3(*args, **kwargs):
+    return s_target(*args, **kwargs)
+
+print(fwd3("bob"), fwd3("bob", "yo"), fwd3("bob", greet="yo"), fwd3(name="ann"))
+
+try:
+    print(fwd(1, 2, zz=9))
+except TypeError as e:
+    print("TypeError")
