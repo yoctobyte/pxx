@@ -1489,6 +1489,19 @@ procedure pyassert(ok: Boolean; const msg: AnsiString);
   the double's EXACT decimal value, which is CPython's rule; the body sits far
   below, next to the exact-decimal core it is built on. }
 function pyround_n(x: Double; n: Integer): Double;
+{ `round(x, ndigits)` where x's INTNESS must survive: an int in is an int out,
+  whatever ndigits is, and a variant is the shape that carries either. The
+  frontend hands the RAW argument here (it defers its own unbox for the
+  two-argument form) so a promotable int keeps its precision instead of being
+  flattened to a double on the way in.
+  bug-nilpy-two-argument-round-of-an-int-returns-a-float }
+function pyround_v(const x: Variant; n: Int64): Variant;
+{ The ONE-argument `round(x)` over a variant: an int stays itself, an
+  arbitrary-precision int stays EXACT (the float path narrowed 2**70 to
+  -9223372036854775808), and a float rounds half-to-EVEN into an int, as
+  CPython does. }
+function pyround1_v(const x: Variant): Variant;
+function pyround_int(x: Int64; n: Int64): Int64;
 { Python's math.floor/math.ceil return an int, unlike the RTL Math unit's
   Floor/Ceil (Double->Double, shared with the Pascal frontend and left alone
   here) -- these are the NilPy-specific int-returning shims, dispatched by
@@ -2964,11 +2977,15 @@ function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
 var nm: AnsiString;
 begin
   if what = '' then nm := 'this argument' else nm := 'parameter ' + what;
-  if (PPyVarRec(@v)^.VType = 8) and (pybound_recv(v) <> nil) then
-    raise TypeError.Create(nm + ' is declared Callable[...], '
-      + 'which carries a code address only, and a BOUND METHOD also needs its '
-      + 'receiver — pass a plain function, a lambda, or declare the parameter '
-      + 'without an annotation');
+  { A BOUND METHOD (VType 8 with a receiver) hands over the {code, recv} PAIR
+    pointer, not the bare code address. Every consumer of a Pointer-typed
+    callable parameter here dispatches through PyCallKey1 (sorted/min/max via
+    its own call, map/filter through PyIterCallHook), and PyCallKey1's FIRST
+    test is PXXObjIsBoundPair on exactly this pointer — so the pair is what it
+    wants. This used to raise a TypeError saying the receiver could not travel,
+    which was true of the bare address and not of the pair:
+    `sorted(xs, key=obj.method)` was refused for a shape the dispatcher on the
+    other side already handled (bug-nilpy-map-over-a-bound-method-segfaults). }
   Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
     raise TypeError.Create(nm + ' is not callable — the value '
@@ -3080,6 +3097,90 @@ begin
   end;
 end;
 
+function PyFindMethByName(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+{ The method of that name, anywhere up the class hierarchy — the method twin of
+  PyFindFieldCI above. Case-SENSITIVE, as Python is. PyFindDunder further down
+  is this same walk and now calls it. }
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
+begin
+  PyFindMethByName := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+    begin
+      meths := curr^.MethsPtr;
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+        if meths[i].NamePtr^ = nm then
+        begin
+          PyFindMethByName := @meths[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyBoxByKind(a: Pointer; k: Int64; var found: Boolean): Variant;
+{ The value at `a`, read as the pxx TypeKind `k` and boxed into a Variant.
+
+  Shared by every reflective read: an instance FIELD reached through the class
+  RTTI (PyDeclaredAttrGet below) and a CLASS ATTRIBUTE reached through a class
+  REFERENCE (PyClsAttrRefGet). One chain, because the two differ only in where
+  the address comes from — and a second copy of it is how one kind ends up
+  supported on one route and silently wrong on the other. }
+begin
+  found := True;
+  if k = 23 then Result := PPyAnsiString(a)^          { AnsiString }
+  else if k = 19 then Result := PPyFD(a)^             { Double }
+  else if k = 18 then Result := PPyFS(a)^             { Single }
+  else if k = 2 then Result := PPyFB(a)^              { Boolean }
+  else if k = 3 then Result := PPyFC(a)^              { Char }
+  else if (k = 13) or (k = 14) then Result := PPyF8(a)^        { Int64/QWord }
+  else if (k = 1) or (k = 11) then Result := PPyF4(a)^         { Integer/LongInt }
+  else if k = 12 then Result := PPyU4(a)^                       { Cardinal }
+  else if k = 9 then Result := PPyF2(a)^                        { SmallInt }
+  else if k = 10 then Result := PPyU2(a)^                       { Word }
+  else if k = 7 then Result := PPyF1(a)^                        { ShortInt }
+  else if k = 8 then Result := PPyU1(a)^                        { Byte }
+  else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
+  else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
+  else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
+  else
+    { a kind with no Python value shape yet (a record, a set, a frozen string,
+      a static array). Answering with SOMETHING would be a wrong value; report
+      it as not-found so the caller raises, which is at least loud. }
+    found := False;
+end;
+
+function PyStoreByKind(a: Pointer; k: Int64; const v: Variant): Boolean;
+{ The write twin of PyBoxByKind: unbox `v` into the slot at `a` as kind `k`.
+  False for a kind with no Python value shape, so the caller raises rather than
+  writing a plausible pattern over memory it does not understand. }
+{ ASSIGNED out of the variant into a typed local, never cast — `Int64(v)` is a
+  hard cast of the variant RECORD and stores its tag word, which wrote 1 where
+  the program said 9. Same trap as PyClsAttrSlotOf's fetch. }
+var iv: Int64; dv: Double; bv: Boolean; cv: Char;
+begin
+  Result := True;
+  if k = 23 then PPyAnsiString(a)^ := pystr_of(v)
+  else if k = 19 then begin dv := v; PPyFD(a)^ := dv; end
+  else if k = 18 then begin dv := v; PPyFS(a)^ := dv; end
+  else if k = 2 then begin bv := v; PPyFB(a)^ := bv; end
+  else if k = 3 then begin cv := v; PPyFC(a)^ := cv; end
+  else if (k = 13) or (k = 14) then begin iv := v; PPyF8(a)^ := iv; end
+  else if (k = 1) or (k = 11) then begin iv := v; PPyF4(a)^ := iv; end
+  else if k = 12 then begin iv := v; PPyU4(a)^ := iv; end
+  else if k = 9 then begin iv := v; PPyF2(a)^ := iv; end
+  else if k = 10 then begin iv := v; PPyU2(a)^ := iv; end
+  else if k = 7 then begin iv := v; PPyF1(a)^ := iv; end
+  else if k = 8 then begin iv := v; PPyU1(a)^ := iv; end
+  else if (k = 15) or (k = 16) then begin iv := v; PPyFN(a)^ := iv; end
+  else if k = 22 then PPyFV(a)^ := v
+  else if k = 6 then PPyFP(a)^ := pyvarobj(v)
+  else Result := False;
+end;
+
 function PyDeclaredAttrGet(obj: Pointer; const name: AnsiString;
                            var found: Boolean): Variant;
 { A field DECLARED by the class, read out of the instance through its RTTI and
@@ -3105,27 +3206,121 @@ begin
   if fi = nil then Exit;
   a := Pointer(NativeInt(obj) + NativeInt(fi^.Offset));
   k := fi^.TypeKind;
-  found := True;
-  if k = 23 then Result := PPyAnsiString(a)^          { AnsiString }
-  else if k = 19 then Result := PPyFD(a)^             { Double }
-  else if k = 18 then Result := PPyFS(a)^             { Single }
-  else if k = 2 then Result := PPyFB(a)^              { Boolean }
-  else if k = 3 then Result := PPyFC(a)^              { Char }
-  else if (k = 13) or (k = 14) then Result := PPyF8(a)^        { Int64/QWord }
-  else if (k = 1) or (k = 11) then Result := PPyF4(a)^         { Integer/LongInt }
-  else if k = 12 then Result := PPyU4(a)^                       { Cardinal }
-  else if k = 9 then Result := PPyF2(a)^                        { SmallInt }
-  else if k = 10 then Result := PPyU2(a)^                       { Word }
-  else if k = 7 then Result := PPyF1(a)^                        { ShortInt }
-  else if k = 8 then Result := PPyU1(a)^                        { Byte }
-  else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
-  else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
-  else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
-  else
-    { a kind with no Python value shape yet (a record, a set, a frozen string,
-      a static array). Answering with SOMETHING would be a wrong value; report
-      it as not-found so the caller raises, which is at least loud. }
-    found := False;
+  Result := PyBoxByKind(a, k, found);
+end;
+
+var
+  { A CLASS ATTRIBUTE's one shared slot, keyed "<class RTTI blob>:<name>".
+    Filled at class-definition time by pyclsattr_bind (pyparser emits one call
+    per attribute), because the slot itself is a hidden GLOBAL whose name only
+    the frontend knows — the RTTI blob carries methods and instance fields, and
+    nothing in it could name this. The three compile-time access routes (`C.attr`,
+    bare `attr` in a method, `inst.attr`) resolve that global directly and never
+    consult this; it exists for the one route that has no class index at compile
+    time, a class held as a VALUE.
+    bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+  PyClsAttrAddrStore: TPyDict;   { key -> the hidden global's address, as Int64 }
+  PyClsAttrKindStore: TPyDict;   { key -> Ord(TTypeKind) of that global }
+
+procedure pyclsattr_bind(cls: Pointer; const name: AnsiString;
+                         addr: Pointer; kind: Int64);
+begin
+  if PyClsAttrAddrStore = nil then
+  begin
+    PyClsAttrAddrStore := TPyDict.Create;
+    PyClsAttrKindStore := TPyDict.Create;
+  end;
+  PyClsAttrAddrStore.store(PyDynAttrKey(cls, name), Int64(NativeInt(addr)));
+  PyClsAttrKindStore.store(PyDynAttrKey(cls, name), kind);
+end;
+
+function PyClsAttrSlotOf(cls: Pointer; const name: AnsiString;
+                         var kind: Int64): Pointer;
+{ The bound slot for `name` on `cls` or any ancestor — the same parent walk
+  PyFindFieldCI does for fields, so an inherited class attribute is reachable
+  through a reference to the SUBCLASS. }
+var curr: PClassRTTI; k: AnsiString; av, kv: Variant; ai: Int64;
+begin
+  Result := nil;
+  kind := 0;
+  if PyClsAttrAddrStore = nil then Exit;
+  curr := PClassRTTI(cls);
+  while curr <> nil do
+  begin
+    k := PyDynAttrKey(Pointer(curr), name);
+    if PyClsAttrAddrStore.indexof(k) >= 0 then
+    begin
+      { ASSIGNED out of the variant, never `Int64(v)` — that spelling is a hard
+        CAST of the variant RECORD and yields the address of the temporary, so
+        both the slot address and the kind came back as stack pointers. }
+      av := PyClsAttrAddrStore.fetch(k);
+      kv := PyClsAttrKindStore.fetch(k);
+      ai := av;
+      kind := kv;
+      Result := Pointer(NativeInt(ai));
+      Exit;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyClsAttrRefGet(const v: Variant; const name: AnsiString;
+                         var found: Boolean): Variant;
+{ `cls.attr` where `cls` holds a VT_CLASSREF variant. }
+var a: Pointer; k: Int64;
+begin
+  found := False;
+  a := PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k);
+  if a = nil then Exit;
+  Result := PyBoxByKind(a, k, found);
+end;
+
+function pyclsattr_inst_get(obj: Pointer; const name: AnsiString): Variant;
+{ A class ATTRIBUTE read through an INSTANCE, resolved on the receiver's RUNTIME
+  class. The compile-time route resolves it on the class that declares the
+  METHOD, so `self.kind` inside a base method answered the BASE's value for a
+  Derived instance -- the template-method pattern silently using the wrong
+  constant. Walks ParentRTTI from the instance's own class, which is the same
+  walk `Derived.kind` does and the reason that spelling was always right.
+  bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value }
+var a: Pointer; k: Int64; found: Boolean;
+begin
+  Result := pynone;
+  if obj = nil then Exit;
+  a := PyClsAttrSlotOf(Pointer(GetInstanceRTTI(obj)), name, k);
+  if a = nil then
+    raise AttributeError.Create('''' + TObject(obj).ClassName +
+      ''' object has no attribute ''' + name + '''');
+  Result := PyBoxByKind(a, k, found);
+  if not found then
+    raise AttributeError.Create('class attribute ''' + name +
+      ''' has a type this read cannot box');
+end;
+
+function PyClsRefName(const v: Variant): AnsiString;
+{ The class's own name out of the blob a VT_CLASSREF points at — for the
+  AttributeError message, which names the TYPE and not an instance. PyClassRefStr
+  below builds CPython's `<class '__main__.A'>` from the same word, but it is
+  declared far past the attribute routes that need this. }
+var cls: PClassRTTI;
+begin
+  cls := PClassRTTI(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+  if cls = nil then Result := 'type' else Result := cls^.NamePtr^;
+end;
+
+function PyClsAttrRefSet(const v: Variant; const name: AnsiString;
+                         const val: Variant): Boolean;
+{ `cls.attr = x` through a class reference — writes the ONE shared slot, so the
+  class name, every instance and every other reference see it. That is only true
+  because a class used as a value has its attributes lowered to the shared slot
+  (pyparser's PyClassUsedAsValue gate); under the copy-at-construction lowering
+  an already-built instance would keep its own copy. }
+var a: Pointer; k: Int64;
+begin
+  Result := False;
+  a := PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k);
+  if a = nil then Exit;
+  Result := PyStoreByKind(a, k, val);
 end;
 
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
@@ -3160,7 +3355,7 @@ end;
 function PyVarTypeName(t: Int64): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
-var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean;
+var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -3168,13 +3363,25 @@ begin
     real object pointer when the tag says so (VT_OBJECT); for any other tag
     (str/int/float/bool) it is scalar bits reinterpreted as an address, and
     ClassName on that would dereference garbage. Check the tag first. }
+  tg := pyvartag(v);
+  { A CLASS held as a value (VT_CLASSREF) — its payload is an RTTI blob address,
+    not an instance, so the object routes below would read at a field's offset
+    INSIDE the blob and answer a plausible integer for what was stored as 7.
+    Ask the class-attribute registry first and never fall through to them.
+    bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+  if tg = 11 then
+  begin
+    Result := PyClsAttrRefGet(v, name, declFound);
+    if declFound then Exit;
+    raise AttributeError.Create('type object ''' + PyClsRefName(v)
+      + ''' has no attribute ''' + name + '''');
+  end;
   obj := pyvarobj(v);
   if pydynattr_has(obj, name) then
   begin
     Result := PyDynAttrStore.fetch(PyDynAttrKey(obj, name));
     Exit;
   end;
-  tg := pyvartag(v);
   if tg = 7 then
   begin
     { a declared field of the object the variant holds — same fallback the
@@ -3183,11 +3390,62 @@ begin
       bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
     Result := PyDeclaredAttrGet(obj, name, declFound);
     if declFound then Exit;
+    { ...and a METHOD read as a VALUE — `f = obj.scale`, `map(obj.scale, xs)`
+      where the receiver is a variant. CALLING it already worked (the frontend
+      resolves the call), so only the value form reached here, and it raised
+      AttributeError for a method that plainly exists. The pair carries the
+      receiver, which is the whole reason a bound method is not just a code
+      address (bug-nilpy-map-over-a-bound-method-segfaults).
+
+      The RTTI Code address is safe to bind because a method whose name is read
+      as a value is normalised to the all-variant function ABI by the frontend
+      (PyMethodUsedAsValue), which keys on exactly this spelling. }
+    if obj <> nil then
+    begin
+      mi := PyFindMethByName(GetInstanceRTTI(obj), name);
+      if (mi <> nil) and (mi^.Code <> nil) then
+      begin
+        Result := pybound_new(mi^.Code, obj, mi^.RetKind <> 0);
+        Exit;
+      end;
+    end;
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
     cn := PyVarTypeName(tg);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
+end;
+
+function pydynattr_has_v(const v: Variant; const name: AnsiString): Boolean;
+{ hasattr's twin of pydynattr_get_v: a CLASS held as a value keeps its
+  attributes in the bind registry, not in the per-object dynamic store the
+  unwrapped-pointer form asks — `hasattr(cls, "name")` answered False for an
+  attribute the very next line read fine.
+  bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+var k: Int64;
+begin
+  if pyvartag(v) = 11 then
+    Result := PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k) <> nil
+  else
+    Result := pydynattr_has(pyvarobj(v), name);
+end;
+
+procedure pydynattr_set_v(const v: Variant; const name: AnsiString;
+                          const val: Variant);
+{ The write twin of pydynattr_get_v, for a receiver whose runtime tag decides
+  what it is. Only a CLASS REFERENCE needs telling apart here: its payload is an
+  RTTI blob, so the dynamic store below would key the write on the blob's
+  address and the value would then be invisible to the class, to its instances
+  and to every other reference — which is what `c.num = 9` did.
+  bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+begin
+  if pyvartag(v) = 11 then
+  begin
+    if PyClsAttrRefSet(v, name, val) then Exit;
+    raise AttributeError.Create('type object ''' + PyClsRefName(v)
+      + ''' has no attribute ''' + name + '''');
+  end;
+  pydynattr_set(pyvarobj(v), name, val);
 end;
 
 { `type(x).__name__` for ANY value. Two things the frontend cannot do itself:
@@ -7113,13 +7371,75 @@ begin
   if b > a then Result := b else Result := a;
 end;
 
+function PyVarIsCallable(const v: Variant): Boolean;
+{ Any of the callable TAGS a NilPy function value can wear — a bound method or
+  a bare def (8), a pyeval closure (9), a lifted bound-fn (10), a callable
+  object (12). The same set PyVarTypeName answers 'method'/'function' for, which
+  is the definition of "callable" this dialect already commits to. }
+var t: Int64;
+begin
+  t := pyvartag(v);
+  PyVarIsCallable := (t = 8) or (t = 9) or (t = 10) or (t = 12);
+end;
+
+function PyCallKeyVar(const key: Variant; const a0: Variant): Variant;
+{ Call a callable VARIANT of any of the four shapes with one argument. A bound
+  pair (tag 8) is callable from here; a closure, a lifted bound-fn and a
+  callable object are pyeval's to dispatch, and pyeval publishes PyCallKey1 into
+  PyIterCallHook for exactly that reason. }
+begin
+  if (pyvartag(key) = 8) or (PyIterCallHook = nil) then
+    PyCallKeyVar := pybound_callv1(key, a0)
+  else
+    PyCallKeyVar := PyIterCallHook(pyvar_callable_ptr(key, 'key'), a0);
+end;
+
+function PyMinMaxByKey(const c: Variant; const key: Variant;
+                       wantMax: Boolean): Variant;
+{ `min(xs, key=f)` / `max(xs, key=f)` where the KEY is a callable held in a
+  VARIABLE. Those spellings picked THIS two-argument numeric overload — a
+  variant argument matches `b: Variant` exactly while the intended
+  `key: Pointer` candidate needs a coercion the resolver applies only after a
+  proc is chosen — and the numeric compare then raised
+  "expected a number, got object" while comparing the LIST against the
+  FUNCTION. `key=<def name>` and `key=lambda ...` were unaffected because those
+  are pointer-typed nodes.
+
+  Answered here rather than by widening overload resolution: comparing a
+  function is a TypeError in CPython too, so a callable second argument can
+  only ever have meant the key form, and this is the one place both receiver
+  shapes (a static list boxed into a variant, and a variant container) arrive
+  at. bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload }
+var i, n: Integer; cur, curK, bestK: Variant; better: Boolean;
+begin
+  n := Integer(pylen_v(c));
+  if n = 0 then
+    raise ValueError.Create('min() arg is an empty sequence');
+  Result := pyvar_getitem(c, pyvar_of_int(0));
+  bestK := PyCallKeyVar(key, Result);
+  for i := 1 to n - 1 do
+  begin
+    cur := pyvar_getitem(c, pyvar_of_int(i));
+    curK := PyCallKeyVar(key, cur);
+    if wantMax then better := pyvar_gt(curK, bestK)
+    else better := pyvar_gt(bestK, curK);
+    if better then
+    begin
+      bestK := curK;
+      Result := cur;
+    end;
+  end;
+end;
+
 function min(const a: Variant; const b: Variant): Variant; overload;
 begin
+  if PyVarIsCallable(b) then begin Result := PyMinMaxByKey(a, b, False); Exit; end;
   if pyvar_gt(a, b) then Result := b else Result := a;
 end;
 
 function max(const a: Variant; const b: Variant): Variant; overload;
 begin
+  if PyVarIsCallable(b) then begin Result := PyMinMaxByKey(a, b, True); Exit; end;
   if pyvar_gt(b, a) then Result := b else Result := a;
 end;
 
@@ -8259,6 +8579,72 @@ end;
   before the rounding position is an implicit 0, which is even, so an exact
   tie goes to zero — round(0.5, 0) is 0.0 in Python, and this gets that for
   the same reason CPython does rather than by a special case. }
+function pyround_v(const x: Variant; n: Int64): Variant;
+{ The variant twin: an int-tagged value (int, bool, or an arbitrary-precision
+  int) keeps its intness, a float rounds as a float. Reached whenever the
+  argument's static type is a variant or a promo int — a list element, an
+  unannotated parameter, `2 ** 70`. }
+var t: Int64;
+begin
+  t := pyvartag(x);
+  { arbitrary precision: a non-negative ndigits cannot change it, and flattening
+    it to a double to "round" it is what lost 2**70 entirely }
+  if t >= 8192 then
+  begin
+    if n >= 0 then pyround_v := x
+    else
+      raise TypeError.Create('round() of an arbitrary-precision int with a '
+        + 'negative ndigits is not supported yet');
+    Exit;
+  end;
+  if (t = 1) or (t = 2) or (t = 4) then         { int / int64 / bool }
+    pyround_v := pyvar_of_int(pyround_int(pyvar_to_int(x), n))
+  else
+    pyround_v := pyround_n(pyvar_to_float(x), Integer(n));
+end;
+
+function pyround1_v(const x: Variant): Variant;
+var t: Int64; d, fl: Double; iv: Int64;
+begin
+  t := pyvartag(x);
+  if (t >= 8192) or (t = 1) or (t = 2) then begin pyround1_v := x; Exit; end;
+  if t = 4 then begin pyround1_v := pyvar_of_int(pyvar_to_int(x)); Exit; end;
+  d := pyvar_to_float(x);
+  iv := Trunc(d);
+  if (d < 0) and (d <> iv) then iv := iv - 1;     { floor, not truncation }
+  fl := iv;
+  d := d - fl;
+  { half-to-EVEN, which is what Python rounds with: 2.5 -> 2, 3.5 -> 4 }
+  if (d > 0.5) or ((d = 0.5) and ((iv and 1) = 1)) then iv := iv + 1;
+  pyround1_v := pyvar_of_int(iv);
+end;
+
+function pyround_int(x: Int64; n: Int64): Int64;
+{ CPython's `round(int, ndigits)`: an int in, an int out, whatever ndigits is.
+  A non-negative ndigits cannot change an integer, so it is the identity; a
+  NEGATIVE one really does round — `round(1234, -2)` is 1200, an INT, and pxx
+  answered 1200.0. Banker's rounding at the half, as CPython does.
+  bug-nilpy-two-argument-round-of-an-int-returns-a-float }
+var p, half, r, q: Int64; i: Integer; neg: Boolean;
+begin
+  if n >= 0 then begin pyround_int := x; Exit; end;
+  p := 1;
+  for i := 1 to -n do
+  begin
+    { past 19 zeros every int64 rounds to 0 — stop rather than overflow p }
+    if p > 922337203685477580 then begin pyround_int := 0; Exit; end;
+    p := p * 10;
+  end;
+  neg := x < 0;
+  if neg then x := -x;
+  q := x div p;
+  r := x - q * p;
+  half := p div 2;
+  if (r > half) or ((r = half) and ((q and 1) = 1)) then q := q + 1;
+  pyround_int := q * p;
+  if neg then pyround_int := -pyround_int;
+end;
+
 function pyround_n(x: Double; n: Integer): Double;
 var
   av, r: Double;
@@ -12741,24 +13127,8 @@ type
   TPyDunderFn = function(self: Pointer): AnsiString;
 
 function PyFindDunder(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
-var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
-  PyFindDunder := nil;
-  curr := cls;
-  while curr <> nil do
-  begin
-    if curr^.MethCount > 0 then
-    begin
-      meths := curr^.MethsPtr;
-      for i := 0 to Integer(curr^.MethCount) - 1 do
-        if meths[i].NamePtr^ = nm then
-        begin
-          PyFindDunder := @meths[i];
-          Exit;
-        end;
-    end;
-    curr := PClassRTTI(curr^.ParentRTTI);
-  end;
+  PyFindDunder := PyFindMethByName(cls, nm);
 end;
 
 { The __eq__ half of the same dispatch — see the forward declaration above

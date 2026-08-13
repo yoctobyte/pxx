@@ -3320,6 +3320,17 @@ function PyHasAttr(const obj: Variant; const name: AnsiString): Boolean;
 var cls: PClassRTTI; kind: Int64; p: Pointer;
 begin
   PyHasAttr := False;
+  { a CLASS held as a value: its attributes live in the bind registry, and its
+    METHODS are in the blob it points at (no instance to walk from).
+    bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
+  if PPyRec(@obj)^.VType = 11 then
+  begin
+    cls := PClassRTTI(Pointer(PPyRec(@obj)^.Payload));
+    if cls = nil then Exit;
+    PyHasAttr := (PyClsAttrSlotOf(Pointer(cls), name, kind) <> nil) or
+                 (PyFindMethCI(cls, name) <> nil);
+    Exit;
+  end;
   if PPyRec(@obj)^.VType <> 7 then Exit;
   cls := GetInstanceRTTI(Pointer(PPyRec(@obj)^.Payload));
   if cls = nil then Exit;
@@ -5135,5 +5146,15 @@ begin
   if (l <> nil) and (FnFind('__body__') >= 0) then
     l.store(MakeStr('__body__'), pyvar_of_callable(Pointer(@PyBodyTramp)));
 end;
+
+initialization
+  { The ONE callable dispatcher, published to pylib for the whole run rather
+    than only while a map/filter cursor is alive. pylib is the lower unit and
+    cannot see PyCallKey1, so anything down there that must CALL a callable
+    variant of any of the four shapes (min/max with a `key=` held in a variable)
+    goes through this hook — and it was previously installed only by
+    pymap_iter/pyfilter_iter, i.e. exactly when a map happened to be running.
+    bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload }
+  PyIterCallHook := @PyCallKey1;
 
 end.
