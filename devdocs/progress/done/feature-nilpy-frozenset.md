@@ -96,4 +96,4 @@ that belongs to [[feature-nilpy-thirdparty-libraries-as-targets]], which owns
 the corpus run.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit a3c522d1a.
