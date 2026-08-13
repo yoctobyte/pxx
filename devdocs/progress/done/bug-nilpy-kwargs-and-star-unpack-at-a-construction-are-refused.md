@@ -164,4 +164,4 @@ canary).
 this ticket's argument path, and no row here depends on it.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 3525a2d57.
