@@ -3,8 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `be7f80936b0c` | 2026-08-13T20:17:55Z | RED (native) | 164.1s | `7a3f93c5f7eb` GREEN |
+| plexus | `be7f80936b0c` | 2026-08-13T20:31:20Z | RED (full) | 762.5s | `be7f80936b0c` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-core#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `1df75aad5458`, last good `432867370a9e`, 4 commit(s) in range
+- **test-arm32#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas test/test_arm32_record_byval_wide.pas +1 (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range
+- **test-i386#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range
+- **test-nilpy#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range

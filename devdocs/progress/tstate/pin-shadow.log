@@ -74,3 +74,4 @@
 2026-08-13T15:55:43Z	plexus	36442397288fe5b6fe40c1291cd22ba9b510fd9e	WOULD PIN 36442397288f — 0 red(s), all allowlisted, self-host clean, streak 3/2
 2026-08-13T16:49:33Z	plexus	e1fa561d3866e4b193da43d13682ec0958104ee9	WOULD PIN e1fa561d3866 — 0 red(s), all allowlisted, self-host clean, streak 4/2
 2026-08-13T19:00:08Z	plexus	7a3f93c5f7ebf9d06a25bf498db1bde42e1beded	WOULD PIN 7a3f93c5f7eb — 0 red(s), all allowlisted, self-host clean, streak 5/2
+2026-08-13T20:31:20Z	plexus	be7f80936b0c0c95afadcb4d093ae8ba95ecea1c	would NOT pin be7f80936b0c — 4 red(s) not in the allowlist: test-arm32#src:examples/net/httpdemo.pas, test-core#src:test/test_uses_order_pylib_exception_a.pas, test-i386#src:examples/net/httpdemo.pas, test-nilpy#src:test/test_uses_order_pylib_exception_a.pas
