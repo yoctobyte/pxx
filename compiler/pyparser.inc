@@ -6254,6 +6254,43 @@ end;
 function PyStrMethodFinish(const mname: AnsiString;
                            argHead, lastArg, argCount: Integer): Integer; forward;
 
+{ `input([prompt])` -> pyinput() / pyinput_p(prompt). ONE builder with TWO
+  entry points, because there ARE two: `input` is intercepted both in the NilPy
+  builtin chain (guarded on nothing else being called `input`, so a parameter
+  may shadow it — songformatter's `int_to_roman(input)`) and in the
+  PyExprMode name dispatch (guarded on no user proc of that name). They used to
+  carry two lowerings, and the first DISCARDED the prompt — Python writes it to
+  stdout without a newline, which is observable output a differential harness
+  compares byte for byte. Every syntactic shape probed took the second arm, so
+  the divergence was latent; sharing the builder retires it without having to
+  prove which arm is dead (bug-nilpy-input-has-two-lowerings-one-discards-the-prompt).
+  Call with CurTok on the name; consumes through the ')'. }
+function PyParseInputCall: Integer;
+var idx, argSeq, node: Integer;
+begin
+  Next; Expect(tkLParen, '(');
+  if CurTok.Kind = tkRParen then
+  begin
+    idx := FindProc('pyinput');
+    if idx < 0 then Error('Nil Python: pylib (pyinput) not loaded');
+    Expect(tkRParen, ')');
+    node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+    ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := -1;
+  end
+  else
+  begin
+    idx := FindProc('pyinput_p');
+    if idx < 0 then Error('Nil Python: pylib (pyinput_p) not loaded');
+    PyParseBoolExpr;
+    Expect(tkRParen, ')');
+    argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+    ASTRight[argSeq] := -1;
+    node := AllocNode(AN_CALL); ASTIVal[node] := idx;
+    ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := argSeq;
+  end;
+  Result := node;
+end;
+
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;

@@ -9,8 +9,8 @@ blocked-by: []
 - **Type:** bug (latent — no shape found that reaches the broken arm)
 - **Track:** N (Nil-Python semantics; the edit lands in the SHARED `parser.inc`,
   so it is Track A file-ownership and needs the sole-A guard)
-- **Status:** backlog — found 2026-08-08 while fixing [[regression-test-uforth-00]]
-- **Owner:** —
+- **Status:** done
+- **Owner:** claude-A-N
 
 ## The two arms
 
@@ -60,3 +60,37 @@ or `def` named `input` legitimately shadows the builtin (songformatter's
 ## Related
 [[regression-test-uforth-00]] (the EOFError fix that surfaced this),
 `test/test_nilpy_input_builtin.npy`, `test/test_nilpy_input_eof_raises.npy`
+
+## DONE 2026-08-13 — one builder, both entry points
+
+The ticket's own prescription was "delete one arm, not teach the broken one
+about prompts", and blocked itself on proving which arm is dead. That proof is
+not needed: the two arms differ only in their GUARD, which is real in both cases
+— the builtin-chain arm requires that nothing else is called `input` (so a
+parameter may shadow the builtin, songformatter's `int_to_roman(input)`), and
+the PyExprMode arm requires no user proc of that name. What was duplicated was
+the LOWERING, and that is what is now singular.
+
+`PyParseInputCall` (pyparser.inc) is the one builder: `pyinput()` with no
+argument, `pyinput_p(prompt)` with one — the correct arm's behaviour, verbatim.
+Both intercepts in `parser.inc` now call it and keep their own guard. There is
+no second lowering left to drift, which is what
+`normalise-dont-special-case.md` asks for; deleting a guard nothing has shown to
+be dead would have been the riskier reading of it.
+
+The discarded prompt is therefore gone whether or not the first arm is
+reachable — the question the ticket parked on stops mattering.
+
+### Verified
+
+Six shapes with a prompt diffed against CPython (plain assignment, inside
+`len(...)`, as a user function's argument, in a list literal, as a ternary arm,
+and the no-argument form), plus `def int_to_roman(input)` — the shadowing case
+the first arm's guard exists for — all matching. The three existing `input`
+tests re-run: `test_nilpy_input_builtin` (which already asserts the prompt is
+written), `test_nilpy_input_eof_raises`, `test_nilpy_select_stdin_ready`.
+
+Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

@@ -632,6 +632,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-indexing-an-unannotated-str-parameter-segfaults | N | 80 | bug | `def f(s): return s[0]` SEGFAULTS — indexing an unannotated str parameter | — |
 | bug-nilpy-inherited-class-attribute-empty-on-a-subclass-instance | N | 60 | bug | `Sub().kind` reads empty/zero when `kind` is a class attribute declared on the BASE — construction copies only the class's OWN class attributes, never the inherited ones. Silent wrong value | — |
 | bug-nilpy-input-builtin-is-shadowed-by-pascals-standard-input-file | N | 45 | bug | `input()` never reached a call lowering — `Input` is a standard Pascal identifier (the text file), so `line = input()` bound the file variable and the failure surfaced later and unrecognisably at the first USE of the result | — |
+| bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |
 | bug-nilpy-int-equals-string-segfaults | N | 80 | bug | `3 == "ab"` SEGFAULTS | — |
 | bug-nilpy-int-local-accumulating-a-float-from-a-list-crashes-219 | N | 55 | bug | NilPy: `tot = 0` then `tot += v` over a list holding any float dies with Runtime error 219 (invalid typecast) — averaging a column of mixed ints and floats, ordinary CPython code, crashes | — |
 | bug-nilpy-int-of-a-long-decimal-string-narrows | N | 55 | bug | NilPy: int('<30 digits>') wraps mod 2^64 instead of producing an arbitrary-precision int — int('123456789012345678901234567890') prints -4362896299872285998 | — |

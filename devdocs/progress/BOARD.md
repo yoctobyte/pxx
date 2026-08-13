@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (222)
+## backlog (221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,7 +64,6 @@ _none_
 | bug-nilpy-float-formatting-manufactures-ties-by-scaling | N | 40 | bug | `\"%.1f\" % 0.15` answers 0.2 where CPython answers 0.1, and 0.45 answers 0.4 where CPython answers 0.5: scaling the fraction by a power of ten lands exactly on .5 for values whose binary expansion is just below or just above it, so the formatter rounds a tie that does not exist — and gets it wrong in BOTH directions. Needs exact decimal digit generation, not a rounding tweak | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
-| bug-nilpy-input-has-two-lowerings-one-discards-the-prompt | N | 35 | bug | `input` has TWO lowerings in parser.inc and one silently discards the prompt | — |
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
 | bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused | N | 45 | bug | Three construction-site argument shapes are refused with a diagnostic: `C(**kw)` on a `**kwargs` ctor, `C(*xs)` unpacking into one, and a keyword whose name matches a FIELD when the ctor takes `**kw`. All work at a plain `def` or an ordinary method; only the construction path is short. | — |
 | bug-nilpy-math-surface-remaining-gaps-and-degrees-association | N | 35 | bug | Seven math names still resolve to 'undefined variable' — asin, acos, atan, fsum, modf, perm, dist, prod — and math.degrees(3.14) answers 179.90874767107852 where CPython answers 179.9087476710785, because it computes x*180/pi instead of CPython's x*(180/pi). The `random` module is absent entirely | — |
@@ -412,9 +411,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1711)
+## done (1712)
 
-1711 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1712 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -590,7 +589,6 @@ _none_
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
 - [p 35] [N] bug-nilpy-def-returning-a-precreated-global-has-no-return-type
 - [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
-- [p 35] [N] bug-nilpy-input-has-two-lowerings-one-discards-the-prompt
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured

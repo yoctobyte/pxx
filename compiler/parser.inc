@@ -856,6 +856,7 @@ function PyClassWantsIntIndex(ci: Integer): Boolean; forward;  { does a subscrip
 function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Integer; forward;  { the one shared class-attribute slot of that name, for a VARIANT receiver (pyparser.inc) }
 function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forward;  { that slot, when the attribute also needs per-instance overrides (pyparser.inc) }
 function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString; gsym: Integer): Integer; forward;  { instance read of an overridable class attribute: has? get : slot (pyparser.inc) }
+function PyParseInputCall: Integer; forward;  { `input([prompt])` -> pyinput / pyinput_p, one builder for both intercepts (pyparser.inc) }
 function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString; forward;  { the name to look up on this class for a Python method spelling — pylib's alias when the class does not declare it as written (pyparser.inc) }
 function PyForceVariant(node: Integer): Integer; forward;  { box a value into a variant (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
@@ -11240,25 +11241,16 @@ begin
       else if isNilPy and (name = 'input') and (FindSym(name) < 0) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
-        { input([prompt]) -> pyinput(), a line from stdin minus the newline. Any
-          prompt argument is parsed and discarded (its only effect in Python is a
-          stdout write; uforth's REPL prompt is cosmetic).
+        { input([prompt]) -> PyParseInputCall, the SHARED builder — this arm
+          used to have its own lowering that parsed the prompt and threw it
+          away, where Python writes it to stdout
+          (bug-nilpy-input-has-two-lowerings-one-discards-the-prompt).
 
           Only when a '(' follows AND nothing else is called `input`: Python
           lets a parameter shadow a builtin, and songformatter's
           `int_to_roman(input)` does exactly that — `isinstance(input, int)`
           was read as the BUILTIN and demanded its parenthesis. }
-        Next; Expect(tkLParen, '(');
-        if CurTok.Kind <> tkRParen then ParseExpr;
-        while CurTok.Kind = tkComma do begin Next; ParseExpr; end;
-        Expect(tkRParen, ')');
-        node := AllocNode(AN_CALL);
-        idx := FindProc('pyinput');
-        if idx < 0 then Error('Nil Python: pylib (pyinput) not loaded');
-        ASTIVal[node] := idx;
-        ASTTk[node] := Ord(tyAnsiString);
-        ASTLeft[node] := -1;
-        CurASTNode := node;
+        CurASTNode := PyParseInputCall;
         LastExprTk := tyAnsiString;
         Exit;
       end
@@ -13044,27 +13036,8 @@ begin
       if PyExprMode and CaseEqual(name, 'input') and (procIdx < 0) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
-        Next; Expect(tkLParen, '(');
-        if CurTok.Kind = tkRParen then
-        begin
-          idx := FindProc('pyinput');
-          if idx < 0 then Error('Nil Python: pylib (pyinput) not loaded');
-          Expect(tkRParen, ')');
-          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := -1;
-        end
-        else
-        begin
-          idx := FindProc('pyinput_p');
-          if idx < 0 then Error('Nil Python: pylib (pyinput_p) not loaded');
-          PyParseBoolExpr;
-          Expect(tkRParen, ')');
-          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-          ASTRight[argSeq] := -1;
-          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := argSeq;
-        end;
-        CurASTNode := node; LastExprTk := tyAnsiString;
+        CurASTNode := PyParseInputCall;   { the shared builder, see the arm above }
+        LastExprTk := tyAnsiString;
         Exit;
       end;
 
