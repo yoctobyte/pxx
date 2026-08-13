@@ -5229,12 +5229,11 @@
   },
   {
    "bad": "67910b097bafa4e8acb496ead3156e10b3ac079d",
-   "good": "432867370a9eefe623d0aa5fd63076dc097f8a92",
+   "good": "983104cae716ca9031686f798abf51a33ef886a3",
    "job": "test-arm32#src:examples/net/httpdemo.pas",
    "name": "test-arm32#06",
    "opened": "2026-08-13T20:31:20Z",
    "range": [
-    "983104cae716ca9031686f798abf51a33ef886a3",
     "67910b097bafa4e8acb496ead3156e10b3ac079d"
    ],
    "src": "examples/net/httpdemo.pas test/test_arm32_record_byval_wide.pas +1"
