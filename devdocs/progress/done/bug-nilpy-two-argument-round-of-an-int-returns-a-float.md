@@ -112,4 +112,4 @@ receiver kind. `make test-nilpy` green, `gate.sh quick` GREEN.
 `lib/**` calls the new routines, so Track B is unaffected until then.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 610d88eb4.
