@@ -107,4 +107,4 @@ Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` GREEN + full
 `make test-nilpy` sweep green.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 3f5511820.
