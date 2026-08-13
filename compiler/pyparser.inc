@@ -19999,7 +19999,12 @@ begin
     Result := node;
     Exit;
   end;
-  if PyIsIdent('print') or (CurTok.Kind = tkwriteln) then
+  { `print(...)` — by NAME now, not by token (see PyKeyword in pylexer.inc), and
+    declining when the program binds the name itself, which is what lets `def
+    print(x)` shadow it the way CPython does. tkwriteln is still accepted so a
+    Pascal `writeln` reaching this path keeps working. }
+  if ((CurTok.Kind = tkwriteln) or
+      (PyIsIdent('print') and (not PyUserShadowsProc('print')))) then
   begin
     Result := PyParsePrint;
     Exit;

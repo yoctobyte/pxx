@@ -1554,6 +1554,10 @@ test-nilpy: $(COMPILER)
 	# intercept must ask PyUserShadowsProc, not answer it itself.
 	./$(COMPILER) test/test_nilpy_user_def_shadows_a_builtin.npy /tmp/test_nilpy_defshadow26
 	/tmp/test_nilpy_defshadow26 | diff -u test/test_nilpy_user_def_shadows_a_builtin.expected -
+	# print is an identifier, not Pascal's tkwriteln token: `def print` shadows
+	# it, and a call ABOVE the def still reaches the builtin (Python's rule).
+	./$(COMPILER) test/test_nilpy_print_is_not_a_keyword.npy /tmp/test_nilpy_printkw26
+	/tmp/test_nilpy_printkw26 | diff -u test/test_nilpy_print_is_not_a_keyword.expected -
 	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
 	/tmp/test_nilpy_tupnotlist26 | diff -u test/test_nilpy_tuple_is_not_a_list.expected -
 	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26

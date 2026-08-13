@@ -35,7 +35,16 @@ begin
     5: begin
       if lower = 'while' then Result := tkWhile;
       if lower = 'False' then Result := tkFalse;
-      if lower = 'print' then Result := tkwriteln;
+      { `print` stays an ORDINARY IDENTIFIER. It used to lex as Pascal's
+        tkwriteln, which cost the one thing a keyword costs: `def print(x)` was
+        refused with "expected function name", because by the time the parser
+        saw the name it was not a name. CPython lets a def shadow print like
+        any other builtin, and PyParsePrint — NilPy's OWN print statement,
+        which has existed all along — is reached by name from pyparser, so the
+        shared token bought nothing and hid a divergence.
+        print() is not writeln(): different defaults, different separator
+        rules, different argument model. Duplicate, do not over-abstract
+        (feedback_duplicate_helpers_per_language_shared_ast). }
       if lower = 'break' then Result := tkBreak;
       if lower = 'class' then Result := tkClass;
       if lower = 'raise' then Result := tkRaise;

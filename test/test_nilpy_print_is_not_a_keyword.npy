@@ -1,0 +1,20 @@
+# print is an ORDINARY IDENTIFIER, not Pascal's tkwriteln token. It used to lex
+# as the keyword, so `def print(x)` was refused with "expected function name" —
+# the only builtin that could not be shadowed, for no reason anyone had chosen.
+# print() is not writeln(): different defaults, separator rules and argument
+# model, so the token is duplicated rather than shared.
+print("builtin: above the def")
+print("a", 1, 2.5, True, None)
+print("x", end="")
+print("y", sep="-")
+print()
+
+
+def print(x):
+    # swallows its argument: nothing more may reach stdout after this point,
+    # which is the assertion — if the def did not shadow, "7" would appear.
+    return "USER"
+
+
+print(7)
+print("never printed")
