@@ -1361,6 +1361,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-comprehension-if-filter | N | 30 | feature | NilPy: comprehension `if` filters — `[x for x in xs if x > 1]` | — |
 | feature-nilpy-configparser | N | 45 | feature | nilpy: configparser module (INI settings) — songformatter's settings.py imports it | — |
 | feature-nilpy-container-method-gaps | N | 60 | feature | Container-method gaps: `list.remove`, `list.index`, `list.copy`, one-argument `dict.pop` | — |
+| feature-nilpy-dataclass-expression-field-default | N | 40 | feature | A @dataclass field default may only be a scalar literal, field(default_factory=list/dict) or a zero-arg lambda. An expression (`x: int = 2 + 3`) is refused; a plain class attribute with the same initialiser is evaluated | — |
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |

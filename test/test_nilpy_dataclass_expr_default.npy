@@ -1,0 +1,73 @@
+# feature-nilpy-dataclass-expression-field-default
+#
+# `x: int = 2 + 3` on a @dataclass was refused. It had to be: the default
+# travels as a FOLDED CONSTANT in the PyDc* tables the generated ctor reads, and
+# before the refusal existed the scalar path claimed the first token and the
+# field held 2 — a wrong value, silently.
+#
+# Now the expression is evaluated ONCE, at the class statement, into a hidden
+# global, and each construction READS that global. Once and not per-construction
+# is Python's own rule, and it is exactly why field(default_factory=...) has to
+# exist — the `evaluated once` rows below (a default naming a module global that
+# is then reassigned) are what pin it.
+#
+# Two things this could have been built on and is not:
+#
+#  - PyEmitClassAttrExpr, the plain-class-attribute evaluator. It shares the
+#    evaluate-once-into-a-global half and NOT the storage model: it registers
+#    the name as a class attribute with per-instance overrides, and a dataclass
+#    field is a real instance field. Reusing it compiled and then SEGFAULTED on
+#    the ordinary read `p.x`, because the read went through the override path.
+#  - the existing PYDC_FACTORY_EXPR span-replay, which re-parses per
+#    construction. That is the default_factory contract, not the default one.
+#
+# The decision is made by scanning the whole RUN, not the first token: the
+# literal arms claim the `2` of `2 + 3` and the ident arm rejected `BASE * 2`
+# outright with a field()/lambda message, so the two halves of one feature
+# failed in two different ways and neither said "expression".
+#
+# Expectations are CPython's own output.
+
+from dataclasses import dataclass, field
+
+BASE = 10
+
+
+@dataclass
+class P:
+    x: int = 2 + 3
+    s: str = "a" + "b"
+    g: int = BASE * 2
+    plain: int = 7
+    f: float = 1.5 + 0.25
+
+
+p1 = P()
+p2 = P()
+print("expr int ", p1.x, p2.x)
+print("expr str ", p1.s, p2.s)
+print("expr glob", p1.g, p2.g)
+print("literal  ", p1.plain, p1.f)
+print("supplied ", P(1).x, P(1, "z").s, P(1, "z", 3).g)
+
+# evaluated ONCE, at the class statement: rebinding the global afterwards must
+# not change what a later construction gets
+BASE = 99
+p3 = P()
+print("once     ", p3.g)
+
+
+# ...and the forms that already worked must keep working, including the
+# factory, whose contract is the OPPOSITE (fresh per construction)
+@dataclass
+class Q:
+    xs: list = field(default_factory=list)
+    n: int = 1
+    m: int = 2 * 3
+
+
+q1 = Q()
+q2 = Q()
+q1.xs.append(5)
+print("factory  ", q1.xs, q2.xs)
+print("beside   ", q1.n, q1.m)

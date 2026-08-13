@@ -48,6 +48,12 @@ const
   PYDC_FACTORY_DICT = 8;  { field(default_factory=dict): fresh empty TPyDict per construction }
   PYDC_FACTORY_EXPR = 7;  { field(default_factory=lambda: <expr>): IVal/SOff carry the
                             body's token span, re-parsed at every construction site }
+  PYDC_EXPR = 9;          { an EXPRESSION default (`x: int = 2 + 3`): evaluated ONCE at
+                            the class statement into the same hidden global a plain
+                            class attribute uses, and READ from there per construction.
+                            Once, not per construction, because that is CPython's rule —
+                            it is exactly why field(default_factory=...) has to exist.
+                            feature-nilpy-dataclass-expression-field-default }
 
 var
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
@@ -4348,6 +4354,14 @@ end;
   rather than tracked in a side table on purpose: the symbol table already is
   the registry, and the construction path finds the value by rebuilding the same
   name from the class and field it is copying. }
+{ The hidden global holding a dataclass field's evaluated EXPRESSION default.
+  Its own namespace, not the class-attribute one, because the two are different
+  storage models that happen to share an evaluation point. }
+function PyDcDefaultGlobalName(ci: Integer; const nm: AnsiString): AnsiString;
+begin
+  Result := '$dcdef.' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + '.' + nm;
+end;
+
 function PyClsAttrGlobalName(ci: Integer; const nm: AnsiString): AnsiString;
 begin
   Result := '$clsattr.' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + '.' + nm;
@@ -5447,6 +5461,64 @@ const
     synthesiser already caps a dataclass at 15 fields }
   PY_MAX_DC_KW = 32;
 
+{ Evaluate a dataclass field's EXPRESSION default at the class statement, into
+  a hidden global named after the class and the field.
+
+  Deliberately NOT PyEmitClassAttrExpr, which does this for a plain class
+  attribute: that routine also registers the name as a CLASS ATTRIBUTE — a
+  shared slot with per-instance overrides — and a dataclass field is a real
+  instance field. Reusing it compiled and then SEGFAULTED on the ordinary read
+  `p.x`, because the read went through the class-attribute override path
+  instead of the field. Same value, different storage model; only the
+  evaluate-once-into-a-global half is shared, so only that half is copied.
+  CurTok is the field NAME on entry; the line is consumed.
+  feature-nilpy-dataclass-expression-field-default }
+procedure PyEmitDcExprDefault(ci: Integer; eqAt: Integer);
+var nm, gname: AnsiString; gsym, valNode, asgn: Integer;
+begin
+  nm := CurTok.SVal;
+  TokPos := eqAt;
+  Next;                            { CurTok = '=' }
+  Next;                            { onto the expression }
+  PyParseBoolExpr;
+  valNode := CurASTNode;
+  gname := PyDcDefaultGlobalName(ci, nm);
+  gsym := FindSym(gname);
+  if gsym < 0 then
+  begin
+    gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+    Syms[gsym].RecName := ResolveNodeRec(valNode);
+    SymSyncTypeRef(gsym);
+  end;
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(gsym);
+  ASTRight[asgn] := valNode;
+  PyHoistStmt(asgn);
+  while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+end;
+
+{ The recorded default KIND of dataclass field `nm` on class ci, or PYDC_NONE.
+  The class-body pass needs it to tell an EXPRESSION default (which it must
+  evaluate here, once) from every other form (which it steps over) — asking
+  "does an expression follow the '='" instead would also claim
+  `field(default_factory=list)`, whose `field` is not a callable that exists.
+  feature-nilpy-dataclass-expression-field-default }
+function PyDcFieldKind(ci: Integer; const nm: AnsiString): Integer;
+var i, fidx, base: Integer;
+begin
+  Result := PYDC_NONE;
+  fidx := FindUField(ci, nm);
+  if fidx < 0 then Exit;
+  fidx := fidx - UClsFBase[ci];
+  base := -1;
+  for i := 0 to PyDcCount - 1 do
+    if PyDcCi[i] = ci then begin base := i; Break; end;
+  if base < 0 then Exit;
+  if base + fidx >= PyDcCount then Exit;
+  if PyDcCi[base + fidx] <> ci then Exit;
+  Result := PyDcKind[base + fidx];
+end;
+
 function PyDcDefaultNode(ci, dcBase, fidx: Integer): Integer;
 var i, k, valNode, tkNode: Integer; tkF: TTypeKind;
 begin
@@ -5538,6 +5610,19 @@ case PyDcKind[i] of
       k := AllocNode(AN_ARG);
       ASTLeft[k] := tkNode;
       ASTLeft[valNode] := k;
+    end;
+    PYDC_EXPR:
+    begin
+      { the hidden global the class statement evaluated this default into —
+        one object shared by every construction, as Python has it }
+      k := FindSym(PyDcDefaultGlobalName(ci,
+             PyRawName(UFldNOff[UClsFBase[ci] + fidx],
+                       UFldNLen[UClsFBase[ci] + fidx])));
+      if k < 0 then
+        Error('Nil Python: dataclass expression default was not evaluated at the '
+              + 'class statement — internal (feature-nilpy-dataclass-expression-'
+              + 'field-default)');
+      valNode := PyMakeIdent(k);
     end;
     else { PYDC_BOOL }
     begin
@@ -24168,6 +24253,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     pdefVal: array[0..15] of Int64;
     pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
+    dcExprDef: Boolean;   { this field's default is an EXPRESSION, evaluated at the class statement }
 begin
   UClsFBase[ci] := UFldCount;
   UClsFCount[ci] := 0;
@@ -24413,6 +24499,41 @@ begin
       if (j < bodyEnd) and (Tokens[j].Kind = tkAssign) then
       begin
         Inc(j);
+        { An EXPRESSION default is decided FIRST, by looking at the whole run
+          rather than at its first token. Deciding per-token could not work: the
+          literal arms below claim `2` of `2 + 3` and the ident arm rejects
+          `BASE * 2` outright with the field(...)/lambda message, so the two
+          halves of one feature failed in two different ways and neither said
+          "expression". A run is a scalar default only when it is ONE literal
+          token (or `-` and one numeric), and a factory only when it opens with
+          `field(` or `lambda`; everything else is an expression, evaluated once
+          at the class statement.
+          feature-nilpy-dataclass-expression-field-default }
+        dcExprDef := False;
+        k := j;
+        while (k < bodyEnd) and
+              not (Tokens[k].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(k);
+        if (Tokens[j].Kind = tkIdent) and
+           (CaseEqual(GetTokenStr(j), 'field') or CaseEqual(GetTokenStr(j), 'lambda')) then
+          { a factory form — the arms below own it }
+        else if (k = j + 1) or
+                ((Tokens[j].Kind = tkMinus) and (k = j + 2)) then
+          { a single literal token, or a negated one }
+        else
+          dcExprDef := True;
+        if dcExprDef then
+        begin
+          defKind := PYDC_EXPR;
+          defIVal := 0; defSOff := 0; defSLen := 0;
+          { k is the line's NEWLINE; leave j one short of it so the shared
+            Inc(j) below lands ON the newline, exactly where the single-literal
+            arms leave it. Landing one PAST it made the line-skip at the bottom
+            of this loop eat the NEXT field line whole — so a class with two
+            expression defaults registered only the first, and the second read
+            as "no such member". }
+          j := k - 1;
+        end
+        else
         case Tokens[j].Kind of
           tkInteger: begin defKind := PYDC_INT; defIVal := Tokens[j].IVal; end;
           tkFloat:   begin defKind := PYDC_FLOAT; defIVal := Tokens[j].IVal; end;
@@ -24495,12 +24616,15 @@ begin
           EVALUATING the expression; a dataclass default cannot follow yet
           because it travels as a folded constant in the PyDc* tables that build
           the generated ctor — feature-nilpy-dataclass-expression-field-default. }
-        if (j < bodyEnd) and
+        { the scalar arms must still END at the line, which is what caught
+          `x: int = 2 + 3` silently becoming 2 before the run-scan above
+          existed. Unreachable for an expression now, and kept as the guard for
+          any shape the scan lets through. }
+        if (not dcExprDef) and (j < bodyEnd) and
            not (Tokens[j].Kind in [tkNewline, tkDedent, tkEOF]) then
-          Error('Nil Python: a dataclass field default must be a scalar literal, '
-                + 'field(default_factory=list/dict) or a zero-arg lambda — an '
-                + 'expression default is not evaluated, and silently using only '
-                + 'its first token would be worse than refusing it');
+          Error('Nil Python: a dataclass field default must be a scalar '
+                + 'literal, an expression, field(default_factory=list/dict) or '
+                + 'a zero-arg lambda');
       end;
       if (defKind = PYDC_INT) and (tk = tyDouble) then
       begin
@@ -26301,8 +26425,18 @@ begin
     end
     else if isDC and (CurTok.Kind = tkIdent) then
     begin
-      { dataclass field line — already registered; skip to end of line }
-      while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+      { A dataclass field line is already registered by the pre-pass and is
+        normally just stepped over — its default is a folded constant. An
+        EXPRESSION default is not: it goes through the SAME routine a plain
+        class attribute's initialiser does, so it is evaluated exactly once, at
+        the class statement, into the hidden global that routine creates.
+        PyDcDefaultNode then reads that global at each construction.
+        feature-nilpy-dataclass-expression-field-default }
+      clsEqAt := PyClsAttrAssignAt;
+      if (clsEqAt >= 0) and (PyDcFieldKind(ci, CurTok.SVal) = PYDC_EXPR) then
+        PyEmitDcExprDefault(ci, clsEqAt)
+      else
+        while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
       PySkipNewlines;
     end
     else if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and

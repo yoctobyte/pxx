@@ -729,8 +729,11 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_param_defaults_nonconstant26 | diff -u test/test_nilpy_param_defaults_nonconstant.expected -
 	./$(COMPILER) test/test_nilpy_method_param_defaults.npy /tmp/test_nilpy_method_param_defaults26
 	/tmp/test_nilpy_method_param_defaults26 | diff -u test/test_nilpy_method_param_defaults.expected -
-	! ./$(COMPILER) test/test_nilpy_dataclass_expr_default_fail.npy /tmp/test_nilpy_dcexpr26 > /tmp/test_nilpy_dcexpr.log 2>&1
-	grep -q "dataclass field default must be" /tmp/test_nilpy_dcexpr.log
+	# An EXPRESSION dataclass default is evaluated once, at the class statement,
+	# into a hidden global each construction reads -- Python's own rule, and why
+	# field(default_factory=...) exists. This file used to assert the REFUSAL.
+	./$(COMPILER) test/test_nilpy_dataclass_expr_default.npy /tmp/test_nilpy_dcexpr26
+	/tmp/test_nilpy_dcexpr26 | diff -u test/test_nilpy_dataclass_expr_default.expected -
 	./$(COMPILER) test/test_nilpy_dataclass_decorator_args.npy /tmp/test_nilpy_dcargs26
 	/tmp/test_nilpy_dcargs26 | diff -u test/test_nilpy_dataclass_decorator_args.expected -
 	! ./$(COMPILER) test/test_nilpy_dataclass_order_fail.npy /tmp/test_nilpy_dcorder26 > /tmp/test_nilpy_dcorder.log 2>&1

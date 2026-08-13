@@ -1,0 +1,8 @@
+expr int  5 5
+expr str  ab ab
+expr glob 20 20
+literal   7 1.75
+supplied  1 z 3
+once      20
+factory   [5] []
+beside    1 6
