@@ -9,7 +9,7 @@ owner: claude-A-C-N
 # Float exception mask control (SetExceptionMask-style, FPC emulation opt-in)
 
 - **Type:** feature (runtime / math) — Track A
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-02, from the math-error design discussion with the user.
 
 ## Decision already made (user, 2026-07-02)
@@ -269,3 +269,28 @@ The user-facing CLI reference row is `docs/**` (Track D) and is filed as
   exception class and where it lives is still
   [[decide-int-div-zero-behavior-unification]], which is a Track U question, not
   an implementation one.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
+
+## Resolved 2026-08-13 — acceptance met, three follow-ups filed
+
+Against this ticket's own acceptance line:
+
+- *default behaviour unchanged, with a pin test* — done twice over
+  (`test_float_exception_mask.pas` asserts mask 63 and Inf/NaN;
+  `test_fpc_float_errors.pas` builds the same source without the flag and
+  asserts `no trap, r= Inf`);
+- *with the mask cleared, float div-zero/overflow/invalid produce the
+  documented runtime errors* — done, and the numbers are FPC's, measured;
+- *mask round-trips via Get/SetExceptionMask* — done at the intrinsic layer
+  (`__pxxSetFPUMask` returns the previous mask); the FPC set-typed NAMES are
+  `lib/rtl` and need a pin first, so they are [[feature-b-fpc-exception-mask-api-in-math]];
+- *x86-64 first* — x86-64 only, everything else refused with a reason.
+
+Not closed by this ticket, each with its own home: the RTL surface (Track B,
+above), the CLI-reference row ([[docs-cli-fpc-float-errors-flag]], Track D), and
+i386 (in the refusal message; nobody has asked for it). Making the trap
+CATCHABLE rather than print+exit is [[decide-int-div-zero-behavior-unification]]
+— a Track U question about which exception class and where it lives, with a
+working mechanism (`__pxxSigPCPtr`) now proven underneath it.

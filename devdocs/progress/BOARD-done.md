@@ -1268,6 +1268,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-explicit-typecasts | A | 50 | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-extended-alias-or-reject | A | 50 | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | A | 50 | feature | `flexcolumn` calling-convention directive | — |
+| feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-float-math-and-demo | B | 50 | feature | Float math library (Single+Double) + numerical float demo | — |
 | feature-float-str-val | A | 50 | feature | Float Str / Val | — |
 | feature-for-in-iteration | A | 50 | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
