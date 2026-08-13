@@ -86,4 +86,4 @@ method. The 44-file NilPy dict/selector/call family re-run.
 Gate: self-host fixedpoint + `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit d3a833393.
