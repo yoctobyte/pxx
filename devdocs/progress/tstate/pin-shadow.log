@@ -62,3 +62,4 @@
 2026-08-12T11:16:29Z	plexus	202cfb1f6d0c86532d46c85c09b6c6eea6a97a1f	WOULD PIN 202cfb1f6d0c — 0 red(s), all allowlisted, self-host clean, streak 18/2
 2026-08-12T12:04:05Z	plexus	65fdd0a6fd3f4862acbeb8a41fdc527a470e59a7	WOULD PIN 65fdd0a6fd3f — 0 red(s), all allowlisted, self-host clean, streak 19/2
 2026-08-13T06:04:44Z	plexus	8e5ed5e8b075ce7dc15326f45f9f82a18a96dfde	WOULD PIN 8e5ed5e8b075 — 0 red(s), all allowlisted, self-host clean, streak 20/2
+2026-08-13T07:17:27Z	plexus	4636171e082162674ea611aca6871828e730d6f3	would NOT pin 4636171e0821 — 1 red(s) not in the allowlist: test-core#src:test/test_conformance_1.pas
