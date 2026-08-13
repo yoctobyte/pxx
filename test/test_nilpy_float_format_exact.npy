@@ -1,0 +1,48 @@
+# bug-nilpy-float-formatting-manufactures-ties-by-scaling
+#
+# `"%.1f" % 0.15` printed 0.2 where CPython prints 0.1, and 0.45 printed 0.4
+# where CPython prints 0.5 — wrong in BOTH directions, which is what rules out
+# a tie-break fix. 0.15 as a double is just BELOW the midpoint and 0.45 just
+# ABOVE it, and multiplying by ten rounds that difference away: 0.15 * 10 is
+# exactly 1.5, so the formatter was asked to break a tie the value does not
+# have.
+#
+# So there is no float arithmetic in the formatter any more. PyExDecDigits
+# expands the double's own mantissa and exponent into its full decimal
+# expansion — the machinery that already exists to read decimals back correctly
+# rounded — and PyExDecRound rounds that DIGIT STRING half-even on an exact
+# remainder. A tie is now a tie only when the value really sits on one. This is
+# what CPython and glibc do, and for this reason.
+#
+# The rows: the four the ticket recorded, the EXACT ties from the sibling
+# ticket that must still round half-even (7.5 -> 8, 8.5 -> 8), values below the
+# last kept place (0.04 / 0.05 / 0.06 at .1f, where there is no kept digit to
+# round against), a negative zero (CPython prints -0.00, and -0.0 < 0.0 is
+# False so the sign has to come from the sign BIT), and every form that shares
+# this routine — %f, an f-string spec, .format(), the percent form, %e, %g and
+# round().
+#
+# A dense sweep lives in the ticket rather than here: x/100 for x in 5..995
+# step 10, x/8 for x in 1..200 and x/3, x/7 at three precisions — about 700
+# values, all matching.
+#
+# Expectations are CPython's own output.
+
+print("%.1f" % 0.15, "%.1f" % 0.35, "%.1f" % 0.45, "%.2f" % 1.115)
+print("%.0f" % 7.5, "%.0f" % 8.5, "%.0f" % 0.5, "%.0f" % 1.5)
+print("%.2f" % 2.675, "%.2f" % 2.665, "%.3f" % 1.0005)
+print("%.2f" % 0.0, "%.2f" % -0.0, "%.1f" % -0.15, "%.2f" % -2.675)
+print("%.2f" % 1234.5678, "%.0f" % 999.5, "%.1f" % 99.95)
+print("%.4f" % 1e-5, "%.2f" % 1e10, "%.2f" % 123456789.987)
+print("%.1f" % 0.04, "%.1f" % 0.05, "%.1f" % 0.06)
+print("%.0f" % 0.4, "%.0f" % 0.6)
+print("%.3f" % 0.0001, "%.6f" % 3.141592653589793)
+v = 0.15
+print("%.1f" % v, f"{v:.1f}", "{:.1f}".format(v))
+print("%.2f%%" % 12.345, f"{12.345:.2f}%")
+print("%e" % 1234.5, "%.2e" % 1234.5, "%.3e" % 0.15)
+print("%g" % 0.15, "%.3g" % 1234.5)
+print(round(0.15, 1), round(2.675, 2), round(0.5), round(1.5), round(2.5))
+print(str(0.15), repr(0.15), str(1/3))
+print(f"{0.45:.1f}", f"{1.115:.2f}", f"{-0.15:.1f}")
+print("%10.2f|" % 3.14159, "%-10.2f|" % 3.14159, "%+.2f" % 3.14159)

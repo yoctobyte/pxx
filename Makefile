@@ -1528,6 +1528,12 @@ test-nilpy: $(COMPILER)
 	# e.args -- derived from the Message, since a pxx Exception carries one
 	# string; KeyError stores the raw key instead, because its message is already
 	# repr'd, and that is what also settled repr(KeyError(...)).
+	# float formatting takes its digits from the double's EXACT decimal
+	# expansion. Scaling by a power of ten manufactured ties -- 0.15 * 10 is
+	# exactly 1.5 -- so "%.1f" % 0.15 printed 0.2 and 0.45 printed 0.4, wrong in
+	# both directions.
+	./$(COMPILER) test/test_nilpy_float_format_exact.npy /tmp/test_nilpy_ffexact26
+	/tmp/test_nilpy_ffexact26 | diff -u test/test_nilpy_float_format_exact.expected -
 	./$(COMPILER) test/test_nilpy_exception_args.npy /tmp/test_nilpy_excargs26
 	/tmp/test_nilpy_excargs26 | diff -u test/test_nilpy_exception_args.expected -
 	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
