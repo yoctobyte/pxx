@@ -304,3 +304,41 @@ pinned down. Any scan result here should name the sha it came from.)
 - **`codecs` (2)** is small in file count but it is the KEYSTONE: it is the only
   thing blocking `webencodings/__init__.py`, the bottom of the stack.
 
+
+## MEASURED 2026-08-13 — webencodings is class **4**, not class 1. The verdict table was wrong.
+
+Compiled the three modules of the installed `webencodings` directly with pxx at
+HEAD, which is cheaper than reading them:
+
+| module | result |
+| --- | --- |
+| `labels.py` (the 200+ label -> encoding map) | **compiles clean** |
+| `__init__.py` | `no unit named codecs` |
+| `x_user_defined.py` | `no unit named codecs` |
+
+The `.so` triage this ticket teaches is right about the wheel tag and wrong
+about the cost here: webencodings ships no native code of its own, so the
+`find … -name '*.so'` probe calls it class 1 — but it is a **thin wrapper over
+CPython's codec registry**, which is C inside CPython. That is class 4, "the
+real recurring cost", and it means the bottom of the dependency ladder
+(`webencodings -> tinycss2 -> html5lib`) starts one rung lower than the plan
+assumes: **`codecs` before webencodings**.
+
+The surface it actually needs, measured (nothing else):
+
+```
+codecs.lookup / codecs.register / codecs.CodecInfo
+codecs.charmap_build / charmap_decode / charmap_encode
+codecs.Codec, IncrementalDecoder, IncrementalEncoder, StreamReader, StreamWriter
+```
+
+That is small and concrete — the charmap trio plus a registry and five base
+classes — and every one of them is OUR implementation to write in `lib/`, once,
+for every future app. It is also **not** a per-library problem, which is exactly
+what this ticket's class-4 row predicted; the correction is only about which
+class webencodings is in.
+
+The triage command in this ticket should therefore gain a second line: a package
+with no `.so` is class 1 **only if it also imports nothing C-backed** — grep its
+imports against the stdlib-C list (`codecs re zlib json hashlib socket ssl`)
+before calling it cheap.
