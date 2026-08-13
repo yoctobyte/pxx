@@ -34,7 +34,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (217)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -49,6 +49,7 @@ _none_
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
+| bug-nilpy-a-user-def-named-open-is-silently-ignored | N | 45 | bug | `def open(x)` in a .npy is silently ignored — the builtin runs and raises FileNotFoundError instead of calling the user's function. Python lets a def shadow any builtin, and 13 of the 17 builtins swept get this right; open's intercept never asks. Silent wrong behaviour, not a refusal. | — |
 | bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep | N | 40 | bug | A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=)) | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
@@ -90,7 +91,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
-| decide-nilpy-builtin-vs-pascal-unit-name-resolution | U | 45 | decide | A Python builtin whose name is also a Pascal routine (format vs sysutils' Format) is HIDDEN once the program imports anything reaching that unit — a builtin that stops existing when you add an import. Three routes: fix the cross-unit overload merge and declare builtins normally; keep intercepting name by name in the parser; or make NilPy builtins win over used units by rule. The collision surface is small TODAY (2 names) and grows with every builtin added. | — |
+| decide-nilpy-builtin-vs-pascal-unit-name-resolution | U | 45 | decide | No global rule can win: Pascal, Python and C each let a user definition beat a builtin SOMETIMES, and the answer differs per routine. Proposal (user's steer, 2026-08-13): classify each library routine as reserved / overrideable-builtin / ordinary-library, declared AT THE DECLARATION in the library rather than decided by a parser arm — one predicate replacing the four ad-hoc mechanisms in place today. Open questions: the marker's spelling, the default tier, and who may reach a shadowed routine. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-object-dict-key-hashing | U | 40 | decide | A class with __eq__ and no __hash__ is unhashable in CPython, so `d[V(1)] = x` raises. NilPy stores it and then never finds it again — data in, nothing out, silently. Refuse the store (faithful), make content lookup work (friendlier, needs a __hash__ story), or document the divergence. The ticket that found it says explicitly to decide rather than guess. | — |
 | decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
@@ -501,6 +502,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers
+- [p 45] [N] bug-nilpy-a-user-def-named-open-is-silently-ignored
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
