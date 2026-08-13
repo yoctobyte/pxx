@@ -1737,6 +1737,7 @@ procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant
   the object's address and the attribute name, so no per-class field is needed.
   uforth uses this for lazy state (`if not hasattr(vm, '_trans_ptr'): vm._trans_ptr = ...`). }
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
+function pydynattr_has_any_v(const v: Variant; const name: AnsiString): Boolean;   { hasattr for a COMPUTED name: the dynamic store PLUS declared fields and methods, matching what pydynattr_get_v resolves }
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 { `v[lo:hi]` where v is a VARIANT — slice the str/list/bytes it holds, at run
@@ -3446,6 +3447,33 @@ begin
   else
     cn := PyVarTypeName(tg);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
+end;
+
+function pydynattr_has_any_v(const v: Variant; const name: AnsiString): Boolean;
+{ Does this value have this attribute AT ALL — the predicate `pydynattr_get_v`
+  itself uses, and therefore the only honest partner for it.
+
+  `pydynattr_has_v` below answers the DYNAMIC-attribute store (plus the
+  class-attribute registry for a class held as a value). That is the right
+  question for the literal `hasattr(o, "x")` path, which asks the compile-time
+  field check first and only falls through to the store. A COMPUTED name has no
+  compile-time half at all, so asking the store alone reported False for a
+  method and for a declared field the very next getattr would return —
+  `hasattr(self, "do_" + verb)` was False for a method that plainly exists.
+  So this asks all four the way the getter resolves them, in the getter's own
+  order.
+  feature-nilpy-getattr-with-a-computed-attribute-name }
+var obj: Pointer; tg: Int64; declFound: Boolean; dummy: Variant;
+begin
+  Result := pydynattr_has_v(v, name);
+  if Result then Exit;
+  tg := pyvartag(v);
+  if tg <> 7 then Exit;                  { a class ref is fully answered above }
+  obj := pyvarobj(v);
+  if obj = nil then Exit;
+  dummy := PyDeclaredAttrGet(obj, name, declFound);
+  if declFound then begin Result := True; Exit; end;
+  Result := PyFindMethByName(GetInstanceRTTI(obj), name) <> nil;
 end;
 
 function pydynattr_has_v(const v: Variant; const name: AnsiString): Boolean;
