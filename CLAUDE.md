@@ -523,7 +523,18 @@ suites, cross targets, the corpus, regressions elsewhere — is **Track T's job*
 run against your exact SHA, and it comes back asynchronously as tstate reports
 and tickets. Hear back with `tools/twatch.py --follow`.
 
-**Do not widen this loop.** Specifically, do **not** hand-run `make test-nilpy`,
+**Do not widen this loop — and the repo now REFUSES to let you.** A PreToolUse
+hook (`.claude/hooks/no-full-suite.sh`, wired in `.claude/settings.json`, both
+tracked) denies `make test*`, `gate.sh full|limited`, `testmgr --tier
+full|limited`, and shell loops over a `test/` glob — that last one because a
+`for t in test/test_nilpy_*.npy` loop is the same ten minutes wearing a
+different hat. Track T escapes with `PXX_TRACK=T`; anything else with
+`PXX_ALLOW_FULL_SUITE=1` in front of the command, and only when the user asks
+for it. The rule was written here first and an agent still reached for the
+suite twice in one session, which is why it is now enforced rather than
+advised.
+
+Do **not** hand-run `make test-nilpy`,
 `make test`, `gate.sh full`, or any other long suite because:
 
 - the change "touched something shared" / a frontend / the IR — **this is the

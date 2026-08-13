@@ -75,7 +75,12 @@ sdkconfig.old
 /eliah
 
 # Claude editor metadata
-.claude/
+.claude/*
+# ...except the harness config that ENFORCES this repo's gate rule: a PreToolUse
+# hook that refuses full regression suites outside Track T. Tracked on purpose —
+# a guard only present on one machine is a note, not a guard.
+!.claude/settings.json
+!.claude/hooks/
 
 devdocs/progress/BOARD.html
 # tstate dashboard pages are generated artifacts (twatch_web.py --static),
