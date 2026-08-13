@@ -2,7 +2,7 @@
 track: A
 prio: 60
 type: feature
-blocked-by: [feature-signal-siginfo-ucontext]
+blocked-by: []
 ---
 
 # Float exception mask control (SetExceptionMask-style, FPC emulation opt-in)
@@ -86,3 +86,14 @@ worth having once the trap means something.
 **Un-blocking checklist (both switches):** when siginfo lands, move this file
 OUT of `blocked/` *and* clear the `blocked-by:` line. Either one alone leaves it
 invisible to `ready`/`next`.
+
+**UNBLOCKED 2026-08-13** — both switches thrown (this file moved to `backlog/`,
+`blocked-by:` emptied). The prerequisite is met and then some: SA_SIGINFO is set
+and `si_code` readable via `__pxxSigCode` on ALL FIVE hosted Linux targets, not
+just x86-64 (`feature-signal-siginfo-ucontext` slices 1 and 2). Note
+`__pxxSigCode` is typed **Integer**, not Int64 — si_code's real width, retyped
+so the ILP32 targets need no sign word.
+
+That parent ticket stays OPEN, but for work this one does not need: the
+fault-to-catchable-raise PC rewrite, threadsafe masks, sigaltstack, the
+FPC-compat `Signal()` surface, SIGPIPE policy. Do not re-block on it.
