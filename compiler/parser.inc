@@ -951,6 +951,7 @@ function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integ
 function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a value (pyparser.inc) }
 function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
+function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer; forward; { Nil Python: a callable VALUE heading for a Pointer parameter (pyparser.inc) }
 function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python: is tk a genuine scalar/string result worth wrapping (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString; var ci: Integer): Integer; forward; { Nil Python obj.PROPERTY on a VARIANT receiver: the unboxed class-cast receiver (pyparser.inc) }
@@ -11204,7 +11205,7 @@ begin
         else
         begin
           PyParseBoolExpr;
-          exprNode := CurASTNode;
+          exprNode := PyMakeCallablePtrArg(CurASTNode, 'the function map() applies');
           Expect(tkComma, ',');
           PyParseBoolExpr;
           Expect(tkRParen, ')');
@@ -11241,7 +11242,7 @@ begin
         else
         begin
           PyParseBoolExpr;
-          exprNode := CurASTNode;
+          exprNode := PyMakeCallablePtrArg(CurASTNode, 'the predicate filter() applies');
         end;
         Expect(tkComma, ',');
         PyParseBoolExpr;

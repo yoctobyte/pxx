@@ -17677,6 +17677,37 @@ end;
   `m[i][j], m[j][i] = ...` only the last bracket is stored into, and everything
   left of it has to be evaluated the ordinary way.
   bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
+{ A callable ARGUMENT heading for a Pointer-typed parameter — `map(f, xs)`,
+  `filter(f, xs)`. A callable VALUE is a 16-byte variant, and dropping one into
+  a pointer slot passes its TAG word as the code address: `map(obj.method, xs)`
+  jumped to 8 and SEGFAULTED. pyvar_callable_ptr yields the payload — the
+  {code, recv} pair for a bound method, which is exactly what PyCallKey1 on the
+  other side tests for first.
+
+  The generic call path already coerces every variant argument to a Pointer
+  parameter this way (parser.inc); the map/filter intercepts build their call by
+  hand and so must do it themselves.
+  bug-nilpy-map-over-a-bound-method-segfaults }
+function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer;
+var procIdx, a0, a1, nameNode: Integer;
+begin
+  Result := node;
+  if IntToTypeKind(ASTTk[node]) <> tyVariant then Exit;
+  procIdx := FindProc('pyvar_callable_ptr');
+  if procIdx < 0 then Exit;
+  nameNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[nameNode] := PyStoredName(what);
+  ASTSLen[nameNode] := Length(what);
+  ASTTk[nameNode] := Ord(tyString);
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := node;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode; ASTRight[a1] := -1;
+  ASTRight[a0] := a1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyPointer);
+  ASTLeft[Result] := a0;
+end;
+
 function PyMakeSubscriptLoad(baseNode, idxNode: Integer): Integer;
 var ci, pri, i, idxN, idxArg: Integer;
 begin

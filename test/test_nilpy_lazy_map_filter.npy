@@ -62,10 +62,11 @@ class Box:
 
 print(list(map(double, [1, 2])))
 print(list(map(lambda x: x + 1, [1, 2])))
-# NOT here: `map(obj.method, xs)` — a BOUND METHOD as the callable segfaults,
-# and it does so on the eager map too (measured against the pinned binary), so
-# it is a pre-existing gap in the callable dispatch rather than anything
-# laziness introduced. bug-nilpy-map-over-a-bound-method-segfaults.
+# ...and the fourth representation, a BOUND METHOD, which used to segfault here
+# (on the eager map too, so it was never a laziness problem). Its own rows live
+# in test_nilpy_map_over_a_bound_method.npy; this one keeps the shape so the
+# four are visible together. bug-nilpy-map-over-a-bound-method-segfaults.
+print(list(map(Box(3).scale, [1, 2])))
 print(list(map(str, [1, 2])))
 
 # filter, including Python's own filter(None, xs) truthiness shorthand

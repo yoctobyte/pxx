@@ -64,9 +64,9 @@ _none_
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
 | bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused | N | 45 | bug | Three construction-site argument shapes are refused with a diagnostic: `C(**kw)` on a `**kwargs` ctor, `C(*xs)` unpacking into one, and a keyword whose name matches a FIELD when the ctor takes `**kw`. All work at a plain `def` or an ordinary method; only the construction path is short. | — |
 | bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero | N | 50 | bug | `len(f.read().split('\\n'))` answers 1 and `len(f.read().upper())` answers 0 — as if the file were empty — while the identical expression printed, assigned, or iterated is correct. The read really happens (a following f.read() returns ''), so the string is produced and then lost on the way into len() alone | — |
-| bug-nilpy-map-over-a-bound-method-segfaults | N | 50 | bug | map(obj.method, xs) SEGFAULTS — a bound method is one of the four callable representations PyCallKey1 claims to handle, and it is the one that crashes. Pre-existing: measured identical on the eager map (pinned v263) and the lazy one, so laziness neither caused nor fixed it. list(map(f, xs)) with a def, a lambda or a builtin all work. | — |
 | bug-nilpy-math-surface-remaining-gaps-and-degrees-association | N | 35 | bug | Seven math names still resolve to 'undefined variable' — asin, acos, atan, fsum, modf, perm, dist, prod — and math.degrees(3.14) answers 179.90874767107852 where CPython answers 179.9087476710785, because it computes x*180/pi instead of CPython's x*(180/pi). The `random` module is absent entirely | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
+| bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload | N | 45 | bug | `min(xs, key=f)` where f is a NAME holding a callable raises `TypeError: expected a number, got object` — the two-argument numeric min/max overload is picked and compares the list against the function. `key=<def name>` and `key=lambda ...` both work, because those are pointer-typed nodes; only a callable held in a VARIABLE (any kind — a plain def, a bound method) loses | — |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1683)
+## done (1684)
 
-1683 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1684 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -488,7 +488,6 @@ _none_
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [N] bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero
-- [p 50] [N] bug-nilpy-map-over-a-bound-method-segfaults
 - [p 50] [P] bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
 - [p 50] [D] docs-devnotes-ai-assisted-build
@@ -506,6 +505,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [N] bug-nilpy-a-filter-between-two-for-clauses-is-not-supported
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
+- [p 45] [N] bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [N] bug-nilpy-two-argument-round-of-an-int-returns-a-float
 - [p 45] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython

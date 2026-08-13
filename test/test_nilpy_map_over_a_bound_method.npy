@@ -1,0 +1,42 @@
+# map(obj.method, xs) SEGFAULTED: a callable VALUE is a 16-byte variant, and the
+# map/filter intercepts dropped it into a `key: Pointer` parameter — passing the
+# variant's TAG word as the code address. sorted(key=obj.method) was refused
+# outright by a TypeError that predated PyCallKey1's bound-pair arm.
+# bug-nilpy-map-over-a-bound-method-segfaults
+# Every expectation is CPython's own output.
+
+class Box:
+    def __init__(self, k):
+        self.k = k
+    def scale(self, x):
+        return x * self.k
+    def keep(self, x):
+        return x > self.k
+    def key(self, x):
+        return -x
+
+def plain(x):
+    return x + 100
+
+b = Box(3)
+lam = lambda x: x * 2
+
+# all four callable representations through map()
+print("map def", list(map(plain, [1, 2])))
+print("map lambda", list(map(lam, [1, 2])))
+print("map builtin", list(map(str, [1, 2])))
+print("map bound", list(map(b.scale, [1, 2])))
+print("map inline", list(map(Box(4).scale, [1, 2])))
+
+m = b.scale
+print("map via name", list(map(m, [1, 2])))
+
+print("filter bound", list(filter(b.keep, [1, 3, 4, 5])))
+print("sorted bound", sorted([3, 1, 2], key=b.key))
+
+# a lazy map is consumed once, and chaining keeps working
+print("chained", sum(map(b.scale, filter(b.keep, [1, 4, 5]))))
+
+# the receiver really travels: two instances give two answers from one call site
+boxes = [Box(2), Box(10)]
+print("two receivers", [list(map(x.scale, [1, 2])) for x in boxes])

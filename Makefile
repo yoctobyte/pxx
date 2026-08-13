@@ -334,7 +334,7 @@ test-nilpy: $(COMPILER)
 	# digit and prints garbage. (In a printf FORMAT string it is \ddd instead,
 	# which is why the older entries around here are spelled the other way.)
 	./$(COMPILER) test/test_nilpy_lazy_map_filter.npy /tmp/test_nilpy_lazymap26
-	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
+	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[3, 6]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy /tmp/test_nilpy_itercur26
@@ -791,6 +791,10 @@ test-nilpy: $(COMPILER)
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which
 	# has no class index at compile time: read, write, inheritance, getattr/hasattr,
 	# the plugin-registry shape, and the AttributeError. Diffed against CPython.
+	@# map(obj.method, xs) — a bound method through map/filter/sorted, plus a
+	@# method read as a VALUE off a variant receiver. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy /tmp/test_nilpy_mapbound26
+	/tmp/test_nilpy_mapbound26 | diff -u test/test_nilpy_map_over_a_bound_method.expected -
 	@# a SECOND for-clause when the FIRST iterable is a range(): the counted path
 	@# had no arm for the rest of the header. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_two_for_clauses_over_range.npy /tmp/test_nilpy_twofor26
@@ -5457,7 +5461,7 @@ test-core: $(COMPILER)
 	# digit and prints garbage. (In a printf FORMAT string it is \ddd instead,
 	# which is why the older entries around here are spelled the other way.)
 	./$(COMPILER) test/test_nilpy_lazy_map_filter.npy /tmp/test_nilpy_lazymap26
-	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
+	test "$$(/tmp/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[3, 6]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy /tmp/test_nilpy_itercur26

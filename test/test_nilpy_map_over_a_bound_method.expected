@@ -1,0 +1,10 @@
+map def [101, 102]
+map lambda [2, 4]
+map builtin ['1', '2']
+map bound [3, 6]
+map inline [4, 8]
+map via name [3, 6]
+filter bound [4, 5]
+sorted bound [3, 2, 1]
+chained 27
+two receivers [[2, 4], [10, 20]]

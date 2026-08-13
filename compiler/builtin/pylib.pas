@@ -2964,11 +2964,15 @@ function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
 var nm: AnsiString;
 begin
   if what = '' then nm := 'this argument' else nm := 'parameter ' + what;
-  if (PPyVarRec(@v)^.VType = 8) and (pybound_recv(v) <> nil) then
-    raise TypeError.Create(nm + ' is declared Callable[...], '
-      + 'which carries a code address only, and a BOUND METHOD also needs its '
-      + 'receiver — pass a plain function, a lambda, or declare the parameter '
-      + 'without an annotation');
+  { A BOUND METHOD (VType 8 with a receiver) hands over the {code, recv} PAIR
+    pointer, not the bare code address. Every consumer of a Pointer-typed
+    callable parameter here dispatches through PyCallKey1 (sorted/min/max via
+    its own call, map/filter through PyIterCallHook), and PyCallKey1's FIRST
+    test is PXXObjIsBoundPair on exactly this pointer — so the pair is what it
+    wants. This used to raise a TypeError saying the receiver could not travel,
+    which was true of the bare address and not of the pair:
+    `sorted(xs, key=obj.method)` was refused for a shape the dispatcher on the
+    other side already handled (bug-nilpy-map-over-a-bound-method-segfaults). }
   Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
     raise TypeError.Create(nm + ' is not callable — the value '
@@ -3073,6 +3077,30 @@ begin
         if PyEqAttrCI(flds[i].NamePtr^, name) then
         begin
           PyFindFieldCI := @flds[i];
+          Exit;
+        end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function PyFindMethByName(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
+{ The method of that name, anywhere up the class hierarchy — the method twin of
+  PyFindFieldCI above. Case-SENSITIVE, as Python is. PyFindDunder further down
+  is this same walk and now calls it. }
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
+begin
+  PyFindMethByName := nil;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+    begin
+      meths := curr^.MethsPtr;
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+        if meths[i].NamePtr^ = nm then
+        begin
+          PyFindMethByName := @meths[i];
           Exit;
         end;
     end;
@@ -3292,7 +3320,7 @@ end;
 function PyVarTypeName(t: Int64): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
-var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean;
+var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -3327,6 +3355,25 @@ begin
       bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
     Result := PyDeclaredAttrGet(obj, name, declFound);
     if declFound then Exit;
+    { ...and a METHOD read as a VALUE — `f = obj.scale`, `map(obj.scale, xs)`
+      where the receiver is a variant. CALLING it already worked (the frontend
+      resolves the call), so only the value form reached here, and it raised
+      AttributeError for a method that plainly exists. The pair carries the
+      receiver, which is the whole reason a bound method is not just a code
+      address (bug-nilpy-map-over-a-bound-method-segfaults).
+
+      The RTTI Code address is safe to bind because a method whose name is read
+      as a value is normalised to the all-variant function ABI by the frontend
+      (PyMethodUsedAsValue), which keys on exactly this spelling. }
+    if obj <> nil then
+    begin
+      mi := PyFindMethByName(GetInstanceRTTI(obj), name);
+      if (mi <> nil) and (mi^.Code <> nil) then
+      begin
+        Result := pybound_new(mi^.Code, obj, mi^.RetKind <> 0);
+        Exit;
+      end;
+    end;
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
@@ -12917,24 +12964,8 @@ type
   TPyDunderFn = function(self: Pointer): AnsiString;
 
 function PyFindDunder(cls: PClassRTTI; const nm: AnsiString): PMethInfo;
-var curr: PClassRTTI; meths: PMethInfo; i: Integer;
 begin
-  PyFindDunder := nil;
-  curr := cls;
-  while curr <> nil do
-  begin
-    if curr^.MethCount > 0 then
-    begin
-      meths := curr^.MethsPtr;
-      for i := 0 to Integer(curr^.MethCount) - 1 do
-        if meths[i].NamePtr^ = nm then
-        begin
-          PyFindDunder := @meths[i];
-          Exit;
-        end;
-    end;
-    curr := PClassRTTI(curr^.ParentRTTI);
-  end;
+  PyFindDunder := PyFindMethByName(cls, nm);
 end;
 
 { The __eq__ half of the same dispatch — see the forward declaration above
