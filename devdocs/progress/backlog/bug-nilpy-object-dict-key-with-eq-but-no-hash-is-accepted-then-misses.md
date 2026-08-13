@@ -75,3 +75,26 @@ explicitly rather than by whoever touches it first. **If it is not obvious, file
 The repro matching whichever direction is chosen; `in`/`count`/`index` over a
 list of the same objects still correct (they share the equality route);
 `make test-nilpy` green + self-host fixedpoint.
+
+## 2026-08-13 — escalated, per this ticket's own closing instruction
+
+Filed [[decide-nilpy-object-dict-key-hashing]] rather than picking a direction.
+Re-measured first, and the divergence is NARROWER than this ticket's framing:
+
+| shape | pxx | CPython |
+| --- | --- | --- |
+| same OBJECT as key, `__eq__` defined | works | TypeError at the store |
+| equal-but-NEW key, `__eq__` defined | MISSING | TypeError at the store |
+| no `__eq__` at all, same object | works | works |
+| no `__eq__` at all, equal-but-new | MISSING | MISSING — agrees |
+
+So identity-keyed dicts are correct and agree with CPython; only a class that
+defines `__eq__` diverges. That matters for option 1: refusing the store would
+be a narrow change, not a broad one.
+
+The decide ticket also records the fact that makes option 2 real — `TPyDict`
+falls back to a LINEAR SCAN over `PyVarEq` when `FHashCap` is 0, and `PyVarEq`
+already dispatches `__eq__`, which is why the same objects behave correctly in
+a list — and rules out "just document it": the current behaviour is not
+laxness, it loses data silently.
+
