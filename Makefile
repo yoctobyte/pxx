@@ -5395,6 +5395,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_variant_byvalue_param26)" = "$$(printf 'byval: 2\nafter write: clobbered\nconst: 2\nbyval: 42\nafter write: clobbered\nconst: 42\nbyval: hi\nafter write: clobbered\nconst: hi\ncaller intact: hi\nafter byref: written\nthree: 1 str 7\nthree: 5 lit 8\nroundtrip: rt\nbyval: 3.5\nafter write: clobbered\nfloat intact: 3.5')"
 	./$(COMPILER) test/test_variant_div.pas /tmp/test_variant_div26
 	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n3.4\n2.5')"
+	# A typecast of a Variant CONVERTS (FPC/Delphi semantics); it used to
+	# reinterpret the 16-byte record and answer the tag word, and the float
+	# kinds segfaulted. Diffed against an FPC build of the same file except
+	# the two lines its own comments flag as conversion-level divergences.
+	./$(COMPILER) test/test_variant_typecast.pas /tmp/test_variant_typecast26
+	test "$$(/tmp/test_variant_typecast26)" = "$$(printf '9\n9\n9\n9\n9\n9\n9\n9.00\n9.00\nTRUE\n2.50\n2.50\n2\n2\nTRUE\n1\nA\ntext\ntext\nA\n21\n2.500')"
 	./$(COMPILER) test/test_variant_string.pas /tmp/test_variant_string26
 	test "$$(/tmp/test_variant_string26)" = "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
 	./$(COMPILER) test/test_variant_string_ops.pas /tmp/test_variant_string_ops26

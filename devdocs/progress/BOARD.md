@@ -35,10 +35,11 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (219)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-variant-to-string-drops-the-boolean-tag | A | 50 | bug | `s := v` on a BOOLEAN variant yields the EMPTY STRING — VariantToStr has no arm for VType=4 and falls off its if-chain into ''. `writeln(v)` on the same variant correctly prints True, so variant->text has two renderers and only one of them knows about booleans. Silent wrong value, no diagnostic. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
@@ -72,9 +73,9 @@ _none_
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep | N | 40 | bug | Four small refusals found by the 2026-08-13 CPython sweep: `issubclass(A, B)`, `d.update(k=v)` (the keyword form), `key=str.lower` (an unbound method as a callable value), and Unicode special-casing in upper()/lower() ('ß'.upper() is 'ß', CPython 'SS'). Each is a parse error or a wrong string, none is a silent wrong VALUE | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 45 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
-| bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting | P | 62 | bug | `Int64(v)` on a Variant answers 1 (the variant's TAG word) where FPC answers 9, and `Double(v)` SEGFAULTS. FPC/Delphi treat a typecast of a variant as a CONVERSION; pxx treats it as a reinterpret of the variant RECORD. Silent wrong value on the integer side, crash on the float side. | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
+| bug-p-variant-to-int-and-char-conversion-diverges-from-fpc | P | 45 | bug | DECIDED (user, 2026-08-13) — plain work now. The Variant->scalar CONVERSION itself disagrees with FPC in two rows: a boolean variant answers 1 where FPC answers -1, and an integer variant converted to Char answers Chr(n) where FPC renders the number as a string and takes its first character ('65' -> '6'). Both spellings (`i := v` and `Int64(v)`) agree with each other — the conversion is what differs. Ruling: boolean adopts FPC's -1; Char keeps Chr(n) by default with FPC's format-then-index rule behind --strict-fpc. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
@@ -407,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1690)
+## done (1691)
 
-1690 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1691 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -453,7 +454,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 62] [P] bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-float-exception-mask-control
@@ -485,6 +485,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [A] bug-a-variant-to-string-drops-the-boolean-tag
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [P] bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - [p 50] [T] bug-t-tstate-launders-skip-into-pass
@@ -504,6 +505,7 @@ _none_
 - [p 45] [N] bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- [p 45] [P] bug-p-variant-to-int-and-char-conversion-diverges-from-fpc
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-nilpy-isnumeric-red-at-T-not-reproducible-locally

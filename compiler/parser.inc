@@ -903,6 +903,7 @@ function PyBareGenExprAhead: Boolean; forward;   { bare genexpr as a call arg (p
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
+function VariantCastToTemp(n: Integer; target: TTypeKind): Integer; forward;   { a typecast of a VARIANT is the CONVERSION, not a reinterpret of the record; defined beside PromoDemoteToInt64 }
 function PromoDemoteToInt64(n: Integer): Integer; forward;   { promo -> machine int for a value CAST; defined beside PromoWidenToDouble, below its three call sites (FPC is strict about declaration order, pxx is not — bug-a-fpc-seed-drift-emitasmx64-forward) }
 function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-kind widening (pyparser.inc) }
 function AIntToStr(n: Integer): AnsiString; forward;   { real body in aparser.inc, included after pyparser.inc uses it (regression-fpc-seed-drift-b1976-stale) }
@@ -9298,6 +9299,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     rndArgTk, rndRawTk: TTypeKind;   { its type, to restore after the identity }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
+    vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
 begin
@@ -10207,24 +10209,42 @@ begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
         { demote a promotable operand first — see PromoDemoteToInt64 }
         CurASTNode := PromoDemoteToInt64(CurASTNode);
-        node := AllocNode(AN_PTR_CAST);
-        ASTLeft[node] := CurASTNode;
-        ASTIVal[node] := -1;
-        ASTTk[node] := Ord(tyUInt8);
-        CurASTNode := node;
-        LastExprTk := tyUInt8;
+        vcNode := VariantCastToTemp(CurASTNode, tyUInt8);   { Byte(v) converts }
+        if vcNode >= 0 then
+        begin
+          CurASTNode := vcNode;
+          LastExprTk := tyUInt8;
+        end
+        else
+        begin
+          node := AllocNode(AN_PTR_CAST);
+          ASTLeft[node] := CurASTNode;
+          ASTIVal[node] := -1;
+          ASTTk[node] := Ord(tyUInt8);
+          CurASTNode := node;
+          LastExprTk := tyUInt8;
+        end;
       end
       else if CaseEqual(CurTok.SVal, 'longword') then
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
         { demote a promotable operand first — see PromoDemoteToInt64 }
         CurASTNode := PromoDemoteToInt64(CurASTNode);
-        node := AllocNode(AN_PTR_CAST);
-        ASTLeft[node] := CurASTNode;
-        ASTIVal[node] := -1;
-        ASTTk[node] := Ord(tyUInt32);
-        CurASTNode := node;
-        LastExprTk := tyUInt32;
+        vcNode := VariantCastToTemp(CurASTNode, tyUInt32);   { LongWord(v) converts }
+        if vcNode >= 0 then
+        begin
+          CurASTNode := vcNode;
+          LastExprTk := tyUInt32;
+        end
+        else
+        begin
+          node := AllocNode(AN_PTR_CAST);
+          ASTLeft[node] := CurASTNode;
+          ASTIVal[node] := -1;
+          ASTTk[node] := Ord(tyUInt32);
+          CurASTNode := node;
+          LastExprTk := tyUInt32;
+        end;
       end
       else
       begin
@@ -10232,6 +10252,16 @@ begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
         { a promotable operand demotes before the pun — see PromoDemoteToInt64 }
         CurASTNode := PromoDemoteToInt64(CurASTNode);
+        { …and a VARIANT operand is a CONVERSION, not a pun — see
+          VariantCastToTemp. Same Exit shape as the Explicit-operator arm
+          just below. }
+        vcNode := VariantCastToTemp(CurASTNode, tyInteger);
+        if vcNode >= 0 then
+        begin
+          CurASTNode := vcNode;
+          LastExprTk := tyInteger;
+          Exit;
+        end;
         { `operator Explicit(a: TFoo): Integer` — an Integer(recordValue)
           cast with a matching Explicit overload is the conversion CALL
           (toperator11), not the value-pun. }
@@ -10268,11 +10298,24 @@ begin
         SLOT ADDRESS — `Char(n)` for n = 65 gave a character from the pointer,
         not 'A'. See PromoDemoteToInt64. }
       CurASTNode := PromoDemoteToInt64(CurASTNode);
-      node := AllocNode(AN_CALL); ASTIVal[node] := -op;
-      if op = Ord(tkChar_T) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyBoolean);
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
+      { a VARIANT operand converts instead of punning — see VariantCastToTemp.
+        `Char(v)` punned the tag word into a control character and `Boolean(v)`
+        was right only by accident (a non-zero tag reads as True). }
+      if op = Ord(tkChar_T) then castTk := tyChar else castTk := tyBoolean;
+      vcNode := VariantCastToTemp(CurASTNode, castTk);
+      if vcNode >= 0 then
+      begin
+        CurASTNode := vcNode;
+        LastExprTk := castTk;
+      end
+      else
+      begin
+        node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+        if op = Ord(tkChar_T) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyBoolean);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+      end;
     end;
     tkSingle_T, tkDouble_T, tkExtended_T:
     begin
@@ -10282,9 +10325,21 @@ begin
         plus an assignment — the ordinary store path already coerces the operand.
         Reuses the generic assign-then-yield node (AN_STR_FROM_CHAR: Left = the
         store side-effect, Right = the temp read). `Extended` aliases Double. }
-      if CurTok.Kind = tkSingle_T then LastExprTk := tySingle else LastExprTk := tyDouble;
+      { The temp's type is the CAST's, not the OPERAND's: `ParseExpr` overwrites
+        LastExprTk with the operand's kind, so `op := AllocVar('', LastExprTk)`
+        handed the "conversion" a temp of the source type and the conversion
+        never happened — `Single(d)` in expression position printed the
+        unnarrowed double (3.7000000000 vs FPC's 3.7000000480), and for a
+        VARIANT operand it built a VARIANT temp, so `Double(v)` stored the
+        16-byte record through an 8-byte value and SEGFAULTED. Capturing the
+        kind before ParseExpr fixes both: a variant temp becomes a real Double
+        temp, and the store path then emits the variant unbox by itself.
+        bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting }
+      if CurTok.Kind = tkSingle_T then castTk := tySingle else castTk := tyDouble;
+      LastExprTk := castTk;
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-      op := AllocVar('', LastExprTk);
+      LastExprTk := castTk;
+      op := AllocVar('', castTk);
       node := AllocNode(AN_STR_FROM_CHAR);
       argSeq := AllocNode(AN_IDENT);             { store LHS = the temp }
       ASTIVal[argSeq] := op; ASTTk[argSeq] := Ord(Syms[op].TypeKind);
@@ -10338,7 +10393,19 @@ begin
         CurASTNode := node;
       end
       else
-        Error('String(): operand must be Char or string');
+      begin
+        { A VARIANT operand is the variant->string CONVERSION (FPC's
+          `String(v)`), which the store into a string temp already emits —
+          see VariantCastToTemp. Before this it was a hard error. }
+        vcNode := VariantCastToTemp(CurASTNode, tyString);
+        if vcNode >= 0 then
+        begin
+          CurASTNode := vcNode;
+          LastExprTk := tyString;
+        end
+        else
+          Error('String(): operand must be Char or string');
+      end;
     end;
     tkSysOpen:
     begin
@@ -12187,6 +12254,15 @@ begin
           why fixing that one made Integer(n) right while Int64(n) stayed
           wrong. See PromoDemoteToInt64. }
         CurASTNode := PromoDemoteToInt64(CurASTNode);
+        { …and the same two-sites trap applies to the VARIANT conversion: this
+          is where `Int64(v)` / `QWord(v)` / `NativeInt(v)` land, so fixing only
+          the keyword-token arms left exactly `Int64(v)` still answering the tag
+          word. Convert here and WRAP the converted temp in the cast below
+          rather than exiting — the wrap is then a no-op retag (or the 16-bit
+          truncation WideChar wants) and the -3 WideChar marker survives.
+          See VariantCastToTemp. }
+        vcNode := VariantCastToTemp(CurASTNode, tk);
+        if vcNode >= 0 then CurASTNode := vcNode;
         node := AllocNode(AN_PTR_CAST);
         ASTLeft[node] := CurASTNode;
         { -3 = a WIDECHAR value cast: same width-truncating value cast as -1
@@ -13848,6 +13924,18 @@ begin
               LastExprTk := tyPointer;
               Exit;
             end;
+            { A VARIANT operand converts rather than reinterpreting the record —
+              the named-type spellings (`Int64(v)`, `Cardinal(v)`, `AnsiString(v)`,
+              an enum cast) reach the cast here, and every one of them used to
+              read the tag word. See VariantCastToTemp. `Pointer(v)` is excluded
+              there and stays a reinterpret. }
+            vcNode := VariantCastToTemp(CurASTNode, castTk);
+            if vcNode >= 0 then
+            begin
+              CurASTNode := vcNode;
+              LastExprTk := castTk;
+              Exit;
+            end;
             { `operator Explicit(a: TFoo): Integer` — a value cast of a
               record/class operand with a matching Explicit overload is the
               conversion CALL, not a reinterpret (toperator11's Integer(a)). }
@@ -15430,6 +15518,53 @@ begin
   ASTTk[pdCall] := Ord(tyInt64);
   ASTLeft[pdCall] := pdArg;
   PromoDemoteToInt64 := pdCall;
+end;
+
+{ A typecast of a VARIANT operand, rewritten as the variant CONVERSION.
+
+  FPC and Delphi define `Int64(v)` / `Double(v)` / `Char(v)` as exactly the
+  conversion `i := v` performs; pxx lowered them as ordinary hard casts of the
+  16-byte variant RECORD, so the value read was the TAG word (`Int64(v)` on
+  v=9 answered 1) and the float kinds reinterpreted those bytes as an address
+  and segfaulted. The assignment form was already right, which is the
+  double-case shape normalise-dont-special-case.md warns about — so this
+  NORMALISES the cast onto the assignment: store into a hidden temp of the
+  cast's type (ir.inc's AN_ASSIGN arm emits the VariantTo*/pyvar_to_* unbox
+  there) and yield the temp. One mechanism, every spelling, all six backends,
+  no new IR op. Reuses the generic assign-then-yield node AN_STR_FROM_CHAR
+  (Left = the store side-effect, Right = the temp read), same as the float and
+  String() casts below.
+
+  Returns -1 for "not mine" — a non-variant operand, or a target no variant
+  payload can stand in for (pointer/record/set/class; mirror of ir.inc's
+  IRVariantUnboxKind, minus tyPointer: `Pointer(v)` stays a reinterpret, since
+  the address of the record is the only sensible reading of it).
+  bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting }
+function VariantCastToTemp(n: Integer; target: TTypeKind): Integer;
+var vcTmp, vcAsg, vcLhs, vcRd, vcNd: Integer;
+begin
+  VariantCastToTemp := -1;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyVariant then Exit;
+  if not (TypeIsFloat(target) or (target = tyBoolean) or (target = tyChar) or
+          (target = tyString) or (target = tyAnsiString) or
+          (target = tyInteger) or (target = tyInt8) or (target = tyInt16) or
+          (target = tyInt32) or (target = tyInt64) or (target = tyNativeInt) or
+          (target = tyUInt8) or (target = tyUInt16) or (target = tyUInt32) or
+          (target = tyUInt64) or (target = tyNativeUInt)) then Exit;
+  vcTmp := AllocVar('', target);
+  vcNd  := AllocNode(AN_STR_FROM_CHAR);
+  vcLhs := AllocNode(AN_IDENT);
+  ASTIVal[vcLhs] := vcTmp; ASTTk[vcLhs] := Ord(Syms[vcTmp].TypeKind);
+  vcAsg := AllocNode(AN_ASSIGN);
+  ASTLeft[vcAsg] := vcLhs; ASTRight[vcAsg] := n;
+  ASTTk[vcAsg] := Ord(Syms[vcTmp].TypeKind);
+  ASTLeft[vcNd] := vcAsg;
+  vcRd := AllocNode(AN_IDENT);
+  ASTIVal[vcRd] := vcTmp; ASTTk[vcRd] := Ord(Syms[vcTmp].TypeKind);
+  ASTRight[vcNd] := vcRd;
+  ASTTk[vcNd] := Ord(Syms[vcTmp].TypeKind);
+  VariantCastToTemp := vcNd;
 end;
 
 { Apply PromoWidenToDouble to both operands of a float-typed binop, in place. }
