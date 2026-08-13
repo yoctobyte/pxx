@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:3 backlog:223 experimental:20 rainy-day:40 done-followup:3 decided:65 done:1710 rejected:35`
+`unfinished:11 blocked:3 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1710 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,7 +31,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 204, ranked
+## Ready — top 30 of 203, ranked
 
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
@@ -49,7 +49,6 @@ _none — no lane is locked._
 - `[p 55] [C]` bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - `[p 55] [N]` bug-nilpy-python-import-resolves-against-c-headers
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- `[p 55] [U]` decide-nilpy-dunder-file-for-a-compiled-program
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution
 - `[p 55] [E]` feature-demo-portable-userland
@@ -63,5 +62,6 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-file-dunder-from-the-executable (unblocks 1)
+- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
-_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
