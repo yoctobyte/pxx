@@ -4,7 +4,6 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A NilPy `import X` is satisfied by a C HEADER from lib/crtl/include: `import string` pulls string.h (and warns about host features.h), `import stdio` compiles clean. So a module that does not exist appears to import, and the failure surfaces later as `undefined variable (ascii_lowercase)` — pointing at the wrong thing entirely."
-status: done
 ---
 
 # `import string` in a .npy resolves to crtl's `string.h`
@@ -76,35 +75,58 @@ either resolves to a real shim or errors, and neither pulls a host header; a
 `.npy` build emits no `features.h` warning; the existing NilPy import tests stay
 green.
 
-## FIXED 2026-08-13 — the two `/usr/include` arms are Pascal/C only
+## REVERTED 2026-08-13 — the premise above is WRONG, and the ticket has to change
 
-A C header can satisfy a Pascal `uses` or a C `#include`; it can never satisfy a
-Python `import`. The two `/usr/include` lookups in the unit resolver are now
-gated on `not isNilPy`, which is the narrowest change that closes it:
+The fix (gating the `/usr/include` arms on `not isNilPy`) was landed and then
+**reverted the same day**: Track T's watcher turned four tests red at that sha —
+`test_nilpy_c_pointer`, `test_nilpy_c_define_const` (test-core) and
+`test_nilpy_import_sqlite`, `test_nilpy_sqlite_crud` (test-nilpy).
 
+Reading them says why, in their own first lines:
+
+```python
+# Nil Python `import` maps onto the Pascal unit resolver, so a C header in
+# /usr/include is imported and dynamically linked.
+import sqlite3
+print(sqlite3_libversion_number())
 ```
-import stdio   ->  import: no unit named stdio and no shim mimic_stdio
-import string  ->  import: no unit named string and no shim mimic_string
-import math    ->  still resolves (lib/rtl/math.pas), and no longer warns
+
+```python
+import stdlib
+p = malloc(64)
+free(p)
 ```
 
-C compilation is untouched (`#include <stdio.h>` builds and runs), and the
-features.h warning is gone from NilPy builds — a Python program can no longer
-reach the host include path at all.
+**`import <c-header>` is a DESIGNED NilPy feature** — the wrapper-free
+nilpy↔C arc — not an accident. `import stdio` compiling is correct behaviour.
+So the ticket's headline claim ("must be `no module named stdio`") is wrong and
+the blanket gate was the wrong shape.
 
-`import string` now says what is true. Making it WORK is a `mimic_string`
-(`ascii_lowercase`, `ascii_uppercase`, `digits`, `punctuation`, `whitespace`,
-`capwords`), which is html5lib/constants.py's actual need and belongs to
-whoever picks that up — the same shape as
-[[feature-b-mimic-codecs-for-nilpy]].
+### What is still a real problem
 
-Left deliberately in place: the `lib/rtl/*.h` / `lib/pcl/*.h` / `compiler/*.h`
-arms, which only run under the CWD-relative fallback and are how the C frontend
-finds pxx's own headers. Only the host-include arms could turn a Python import
-into a `/usr/include` file.
+Only the **collision**: a Python stdlib name that also names a C header. `import
+string` finds `/usr/include/string.h` instead of the Python `string` module, and
+the failure surfaces later as `undefined variable (ascii_lowercase)`. The host
+`features.h` warning riding along is the second half.
 
-Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` GREEN + full
-`make test-nilpy` sweep green.
+### The fix shape, corrected
 
-## Log
-- 2026-08-13 — resolved, commit 3f5511820.
+Do NOT remove the C-header route. Instead **order** the candidates: for a
+`.npy`, a NilPy module / `mimic_*` unit must be tried BEFORE a C header, so
+`mimic_string` wins over `string.h` while `import sqlite3` still reaches the
+header it means. That also makes the whole thing land as "write `mimic_string`",
+which is the actual need, rather than as a resolver amputation.
+
+Worth adding while there: a diagnostic when a `.npy` import resolves to a host
+`/usr/include` header, since that is the case that is silently surprising
+(`sqlite3` is deliberate, `string` is not).
+
+### Two process lessons, recorded because they cost the red
+
+1. **`make test-nilpy` does not cover the NilPy C-interop tests** —
+   `test_nilpy_c_pointer` and `test_nilpy_c_define_const` live in **test-core**.
+   A change to the IMPORT RESOLVER is a test-core change too, whatever the
+   frontend it looks like it belongs to.
+2. **Read the tests that name the thing you are "fixing" before you fix it.**
+   `ls test | grep import` would have shown `test_nilpy_import_sqlite.npy`,
+   whose first comment is the design statement this ticket contradicted.
