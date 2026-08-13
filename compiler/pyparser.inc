@@ -6558,6 +6558,48 @@ begin
   Result := node;
 end;
 
+function PyParseFormatCall: Integer;
+{ `format(v)` / `format(v, spec)` -> pyformat_v, the SAME implementation the
+  f-string holes use. An intercept rather than a pylib function named `format`,
+  because sysutils' `Format` shadows the whole name once a program imports
+  anything that reaches it — see the note at pyformat_v's declaration.
+  The spec is an ordinary expression, not a literal: `format(x, spec)` with the
+  spec in a variable is how a report makes its own columns configurable, and
+  that is the shape an f-string cannot express. }
+var idx, argSeq, argSeq2, node, specNode: Integer;
+begin
+  idx := FindProc('pyformat_v');
+  if idx < 0 then Error('Nil Python: pylib (pyformat_v) not loaded');
+  Next; Expect(tkLParen, '(');
+  PyParseBoolExpr;
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := PyForceVariant(CurASTNode);
+  if CurTok.Kind = tkComma then
+  begin
+    Next;
+    PyParseBoolExpr;
+    specNode := CurASTNode;
+  end
+  else
+  begin
+    { no spec — an empty one, which pyformat_v defines as str(v) }
+    specNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[specNode] := 0;
+    ASTSLen[specNode] := 0;
+    ASTTk[specNode] := Ord(tyString);
+  end;
+  Expect(tkRParen, ')');
+  argSeq2 := AllocNode(AN_ARG);
+  ASTLeft[argSeq2] := specNode;
+  ASTRight[argSeq2] := -1;
+  ASTRight[argSeq] := argSeq2;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := idx;
+  ASTTk[node] := Ord(tyAnsiString);
+  ASTLeft[node] := argSeq;
+  Result := node;
+end;
+
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;

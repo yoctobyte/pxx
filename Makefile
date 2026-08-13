@@ -1540,6 +1540,10 @@ test-nilpy: $(COMPILER)
 	# AnsiString, so a non-string single argument was read as a string handle.
 	./$(COMPILER) test/test_nilpy_exception_non_string_argument.npy /tmp/test_nilpy_excnonstr26
 	/tmp/test_nilpy_excnonstr26 | diff -u test/test_nilpy_exception_non_string_argument.expected -
+	# the builtin format(v[, spec]) — an intercept, because sysutils' Format
+	# shadows the name once a program imports anything reaching it.
+	./$(COMPILER) test/test_nilpy_format_builtin.npy /tmp/test_nilpy_fmtbuiltin26
+	/tmp/test_nilpy_fmtbuiltin26 | diff -u test/test_nilpy_format_builtin.expected -
 	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
 	/tmp/test_nilpy_tupnotlist26 | diff -u test/test_nilpy_tuple_is_not_a_list.expected -
 	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26

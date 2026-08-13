@@ -857,6 +857,7 @@ function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Int
 function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forward;  { that slot, when the attribute also needs per-instance overrides (pyparser.inc) }
 function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString; gsym: Integer): Integer; forward;  { instance read of an overridable class attribute: has? get : slot (pyparser.inc) }
 function PyParseInputCall: Integer; forward;  { `input([prompt])` -> pyinput / pyinput_p, one builder for both intercepts (pyparser.inc) }
+function PyParseFormatCall: Integer; forward; { `format(v[, spec])` -> pyformat_v, one builder for both intercepts (pyparser.inc) }
 function PyIsClassNameChainAhead: Boolean; forward;   { CurTok begins `__class__ . __name__` (pyparser.inc) }
 function PyMakeClassNameOf(node: Integer): Integer; forward;   { ...consume it and answer pytype_name_v(node) (pyparser.inc) }
 function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString; forward;  { the name to look up on this class for a Python method spelling — pylib's alias when the class does not declare it as written (pyparser.inc) }
@@ -11293,6 +11294,22 @@ begin
         LastExprTk := tyAnsiString;
         Exit;
       end
+      else if isNilPy and CaseEqual(name, 'format') and (FindSym(name) < 0) and
+              ((FindProc(name) < 0) or (ProcUnitIdx[FindProc(name)] <> -1)) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { format(v[, spec]) -> PyParseFormatCall (pyformat_v). Intercepted even
+          though a proc of that name resolves, because the one that resolves is
+          sysutils' `Format(fmt, [args])` as soon as the program imports
+          anything reaching sysutils — and a later unit SHADOWS the name rather
+          than joining an overload set, so declaring the builtin in pylib made
+          `format(7.5, ".1f")` compile until you added `import json`.
+          ProcUnitIdx = -1 is the main program, i.e. the .npy's OWN `def
+          format`, which must still win — Python lets a def shadow a builtin. }
+        CurASTNode := PyParseFormatCall;
+        LastExprTk := tyAnsiString;
+        Exit;
+      end
       else if isNilPy and (name = 'open') then
       begin
         { open(path[, mode]) -> a TPyFile, whatever the mode. The no-mode form
@@ -13076,6 +13093,14 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         CurASTNode := PyParseInputCall;   { the shared builder, see the arm above }
+        LastExprTk := tyAnsiString;
+        Exit;
+      end;
+      if PyExprMode and CaseEqual(name, 'format') and
+         ((procIdx < 0) or (ProcUnitIdx[procIdx] <> -1)) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        CurASTNode := PyParseFormatCall;  { the shared builder, see the arm above }
         LastExprTk := tyAnsiString;
         Exit;
       end;

@@ -1,0 +1,36 @@
+# The builtin format(v[, spec]) — the function the f-string grammar is sugar
+# for. It was `undefined variable`, and declaring it in pylib as `format` broke
+# the moment a program imported anything reaching sysutils (whose Format
+# SHADOWS the whole name), which is why the last rows matter.
+# bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item 4
+print(format(7.5, ".2f"))
+print(format(255, "x"), format(255, "08b"), format(255, "o"))
+print(format("a", ">5") + "|", format("a", "<5") + "|", format("ab", "^6") + "|")
+print(format(3), format(3.5), format("s"), format(True))
+print(format(1234567, ","))
+print(format(0.5, "+.3e"))
+print(format(42, ""), format(3.25, ""))
+# the spec as a VALUE — the shape an f-string cannot express
+sp = ".3f"
+print(format(2.5, sp))
+
+
+def show(v, spec):
+    return format(v, spec)
+
+
+print(show(7, "04d"))
+print([format(x, ".1f") for x in [1.25, 2.5]])
+
+
+class P:
+    def __init__(self, n):
+        self.n = n
+
+    def render(self):
+        return format(self.n, "03d")
+
+
+print(P(7).render())
+# the f-string and the builtin are ONE implementation
+print(f"{7.5:.2f}" == format(7.5, ".2f"))

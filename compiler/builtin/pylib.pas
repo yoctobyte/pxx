@@ -768,6 +768,21 @@ function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; o
 function PyFmtFixed(d: Double; prec: Integer): AnsiString;
 function pyformat_of(d: Double; const spec: AnsiString): AnsiString; overload;
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
+{ The builtin `format(v[, spec])` behind the f-string grammar, which was
+  `undefined variable` while every spec it takes already worked inside an
+  f-string (bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item
+  4). One implementation shared with the f-strings, so the two spellings cannot
+  drift; an EMPTY spec is `str(v)`, which is CPython's own definition of the
+  one-argument form.
+
+  Named pyformat_v and reached through a FRONTEND intercept rather than being
+  declared as `format`: sysutils declares `Format(fmt, [args])`, and a later
+  unit's declaration SHADOWS the whole name rather than joining its overload
+  set — measured, with the pylib arms absent from the candidate list — so
+  `format(7.5, ".1f")` compiled until the program said `import json` and then
+  stopped compiling. A builtin that works only until you import something is
+  worse than one that is missing. }
+function pyformat_v(const v: Variant; const spec: AnsiString): AnsiString;
 { `bytearray(n)` and `bytes(b)` are spelled as ordinary FUNCTIONS rather than
   recognised by the frontend: neither name is a Pascal keyword, so both
   resolve through the normal call path with no parser hook. (`set()` needed a
@@ -12006,6 +12021,12 @@ begin
   WriteLn('Nil Python: f-string format spec "', spec,
           '" on a value of variant tag ', tag, ' is not supported');
   Halt(1);
+end;
+
+function pyformat_v(const v: Variant; const spec: AnsiString): AnsiString;
+begin
+  if spec = '' then Result := pystr_of(v)
+  else Result := pyformat_of(v, spec);
 end;
 
 
