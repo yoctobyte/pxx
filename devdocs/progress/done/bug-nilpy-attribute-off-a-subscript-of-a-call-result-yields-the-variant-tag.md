@@ -182,4 +182,4 @@ worked (bound element, bound expression, parenthesised, list literal, dict
 through a name, plain call attribute).
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 391c67c0d.

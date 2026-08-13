@@ -140,4 +140,4 @@ worked (`get(k, d)`, `dict(literal)`, `len(literal)`, the variable form).
 Gate: `make compiler/pascal26` fixedpoint + `gate.sh quick` + `make test-nilpy`.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 391c67c0d.
