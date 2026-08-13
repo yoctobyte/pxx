@@ -4,6 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`def open(x)` in a .npy is silently ignored — the builtin runs and raises FileNotFoundError instead of calling the user's function. Python lets a def shadow any builtin, and 13 of the 17 builtins swept get this right; open's intercept never asks. Silent wrong behaviour, not a refusal."
+status: done
 ---
 
 # A user `def open()` is silently ignored
@@ -61,3 +62,38 @@ The sweep above as a `.npy` diffed against CPython: a `def` of each intercepted
 builtin, called, plus the builtin still working in a program that does NOT
 define it. `zip`/`type`/`print` may stay refusals in this ticket — they are
 diagnostics, not wrong answers — but say so in the test.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-13)
+
+Fixed as the ticket's "right version", not its one-liner, because the governing
+rule ([[feedback_reference_compat_is_the_default_shadowing_allowed]]) says the
+default follows CPython and a design question is not settled by what is
+cheapest.
+
+`PyUserShadowsProc` (symtab.inc) already IS the predicate — about ten
+name-keyed lowerings ask it, and it knows the part any ad-hoc guard would miss:
+Python rebinds the name only from the `def` statement ONWARD, so a call above
+the def still reaches the builtin. Four arms answered the question themselves
+instead — `open` not at all, `zip`/`type` via their own conditions, `format`
+via a bespoke `ProcUnitIdx = -1` check added the same day — and they now ask it.
+That is four mechanisms down to one, which is the gate clause this ticket's
+parent decision asks for.
+
+Sweep of all 17 intercepted builtins against CPython: **16 agree, up from 13.**
+
+| result | names |
+| --- | --- |
+| user def wins | len, sum, sorted, max, min, format, input, str, abs, round, enumerate, callable, repr, **zip, type, open** |
+| refused | print |
+
+`print` stays refused because it LEXES to `tkwriteln` — an implementation
+accident, not a decision, and it is the open question in
+[[decide-nilpy-builtin-vs-pascal-unit-name-resolution]] rather than something
+quietly kept. Every builtin still answers correctly when NOT shadowed (checked:
+all 17 in one program, plus the file round-trip through `open`).
+
+Test `test/test_nilpy_user_def_shadows_a_builtin.{npy,expected}`, wired into
+`test-nilpy`; the zip/enumerate/format/f-string families re-run by name.
