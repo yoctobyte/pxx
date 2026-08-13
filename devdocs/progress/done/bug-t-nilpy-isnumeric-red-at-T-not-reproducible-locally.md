@@ -2,6 +2,7 @@
 track: T
 prio: 45
 type: bug
+status: done
 ---
 
 # T reports `test_nilpy_str_isnumeric_istitle` RED at full tier; not reproducible locally
@@ -81,3 +82,32 @@ with its original evidence.
 
 Worth keeping either way: a recipe shaped unlike its 300 neighbours is a bad
 thing to introduce, independent of whether it caused this.
+
+## 2026-08-13 — RESOLVED by the condition this ticket set for itself
+
+The ticket's own test was: *"If the red persists at the next full run, the `cd`
+was not the cause and the ticket stands with its original evidence."* It did not
+persist. `tstate/plexus.json`:
+
+```
+2026-08-13T06:04:44Z  8e5ed5e8b  full     new_red=[]  red=0
+2026-08-13T07:17:27Z  4636171e0  full     new_red=[]  red=0
+jobs["test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy"] = "pass"
+```
+
+Two independent full tiers, four days after the recipe was normalised, with the
+job green in both and no open regression naming it. So the diagnosis holds: the
+red belonged to the neighbouring relative-imports recipe and was attributed to
+the nearest preceding test source, and removing the one recipe shaped unlike its
+300 neighbours removed it.
+
+Closed as **done**, not rejected: the finding was real and the fix was real. The
+part worth keeping is the ticket's last open observation — **tstate records a
+job name and shas but not the failing output**, so a T-only red has nothing to
+diagnose from and costs a local re-run to disprove. That is the general defect
+this instance exposed, and it outlives this ticket; it belongs with
+[[bug-t-tstate-launders-skip-into-pass]], which is the same class of "the
+published state does not say enough to be trusted".
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
