@@ -130,4 +130,4 @@ FPC seed canary), `make test-nilpy` GREEN — the nilpy suite because this
 changes a VARIANT lowering that pylib's Pascal sources compile through.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 24204e10d.
