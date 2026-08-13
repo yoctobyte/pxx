@@ -3,6 +3,7 @@ summary: "The Makefile's ~3700 fixed /tmp/test_* output paths make two concurren
 type: feature
 track: T
 prio: 55
+status: done
 ---
 
 # Per-invocation temp namespace for the make test recipes
@@ -63,3 +64,45 @@ so a mistake is bisectable.
 Two concurrent `make test-nilpy` runs from two checkouts on one box both pass,
 share no output file, and clean up after themselves. Then the same for the
 other suites touched.
+
+## CONSOLIDATED 2026-08-13 into the Track A ticket — duplicate, and mis-laned
+
+This ticket and [[chore-makefile-testtmp-parameterize]] are the same job: route
+the Makefile's fixed `/tmp` paths through one variable. That one is older
+(2026-07-08 vs 2026-08-01), correctly filed on **Track A** — the Makefile is A's
+file-ownership and A's gate, and CLAUDE.md scopes Track T to `tools/**` and
+`tstate/**` "and nothing else". Everything here has been merged into it, its
+prio raised 45 -> 55 to match, and the mechanical work de-risked:
+
+- the sweep script, measured at **6755 rewrites, 4 pinned**;
+- a **total verification protocol** — `make -n` across all 90 targets is
+  byte-identical after the sweep (37825 lines, `diff` clean), which is stronger
+  than the per-suite incremental landing this ticket asked for, and also proves
+  the change is transparent to testmgr (it builds its job list from `make -n`);
+- `make test-smoke TESTTMP=<scratch>` verified green end to end, self-host
+  fixedpoint chain included;
+- the **pinned set measured rather than assumed**: 63 source-hardcoded paths
+  exist, only 3 are named in the Makefile, and testmgr's docstring citing
+  `external '/tmp/liblazycasing.so'` is stale — that source now uses a bare
+  soname.
+
+**Two corrections to what this ticket proposed**, both worth carrying forward:
+
+1. **`TESTTMP ?= /tmp`, not a per-invocation `mktemp -d` default.** The
+   `mktemp` shape recommended above would break every testmgr job: testmgr
+   privatizes by *prefix substitution*, so a nested default expands to
+   `<scratch>/pxx-run-ab12/foo`, a directory nothing creates. Recipe paths must
+   stay flat under `/tmp`; isolation is the caller's to request.
+2. **The Gate as written cannot be met by this sweep.** 60 of the 63
+   source-hardcoded paths are written by the test *binary* at runtime, not by
+   the recipe (e.g. `test/test_nilpy_sqlite_crud.npy:7` opens
+   `/tmp/test_nilpy_sqlite_crud.db`), across 40 files. No Makefile sweep reaches
+   them and testmgr deliberately does not privatize them, so concurrent runs
+   still share those files. That is a separate, smaller job.
+
+The "Landmine to respect" note above — expected output must never contain an
+absolute `/tmp` path — held up: no `.expected` file contains one, and the
+expansion diff would have caught it.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

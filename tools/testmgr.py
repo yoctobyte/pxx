@@ -907,13 +907,29 @@ TMP_RE = re.compile(r"/tmp(?![\w.-])(?:/[A-Za-z0-9_.+-]+)*")
 def pinned_tmp_paths(lines):
     """Literal /tmp paths hardcoded inside the SOURCES a job compiles.
 
-    A source that says `external '/tmp/liblazycasing.so'` bakes that path into
-    the binary, so the recipe line that builds the .so must keep writing there
-    — rewriting it into private scratch would just hide the library from the
-    loader.  Everything else in the job still gets privatized.
+    A source that bakes an absolute path into the binary — an `external
+    '/tmp/libfoo.so'`, or a program that opens '/tmp/thing.db' by name — means
+    the recipe line that builds or seeds that file must keep writing THERE.
+    Rewriting only the recipe side would point the two halves at different
+    files.  Everything else in the job still gets privatized.
 
     Reads the sources named by the recipe (Job.src is a truncated display
     string, so it cannot be used here).
+
+    The `external '/tmp/liblazycasing.so'` case this was written for is GONE
+    (test_c_lazycasing.pas and test_c_argspill.pas now name a bare soname and
+    let LD_LIBRARY_PATH find it), so do not go looking for it.  What survives is
+    the runtime kind: measured 2026-08-13, 63 distinct /tmp paths are hardcoded
+    across 40 compiled sources, and only 3 are also named in the Makefile.
+
+    NOTE what that means for isolation, because it is the opposite of what this
+    function's existence suggests: the other 60 are opened by the test BINARY at
+    runtime, so they are not privatized either — nothing rewrites a compiled-in
+    string.  Two concurrent runs on one box therefore SHARE those files even
+    under testmgr (e.g. test/test_nilpy_sqlite_crud.npy's
+    /tmp/test_nilpy_sqlite_crud.db).  Tracked in the Track A ticket
+    chore-makefile-testtmp-parameterize under "Residual"; this rewrite covers
+    recipes, not sources.
     """
     out = set()
     for path in SRC_RE.findall("\n".join(lines)):
@@ -970,12 +986,13 @@ class Job:
         # for reports, and a human running the printed repro in plain /tmp
         # is fine — they're not racing themselves.
         #
-        # EXCEPT paths a compiled SOURCE hardcodes.  test_c_lazycasing.pas has
-        # `external '/tmp/liblazycasing.so'` baked into the binary, so building
-        # that .so into our private scratch just means the loader can't find it.
-        # We cannot rewrite the source, so we leave exactly those literals in
-        # real /tmp and privatize everything else.  Track C ticket
-        # bug-test-hardcoded-tmp-so-path retires the last of them.
+        # EXCEPT paths a compiled SOURCE hardcodes: we cannot rewrite the
+        # source, so a recipe line that seeds such a file must keep writing
+        # where the binary will look.  Leave exactly those literals in real
+        # /tmp, privatize everything else — and see pinned_tmp_paths() for why
+        # that leaves a real shared-file window open rather than closing one.
+        # (Track C's bug-test-hardcoded-tmp-so-path retired the `external
+        # '/tmp/lib*.so'` variant this was originally written for.)
         pinned = pinned_tmp_paths(self.lines)
         parts = ["cd %s || exit 1" % shlex.quote(REPO)]
         for ln in self.lines:
@@ -1200,6 +1217,15 @@ def split_jobs(target, lines):
     # survive).  Model the loader search path itself as the shared resource:
     # every .so producer and every bare-/tmp LD_LIBRARY_PATH consumer in a
     # target gets a synthetic token, which the union-find below merges as usual.
+    # These three, plus TMP_RE, hardcode the literal /tmp PREFIX as it appears
+    # in `make -n` output.  That is safe today and must stay a deliberate
+    # choice: the Track A ticket chore-makefile-testtmp-parameterize routes the
+    # recipes through $(TESTTMP), whose default is /tmp precisely so this keeps
+    # matching.  If anything ever runs make_dry_run() with TESTTMP set
+    # elsewhere, all four go blind AT ONCE and fail silently — no privatization
+    # (concurrent runs collide again) and no producer/consumer merge (which is
+    # how test-core#555/#556 went red on 2026-07-12).  Teach them the value
+    # before setting it; do not set it and hope.
     tmp_re = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
     so_prod_re = re.compile(r"-o\s+/tmp/\S+\.so\b")
     loader_dir_re = re.compile(r"LD_LIBRARY_PATH=/tmp(?![\w./-])")
