@@ -3,6 +3,8 @@ track: N
 prio: 40
 type: feature
 blocked-by: []
+status: done
+owner: claude-A-N
 ---
 
 # A `set` needs its own runtime tag — two divergences from `list` share this root cause
@@ -82,3 +84,49 @@ The tag being present is what makes this cheap now: `pylist_eq` can ask
 `FKind = PYSEQ_SET` on both sides and compare by membership instead of by
 position, with no frontend change. Note it is a `compiler/builtin/**` edit, so
 it carries the stabilize+pin obligation.
+
+## DONE 2026-08-13 — half 2 landed; the tag made it a small change after all
+
+`{1, 2} == {2, 1}` is True, and a set is no longer equal to a sequence
+(`{1, 2} == [1, 2]` was True, now False, matching CPython both ways round).
+
+`pylist_eq` asks `FKind` when either side is a set and compares by MEMBERSHIP
+instead of by position — equal lengths plus "every element of a is in b", which
+is sufficient because `add()` dedups, so neither side can hold a repeat. The
+positional walk stays exactly as it was for two lists, which is Python's own
+rule for lists.
+
+### The second copy is what made it look fixed when it was not
+
+The first cut passed the direct rows and failed `[{1, 2}] == [{2, 1}]` and
+`{1, 2} in [{2, 1}]`. `PyVarEq`'s two-objects arm carried its OWN copy of the
+positional walk, so the operator agreed with the new rule and every CONTAINER
+route — `in`, `.index()`, `.count()`, `.remove()`, a nested compare — still ran
+the old one. That arm now calls `pylist_eq`, so there is one comparison in one
+place; the duplication is what this repo's `normalise-dont-special-case.md`
+keeps warning about, and it was found by testing the sibling route rather than
+by reading.
+
+### Left open, on purpose
+
+`(1, 2) == [1, 2]` is still True where CPython says False. Same tag, same
+function, one guard away — but the set arm only fires for values explicitly
+built as sets, whereas a tuple-vs-list guard fires for everything whose kind was
+left at its default, and that surface was not swept. Filed as
+[[bug-nilpy-a-tuple-compares-equal-to-a-list]] with the constructors to check.
+
+### Verified
+
+`test/test_nilpy_set_equality_is_membership.{npy,expected}` (`.expected` from
+CPython), wired into `test-nilpy`: order-independence, unequal contents at equal
+length (which the length check alone cannot catch), differing lengths, empties,
+strings and mixed types, `!=`, set-vs-list both ways, set-vs-tuple, the `is`
+control that must not have moved, sets built by mutation and by `|=`, the
+nested/`in` routes that caught the second copy, and lists keeping the ordered
+rule.
+
+`compiler/builtin/**` change, so it carries the stabilize+pin obligation —
+pinned in the same commit. Gate: self-host fixedpoint + `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

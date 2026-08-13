@@ -1439,6 +1439,11 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_selglob26 | diff -u test/test_nilpy_selector_off_call_returning_a_global.expected -
 	./$(COMPILER) test/test_nilpy_break_continue.npy /tmp/test_nilpy_brkcont26
 	/tmp/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -
+	# set EQUALITY is by MEMBERSHIP, not position ({1,2} == {2,1}), and a set is
+	# never equal to a sequence. Both routes must agree: the operator and the
+	# container walk used to carry two copies of the positional compare.
+	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26
+	/tmp/test_nilpy_seteq26 | diff -u test/test_nilpy_set_equality_is_membership.expected -
 	./$(COMPILER) test/test_nilpy_set_update_methods.npy /tmp/test_nilpy_setupd26
 	/tmp/test_nilpy_setupd26 | diff -u test/test_nilpy_set_update_methods.expected -
 	# `xs[0].update(d)` on a dict element SEGFAULTED: a variant receiver picked an

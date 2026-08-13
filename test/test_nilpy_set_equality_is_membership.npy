@@ -1,0 +1,54 @@
+# feature-nilpy-set-needs-runtime-tag-for-display-and-equality (half 2)
+#
+# Set equality was POSITIONAL — the list rule, which is correct for lists and
+# wrong for sets: `{1, 2} == {2, 1}` answered False. A set is a TPyList here,
+# and the FKind tag that tells a set from a list now exists (it landed with the
+# display half), so pylist_eq can compare by MEMBERSHIP when either side is a
+# set, and refuse a set-vs-sequence comparison outright the way CPython does.
+#
+# Rows: order-independence (the headline), unequal contents at equal length
+# (which the length check alone cannot catch), differing lengths, empties, the
+# `is` control that must NOT become True, sets nested in a list, and set
+# membership in a container — the routes that all reach the same comparison.
+#
+# NOT asserted: `(1, 2) == [1, 2]`, which is still True here and False in
+# CPython. Same root cause, filed separately — tightening the tuple side moves
+# code that sets no explicit kind.
+#
+# Expectations are CPython's own output.
+
+print("reorder  ", {1, 2} == {2, 1})
+print("same     ", {1, 2} == {1, 2})
+print("differ   ", {1, 2} == {1, 3})
+print("longer   ", {1, 2} == {1, 2, 3})
+print("shorter  ", {1, 2, 3} == {1, 2})
+print("empty    ", set() == set())
+print("empty/one", set() == {1})
+print("strings  ", {"a", "b"} == {"b", "a"})
+print("mixed    ", {1, "a"} == {"a", 1})
+print("ne       ", {1, 2} != {2, 1}, {1, 2} != {1, 3})
+
+# a set is never equal to a sequence, whatever the order
+print("vs list  ", {1, 2} == [1, 2], [1, 2] == {1, 2})
+print("vs tuple ", {1, 2} == (1, 2))
+
+# identity is a different question and must not have moved
+a = {1, 2}
+b = {2, 1}
+print("identity ", a == b, a is b, a is a)
+
+# built by mutation rather than by a literal
+m = set()
+m.add(2)
+m.add(1)
+print("built    ", m == {1, 2})
+u = {1}
+u |= {2}
+print("via op   ", u == {2, 1})
+
+# the comparison reached through a container, not directly
+print("nested   ", [{1, 2}] == [{2, 1}])
+print("in       ", {1, 2} in [{2, 1}], {1, 9} in [{2, 1}])
+
+# lists keep the ORDERED rule — that is what must not regress
+print("list ord ", [1, 2] == [2, 1], [1, 2] == [1, 2])

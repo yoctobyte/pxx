@@ -1,0 +1,18 @@
+reorder   True
+same      True
+differ    False
+longer    False
+shorter   False
+empty     True
+empty/one False
+strings   True
+mixed     True
+ne        False True
+vs list   False False
+vs tuple  False
+identity  True False True
+built     True
+via op    True
+nested    True
+in        True False
+list ord  False True
