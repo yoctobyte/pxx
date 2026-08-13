@@ -5091,11 +5091,11 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-12T12:16:40Z",
+  "date": "2026-08-13T05:39:16Z",
   "red": [],
-  "sha": "1ef4c2d88994fb74a9922eacc5c1761420c692c7",
-  "tier": "full",
-  "ver": "v260",
+  "sha": "7195ce2f7c318d6e263f06ae254aba23b57802e6",
+  "tier": "limited",
+  "ver": "v267",
   "verdict": "GREEN"
  },
  "renamed_from": [
