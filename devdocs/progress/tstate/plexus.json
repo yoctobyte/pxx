@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-13T13:43:26Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_import_sqlite.npy",
-    "test-nilpy#src:test/test_nilpy_sqlite_crud.npy"
-   ],
-   "new_red": [],
-   "sha": "1ca15d0e68c528203819879bcfad4ed4ac8808a4",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-13T13:48:22Z",
    "fixed": [],
    "new_red": [],
@@ -408,6 +397,14 @@
     "test-core#src:examples/tk/callbacks.npy"
    ],
    "sha": "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-13T22:52:38Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b2cb54156a1fe38197653b46a50226ded9d15fde",
    "tier": "native",
    "verdict": "RED"
   }
@@ -5181,11 +5178,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-13T22:48:44Z",
-  "sha": "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79",
+  "date": "2026-08-13T22:52:38Z",
+  "sha": "b2cb54156a1fe38197653b46a50226ded9d15fde",
   "tier": "native",
   "verdict": "RED",
-  "wall": 163.7
+  "wall": 163.2
  },
  "last_bench": {
   "conf_rows": 550,
