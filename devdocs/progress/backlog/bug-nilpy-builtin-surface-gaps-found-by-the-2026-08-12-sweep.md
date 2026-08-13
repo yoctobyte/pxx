@@ -184,3 +184,28 @@ the list above rather than re-measured every pass.
 Still absent from item 4: id, slice, complex, ascii, eval, dir, vars,
 memoryview, `max(default=)`, and `type(x) == int`. Items 2 (three-way `zip`)
 and 3 (a computed precision in a format spec) are untouched.
+
+## Item 2 DONE 2026-08-13 — three- and four-way `zip`
+
+`zip(rows, labels, values)` parses and runs, as a value, in a comprehension,
+and as a for-header with three names. Four streams is the ceiling; past it the
+diagnostic says so rather than dropping one silently.
+
+Two halves, and the second is the interesting one. The cursor grew `FUp3` /
+`FUp4` (nil below three/four streams) and the advance appends a stream only
+when its field is set, so a two-way zip still yields a PAIR and not a triple
+padded with None — the row asserting that is in the test. Shortest-wins is
+unchanged and still consumes the streams to the LEFT of the exhausted one,
+which is CPython's observable order.
+
+**The for-header needed no desugar of its own.** With zip an N-way expression,
+three names fall through to `PyParseForIn`, which already unpacks a 3-tuple
+from any iterable — measured first on a plain list of tuples, which is what
+said the general path was there. So the fix was to STOP the two-name index-walk
+desugar from claiming the header (it keyed on "a second name exists", which is
+true of three names too) and delete the refusal. Exactly the shape of the
+comprehension fix recorded above it: the special case was only ever the
+refusal.
+
+Test `test/test_nilpy_zip_n_way.{npy,expected}`, wired into `test-nilpy`; the
+nine existing zip-using tests re-run by name and unchanged.
