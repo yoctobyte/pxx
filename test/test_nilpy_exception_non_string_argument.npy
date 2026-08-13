@@ -1,0 +1,52 @@
+# raise SomeError(x) where x is not a string. Every builtin exception's ctor
+# took an AnsiString, so an integer arrived as a string handle and the raise
+# SEGFAULTED with no diagnostic.
+# bug-nilpy-raise-keyerror-with-a-non-string-argument-segfaults
+try:
+    raise KeyError(42)
+except KeyError as e:
+    print("int:", str(e), repr(e.args), e.args[0] + 1)
+try:
+    raise KeyError("k")
+except KeyError as e:
+    print("str:", str(e), repr(e.args))
+try:
+    raise KeyError((1, 2))
+except KeyError as e:
+    print("tup:", str(e), repr(e.args))
+try:
+    raise KeyError()
+except KeyError as e:
+    print("empty:", repr(str(e)), repr(e.args))
+try:
+    raise ValueError(42)
+except ValueError as e:
+    print("ve:", str(e))
+try:
+    raise ValueError(3.5)
+except ValueError as e:
+    print("vf:", str(e))
+try:
+    raise IndexError(True)
+except IndexError as e:
+    print("ib:", str(e))
+
+
+class MyErr(Exception):
+    pass
+
+
+try:
+    raise MyErr(7)
+except MyErr as e:
+    print("user:", str(e))
+# controls: the shapes that already worked
+try:
+    raise MyErr("a", 42)
+except MyErr as e:
+    print("multi:", str(e))
+d = {"a": 1}
+try:
+    d[7]
+except KeyError as e:
+    print("miss:", str(e), repr(e.args))

@@ -1,0 +1,10 @@
+int: 42 (42,) 43
+str: 'k' ('k',)
+tup: (1, 2) ((1, 2),)
+empty: '' ()
+ve: 42
+vf: 3.5
+ib: True
+user: 7
+multi: ('a', 42)
+miss: 7 (7,)

@@ -6030,9 +6030,47 @@ begin
     ... + ')'. One argument is left completely alone — `str(MyErr("boom"))` is
     `boom`, not `('boom',)` — which is why this only fires above one.
     bug-nilpy-multi-arg-exception-constructor-segfaults }
+  { ONE argument that is not a string — `raise KeyError(42)`, `ValueError(3.5)`,
+    ordinary Python and a SEGFAULT here: every builtin exception's Create takes
+    `const m: AnsiString`, so the integer was read as a string handle and the
+    process died at the raise with no diagnostic
+    (bug-nilpy-raise-keyerror-with-a-non-string-argument-segfaults).
+
+    Two shapes, because KeyError is the one builtin whose str() is the REPR of
+    its argument: KeyError's ctor now takes a VARIANT and reprs it itself (so
+    `args` keeps the key's own type and an int key stays unquoted), while every
+    other exception keeps its string ctor and gets the argument rendered by
+    pyexc_msgstr — CPython's str(). Both run BEFORE the multi-arg fold's
+    condition is read, and neither can fire with it: this is nArgs = 1, that is
+    nArgs > 1. }
+  if (ctorMi >= 0) and (nArgs = 1) and (Procs[ctorPi].ParamCount - 1 = 1) then
+  begin
+    excFoldCi := FindUClass('Exception');
+    if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
+    begin
+      excFoldN := ASTRight[ASTLeft[node]];   { the single user arg }
+      if Procs[ctorPi].Params[1].TypeKind = tyVariant then
+        ASTLeft[excFoldN] := PyForceVariant(ASTLeft[excFoldN])
+      else if (Procs[ctorPi].Params[1].TypeKind in [tyString, tyAnsiString]) and
+              (TTypeKind(ASTTk[ASTLeft[excFoldN]]) <> tyString) and
+              (TTypeKind(ASTTk[ASTLeft[excFoldN]]) <> tyAnsiString) then
+      begin
+        excFoldPi := FindProc('pyexc_msgstr');
+        if excFoldPi < 0 then Error('Nil Python: pylib (pyexc_msgstr) not loaded');
+        excFoldA := AllocNode(AN_ARG);
+        ASTLeft[excFoldA] := PyForceVariant(ASTLeft[excFoldN]);
+        ASTRight[excFoldA] := -1;
+        excFoldC := AllocNode(AN_CALL);
+        ASTIVal[excFoldC] := excFoldPi;
+        ASTTk[excFoldC] := Ord(tyAnsiString);
+        ASTLeft[excFoldC] := excFoldA;
+        ASTLeft[excFoldN] := excFoldC;
+      end;
+    end;
+  end;
   if (ctorMi >= 0) and (nArgs > 1) and
      (Procs[ctorPi].ParamCount - 1 = 1) and
-     (Procs[ctorPi].Params[1].TypeKind in [tyString, tyAnsiString]) then
+     (Procs[ctorPi].Params[1].TypeKind in [tyString, tyAnsiString, tyVariant]) then
   begin
     excFoldCi := FindUClass('Exception');
     if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
@@ -6101,6 +6139,26 @@ begin
     default-builders could each be proved NOT to be in the path, because the
     slot had already been consumed here.
     bug-nilpy-dataclass-str-field-default-is-dropped }
+  { …and the same for the one exception whose message parameter is a VARIANT
+    (KeyError, see above): `raise KeyError()` is valid Python. Filled with None
+    rather than an empty literal because an empty VARIANT is what the ctor reads
+    as "no argument"; a boxed '' would be a real empty-string key. Narrow to the
+    exception tree on purpose — filling any class's unsupplied variant slot
+    would paper over under-calls that should stay visible. }
+  if (ctorMi >= 0) and (nArgs = 0) and (Procs[ctorPi].ParamCount - 1 = 1) and
+     (Procs[ctorPi].Params[1].TypeKind = tyVariant) then
+  begin
+    excFoldCi := FindUClass('Exception');
+    if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
+    begin
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := PyMakeNone;
+      ASTRight[argNode] := -1;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(nArgs);
+    end;
+  end;
   if ctorMi >= 0 then
     while (nArgs < Procs[ctorPi].ParamCount - 1) and
           (nArgs + 1 < MAX_PROC_PARAMS) and

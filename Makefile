@@ -1536,6 +1536,10 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_ffexact26 | diff -u test/test_nilpy_float_format_exact.expected -
 	./$(COMPILER) test/test_nilpy_exception_args.npy /tmp/test_nilpy_excargs26
 	/tmp/test_nilpy_excargs26 | diff -u test/test_nilpy_exception_args.expected -
+	# `raise KeyError(42)` SEGFAULTED: every builtin exception ctor took an
+	# AnsiString, so a non-string single argument was read as a string handle.
+	./$(COMPILER) test/test_nilpy_exception_non_string_argument.npy /tmp/test_nilpy_excnonstr26
+	/tmp/test_nilpy_excnonstr26 | diff -u test/test_nilpy_exception_non_string_argument.expected -
 	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
 	/tmp/test_nilpy_tupnotlist26 | diff -u test/test_nilpy_tuple_is_not_a_list.expected -
 	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26
