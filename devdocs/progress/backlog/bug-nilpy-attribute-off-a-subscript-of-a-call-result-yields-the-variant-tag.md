@@ -73,3 +73,43 @@ A `.npy` diffed against CPython: every row of the table above, an int field, a
 str field, a float field, a nested call (`mk()[0].inner.n`), a method call after
 the subscript (`mk()[0].describe()`), and the bound-name controls kept in the
 file.
+
+## 2026-08-13 — measured further, NOT started; here is where the read is NOT built
+
+Probed rather than reasoned, and the useful part is what has been RULED OUT.
+No code changed; the tree is back at HEAD.
+
+**Confirmed facts (all on HEAD, all reproduced on the pin):**
+
+  * every field answers **7** whatever its type, and 7 is `VT_OBJECT` — so the
+    expression is yielding the receiver variant's TAG word, not reading a field;
+  * `(mk())[0].n` — the SAME expression parenthesised — is **correct**. That is
+    the sharpest control in the ticket: the parenthesised factor re-enters
+    through a different postfix path, so the bug is in the un-parenthesised
+    call-suffix chain, not in the subscript or the attribute read themselves;
+  * `mk()`'s inferred return type is right (`PXXDBG=n.ret`: tyClass, rec 40 =
+    TPyList), so this is not the return-typing family.
+
+**Three candidate paths are ruled OUT by instrumentation** (a `PxxDbgEnabled`
+print at each; none fires for this expression):
+
+  * `PyVariantFieldArm` / `PyMakeVariantField` (pyparser.inc) — the
+    unbox-cast-read arm a variant receiver normally takes;
+  * `PyMakeDynAttrGet` — the dynamic-attribute route;
+  * parser.inc's postfix `.`-suffix site (the one that sets `fieldName` at
+    ~5524). It fires exactly twice for this program, both for `self.n` inside
+    `__init__`, and never for `mk()[0].n`.
+
+So a FOURTH path builds this read. The next thing to probe is pyparser.inc's
+`PyParseClassRecordSelectors` (the NilPy copy of the selector loop, split out
+2026-08-09) and the subscript-suffix loop in parser.inc that precedes it —
+the arm to look for is one that keeps the ELEMENT's static class while the
+runtime value is a variant, because that combination is exactly what reads
+offset 0 of the slot and answers the tag.
+
+Adding a bare-attribute arm to the subscript-suffix loop and forcing the
+receiver through `PyEvalOnce` were both tried and BOTH ARE NO-OPS for this
+expression — further evidence that the chain never reaches that loop.
+
+Left claim-free with the measurement so the next session starts from the
+ruled-out list rather than re-deriving it.
