@@ -166,4 +166,4 @@ time. The unit tests were the sophisticated ones; the missing test was the
 stupid one.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit cef27315e.

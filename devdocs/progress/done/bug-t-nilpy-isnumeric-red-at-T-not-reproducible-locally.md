@@ -110,4 +110,4 @@ this instance exposed, and it outlives this ticket; it belongs with
 published state does not say enough to be trusted".
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit af743ee5f.

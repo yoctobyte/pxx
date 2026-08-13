@@ -53,7 +53,7 @@ cost one wrong-turn probe before the exit code was noticed.
 by relative and absolute path must give the same verdict.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit e0313bbc4.
 
 ## Resolution — 2026-08-13 (Track T)
 
