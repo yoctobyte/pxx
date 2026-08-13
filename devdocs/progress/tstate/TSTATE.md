@@ -3,8 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `432867370a9e` | 2026-08-13T19:22:13Z | GREEN (native) | 164.0s | `7a3f93c5f7eb` GREEN |
+| plexus | `1df75aad5458` | 2026-08-13T19:31:21Z | RED (native) | 163.3s | `7a3f93c5f7eb` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- none
+- **test-core#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `1df75aad5458`, last good `432867370a9e`, 4 commit(s) in range

@@ -754,3 +754,4 @@
 {"date": "2026-08-13T19:05:09Z", "fixed": [], "full": false, "new_red": [], "sha": "7a3f93c5f7ebf9d06a25bf498db1bde42e1beded", "tier": "slow", "verdict": "GREEN", "wall": 293.4}
 {"date": "2026-08-13T19:09:41Z", "fixed": [], "full": false, "new_red": [], "sha": "7a3f93c5f7ebf9d06a25bf498db1bde42e1beded", "tier": "opt", "verdict": "GREEN", "wall": 261.1}
 {"date": "2026-08-13T19:22:13Z", "fixed": [], "full": false, "new_red": [], "sha": "432867370a9eefe623d0aa5fd63076dc097f8a92", "tier": "native", "verdict": "GREEN", "wall": 164.0}
+{"date": "2026-08-13T19:31:21Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_uses_order_pylib_exception_a.pas"], "sha": "1df75aad5458bf3ab272964dea010a8ff15f26c0", "tier": "native", "verdict": "RED", "wall": 163.3}
