@@ -391,7 +391,13 @@ type
     pre-repr'd its message and a user raise not.
     bug-nilpy-exception-str-and-repr-diverge-from-cpython }
   KeyError          = class(Exception)
-    constructor Create(const m: AnsiString);
+    { A VARIANT, not a string: `raise KeyError(42)` is ordinary Python, and an
+      integer arriving at a `const m: AnsiString` parameter was read as a string
+      handle and SEGFAULTED at the raise — no diagnostic, a dead process
+      (bug-nilpy-raise-keyerror-with-a-non-string-argument-segfaults). Taking
+      the variant also makes both halves right at once: the repr keeps an int
+      key unquoted, and `args` keeps the key's own TYPE rather than its text. }
+    constructor Create(const m: Variant);
     { …and the form for a raise site that has already rendered the key —
       PyKeyError, which reprs the VARIANT so an int key stays unquoted. Passing
       that text through Create would repr it a second time and report '7' for a
@@ -717,6 +723,18 @@ function PyClassRefStr(const v: Variant): AnsiString;
 function pyraise_check(const v: Variant): Variant;
 function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
 function pyvar_repr(const v: Variant): AnsiString;
+{ The message text for `raise SomeError(x)` where x is NOT a string. Every
+  builtin exception below KeyError takes `const m: AnsiString`, so a bare
+  integer arrived as a string handle and the raise SEGFAULTED; the frontend
+  boxes the argument and routes it through here instead. `str()`, because
+  CPython's `str(ValueError(42))` is `42` — KeyError is the one exception that
+  reprs, and it has its own variant ctor for exactly that reason.
+  ONE signature on purpose: pystr_of is overloaded per type and FindProc
+  resolves by NAME without consulting overloads
+  (project_findproc_by_name_ignores_overloads), so calling pystr_of from the
+  frontend would hand the integer to the AnsiString arm — the same crash, one
+  frame further in. }
+function pyexc_msgstr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
   Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
   frontend to format a variant/Any print argument, which otherwise reached the
@@ -4792,6 +4810,11 @@ begin
   end
   else if pyvartag(c) = 6 then
     Result := pystr_contains(pystr_of(c), pystr_of(v));
+end;
+
+function pyexc_msgstr(const v: Variant): AnsiString;
+begin
+  Result := pystr_of(v);
 end;
 
 procedure PyKeyError;
@@ -9044,9 +9067,22 @@ begin
   Result := acc;
 end;
 
-constructor KeyError.Create(const m: AnsiString);
+constructor KeyError.Create(const m: Variant);
 begin
-  inherited Create(pyrepr_of(m));
+  { `KeyError()` with no argument at all: the frontend fills an unsupplied
+    variant slot with None (an empty variant is the only addressable "not
+    supplied" this dialect has), and CPython's str(KeyError()) is the empty
+    string, not 'None'. So an empty tag means the no-argument form — and
+    argsv is left nil, so GetArgs derives `()` the way it does for every other
+    empty exception. The cost is that an EXPLICIT `KeyError(None)` renders as
+    '' rather than 'None'; the no-argument spelling is much the commoner, and
+    this is the same call already made for `ValueError('')`. }
+  if pyvartag(m) = 0 then
+  begin
+    inherited Create('');
+    Exit;
+  end;
+  inherited Create(pyvar_repr(m));
   argsv := TPyList.Create;
   argsv.FKind := PYSEQ_TUPLE;
   argsv.append(m);
