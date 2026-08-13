@@ -95,6 +95,10 @@ CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  "fast_tier": "native", "interval": 60,
                  "debounce": 20, "no_bisect": False,
                  "autoticket": True,   # stub regression tickets (face 1)
+                 # idle: the shards demoted out of the per-sha tiers for being
+                 # the wall (testmgr.SLOW_SHARDS). Ranked above idle_opt — it
+                 # is mainline coverage that used to run every sha.
+                 "idle_slow": True,
                  "idle_opt": True,     # idle: O-level differential sweep
                  "idle_bench": True,   # idle: tracked benchmark timings
                  "idle_fuzz": True,    # idle: pasmith/fuzz.sh (endless, lowest prio)
@@ -3807,6 +3811,29 @@ def main():
                 # which is why it stays.
                 verify_pin(clone, host, st, *pin_deep,
                            abort_check=make_preempted(clone, tested))
+                did_work = True
+            elif tested and CONF.get("idle_slow") and \
+                    (st.get("last_full") or {}).get("sha") == tested and \
+                    (st.get("last_full") or {}).get("tier") == args.tier and \
+                    (st.get("last_slow") or {}).get("sha") != tested:
+                # idle, full matrix done: the shards DEMOTED out of the per-sha
+                # tiers because they set the sweep's wall (testmgr.SLOW_SHARDS
+                # — today just test-uforth#blocktest, 595s of an 821s full run).
+                # Ranked ABOVE the opt sweep: this is mainline corpus coverage
+                # that used to run on every sha, whereas opt is an extra oracle.
+                # A push preempts it, which is the point — a fresh sha outranks
+                # finishing an expensive sweep on an old one.
+                r = test_sha(clone, host, st, tested, "slow", full=False,
+                             abort_check=make_preempted(clone, tested))
+                if r not in ("aborted", "busy"):
+                    st = load_state(clone, host)
+                    st["last_slow"] = {"sha": tested, "date": utcnow()}
+                    if r is False:      # sha predates the tier: don't wedge
+                        st["last_slow"]["note"] = "unsupported"
+                    save_state(clone, host, st)
+                    clone.publish("tstate(%s): slow %s %s"
+                                  % (host, tested[:12],
+                                     "done" if r else "unsupported"))
                 did_work = True
             elif tested and CONF.get("idle_opt") and \
                     (st.get("last_full") or {}).get("sha") == tested and \

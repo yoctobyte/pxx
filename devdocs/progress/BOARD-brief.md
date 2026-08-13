@@ -34,6 +34,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 200, ranked
 
 - `[p 70] [P]` regression-test-core-test-conformance-1
+- `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -62,6 +63,5 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-per-invocation-tmp-namespace-for-make-recipes
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
-- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
 _170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

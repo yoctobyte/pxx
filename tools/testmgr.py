@@ -139,6 +139,10 @@ TIERS = {
         "test-sqlite-threads-x86_64", "test-sqlite-threads-i386",
         "test-sqlite-threads-aarch64", "test-sqlite-threads-arm32",
     ],
+    # slow: shards demoted OUT of the per-sha tiers because one job was setting
+    # the whole tier's wall. Disjoint from the nesting chain, like `opt`, so a
+    # full run neither contains nor evicts it. See SLOW_SHARDS.
+    "slow": ["test-uforth"],
     # opt: O-level differential gate (feature-testmgr-opt-tier-and-benchmarks).
     # test-opt = hand-picked corpus + -O1/-O2 self-compile fixedpoints; on top,
     # generate() adds OPT_SHARDS optdiff.sh jobs sweeping EVERY test/*.pas|.c
@@ -1240,12 +1244,45 @@ def uforth_shards():
     return out
 
 
+# Shards pulled out of the per-sha tiers and given to `slow` instead, because
+# ONE of them was setting the wall time of every sweep. Measured on plexus
+# 2026-08-13, full tier = 821s total:
+#
+#     test-uforth#blocktest   594.8s     <- 72% of the run
+#     selfhost-fixedpoint      131.8s
+#     test-core#1139           108.2s
+#     ...2326 other jobs       in parallel behind them
+#
+# Sharding test-uforth already fixed the first-order problem (one 790s serial
+# job); this is the residue — one shard that is slow for a REASON, not because
+# it is big: bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+# measures pxx-compiled uforth at 413s on blocktest.fth against CPython's 196s
+# INTERPRETING the same source. So the wall was being set by a compiler
+# performance bug, on every sha, in two tiers at once — and it is what made
+# `limited` cost 84% of `full` (both carried this pole), which is why the
+# middle rung was collapsed the same day.
+#
+# DEMOTED, NOT DROPPED. It runs in `slow`, which the watcher takes as an idle
+# rung after the full matrix, so the corpus is still swept — just not on every
+# sha. Delete this entry when the Track O ticket lands and blocktest is
+# ordinary again; it is a workaround with an expiry condition, not a policy.
+SLOW_SHARDS = {"test-uforth": ("blocktest",)}
+SLOW_TIER = "slow"
+
+
 def generate(tier):
     jobs = []
     for tgt in TIERS[tier]:
         if tgt == "test-uforth":
             shards = uforth_shards()
+            demoted = SLOW_SHARDS.get(tgt, ())
             for label, ov in shards:
+                # `slow` is exactly the demoted shards; every other tier is
+                # exactly the rest. One rule, so a shard cannot land in both
+                # (double work) or neither (silent coverage hole — the thing
+                # uforth_shards' docstring refuses to risk).
+                if (label in demoted) != (tier == SLOW_TIER):
+                    continue
                 for job in split_jobs(tgt, make_dry_run(tgt, ov)):
                     job.name = "%s#%s" % (tgt, label)
                     jobs.append(job)

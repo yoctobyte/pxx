@@ -2,7 +2,7 @@
 summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers"
 type: bug
 track: O
-prio: 45
+prio: 65
 ---
 
 # pxx-compiled uforth is 2.1x slower than CPython on `blocktest`
@@ -91,3 +91,50 @@ this ticket's guess.
 A profile naming the dominant cost, and — if a fix lands — the ratio measured
 again the same way (same loop, same box, both runtimes contended equally), plus
 `make test-uforth` still byte-identical to CPython on all 13 word sets.
+
+## 2026-08-13 — re-measured, raised to prio 65, and worked around
+
+Measured on plexus from the watcher's own log, full tier, wall 821.1s:
+
+| job | wall | share |
+|---|---|---|
+| **test-uforth#blocktest** | **594.8s** | **72%** |
+| selfhost-fixedpoint#00 | 131.8s | 16% |
+| test-core#1139 | 108.2s | 13% |
+| 2326 others | in parallel behind them | — |
+
+This ticket's "it sets Track T's wall time on its own" was, if anything,
+understated: with the matrix at 2331 jobs and a 12-core box, one job is
+three-quarters of the sweep, and everything else fits in its shadow.
+
+It also explains a second symptom that had been read as a tiering problem. The
+`limited` tier cost 686s against `full`'s 821s — 84% of the price for 78% of
+the jobs — which made the three-rung escalation ladder nearly pointless. The
+mechanism was this job: **both tiers carried the same pole**, so neither could
+be faster than it. The middle rung was collapsed today
+(`perf(T): collapse the watcher's middle rung`), and that collapse is only
+correct while this remains true.
+
+### Worked around, on purpose, with an expiry condition
+
+`test-uforth#blocktest` is now demoted out of the per-sha tiers into a new
+disjoint `slow` tier (`testmgr.SLOW_SHARDS`), which the watcher runs as an idle
+rung after the full matrix (`idle_slow`). The corpus is still swept; it is no
+longer swept on every sha. Full sweeps drop 821s -> ~440s.
+
+**This weakens the urgency argument above and should not be read as weakening
+the ticket.** Two things stay true:
+
+1. The quality finding is untouched and is the real point — a *compiled*
+   frontend losing to a bytecode interpreter by 2-4x, uniformly across every
+   subject measured, is the opposite of the expected result.
+2. The workaround has a defined end: `SLOW_SHARDS` exists to be deleted. When
+   this lands and blocktest is ordinary again, put it back in `limited`/`full`
+   where the densest NilPy regression corpus belongs, and re-check whether the
+   middle rung is worth restoring.
+
+Raised 45 -> 65 by the user, on seeing the 72% number.
+
+Nothing about the diagnosis changed: the "where the cause probably is NOT"
+section above is still a hypothesis from the shape of the numbers, and the
+suggested first step is still to profile before touching anything.
