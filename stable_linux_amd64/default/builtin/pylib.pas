@@ -5950,6 +5950,15 @@ begin
     here — tuple-vs-list is the same root cause and is filed separately, since
     tightening it moves code that sets no explicit kind.
     feature-nilpy-set-needs-runtime-tag-for-display-and-equality }
+  { A TUPLE is never equal to a LIST either — `(1, 2) == [1, 2]` is False in
+    CPython and answered True here, the same tag-blind positional walk that made
+    a set equal to a list. Held back when the set half landed because the guard
+    fires for every value whose kind was never stamped; the constructors were
+    then swept (dict items, zip, divmod, tuple()/list(), slices, concatenation,
+    comprehensions, all three literals) and `type(x).__name__` agrees with
+    CPython for every one, so there is no unstamped population to protect.
+    bug-nilpy-a-tuple-compares-equal-to-a-list }
+  if (a.FKind = PYSEQ_TUPLE) <> (b.FKind = PYSEQ_TUPLE) then Exit;
   if (a.FKind = PYSEQ_SET) or (b.FKind = PYSEQ_SET) or
      (a.FKind = PYSEQ_FROZENSET) or (b.FKind = PYSEQ_FROZENSET) then
   begin
