@@ -138,9 +138,32 @@ def t_sigint_during_flip(d):
     return "SIGINT deferred past the flip, then delivered; pin complete"
 
 
+def t_gate_tier_default(_d):
+    """The pin gates QUICK by default, not FULL.
+
+    bug-t-testmgr-pin-gates-with-the-full-tier-by-default: the bare command ran
+    2305 jobs with the repo lock held, blocking every other lane, and two
+    operators killed it as a hang. It also contradicted run_pin's own docstring,
+    which quotes the 2026-08-09 decision that all-target verification belongs to
+    a RELEASE. `gate.sh quick` is what CLAUDE.md names as THE pin gate.
+
+    The single escalation is the documented exception — Track T PROVEN down, so
+    nothing else is sweeping the matrix. Explicit --tier wins either way.
+    """
+    cases = [((None, False), "quick"), ((None, True), "limited"),
+             (("full", False), "full"), (("full", True), "full"),
+             (("quick", True), "quick")]
+    for (explicit, down), want in cases:
+        got = tm.pin_gate_tier(explicit, down)
+        assert got == want, "--tier %r, down=%r -> %r, want %r" % (
+            explicit, down, got, want)
+    return "bare=quick, T-down=limited, explicit always wins"
+
+
 def main():
     rc = 0
-    for fn in (t_applies, t_abort_while_staging, t_sigint_during_flip):
+    for fn in (t_applies, t_abort_while_staging, t_sigint_during_flip,
+               t_gate_tier_default):
         root = tempfile.mkdtemp(prefix="devtest-pinatomic-")
         try:
             d = build(root)

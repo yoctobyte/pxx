@@ -2533,6 +2533,47 @@ def apply_pin_atomic(p, sha):
         shutil.rmtree(stage, ignore_errors=True)
 
 
+PIN_TIER_COST = {"quick": "~30s", "limited": "several minutes",
+                 "full": "up to an hour — the whole cross-target matrix"}
+
+
+def watcher_is_down():
+    """Is Track T PROVEN down? `twatch --status` exit 1 is the documented test.
+
+    Not "slow" and not "feels stale" — CLAUDE.md is explicit that those two
+    commands are what answer it, so this asks rather than guesses. Any error
+    reaching it counts as NOT down: a pin should not silently escalate to a
+    long gate because a subprocess failed to launch.
+    """
+    try:
+        return subprocess.run([sys.executable,
+                               os.path.join(REPO, "tools/twatch.py"),
+                               "--status"], cwd=REPO,
+                              capture_output=True, timeout=60).returncode == 1
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def pin_gate_tier(explicit, down):
+    """Which tier gates a pin. Split out so both directions are testable.
+
+    Defaults to QUICK, because `tools/gate.sh quick` is what CLAUDE.md names as
+    THE pin gate. It used to default to `full`, which reintroduced through the
+    gate exactly the cost the 2026-08-09 stabilize-fast decision removed through
+    stabilize — 2305 jobs with the repo lock held, blocking every other lane —
+    and two operators killed it as a hang because nothing said what it was doing
+    (bug-t-testmgr-pin-gates-with-the-full-tier-by-default).
+
+    The one escalation is the documented exception: when Track T is PROVEN down
+    nothing else is sweeping the matrix, so breadth has to come from somewhere.
+    `limited` rather than `full` — enough to be worth the wait, still not a
+    release gate. Explicit --tier always wins, in both directions.
+    """
+    if explicit:
+        return explicit
+    return "limited" if down else "quick"
+
+
 def run_pin(args):
     """Gate, stabilize, pin -- scheduled, resource-aware and INTERRUPTIBLE.
 
@@ -2581,8 +2622,15 @@ def run_pin(args):
         print("testmgr --pin: gate already green for %s (%s) — skipping it"
               % (sha[:12], prior.get("gated_at", "?")), flush=True)
     else:
-        tier = args.tier or "full"
-        print("testmgr --pin: gate — tier %s at %s" % (tier, sha[:12]),
+        down = watcher_is_down() if not args.tier else False
+        tier = pin_gate_tier(args.tier, down)
+        # Say what is about to happen and roughly how long. Silence for minutes
+        # is what got the old default killed twice as a hang — a UX defect
+        # independent of which tier is correct.
+        print("testmgr --pin: gate — tier %s at %s (%s)%s"
+              % (tier, sha[:12], PIN_TIER_COST.get(tier, "duration unknown"),
+                 "; Track T is DOWN, so nothing else is sweeping the matrix "
+                 "— pass --tier quick to override" if down else ""),
               flush=True)
         # A child, so the gate keeps the process-group teardown twatch.kill_child
         # relies on; --force because THIS process holds the repo lock for the
@@ -2598,7 +2646,8 @@ def run_pin(args):
             json.dump({"gated_sha": sha, "gated_at": utcnow_iso()}, f)
         print("testmgr --pin: gate GREEN", flush=True)
 
-    print("testmgr --pin: stabilize-fast", flush=True)
+    print("testmgr --pin: stabilize-fast (~40s — self → next → fixedpoint, "
+          "byte-identical)", flush=True)
     if subprocess.run(["make", "stabilize-fast"], cwd=REPO).returncode != 0:
         print("testmgr --pin: stabilize-fast FAILED — nothing pinned",
               file=sys.stderr)

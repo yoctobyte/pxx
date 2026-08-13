@@ -4,6 +4,7 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`testmgr.py --pin` with no --tier gates with the FULL tier (2305 jobs, the whole cross-target matrix) while holding the repo lock — so the documented operator pin command blocks every other lane for an hour. run_pin's own docstring quotes the 2026-08-09 decision that all-target verification belongs to a RELEASE, not to a pin; the stabilize half honours it and the gate half does not"
+status: done
 ---
 
 # `testmgr --pin` gates with the FULL tier by default
@@ -102,3 +103,32 @@ gates quick, and `--pin --tier full` still gates full.
 "Permission denied" and needs `python3 tools/trackt.py health`. A `chmod +x`,
 worth folding into whatever touches Track T's tooling next rather than its own
 ticket.
+
+## FIXED 2026-08-13 — by the agent that wrote the defect
+
+Accepted in full; the report is correct and the reasoning is the one that
+should have been applied when `--pin` was written the day before. `run_pin`
+quoted the 2026-08-09 decision in its own docstring and then contradicted it one
+branch later.
+
+- `pin_gate_tier(explicit, down)` — split out as a pure function precisely so
+  the Gate's "assert both directions" is a unit test rather than an hour-long
+  run. Bare `--pin` gates **quick**; explicit `--tier` always wins.
+- **The Track-T-down conditional is now in the tool**, as the ticket suggested it
+  should be: `watcher_is_down()` uses the documented test (`twatch --status`
+  exit 1 — not "slow", not "feels stale"), and escalates the default to
+  `limited`, saying so and naming the override. Any error reaching that probe
+  counts as NOT down, so a failed subprocess can never silently buy an hour.
+- **Every phase now announces itself and its expected cost** — `gate — tier
+  quick (~30s)`, `stabilize-fast (~40s ...)`, `applying the pin
+  (uninterruptible from here — microseconds)`. This was the real reason two
+  operators killed it: silence, not duration.
+- `chmod +x tools/trackt.py` — folded in as the ticket asked.
+
+Verified both directions end to end, with the gate child's argv captured rather
+than executed: bare → `--tier quick`, `--tier full` → `--tier full`. Pinned as a
+case in `tools/devtest_pin_atomic.py`, run against a scratch tree per Track T's
+"QUICK tiers and a scratch repo, never long runs" rule.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
