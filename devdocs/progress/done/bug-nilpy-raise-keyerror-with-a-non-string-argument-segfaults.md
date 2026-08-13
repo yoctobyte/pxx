@@ -56,7 +56,7 @@ argument, `str(e)`, `repr(e)` and `e.args` for each, plus the string forms as
 controls.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit beacc6660.
 
 ## Resolution (2026-08-13)
 
