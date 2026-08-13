@@ -219,6 +219,51 @@ class Clone:
         file, corpus trees) is harmless — detached checkouts don't touch it."""
         return sh(["git", "status", "--porcelain", "-uno"], cwd=self.path)
 
+    def publish_own_writes(self, host):
+        """Commit dirt confined to tstate/ — it can only ever be ours.
+
+        The dirty guard below exists to stop a HUMAN's edit being trampled by a
+        detached checkout, and to stop dev sources leaking into a run. It is
+        right about both. It is wrong about `tstate/`, because that directory is
+        face 1's entire write scope and nothing else on the box writes there —
+        so when it pauses on tstate dirt it is waiting for a commit that only
+        the paused daemon could make.
+
+        That deadlock has now happened twice from two different call sites: the
+        `last_opt` bookkeeping on 2026-07-11, and mark_infra() on 2026-08-12,
+        which cost 16 hours. Both were fixed at the call site. This fixes the
+        SHAPE instead: any bare save_state() from any future path self-heals on
+        the next cycle rather than taking the box dark, because publishing our
+        own record is always the right answer and pausing forever never is.
+
+        Deliberately narrow — tracked, modified, under tstate/ only. A dirty
+        file anywhere else still pauses exactly as before, AND suppresses this
+        entirely: if anything outside tstate/ is dirty we publish nothing and
+        fall through to the pause. That is not tidiness, it is safety. publish()
+        can hit a rebase conflict, and its recovery is `_drop_to_origin()` —
+        a `reset --hard`, which would take a human's uncommitted edit with it.
+        The old code could never do that because publish() was only reachable
+        after the guard had proven the tree clean; running before the guard
+        removes that protection unless we restore it here.
+        """
+        mine, others = [], []
+        for line in (self.dirty() or "").splitlines():
+            m = re.match(r"^\s*([A-Z?!]{1,2})\s+(.*)$", line)
+            if not m or "D" in m.group(1) or "R" in m.group(1):
+                continue
+            rel = m.group(2).strip().strip('"')
+            (mine if rel.startswith(TSTATE_REL.rstrip("/") + "/")
+             else others).append(rel)
+        if not mine or others:
+            return []
+        print("twatch: %d uncommitted tstate file(s) — ours by definition, "
+              "publishing rather than pausing on them: %s"
+              % (len(mine), ", ".join(os.path.basename(p) for p in mine)),
+              flush=True)
+        self.publish("tstate(%s): publish uncommitted state (%s)"
+                     % (host, ", ".join(os.path.basename(p) for p in mine)))
+        return mine
+
     def heal_truncations(self):
         """Restore tracked files an unclean shutdown zeroed. Returns the list.
 
@@ -1214,12 +1259,23 @@ def no_measurement(report):
 
 
 def mark_infra(clone, host, st, sha, tier, reason):
-    """Record that this box could not run — and keep it out of the ledger."""
+    """Record that this box could not run — and keep it out of the ledger.
+
+    PUBLISHES, and must: a bare save_state() leaves the clone dirty, and the
+    per-cycle dirty guard then pauses every following cycle forever, because the
+    only thing that writes tstate/ is the daemon and the daemon is paused. The
+    identical bug was found in the `last_opt` bookkeeping on 2026-07-11 and
+    fixed only there; this sibling went unnoticed until it took the box dark for
+    16 hours on 2026-08-12 — a full tier ran GREEN 2293/2293, testmgr returned
+    rc=2, and the infra record written to explain that never got committed.
+    """
     inf = st.get("infra") or {}
     st["infra"] = {"since": inf.get("since") or utcnow(), "last": utcnow(),
                    "sha": sha, "tier": tier, "reason": reason,
                    "count": int(inf.get("count") or 0) + 1}
     save_state(clone, host, st)
+    clone.publish("tstate(%s): infra %s %s — %s"
+                  % (host, sha[:12], tier, reason))
 
 
 def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
@@ -3540,6 +3596,7 @@ def main():
             # here too, or an OOM kill mid-publish parks the daemon forever
             clone.heal_truncations()
             rotate_log(clone.path)
+            clone.publish_own_writes(host)
             dirty = clone.dirty()
             if dirty:
                 print("twatch: clone dirty — pausing this cycle (commit or "
