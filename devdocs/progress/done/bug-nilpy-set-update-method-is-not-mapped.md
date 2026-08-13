@@ -155,4 +155,4 @@ expectations (this change moves a name-resolution gate, which the family sweep
 is for).
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 1e61fa198.
