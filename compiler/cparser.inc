@@ -1057,7 +1057,21 @@ begin
       if ((CAttrFlags[TokPos - 1] and 32) <> 0) or
          (((CAttrFlags[TokPos - 1] and 16) <> 0) and (TARGET_PTR_SIZE = 8)) then
       begin
-        if IntToTypeKind(ASTTk[node]) = tyUInt32 then ASTTk[node] := Ord(tyUInt64)
+        if IntToTypeKind(ASTTk[node]) = tyUInt32 then
+        begin
+          { The suffix RE-RUNS the ladder, it does not widen the rung the
+            unsuffixed ladder picked. C99 6.4.4.1: a hex constant suffixed `l/L`
+            has candidate types `long`, then `unsigned long` — so a value that
+            fits a signed 64-bit long IS a long, however it was typed without
+            the suffix. Widening tyUInt32 straight to tyUInt64 made
+            `0x9745DC78L` an UNSIGNED long, and comparing it with a negative
+            int32 then converted the int32 to a huge unsigned:
+            `0x9745DC78L > *g_6` answered 0 where gcc answers 1, silently.
+            (Found by csmith seed 79, bug-c-csmith-seed-79-miscompile-vs-gcc.)
+            A `u`/`U` suffix keeps the unsigned rungs, which is what it is for. }
+          if (CAttrFlags[TokPos - 1] and 4) <> 0 then ASTTk[node] := Ord(tyUInt64)
+          else ASTTk[node] := Ord(tyInt64)
+        end
         else if IntToTypeKind(ASTTk[node]) in [tyInteger, tyInt32] then ASTTk[node] := Ord(tyInt64);
       end;
       { The suffix also fixes the literal's C TYPE IDENTITY, which the width above

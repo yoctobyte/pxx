@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "csmith seed 79 (1588 lines, UB-free by construction) computes a different global checksum under pxx than under gcc at -O0: gcc B4981522, pxx D1BEECFE. Silent wrong value, saved with its REPRO. One hit in 250 seeds — the first since the campaign's original nine."
+status: done
 ---
 
 # csmith seed 79: checksum disagrees with the gcc oracle
@@ -97,3 +98,58 @@ So the interestingness test needs FOUR families of guard — uninitialised reads
 and only then the checksum difference. The script lives beside the repro in the
 scratch tree; it is worth copying into the next reduction rather than
 re-deriving, because each of these cost a full reduction run to discover.
+
+## FIXED 2026-08-13 — a suffix RE-RUNS the constant ladder, it does not widen a rung
+
+Run 4 (all five guards) reduced the 1588 lines to **15**, and the payload is one
+line:
+
+```c
+int32_t g_7 = 2324699082;          /* as int32: -1970268214 */
+int32_t *g_6 = &g_7;
+*l_403 = 0x9745DC78L > *g_6;       /* gcc: 1   pxx: 0 */
+```
+
+Minimal, outside csmith — every row's expectation is gcc's:
+
+| expression (`int32_t g = -1970268214`) | gcc | pxx before |
+| --- | --- | --- |
+| `0x9745DC78L  > g` | 1 | **0** |
+| `0x9745DC78   > g` | 1 | 1 |
+| `2537528440L  > g` | 1 | 1 |
+| `0x9745DC78LL > g` | 1 | **0** |
+| `0x9745DC78UL > g` | 0 | 0 |
+
+### The cause
+
+`0x9745DC78` is 2537528440: it overflows `int` but fits `unsigned int`, so the
+UNSUFFIXED hex ladder types it `unsigned int` — correct, and `cparser.inc` did
+that right. The `l/L` promotion then read that rung and widened it,
+`tyUInt32 -> tyUInt64`.
+
+But C99 6.4.4.1 says the suffix **re-runs** the ladder with a different
+candidate list: for a hex constant suffixed `l/L` the candidates are
+`long`, then `unsigned long`. 2537528440 fits a signed 64-bit long, so it is a
+positive **long** — signedness is not inherited from the rung the unsuffixed
+ladder happened to stop at.
+
+As `unsigned long` it dragged the other operand up with it: the negative int32
+converted to a huge unsigned, and `>` answered 0. Silent, and exactly the class
+of bug the human-written C corpora never reach.
+
+Fix: on the `l/L` promotion, `tyUInt32` becomes `tyInt64` — unless the literal
+also carried `u`/`U`, which is what the unsigned rungs are for.
+
+### Verified
+
+- the 15-line reduction: gcc and pxx both `checksum = 56772008`;
+- **the original 1588-line seed 79: both `checksum = B4981522`** — the root fix,
+  not a reduction-shaped patch;
+- `test/chex_long_suffix_literal.c` (the six rows above) wired into `make test`;
+- `gate.sh quick` GREEN, self-host fixedpoint byte-identical.
+
+Track A note: this is a C-frontend typing bug (`cparser.inc`), no IR or backend
+involvement.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

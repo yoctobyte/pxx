@@ -4124,6 +4124,13 @@ test-core: $(COMPILER)
 	# b200 (bug-c-expr-result-type-model / 00104): hex/octal constant unsigned type ladder
 	./$(COMPILER) test/chex_constant_unsigned_type_b200.c /tmp/chex_constant_unsigned_type_b20026
 	/tmp/chex_constant_unsigned_type_b20026; test "$$?" = "42"
+	# csmith seed 79: a SUFFIX re-runs the constant ladder, it does not widen the
+	# rung the unsuffixed ladder picked. 0x9745DC78L fits a signed long, so it is
+	# a positive long -- typed unsigned long it converted the negative int32 it is
+	# compared against into a huge unsigned and the comparison silently flipped.
+	# 1588 csmith lines reduced to that one line. Expectations are gcc's.
+	./$(COMPILER) test/chex_long_suffix_literal.c /tmp/chex_long_suffix26
+	test "$$(/tmp/chex_long_suffix26)" = "$$(printf 'hexL   1\nhex    1\ndecL   1\nhexLL  1\nhexU   0\nplain  1')"
 	# b201 (bug-crtl-printf-g-double-roundtrip): va_arg(T*) pointee width (scanf float)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cva_arg_pointer_pointee_b201.c /tmp/cva_arg_pointer_pointee_b20126
 	/tmp/cva_arg_pointer_pointee_b20126; test "$$?" = "42"

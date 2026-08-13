@@ -198,6 +198,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-crtl-missing-unistd-syscalls | C | 50 | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-crtl-pulled-fn-inline-signed-compare | A | 30 | bug | C: a crtl auto-pulled int function used inline in a signed compare reads unsigned | — |
 | bug-c-crtl-rmdir-access-constants-register | A | 58 | bug | crtl gaps surfaced by the undeclared-identifier warning: rmdir, F_OK/W_OK/R_OK, register | — |
+| bug-c-csmith-seed-79-miscompile-vs-gcc | C | 55 | bug | csmith seed 79 (1588 lines, UB-free by construction) computes a different global checksum under pxx than under gcc at -O0: gcc B4981522, pxx D1BEECFE. Silent wrong value, saved with its REPRO. One hit in 250 seeds — the first since the campaign's original nine. | — |
 | bug-c-csmith-seed2-segfault | A+C | 60 | bug | bug: pxx-built csmith program segfaults (csmith seed 2), -O0 | — |
 | bug-c-cstatic-init-cast-encodes-the-parked-signed-char-expectation | C | 60 | bug | cstatic_init_cast.c was written during the 2-hour window when plain char was signed, so its c3 check expects -1. The remap was reverted at 17:00 and the test was stranded — the compiler is behaving as ticketed, the expectation is not | — |
 | bug-c-double-ptr-deref-narrow-to-single | A | 45 | bug | C: `(float)*doubleptr` narrows to 0 when a single value is live (x86-64) | — |
