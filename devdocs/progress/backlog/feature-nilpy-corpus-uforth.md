@@ -624,3 +624,47 @@ forever. Now exit 0 and byte-identical.
 This is the corpus doing the job it exists for: a whole night of frontend and
 runtime changes, and the one differential suite big enough to notice says
 nothing moved.
+
+## MILESTONE 2026-08-13 — the WHOLE ANS/Forth-2012 suite is byte-identical to CPython
+
+`tests/runtests.fth` — the upstream master driver: prelim, core, coreplus,
+coreext, block, double, exception, facility, file, locals, memory, tools,
+searchorder, string, then `REPORT-ERRORS` — run under pxx-compiled uforth and
+under CPython, same input, from `tests/`:
+
+```
+252 lines, byte-identical stdout AND stderr, exit 0 both
+REPORT-ERRORS:  Total  0
+```
+
+Both walls this ticket recorded are gone:
+
+- the **line-3887 `expected newline after statement`** wall is CLEAR —
+  `uforth.py` (153 KB, 3.9k lines) compiles clean at HEAD, no isolation needed;
+- `tests/core.fr` no longer stops at line 639 of 1009: it runs to
+  `End of Core word set tests`, and the earlier "runs and diverges" reading was
+  a **capture artifact** — the two runs' stdout/stderr were merged with `2>&1`
+  and interleaved differently. Separate the streams before calling an ordering
+  difference a divergence.
+
+Also worth knowing for anyone re-running this: `prelimtest.fth` **reads a line
+from stdin** ("PLEASE TYPE UP TO 80 CHARACTERS"). Both implementations sit there
+forever, so a bare run looks like a hang and a timeout looks like a wall. Feed it
+(`echo hi | ...`).
+
+Timing on this box, whole suite: **CPython 68.5 s, pxx 190.8 s** — pxx is ~2.8x
+SLOWER here, which is the interpreted-lambda/pyeval cost this ticket's own notes
+predict (uforth's native words are `"..." PYTHON` blocks exec'd per call). That
+is the number to beat, and it is a much better benchmark than a microbench
+because it is 100% real work.
+
+### The one real divergence found: `__file__`
+
+Running from `tests/` instead of the project root, pxx prints `STD LIB NOT
+FOUND` and every driver then dies on `THROW -13`, where CPython is fine.
+`load_stdlib_if_any` falls back to
+`os.path.dirname(os.path.abspath(__file__))`, and NilPy's `__file__` is
+`argv[0]` — the BINARY — not the source path. Parked as a Track U fork:
+[[decide-nilpy-dunder-file-for-a-compiled-program]] (recommendation: bake the
+source path at compile time). Until it is decided, run the drivers from the
+directory that holds `STD.UFO`, or put the binary beside it.
