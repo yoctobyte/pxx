@@ -10695,7 +10695,7 @@ end;
   argsHead is the AN_ARG chain INCLUDING Self at 0, so explicit argument i
   lines up with parameter i+1. Exact type-kind equality only — see the caller. }
 function PyOverloadArgTypeScore(pIdx, argsHead, nExplicit: Integer): Integer;
-var j, an, tk: Integer;
+var j, an, tk, argRec, parRec: Integer;
 begin
   Result := 0;
   an := ASTRight[argsHead];          { skip Self }
@@ -10705,7 +10705,27 @@ begin
     if j >= MAX_PROC_PARAMS then Break;
     if j > Procs[pIdx].ParamCount - 1 then Break;
     tk := ASTTk[ASTLeft[an]];
-    if tk = Ord(Procs[pIdx].Params[j].TypeKind) then Inc(Result);
+    if tk = Ord(Procs[pIdx].Params[j].TypeKind) then
+    begin
+      Inc(Result);
+      { CLASS IDENTITY, not just the type KIND. TPyDict.update declares
+        update(TPyList) and update(TPyDict) at the same arity and both
+        parameters are tyClass, so the kind test alone TIES every time and the
+        first DECLARATION won — a TPyDict argument was walked as a TPyList.
+        Through a statically-typed receiver that only mattered until the
+        Variant overload was added; through a VARIANT receiver, where nothing
+        else disambiguates, it SEGFAULTED.
+        An exact rec-id match scores strictly higher, and a mismatch still
+        keeps the kind point, so a call only moves when a better-typed sibling
+        actually exists.
+        bug-nilpy-dict-update-through-a-variant-receiver-picks-the-list-overload }
+      if (tk = Ord(tyClass)) or (tk = Ord(tyRecord)) then
+      begin
+        argRec := ResolveNodeRec(ASTLeft[an]);
+        parRec := ProcParamRecId[pIdx * MAX_PROC_PARAMS + j];
+        if (argRec >= REC_UCLASS_BASE) and (argRec = parRec) then Inc(Result, 2);
+      end;
+    end;
     an := ASTRight[an];
     Inc(j);
   end;
@@ -11233,6 +11253,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
       candidate classes to dispatch at runtime" }
     dualCis, dualMmis: array[0..15] of Integer;
     nDual, di, kwIdx, kwDepth, swapCi, swapMmi, dualArgs: Integer;
+    ovlMmi: Integer;   { same-arity overload re-picked by argument TYPE }
     anyKw: Boolean; dualRetMixed: Boolean;
     argExprs: array[0..15] of Integer;
     smTmpSym, smAsgn, smGuardArg, smGuardCall, smNotNode, smNameArg,
@@ -11789,6 +11810,16 @@ begin
   begin
     mmi := FindUMethArity(hitCi, PyMethNameFor(hitCi, mname), i);
     if mmi >= 0 then begin hitMmi := mmi; hitPi := UMthProc_[mmi]; end;
+    { ...and among the same-ARITY overloads, by argument TYPE, exactly as the
+      class-typed path does. Arity alone is not enough: TPyDict.update declares
+      update(TPyList), update(TPyDict) and update(const Variant) all at arity 1
+      and the first always won, so `xs[0].update(d)` on a dict element walked a
+      TPyDict as a TPyList and SEGFAULTED — while the identical call on a bare
+      name was fine, because that path already scores the arguments.
+      bug-nilpy-dict-update-through-a-variant-receiver-picks-the-list-overload }
+    ovlMmi := PyPickOverloadByArgTypes(hitCi, PyMethNameFor(hitCi, mname),
+                                       i, selfArg, hitMmi);
+    if ovlMmi >= 0 then begin hitMmi := ovlMmi; hitPi := UMthProc_[ovlMmi]; end;
   end;
 
   mpi := hitPi;
@@ -11936,6 +11967,15 @@ begin
       mmi := FindUMethArity(dualCis[di], PyMethNameFor(dualCis[di], mname), i);
       if mmi < 0 then mmi := dualMmis[di];
       if mmi < 0 then Continue;
+      { ...and by argument TYPE among the same-arity overloads, as the static
+        arm above now does. This is the arm a DICT reached: `xs[0].update(d)`
+        dispatched correctly to the TPyDict candidate and then called its
+        update(TPyList) overload — first by declaration, and arity cannot tell
+        the three apart — so a TPyDict was walked as a TPyList and SEGFAULTED.
+        bug-nilpy-dict-update-through-a-variant-receiver-picks-the-list-overload }
+      ovlMmi := PyPickOverloadByArgTypes(dualCis[di],
+                  PyMethNameFor(dualCis[di], mname), i, selfArg, mmi);
+      if ovlMmi >= 0 then mmi := ovlMmi;
       dualPi := UMthProc_[mmi];
       { The runtime candidate may declare MORE parameters than the call wrote,
         with defaults — `to_text(self, verbose=False)` reached by a bare

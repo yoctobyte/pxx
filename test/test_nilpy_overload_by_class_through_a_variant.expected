@@ -1,0 +1,14 @@
+mapping   [('a', 1), ('c', 3)]
+pairs     [('a', 1), ('c', 3)]
+var arg   [('a', 1), ('c', 3)]
+via local [('a', 1), ('c', 3)]
+mutates   [('a', 1), ('c', 3)] True
+param map [('host', 'x'), ('p', 1)]
+param prs [('host', 'x'), ('q', 2)]
+static    [('a', 1), ('c', 3)]
+static pr [('a', 1), ('c', 3), ('e', 5)]
+set elem  [1, 8]
+list elem [1, 9]
+get 1/2   1 dflt
+pop       2 3
+count     4 2

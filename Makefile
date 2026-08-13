@@ -1430,6 +1430,15 @@ test-nilpy: $(COMPILER)
 	# set was walked as a dict).
 	./$(COMPILER) test/test_nilpy_set_update_methods.npy /tmp/test_nilpy_setupd26
 	/tmp/test_nilpy_setupd26 | diff -u test/test_nilpy_set_update_methods.expected -
+	# `xs[0].update(d)` on a dict element SEGFAULTED: a variant receiver picked an
+	# overload by ARITY alone, and the scorer that should have decided compared
+	# type KINDS -- two class parameters both being tyClass, every candidate tied
+	# and the first declaration (update(TPyList)) always won, so a TPyDict was
+	# walked as a TPyList. The scorer now ranks exact CLASS identity above a
+	# kind-only match. Rows vary the receiver AND the argument kind: mapping,
+	# iterable of pairs and variant must each reach a different overload.
+	./$(COMPILER) test/test_nilpy_overload_by_class_through_a_variant.npy /tmp/test_nilpy_ovlcls26
+	/tmp/test_nilpy_ovlcls26 | diff -u test/test_nilpy_overload_by_class_through_a_variant.expected -
 	# a module name rebound INSIDE a block from a subscript / .values() loop /
 	# list() wrapper kept the module binding's type -- len() read a pointer.
 	./$(COMPILER) test/test_nilpy_module_name_rebound_in_a_block.npy /tmp/test_nilpy_modrebind26

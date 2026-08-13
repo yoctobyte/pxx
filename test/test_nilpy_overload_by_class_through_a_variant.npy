@@ -1,0 +1,93 @@
+# bug-nilpy-dict-update-through-a-variant-receiver-picks-the-list-overload
+#
+# `xs[0].update(d)` on a DICT element SEGFAULTED, while the identical call on a
+# bare name was correct. A subscript yields a VARIANT, so the call takes the
+# variant-receiver path, and that path picked an overload by ARITY alone:
+# TPyDict.update declares update(TPyList), update(TPyDict) and
+# update(const Variant) all at arity 1, so the first DECLARATION always won and
+# a TPyDict was walked as a TPyList.
+#
+# The arity re-resolve was only half of it. The overload SCORER compared type
+# KINDS, and two class parameters are both tyClass — every candidate tied, so
+# the incumbent kept winning even where the scorer did run (the statically
+# typed path). It now scores CLASS IDENTITY: an exact rec-id match ranks
+# strictly above a kind-only match, and a kind-only match still scores, so a
+# call moves only when a better-typed sibling actually exists.
+#
+# Three sites had to learn it, which is why the rows below vary the RECEIVER as
+# well as the argument: the static arm, the runtime dual-dispatch arm (the one
+# a dict actually reached — dispatch found TPyDict correctly and then called
+# its wrong overload), and the scorer they share.
+#
+# The ARGUMENT rows matter as much: a mapping, an iterable of pairs and a
+# variant must each reach a different overload, so a fix that sent them all
+# down one arm would still pass a mapping-only test.
+#
+# Expectations are CPython's own output.
+
+# --- variant receiver (a subscript), each argument kind ---
+dvs = [{"a": 1}]
+dvs[0].update({"c": 3})
+print("mapping  ", sorted(dvs[0].items()))
+
+dvs2 = [{"a": 1}]
+dvs2[0].update([["c", 3]])
+print("pairs    ", sorted(dvs2[0].items()))
+
+src = {"c": 3}
+dvs3 = [{"a": 1}]
+dvs3[0].update(src)
+print("var arg  ", sorted(dvs3[0].items()))
+
+# the receiver bound to a plain local first — still a variant, another route in
+dvs4 = [{"a": 1}]
+d4 = dvs4[0]
+d4.update({"c": 3})
+print("via local", sorted(d4.items()))
+
+# it MUTATES the element, not a copy: the original dict must see it
+orig = {"a": 1}
+holder = [orig]
+holder[0].update({"c": 3})
+print("mutates  ", sorted(orig.items()), orig is holder[0])
+
+
+# --- the argument through a PARAMETER: the shape the Variant overload exists
+# for, kept as a control so this fix cannot regress it ---
+def merged(sec):
+    m = dict({"host": "x"})
+    m.update(sec)
+    return sorted(m.items())
+
+
+print("param map", merged({"p": 1}))
+print("param prs", merged([["q", 2]]))
+
+
+# --- statically-typed receivers, as controls ---
+dd = {"a": 1}
+dd.update({"c": 3})
+print("static   ", sorted(dd.items()))
+dd.update([["e", 5]])
+print("static pr", sorted(dd.items()))
+
+
+# --- a SET element through the same path: TPyList, not TPyDict, must be the
+# class the dispatch lands on ---
+sets = [{1}, {2}]
+sets[0].update({8})
+print("set elem ", sorted(sets[0]))
+
+lists = [[1], [2]]
+lists[0].extend([9])
+print("list elem", lists[0])
+
+
+# --- other overloaded methods through a variant receiver, which the same
+# scorer now ranks: these are arity-distinguished and must not move ---
+gd = [{"a": 1}]
+print("get 1/2  ", gd[0].get("a"), gd[0].get("zz", "dflt"))
+pl = [[3, 1, 2]]
+print("pop      ", pl[0].pop(), pl[0].pop(0))
+cl = [[1, 2, 2, 3]]
+print("count    ", len(cl[0]), cl[0].count(2))
