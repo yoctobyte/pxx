@@ -8,6 +8,6 @@
 
 ## Open regressions
 - **test-core#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `67910b097baf`, last good `983104cae716`, 1 commit(s) in range
-- **test-arm32#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas test/test_arm32_record_byval_wide.pas +1 (plexus): bad `f86de5e84174`, last good `432867370a9e`, 11 commit(s) in range
+- **test-arm32#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas test/test_arm32_record_byval_wide.pas +1 (plexus): bad `80d61373e108`, last good `432867370a9e`, 5 commit(s) in range
 - **test-i386#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range
 - **test-nilpy#src:test/test_uses_order_pylib_exception_a.pas** — test/test_uses_order_pylib_exception_a.pas (plexus): bad `be7f80936b0c`, last good `7a3f93c5f7eb`, 44 commit(s) in range
