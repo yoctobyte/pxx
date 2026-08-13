@@ -64,7 +64,7 @@ define it. `zip`/`type`/`print` may stay refusals in this ticket — they are
 diagnostics, not wrong answers — but say so in the test.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 5aac2701c.
 
 ## Resolution (2026-08-13)
 
