@@ -1,0 +1,73 @@
+# bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
+#
+# Three argument shapes were refused at a CONSTRUCTION while working at a plain
+# def and at an ordinary method. The cause the ticket names is right: the
+# construction site assembles its own call and does not go through the shared
+# argument path, so each thing that path does had to arrive here separately.
+#
+# The third shape is the sharpest and is the F rows below. `def __init__(self,
+# a, *rest, **kw)` that stores `self.k = len(kw)` declares a FIELD named k, and
+# the keyword lookup checked fields before deciding a non-parameter keyword
+# belongs in **kw — so `F(1, 2, k=9)` matched that field, found its slot already
+# taken by the positional 2, and was rejected with "got multiple values for
+# field 'k'". A class was punished for naming a field after one of its own
+# keyword options, which is the ordinary thing to do.
+#
+# NOT supported: `A(*xs)` where the constructor ITSELF takes *args or **kwargs.
+# That wants the list passed through as the packed parameter, a different
+# lowering from expanding into declared slots — the shared expander counts every
+# signature slot, packed ones included, so it demanded one element per container
+# and failed at RUN time with an arity message about a call the program never
+# wrote. Refused at compile time by name instead, which is why no row here
+# unpacks into such a constructor.
+#
+# The plain-def and ordinary-method twins are the controls that say which path
+# was short.
+#
+# Expectations are CPython's own output.
+
+
+class E:
+    def __init__(self, **kw):
+        self.n = len(kw)
+
+
+class F:
+    def __init__(self, a, *rest, **kw):
+        self.a = a
+        self.r = len(rest)
+        self.k = len(kw)
+
+
+class C:
+    def __init__(self, a, b):
+        self.s = a + b
+
+
+print("kwargs ctor ", E(a=1, b=2).n, E().n)
+print("kw vs field ", F(1, 2, k=9).a, F(1, 2, k=9).r, F(1, 2, k=9).k)
+print("kw only     ", F(1).a, F(1).r, F(1).k)
+print("many kw     ", F(1, 2, 3, x=1, y=2, z=3).r, F(1, 2, 3, x=1, y=2, z=3).k)
+
+xs = [1, 2]
+print("star unpack ", C(*xs).s)
+print("star tuple  ", C(*(3, 4)).s)
+
+# the controls: the shapes that always worked
+print("positional  ", C(1, 2).s)
+print("plain kw    ", F(1, 2, 3).r)
+
+
+def fn(a, *rest, **kw):
+    return a, len(rest), len(kw)
+
+
+print("def twin    ", fn(1, 2, k=9))
+
+
+class Holder:
+    def m(self, a, *rest, **kw):
+        return a, len(rest), len(kw)
+
+
+print("method twin ", Holder().m(1, 2, k=9))

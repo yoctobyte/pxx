@@ -1,0 +1,10 @@
+kwargs ctor  2 0
+kw vs field  1 1 1
+kw only      1 0 0
+many kw      2 3
+star unpack  3
+star tuple   7
+positional   3
+plain kw     2
+def twin     (1, 1, 1)
+method twin  (1, 1, 1)

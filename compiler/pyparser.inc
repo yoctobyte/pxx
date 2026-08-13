@@ -4931,6 +4931,12 @@ begin
 end;
 
 function PyClassCreate: Integer; forward;
+{ Defined far below, next to the method-call paths that were its first callers;
+  PyClassCreate uses it too, and the FPC SEED needs the forward because it
+  compiles this include top-down (bug-a-fpc-seed-drift-emitasmx64-forward — the
+  self-hosted build resolves it either way, so only the seed canary sees this). }
+procedure PyStarExpandCallArgs(procIdx, firstSlot: Integer;
+                               var headArg, lastArg: Integer); forward;
 
 { Is the construction at CurTok followed by a `.name(` suffix — `Cls().m(...)`?
   Then the statement's right-hand side is a CALL whose receiver happens to be a
@@ -5575,6 +5581,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     excFoldCi, excFoldPi, excFoldStr, excFoldN, excFoldI: Integer;
     excFoldA, excFoldC: Integer;   { the multi-arg Exception fold }
     szArgNode, starHead: Integer;  { *args packing (see below) }
+    kwExtraHead, kwExtraLast, kwKeyNode: Integer;   { keywords bound for **kwargs }
 begin
   name := CurTok.SVal;
   ci := -1;
@@ -5608,6 +5615,45 @@ begin
   kwAny := False;
   kwMax := -1;
   kwPos := 0;
+  kwExtraHead := -1; kwExtraLast := -1;
+  { `C(*xs)` — the whole argument list is one unpack, the shape the METHOD paths
+    already handle via PyStarUnpackMethodArgs and this one did not (it reached
+    PyParseBoolExpr on the '*' and died with "expected expression"). Handled
+    before the keyword/slot loop rather than inside it: the expansion fills
+    every remaining declared slot at once, so there is nothing for the slot
+    bookkeeping to do, and an argument after the unpack is refused by the shared
+    expander anyway.
+    bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused }
+  if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind <> tkStar) then
+  begin
+    ctorMi := FindUMeth(ci, 'create');
+    if ctorMi < 0 then
+      Error('Nil Python: *unpacking into ' + name
+            + '() needs a constructor to unpack into');
+    ctorPi := UMthProc_[ctorMi];
+    { A ctor that itself takes *args or **kwargs would need the LIST passed
+      through as its packed parameter rather than expanded into declared slots
+      — a different lowering. The shared expander counts EVERY signature slot,
+      the packed ones included, so it would demand one element per container
+      and fail at run time with an arity message about a call the program never
+      wrote. Refused at compile time by name instead. }
+    if (ProcPyStarIdx[ctorPi] >= 0) or (ProcPyKwIdx[ctorPi] >= 0) then
+      Error('Nil Python: ' + name + '(*xs) where the constructor itself takes '
+            + '*args or **kwargs is not supported yet — pass the elements '
+            + 'positionally');
+    starHead := ASTRight[szArgNode];
+    PyStarExpandCallArgs(ctorPi, 1, starHead, lastArg);
+    if starHead >= 0 then ASTRight[szArgNode] := starHead;
+    if lastArg < 0 then lastArg := szArgNode;
+    if CurTok.Kind = tkComma then
+      Error('Nil Python: an argument after *unpacking is not supported yet');
+    Expect(tkRParen, ')');
+    Result := node;
+    LastExprTk := tyClass;
+    CurASTNode := node;
+    Exit;
+  end;
   while CurTok.Kind <> tkRParen do
   begin
     kwFld := -1;
@@ -5632,6 +5678,37 @@ begin
         for kwPk := 1 to Procs[kwCtorPi].ParamCount - 1 do
           if ParamNameEq(kwCtorPi, Procs[kwCtorPi].Params[kwPk].Name, kwName) then
             kwFld := kwPk - 1;
+      end;
+      { …and a ctor taking `**kwargs` accepts a name that is NOT one of its
+        parameters — that is what the dict is for. Checked BEFORE the field
+        fallback, which is the third shape this ticket is about: `def
+        __init__(self, a, *rest, **kw)` storing `self.k = len(kw)` declares a
+        FIELD named k, so `F(1, 2, k=9)` matched that field, found its slot
+        already taken by the positional 2, and was rejected with "got multiple
+        values for field 'k'" — a class punished for naming a field after one
+        of its own keyword options, which is the ordinary thing to do.
+        The key literal travels on the argument's ASTIVal as -(node+1), the
+        same convention PyKwArgIndex uses for a method; PyPackStarArgs below
+        decodes it into the dict.
+        bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused }
+      if (kwFld < 0) and (kwCtorMi >= 0) and (ProcPyKwIdx[kwCtorPi] >= 0) then
+      begin
+        kwKeyNode := AllocNode(AN_STR_LIT);
+        ASTSOffset[kwKeyNode] := PyStoredName(kwName);
+        ASTSLen[kwKeyNode] := Length(kwName);
+        ASTTk[kwKeyNode] := Ord(tyString);
+        Next; Next;                        { the name and the '=' }
+        PyParseBoolExpr;
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := CurASTNode;
+        ASTIVal[argNode] := -(kwKeyNode + 1);
+        ASTRight[argNode] := -1;
+        if kwExtraHead < 0 then kwExtraHead := argNode
+        else ASTRight[kwExtraLast] := argNode;
+        kwExtraLast := argNode;
+        Inc(nArgs);
+        if not Eat(tkComma) then Break;
+        Continue;
       end;
       if kwFld < 0 then
       begin
@@ -5794,6 +5871,16 @@ begin
       nothing — PyPackStarArgs fills the gap itself, keyword bindings included. }
     if (ProcPyStarIdx[ctorPi] >= 0) or (ProcPyKwIdx[ctorPi] >= 0) then
     begin
+      { the keywords destined for **kwargs, appended after the slot-ordered
+        chain: PyPackStarArgs pulls every negatively-marked node out into the
+        dict, so their position among the others does not matter — only that
+        they are IN the chain it walks }
+      if kwExtraHead >= 0 then
+      begin
+        if lastArg >= 0 then ASTRight[lastArg] := kwExtraHead
+        else ASTRight[szArgNode] := kwExtraHead;
+        lastArg := kwExtraLast;
+      end;
       starHead := ASTRight[szArgNode];
       PyPackStarArgs(ctorPi, starHead, lastArg, nArgs, 1);
       ASTRight[szArgNode] := starHead;

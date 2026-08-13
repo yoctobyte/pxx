@@ -1477,6 +1477,12 @@ test-nilpy: $(COMPILER)
 	# element first all worked: the lvalue branch was entered on `name .` alone.
 	# The entry test is now "continues into .member after the bracket", which is
 	# false for a bare xs[0] = v -- that keeps its own setitem lowering.
+	# Construction-site argument shapes: C(**kw) on a **kwargs ctor, C(*xs), and
+	# the sharp one -- a keyword whose name matches a FIELD the ctor's own body
+	# declares (self.k = len(kw)), which was rejected as "got multiple values
+	# for field 'k'". The def and method twins are the controls.
+	./$(COMPILER) test/test_nilpy_ctor_star_and_kwargs.npy /tmp/test_nilpy_ctorargs26
+	/tmp/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -
 	./$(COMPILER) test/test_nilpy_store_attr_of_an_element.npy /tmp/test_nilpy_elemattr26
 	/tmp/test_nilpy_elemattr26 | diff -u test/test_nilpy_store_attr_of_an_element.expected -
 	./$(COMPILER) test/test_nilpy_selector_on_a_dict_returning_call.npy /tmp/test_nilpy_dictsel26
