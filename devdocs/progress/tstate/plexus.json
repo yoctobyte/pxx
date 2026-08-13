@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-13T13:30:30Z",
-   "fixed": [
-    "test-core#src:test/test_nilpy_c_define_const.npy",
-    "test-core#src:test/test_nilpy_c_pointer.npy"
-   ],
-   "new_red": [],
-   "sha": "1ca15d0e68c528203819879bcfad4ed4ac8808a4",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-13T13:43:26Z",
    "fixed": [
     "test-nilpy#src:test/test_nilpy_import_sqlite.npy",
@@ -409,6 +398,16 @@
    "fixed": [],
    "new_red": [],
    "sha": "77c55970f49cadcb87a6341584a5539112d1e038",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-13T22:48:44Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:examples/tk/callbacks.npy"
+   ],
+   "sha": "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79",
    "tier": "native",
    "verdict": "RED"
   }
@@ -3123,7 +3122,7 @@
   "test-core#135": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
-  "test-core#src:examples/tk/callbacks.npy": "pass",
+  "test-core#src:examples/tk/callbacks.npy": "fail",
   "test-core#src:examples/tk/facade_and_paths.npy": "pass",
   "test-core#src:examples/tk/field_class_identity.npy": "pass",
   "test-core#src:examples/tk/import_in_body.npy": "pass",
@@ -5182,11 +5181,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-13T22:37:11Z",
-  "sha": "77c55970f49cadcb87a6341584a5539112d1e038",
+  "date": "2026-08-13T22:48:44Z",
+  "sha": "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79",
   "tier": "native",
   "verdict": "RED",
-  "wall": 165.0
+  "wall": 163.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5259,6 +5258,18 @@
     "67910b097bafa4e8acb496ead3156e10b3ac079d"
    ],
    "src": "test/test_uses_order_pylib_exception_a.pas"
+  },
+  {
+   "bad": "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79",
+   "good": "77c55970f49cadcb87a6341584a5539112d1e038",
+   "job": "test-core#src:examples/tk/callbacks.npy",
+   "name": "test-core#1035",
+   "opened": "2026-08-13T22:48:44Z",
+   "range": [
+    "73e38bb6bed0b3983d8f7f674bb313e2e6d52c11",
+    "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79"
+   ],
+   "src": "examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy"
   }
  ],
  "pin_shadow": {
