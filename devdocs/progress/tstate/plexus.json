@@ -5218,12 +5218,11 @@
  "open_regressions": [
   {
    "bad": "67910b097bafa4e8acb496ead3156e10b3ac079d",
-   "good": "432867370a9eefe623d0aa5fd63076dc097f8a92",
+   "good": "983104cae716ca9031686f798abf51a33ef886a3",
    "job": "test-core#src:test/test_uses_order_pylib_exception_a.pas",
    "name": "test-core#1038",
    "opened": "2026-08-13T19:31:21Z",
    "range": [
-    "983104cae716ca9031686f798abf51a33ef886a3",
     "67910b097bafa4e8acb496ead3156e10b3ac079d"
    ],
    "src": "test/test_uses_order_pylib_exception_a.pas"
