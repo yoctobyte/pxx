@@ -193,4 +193,4 @@ tests were re-run against their exact assertions.
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 74e0cac08.
