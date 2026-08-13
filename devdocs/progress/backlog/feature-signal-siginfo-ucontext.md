@@ -25,10 +25,10 @@ niceties around it.
 
 ## Remaining work
 
-1. **SA_SIGINFO + ucontext.** *(x86-64 access half DONE 2026-08-13 — the flag is
-   set, si_code/si_addr/ucontext* are readable via `__pxxSigCode`/`__pxxSigAddr`/
-   `__pxxSigContext`. What REMAINS here: the RIP rewrite that turns a fault into
-   a catchable raise, and the same treatment for the other four targets.)*
+1. **SA_SIGINFO + ucontext.** *(ACCESS HALF DONE on all five hosted targets
+   2026-08-13 — the flag is set and si_code/si_addr/ucontext* are readable via
+   `__pxxSigCode`/`__pxxSigAddr`/`__pxxSigContext` everywhere. What REMAINS here:
+   the PC rewrite that turns a fault into a catchable raise.)*
    Handler sees `siginfo_t` + register state
    (`ucontext_t`). This is the load-bearing piece for turning a fault into a
    *catchable* Pascal raise: modify ucontext RIP/PC to point at a raise stub
@@ -37,12 +37,14 @@ niceties around it.
    [[bug-integer-div-zero-sigfpe-uncatchable]]), the float-exception-mask trap
    path ([[feature-float-exception-mask-control]]), and SIGSEGV/SIGBUS
    diagnostics ("fault at $ADDR in proc X").
-   - **LANDMINE from b371:** arm32 and i386 pick the signal-frame shape by
-     SA_SIGINFO, NOT by which sigaction syscall installed the handler. The
-     current no-SA_SIGINFO restorers call **sigreturn (119)**. The moment
-     SA_SIGINFO is set these MUST flip to **rt_sigreturn (173)** or the kernel
-     restores a garbage context (observed as pc=sp=lr=0 -> instant SIGSEGV).
-     aarch64/riscv32 use the kernel vdso path either way.
+   - **LANDMINE from b371, now DEFUSED (2026-08-13) — and it must stay that
+     way:** arm32 and i386 pick the signal-frame shape by SA_SIGINFO, NOT by
+     which sigaction syscall installed the handler, so their restorers flipped
+     from **sigreturn (119)** to **rt_sigreturn (173)** in the same change that
+     set the flag (i386 also dropped its leading `pop eax`). Those constants are
+     now coupled to the flags word: never change one without the other, or the
+     kernel restores a garbage context (pc=sp=lr=0 -> instant SIGSEGV).
+     aarch64/riscv32 use the kernel vdso path either way and have no restorer.
 
 2. **--threadsafe interaction.** Signal masks are per-thread; the hook table is
    process-wide. Define + test delivery under clone(2) threads (which thread
@@ -221,3 +223,73 @@ qemu-riscv32 are all present on this box). `test/test_signal_siginfo.pas` is
 already arch-independent — its si_addr assert against `$DEAD0000` is precisely
 the offset canary, and its SI_TKILL half is the sign canary. Wire a per-arch
 copy into each `test-<arch>` target the way the b371 signal tests already are.
+
+## Progress — slice 2 landed (SA_SIGINFO on the remaining four targets), 2026-08-13
+
+The rest of item 1's ACCESS half. aarch64, riscv32, arm32 and i386 now install
+with SA_SIGINFO and park si_code / si_addr / ucontext* exactly as x86-64 does,
+so `__pxxSigCode` / `__pxxSigAddr` / `__pxxSigContext` answer on every hosted
+Linux target; only xtensa/ESP still refuses, deliberately (no signal runtime
+there at all). Items 2-5 are untouched and this ticket stays open for them,
+plus the PC rewrite.
+
+The survey above was accurate and is left standing as the record; what it could
+not know is below.
+
+### The cross-cutting decision: `__pxxSigCode` is now `tyInteger`
+
+Retyped from Int64 before the first 32-bit target landed, as the survey asked.
+si_code's real width IS a signed 32-bit int; the deciding fact is that every
+backend's `IR_EXC_STORE` moves **exactly one machine word**, so on ILP32 an
+Int64 slot would have forced each 32-bit stub to synthesize a sign word into
+the slot's upper half — four copies of a hazard whose failure mode is a huge
+positive number for the negative SI_* codes. Typing it at the field's true
+width removes the pair from all six backends at once. x86-64's stub still
+sign-extends into its 8-byte slot, so the slot stays self-consistent for
+anything that later reads it wide.
+
+### si_addr on ILP32 is 12 — MEASURED now, not assumed
+
+The survey's 12 came from the asm-generic definition, with a note to confirm
+it. Confirmed on all three ILP32 targets: the test faults on `$DEAD0000` and
+asserts si_addr equals it, and it does. (16 would have read the union's second
+word and printed nonsense.)
+
+### The b371 restorer landmine, defused
+
+arm32: `mov r7, #119` -> `#173`. i386: `mov eax, 119` -> `173` **and** the
+leading `pop eax` deleted — the two coupled changes the survey warned about,
+both required, and the proof they landed is not the new test but the OLD one:
+`test_signal_handler_callback_b336` still prints "resumed after handler" on
+both targets, which is only possible if the restorer unwound the rt frame the
+flag switched the kernel to. Comments at all three sites now say the flag and
+the restorer constant are one change.
+
+### Cost in the backends, again: zero
+
+Nothing outside the four `EmitSignalRuntime*` stubs and the parser's guard
+changed — no new IR op, no new AST node, no backend dispatch. The design signal
+from slice 1 held: routing the three reads through `IRExcStoreSlot` means a new
+target costs only its own stub.
+
+### The test is arch-independent NOW
+
+It was described as such but wasn't quite: its two raw syscall numbers (gettid
+186, tkill 200) were x86-64's. They now sit behind `{$ifdef CPU*}` — 178/130 on
+the asm-generic targets (aarch64, riscv32), 224/238 on arm32/i386. Wired into
+`test-aarch64`, `test-riscv32`, `test-arm32` and `test-i386` beside the b371
+signal tests.
+
+### What is left of item 1
+
+Only the PC rewrite: the ucontext pointer is parked on five targets and nothing
+rewrites the saved PC yet, which is what
+[[bug-integer-div-zero-sigfpe-uncatchable]] and
+[[decide-int-div-zero-behavior-unification]] need. That work is now
+five-targets-wide by default, and each target's saved-PC offset inside its
+`ucontext_t` is per-arch — the one piece of per-target knowledge this slice did
+NOT need and therefore did not establish.
+
+Also worth noting for [[feature-float-exception-mask-control]]: its
+`blocked-by` on "x86-64 only" is gone — `__pxxSigCode` now answers everywhere
+it could.

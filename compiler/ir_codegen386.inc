@@ -141,30 +141,63 @@ procedure EmitSignalRuntime386;
 
   Syscalls (int $0x80): rt_sigaction=174, sigreturn=119, getpid=20, kill=37.
   Hex verified against GNU as --32. }
-var jmpOver, dispatchAt, restorerAt, jOut1, jOut2, jDfl, outAt, jEnd: Integer;
+var jmpOver, dispatchAt, restorerAt, jOut1, jOut2, jDfl, outAt, jEnd,
+    jNoSi, jSt: Integer;
 begin
   EmitB($E9); jmpOver := CodeLen; EmitI32(0);     { jmp .end (patched below) }
 
-  { --- restorer (SA_RESTORER target): sigreturn --- }
+  { --- restorer (SA_RESTORER target): rt_sigreturn --- }
   restorerAt := CodeLen;
   SigRestorerAddr := restorerAt;
-  { The leading `pop eax` is NOT optional. i386's setup_frame() wedges the
-    signal number between the return address and the rest of the frame:
-      [frame+0] = pretcode (restorer)   [frame+4] = sig   [frame+8] = context
-    The handler's `ret` pops pretcode, leaving esp = frame+4 — but
-    sys_sigreturn recovers the frame as (sp - 8), so it needs esp = frame+8.
-    Popping the signal word supplies exactly that. (glibc's i386 trampoline
-    opens with the same `popl %eax` for this reason; x86-64's rt frame has no
-    such word, which is why its restorer is just the bare syscall.) }
-  EmitB($58);                                     { pop eax   (discard sig; esp = frame+8) }
-  EmitB($B8); EmitI32(119);                       { mov eax, 119  (sigreturn) }
+  { TWO changes ride together with the SA_SIGINFO flag set in install below, and
+    getting one without the other restores a garbage context:
+
+    - **173 (rt_sigreturn), not 119.** i386 has two signal-frame shapes and the
+      kernel picks by SA_SIGINFO, not by which sigaction syscall installed the
+      handler. SA_SIGINFO -> setup_rt_frame() -> only sys_rt_sigreturn unwinds it.
+    - **NO leading `pop eax`.** That pop existed for the PLAIN frame only:
+      setup_frame() wedges the signal number between the return address and the
+      context ([frame+0]=pretcode, +4=sig, +8=context), the handler's `ret`
+      leaves esp = frame+4, and sys_sigreturn recovers the frame at (sp - 8) —
+      so the pop supplied the missing 4. The rt frame + sys_rt_sigreturn have no
+      such skew. glibc's two i386 restorers differ in exactly this way: the
+      non-rt one opens with `popl %eax`, the rt one is the bare syscall. }
+  EmitB($B8); EmitI32(173);                       { mov eax, 173  (rt_sigreturn) }
   EmitB($CD); EmitB($80);                         { int 0x80 }
 
-  { --- dispatch (cdecl: signal number at [ebp+8]) --- }
+  { --- dispatch (SA_SIGINFO rt frame, args ON THE STACK: after the frame
+        pointer is set, [ebp+8] = sig, [ebp+12] = siginfo_t*, [ebp+16] =
+        ucontext_t* — i386 passes them as a cdecl `void h(int, siginfo_t*,
+        void*)` rather than in registers) --- }
   SigDispatchAddr := CodeLen;
   dispatchAt := CodeLen;
   EmitB($55);                                     { push ebp }
   EmitB($89); EmitB($E5);                         { mov ebp, esp }
+
+  { Park si_code / si_addr / ucontext* before anything else — the hook is a
+    parameterless Pascal proc (unchanged ABI), so the slots are how it learns
+    anything about the fault. siginfo_t is { si_signo(0), si_errno(4),
+    si_code(8), union }; the union is pointer-aligned, so on ILP32 the preamble
+    is NOT padded and si_addr is at **12**, not 16 as on the 64-bit targets.
+    __pxxSigCode is typed Integer (the field's true width), so one dword is the
+    whole value. The siginfo pointer being nil is defensive only. }
+  EmitB($8B); EmitB($45); EmitB($10);             { mov eax, [ebp+16]  ucontext* }
+  EmitB($A3); EmitGlobRef(BSS_SIG_CTX);           { mov [ctx], eax }
+  EmitB($8B); EmitB($45); EmitB($0C);             { mov eax, [ebp+12]  siginfo* }
+  EmitB($85); EmitB($C0);                         { test eax, eax }
+  EmitB($0F); EmitB($84); jNoSi := CodeLen; EmitI32(0);   { jz .nosi }
+  EmitB($8B); EmitB($50); EmitB($08);             { mov edx, [eax+8]   si_code }
+  EmitB($8B); EmitB($48); EmitB($0C);             { mov ecx, [eax+12]  si_addr }
+  EmitB($E9); jSt := CodeLen; EmitI32(0);         { jmp .st }
+  { .nosi }
+  Patch32(jNoSi, CodeLen - (jNoSi + 4));
+  EmitB($31); EmitB($D2);                         { xor edx, edx }
+  EmitB($31); EmitB($C9);                         { xor ecx, ecx }
+  { .st }
+  Patch32(jSt, CodeLen - (jSt + 4));
+  EmitB($89); EmitB($15); EmitGlobRef(BSS_SIG_CODE);  { mov [code], edx }
+  EmitB($89); EmitB($0D); EmitGlobRef(BSS_SIG_ADDR);  { mov [addr], ecx }
+
   EmitB($8B); EmitB($4D); EmitB($08);             { mov ecx, [ebp+8]  (sig) }
   EmitB($83); EmitB($F9); EmitB($01);             { cmp ecx, 1 }
   EmitB($0F); EmitB($8C); jOut1 := CodeLen; EmitI32(0);   { jl .out }
@@ -219,7 +252,11 @@ begin
   EmitB($89); EmitB($C3);                         { mov ebx, eax        sig }
   EmitCodeAbsToEax386(dispatchAt);                { eax = &dispatch (absolute) }
   EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 0);   { mov [scratch+0], eax   handler }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4); EmitI32($14000000); { flags = SA_RESTORER|SA_RESTART }
+  { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* — the
+    fault CAUSE is unknowable without si_code (see BSS_SIG_CODE). It is ALSO
+    what selects the rt signal frame, so it is inseparable from the restorer
+    above: this constant, the 173, and the absent `pop eax` are one change. }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4); EmitI32($14000004); { flags = SA_RESTORER|SA_RESTART|SA_SIGINFO }
   EmitCodeAbsToEax386(restorerAt);                { eax = &restorer (absolute) }
   EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 8);   { mov [scratch+8], eax   restorer }
   EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 12); EmitI32(0);  { mask lo }

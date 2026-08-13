@@ -255,7 +255,8 @@ procedure EmitSignalRuntimeArm32;
 
   Syscalls (EABI): rt_sigaction=174, rt_sigreturn=173, getpid=20, kill=37.
   Handler ABI: r0 = signal number. Hex verified against arm-linux-gnueabi-as. }
-var jmpOver, dispatchAt, restorerAt, bOut1, bOut2, bDfl, outAt, jOut, movPos: Integer;
+var jmpOver, dispatchAt, restorerAt, bOut1, bOut2, bDfl, outAt, jOut, movPos,
+    bNoSi, bSt: Integer;
 
   procedure BrArm32(patchPos, targetPos, condBits: Integer);
   begin   { cond|101|L=0|imm24 ; offset = (target - (pc+8)) / 4 }
@@ -266,24 +267,54 @@ begin
   jmpOver := CodeLen; EmitI32($EA000000);   { b .end (patched below) }
 
   { --- restorer (SA_RESTORER target) ---
-    **sigreturn (119), NOT rt_sigreturn (173).** ARM has TWO signal-frame
-    shapes and the kernel picks by SA_SIGINFO, not by which sigaction syscall
-    installed the handler: no SA_SIGINFO -> setup_frame() -> a plain
-    `struct sigframe` -> the restorer must call sys_sigreturn. Calling
-    rt_sigreturn against a plain frame makes the kernel restore a garbage
-    context (observed: pc=sp=lr=0, instant SIGSEGV). x86-64 gets away with
-    rt_sigreturn only because it has no legacy frame at all; aarch64/riscv32
-    likewise (which is why b370 needed no restorer). If SA_SIGINFO is ever set
-    here (the ucontext slice), this MUST become 173. }
+    **rt_sigreturn (173), NOT sigreturn (119)** — and the two are coupled to the
+    SA_SIGINFO flag set in install below, not to which sigaction syscall put the
+    handler there. ARM has TWO signal-frame shapes and the kernel picks by
+    SA_SIGINFO: without it, setup_frame() builds a plain `struct sigframe` whose
+    restorer must call sys_sigreturn; WITH it, setup_rt_frame() builds an rt
+    frame and only sys_rt_sigreturn can unwind it. Restore the wrong shape and
+    the kernel hands back a garbage context (observed at b371, before
+    SA_SIGINFO: pc=sp=lr=0, instant SIGSEGV). So this constant and the flags
+    word below must always change TOGETHER. x86-64 sidesteps the whole question
+    (no legacy frame at all); aarch64/riscv32 have no restorer to get wrong. }
   restorerAt := CodeLen;
   SigRestorerAddr := restorerAt;
-  EmitI32($E3A07077);   { mov r7, #119   sigreturn }
+  EmitI32($E3A070AD);   { mov r7, #173   rt_sigreturn (pairs with SA_SIGINFO) }
   EmitI32($EF000000);   { svc #0 }
 
-  { --- dispatch (kernel handler ABI: r0 = signal number) --- }
+  { --- dispatch (SA_SIGINFO ABI: r0 = sig, r1 = siginfo_t*, r2 = ucontext_t*) --- }
   SigDispatchAddr := CodeLen;
   dispatchAt := CodeLen;
   EmitI32($E92D4010);   { push {r4, lr}   (lr = restorer) }
+
+  { Park si_code / si_addr / ucontext* while the kernel's argument registers are
+    still live — the hook is a parameterless Pascal proc (unchanged ABI), so the
+    slots are how it learns anything about the fault.
+
+    siginfo_t is { si_signo(0), si_errno(4), si_code(8), union }; the union is
+    pointer-aligned, so on ILP32 the preamble is NOT padded and si_addr is at
+    **12**, not 16 as on the 64-bit targets. __pxxSigCode is typed Integer (the
+    field's true width), so one word is the whole value — no sign word to
+    synthesize the way an Int64 slot would have needed. r1 nil is defensive
+    only. Hex verified against arm-linux-gnueabi-as. }
+  EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_CTX);   { ip = &ctx slot }
+  EmitI32($E58C2000);   { str r2, [ip]      ucontext* }
+  EmitI32($E3510000);   { cmp r1, #0 }
+  bNoSi := CodeLen; EmitI32($0A000000);        { beq .nosi (patched) }
+  EmitI32($E5912008);   { ldr r2, [r1, #8]   si_code }
+  EmitI32($E591300C);   { ldr r3, [r1, #12]  si_addr (ILP32 offset) }
+  bSt := CodeLen; EmitI32($EA000000);          { b .st (patched) }
+  { .nosi }
+  BrArm32(bNoSi, CodeLen, $0A000000);
+  EmitI32($E3A02000);   { mov r2, #0 }
+  EmitI32($E3A03000);   { mov r3, #0 }
+  { .st }
+  BrArm32(bSt, CodeLen, $EA000000);
+  EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_CODE);
+  EmitI32($E58C2000);   { str r2, [ip] }
+  EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_ADDR);
+  EmitI32($E58C3000);   { str r3, [ip] }
+
   EmitI32($E3500001);   { cmp r0, #1 }
   bOut1 := CodeLen; EmitI32($BA000000);        { blt .out (patched) }
   EmitI32($E3500040);   { cmp r0, #64 }
@@ -344,6 +375,12 @@ begin
   EmitI32($E0800002);   { add r0, r0, r2 }
   EmitI32($E58C0000);   { str r0, [ip]      handler = dispatch }
   EmitI32($E3A00305);   { mov r0, #$14000000  SA_RESTORER|SA_RESTART }
+  EmitI32($E3800004);   { orr r0, r0, #4      ...or SA_SIGINFO -> $14000004 }
+  { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
+    r1/r2 — without it the fault CAUSE is unknowable (si_code is the only
+    carrier; see BSS_SIG_CODE). It is ALSO what selects the rt signal frame, so
+    it is inseparable from the restorer's rt_sigreturn above: never set one
+    without the other. }
   EmitI32($E58C0004);   { str r0, [ip, #4]  flags }
   { restorer = &restorer stub, PC-relative }
   movPos := CodeLen; EmitI32($E1A0200F);       { mov r2, pc }

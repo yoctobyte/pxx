@@ -12330,8 +12330,10 @@ begin
           CaseEqual(name, '__pxxSigContext')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
-        if not ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) or
-                (TargetArch = TARGET_RISCV32)) then
+        { Every hosted Linux target now installs with SA_SIGINFO; only xtensa/ESP
+          is left out, and deliberately — FreeRTOS is not a Unix and has no
+          signal runtime at all (EmitSignalRuntime* has no xtensa sibling). }
+        if TargetArch = TARGET_XTENSA then
           Error(name + ' needs SA_SIGINFO, which this target''s signal runtime '
                 + 'does not install (feature-signal-siginfo-ucontext)');
         if NoSignals then

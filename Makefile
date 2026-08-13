@@ -6207,6 +6207,15 @@ test-i386: $(COMPILER)
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=i386 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_i386_sigdfl
 	tools/run_target.sh i386 /tmp/test_i386_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
+	# against the address the program itself faulted on (union at 12 on ILP32,
+	# not 16), and the negative SI_TKILL is the sign canary. The callback test
+	# above is the OTHER half of the acceptance here: setting SA_SIGINFO flips
+	# i386's frame shape, so a program that still resumes after its hook proves
+	# the restorer's TWO coupled changes (119->173, and dropping the plain
+	# frame's `pop eax`) both landed with it.
+	./$(COMPILER) --target=i386 test/test_signal_siginfo.pas /tmp/test_i386_siginfo
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas /tmp/test_i386_cdeclind
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=i386 test/test_extern_c.pas /tmp/test_i386_extern
@@ -7306,6 +7315,14 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=arm32 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_arm32_sigdfl
 	tools/run_target.sh arm32 /tmp/test_arm32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
+	# against the address the program itself faulted on (union at 12 on ILP32,
+	# not 16), and the negative SI_TKILL is the sign canary. The callback test
+	# above is the OTHER half of the acceptance here: setting SA_SIGINFO flips
+	# arm32's frame shape, so a program that still resumes after its hook proves
+	# the restorer's sigreturn->rt_sigreturn flip landed with it.
+	./$(COMPILER) --target=arm32 test/test_signal_siginfo.pas /tmp/test_arm32_siginfo
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas /tmp/test_arm32_cdeclind
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=arm32 test/test_extern_c.pas /tmp/test_arm32_extern
