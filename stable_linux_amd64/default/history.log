@@ -280,3 +280,4 @@
 2026-08-13T19:53:56Z  v280  8f83a3ee038be3829f50c8ad498c274bd82e083c5ebf92bbb471acfb0b7e87d4  5a00224aed4e834ce0af82ddad00b2b7be4966de  fix(N): raise KeyError(42) segfaulted — a non-string exception argument
 2026-08-13T20:01:14Z  v281  9f35dff5f137e03b695406d9e2fff1cd83449bb87dad6b4d289dad52ced0a19f  36eb4720fe674086d9e38097346a319b51112e00  feat(N): the builtin format(v[, spec])
 2026-08-13T20:07:44Z  v282  b23eb67b7618ca3e6300a4b4619b83767a0da0951b35c067fb08abb65abde6e9  e72295a8a39dbf5622890dff8c216cb5e754d56c  feat(N): zip() over three and four iterables
+2026-08-13T23:00:42Z  v283  5ad437d0c415947949890b2ddd24a189c8dcb366786a0112d6ddb446735fe914  b68597066a2cafa1a2dafc4bf41f839953d64921  revert(N): e.args -- pylib's Exception cannot carry a member sysutils lacks

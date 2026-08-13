@@ -357,22 +357,17 @@ type
     property FMessage: AnsiString read msg write msg;
     property Message: AnsiString read msg write msg;
     property HelpContext: Integer read FHelpContext write FHelpContext;
-    { Python's `e.args`. A PROPERTY rather than a field, and derived rather than
-      stored, because a pxx Exception carries one Message string: `args` is
-      what the constructor was given, and for every raise this dialect emits
-      that is exactly the message. So it answers `()` for an empty message and
-      `(msg,)` otherwise — CPython's own relationship between args and str(e)
-      for the one-argument case, which is every builtin raise and almost all
-      user code.
-      A MULTI-argument raise (`raise MyErr("no such user", 404)`) is folded to
-      the rendered string `('no such user', 404)` at the construction site, so
-      its args would come back as a 1-tuple of that text. That is why the fold
-      stashes the real tuple in argsv when it runs, and why this reads argsv
-      first.
-      bug-nilpy-exception-args-attribute-missing }
-    argsv: TPyList;
-    function GetArgs: TPyList;
-    property args: TPyList read GetArgs;
+    { `e.args` USED TO LIVE HERE and had to be removed — see
+      decide-pylib-exception-vs-sysutils-exception. sysutils declares a class
+      called `Exception` too and the name is deliberately shared program-wide
+      (ClassNameIsDeliberatelyShared) so a bare `except Exception:` catches
+      either RTL's raise. The cost of that arrangement: under `uses sysutils,
+      pylib`, pylib's OWN classes bind their ancestor to SYSUTILS' Exception,
+      so only members BOTH classes have can be reached — from a descendant's
+      body, from a cast, from anywhere. `argsv`/`GetArgs` were pylib's alone
+      and broke that uses order in three separate places.
+      Do not add a member here without reading that ticket. `Message` is safe
+      because sysutils has one too; that is the whole test. }
   end;
   ValueError        = class(Exception) end;
   { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
@@ -4860,21 +4855,18 @@ procedure PyKeyError(const k: Variant); overload;
   string key reports 'nope' WITH the quotes. Using the repr here makes the
   message match CPython's for free, and keeps an int key unquoted the way
   CPython does. }
-var e: KeyError;
 begin
-  { …and the KEY ITSELF goes into `args`, not the repr'd message. CPython's
-    KeyError('nope').args is ('nope',) — unquoted — while its str() is the
-    quoted repr, so the two genuinely differ for this one exception and the
-    derive-from-message default would hand back the quoted form.
-    bug-nilpy-exception-args-attribute-missing }
-  { The ctor reprs the message now, so the raw TEXT goes in; argsv is then
-    overwritten with the raw VARIANT, so an int key's args is (42,) and not
-    ('42',). }
-  e := KeyError.CreateRendered(pyvar_repr(k));
-  e.argsv := TPyList.Create;
-  e.argsv.FKind := PYSEQ_TUPLE;
-  e.argsv.append(k);
-  raise e;
+  { One call, because KeyError.Create TAKES the variant now: it reprs the key
+    for `str(e)` and keeps the raw value for `e.args`, which is exactly what
+    this raise site wants. CPython's KeyError('nope').args is ('nope',) —
+    unquoted — while its str() is the quoted repr, so the two genuinely differ
+    for this one exception (bug-nilpy-exception-args-attribute-missing).
+
+    It used to construct and then assign an `argsv` field from OUT HERE, which
+    broke `uses sysutils, pylib` — see decide-pylib-exception-vs-sysutils-
+    exception. One ctor call reaches nothing pylib-only and is also simply
+    less code. }
+  raise KeyError.Create(k);
 end;
 
 constructor TPyDict.Create;
@@ -9099,20 +9091,27 @@ begin
   { `KeyError()` with no argument at all: the frontend fills an unsupplied
     variant slot with None (an empty variant is the only addressable "not
     supplied" this dialect has), and CPython's str(KeyError()) is the empty
-    string, not 'None'. So an empty tag means the no-argument form — and
-    argsv is left nil, so GetArgs derives `()` the way it does for every other
-    empty exception. The cost is that an EXPLICIT `KeyError(None)` renders as
-    '' rather than 'None'; the no-argument spelling is much the commoner, and
-    this is the same call already made for `ValueError('')`. }
+    string, not 'None'. The cost is that an EXPLICIT `KeyError(None)` renders
+    as '' rather than 'None'; the no-argument spelling is much the commoner,
+    and this is the same call already made for `ValueError('')`. }
   if pyvartag(m) = 0 then
   begin
     inherited Create('');
     Exit;
   end;
+  { `inherited Create` and NOTHING ELSE inherited. Under `uses sysutils,
+    pylib` the name `Exception` resolves to SYSUTILS' class even while pylib
+    itself is being compiled (ClassNameIsDeliberatelyShared exempts the name
+    from the own-unit preference, deliberately, so a bare `except Exception:`
+    catches either RTL's raise) — so KeyError's ancestor is that class there,
+    and only members BOTH classes have can be reached. An `argsv` field was
+    pylib's alone: writing it from here, or calling a new ctor that writes it,
+    both failed to compile in that uses order.
+    So `e.args` is parked until the ownership question is settled —
+    decide-pylib-exception-vs-sysutils-exception. What survives is the part
+    that needed no new member: the message is the key's REPR on both
+    construction paths, so str() and repr() are CPython-exact. }
   inherited Create(pyvar_repr(m));
-  argsv := TPyList.Create;
-  argsv.FKind := PYSEQ_TUPLE;
-  argsv.append(m);
 end;
 
 constructor KeyError.CreateRendered(const shown: AnsiString);
@@ -9120,22 +9119,11 @@ begin
   inherited Create(shown);
 end;
 
-function Exception.GetArgs: TPyList;
-begin
-  if argsv <> nil then
-  begin
-    Result := argsv;
-    Exit;
-  end;
-  Result := TPyList.Create;
-  Result.FKind := PYSEQ_TUPLE;
-  if Length(msg) > 0 then Result.append(msg);
-end;
-
 constructor Exception.Create(const m: AnsiString);
 begin
   msg := m;
 end;
+
 
 { One `array of const` element as a string / as an integer's decimal text. The
   same shape as sysutils' FmtArgStr/FmtArgInt, duplicated rather than shared
@@ -13901,19 +13889,14 @@ begin
     address either way. }
   if (mi = nil) and (not wantRepr) and (o is Exception) then
   begin
-    { KeyError is the one builtin whose str() is the REPR of its argument —
-      `str(KeyError('inner'))` is "'inner'", with the quotes. That used to come
-      out right only on the RAISE path, because PyKeyError stores the message
-      already repr'd, and wrong for a user-constructed KeyError. Now that
-      `args` exists, both are the same question asked of the same place: repr
-      the single argument. A KeyError carrying zero or several arguments falls
-      through to the message, as CPython's own __str__ does.
-      bug-nilpy-exception-args-attribute-missing }
-    if (o is KeyError) and (Exception(o).GetArgs <> nil) and
-       (Exception(o).GetArgs.count = 1) then
-      outS := pyvar_repr(Exception(o).GetArgs.at(0))
-    else
-      outS := Exception(o).Message;
+    { KeyError's str() is the REPR of its argument — `str(KeyError('inner'))`
+      is "'inner'", with the quotes — and that needs no special arm here: BOTH
+      construction paths now store the message already repr'd, the raise path
+      through PyKeyError and a user's `KeyError(k)` through the variant ctor.
+      They used to disagree, which is what an args-based arm was written to
+      settle; unifying the constructors settled it one level earlier and
+      survives the uses-order constraint that sank args. }
+    outS := Exception(o).Message;
     PyUserObjStr := True;
     Exit;
   end;
@@ -13924,10 +13907,12 @@ begin
     raised. `args` settles it: repr the ARGUMENT, whoever built the exception,
     and the two cases agree.
     bug-nilpy-exception-args-attribute-missing }
-  if (mi = nil) and wantRepr and (o is KeyError) and
-     (Exception(o).GetArgs <> nil) and (Exception(o).GetArgs.count = 1) then
+  { repr(KeyError) — the Message is ALREADY the key's repr (see above), so
+    wrapping it in ClassName(...) gives CPython's `KeyError('nope')` for a
+    string key and `KeyError(7)` for an int one, with no second rendering. }
+  if (mi = nil) and wantRepr and (o is KeyError) then
   begin
-    outS := TObject(o).ClassName + '(' + pyvar_repr(Exception(o).GetArgs.at(0)) + ')';
+    outS := TObject(o).ClassName + '(' + Exception(o).Message + ')';
     PyUserObjStr := True;
     Exit;
   end;
