@@ -14515,6 +14515,38 @@ end;
   mistaken for the outer one's closer. Also records the first depth-0 `if`
   (a filter clause) into `filtIdx`, without stopping there — the real closer
   sits AFTER the filter condition. }
+function PyCompForAfter(fromTok, closerPos: Integer): Boolean;
+{ Does another `for` CLAUSE follow, at depth 0, before the comprehension closes?
+  Asked at a filter: `[x + y for x in xs if x > 0 for y in ys]` filters the OUTER
+  loop and then opens an inner one, so the filter has to WRAP the rest of the
+  header rather than gate the append. A trailing filter (no `for` after it) keeps
+  the plain append-gating form.
+  bug-nilpy-a-filter-between-two-for-clauses-is-not-supported }
+var i, depth: Integer;
+begin
+  Result := False;
+  i := fromTok;
+  depth := 0;
+  while (i < TokCount) and ((closerPos < 0) or (i < closerPos)) do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end
+    else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit
+    else if (depth = 0) and
+            (((Tokens[i].Kind = tkIdent) and StrEqual(GetTokenStr(i), 'for')) or
+             (Tokens[i].Kind = tkFor)) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyCompFindClose(fromTok: Integer; var filtIdx: Integer): Integer;
 var fj, fdepth: Integer;
 begin
@@ -15540,6 +15572,32 @@ begin
       node := PyParseFor;
       compSaved := -1;
     end
+    { ...and a filter that sits BETWEEN two clauses gates the inner LOOP, not
+      the append: `[x + y for x in xs if x > 0 for y in ys]`. Parsed here, with
+      the rest of the header recursed into inside the AN_IF — the element
+      expression is re-parsed by that innermost clause, where both variables are
+      bound, which is why the filter cannot be left to the trailing-filter arm
+      below (it runs after the element expression has been parsed with the inner
+      name still unbound: "undefined variable (y)").
+      bug-nilpy-a-filter-between-two-for-clauses-is-not-supported }
+    else if (Tokens[TokPos - 1].Kind = tkIf) and
+            PyCompForAfter(TokPos, closerPos) then
+    begin
+      { the TOKEN ARRAY, not CurTok: this `if` was hidden behind a fake ':' while
+        the ITER expression parsed, and CurTok still holds that stale copy — the
+        array entry was restored, the register was not }
+      TokPos := TokPos - 1; Next;    { re-read it as the tkIf it is again }
+      Next;                          { past the `if` }
+      PyParseBoolExpr;               { the condition — names already renamed }
+      filtN := AllocNode(AN_IF);
+      ASTLeft[filtN] := PyMakeTruthy(CurASTNode);
+      filtPair := AllocNode(AN_PAIR);
+      ASTLeft[filtPair] := PyParseFor;    { the REST of the header }
+      ASTRight[filtPair] := -1;
+      ASTRight[filtN] := filtPair;
+      node := filtN;
+      compSaved := -1;
+    end
     else
     begin
     compSaved := TokPos - 1;              { index of CurTok (the closing bracket) }
@@ -16380,19 +16438,41 @@ begin
       bug-nilpy-a-second-for-clause-fails-when-the-first-iterable-is-a-range }
     if (Tokens[compSaved].Kind = tkFor) or
        ((Tokens[compSaved].Kind = tkIdent) and
-        StrEqual(GetTokenStr(compSaved), 'for')) then
+        StrEqual(GetTokenStr(compSaved), 'for')) or
+       ((Tokens[compSaved].Kind = tkIf) and
+        PyCompForAfter(compSaved + 1, PyCompFindClose(compSaved, filtDummy))) then
     begin
       PyRenameIdentRange(PyCompExprStart, forTokIdx, name, hName);
       closerPos2 := PyCompFindClose(compSaved, filtDummy);
       if closerPos2 > compSaved then
         PyRenameIdentRange(compSaved, closerPos2, name, hName);
       TokPos := compSaved; Next;
+      { a filter BETWEEN clauses gates the inner LOOP, not the append — see the
+        identical arm in PyParseForIn. Parsed here so the recursion below runs
+        INSIDE the AN_IF. bug-nilpy-a-filter-between-two-for-clauses-is-not-supported }
+      ifCondStart := -1;
+      if CurTok.Kind = tkIf then
+      begin
+        Next;
+        PyParseBoolExpr;
+        ifCondStart := CurASTNode;
+      end;
       { `PyParseFor()`, WITH the parentheses — a bare own-function name in this
         dialect reads the RESULT variable, it does not recurse. That is why the
         08-12 attempt measured "the recursive call leaves the cursor where it
         started": there was no call, only a read of an uninitialised Result.
         project_bare_funcname_result_partial }
       bodyNode := PyParseFor();
+      if ifCondStart >= 0 then
+      begin
+        node := AllocNode(AN_IF);
+        ASTLeft[node] := PyMakeTruthy(ifCondStart);
+        pair1 := AllocNode(AN_PAIR);
+        ASTLeft[pair1] := bodyNode;
+        ASTRight[pair1] := -1;
+        ASTRight[node] := pair1;
+        bodyNode := node;
+      end;
       compSaved := -1;
     end
     else

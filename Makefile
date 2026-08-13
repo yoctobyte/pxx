@@ -800,6 +800,10 @@ test-nilpy: $(COMPILER)
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy /tmp/test_nilpy_mapbound26
 	/tmp/test_nilpy_mapbound26 | diff -u test/test_nilpy_map_over_a_bound_method.expected -
+	@# a filter BETWEEN two for-clauses gates the inner LOOP, on both comprehension
+	@# paths — container-first and range-first. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_filter_between_for_clauses.npy /tmp/test_nilpy_filtbetween26
+	/tmp/test_nilpy_filtbetween26 | diff -u test/test_nilpy_filter_between_for_clauses.expected -
 	@# a SECOND for-clause when the FIRST iterable is a range(): the counted path
 	@# had no arm for the rest of the header. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_two_for_clauses_over_range.npy /tmp/test_nilpy_twofor26

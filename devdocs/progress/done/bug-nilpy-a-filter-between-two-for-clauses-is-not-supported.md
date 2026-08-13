@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`[x + y for x in xs if x > 0 for y in range(2)]` — an `if` BETWEEN two for-clauses — is 'undefined variable (y)' on BOTH comprehension paths (container and range). A filter after the LAST clause is fine, and so are two clauses with no filter; it is only the interleaved position that fails"
+status: done
+owner: claude-AN
 ---
 
 # A filter BETWEEN two `for` clauses is not supported
@@ -57,3 +59,34 @@ this bug is the second time this pair has diverged.
 A `.npy` diffed against CPython: the interleaved filter with a container first
 clause and with a `range()` first clause, a filter on BOTH clauses, a filter
 between three clauses, and the already-working suffix-filter rows as controls.
+
+## 2026-08-13 — FIXED on both paths, same shape on each
+
+A filter between clauses gates the inner LOOP, so it has to WRAP the rest of the
+header. Both comprehension paths now recognise it at the point where the header
+continues — `PyCompForAfter` answers "is there another depth-0 `for` before the
+closer?" — parse the condition there, and recurse for the remainder INSIDE the
+`AN_IF`. The trailing-filter arms are untouched and still gate the append.
+
+**The stale CurTok was the one real surprise.** In the container path the
+filter's `if` is temporarily rewritten to a fake `:` so the ITER expression
+parser stops at it, and restored afterwards — but `CurTok` is a COPY taken when
+the token was still the fake colon, so the test had to read `Tokens[TokPos - 1]`
+and re-read the token before parsing. Testing `CurTok.Kind = tkIf` silently
+never matched, which looked exactly like the arm not being reached.
+
+Both paths were fixed in one pass rather than one-then-the-other: the ticket
+already recorded that this pair has diverged twice, and the range path's arm is
+five lines once the container path's is written.
+
+### Gate
+
+`test/test_nilpy_filter_between_for_clauses.npy` + `.expected` from CPython,
+wired into `make test-nilpy`: the interleaved filter with a container first
+clause and with a `range()` first clause, filters on BOTH clauses, a filter
+between three clauses, a filter over a nested-list flatten, and the
+already-working suffix-filter / no-filter / single-clause forms as controls.
+`make test-nilpy` green, `gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

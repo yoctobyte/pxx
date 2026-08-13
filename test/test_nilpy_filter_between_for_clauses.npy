@@ -1,0 +1,20 @@
+# `[x + y for x in xs if x > 0 for y in ys]` — a filter BETWEEN two for-clauses.
+# It gates the inner LOOP, not the append, so it has to WRAP the rest of the
+# header; both comprehension paths parsed it as a trailing filter and reported
+# "undefined variable (y)" from the element expression.
+# bug-nilpy-a-filter-between-two-for-clauses-is-not-supported
+# Every expectation is CPython's own output. The last rows are the
+# already-working suffix-filter and no-filter forms, kept as controls.
+
+xs = [0, 1, 2]
+print([x + y for x in xs if x > 0 for y in range(2)])
+print([x + y for x in range(3) if x > 0 for y in [10]])
+print([x + y for x in xs for y in [10, 20] if y > 10])
+print([x + y for x in xs if x > 0 for y in [10, 20] if y > 10])
+print([x + y + z for x in range(3) if x > 0 for y in range(2) if y > 0 for z in [100]])
+print([x for x in xs if x > 0])
+print([x + y for x in xs for y in range(2)])
+print({x + y for x in range(3) if x > 1 for y in range(2)})
+print({(x, y): x + y for x in range(2) if x > 0 for y in range(2)})
+print([c for r in [[1, 2], [3]] if len(r) > 1 for c in r])
+print([x * y for x in range(4) if x % 2 == 0 for y in range(3) if y % 2 == 1])
