@@ -791,6 +791,11 @@ test-nilpy: $(COMPILER)
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which
 	# has no class index at compile time: read, write, inheritance, getattr/hasattr,
 	# the plugin-registry shape, and the AttributeError. Diffed against CPython.
+	@# len()/str()/hex() parse their argument once to learn its TYPE and rewind;
+	@# the discarded parse's hoisted setup used to stay queued, so a file was read
+	@# TWICE and len(f.read().upper()) answered 0. Diffed against CPython.
+	./$(COMPILER) test/test_nilpy_len_of_a_file_read.npy /tmp/test_nilpy_lenread26
+	/tmp/test_nilpy_lenread26 | diff -u test/test_nilpy_len_of_a_file_read.expected -
 	@# map(obj.method, xs) — a bound method through map/filter/sorted, plus a
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy /tmp/test_nilpy_mapbound26

@@ -1,0 +1,21 @@
+split 4
+split-ws 3
+upper 6
+strip 5
+plain 6
+readlines 3
+readline 2
+hex 0x6
+str A
+B
+C
+
+repr ['a', 'b', 'c', '']
+print ['a', 'b', 'c', '']
+bound 4
+two-step 4
+comprehension 4
+once 6 ''
+in-if ok
+as-arg 6
+def 3 method 6

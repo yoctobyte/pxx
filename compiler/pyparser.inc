@@ -593,6 +593,40 @@ begin
   PyImpAliasCount := 0;
 end;
 
+function PyHoistPark: Integer;
+{ Take the hoist queue away and hand it back to the caller — for a TRIAL parse
+  whose statements must not join the enclosing one's. parser.inc cannot touch
+  PyHoistHead directly (it is declared here, and this file is included after
+  it), so the parking is spelled as these three helpers.
+  bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
+begin
+  Result := PyHoistHead;
+  PyHoistHead := -1;
+end;
+
+procedure PyHoistRestore(saved: Integer);
+{ Put a parked queue back, DROPPING whatever a trial parse queued meanwhile. }
+begin
+  PyHoistHead := saved;
+end;
+
+procedure PyHoistMerge(saved, trial: Integer);
+{ Put `saved` back as the hoist queue and re-queue every statement of the parked
+  `trial` chain after it — for a caller that parked the queue across a TRIAL
+  parse (see the `len` intercept in parser.inc) and then decided to KEEP that
+  parse's AST after all. Dropping the chain instead is what a caller does when it
+  rewinds and re-parses. bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
+var h: Integer;
+begin
+  PyHoistHead := saved;
+  h := trial;
+  while h >= 0 do
+  begin
+    PyHoistStmt(ASTLeft[h]);
+    h := ASTRight[h];
+  end;
+end;
+
 function PySeqAppend(head, stmt: Integer): Integer;
 var tail: Integer;
 begin

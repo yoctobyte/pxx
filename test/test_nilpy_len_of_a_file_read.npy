@@ -1,0 +1,74 @@
+# `len(f.read().split("\n"))` answered 1 and `len(f.read().upper())` answered 0,
+# as if the file were empty — the intercepts for len/str/hex parse their argument
+# once to learn its TYPE and then rewind, and the DISCARDED parse's hoisted
+# setup (a hidden temp for a string method on a call result) stayed queued and
+# ran: the file was read TWICE and the second read got ''.
+# bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero
+# Every expectation is CPython's own output.
+
+import os
+
+p = "/tmp/test_nilpy_len_read.txt"
+fh = open(p, "w")
+fh.write("a\nb\nc\n")
+fh.close()
+
+with open(p) as f:
+    print("split", len(f.read().split("\n")))
+with open(p) as f:
+    print("split-ws", len(f.read().split()))
+with open(p) as f:
+    print("upper", len(f.read().upper()))
+with open(p) as f:
+    print("strip", len(f.read().strip()))
+with open(p) as f:
+    print("plain", len(f.read()))
+with open(p) as f:
+    print("readlines", len(f.readlines()))
+with open(p) as f:
+    print("readline", len(f.readline().upper()))
+
+# the same expression under the OTHER intercepts that rewind after a trial parse
+with open(p) as f:
+    print("hex", hex(len(f.read().upper())))
+with open(p) as f:
+    print("str", str(f.read().upper()))
+with open(p) as f:
+    print("repr", repr(f.read().split("\n")))
+
+# and the consumers that never went through a rewind, as controls
+with open(p) as f:
+    print("print", f.read().split("\n"))
+with open(p) as f:
+    b = f.read().split("\n")
+    print("bound", len(b))
+with open(p) as f:
+    s = f.read()
+    print("two-step", len(s.split("\n")))
+with open(p) as f:
+    print("comprehension", sum([1 for x in f.read().split("\n")]))
+
+# the file is consumed exactly ONCE: a second read sees the empty string
+with open(p) as f:
+    x = len(f.read().upper())
+    y = f.read()
+    print("once", x, repr(y))
+
+# len of a chained call in an if and as an argument
+with open(p) as f:
+    if len(f.read().split("\n")) == 4:
+        print("in-if ok")
+with open(p) as f:
+    print("as-arg", max(1, len(f.read().upper())))
+
+# a user def and a method in the same position stay right
+def mk():
+    return "abc"
+
+class C:
+    def m(self):
+        return "abcdef"
+
+print("def", len(mk().upper()), "method", len(C().m().upper()))
+
+os.remove(p)

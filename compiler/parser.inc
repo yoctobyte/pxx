@@ -952,6 +952,9 @@ function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a valu
 function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
 function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer; forward; { Nil Python: a callable VALUE heading for a Pointer parameter (pyparser.inc) }
+function PyHoistPark: Integer; forward; { Nil Python: take the hoist queue away for a TRIAL parse (pyparser.inc) }
+procedure PyHoistRestore(saved: Integer); forward; { Nil Python: put a parked queue back, dropping the trial's (pyparser.inc) }
+procedure PyHoistMerge(saved, trial: Integer); forward; { Nil Python: re-queue a parked trial parse's hoists (pyparser.inc) }
 function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python: is tk a genuine scalar/string result worth wrapping (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString; var ci: Integer): Integer; forward; { Nil Python obj.PROPERTY on a VARIANT receiver: the unboxed class-cast receiver (pyparser.inc) }
@@ -9242,7 +9245,8 @@ begin
 end;
 
 procedure ParseFactorCore;
-var intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
+    intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -10534,7 +10538,12 @@ begin
           argument type REWINDS and takes the ordinary overload path,
           unchanged byte for byte. }
         intBaseArg := TokPos;            { rewind point: CurTok = pystr_of }
+        { park the hoist queue across the TRIAL parse — see the len() intercept
+          below for what a discarded parse's leftover hoists do }
+        lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
+        lenTrialHoist := PyHoistPark;
+        PyHoistRestore(lenSavedHoist);
         if IntToTypeKind(ASTTk[CurASTNode]) = tyClass then
         begin
           atRecv := ResolveNodeRec(CurASTNode);
@@ -10549,6 +10558,7 @@ begin
             atDflt := PyClassStrNode(CurASTNode, atRecv - REC_UCLASS_BASE);
             if atDflt >= 0 then
             begin
+              PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
               Expect(tkRParen, ')');
               CurASTNode := atDflt; LastExprTk := tyAnsiString;
               Exit;
@@ -10569,6 +10579,7 @@ begin
               procIdx := FindProc('pyobj_str_of');
             if procIdx >= 0 then
             begin
+              PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
               argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
               node := AllocNode(AN_CALL);
               ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyAnsiString);
@@ -10613,7 +10624,23 @@ begin
           garbage -- confirmed with PXXDBG=a.ir: the same wrong proc index
           got called either way; it only LOOKED fixed by coincidence. }
         intBaseArg := TokPos;
+        { PARK the hoist queue across this TRIAL parse. The argument is parsed
+          to learn its TYPE and, for most shapes, thrown away and re-parsed
+          below — but a parse has SIDE EFFECTS: a string method on a call
+          result queues a hidden-temp assignment, and the discarded parse's
+          copy stayed in the queue and was emitted. So `len(f.read().upper())`
+          read the file TWICE at run time — once for the abandoned AST and once
+          for the real one — and the second read got the empty string a
+          consumed file returns: len answered 0, exactly as if the file had
+          been empty, and `.split("\n")` on it answered 1.
+          Parked on a FRESH chain rather than by remembering the head, for the
+          reason PyParseMethod records: PySeqAppend mutates the saved chain's
+          tail in place, so a plain restore cannot unlink anything.
+          bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
+        lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
+        lenTrialHoist := PyHoistPark;
+        PyHoistRestore(lenSavedHoist);
         if IntToTypeKind(ASTTk[CurASTNode]) = tyClass then
         begin
           atRecv := ResolveNodeRec(CurASTNode);
@@ -10634,6 +10661,7 @@ begin
             if (FindUClass('TPyIter') >= 0) and
                (atRecv = REC_UCLASS_BASE + FindUClass('TPyIter')) then
             begin
+              PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
               prevTok := FindProc('pyiter_no_len');
               if prevTok < 0 then Error('Nil Python: pylib (pyiter_no_len) not loaded');
               atDflt := AllocNode(AN_ARG);
@@ -10650,6 +10678,7 @@ begin
             atFld := FindUMeth(atRecv - REC_UCLASS_BASE, '__len__');
             if atFld >= 0 then
             begin
+              PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
               atDflt := PyCallMeth1(atRecv - REC_UCLASS_BASE,
                                     PyRawName(UMthNOff[atFld], UMthNLen[atFld]),
                                     CurASTNode, -1);
@@ -10662,6 +10691,9 @@ begin
               (try/except around this must still compile and run its
               handler), not a compile-time Error() or a rewind into the
               overload matcher's unsafe fallback. }
+            { the argument's own setup still runs, as it did before this parse
+              was parked — only its VALUE is unused }
+            PyHoistMerge(lenSavedHoist, lenTrialHoist);
             prevTok := FindProc('PyNotContainerError');
             if prevTok < 0 then Error('Nil Python: pylib (PyNotContainerError) not loaded');
             Expect(tkRParen, ')');
@@ -10703,9 +10735,14 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         intBaseArg := TokPos;
+        { same parked TRIAL parse as the two intercepts above }
+        lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
+        lenTrialHoist := PyHoistPark;
+        PyHoistRestore(lenSavedHoist);
         if TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
         begin
+          PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
           if CaseEqual(name, 'hex') then i := 16
           else if CaseEqual(name, 'oct') then i := 8
           else i := 2;

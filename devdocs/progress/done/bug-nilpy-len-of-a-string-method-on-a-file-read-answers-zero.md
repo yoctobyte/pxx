@@ -4,6 +4,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`len(f.read().split('\\n'))` answers 1 and `len(f.read().upper())` answers 0 — as if the file were empty — while the identical expression printed, assigned, or iterated is correct. The read really happens (a following f.read() returns ''), so the string is produced and then lost on the way into len() alone"
+status: done
+owner: claude-AN
 ---
 
 # `len()` of a string method on `f.read()` answers zero
@@ -112,3 +114,53 @@ A `.npy` diffed against CPython: every row of the table above, plus `len` of a
 chained call on a file inside an `if`, in a comprehension, as a function
 argument, and after a `readlines()` — with the bound-name controls kept in the
 file so a fix cannot trade one path for the other.
+
+## 2026-08-13 — FIXED. The file really was read twice; the second read got ''
+
+The 08-12 note's "test the overloads first" suspicion is wrong, and so is the
+"not double evaluation — measured" section above. Both were reasonable readings
+of the evidence and both mis-locate it.
+
+**What happens.** `len` does not simply lower its argument: it PARSES the
+argument to learn its TYPE, and for anything that is not a non-container class
+it REWINDS the token position and re-parses through the ordinary overload path.
+A parse has side effects — a string method on a call result queues a hidden-temp
+assignment on the hoist queue — and the abandoned parse's queued statement was
+never removed. So the emitted code read the file TWICE: once for the AST that
+was thrown away, once for the real one, and the second read got the empty string
+a consumed file returns. `len('')` is 0 and `''.split("\n")` is `['']`, i.e. 1 —
+the exact two wrong answers.
+
+That also explains every row of both boundary tables at once:
+
+  * `readline()` is fine because it yields a variant that needs no hidden temp,
+    so its trial parse queues nothing;
+  * a def/method/literal receiver is fine for the same reason;
+  * `len(f.read())` alone is fine — no string method, no hoist;
+  * `print`/`repr`/an assignment/a comprehension are fine because none of them
+    rewinds;
+  * and the "the file WAS consumed exactly once" measurement was reading the
+    consequence: the file is consumed by the FIRST (discarded) read, so a later
+    `f.read()` sees '' either way.
+
+**The fix** parks the hoist queue across the trial parse and drops it on the
+rewind (`PyHoistPark` / `PyHoistRestore` / `PyHoistMerge` in pyparser.inc,
+since parser.inc cannot see `PyHoistHead`). The arms that KEEP the trial AST
+merge the parked chain back instead.
+
+**Two siblings had it too**, found by grepping for the rewind rather than by
+waiting for a bug report (`normalise-dont-special-case`'s rule): `str`/`repr`
+and `hex`/`bin`/`oct` do the same trial-parse-and-rewind. Measured before the
+fix: `hex(len(f.read().upper()))` answered `0x0`. All three are parked now.
+
+### Gate
+
+`test/test_nilpy_len_of_a_file_read.npy` + `.expected` from CPython, wired into
+`make test-nilpy`: every row of both tables, the same expression under `hex`,
+`str` and `repr`, `len` of a chained read in an `if` and as a call argument, the
+bound-name and two-step controls, a comprehension, the def/method receivers, and
+the "read exactly once" assertion. `make test-nilpy` green, `gate.sh quick`
+GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
