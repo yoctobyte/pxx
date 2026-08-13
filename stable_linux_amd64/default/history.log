@@ -275,3 +275,4 @@
 2026-08-13T17:47:45Z  v275  295ada6fce366bb7e3e1cdae75f5bce78fe496da293ca2bb8019dcbc4e886a56  d50fcf21d97d643d2660751516664217055d2c32  feat(N): getattr/hasattr with a COMPUTED attribute name
 2026-08-13T19:17:49Z  v276  89d85f56b2fb3f8e5c00cb2b20ecfd3fae83e1c36c27b99ff9c58c4d557cad75  b7962aa16379d4e73f09beb3848bae14e4f7881d  fix(N): a tuple is not equal to a list
 2026-08-13T19:27:15Z  v277  89d85f56b2fb3f8e5c00cb2b20ecfd3fae83e1c36c27b99ff9c58c4d557cad75  35cca8d147d746cea3ec058713de96bb674a94b7  feat(N): e.args, and the KeyError repr it unblocked
+2026-08-13T19:33:34Z  v278  89d85f56b2fb3f8e5c00cb2b20ecfd3fae83e1c36c27b99ff9c58c4d557cad75  1bf824ff3ed4d54f677b4588dde9cb851aa2fbe7  fix(N): KeyError str and repr, now that args exists

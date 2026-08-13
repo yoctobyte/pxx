@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:3 backlog:210 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1731 rejected:35`
+`unfinished:9 blocked:3 backlog:211 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1731 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -29,9 +29,10 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 192, ranked
+## Ready — top 30 of 193, ranked
 
 - `[p 70] [P]` regression-test-core-test-conformance-1
+- `[p 70] [T]` regression-test-core-test-uses-order-pylib-exception-a
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -60,6 +61,5 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-file-dunder-from-the-executable (unblocks 1)
-- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
-_162 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
