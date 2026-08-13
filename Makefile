@@ -1452,6 +1452,12 @@ test-nilpy: $(COMPILER)
 	# frozenset: the VALUE is a set's, so the rows that matter are the ones that
 	# make the difference visible -- repr, type().__name__, isinstance both ways.
 	# Equality is where the kinds must NOT be strict: frozenset({1,2}) == {1,2}.
+	# self.__class__.__name__ raised AttributeError at RUN time while
+	# type(self).__name__ -- the same question -- worked. Lowers to that same
+	# call; the rows are receiver SHAPES, since a bare name and a call result
+	# take different parsers and both had to learn it.
+	./$(COMPILER) test/test_nilpy_class_name_chain.npy /tmp/test_nilpy_clsname26
+	/tmp/test_nilpy_clsname26 | diff -u test/test_nilpy_class_name_chain.expected -
 	./$(COMPILER) test/test_nilpy_frozenset.npy /tmp/test_nilpy_frozenset26
 	/tmp/test_nilpy_frozenset26 | diff -u test/test_nilpy_frozenset.expected -
 	./$(COMPILER) test/test_nilpy_math_log.npy /tmp/test_nilpy_mathlog26

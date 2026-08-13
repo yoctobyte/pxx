@@ -1,0 +1,64 @@
+# feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep, the
+# self.__class__.__name__ row.
+#
+# It raised `AttributeError: 'B' object has no attribute '__class__'` at RUN
+# time, while `type(self).__name__` — the same question — worked. Two spellings
+# of one thing, one of them answered, which is this frontend's recurring shape.
+#
+# Only the full CHAIN is accepted, and it lowers to the SAME pytype_name_v call
+# `type(x).__name__` uses: a second lowering would be a second thing to get
+# wrong for tuples, sets and scalars, which is exactly what that one call
+# exists to get right. A bare `x.__class__` is a class OBJECT in Python and
+# this frontend has no such value, so it keeps its AttributeError rather than
+# getting an invented answer — the same call bare `type(x)` already makes.
+#
+# The receiver SHAPES are the rows: a bare name and `self` take parser.inc's
+# path, a call result and a subscript take the selector twin. Both had to learn
+# it, or the feature would work only for the shape it was tested with.
+#
+# NOT supported, and not asserted: a LITERAL receiver — `(1).__class__` — which
+# fails to parse. `type(1).__name__` is the spelling for that and is a row here.
+#
+# Expectations are CPython's own output.
+
+
+class Base:
+    def who(self):
+        return self.__class__.__name__
+
+
+class Derived(Base):
+    pass
+
+
+b = Base()
+d = Derived()
+
+print("via self ", b.who(), d.who())
+print("via name ", b.__class__.__name__, d.__class__.__name__)
+
+xs = [b, d]
+print("subscript", xs[0].__class__.__name__, xs[1].__class__.__name__)
+
+
+def mk():
+    return Derived()
+
+
+print("call rslt", mk().__class__.__name__)
+print("type()   ", type(b).__name__, type(d).__name__)
+
+# the containers and scalars, through a NAME (the literal receiver does not parse)
+n = 1
+s = "x"
+l = [1]
+dd = {1: 2}
+st = {1}
+tp = (1, 2)
+print("scalars  ", n.__class__.__name__, s.__class__.__name__)
+print("contain  ", l.__class__.__name__, dd.__class__.__name__,
+      st.__class__.__name__, tp.__class__.__name__)
+
+# it is a VALUE, not only a return expression
+names = [b.__class__.__name__, d.__class__.__name__]
+print("as values", names, b.__class__.__name__ == "Base")

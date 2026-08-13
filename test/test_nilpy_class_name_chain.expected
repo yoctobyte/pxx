@@ -1,0 +1,8 @@
+via self  Base Derived
+via name  Base Derived
+subscript Base Derived
+call rslt Derived
+type()    Base Derived
+scalars   int str
+contain   list dict set tuple
+as values ['Base', 'Derived'] True

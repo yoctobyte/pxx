@@ -107,3 +107,47 @@ both wired into `make test-nilpy` and diffed against CPython (exact match).
 `enumerate(str)`, `type(x) == int`, non-name lambda default, `dict(x=1)`,
 `.update(b=2)`, extended-slice assign, `self.__class__.__name__`, nested
 unpacking, bare tuple `t = 1, 2, 3`, two-`for` comprehension.
+
+## 2026-08-13 — re-measured all ten remaining rows: FIVE are gone, five stand
+
+Four had been fixed elsewhere since and were still recorded as open. Measured,
+not assumed — each row run against CPython:
+
+| row | now |
+| --- | --- |
+| `"{} {} {}".format(a, b, c)` | **works** |
+| `enumerate("ab")` | **works** |
+| `dict(x=1, y=2)` | **works** (landed with the keywords-are-keys builder) |
+| `[(i, j) for i in range(2) for j in range(2)]` | **works** |
+| `self.__class__.__name__` | **fixed here** |
+| `type(1) == int` | still refused, by name |
+| `lambda x, y=1: x + y` | still refused, by name |
+| `f.update(b=2)` | still refused (see its own ticket — it SEGFAULTS on two keywords, which is why it is not just a parse gap) |
+| `c[::2] = [7, 8]` | still refused, by name |
+| `(c, d), e = (3, 4), 5` | still `undefined variable (c)` |
+| `t = 1, 2, 3` | still `expected expression` |
+
+### `self.__class__.__name__` — fixed
+
+It raised `AttributeError: 'B' object has no attribute '__class__'` at RUN time
+while `type(self).__name__` answered — one question, two spellings, one of them
+working, which is this frontend's recurring shape.
+
+Lowered to the SAME `pytype_name_v` call `type(x).__name__` uses, deliberately:
+a second lowering would be a second thing to get wrong for tuples, sets and
+scalars, which is precisely what that one call exists to get right.
+
+**Only the full chain.** A bare `x.__class__` is a class OBJECT in Python and
+this frontend has no such value, so it keeps its AttributeError instead of
+being given an invented answer — the same call bare `type(x)` already makes a
+few lines away.
+
+**Two parsers had to learn it**, and testing only the first would have shipped
+it half-done: a bare name and `self` take parser.inc's member access, while a
+call result and a subscript take pyparser's selector twin. One builder
+(`PyMakeClassNameOf`), both call sites.
+
+Left unsupported: a LITERAL receiver, `(1).__class__.__name__`, which does not
+parse. `type(1).__name__` is the spelling for that and works.
+
+Test `test/test_nilpy_class_name_chain.{npy,expected}`, wired into `test-nilpy`.

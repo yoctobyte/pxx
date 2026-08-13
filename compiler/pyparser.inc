@@ -11135,6 +11135,46 @@ end;
   alias, the name itself otherwise. Every resolution path calls this instead of
   applying the table by hand, so a class that spells the Python name directly
   is untouched. }
+{ `x.__class__.__name__` — Python's other spelling of `type(x).__name__`, and
+  the one a class writes about ITSELF (`self.__class__.__name__`). It used to
+  reach the dynamic-attribute fallback and raise `'B' object has no attribute
+  '__class__'` at RUN time, while `type(self).__name__` worked: two spellings
+  of one question, one of them answered.
+  Only the full CHAIN is accepted. A bare `x.__class__` is a class OBJECT in
+  Python and this frontend has no such value (the same reason bare `type(x)` is
+  refused a few lines from here), so leaving it to the existing AttributeError
+  is the honest answer rather than inventing one.
+  feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep }
+function PyIsClassNameChainAhead: Boolean;
+begin
+  Result := isNilPy and (CurTok.Kind = tkIdent) and
+            CaseEqual(CurTok.SVal, '__class__') and
+            (TokPos + 1 < TokCount) and
+            (Tokens[TokPos].Kind = tkDot) and
+            (Tokens[TokPos + 1].Kind = tkIdent) and
+            CaseEqual(GetTokenStr(TokPos + 1), '__name__');
+end;
+
+{ Consumes `__class__ . __name__` and answers pytype_name_v(node) — the SAME
+  runtime call `type(x).__name__` lowers to, deliberately: a second lowering
+  would be a second thing to get wrong for tuples, sets and scalars, which is
+  exactly what that one call exists to get right. }
+function PyMakeClassNameOf(node: Integer): Integer;
+var pi, argNode: Integer;
+begin
+  Next; Next; Next;                { __class__ . __name__ }
+  pi := FindProc('pytype_name_v');
+  if pi < 0 then Error('Nil Python: pylib (pytype_name_v) not loaded');
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := node;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := pi;
+  ASTLeft[Result] := argNode;
+  ASTTk[Result] := Ord(tyAnsiString);
+  ASTRight[Result] := -1;
+end;
+
 function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString;
 var al: AnsiString;
 begin
@@ -27575,6 +27615,16 @@ begin
         end;
       end;
 
+      { `mk().__class__.__name__`, `xs[0].__class__.__name__` — the same chain
+        parser.inc's bare-identifier path takes, here for every receiver that
+        reaches the selector instead. One builder, both routes. }
+      if PyIsClassNameChainAhead then
+      begin
+        node := PyMakeClassNameOf(node);
+        tk := tyAnsiString; recId := REC_NONE; outTk := tk;
+        Result := node;
+        Exit;
+      end;
       { A pylib container method pylib declares under another name, reached
         through a SELECTOR rather than a bare identifier — `mk().update({4})`,
         `sets[0].update(...)`. Same one table the two other resolution paths

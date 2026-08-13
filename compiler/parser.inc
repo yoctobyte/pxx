@@ -857,6 +857,8 @@ function PyClsAttrSharedSym(const fname: AnsiString; var needsOvr: Boolean): Int
 function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forward;  { that slot, when the attribute also needs per-instance overrides (pyparser.inc) }
 function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString; gsym: Integer): Integer; forward;  { instance read of an overridable class attribute: has? get : slot (pyparser.inc) }
 function PyParseInputCall: Integer; forward;  { `input([prompt])` -> pyinput / pyinput_p, one builder for both intercepts (pyparser.inc) }
+function PyIsClassNameChainAhead: Boolean; forward;   { CurTok begins `__class__ . __name__` (pyparser.inc) }
+function PyMakeClassNameOf(node: Integer): Integer; forward;   { ...consume it and answer pytype_name_v(node) (pyparser.inc) }
 function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString; forward;  { the name to look up on this class for a Python method spelling — pylib's alias when the class does not declare it as written (pyparser.inc) }
 function PyForceVariant(node: Integer): Integer; forward;  { box a value into a variant (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
@@ -5573,6 +5575,15 @@ begin
       propFLen := Tokens[prevTok].SLen;
       viaProp := False;
 
+      { `x.__class__.__name__`, ahead of the dynamic-attribute fallback below —
+        which is what used to claim it and raise AttributeError at run time. }
+      if PyIsClassNameChainAhead then
+      begin
+        node := PyMakeClassNameOf(node);
+        tk := tyAnsiString; recName := REC_NONE;
+        Result := node;
+        Exit;
+      end;
       { NilPy DYNAMIC attribute on a class instance: `vm._trans_ptr` where the
         class declares no such field/method/property. Python adds attributes at
         run time; route reads to pydynattr_get and writes to pydynattr_set (the
