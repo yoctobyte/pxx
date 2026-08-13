@@ -3398,12 +3398,22 @@ begin
 end;
 
 function IRExcStoreSlot(n: Integer): Integer;
-{ Which exception BSS slot an IR_EXC_STORE reads. IRC selects it: 0 (the default,
-  `on E: T do`) = the exception OBJECT; 1 (__pxxExceptAddr) = the RAISE SITE the
-  raise stub recorded. Same load, different slot — which is why ExceptAddr needs
-  no backend op of its own. }
+{ Which runtime STATUS slot an IR_EXC_STORE reads. IRC selects it: 0 (the
+  default, `on E: T do`) = the exception OBJECT; 1 (__pxxExceptAddr) = the RAISE
+  SITE the raise stub recorded; 2/3/4 (__pxxSigCode/__pxxSigAddr/
+  __pxxSigContext) = the siginfo fields the signal dispatch stub parked. Same
+  load, different slot — which is why none of them needs a backend op, and why
+  adding the signal three cost nothing in the six backends (they all route
+  IR_EXC_STORE through this function).
+
+  The op keeps its exception-era name; what it really means is "load a
+  compiler-owned status slot". Worth renaming if a fourth family shows up. }
 begin
-  if IRC[n] = 1 then Result := BSS_EXC_ADDR else Result := BSS_EXC_OBJ;
+  if IRC[n] = 1 then Result := BSS_EXC_ADDR
+  else if IRC[n] = 2 then Result := BSS_SIG_CODE
+  else if IRC[n] = 3 then Result := BSS_SIG_ADDR
+  else if IRC[n] = 4 then Result := BSS_SIG_CTX
+  else Result := BSS_EXC_OBJ;
 end;
 
 { OPEN-WORLD is-a, at RUNTIME: given a symbol already holding an instance pointer,
@@ -6082,6 +6092,17 @@ begin
       eaSym := AllocVar('', tyPointer);
       IRAppend(IR_EXC_STORE, eaSym, -1, 1, 0, 0);
       Result := IRAppend(IR_LOAD_SYM, eaSym, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_SIGINFO:
+    begin
+      { The dispatch stub parked si_code / si_addr / ucontext* before calling the
+        hook; ASTIVal picks which (0/1/2), mapping to IRC 2/3/4 — the same slot
+        load AN_EXCEPTADDR uses. si_code is an ordinal (already sign-extended in
+        the stub), the other two are addresses. }
+      eaSym := AllocVar('', IntToTypeKind(ASTTk[node]));
+      IRAppend(IR_EXC_STORE, eaSym, -1, ASTIVal[node] + 2, 0, 0);
+      Result := IRAppend(IR_LOAD_SYM, eaSym, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_TYPEINFO:

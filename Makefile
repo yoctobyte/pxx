@@ -3368,6 +3368,13 @@ test-core: $(COMPILER)
 	# signal runtime: SetSignalHandler hooks fire + program survives; nil-revert dies killed-by-SIGTERM (143)
 	./$(COMPILER) test/test_signal_handlers.pas /tmp/test_signal_handlers26
 	test "$$(/tmp/test_signal_handlers26; echo "exit=$$?")" = "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"
+	# SA_SIGINFO (x86-64): the dispatch stub parks si_code / si_addr / the
+	# ucontext* before calling the hook. si_addr is checked against the address
+	# the test deliberately faults on ($DEAD0000 = 3735879680), so a wrong union
+	# offset cannot pass; the SIGUSR1 half checks a NEGATIVE si_code
+	# (SI_TKILL = -6), which is what the stub's sign-extension exists for.
+	./$(COMPILER) test/test_signal_siginfo.pas /tmp/test_signal_siginfo26
+	test "$$(/tmp/test_signal_siginfo26)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
 	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
 	./$(COMPILER) test/test_rust_else_if.rs /tmp/test_rust_else_if26

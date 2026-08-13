@@ -428,8 +428,38 @@ begin
   SigRestorerAddr := CodeLen;
   EmitAsmX64(['mov rax, %', 15, 'syscall']);          { rt_sigreturn }
 
-  { --- dispatch (edi = sig) --- }
+  { --- dispatch (SA_SIGINFO ABI: edi = sig, rsi = siginfo_t*, rdx = ucontext_t*) --- }
   SigDispatchAddr := CodeLen;
+  { Park si_code / si_addr / ucontext* BEFORE anything else, while the kernel's
+    argument registers are still live — the hook is a parameterless Pascal proc
+    (that ABI is deliberately unchanged, so every existing SetSignalHandler user
+    keeps working), so slots are how it learns anything about the fault.
+
+    siginfo_t on x86-64: si_signo(0), si_errno(4), si_code(8), then the union at
+    16 — si_addr for the fault signals. si_code is a signed int, so sign-extend:
+    the SI_* kernel codes are NEGATIVE (SI_USER=0, SI_QUEUE=-1, SI_TIMER=-2...)
+    and a zero-extended load would answer 4294967294 for SI_TIMER.
+
+    rsi may be nil in principle (a handler installed without SA_SIGINFO by other
+    means); the null check costs two bytes and turns a would-be handler-time
+    SIGSEGV into a zeroed slot. }
+  EmitAsmX64([
+    'mov [@glob], rdx', BSS_SIG_CTX,
+    'test rsi, rsi',
+    'jz .nosi',
+    'mov eax, [rsi+8]',                               { si_code (32-bit, zero-extended) }
+    'shl rax, %', 32,                                 { ...sign-extend it: the mini-assembler }
+    'sar rax, %', 32,                                 { has no movsxd, and shl/sar is exact }
+    'mov [@glob], rax', BSS_SIG_CODE,
+    'mov rax, [rsi+16]',                              { si_addr }
+    'mov [@glob], rax', BSS_SIG_ADDR,
+    'jmp .go',
+    '.nosi:',
+    'xor eax, eax',
+    'mov [@glob], rax', BSS_SIG_CODE,
+    'mov [@glob], rax', BSS_SIG_ADDR,
+    '.go:'
+  ]);
   EmitAsmX64([
     'cmp edi, %', 1,
     'jb .out',
@@ -495,8 +525,17 @@ begin
   EmitAsmX64(['mov rcx, @glob', BSS_SIG_SCRATCH]);
   EmitCodeAbsToRdx(SigDispatchAddr);
   EmitAsmX64(['mov [rcx], rdx']);                     { handler = dispatch }
-  EmitAsmX64(['mov edx, %', $14000000,                { flags = SA_RESTORER or SA_RESTART }
+  EmitAsmX64(['mov edx, %', $14000004,                { flags = SA_RESTORER or SA_RESTART or SA_SIGINFO }
     'mov [rcx+8], rdx']);
+  { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
+    rsi/rdx — without it the fault CAUSE is unknowable (si_code is the only
+    carrier; see BSS_SIG_CODE). x86-64 keeps SA_RESTORER + rt_sigreturn either
+    way, which is why this slice is x86-64-only: i386 and arm32 pick the signal
+    FRAME SHAPE by SA_SIGINFO rather than by which syscall installed the
+    handler, so setting it there without flipping their restorers from
+    sigreturn(119) to rt_sigreturn(173) restores a garbage context (pc=sp=lr=0,
+    instant SIGSEGV — observed at b371). Their install sites are untouched
+    here. }
   EmitCodeAbsToRdx(SigRestorerAddr);
   EmitAsmX64([
     'mov [rcx+16], rdx',                              { restorer }

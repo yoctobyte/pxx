@@ -388,6 +388,15 @@ const
                            loads -- no backend op, because a class method's Self is the BLOB,
                            not an instance, so IR_VIRTUAL_CALL (which loads the VMT from
                            [Self + 0]) cannot be reused. }
+  AN_SIGINFO       = 92; { __pxxSigCode / __pxxSigAddr / __pxxSigContext: a field of the siginfo_t
+                           (or the ucontext pointer) of the signal currently being dispatched.
+                           ASTIVal selects WHICH: 0 = si_code, 1 = si_addr, 2 = ucontext*. The
+                           dispatch stub parks all three in BSS before calling the hook, so this
+                           node is just a slot LOAD — it reuses IR_EXC_STORE (whose IRC already
+                           selects among status slots via IRExcStoreSlot), which is why it needs
+                           no backend op and all six backends carry it unchanged. Reserved-prefix
+                           names, so they cannot collide with user routines.
+                           feature-signal-siginfo-ucontext }
   AN_PARFOR        = 91; { `parallel for` data-parallel loop (feature-parallel-processing).
                            A thin marker over the parse-time desugaring: ASTLeft = the
                            synthesized `PXXParallelFor(lo, hi, @__pf_K, ctx)` AN_CALL that
@@ -2438,6 +2447,9 @@ var
   BSS_IO_DEPTH    : Integer;  { --threadsafe I/O statement lock: reentrancy depth of the owner }
   BSS_SIG_HOOKS   : Integer;  { 64 qword slots: user handler proc address per signal 1..64 (slot = (sig-1)*8), 0 = none. Written by SetSignalHandler, read by the emitted signal dispatch stub. }
   BSS_SIG_SCRATCH : Integer;  { 32-byte kernel struct sigaction build area for the install/redefault stubs (handler, flags, restorer, mask) }
+  BSS_SIG_CODE    : Integer;  { siginfo_t.si_code of the signal currently being dispatched, sign-extended to 64 bits (SA_SIGINFO, x86-64). Written by the dispatch stub BEFORE the hook runs, read by __pxxSigCode. THE reason SA_SIGINFO exists here: it is the only carrier of WHICH fault occurred — the MXCSR status flags read 0x00 in a handler because Linux hands it a clean FP state (measured, see feature-float-exception-mask-control). }
+  BSS_SIG_ADDR    : Integer;  { siginfo_t.si_addr — the faulting address for SIGSEGV/SIGBUS/SIGFPE/SIGILL. Meaningless for a kill()-delivered signal (that union member is a pid there); the CALLER must know which signal it asked about. Read by __pxxSigAddr. }
+  BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;
   InLValueWrite   : Boolean;

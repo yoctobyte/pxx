@@ -12311,6 +12311,53 @@ begin
         Exit;
       end;
 
+      { __pxxSigCode / __pxxSigAddr / __pxxSigContext: the siginfo of the signal
+        currently being dispatched. Zero-arg with optional parens and a reserved
+        prefix, exactly like __pxxExceptAddr above — an RTL wrapper gives them
+        friendly names.
+
+        si_code is THE reason SA_SIGINFO exists here: it is the only carrier of
+        which fault occurred (the MXCSR status flags read 0x00 inside a handler,
+        measured — see feature-float-exception-mask-control).
+
+        x86-64 only, and REFUSED elsewhere rather than answering 0: the other
+        targets install their handlers without SA_SIGINFO, so the slots are never
+        written, and a plausible 0 ("SI_USER", "no fault address") is exactly the
+        silent wrong value this dialect refuses to invent — the same call the ESP
+        PAL makes with PAL_ERR_UNSUPPORTED. feature-signal-siginfo-ucontext }
+      if (CaseEqual(name, '__pxxSigCode') or CaseEqual(name, '__pxxSigAddr') or
+          CaseEqual(name, '__pxxSigContext')) and
+         (FindProc(name) < 0) and (FindSym(name) < 0) then
+      begin
+        if TargetArch <> TARGET_X86_64 then
+          Error(name + ' needs SA_SIGINFO, which only the x86-64 signal runtime '
+                + 'installs so far (feature-signal-siginfo-ucontext)');
+        if NoSignals then
+          Error(name + ' requires the signal runtime (built with --no-signals)');
+        Next;
+        if (TokPos <= TokCount) and (CurTok.Kind = tkLParen) then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        node := AllocNode(AN_SIGINFO);
+        if CaseEqual(name, '__pxxSigCode') then
+        begin
+          ASTIVal[node] := 0; ASTTk[node] := Ord(tyInt64);
+        end
+        else if CaseEqual(name, '__pxxSigAddr') then
+        begin
+          ASTIVal[node] := 1; ASTTk[node] := Ord(tyPointer);
+        end
+        else
+        begin
+          ASTIVal[node] := 2; ASTTk[node] := Ord(tyPointer);
+        end;
+        LastExprTk := IntToTypeKind(ASTTk[node]);
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, 'TypeInfo') and (FindProc(name) < 0) and (FindSym(name) < 0) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -32060,6 +32107,9 @@ begin
   BSS_IO_DEPTH    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
   BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
+  BSS_SIG_CODE    := BSSSize; Inc(BSSSize, 8);
+  BSS_SIG_ADDR    := BSSSize; Inc(BSSSize, 8);
+  BSS_SIG_CTX     := BSSSize; Inc(BSSSize, 8);
   ExceptionUsed := False;
   CoroutineUsed := False;
   CloneStubAddr := 0;        { 0 = clone+trampoline stub not yet emitted (lazy) }
