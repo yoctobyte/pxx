@@ -1931,6 +1931,65 @@ begin
   CurASTNode := left;
 end;
 
+procedure PyParseIssubclass;
+{ `issubclass(D, B)` — the CLASS-to-class twin of isinstance, which was simply
+  absent ("undefined variable (issubclass)").
+
+  Both arguments are resolved as class NAMES and the answer is folded at COMPILE
+  TIME by walking the parent chain, because with names it IS a compile-time
+  fact: the class graph is fully known and nothing about it can change at run
+  time. Reflexive, like Python — `issubclass(B, B)` is True. A tuple second
+  argument is accepted, matching both Python and the isinstance arm above.
+
+  A non-name argument (a class held in a VARIABLE) is REFUSED rather than
+  guessed at. isinstance has a runtime fallback for that case
+  (`pyisinstance_v`); there is no `pyissubclass_v` to call, and inventing one is
+  a compiler/builtin change that would need a re-pin — so this arm stops at the
+  boundary of what it can answer exactly, and says so, instead of returning a
+  plausible False. Extending it is a separate, larger piece of work.
+  bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep }
+var ciA, ciB, cur, node: Integer; res, hadTuple: Boolean;
+begin
+  Next;                     { 'issubclass' }
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkIdent then
+    Error('Nil Python: issubclass() takes class NAMES; a class held in a ' +
+          'variable is not supported yet');
+  ciA := FindUClass(CurTok.SVal);
+  if (ciA < 0) and (FindSym(CurTok.SVal) >= 0) then
+    Error('Nil Python: issubclass() takes class NAMES; ' + CurTok.SVal +
+          ' is a variable, and there is no runtime subclass test yet');
+  if ciA < 0 then Error('Nil Python: unknown class in issubclass: ' + CurTok.SVal);
+  Next;
+  Expect(tkComma, ',');
+  hadTuple := CurTok.Kind = tkLParen;
+  if hadTuple then Next;
+  res := False;
+  repeat
+    if CurTok.Kind <> tkIdent then
+      Error('Nil Python: issubclass() takes class NAMES; a class held in a ' +
+            'variable is not supported yet');
+    ciB := FindUClass(CurTok.SVal);
+    if (ciB < 0) and (FindSym(CurTok.SVal) >= 0) then
+      Error('Nil Python: issubclass() takes class NAMES; ' + CurTok.SVal +
+            ' is a variable, and there is no runtime subclass test yet');
+    if ciB < 0 then Error('Nil Python: unknown class in issubclass: ' + CurTok.SVal);
+    cur := ciA;
+    while cur >= 0 do
+    begin
+      if cur = ciB then begin res := True; Break; end;
+      cur := UClsParent[cur];
+    end;
+    Next;
+  until not Eat(tkComma);
+  if hadTuple then Expect(tkRParen, ')');   { tuple close }
+  Expect(tkRParen, ')');                    { call close }
+  node := AllocNode(AN_BOOL_LIT);
+  ASTIVal[node] := Ord(res);
+  ASTTk[node] := Ord(tyBoolean);
+  CurASTNode := node;
+end;
+
 { Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
 procedure PyParseBitOperand;
 var node: Integer;
@@ -1939,6 +1998,12 @@ begin
      (Tokens[TokPos].Kind = tkLParen) then
   begin
     PyParseIsinstance;
+    Exit;
+  end;
+  if PyIsIdent('issubclass') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    PyParseIssubclass;
     Exit;
   end;
   if CurTok.Kind = tkLogNot then

@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep | N | 40 | bug | Four small refusals found by the 2026-08-13 CPython sweep: `issubclass(A, B)`, `d.update(k=v)` (the keyword form), `key=str.lower` (an unbound method as a callable value), and Unicode special-casing in upper()/lower() ('ß'.upper() is 'ß', CPython 'SS'). Each is a parse error or a wrong string, none is a silent wrong VALUE | — |
 
 ## unfinished (10)
 
@@ -35,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (217)
+## backlog (216)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -72,7 +74,6 @@ _none_
 | bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position | N | 45 | bug | The pyeval fallback still binds a host method's kwargs by POSITION | — |
 | bug-nilpy-set-update-method-is-not-mapped | N | 40 | bug | `s.update(other)` on a SET is a compile error (\"TPyList has no method update\") though CPython accepts it. The operator spelling `s \|= other` works and lowers to TPyList.setupdate, so only the METHOD NAME is missing — the same Python-name-to-pylib-name mapping dict already has for items/keys/values. | — |
-| bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep | N | 40 | bug | Four small refusals found by the 2026-08-13 CPython sweep: `issubclass(A, B)`, `d.update(k=v)` (the keyword form), `key=str.lower` (an unbound method as a callable value), and Unicode special-casing in upper()/lower() ('ß'.upper() is 'ß', CPython 'SS'). Each is a parse error or a wrong string, none is a silent wrong VALUE | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 45 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
@@ -549,7 +550,6 @@ _none_
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [N] bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses
 - [p 40] [N] bug-nilpy-set-update-method-is-not-mapped
-- [p 40] [N] bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep
 - [p 40] [P] bug-p-bare-all-defaulted-routine-refused-in-argument-position
 - [p 40] [T] bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder
 - [p 40] [P] compat-pascal-index-a-function-call-result

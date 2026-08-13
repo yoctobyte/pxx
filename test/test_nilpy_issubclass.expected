@@ -1,0 +1,11 @@
+direct     True
+transitive True
+reversed   False
+unrelated  False
+reflexive  True
+tuple hit  True
+tuple miss False
+in an if   True
+in a list  [True, False]
+in and/or  True
+isinstance True False

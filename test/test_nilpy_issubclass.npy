@@ -1,0 +1,55 @@
+# bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep (row 1)
+#
+# issubclass() was simply absent -- "undefined variable (issubclass)" -- while
+# its instance twin isinstance() has had an intercept for a long time.
+#
+# With class NAMES the answer is a COMPILE-TIME fact: the class graph is fully
+# known and nothing about it changes at run time, so this folds the parent-chain
+# walk at parse time rather than calling a runtime helper. Reflexive like
+# Python, and a tuple second argument works the same way it does for isinstance.
+#
+# A class held in a VARIABLE is refused with a diagnostic that says so, rather
+# than answering a plausible False -- isinstance's runtime fallback
+# (pyisinstance_v) has no subclass twin to call, and adding one is a
+# compiler/builtin change needing a re-pin. That refusal is deliberate and is
+# asserted by its own compile-failure case, not here.
+#
+# Expectations are CPython's own output.
+
+
+class A:
+    pass
+
+
+class B(A):
+    pass
+
+
+class C(B):
+    pass
+
+
+class D:
+    pass
+
+
+# direct, transitive, reversed, unrelated, reflexive
+print("direct    ", issubclass(B, A))
+print("transitive", issubclass(C, A))
+print("reversed  ", issubclass(A, C))
+print("unrelated ", issubclass(D, A))
+print("reflexive ", issubclass(A, A))
+
+# tuple second argument, hit and miss
+print("tuple hit ", issubclass(C, (D, A)))
+print("tuple miss", issubclass(D, (A, B)))
+
+# it is a value, not just a statement: usable in a condition, a container and
+# a boolean expression
+if issubclass(B, A):
+    print("in an if  ", True)
+print("in a list ", [issubclass(C, B), issubclass(A, C)])
+print("in and/or ", issubclass(C, A) and not issubclass(A, C))
+
+# the instance twin still answers, side by side
+print("isinstance", isinstance(C(), A), isinstance(D(), A))

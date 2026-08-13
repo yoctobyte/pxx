@@ -1392,6 +1392,13 @@ test-nilpy: $(COMPILER)
 	# method spelling always worked, which is what located the missing arm.
 	./$(COMPILER) test/test_nilpy_attr_off_subscript_of_call_result.npy /tmp/test_nilpy_attrsub26
 	/tmp/test_nilpy_attrsub26 | diff -u test/test_nilpy_attr_off_subscript_of_call_result.expected -
+	# issubclass() was absent entirely ("undefined variable"). With class NAMES
+	# the answer is a compile-time fact, so it folds the parent-chain walk at
+	# parse time; a class held in a VARIABLE is refused with a diagnostic saying
+	# so rather than answering a plausible False (isinstance's runtime fallback
+	# has no subclass twin, and adding one needs a re-pin).
+	./$(COMPILER) test/test_nilpy_issubclass.npy /tmp/test_nilpy_issub26
+	/tmp/test_nilpy_issub26 | diff -u test/test_nilpy_issubclass.expected -
 	# `a |= <set>` silently did nothing (the desugar used the general or-token and
 	# never reached the set path). In place, like +=/extend -- aliases must see it.
 	./$(COMPILER) test/test_nilpy_set_augmented_union.npy /tmp/test_nilpy_setaug26
