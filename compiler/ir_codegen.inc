@@ -615,6 +615,111 @@ begin
   ]);
 end;
 
+procedure EmitFpcFloatErrStub;
+{ --fpc-float-errors: the SIGFPE hook that turns a hardware float trap into an
+  FPC-style runtime error (feature-float-exception-mask-control, slice 2).
+
+  Installed as an ordinary signal hook (parameterless, called by the dispatch
+  stub), so it reads the parked si_code out of BSS_SIG_CODE — the only carrier
+  of WHICH exception fired, since Linux hands a handler a clean FP state and the
+  MXCSR status flags read 0x00 there.
+
+  The numbers are FPC's, MEASURED against FPC 3.x on this box rather than read
+  off a table: 1.0/0.0 -> 208, 0.0/0.0 -> 207, 1e308*10 -> 205.
+
+  It never returns, and must not: returning would re-run the faulting
+  instruction with the kernel-restored (still unmasked) MXCSR, forever. Pure
+  syscalls, no unit dependency, like the div-zero stub above.
+
+  SIGFPE also carries the INTEGER faults, so they are decoded here too rather
+  than left to print a float message: FPE_INTDIV -> 200 (what the div-zero
+  check already prints when it is on) and FPE_INTOVF -> 215, which is how
+  `Low(Int64) div -1` reaches a diagnosis instead of an uncatchable kill.
+
+  An si_code this decoder does not know exits 255 with a message that says so.
+  Inventing a plausible FPC code for it would be the silent wrong answer this
+  dialect refuses — FPE_FLTRES (inexact) HAS no FPC runtime error.
+
+  One EmitAsmX64 call, deliberately: its label table is per-call, so every arm
+  and the shared .print tail must be in the same one. }
+var m3, m4, m5, m7, m1, m2, m6, mx: AnsiString;
+    s3, s4, s5, s7, s1, s2, s6, sx: Integer;
+begin
+  FpcFloatErrStubAddr := CodeLen;
+  m3 := 'Runtime error 208 (division by zero)' + Chr(10);
+  m4 := 'Runtime error 205 (floating point overflow)' + Chr(10);
+  m5 := 'Runtime error 206 (floating point underflow)' + Chr(10);
+  m7 := 'Runtime error 207 (invalid floating point operation)' + Chr(10);
+  m1 := 'Runtime error 200 (division by zero)' + Chr(10);
+  m2 := 'Runtime error 215 (arithmetic overflow)' + Chr(10);
+  m6 := 'Runtime error 255 (inexact float result, which has no FPC code)' + Chr(10);
+  mx := 'Runtime error 255 (SIGFPE with an si_code this runtime does not know)' + Chr(10);
+  s3 := InternStr(m3); s4 := InternStr(m4); s5 := InternStr(m5); s7 := InternStr(m7);
+  s1 := InternStr(m1); s2 := InternStr(m2); s6 := InternStr(m6); sx := InternStr(mx);
+  EmitAsmX64([
+    'mov rax, [@glob]', BSS_SIG_CODE,
+    'cmp rax, %', 3,                        { FPE_FLTDIV }
+    'jne .n3',
+    'mov rsi, @data', Strs[s3].Offset + 8,
+    'mov rdx, %', Strs[s3].Len,
+    'mov rbx, %', 208,
+    'jmp .print',
+    '.n3:',
+    'cmp rax, %', 4,                        { FPE_FLTOVF }
+    'jne .n4',
+    'mov rsi, @data', Strs[s4].Offset + 8,
+    'mov rdx, %', Strs[s4].Len,
+    'mov rbx, %', 205,
+    'jmp .print',
+    '.n4:',
+    'cmp rax, %', 5,                        { FPE_FLTUND }
+    'jne .n5',
+    'mov rsi, @data', Strs[s5].Offset + 8,
+    'mov rdx, %', Strs[s5].Len,
+    'mov rbx, %', 206,
+    'jmp .print',
+    '.n5:',
+    'cmp rax, %', 7,                        { FPE_FLTINV }
+    'jne .n7',
+    'mov rsi, @data', Strs[s7].Offset + 8,
+    'mov rdx, %', Strs[s7].Len,
+    'mov rbx, %', 207,
+    'jmp .print',
+    '.n7:',
+    'cmp rax, %', 1,                        { FPE_INTDIV }
+    'jne .n1',
+    'mov rsi, @data', Strs[s1].Offset + 8,
+    'mov rdx, %', Strs[s1].Len,
+    'mov rbx, %', 200,
+    'jmp .print',
+    '.n1:',
+    'cmp rax, %', 2,                        { FPE_INTOVF }
+    'jne .n2',
+    'mov rsi, @data', Strs[s2].Offset + 8,
+    'mov rdx, %', Strs[s2].Len,
+    'mov rbx, %', 215,
+    'jmp .print',
+    '.n2:',
+    'cmp rax, %', 6,                        { FPE_FLTRES — no FPC code exists }
+    'jne .nx',
+    'mov rsi, @data', Strs[s6].Offset + 8,
+    'mov rdx, %', Strs[s6].Len,
+    'mov rbx, %', 255,
+    'jmp .print',
+    '.nx:',
+    'mov rsi, @data', Strs[sx].Offset + 8,
+    'mov rdx, %', Strs[sx].Len,
+    'mov rbx, %', 255,
+    '.print:',
+    'mov rax, %', 1,                        { sys_write }
+    'mov rdi, %', 1,                        { stdout, where every runtime error here goes }
+    'syscall',
+    'mov rax, %', 231,                      { sys_exit_group }
+    'mov rdi, rbx',                         { NOT rcx: syscall clobbers rcx and r11 }
+    'syscall'
+  ]);
+end;
+
 procedure EmitPyBitFloatErrStub;
 { Shared NilPy bitwise-on-float TypeError abort stub: a bitwise operator
   (& | ^ << >>) with a float variant operand raises TypeError in Python rather

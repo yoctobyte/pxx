@@ -2495,6 +2495,7 @@ var
   LaxDeclOrder     : Boolean;    { user opt-out (--lax-decl-order / {$DECLORDER OFF}): when True, ParseProgram sets DeclOrderStrict := False — restores the old lenient forward-visible-global behavior }
   RequireForward   : Boolean;    { --strict / --require-forward / {$REQUIRE FORWARD ON}: enforce FPC's routine visibility (header above the call: full def / forward; / interface / method) instead of the pre-scan's auto-forward. Default off; --mimic-fpc implies. The FPC-free seed-ordering proxy (feature-require-forward-strict-mode). }
   NoDivCheck       : Boolean;    { user opt-out (--no-div-check): skip the pre-divide zero check on integer div/mod (FPC-style runtime error 200 is the default; without the check x86 raw-SIGFPEs and ARM silently yields 0). x86-64 only for now. }
+  FpcFloatErrors   : Boolean;    { --fpc-float-errors: emulate FPC's float error behaviour — unmask exInvalidOp/exZeroDivide/exOverflow at entry (FPC's own default, measured) and install a SIGFPE hook that reports runtime error 205/206/207/208. OPT-IN: pxx's default is quiet IEEE (inf/NaN propagate), a user decision from 2026-07-02, and this flag is the whole point of feature-float-exception-mask-control — being ABLE to emulate FPC without becoming it. x86-64 only, needs the signal runtime. }
   NoSignals        : Boolean;    { user opt-out (--no-signals): skip the default signal runtime (SIGINT/SIGTERM dispatch + SetSignalHandler support). Default ON, no auto-detection — user decision, see feature-signal-handlers. x86-64 Linux only for now. }
   { The AST arena is per-proc scratch: a body compiles and ASTNodeCount goes
     back to the floor, handing those nodes out again. That holds while ONE
@@ -2529,6 +2530,7 @@ var
   SigRestorerAddr : Integer;  { code offset of the SA_RESTORER stub (rt_sigreturn) — x86-64 requires a userspace restorer }
   SigDispatchAddr : Integer;  { code offset of the shared signal dispatch handler (hook table -> call, else redefault + re-raise) }
   SigInstallAddr  : Integer;  { code offset of the callable install routine: edi = signal number -> rt_sigaction(sig, dispatch) }
+  FpcFloatErrStubAddr : Integer; { code offset of the --fpc-float-errors SIGFPE decoder stub: reads BSS_SIG_CODE, prints the matching FPC runtime error (205/206/207/208, plus 200/215 for the integer FPE causes) and exit_group()s with it. Installed as the SIGFPE hook at program entry; never returns, because returning would re-run the faulting instruction with the kernel-restored unmasked MXCSR forever. feature-float-exception-mask-control }
   SigSetHookAddr  : Integer;  { code offset of the SetSignalHandler stub: edi = signal, rsi = handler address -> store hook slot, fall through into SigInstallAddr }
   IOLockAddr  : Integer;  { code offset of the --threadsafe I/O statement-lock acquire stub (reentrant owner-tid spinlock over BSS_IO_OWNER/DEPTH) }
   IOUnlockAddr: Integer;  { code offset of the matching release stub }

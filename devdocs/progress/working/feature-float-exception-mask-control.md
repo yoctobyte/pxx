@@ -193,3 +193,79 @@ one-line ordering fact with a silent wrong answer behind it.
    si_code to runtime error 205/206/207/208. Pure Track A, self-contained now
    that the table above is measured.
 3. **i386**, per the refusal message above.
+
+## Progress — slice 2 landed: `--fpc-float-errors`, 2026-08-13
+
+The opt-in from the 2026-07-02 decision, now real. The default is untouched
+(and pinned by two tests); with the flag, pxx reports float faults the way FPC
+does, **verified against FPC 3.x on this box rather than against a table**:
+
+| | pxx `--fpc-float-errors` | FPC 3.x |
+| --- | --- | --- |
+| `1.0/0.0` | Runtime error 208, exit 208 | Runtime error 208 |
+| `1e308*10` | Runtime error 205, exit 205 | Runtime error 205 |
+| `0.0/0.0` | Runtime error 207, exit 207 | Runtime error 207 |
+| `Low(Int64) div -1` | Runtime error 200, exit 200 | Runtime error 200 |
+
+### What the flag does, in two pieces
+
+At program entry, in this order: install a SIGFPE hook, then unmask. (The other
+order has a window where a trap has no handler.) The unmask value is **FPC's
+own default mask, measured** — `GetExceptionMask` under FPC answers
+`{exDenormalized, exUnderflow, exPrecision}`, i.e. invalid / zero-divide /
+overflow unmasked, which is bits 1|4|5 = 50 in this ticket's neutral encoding,
+`$1900` in MXCSR position.
+
+The hook is `EmitFpcFloatErrStub` — a decode chain over the parked si_code that
+writes the message and `exit_group`s with the FPC number. Pure syscalls, no unit
+dependency, exactly like the div-zero stub it sits beside.
+
+### The integer FPE causes are decoded too, and that is not scope creep
+
+SIGFPE carries `FPE_INTDIV` and `FPE_INTOVF` as well. Leaving them to fall
+through would print a *float* message for an integer fault — a wrong answer the
+flag introduced. So they map to 200 and 215, which is also why
+`Low(Int64) div -1` now says something instead of dying uncatchably (see
+[[bug-integer-div-zero-sigfpe-uncatchable]] — this does not close that ticket,
+which wants a *catchable* raise, but it is the same fault reaching a diagnosis).
+FPC agrees on that row too: 200, measured.
+
+### An si_code the decoder does not know exits 255, saying so
+
+`FPE_FLTRES` (inexact) has **no FPC runtime error** — FPC masks precision and
+never faces the question. Picking a plausible 205/207 for it would be the
+invented-answer failure this dialect refuses, so it and any unrecognised code
+print a message that names the situation and exit 255, which is not an FPC code.
+Reachable only if the program unmasked precision itself through
+`__pxxSetFPUMask`.
+
+### Refusals
+
+`--fpc-float-errors` errors on a non-x86-64 target (no portable mask mechanism —
+see slice 1) and errors with `--no-signals`, because the flag IS a signal hook
+and silently doing half of it (unmask, no handler = a bare SIGFPE kill) would be
+worse than not compiling.
+
+### Test
+
+`test/test_fpc_float_errors.pas`, wired into `make test` and run **five ways**:
+the same source with the flag (no-trap exit 0, div 208, ovf 205, inv 207) and
+WITHOUT it (`no trap, r= Inf`, exit 0). That last line is the one that fails if
+anyone ever makes unmasking the default.
+
+The user-facing CLI reference row is `docs/**` (Track D) and is filed as
+[[docs-cli-fpc-float-errors-flag]].
+
+### Still open in this ticket
+
+- The FPC-compatible `Get`/`SetExceptionMask` **set** surface in
+  `lib/rtl/math.pas` — Track B, needs a pin first:
+  [[feature-b-fpc-exception-mask-api-in-math]].
+- **i386**, per slice 1's refusal message (its x87 control word would have to
+  move with MXCSR).
+- Making the trap **catchable** (`try/except EZeroDivide`) rather than a print +
+  exit. The mechanism exists — the handler can rewrite the PC to a raising proc
+  (`__pxxSigPCPtr`, proven in `test/test_float_exception_mask.pas`) — but WHICH
+  exception class and where it lives is still
+  [[decide-int-div-zero-behavior-unification]], which is a Track U question, not
+  an implementation one.

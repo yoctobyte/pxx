@@ -3411,6 +3411,20 @@ test-core: $(COMPILER)
 	# an FPC-style runtime error 205/206/207/208 mapping is built out of.
 	./$(COMPILER) test/test_float_exception_mask.pas /tmp/test_float_exc_mask26
 	test "$$(/tmp/test_float_exc_mask26)" = "$$(printf 'default mask=63\nquiet 1/0= Inf\nquiet overflow= Inf\nquiet 0/0= Nan\nprev=63 now=59\nafter restore=63 (returned 59)\ntrapped si_code=3\ntrapped si_code=4\ntrapped si_code=7\ntrapped si_code=5\ntrapped si_code=6\nmask after=63\nquiet again= Inf\nFPE_FLTDIV=3 FLTOVF=4 FLTUND=5 FLTRES=6 FLTINV=7')"
+	# --fpc-float-errors: the opt-in FPC emulation on top of that mask. The
+	# entry unmasks what FPC unmasks and a SIGFPE hook decodes si_code into
+	# FPC's runtime error -- 208 float div-zero / 205 overflow / 207 invalid,
+	# all three measured against FPC 3.x. The SAME source built WITHOUT the
+	# flag must still print Inf and exit 0: that is the default this feature
+	# exists NOT to change.
+	./$(COMPILER) --fpc-float-errors test/test_fpc_float_errors.pas /tmp/test_fpc_ferr26
+	/tmp/test_fpc_ferr26; test "$$?" = "0"
+	/tmp/test_fpc_ferr26 div; test "$$?" = "208"
+	/tmp/test_fpc_ferr26 ovf; test "$$?" = "205"
+	/tmp/test_fpc_ferr26 inv; test "$$?" = "207"
+	test "$$(/tmp/test_fpc_ferr26 div)" = "Runtime error 208 (division by zero)"
+	./$(COMPILER) test/test_fpc_float_errors.pas /tmp/test_fpc_ferr_off26
+	test "$$(/tmp/test_fpc_ferr_off26 div)" = "no trap, r= Inf"
 	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
 	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
 	./$(COMPILER) test/test_rust_else_if.rs /tmp/test_rust_else_if26

@@ -148,6 +148,7 @@ begin
 {$endif}
   DebugTrace := False;
   DebugInfo := False;
+  FpcFloatErrors := False;
   DbgMainTokEnd := MAX_TOKENS;
   CCharSignedOpt := -1;   { -1 = follow the target psABI; see CPlainCharSigned }
   DumpIR := False;
@@ -470,6 +471,18 @@ begin
         + SetSignalHandler). Default on for PC targets; see
         feature-signal-handlers. }
       NoSignals := True;
+      Inc(i);
+    end
+    else if option = '--fpc-float-errors' then
+    begin
+      { Emulate FPC's float error behaviour: unmask exInvalidOp / exZeroDivide /
+        exOverflow at entry (FPC's own default mask, measured) and install a
+        SIGFPE hook that prints the matching FPC runtime error and exits with
+        it. OPT-IN — pxx's default is and stays quiet IEEE (inf/NaN propagate),
+        which is the better default for measurement/streaming data with
+        out-of-bounds inputs (user, 2026-07-02). See
+        feature-float-exception-mask-control. }
+      FpcFloatErrors := True;
       Inc(i);
     end
     else if option = '--no-div-check' then

@@ -12,6 +12,8 @@ procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
 procedure EmitDiv0Stub; forward;
+procedure EmitFpcFloatErrStub; forward;
+procedure EmitCodeAbsToRdx(targetOff: Integer); forward;   { ir_codegen.inc is included AFTER this file, and the FPC seed build (only it) enforces that — bug-a-fpc-seed-drift-emitasmx64-forward }
 procedure EmitPyBitFloatErrStub; forward;
 procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;
@@ -32794,6 +32796,18 @@ begin
     predictable process behavior beats size sniffing; the whole runtime is
     ~200 bytes). See feature-signal-handlers. }
   if (TargetArch = TARGET_X86_64) and not NoSignals then EmitSignalRuntime;
+  { --fpc-float-errors decoder stub (feature-float-exception-mask-control):
+    emitted next to the signal runtime because it IS a signal hook. }
+  if FpcFloatErrors then
+  begin
+    if TargetArch <> TARGET_X86_64 then
+      Error('--fpc-float-errors is x86-64 only: the float-exception mask has no '
+            + 'portable mechanism (feature-float-exception-mask-control)');
+    if NoSignals then
+      Error('--fpc-float-errors needs the signal runtime; it is the SIGFPE hook '
+            + 'that turns the trap into a runtime error (drop --no-signals)');
+    EmitFpcFloatErrStub;
+  end;
   { --threadsafe statement-atomic I/O lock stubs (x86-64 only, like the
     threadsafe atomics themselves). }
   if (TargetArch = TARGET_X86_64) and ThreadSafeMode then EmitIoLockStubs;
@@ -32980,6 +32994,28 @@ begin
   begin
     EmitAsmX64(['mov edi, %', 2]);   IREmitCodeCall(SigInstallAddr);   { SIGINT }
     EmitAsmX64(['mov edi, %', 15]);  IREmitCodeCall(SigInstallAddr);   { SIGTERM }
+  end;
+  { --fpc-float-errors: hook SIGFPE, then UNMASK what FPC unmasks. In that
+    order — the hook must be installed before the first trap can fire, and the
+    mask write is the thing that makes traps possible at all.
+
+    The mask value is FPC's own, measured with GetExceptionMask under FPC 3.x
+    rather than assumed: masked = {exDenormalized, exUnderflow, exPrecision}
+    = bits 1|4|5 = 50, i.e. invalid / zero-divide / overflow UNMASKED. }
+  if FpcFloatErrors then
+  begin
+    EmitAsmX64(['mov edi, %', 8]);                       { SIGFPE }
+    EmitCodeAbsToRdx(FpcFloatErrStubAddr);
+    EmitAsmX64(['mov rsi, rdx']);
+    IREmitCodeCall(SigSetHookAddr);
+    { Raw bytes, like IR_FPU_MASK's emitter: the text assembler has no
+      stmxcsr/ldmxcsr. 50 shl 7 = $1900 = the FPC mask in MXCSR position. }
+    EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($F8);   { stmxcsr [rsp-8] }
+    EmitB($8B); EmitB($44); EmitB($24); EmitB($F8);               { mov eax, [rsp-8] }
+    EmitB($25); EmitB($7F); EmitB($E0); EmitB($FF); EmitB($FF);   { and eax, ~$1F80 }
+    EmitB($0D); EmitB($00); EmitB($19); EmitB($00); EmitB($00);   { or eax, $1900 }
+    EmitB($89); EmitB($44); EmitB($24); EmitB($F8);               { mov [rsp-8], eax }
+    EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($F8);   { ldmxcsr [rsp-8] }
   end;
   if (TargetArch = TARGET_I386) and not NoSignals then
   begin
