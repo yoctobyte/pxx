@@ -3,7 +3,7 @@ track: U
 prio: 45
 type: decide
 blocked-by: []
-summary: "No global rule can win: Pascal, Python and C each let a user definition beat a builtin SOMETIMES, and the answer differs per routine. Proposal (user's steer, 2026-08-13): classify each library routine as reserved / overrideable-builtin / ordinary-library, declared AT THE DECLARATION in the library rather than decided by a parser arm — one predicate replacing the four ad-hoc mechanisms in place today. Open questions: the marker's spelling, the default tier, and who may reach a shadowed routine."
+summary: "Settled by the governing rule (user, 2026-08-13): the DEFAULT follows the reference implementation per frontend — CPython for .npy, FPC for .pas — deviations behind --strict-*. So shadowing is ALLOWED and PREFERRED, `reserved` needs the bar 'principally unsolvable', and the tier is a compatibility statement rather than a convenience. What is left to decide: the marker's spelling, whether `print` stops being a token, and whether a --strict-python peer is wanted."
 ---
 
 # Classify library routines by how strongly they own their name
@@ -72,6 +72,38 @@ fifth mechanism, and it is per-FRONTEND by construction: the same pylib routine
 can be `builtin` for `.npy` and `library` for a Pascal program that happens to
 use the unit.
 
+## The governing rule (user, 2026-08-13) — and what it settles
+
+> "We try to stay compatible. If FPC behaves this way, we follow. CPython, we
+> follow. Exceptions are there to be — hence `--strict-fpc`, and maybe we need a
+> `--strict-python`. In general shadowing is allowed, and preferred, unless.
+> Approach this from PHILOSOPHY, not from quick hacks or what is easiest.
+> Correctness first, unless principally unsolvable."
+
+This is not a tie-breaker among the three options above — it decides the shape
+of the tier table itself, and it overturns two of the recommendations this
+ticket carried an hour earlier:
+
+- **The default tier is `builtin` (overrideable), not `library`.** The earlier
+  recommendation ("default to `library`, mark builtins explicitly") was
+  conservatism about OUR migration risk, which is exactly the kind of reasoning
+  the rule rejects. CPython lets a module-level `def` shadow every builtin, so
+  that is the default and an unmarked routine gets it.
+- **`reserved` needs a much higher bar: principally unsolvable.** Not "the
+  intercept claimed the call first", not "it lexes to a token" — a real grammar
+  impossibility. On that bar `print` does NOT qualify: `def print` is legal
+  Python, so today's refusal is a quick hack (it lexes to `tkwriteln`) and the
+  tier table is where that becomes visible instead of being lost in the lexer.
+- **A shadowed routine must stay reachable**, because CPython has `builtins.len`.
+  Following the reference means following it here too, not only where it is
+  convenient.
+- **The tier is a COMPATIBILITY STATEMENT, not a convenience knob.** Each entry
+  says "the reference does X, so we do X" — or, where we deviate, names the
+  `--strict-*` flag under which the reference's behaviour is restored. A tier
+  chosen because it is easier to implement is a bug in the table.
+
+Recorded as [[feedback_reference_compat_is_the_default_shadowing_allowed]].
+
 ## What the user needs to decide
 
 1. **The marker's spelling.** A Pascal-style directive on the declaration
@@ -79,17 +111,22 @@ use the unit.
    needs a lexer/parser change; a registry unit listing name + tier + frontend
    is zero syntax change but splits the fact from the routine. Recommendation:
    the directive — the whole point is that the fact lives WITH the routine.
-2. **The default tier for an unmarked routine.** `library` (conservative,
-   nothing changes until marked) or `builtin` (matches what most already do,
-   but silently changes resolution for every existing pylib export).
-   Recommendation: `library`, and mark the builtins explicitly — a tier that is
-   inherited by accident is the mess we are getting out of.
-3. **Whether a shadowed routine stays reachable**, and how. Python has
-   `builtins.len`; we have qualified names (`pylib.len`). Recommendation: yes,
-   qualified — it costs nothing and makes shadowing recoverable.
-4. **Whether `print` stays reserved.** CPython lets `def print` win. Making it
-   overrideable means it stops being a token, which is a real lexer change for
-   a shape almost nobody writes.
+2. **Whether `print` stops being a token.** The rule says it must — `def
+   print` is legal Python and today's refusal is an implementation accident.
+   The cost is real: `print` lexes to `tkwriteln`, so this is a lexer change
+   plus every parser arm that keys on the token. Worth confirming you want it
+   paid for a shape almost nobody writes, or explicitly deferred with the tier
+   table recording `print` as a KNOWN deviation rather than a decision.
+3. **Whether a `--strict-python` peer is wanted at all, and for what.** The
+   shadowing question needs no flag — the reference ALLOWS it, so the default
+   allows it and there is nothing to be strict about. A `--strict-python` would
+   be for the other direction: refusing what CPython refuses, where NilPy is
+   deliberately laxer (a mutated tuple, the divergences page). That is a
+   separate campaign; the only question here is whether to reserve the name now.
+
+Settled by the rule, no longer open: the default tier is `builtin`
+(overrideable); `reserved` requires "principally unsolvable"; a shadowed
+routine stays reachable under a qualified name.
 
 ## Scope note
 
