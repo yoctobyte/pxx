@@ -593,6 +593,13 @@ type
     FStr: AnsiString;        { leaf str source (STR, REVSTR) }
     FUp: TPyIter;            { upstream cursor (MAP, FILTER, ENUM, ZIP left) }
     FUp2: TPyIter;           { ZIP right }
+    { …and the third and fourth streams of an N-way zip. `zip(rows, labels,
+      values)` is ordinary Python and did not PARSE; two more fields cover the
+      arities real code writes, and the advance below appends a stream only
+      when its field is non-nil, so a two-way zip still yields a PAIR and not a
+      2-tuple padded with None. bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item 2 }
+    FUp3: TPyIter;           { ZIP third — nil for a two-way zip }
+    FUp4: TPyIter;           { ZIP fourth — nil below four }
     FKey: Pointer;           { the stored callable (MAP, FILTER) — see PyIterCallHook }
     FPos: Integer;           { leaf position / ENUM counter / RANGE values left }
     FStart: Int64;           { enumerate(xs, START) / RANGE next value }
@@ -1035,6 +1042,11 @@ function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
   per combination of argument types — zip alone would otherwise want nine. }
 function pyiter_enum_i(up: TPyIter; start: Int64): TPyIter;
 function pyiter_zip_ii(a: TPyIter; b: TPyIter): TPyIter;
+{ …and the three- and four-way forms. Separate entries rather than an
+  open-array: the frontend builds these calls with a fixed argument chain, and
+  the arity is known at the call site. }
+function pyiter_zip_iii(a: TPyIter; b: TPyIter; c: TPyIter): TPyIter;
+function pyiter_zip_iiii(a: TPyIter; b: TPyIter; c: TPyIter; d: TPyIter): TPyIter;
 { map(f, xs) / filter(f, xs). `key` is a callable in any of its four
   representations; filter's `key` may be nil, which is Python's own
   `filter(None, xs)` "keep the truthy elements" shorthand. }
@@ -9813,6 +9825,20 @@ begin
   PXXObjRetain(Pointer(b));
 end;
 
+function pyiter_zip_iii(a: TPyIter; b: TPyIter; c: TPyIter): TPyIter;
+begin
+  Result := pyiter_zip_ii(a, b);
+  Result.FUp3 := c;
+  PXXObjRetain(Pointer(c));
+end;
+
+function pyiter_zip_iiii(a: TPyIter; b: TPyIter; c: TPyIter; d: TPyIter): TPyIter;
+begin
+  Result := pyiter_zip_iii(a, b, c);
+  Result.FUp4 := d;
+  PXXObjRetain(Pointer(d));
+end;
+
 function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -10027,6 +10053,19 @@ begin
     pair.FKind := PYSEQ_TUPLE;
     pair.append(ev);
     pair.append(pyiter_take(it.FUp2));
+    { the third and fourth streams, when this is an N-way zip. Same
+      shortest-wins rule: CPython stops at the first exhausted stream, having
+      already consumed the ones to its left. }
+    if it.FUp3 <> nil then
+    begin
+      if not pyiter_has(it.FUp3) then begin it.FEnd := True; Exit; end;
+      pair.append(pyiter_take(it.FUp3));
+      if it.FUp4 <> nil then
+      begin
+        if not pyiter_has(it.FUp4) then begin it.FEnd := True; Exit; end;
+        pair.append(pyiter_take(it.FUp4));
+      end;
+    end;
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
     PXXObjRetain(Pointer(pair));
@@ -10426,9 +10465,12 @@ begin
     PXXObjRelease(Pointer(it.FSrc));
     PXXObjRelease(Pointer(it.FUp));
     PXXObjRelease(Pointer(it.FUp2));
+    PXXObjRelease(Pointer(it.FUp3));
+    PXXObjRelease(Pointer(it.FUp4));
     PXXObjRelease(Pointer(it.FBox));
     PXXObjRelease(it.FKey);
     it.FSrc := nil; it.FUp := nil; it.FUp2 := nil; it.FBox := nil; it.FKey := nil;
+    it.FUp3 := nil; it.FUp4 := nil;
     it.FStr := '';
     Exit;
   end;

@@ -8265,20 +8265,40 @@ begin
     Result := PyCallProc1('pyiter_v', node);
 end;
 
-function PyMakeZip(aNode, bNode: Integer): Integer;
-var a0, a1: Integer;
+function PyMakeZip(aNode, bNode, cNode, dNode: Integer): Integer;
+var a0, a1, a2, a3: Integer; pname: AnsiString;
 begin
   { LAZY: `zip(a, b)` is a CURSOR over two cursors. Each side is converted
     once, so there is one pylib entry instead of one per pair of argument
-    types — and a str side needs no charlist explosion. }
+    types — and a str side needs no charlist explosion.
+    cNode/dNode are -1 below three/four streams: `zip(rows, labels, values)` is
+    ordinary Python and used to die at PARSE time on the second comma. The
+    two-way call is unchanged, so a pair stays a PAIR and is not padded. }
   aNode := PyMakeIterOf(aNode);
   bNode := PyMakeIterOf(bNode);
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := aNode;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := bNode; ASTRight[a1] := -1;
   ASTRight[a0] := a1;
+  pname := 'pyiter_zip_ii';
+  if cNode >= 0 then
+  begin
+    pname := 'pyiter_zip_iii';
+    a2 := AllocNode(AN_ARG);
+    ASTLeft[a2] := PyMakeIterOf(cNode);
+    ASTRight[a2] := -1;
+    ASTRight[a1] := a2;
+    if dNode >= 0 then
+    begin
+      pname := 'pyiter_zip_iiii';
+      a3 := AllocNode(AN_ARG);
+      ASTLeft[a3] := PyMakeIterOf(dNode);
+      ASTRight[a3] := -1;
+      ASTRight[a2] := a3;
+    end;
+  end;
   Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := FindProc('pyiter_zip_ii');
-  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pyiter_zip_ii) not loaded');
+  ASTIVal[Result] := FindProc(pname);
+  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   ASTTk[Result] := Ord(tyClass);
   ASTRight[Result] := ProcRetRecId[ASTIVal[Result]];
   ASTLeft[Result] := a0;
@@ -17350,8 +17370,14 @@ begin
   end;
   if parenTarget then Expect(tkRParen, ')');
   Expect(tkIn, 'in');
-  if (PyForExtraCount > 0) and PyIsIdent('zip') then
-    Error('Nil Python: zip() with more than two loop variables is not supported yet');
+  { THREE or more loop variables over a zip — `for row, label, value in zip(a,
+    b, c):` — needs nothing of its own now that zip() is an N-way EXPRESSION:
+    the two-name desugar below (PyParseForZip, an index walk over two
+    containers) is skipped and the header falls through to PyParseForIn, which
+    unpacks a 3-tuple from any iterable exactly as it does for a plain list of
+    tuples. Same argument as the comprehension case just below: the general
+    path already knows how, so the special case was only ever the refusal.
+    bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item 2 }
   { `for x, y in zip(A, B):` — parallel iteration over two containers.
 
     STATEMENT form only. PyParseForZip is a statement desugar: it demands the
@@ -17363,7 +17389,8 @@ begin
     PyParseForIn hands it to the two-name pair-unpack path that a plain list of
     pairs already takes.
     bug-nilpy-zip-in-a-comprehension-fails-to-parse }
-  if (name2 <> '') and (PyCompTarget < 0) and PyIsIdent('zip') and
+  if (name2 <> '') and (PyForExtraCount = 0) and (PyCompTarget < 0) and
+     PyIsIdent('zip') and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     Result := PyParseForZip(name, name2);

@@ -1,0 +1,17 @@
+# zip(a, b, c) — three and four streams. Two worked; the second comma was
+# `unexpected token` at parse time, and the for-header form refused three
+# loop variables by name.
+# bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep item 2
+print(list(zip([1, 2], [3, 4], [5, 6])))
+print(list(zip([1, 2], "ab", [5, 6], (7, 8))))
+# shortest wins, and the streams left of the exhausted one are consumed
+print(list(zip([1, 2, 3], [4, 5], [6, 7, 8])))
+# a two-way zip still yields a PAIR, not a padded triple
+print(list(zip([1, 2], [3, 4])))
+for a, b, c in zip([1, 2], [3, 4], [5, 6]):
+    print(a, b, c)
+for a, b in zip([1, 2], [3, 4]):
+    print(a, b)
+print(list(zip(range(3), [1, 2, 3], "xyz")))
+print([x + y + z for x, y, z in zip([1], [2], [3])])
+print([p + q for p, q in zip([1], [2])])

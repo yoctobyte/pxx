@@ -1544,6 +1544,9 @@ test-nilpy: $(COMPILER)
 	# shadows the name once a program imports anything reaching it.
 	./$(COMPILER) test/test_nilpy_format_builtin.npy /tmp/test_nilpy_fmtbuiltin26
 	/tmp/test_nilpy_fmtbuiltin26 | diff -u test/test_nilpy_format_builtin.expected -
+	# zip(a, b, c) — three and four streams; two-way must still yield a PAIR.
+	./$(COMPILER) test/test_nilpy_zip_n_way.npy /tmp/test_nilpy_zipnway26
+	/tmp/test_nilpy_zipnway26 | diff -u test/test_nilpy_zip_n_way.expected -
 	./$(COMPILER) test/test_nilpy_tuple_is_not_a_list.npy /tmp/test_nilpy_tupnotlist26
 	/tmp/test_nilpy_tupnotlist26 | diff -u test/test_nilpy_tuple_is_not_a_list.expected -
 	./$(COMPILER) test/test_nilpy_set_equality_is_membership.npy /tmp/test_nilpy_seteq26

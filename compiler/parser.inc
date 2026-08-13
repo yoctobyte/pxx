@@ -942,7 +942,7 @@ function PyParseCompExprValue(bracketed: Boolean): Integer; forward;
 function PyIsParenCompAhead: Boolean; forward;      { `(x for x in xs)` (pyparser.inc) }
 function PyNextOverListAhead: Boolean; forward;     { is `next(...)`'s argument a sequence? (pyparser.inc) }
 function PyParseParenComp: Integer; forward;
-function PyMakeZip(aNode, bNode: Integer): Integer; forward;   { `zip(a, b)` as a value (pyparser.inc) }
+function PyMakeZip(aNode, bNode, cNode, dNode: Integer): Integer; forward;   { `zip(a, b[, c[, d]])` as a value; -1 for an absent stream (pyparser.inc) }
 function PyIsSetCompAhead: Boolean; forward;    { set comprehension (pyparser.inc) }
 function PyParseSetComp: Integer; forward;
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer; forward; { `Cls().m(...)` (pyparser.inc) } { Nil Python expression-position comprehension (pyparser.inc) }
@@ -15286,6 +15286,7 @@ var smNameTok, smBase, sdTok, tpObjNode, tpBlobNode, tpCallNode: Integer;
     smTk, tpTk: TTypeKind;   { receiver kind for a suffix on a fresh construction }
     ppBase, ppExp, ppPi, ppArgSeq, ppArgSeq2: Integer;   { `**` power operator }
     enStart, enArg0, enArg1: Integer;   { enumerate(xs, start=N) }
+    zipB, zipC, zipD: Integer;   { zip(a, b[, c[, d]]) — -1 for an absent stream }
     pySuffixTokPos: Integer;   { token cursor at the top of the suffix cluster }
 begin
   { `type(x).__name__` -- the ONLY shape of Python's `type()` builtin this
@@ -15469,7 +15470,25 @@ begin
     smBase := CurASTNode;
     Expect(tkComma, ',');
     ParseArgExpr;
-    CurASTNode := PyMakeZip(smBase, CurASTNode);
+    zipB := CurASTNode;
+    { …and the THREE- and four-way forms, which used to fail at the second
+      comma with `unexpected token`. Four is where it stops: past that the
+      shape is a list of lists, and a fixed argument chain has to end
+      somewhere — the diagnostic says so rather than silently dropping a
+      stream. }
+    zipC := -1; zipD := -1;
+    if CurTok.Kind = tkComma then
+    begin
+      Next; ParseArgExpr; zipC := CurASTNode;
+      if CurTok.Kind = tkComma then
+      begin
+        Next; ParseArgExpr; zipD := CurASTNode;
+        if CurTok.Kind = tkComma then
+          Error('Nil Python: zip() of more than four iterables is not '
+                + 'supported yet — zip the first four and zip the result');
+      end;
+    end;
+    CurASTNode := PyMakeZip(smBase, zipB, zipC, zipD);
     Expect(tkRParen, ')');
     LastExprTk := tyClass;
   end
