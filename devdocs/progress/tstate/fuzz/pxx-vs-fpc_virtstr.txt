@@ -1,0 +1,19 @@
+sig=pxx-vs-fpc_virtstr
+seed=27239
+sha=30dc68bc02bb
+compiler=/home/neo/trackt-watch/compiler/pascal26
+note=pxx and FPC each self-consistent but disagree -- investigate in order: (a) pasmith emitted UB/impl-defined code, (b) pxx bug, (c) FPC bug. Do NOT auto-dismiss (c).
+
+fpc-O0       10949817360010768169
+fpc-O2       10949817360010768169
+pxx-O0       13042670879533512425
+pxx-O2       13042670879533512425
+pxx-O3       13042670879533512425
+
+first divergence at checkpoint 11 of 21 -- a `virtstr` statement
+    pxx-O0     4484024450637191954
+    fpc-O0     605907560149589626
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 27239 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3
