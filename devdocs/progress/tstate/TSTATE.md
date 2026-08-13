@@ -3,9 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `c159680f8819` | 2026-08-13T08:45:50Z | RED (limited) | 685.5s | `c159680f8819` RED |
+| plexus | `2b516b057f59` | 2026-08-13T08:58:32Z | RED (native) | 166.6s | `c159680f8819` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (plexus): bad `b1976742df2c`, last good `6f73c5a88bef`, 1 commit(s) in range
 - **test-core#src:test/test_conformance_1.pas** — test/test_conformance_1.pas (plexus): bad `f9e4e1c44eda`, last good `8e5ed5e8b075`, 6 commit(s) in range
