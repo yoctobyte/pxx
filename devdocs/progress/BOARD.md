@@ -34,10 +34,11 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (212)
+## backlog (217)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set | A | 40 | bug | `f(fmt, ['a'])` stops compiling when the routine is in a CROSS-UNIT overload set and its unit is used LAST: the literal is typed (ShortString, set) against an `array of const` parameter reported as `record`. Same-unit overload sets are fine, single cross-unit routines are fine, and reversing the uses order fixes it — so the array-of-const conversion is lost on one path through the cross-unit merge. | — |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
@@ -89,6 +90,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
+| decide-nilpy-builtin-vs-pascal-unit-name-resolution | U | 45 | decide | A Python builtin whose name is also a Pascal routine (format vs sysutils' Format) is HIDDEN once the program imports anything reaching that unit — a builtin that stops existing when you add an import. Three routes: fix the cross-unit overload merge and declare builtins normally; keep intercepting name by name in the parser; or make NilPy builtins win over used units by rule. The collision surface is small TODAY (2 names) and grows with every builtin added. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-object-dict-key-hashing | U | 40 | decide | A class with __eq__ and no __hash__ is unhashable in CPython, so `d[V(1)] = x` raises. NilPy stores it and then never finds it again — data in, nothing out, silently. Refuse the store (faithful), make content lookup work (friendlier, needs a __hash__ story), or document the divergence. The ticket that found it says explicitly to decide rather than guess. | — |
 | decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
@@ -244,7 +246,10 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
+| regression-test-arm32-httpdemo | T | 70 | regression | regression: test-arm32#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
+| regression-test-i386-httpdemo | T | 70 | regression | regression: test-i386#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
+| regression-test-nilpy-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-nilpy#src:test/test_uses_order_pylib_exception_a.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -447,7 +452,10 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [A] bug-pascal-uses-order-breaks-pylib-exception
+- [p 70] [T] regression-test-arm32-httpdemo
 - [p 70] [P] regression-test-core-test-conformance-1
+- [p 70] [T] regression-test-i386-httpdemo
+- [p 70] [T] regression-test-nilpy-test-uses-order-pylib-exception-a
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -498,6 +506,7 @@ _none_
 - [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-mem-floor-is-a-fixed-1500mb-so-a-small-box-admits-nothing-ever
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
+- [p 45] [U] decide-nilpy-builtin-vs-pascal-unit-name-resolution
 - [p 45] [D] doc-variant-conversion-rules-and-the-fpc-char-divergence
 - [p 45] [B] feature-b-fpc-exception-mask-api-in-math
 - [p 45] [C] feature-c-entry-stub-must-run-initializers-for-environ
@@ -533,6 +542,7 @@ _none_
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
+- [p 40] [A] bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
 - [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
 - [p 40] [N] bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep
