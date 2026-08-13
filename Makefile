@@ -6557,6 +6557,11 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=aarch64 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_aarch64_sigdfl
 	tools/run_target.sh aarch64 /tmp/test_aarch64_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
+	# against the address the program itself faulted on, so a wrong union offset
+	# (16 here, 12 on ILP32) cannot pass; the negative SI_TKILL is the sign canary.
+	./$(COMPILER) --target=aarch64 test/test_signal_siginfo.pas /tmp/test_aarch64_siginfo
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
 	./$(COMPILER) --target=aarch64 test/test_cdecl_indirect.pas /tmp/test_aarch64_cdeclind
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
@@ -6700,6 +6705,12 @@ test-riscv32: $(COMPILER)
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=riscv32 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_riscv32_sigdfl
 	tools/run_target.sh riscv32 /tmp/test_riscv32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
+	# against the address the program itself faulted on — on ILP32 the siginfo
+	# preamble is NOT padded, so the union starts at 12, not 16; this is what
+	# measured that. The negative SI_TKILL is the sign canary.
+	./$(COMPILER) --target=riscv32 test/test_signal_siginfo.pas /tmp/test_riscv32_siginfo
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# by-value record params over 4 bytes (up to 8): both words must cross
 	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
 	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas /tmp/test_riscv32_recwide

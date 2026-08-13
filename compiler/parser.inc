@@ -12320,18 +12320,20 @@ begin
         which fault occurred (the MXCSR status flags read 0x00 inside a handler,
         measured — see feature-float-exception-mask-control).
 
-        x86-64 only, and REFUSED elsewhere rather than answering 0: the other
-        targets install their handlers without SA_SIGINFO, so the slots are never
-        written, and a plausible 0 ("SI_USER", "no fault address") is exactly the
-        silent wrong value this dialect refuses to invent — the same call the ESP
-        PAL makes with PAL_ERR_UNSUPPORTED. feature-signal-siginfo-ucontext }
+        Hosted Linux targets only, and REFUSED elsewhere (xtensa/ESP) rather than
+        answering 0: a target whose handlers are installed without SA_SIGINFO
+        never writes the slots, and a plausible 0 ("SI_USER", "no fault address")
+        is exactly the silent wrong value this dialect refuses to invent — the
+        same call the ESP PAL makes with PAL_ERR_UNSUPPORTED.
+        feature-signal-siginfo-ucontext }
       if (CaseEqual(name, '__pxxSigCode') or CaseEqual(name, '__pxxSigAddr') or
           CaseEqual(name, '__pxxSigContext')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
-        if TargetArch <> TARGET_X86_64 then
-          Error(name + ' needs SA_SIGINFO, which only the x86-64 signal runtime '
-                + 'installs so far (feature-signal-siginfo-ucontext)');
+        if not ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) or
+                (TargetArch = TARGET_RISCV32)) then
+          Error(name + ' needs SA_SIGINFO, which this target''s signal runtime '
+                + 'does not install (feature-signal-siginfo-ucontext)');
         if NoSignals then
           Error(name + ' requires the signal runtime (built with --no-signals)');
         Next;
@@ -12343,7 +12345,15 @@ begin
         node := AllocNode(AN_SIGINFO);
         if CaseEqual(name, '__pxxSigCode') then
         begin
-          ASTIVal[node] := 0; ASTTk[node] := Ord(tyInt64);
+          { tyInteger, NOT tyInt64: si_code's real width is a signed 32-bit int,
+            and on the ILP32 targets an Int64 is a register PAIR — a stub would
+            have to write a second sign word into the slot, and every backend's
+            IR_EXC_STORE moves exactly one machine word. Typing it at the field's
+            true width sidesteps the pair on all six backends at once. (Decided
+            2026-08-13, feature-signal-siginfo-ucontext: small now, breaking
+            later.) The x86-64 stub still sign-extends into its 8-byte slot, so
+            the slot stays self-consistent whoever reads it. }
+          ASTIVal[node] := 0; ASTTk[node] := Ord(tyInteger);
         end
         else if CaseEqual(name, '__pxxSigAddr') then
         begin

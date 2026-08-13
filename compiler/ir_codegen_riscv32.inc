@@ -56,16 +56,44 @@ procedure EmitSignalRuntimeRISCV32;
   whole register file from the ucontext at rt_sigreturn.
   Syscalls (generic table, same as arm64): rt_sigaction=134, getpid=172,
   kill=129; sigsetsize = 8. Handler ABI: a0 = signal number. }
-var jmpOver, dispatchAt, bOut1, bDfl, jOut, outAt, adrDelta: Integer;
+var jmpOver, dispatchAt, bOut1, bDfl, jOut, outAt, adrDelta, bNoSi, jSt: Integer;
 begin
   jmpOver := CodeLen; rv32_jal(reg_zero, 8);      { b .end (patched below) }
 
-  { --- dispatch (kernel handler ABI: a0 = signal number) --- }
+  { --- dispatch (SA_SIGINFO ABI: a0 = sig, a1 = siginfo_t*, a2 = ucontext_t*) --- }
   SigDispatchAddr := CodeLen;
   dispatchAt := CodeLen;
   rv32_addi(reg_sp, reg_sp, -16);
   rv32_sw(reg_ra, reg_sp, 12);                    { ra = kernel trampoline }
   rv32_sw(reg_s0, reg_sp, 8);                     { s0 holds the sig across syscalls }
+
+  { Park si_code / si_addr / ucontext* while the kernel's argument registers are
+    still live — the hook is a parameterless Pascal proc (unchanged ABI), so the
+    slots are how it learns anything about the fault.
+
+    siginfo_t is { si_signo(0), si_errno(4), si_code(8), union }. The union is
+    pointer-aligned, so on ILP32 the preamble is NOT padded and si_addr sits at
+    **12**, not 16 as on the 64-bit targets. si_code is read as one word and
+    __pxxSigCode is typed Integer (32-bit signed, the field's true width), so
+    unlike x86-64 there is no sign word to synthesize — which is exactly why the
+    intrinsic was retyped before this target landed. a1 nil is defensive only. }
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_CTX);
+  rv32_sw(reg_a2, reg_t1, 0);
+  bNoSi := CodeLen; rv32_beq(reg_a1, reg_zero, 0);  { -> .nosi (patched) }
+  rv32_lw(reg_t0, reg_a1, 8);                     { si_code }
+  rv32_lw(reg_t2, reg_a1, 12);                    { si_addr (ILP32 offset) }
+  jSt := CodeLen; rv32_jal(reg_zero, 0);          { -> .st (patched) }
+  { .nosi }
+  Patch32(bNoSi, EncodeRISCVBEQ(reg_a1, reg_zero, CodeLen - bNoSi));
+  rv32_addi(reg_t0, reg_zero, 0);
+  rv32_addi(reg_t2, reg_zero, 0);
+  { .st }
+  Patch32(jSt, EncodeRISCVJAL(reg_zero, CodeLen - jSt));
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_CODE);
+  rv32_sw(reg_t0, reg_t1, 0);
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_ADDR);
+  rv32_sw(reg_t2, reg_t1, 0);
+
   { bounds: (unsigned)(sig-1) < 64 }
   rv32_addi(reg_t2, reg_a0, -1);
   rv32_sltiu(reg_t0, reg_t2, 64);
@@ -127,6 +155,12 @@ begin
   rv32_addi(reg_t0, reg_t0, adrDelta);
   rv32_sw(reg_t0, reg_t1, 0);                     { handler = dispatch }
   rv32_lui(reg_t0, $10000);                       { SA_RESTART = $10000000 (lui imm = val>>12) }
+  rv32_addi(reg_t0, reg_t0, 4);                   { ...or SA_SIGINFO -> $10000004 }
+  { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
+    a1/a2 — without it the fault CAUSE is unknowable (si_code is the only
+    carrier; see BSS_SIG_CODE). Like arm64 and unlike i386/arm32, riscv has no
+    SA_RESTORER and the kernel picks the frame itself, so there is no restorer
+    to flip alongside this flag. }
   rv32_sw(reg_t0, reg_t1, 4);                     { flags }
   rv32_sw(reg_zero, reg_t1, 8);                   { mask lo }
   rv32_sw(reg_zero, reg_t1, 12);                  { mask hi }

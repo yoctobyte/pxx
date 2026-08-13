@@ -142,15 +142,45 @@ procedure EmitSignalRuntimeA64;
   the whole register file from the ucontext at rt_sigreturn.
   Syscalls: rt_sigaction=134, getpid=172, kill=129. Hex verified against
   aarch64-linux-gnu-as. }
-var jmpOver, dispatchAt, adrAt, imm: Integer;
+var jmpOver, dispatchAt, adrAt, imm, cbzAt, bAt: Integer;
 begin
   EmitI32($14000000); jmpOver := CodeLen - 4;   { b .end (patched below) }
 
-  { --- dispatch (kernel handler ABI: w0 = signal number) --- }
+  { --- dispatch (SA_SIGINFO ABI: w0 = sig, x1 = siginfo_t*, x2 = ucontext_t*) --- }
   SigDispatchAddr := CodeLen;
   dispatchAt := CodeLen;
   EmitI32($A9BF7BFD);   { stp  x29, x30, [sp, #-16]!   (x30 = kernel trampoline) }
   EmitI32($910003FD);   { mov  x29, sp }
+
+  { Park si_code / si_addr / ucontext* while the kernel's argument registers are
+    still live — the hook is a parameterless Pascal proc (that ABI is deliberately
+    unchanged), so the slots are how it learns anything about the fault.
+
+    siginfo_t is { si_signo(0), si_errno(4), si_code(8), union }, and the union is
+    pointer-aligned, so on a 64-bit target si_addr sits at 16. si_code is a SIGNED
+    int (SI_USER=0, SI_QUEUE=-1, SI_TKILL=-6...), hence ldrsw, not ldr w. x1 nil
+    is defensive only (a handler installed without SA_SIGINFO by other means):
+    two instructions to turn a would-be handler-time SIGSEGV into zeroed slots.
+    All hex verified against aarch64-linux-gnu-as. }
+  EmitLoadGlobAddrA64(9, BSS_SIG_CTX);
+  EmitI32($F9000122);   { str  x2, [x9]        ucontext* }
+  cbzAt := CodeLen;
+  EmitI32($B4000001);   { cbz  x1, .nosi       (patched) }
+  EmitI32($B980082A);   { ldrsw x10, [x1, #8]  si_code, sign-extended }
+  EmitI32($F940082B);   { ldr  x11, [x1, #16]  si_addr }
+  bAt := CodeLen;
+  EmitI32($14000000);   { b    .st             (patched) }
+  { .nosi }
+  Patch32(cbzAt, $B4000001 or ((((CodeLen - cbzAt) div 4) and $7FFFF) shl 5));
+  EmitI32($D280000A);   { mov  x10, #0 }
+  EmitI32($D280000B);   { mov  x11, #0 }
+  { .st }
+  Patch32(bAt, $14000000 or (((CodeLen - bAt) div 4) and $03FFFFFF));
+  EmitLoadGlobAddrA64(9, BSS_SIG_CODE);
+  EmitI32($F900012A);   { str  x10, [x9] }
+  EmitLoadGlobAddrA64(9, BSS_SIG_ADDR);
+  EmitI32($F900012B);   { str  x11, [x9] }
+
   EmitI32($7100041F);   { cmp  w0, #1 }
   EmitI32($5400014B);   { b.lt .out  (+10 words — the glob load below is 3 words) }
   EmitI32($7101001F);   { cmp  w0, #64 }
@@ -200,7 +230,13 @@ begin
   imm := dispatchAt - adrAt;                    { adr x10, dispatch (PC-relative) }
   EmitI32($10000000 or ((imm and 3) shl 29) or ((((imm div 4)) and $7FFFF) shl 5) or 10);
   EmitI32($F900012A);   { str  x10, [x9]       handler = dispatch }
-  EmitI32($52A2000B);   { mov  w11, #$10000000 SA_RESTART (NO SA_RESTORER on arm64) }
+  EmitI32($52A2000B);   { movz w11, #$1000, lsl #16   SA_RESTART (NO SA_RESTORER on arm64) }
+  EmitI32($7280008B);   { movk w11, #4               ...or SA_SIGINFO -> $10000004 }
+  { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
+    x1/x2 — without it the fault CAUSE is unknowable (si_code is the only
+    carrier; see BSS_SIG_CODE). arm64 has no SA_RESTORER either way and the
+    kernel supplies the trampoline, so unlike i386/arm32 there is no restorer to
+    flip alongside it. }
   EmitI32($F900052B);   { str  x11, [x9, #8]   flags }
   EmitI32($D280000A);   { mov  x10, #0 }
   EmitI32($F900092A);   { str  x10, [x9, #16]  mask = 0 }

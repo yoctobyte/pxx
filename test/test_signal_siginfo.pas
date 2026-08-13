@@ -1,5 +1,5 @@
 program test_signal_siginfo;
-{ SA_SIGINFO, x86-64 (feature-signal-siginfo-ucontext, slice 1). The dispatch
+{ SA_SIGINFO (feature-signal-siginfo-ucontext). The dispatch
   stub parks siginfo_t.si_code, siginfo_t.si_addr and the ucontext_t* before
   calling the hook; __pxxSigCode / __pxxSigAddr / __pxxSigContext read them.
 
@@ -9,7 +9,29 @@ program test_signal_siginfo;
   cannot distinguish div-zero from overflow without this.
 
   Both values are checked against the kernel's documented constants, and the
-  fault address against the address this program deliberately wrote to. }
+  fault address against the address this program deliberately wrote to.
+
+  Arch-independent by design — it is the canary for BOTH failure modes on every
+  target: the si_addr assert catches a wrong union offset (16 on the 64-bit
+  targets, 12 on ILP32, where the preamble is not padded), and the negative
+  SI_TKILL catches a lost sign. Only the two raw syscall numbers differ. }
+
+const
+{$ifdef CPUX86_64}
+  SYS_gettid = 186; SYS_tkill = 200;
+{$endif}
+{$ifdef CPUAARCH64}
+  SYS_gettid = 178; SYS_tkill = 130;   { asm-generic unistd }
+{$endif}
+{$ifdef CPURISCV32}
+  SYS_gettid = 178; SYS_tkill = 130;   { asm-generic unistd }
+{$endif}
+{$ifdef CPUARM}
+  SYS_gettid = 224; SYS_tkill = 238;   { ARM EABI }
+{$endif}
+{$ifdef CPUI386}
+  SYS_gettid = 224; SYS_tkill = 238;
+{$endif}
 
 var
   p: ^Integer;
@@ -26,8 +48,8 @@ begin
   stage := 2;
   { Fall through to the SIGUSR1 half; returning from a SIGSEGV handler would
     re-execute the faulting store forever, so this half never returns. }
-  tid := __pxxrawsyscall(186);            { gettid }
-  tid := __pxxrawsyscall(200, tid, 10);   { tkill(tid, SIGUSR1) }
+  tid := __pxxrawsyscall(SYS_gettid);
+  tid := __pxxrawsyscall(SYS_tkill, tid, 10);   { tkill(tid, SIGUSR1) }
   WriteLn('unreachable-a');
   Halt(1);
 end;
