@@ -133,4 +133,4 @@ output before and after this change (3 divergences, same signatures), confirmed
 against the committed version.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 3c17cfc46.
