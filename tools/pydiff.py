@@ -55,9 +55,22 @@ class Result:
 
 
 def run_cpython(path, argv):
+    """Both arms run from the file's own directory, so relative imports and
+    sibling data files resolve the same way for CPython and for pxx.
+
+    The script path must therefore be BASENAME (or absolute), never the caller's
+    relative path: `pydiff.py run test/x.npy` from the repo root ran
+    `python3 test/x.npy` from inside `test/`, so CPython exited 2 with no
+    stdout and every line reported `cpython: <no line>` — a whole-file DIFF that
+    looks exactly like a real divergence, on the oracle the debugging playbook
+    tells you to trust over reasoning (bug-t-pydiff-cpython-arm-fails-on-a-
+    relative-path). run_pxx below already got this right, which is why only one
+    arm went silent.
+    """
+    d = os.path.dirname(path) or "."
     try:
-        p = subprocess.run([sys.executable, path] + argv, capture_output=True,
-                           text=True, timeout=TIMEOUT, cwd=os.path.dirname(path) or ".")
+        p = subprocess.run([sys.executable, os.path.basename(path)] + argv,
+                           capture_output=True, text=True, timeout=TIMEOUT, cwd=d)
         return Result(p.stdout, p.stderr, p.returncode)
     except subprocess.TimeoutExpired:
         return Result("", "", -1, "timeout")

@@ -3,6 +3,7 @@ track: T
 prio: 45
 type: bug
 summary: "pydiff.py reports a bogus DIFF for any file given as a relative path: run_cpython passes the full relative path while setting cwd to that path's dirname, so CPython exits 2 and every line reads 'cpython: <no line>'"
+status: done
 ---
 
 # pydiff's CPython arm fails on a relative path, and it looks like a real DIFF
@@ -50,3 +51,29 @@ cost one wrong-turn probe before the exit code was noticed.
 
 `tools/testmgr.py --tier full` per Track T's rule, plus: the same file diffed
 by relative and absolute path must give the same verdict.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
+
+## Resolution — 2026-08-13 (Track T)
+
+`run_cpython` now runs `os.path.basename(path)` with `cwd` set to the file's
+directory — the same shape `run_pxx` directly below it already used. Both arms
+therefore execute from the file's own directory, so relative imports and sibling
+data files resolve identically for the oracle and for pxx, which is the property
+the `cwd` was there for in the first place.
+
+Fixed at the single choke point rather than at the three call sites the ticket
+lists (`run` :471, `bisect` :147, `probe` :440): all three reach CPython through
+this one function, and a rule enforced in one place cannot drift between them.
+
+Gate, exactly as the ticket asks — the same file by both path forms:
+
+```
+$ tools/pydiff.py run test/quick_canary_nilpy.npy
+ok test/quick_canary_nilpy.npy (24 lines of stdout agree)
+$ tools/pydiff.py run /home/neo/pxx/test/quick_canary_nilpy.npy
+ok /home/neo/pxx/test/quick_canary_nilpy.npy (24 lines of stdout agree)
+```
+
+Before the fix the first form reported a whole-file DIFF with `exit: cpython=2`.
