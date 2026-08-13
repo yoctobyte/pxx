@@ -71,6 +71,29 @@ First run (UBSan only) reduced 1588 lines to a loop over uninitialised
 with the locals hoisted to globals-by-another-name and one still uninitialised —
 gcc had not warned at -O0. Only valgrind rejects it.
 
-The current run uses all five layers. The check script lives beside the repro
-in the scratch tree; it is 30 lines and worth copying into the next reduction
-rather than re-deriving.
+### A THIRD discard, and a guard nobody would think of first
+
+Run 3 (all the UB layers, valgrind included) reduced cleanly to **14 lines** —
+valgrind-clean, UBSan-clean, `-O0` == `-O2` — and was still bogus:
+
+```c
+int g_7; int32_t *g_6 = &g_7;
+*l_403 = 4578424 > g_6;          /* an INT compared with a POINTER */
+```
+
+The checksum is then a function of **where the globals land**, and pxx's image
+base is not gcc's. Nothing about codegen; the reducer had simply found the
+cheapest remaining way to make two numbers differ.
+
+The guard: **gcc PIE and gcc `-no-pie` must agree.** `-no-pie` moves the whole
+image, so an address-independent program answers the same under both. On the
+14-line file they differ (`56772008` vs `9ADD2096` — and the no-PIE build agrees
+with pxx, which is the tell); on the original csmith program both are
+`B4981522`. Running the same binary twice does NOT catch it: the addresses are
+stable per build.
+
+So the interestingness test needs FOUR families of guard — uninitialised reads
+(valgrind), UB (UBSan/ASan + `-O0`==`-O2`), address dependence (PIE vs no-PIE),
+and only then the checksum difference. The script lives beside the repro in the
+scratch tree; it is worth copying into the next reduction rather than
+re-deriving, because each of these cost a full reduction run to discover.
