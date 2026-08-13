@@ -5226,12 +5226,11 @@
  "open_regressions": [
   {
    "bad": "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79",
-   "good": "77c55970f49cadcb87a6341584a5539112d1e038",
+   "good": "73e38bb6bed0b3983d8f7f674bb313e2e6d52c11",
    "job": "test-core#src:examples/tk/callbacks.npy",
    "name": "test-core#1035",
    "opened": "2026-08-13T22:48:44Z",
    "range": [
-    "73e38bb6bed0b3983d8f7f674bb313e2e6d52c11",
     "410b7a40b51663a8e3c404fe214d2ce8e5a6bd79"
    ],
    "src": "examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy"

@@ -7,5 +7,5 @@
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `410b7a40b516`, last good `77c55970f49c`, 2 commit(s) in range
+- **test-core#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `410b7a40b516`, last good `73e38bb6bed0`, 1 commit(s) in range
 - **test-nilpy#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `30dc68bc02bb`, last good `be7f80936b0c`, 44 commit(s) in range
