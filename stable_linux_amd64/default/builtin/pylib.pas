@@ -357,6 +357,22 @@ type
     property FMessage: AnsiString read msg write msg;
     property Message: AnsiString read msg write msg;
     property HelpContext: Integer read FHelpContext write FHelpContext;
+    { Python's `e.args`. A PROPERTY rather than a field, and derived rather than
+      stored, because a pxx Exception carries one Message string: `args` is
+      what the constructor was given, and for every raise this dialect emits
+      that is exactly the message. So it answers `()` for an empty message and
+      `(msg,)` otherwise — CPython's own relationship between args and str(e)
+      for the one-argument case, which is every builtin raise and almost all
+      user code.
+      A MULTI-argument raise (`raise MyErr("no such user", 404)`) is folded to
+      the rendered string `('no such user', 404)` at the construction site, so
+      its args would come back as a 1-tuple of that text. That is why the fold
+      stashes the real tuple in argsv when it runs, and why this reads argsv
+      first.
+      bug-nilpy-exception-args-attribute-missing }
+    argsv: TPyList;
+    function GetArgs: TPyList;
+    property args: TPyList read GetArgs;
   end;
   ValueError        = class(Exception) end;
   { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
@@ -4779,8 +4795,18 @@ procedure PyKeyError(const k: Variant); overload;
   string key reports 'nope' WITH the quotes. Using the repr here makes the
   message match CPython's for free, and keeps an int key unquoted the way
   CPython does. }
+var e: KeyError;
 begin
-  raise KeyError.Create(pyvar_repr(k));
+  { …and the KEY ITSELF goes into `args`, not the repr'd message. CPython's
+    KeyError('nope').args is ('nope',) — unquoted — while its str() is the
+    quoted repr, so the two genuinely differ for this one exception and the
+    derive-from-message default would hand back the quoted form.
+    bug-nilpy-exception-args-attribute-missing }
+  e := KeyError.Create(pyvar_repr(k));
+  e.argsv := TPyList.Create;
+  e.argsv.FKind := PYSEQ_TUPLE;
+  e.argsv.append(k);
+  raise e;
 end;
 
 constructor TPyDict.Create;
@@ -8998,6 +9024,18 @@ begin
   end;
   if neg then acc := -acc;
   Result := acc;
+end;
+
+function Exception.GetArgs: TPyList;
+begin
+  if argsv <> nil then
+  begin
+    Result := argsv;
+    Exit;
+  end;
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  if Length(msg) > 0 then Result.append(msg);
 end;
 
 constructor Exception.Create(const m: AnsiString);
@@ -13708,7 +13746,33 @@ begin
     address either way. }
   if (mi = nil) and (not wantRepr) and (o is Exception) then
   begin
-    outS := Exception(o).Message;
+    { KeyError is the one builtin whose str() is the REPR of its argument —
+      `str(KeyError('inner'))` is "'inner'", with the quotes. That used to come
+      out right only on the RAISE path, because PyKeyError stores the message
+      already repr'd, and wrong for a user-constructed KeyError. Now that
+      `args` exists, both are the same question asked of the same place: repr
+      the single argument. A KeyError carrying zero or several arguments falls
+      through to the message, as CPython's own __str__ does.
+      bug-nilpy-exception-args-attribute-missing }
+    if (o is KeyError) and (Exception(o).GetArgs <> nil) and
+       (Exception(o).GetArgs.count = 1) then
+      outS := pyvar_repr(Exception(o).GetArgs.at(0))
+    else
+      outS := Exception(o).Message;
+    PyUserObjStr := True;
+    Exit;
+  end;
+  { KeyError is no longer excluded here. It was, because its message is stored
+    already repr'd on the raise path and quoting that again gives
+    KeyError("'nope'") while not quoting it gives KeyError(k) for a
+    user-constructed one — both wrong, in opposite cases, depending on who
+    raised. `args` settles it: repr the ARGUMENT, whoever built the exception,
+    and the two cases agree.
+    bug-nilpy-exception-args-attribute-missing }
+  if (mi = nil) and wantRepr and (o is KeyError) and
+     (Exception(o).GetArgs <> nil) and (Exception(o).GetArgs.count = 1) then
+  begin
+    outS := TObject(o).ClassName + '(' + pyvar_repr(Exception(o).GetArgs.at(0)) + ')';
     PyUserObjStr := True;
     Exit;
   end;
