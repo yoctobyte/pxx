@@ -215,3 +215,64 @@ value reading in CPython.
 It becomes a `--strict-python`-style per-feature flag, like `--strict-case` and
 `--strict-overload`. The default stays lax; see
 `decide-nilpy-builtin-keyword-only-parameters`.
+
+---
+
+## `__file__` names the EXECUTABLE, not the source (decided 2026-08-13)
+
+*Decided 2026-08-13 (Rene). See `decide-nilpy-dunder-file-for-a-compiled-program`
+for the full reasoning and the rejected options; implementation is
+`feature-nilpy-file-dunder-from-the-executable`; the user-facing write-up is
+`docs-nilpy-file-dunder-and-data-files` (Track D).*
+
+CPython's `__file__` is the path of the **source file** a module was loaded
+from. A compiled NilPy program performs no module load at run time, so the name
+has to mean something else. It is derived from the **resolved executable path**:
+
+| | value |
+| --- | --- |
+| main module | the executable's own path (`os.path.exists(__file__)` is True) |
+| imported module | `<exe_dir>/<original module basename>` — a VIRTUAL path; no file is there |
+| `sys.executable` | the same resolved executable path |
+
+Resolved via `/proc/self/exe` on hosted Linux, not raw `argv[0]` — `argv[0]` can
+be a PATH lookup, a relative path, or whatever an `exec` caller passed.
+
+**What this makes work:** the dominant idiom
+`os.path.dirname(os.path.abspath(__file__))` yields the **executable's
+directory** for every module, i.e. where a shipped app's data files sit.
+
+**What an accepting program can observe, and why it is acceptable:**
+
+- `open(__file__)` on an imported module fails — nothing is at that path. This
+  is the third-most-common use of `__file__`, after locating sibling data and
+  logging, and **frozen Python behaves the same** once its temp directory is
+  gone. pxx is a freezer; PyInstaller/cx_Freeze is the right family to compare
+  against, not CPython running source.
+- A program that ships data beside its SOURCE and is run from elsewhere finds
+  nothing, where CPython finds it. This is a **trade, not a strict win**: it
+  works when you ship the binary next to its data instead. uforth is the worked
+  example — run from `tests/`, it locates `STD.UFO` only if the binary sits
+  beside it.
+
+**Why the two rejected alternatives are worse:** baking the compile-time source
+path leaks the build machine's absolute paths into every shipped binary (even
+with debug info off) and breaks the moment the binary moves; a compile-time path
+with a run-time fallback makes the same binary answer differently on two
+machines, and a silent fallback is the pattern this codebase refuses elsewhere.
+
+**If a program needs data somewhere else** (a distro installing to
+`/usr/share/<app>`), the answer is an application-level data root —
+`--data-root=<path>` setting the base directory those virtual paths hang off,
+default the executable's directory. Deliberately NOT built yet: it waits for the
+first program that needs it, so that `__file__` does not acquire two meanings
+speculatively.
+
+### Why this surfaced only on 2026-08-13
+
+Worth knowing because it hides a whole class: programs probe the CWD first
+(uforth: `if not os.path.exists("STD.UFO"): ...__file__...`), and our corpus
+habit compiles a program in its source directory and runs it there — so "the
+CWD" and "where the source lives" coincide and any `__file__`-based resolution
+silently agrees with the CWD-based one. Finding one needs a program that BOTH
+reaches the fallback AND runs from somewhere else.

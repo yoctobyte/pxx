@@ -162,4 +162,14 @@ lives" coincide and any `__file__`-based path resolution silently agrees with th
 CWD-based one. Any future path-resolution bug of this shape needs a program that
 both reaches the fallback and runs from somewhere else.
 
-Implementation re-filed as [[feature-nilpy-file-dunder-from-the-executable]].
+### Where this decision lives, and what must move with it
+
+Four places, and a change of mind (or a new use case) has to move all four:
+
+- **this ticket** — the decision, the rejected options and why;
+- [[feature-nilpy-file-dunder-from-the-executable]] — the implementation;
+- `devdocs/dev/nilpy-semantics-divergences.md` — the internal divergence entry,
+  under "`__file__` names the EXECUTABLE, not the source";
+- [[docs-nilpy-file-dunder-and-data-files]] — the user-facing text (Track D),
+  blocked on the implementation so it describes what ships rather than what was
+  decided.

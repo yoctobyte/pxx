@@ -40,12 +40,16 @@ Today `__file__` is `argv[0]` unresolved, and `sys.executable` does not exist.
 the first program that actually needs it rather than building it speculatively;
 the decision ticket records the shape so it can be added without re-litigating.
 
-## Divergence to document
+## Divergence, already documented
 
 `open(__file__)` on an imported module fails — there is no file at that path.
-Frozen Python behaves the same once its temp dir is gone. Add the row to
-`devdocs/dev/nilpy-semantics-divergences.md` in the same change; it is a
-deliberate divergence, not a defect.
+Frozen Python behaves the same once its temp dir is gone. The entry is already
+in `devdocs/dev/nilpy-semantics-divergences.md` ("`__file__` names the
+EXECUTABLE, not the source"); **check it still matches** what you land, and fix
+the doc if it does not.
+
+The user-facing half is [[docs-nilpy-file-dunder-and-data-files]] (Track D),
+blocked on this ticket. Unblock it when this lands.
 
 ## Gate
 

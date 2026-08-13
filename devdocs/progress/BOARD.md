@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (222)
+## backlog (223)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -102,6 +102,7 @@ _none_
 | doc-variant-conversion-rules-and-the-fpc-char-divergence | D | 45 | doc | Document the Variant->scalar conversion rules now that they are settled: a boolean variant converts to -1 (OLE VARIANT_TRUE, matching FPC) while Ord(True) stays 1, and Variant->Char answers Chr(n) by default where FPC takes character 1 of the variant's string form ('65' -> '6') — the one row that deliberately diverges, available under --strict-fpc. Also CORRECTS an existing note in docs/language/types.md that is factually wrong. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
+| docs-nilpy-file-dunder-and-data-files | D | 45 | docs | User-facing docs for `__file__` / `sys.executable` in a compiled NilPy program: they name the EXECUTABLE, not the source, so `dirname(abspath(__file__))` is the binary's directory. Ship data files next to the binary. Blocked until the implementation lands so the docs describe what ships, not what was decided. | feature-nilpy-file-dunder-from-the-executable |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
@@ -486,6 +487,7 @@ _none_
 - [p 55] [T] feature-t-per-invocation-tmp-namespace-for-make-recipes
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
+- [p 50] [N] feature-nilpy-file-dunder-from-the-executable (unblocks 1)
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
@@ -495,7 +497,6 @@ _none_
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
-- [p 50] [N] feature-nilpy-file-dunder-from-the-executable
 - [p 50] [P] feature-p-read-text-into-a-char-arm
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
@@ -675,6 +676,7 @@ _none_
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-b-tkhtmlview-in-nilpy
 - **1** — feature-inline-asm-xmm-operands
+- **1** — feature-nilpy-file-dunder-from-the-executable
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-nilpy-tkinter-facade
