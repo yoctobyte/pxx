@@ -201,4 +201,4 @@ not already prove — same `health_check`, same verdict, same delivery. Worth
 doing opportunistically the next time the watcher is idle between runs.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit 65b4f8778.
