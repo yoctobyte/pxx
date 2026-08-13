@@ -2639,7 +2639,7 @@ def run_bench_idle(clone, host, st, sha, abort_check=None):
             with open(ctsv, "a") as f:
                 if cfresh:
                     f.write("# date\thost\tworkload\tlevel"
-                            "\tmhz\tmhz_lo\tmhz_hi\n")
+                            "\tmhz\tmhz_lo\tmhz_hi\tbox_mhz\n")
                 f.writelines(cnew)
         os.unlink(tmp_tsv + ".clock")
     conf_rows = 0

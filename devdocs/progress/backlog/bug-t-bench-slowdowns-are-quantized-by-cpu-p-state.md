@@ -270,3 +270,91 @@ goal, and it costs no throughput.
 Track T: `tools/testmgr.py --tier full` green for tooling changes. The real
 proof is behavioural — once a few hundred plexus rows carry `mhz`, re-run the
 analysis above and check the >=1.20 population is fully labelled.
+
+## 2026-08-13 — the `mhz` column was measuring the wrong thing, and is fixed
+
+Re-running the analysis the Gate asks for surfaced a defect in the instrument
+this ticket added on 08-12. `cpu_mhz()` returns the **mean across all online
+CPUs**, and a bench workload is single-threaded: eleven of plexus' twelve CPUs
+sit at the ~1196 MHz floor (`min_perf_pct=46`) while the twelfth runs the
+benchmark. One core at 2394 and eleven at 1196 averages 1296 — and every row the
+column produced fell in **1283-1911 MHz on a box whose busy clock is 2394**.
+
+So the column recorded **occupancy, not speed**, and could not answer the
+question it was added for. Worth stating plainly because the number looked
+perfectly reasonable: low clocks on a contended box is exactly what one expects
+to see, which is why nothing flagged it for a day.
+
+**Fixed:** `TaskClock` samples, every 250 ms while the child runs, the clock of
+the CPU the child is *actually on* (`/proc/<pid>/stat` field 39 -> that CPU's
+`scaling_cur_freq`). Sampled rather than read once because schedutil both
+migrates the task and ramps the P-state during a run. The old box-wide mean is
+kept as a new **`box_mhz`** column — appended, never inserted, per this file's
+own positional-join rule — because it turns out to be a fair contention proxy,
+which is a different useful thing. `bench-clock.tsv` carries a MEASUREMENT BASIS
+CHANGED line in the style bench.tsv already uses; do not compare across it.
+
+Immediate confirmation, a 3 s single-threaded spinner on a busy box:
+
+```
+task_mhz = 2081     <- the core it ran on
+box_mhz  = 1884     <- mean across all 12 CPUs
+```
+
+### And the deschedule guard cannot see this, by construction
+
+`bench_time` discards a run when `wall > cpu * 1.06`. That catches an
+**interrupted** run, never a **slow** one: at a low P-state the task keeps its
+core and burns proportionally more CPU time, so `wall/cpu` stays ~1.0 while the
+run takes 40% longer. Measured above: `wall=3.03s cpu=3.03s`. This is precisely
+why the clock has to be recorded rather than inferred from that ratio — noted in
+the code so the guard is not mistaken for coverage it does not provide.
+
+## The two mechanisms separate, and the 1.238 prediction holds
+
+A full bench under a running full tier (diverted to a scratch tsv — the tracked
+series must not carry rows taken under a load I created), against each
+workload's prior best:
+
+| workload | best | inflation | task_mhz |
+|---|---|---|---|
+| raytracer-p fpc | 0.042 s | 1.202 | 2032 |
+| sieve -O0 | 0.115 s | 1.215 | 2087 |
+| fib -O2 | 0.221 s | 1.228 | 2079 |
+| raytracer-p -O0 | 0.428 s | 1.233 | 2095 |
+| nbody -O0 | 0.907 s | 1.234 | 2095 |
+| mandelbrot-p -O2 | 1.836 s | 1.237 | 2091 |
+| **raytracer -O3** | **9.218 s** | **1.758** | 2094 |
+| **selfcompile -O0** | **12.205 s** | **1.895** | 2092 |
+
+Task clock is uniform at ~2090 across every row, so it cannot be what separates
+them. Two distinct effects, and the corrected instrument is what makes them
+separable:
+
+1. **A clock floor of ~1.237 on everything.** The short workloads cluster at
+   1.202-1.237 — median **1.237** against this ticket's predicted **1.238**,
+   agreement to 0.1%. That is what you would see if the reference rows were
+   taken near 2600 and today's at 2095 (2600/2095 = 1.241). The reference rows
+   predate the clock column, so this stays an **inference** until enough rows
+   carry a task clock on both sides — but it is the same 1.238 the 798-row
+   histogram found, arrived at independently.
+2. **A contention penalty that grows with duration**, on top: 1.24 -> 1.76 ->
+   1.90 as the workload goes 1.8 s -> 9.2 s -> 12.2 s, at identical clock. The
+   likely mechanism is the sampling strategy itself — `bench_time` reports
+   min-of-N, which dodges busy windows only for runs short enough to fit between
+   them. A 12 s run cannot dodge anything, so even its best sample is
+   contaminated. Stated as a hypothesis: it fits, and it is not yet measured.
+
+**Consequence for the fix shape above: option 1 (void by ratio) stays rejected,
+and for a second reason now.** A single threshold cannot separate these two
+effects, because they add — a 1.24 row is clock, a 1.90 row is clock plus
+exposure, and no threshold on the ratio alone tells you which. The recorded
+clock does.
+
+## Still open (unchanged)
+
+The behavioural proof this ticket's Gate asks for still needs a few hundred
+plexus rows carrying a task clock — the 30 rows above are one batch, all taken
+under a load I created, which is the right way to see contention and the wrong
+way to characterise a series. The old-basis rows cannot contribute. Re-run the
+analysis once the watcher's own idle benches have accumulated.

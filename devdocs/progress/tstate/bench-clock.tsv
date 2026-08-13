@@ -1,4 +1,4 @@
-# date	host	workload	level	mhz	mhz_lo	mhz_hi
+# date	host	workload	level	mhz	mhz_lo	mhz_hi	box_mhz
 2026-08-13T10:44:02Z	plexus	mandelbrot	-O0	1554	1362	1711
 2026-08-13T10:44:02Z	plexus	mandelbrot	-O2	1444	1289	1483
 2026-08-13T10:44:02Z	plexus	mandelbrot	-O3	1392	1381	1540
@@ -29,3 +29,4 @@
 2026-08-13T10:44:02Z	plexus	selfcompile	-O2	1485	1467	1521
 2026-08-13T10:44:02Z	plexus	selfcompile	-O3	1469	1469	1581
 2026-08-13T10:44:02Z	plexus	selfcompile	fpc	1911	1613	1911
+# 2026-08-13 MEASUREMENT BASIS CHANGED — `mhz` above this line is cpu_mhz(), the mean across ALL CPUs, which a single-threaded bench leaves dominated by idle cores at the ~1196 MHz floor: those rows read 1283-1911 on a box whose busy clock is 2394, i.e. they record OCCUPANCY, not the clock the workload ran at. Below this line `mhz` is the clock of the CPU the workload actually ran on (testmgr.TaskClock), and the old number is kept as `box_mhz`. Do not compare across this line.

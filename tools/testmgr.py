@@ -2388,7 +2388,11 @@ def _wait_quiet():
 
 
 def _timed_run(argv, timeout):
-    """Run argv once and return (wall_secs, cpu_secs, rc, peak_rss_kb).
+    """Run argv once: (wall_secs, cpu_secs, rc, peak_rss_kb, task_mhz).
+
+    `task_mhz` is the mean clock of the CPU the CHILD ran on, sampled while it
+    ran (TaskClock) — not the box mean, which idle cores dominate. None where
+    cpufreq is unavailable or the run was too short to sample.
 
     Uses os.wait4() — a BLOCKING reap — deliberately, and never
     `subprocess.run(..., timeout=)`.
@@ -2431,18 +2435,22 @@ def _timed_run(argv, timeout):
 
     wd = threading.Timer(timeout, _watchdog)
     wd.start()
+    clk = TaskClock(p.pid)
+    clk.start()
     t0 = time.monotonic()
     try:
         _, status, ru = os.wait4(p.pid, 0)
     finally:
         wd.cancel()
     wall = time.monotonic() - t0
+    task_mhz = clk.stop()
     # We reaped the child behind Popen's back: tell it, or __del__ warns and
     # a later poll()/wait() would block on a pid that no longer exists.
     p.returncode = os.waitstatus_to_exitcode(status)
     if timed_out:
-        return None, None, None, None
-    return (wall, ru.ru_utime + ru.ru_stime, p.returncode, ru.ru_maxrss)
+        return None, None, None, None, None
+    return (wall, ru.ru_utime + ru.ru_stime, p.returncode, ru.ru_maxrss,
+            task_mhz)
 
 
 def cpu_mhz():
@@ -2451,6 +2459,14 @@ def cpu_mhz():
     None rather than a guess: a box without `cpufreq` (a VM, a container, some
     ARM boards) must record NO clock rather than a fabricated one, because the
     whole point of this column is that it is a measurement.
+
+    THIS IS A BOX-ACTIVITY NUMBER, NOT A WORKLOAD'S CLOCK. A bench workload is
+    single-threaded, so eleven of plexus' twelve CPUs sit at the ~1196 MHz
+    floor (min_perf_pct=46) while the twelfth runs the benchmark: one core at
+    2394 and eleven at 1196 averages 1296, and every row the first version of
+    this column produced landed in 1283-1911 — the mean, never the clock the
+    benchmark saw. Use task_mhz() for that. Kept, because the box mean turns
+    out to be a decent contention proxy, which is a different useful thing.
     """
     vals = []
     for p in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/"
@@ -2463,6 +2479,68 @@ def cpu_mhz():
     return sum(vals) / len(vals) if vals else None
 
 
+def _cpu_of(pid):
+    """Which CPU `pid` last ran on — field 39 of /proc/<pid>/stat.
+
+    Parsed from the LAST ')' rather than by splitting the whole line: field 2
+    is the comm in parentheses and may itself contain spaces or ')'.
+    """
+    try:
+        with open("/proc/%d/stat" % pid) as f:
+            data = f.read()
+        after = data[data.rindex(")") + 2:].split()
+        return int(after[36])           # field 39 overall = index 36 after comm
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _cpu_freq(cpu):
+    try:
+        with open("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq"
+                  % cpu) as f:
+            return int(f.read().strip()) / 1000.0
+    except (OSError, ValueError):
+        return None
+
+
+class TaskClock(threading.Thread):
+    """Sample the clock of the CPU the CHILD is actually running on.
+
+    The question the bench series needs answered is "how fast was the core that
+    ran this workload", and neither the box mean (dragged down by idle cores)
+    nor the box max (under co-tenancy, that is somebody else's core) answers it.
+    Follow the task instead: read where it last ran, then read THAT CPU's clock.
+
+    Sampled rather than read once because schedutil moves the task and ramps the
+    P-state during the run; a single reading at the start would catch the ramp
+    rather than the steady state. Daemon thread, best-effort throughout — a box
+    without cpufreq, or a child that exits between the two reads, yields no
+    samples and the caller records no clock, which is the honest outcome.
+    """
+
+    PERIOD = 0.25
+
+    def __init__(self, pid):
+        super().__init__(daemon=True)
+        self.pid = pid
+        self.samples = []
+        self._stop = threading.Event()
+
+    def run(self):
+        while not self._stop.is_set():
+            cpu = _cpu_of(self.pid)
+            if cpu is not None:
+                mhz = _cpu_freq(cpu)
+                if mhz is not None:
+                    self.samples.append(mhz)
+            self._stop.wait(self.PERIOD)
+
+    def stop(self):
+        self._stop.set()
+        self.join(timeout=2.0)
+        return (sum(self.samples) / len(self.samples)) if self.samples else None
+
+
 def bench_time(argv, runs, timeout, label=""):
     """Min wall time over `runs` CLEAN runs, and the CPU clock it was taken at.
 
@@ -2472,36 +2550,51 @@ def bench_time(argv, runs, timeout, label=""):
     min over whatever did is returned and a `noisy` line is printed.
 
     Returns (secs, clock) -- secs None on failure/timeout. `clock` is
-    (mhz, lo, hi): the clock during the run that PRODUCED the returned time,
-    plus the range seen across all clean runs. Pairing the clock with the
-    winning run specifically is the point: the reported number is a min, so the
-    clock that explains it is the one that run saw, not a batch average.
+    (mhz, lo, hi, box_mhz): the clock during the run that PRODUCED the returned
+    time, the range seen across all clean runs, and the box-wide mean at that
+    run. Pairing the clock with the winning run specifically is the point: the
+    reported number is a min, so the clock that explains it is the one that run
+    saw, not a batch average.
+
+    `mhz` is the clock of the CPU THE WORKLOAD RAN ON (TaskClock), which is a
+    correction: the first version of this column recorded cpu_mhz(), the mean
+    across all CPUs, and a single-threaded bench leaves eleven of twelve at the
+    ~1196 MHz floor. Every row it produced read 1283-1911 MHz on a box whose
+    busy clock is 2394 — it was measuring occupancy, not speed, and could not
+    answer the question it was added for. `box_mhz` keeps that number, now
+    named for what it actually is: a contention proxy.
     """
     _wait_quiet()
     max_tries = runs + BENCH_EXTRA_TRIES
     best_clean = best_any = None
-    best_mhz = None
+    best_mhz = best_box = None
     seen = []
     clean = tries = 0
     while clean < runs and tries < max_tries:
         tries += 1
         before = cpu_mhz()
-        wall, cpu, rc, _rss = _timed_run(argv, timeout)
+        wall, cpu, rc, _rss, task_mhz = _timed_run(argv, timeout)
         after = cpu_mhz()
         if wall is None or rc != 0:        # timeout, or the workload failed
             return None, None
         best_any = wall if best_any is None else min(best_any, wall)
         # descheduled? only judge once cpu is big enough that the ratio is signal
+        #
+        # NOTE this guard cannot see a SLOW run, only an INTERRUPTED one: at a
+        # low P-state the task keeps the core and burns proportionally more cpu
+        # time, so wall/cpu stays ~1 while the run takes 40% longer. That is why
+        # the clock has to be recorded rather than inferred from this ratio.
         if cpu is not None and cpu >= BENCH_CPU_MIN_S and \
            wall > cpu * BENCH_CPU_WALL_MAX:
             continue                       # contaminated -- discard, retry
         clean += 1
-        mhz = None
+        box = None
         if before is not None and after is not None:
-            mhz = (before + after) / 2.0
-            seen.append(mhz)
+            box = (before + after) / 2.0
+        if task_mhz is not None:
+            seen.append(task_mhz)
         if best_clean is None or wall < best_clean:
-            best_clean, best_mhz = wall, mhz
+            best_clean, best_mhz, best_box = wall, task_mhz, box
     if best_clean is None:                 # never got a clean run
         if label:
             print("  bench %-17s NOISY 0/%d clean in %d tries (box busy?)"
@@ -2510,7 +2603,8 @@ def bench_time(argv, runs, timeout, label=""):
     if clean < runs and label:
         print("  bench %-17s noisy: kept %d/%d clean in %d tries"
               % (label, clean, runs, tries))
-    clock = (best_mhz, min(seen), max(seen)) if seen and best_mhz else None
+    clock = ((best_mhz, min(seen), max(seen), best_box)
+             if seen and best_mhz else None)
     return best_clean, clock
 
 
@@ -2813,9 +2907,14 @@ def run_bench():
             note = "  SLOW (was %sms)" % old
             slow.append("%s %s %s -> %sms" % (name, lvl, old, ms))
         if clock:
-            mhz, lo, hi = clock
-            clocks.append("%s\t%s\t%s\t%s\t%.0f\t%.0f\t%.0f"
-                          % (date, host, name, lvl, mhz, lo, hi))
+            mhz, lo, hi, box = clock
+            # box_mhz APPENDED, never inserted: this file is joined positionally
+            # like bench.tsv, and a new column in the middle silently
+            # reinterprets every existing row (the trap that put this data in a
+            # side file to begin with).
+            clocks.append("%s\t%s\t%s\t%s\t%.0f\t%.0f\t%.0f\t%s"
+                          % (date, host, name, lvl, mhz, lo, hi,
+                             "%.0f" % box if box is not None else ""))
             # Say it at the time. A row taken off boost is not wrong, but it is
             # not comparable to one taken on boost, and the number alone has
             # never told anyone which it was.
@@ -2949,7 +3048,8 @@ def run_bench():
         fresh = not os.path.exists(out_clk) or not os.path.getsize(out_clk)
         with open(out_clk, "a") as f:
             if fresh:
-                f.write("# date\thost\tworkload\tlevel\tmhz\tmhz_lo\tmhz_hi\n")
+                f.write("# date\thost\tworkload\tlevel"
+                        "\tmhz\tmhz_lo\tmhz_hi\tbox_mhz\n")
             f.write("\n".join(clocks) + "\n")
     print("bench: %d rows -> %s%s%s" %
           (len(rows), out_tsv,
