@@ -382,7 +382,22 @@ type
   ZeroDivisionError = class(Exception) end;
   TypeError         = class(Exception) end;
   IndexError        = class(Exception) end;
-  KeyError          = class(Exception) end;
+  { CPython's KeyError is the one builtin whose str() is the REPR of its
+    argument — `str(KeyError('inner'))` is "'inner'", with the quotes, which is
+    why every "key not found" line in a real log looks like that. So the repr
+    happens HERE, at construction, and the raw argument is kept for `args`:
+    one place, so the raise path and a user's own `raise KeyError(k)` cannot
+    disagree — which they did, the raise path being correct because PyKeyError
+    pre-repr'd its message and a user raise not.
+    bug-nilpy-exception-str-and-repr-diverge-from-cpython }
+  KeyError          = class(Exception)
+    constructor Create(const m: AnsiString);
+    { …and the form for a raise site that has already rendered the key —
+      PyKeyError, which reprs the VARIANT so an int key stays unquoted. Passing
+      that text through Create would repr it a second time and report '7' for a
+      missing 7. }
+    constructor CreateRendered(const shown: AnsiString);
+  end;
   OSError           = class(Exception) end;
   AttributeError    = class(Exception) end;
   EOFError          = class(Exception) end;
@@ -4802,7 +4817,10 @@ begin
     quoted repr, so the two genuinely differ for this one exception and the
     derive-from-message default would hand back the quoted form.
     bug-nilpy-exception-args-attribute-missing }
-  e := KeyError.Create(pyvar_repr(k));
+  { The ctor reprs the message now, so the raw TEXT goes in; argsv is then
+    overwritten with the raw VARIANT, so an int key's args is (42,) and not
+    ('42',). }
+  e := KeyError.CreateRendered(pyvar_repr(k));
   e.argsv := TPyList.Create;
   e.argsv.FKind := PYSEQ_TUPLE;
   e.argsv.append(k);
@@ -9024,6 +9042,19 @@ begin
   end;
   if neg then acc := -acc;
   Result := acc;
+end;
+
+constructor KeyError.Create(const m: AnsiString);
+begin
+  inherited Create(pyrepr_of(m));
+  argsv := TPyList.Create;
+  argsv.FKind := PYSEQ_TUPLE;
+  argsv.append(m);
+end;
+
+constructor KeyError.CreateRendered(const shown: AnsiString);
+begin
+  inherited Create(shown);
 end;
 
 function Exception.GetArgs: TPyList;

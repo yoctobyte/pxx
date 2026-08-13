@@ -3,6 +3,8 @@ track: N
 prio: 40
 type: bug
 blocked-by: [bug-nilpy-exception-args-attribute-missing]
+status: done
+owner: claude-A-N
 ---
 
 # Exception `repr()` is the default object repr (KeyError's message: FIXED 2026-08-09)
@@ -148,3 +150,47 @@ ranks as what it is: the thing to do first.
 
 Nothing here needs re-investigating once args lands — the rendering site is
 already written and already has KeyError carved out of it by name.
+
+## DONE 2026-08-13 — all three items, once `args` existed
+
+This ticket was blocked on [[bug-nilpy-exception-args-attribute-missing]] and
+its three items fell out in order once that landed.
+
+| item | now |
+| --- | --- |
+| 1. no `__repr__` on exceptions | `repr(ValueError('v'))` is `ValueError('v')` (landed earlier with the dataclass-style repr builder) |
+| 2. `KeyError.__str__` is the REPR of its argument | **fixed here** |
+| 3. a real missing-key raise loses the key | `KeyError('nope')`, key included |
+
+### Item 2, and why it needed `args` first
+
+The exception repr deliberately EXCLUDED KeyError, for a reason this ticket
+stated correctly: its message is stored already repr'd on the raise path, so
+quoting again gives `KeyError("'nope'")` while not quoting gives `KeyError(k)`
+for a user-constructed one — both wrong, in opposite cases, depending on who
+raised.
+
+The fix is to stop having two storage conventions. `KeyError.Create` now reprs
+its argument itself and keeps the raw one in `args`, so a user's
+`raise KeyError("inner")` and the runtime's own raise agree: `str(e)` is
+`'inner'` (quoted, as CPython has it), `repr(e)` is `KeyError('inner')`, and
+`e.args` is `('inner',)` unquoted.
+
+**The int-key row is the one that made this more than a rename.** PyKeyError
+reprs the VARIANT — `repr(7)` is `7`, unquoted — and routing that text through
+the new constructor repr'd it a SECOND time, reporting `'7'` for a missing 7.
+The existing `test_nilpy_keyerror_names_the_key` caught it immediately, which is
+what that test is for. So the raise site uses `CreateRendered`, which stores an
+already-rendered key verbatim, and the quoting stays a property of the repr
+rather than a rule about keys.
+
+Test rows added to `test/test_nilpy_exception_args.npy` (`.expected` from
+CPython) — the user/miss/int triple, since they are the three ways a KeyError
+gets built and the whole point is that they agree. The thirteen other exception
+tests were re-run against their exact assertions.
+
+`compiler/builtin/**`, so it carries the pin. Gate: self-host fixedpoint +
+`tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.

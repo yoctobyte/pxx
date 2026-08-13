@@ -26,9 +26,6 @@
 #  - a MULTI-argument raise. Its arguments are folded to a rendered string at
 #    the construction site, so args comes back as a 1-tuple of that text. It
 #    needs the fold to stash the real tuple, which is frontend work.
-#  - `str(KeyError("inner"))`, which is "inner" here and "'inner'" in CPython:
-#    str(e) for a CAUGHT exception reads the msg FIELD through a frontend-
-#    synthesised access and never reaches the renderer this fixed.
 #
 # Expectations are CPython's own output.
 
@@ -55,7 +52,7 @@ except MyErr as e:
 try:
     raise KeyError("inner")
 except KeyError as e:
-    print("keyerror ", e.args, repr(e))
+    print("keyerror ", e.args, repr(e), str(e))
 
 try:
     {}["nope"]
@@ -74,3 +71,12 @@ try:
     raise ValueError("v")
 except ValueError as e:
     print("repr     ", repr(e), str(e))
+
+# an INT key: CPython's KeyError reprs its argument, and repr(7) is 7 — the
+# quoting is the repr's, not a rule about keys, which is what a raise site that
+# has ALREADY rendered its key must not have applied to it twice
+nums = {1: "a"}
+try:
+    nums[7]
+except KeyError as e:
+    print("int key  ", str(e), repr(e), e.args)
