@@ -27674,6 +27674,16 @@ begin
       ci := -1;
       if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
 
+      { The pylib name remap runs HERE, before the property and method
+        resolution below, not beside the method lookup further down: TPyDict's
+        three view methods are spelled keylist/vallist/itemlist precisely to
+        dodge the default `Items[]` PROPERTY, so `mk().items()` matched that
+        PROPERTY first and then died on the '(' with "unexpected token" — while
+        `mk().keys()` and `mk().values()`, which collide with nothing, worked.
+        One remap, and it has to come before whatever the collision is with.
+        bug-nilpy-selector-on-a-call-returning-a-dict-does-not-parse }
+      if ci >= 0 then fieldName := PyMethNameFor(ci, fieldName);
+
       { The class-reference OPERATIONS on a chained value: `(Data as TJSONArray).ClassType`,
         `(b as TD).ClassName`. They are not methods, so the method path below never matched --
         and a pointer accepts any member name silently, so the selector was simply DROPPED and
@@ -27860,13 +27870,6 @@ begin
         Result := node;
         Exit;
       end;
-      { A pylib container method pylib declares under another name, reached
-        through a SELECTOR rather than a bare identifier — `mk().update({4})`,
-        `sets[0].update(...)`. Same one table the two other resolution paths
-        consult (PyPylibMethodAlias); without this arm the alias worked for a
-        plain receiver only, which is the double-case shape
-        normalise-dont-special-case.md is about. }
-      if ci >= 0 then fieldName := PyMethNameFor(ci, fieldName);
       mmi := -1;
       if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
       if mmi >= 0 then

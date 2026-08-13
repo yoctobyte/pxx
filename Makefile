@@ -1469,6 +1469,12 @@ test-nilpy: $(COMPILER)
 	# hasattr predicate asking what the GETTER resolves, and normalising bound
 	# methods in a module that dispatches by a runtime name (a method read by a
 	# name no token spells is invisible to the scan that normally does it).
+	# mk().items() did not parse while mk().keys()/.values() did: `items` is the
+	# one of the three that collides with TPyDict's default Items[] PROPERTY, so
+	# the remap of a Python spelling to pylib's name has to run BEFORE property
+	# resolution, not beside the method lookup.
+	./$(COMPILER) test/test_nilpy_selector_on_a_dict_returning_call.npy /tmp/test_nilpy_dictsel26
+	/tmp/test_nilpy_dictsel26 | diff -u test/test_nilpy_selector_on_a_dict_returning_call.expected -
 	./$(COMPILER) test/test_nilpy_getattr_computed_name.npy /tmp/test_nilpy_getattrc26
 	/tmp/test_nilpy_getattrc26 | diff -u test/test_nilpy_getattr_computed_name.expected -
 	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy /tmp/test_nilpy_kwfwd26

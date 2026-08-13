@@ -1,0 +1,50 @@
+# bug-nilpy-selector-on-a-call-returning-a-dict-does-not-parse
+#
+# `mk().items()` where mk() returns a dict did not parse ("unexpected token"),
+# while `mk().keys()` and `mk().values()` on the same call worked and binding
+# the result to a local first worked for all three. That asymmetry is the whole
+# diagnosis: `items` is the one of the three that COLLIDES — pylib spells the
+# view methods keylist/vallist/itemlist precisely to dodge TPyDict's default
+# `Items[]` property — so the selector matched the PROPERTY first and then died
+# on the '(' .
+#
+# The remap of a Python spelling to pylib's name therefore has to run BEFORE
+# the property and method resolution, not beside the method lookup. It ran
+# beside it, which is why two thirds of the same feature worked.
+#
+# The rows are the three views x the receiver shapes that take this selector
+# path (a call result, a subscript, a chain), plus a locally-built dict and a
+# literal one, since the def's return-type inference is the other candidate
+# this repro could have been about and is not.
+#
+# Expectations are CPython's own output.
+
+
+def built():
+    out = {}
+    out["a"] = 1
+    out["b"] = 2
+    return out
+
+
+def literal():
+    return {"a": 1, "b": 2}
+
+
+print("built  ", sorted(built().items()), sorted(built().keys()), sorted(built().values()))
+print("literal", sorted(literal().items()), sorted(literal().keys()), sorted(literal().values()))
+
+ds = [built()]
+print("subscr ", sorted(ds[0].items()), sorted(ds[0].keys()), sorted(ds[0].values()))
+
+# the bind-to-a-local control, which always worked
+d = built()
+print("local  ", sorted(d.items()), sorted(d.keys()), sorted(d.values()))
+
+# the other pylib remaps must still resolve through the same site
+sets = [{1}, {2}]
+sets[0].update({8})
+print("set upd", sorted(sets[0]))
+
+# and an ordinary dict method on a call result, which never collided
+print("get    ", built().get("a"), len(built()), built()["b"])
