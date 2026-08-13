@@ -155,3 +155,32 @@ it comes up again.
 
 Still absent from item 4: frozenset (own ticket), id, slice, complex, format,
 ascii, eval, dir, vars, memoryview, and `max(default=)`.
+
+## Item 4, `format(v[, spec])` DONE 2026-08-13 — and `issubclass` was already there
+
+`format` now answers for every spec the f-strings take (checked: `.2f`, `x`,
+`08b`, `o`, `>5`/`<5`/`^6`, `,`, `+.3e`, the empty spec, a one-argument call, a
+spec held in a VARIABLE, threaded through a helper, inside a comprehension, and
+from a method body). One implementation with the f-string holes — the test
+asserts `f"{7.5:.2f}" == format(7.5, ".2f")` so they cannot drift.
+
+**A FRONTEND intercept, not a pylib function named `format`, and the difference
+is the whole lesson.** Declared in pylib it worked — until the program said
+`import json`: sysutils declares `Format(fmt, [args])`, and a later unit
+SHADOWS the whole name rather than joining its overload set, measured with the
+pylib arms absent from the candidate list. So the first version compiled every
+test in this ticket and would have broken on the first real program. A builtin
+that stops existing when you add an import is worse than a missing one. The
+`import json` row is in the test to keep it that way, and the `.npy`'s own `def
+format` still wins (ProcUnitIdx = -1 is the main program), which is Python's
+rule for shadowing a builtin.
+
+Test `test/test_nilpy_format_builtin.{npy,expected}`, wired into `test-nilpy`.
+
+**`issubclass(A, B)` needs nothing** — measured today, it compiles and answers
+correctly for a subclass, so it landed between the sweep and now. Struck from
+the list above rather than re-measured every pass.
+
+Still absent from item 4: id, slice, complex, ascii, eval, dir, vars,
+memoryview, `max(default=)`, and `type(x) == int`. Items 2 (three-way `zip`)
+and 3 (a computed precision in a format spec) are untouched.
