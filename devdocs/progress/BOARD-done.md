@@ -570,6 +570,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-construction-on-the-right-of-is-does-not-parse | N | 30 | bug | A construction on the right of `is` does not parse | — |
 | bug-nilpy-constructor-call-in-unpack-rhs-fails-to-parse | N | 55 | bug | A constructor call in an unpacking right-hand side won't parse | — |
 | bug-nilpy-constructor-parameter-defaults-are-ignored | N | 60 | bug | SILENT: __init__ parameter defaults are ignored entirely — `def __init__(self, v=7)` then `C()` leaves v as None, for CONSTANT defaults too. Ordinary methods honour their defaults; the constructor call path does not consult ProcParamDefault* at all. | — |
+| bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword | N | 40 | bug | A constructor declaring `**kw` still rejects an unmatched keyword | — |
 | bug-nilpy-container-literal-default-arg-segfaults | N | 65 | bug | `def f(a, b=[])` SEGFAULTS the moment the default is used as a container | — |
 | bug-nilpy-container-membership-ignores-the-eq-dunder | N | 35 | bug | `x in [a, b]` compares boxed handles, so a class's __eq__ is ignored and membership is False for an equal-but-distinct object — the same runtime-dispatch gap as list.sort() ignoring __lt__ | — |
 | bug-nilpy-curried-lambda-fails-at-runtime | N | 40 | bug | A lambda whose body is another lambda dies at RUN time | — |

@@ -1,0 +1,29 @@
+# bug-nilpy-constructor-with-kwargs-rejects-an-unmatched-keyword
+#
+# `K(1, b=5, z=6)` on `def __init__(self, a, b=2, *rest, **kw)` was refused with
+# "K has no field or constructor parameter named 'z'" — b=5 bound fine, and only
+# the keyword that should fall through to **kw was rejected.
+#
+# Fixed by the ordering change in
+# bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused: the ctor
+# keyword lookup now tries the **kwargs dict before falling through to fields.
+# This test is the row that ticket did not have — a ctor with the FULL shape
+# (a fixed parameter, one with a default, *rest AND **kw at once), where the
+# interesting part is that b=5 must still bind to the PARAMETER while z=6 goes
+# to the dict.
+#
+# Expectations are CPython's own output.
+
+class K:
+    def __init__(self, a, b=2, *rest, **kw):
+        self.a = a
+        self.b = b
+        self.r = len(rest)
+        self.k = sorted(kw.items())
+
+k = K(1, b=5, z=6)
+print(k.a, k.b, k.r, k.k)
+k2 = K(1)
+print(k2.a, k2.b, k2.r, k2.k)
+k3 = K(1, 9, 8, 7, z=1, y=2)
+print(k3.a, k3.b, k3.r, k3.k)

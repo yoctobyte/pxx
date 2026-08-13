@@ -1482,6 +1482,10 @@ test-nilpy: $(COMPILER)
 	# declares (self.k = len(kw)), which was rejected as "got multiple values
 	# for field 'k'". The def and method twins are the controls.
 	./$(COMPILER) test/test_nilpy_ctor_star_and_kwargs.npy /tmp/test_nilpy_ctorargs26
+	# ...and the full ctor shape (fixed + defaulted + *rest + **kw at once): b=5
+	# must still bind to the PARAMETER while z=6 falls through to the dict.
+	./$(COMPILER) test/test_nilpy_ctor_kwargs_fallthrough.npy /tmp/test_nilpy_ctorkwf26
+	/tmp/test_nilpy_ctorkwf26 | diff -u test/test_nilpy_ctor_kwargs_fallthrough.expected -
 	/tmp/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -
 	./$(COMPILER) test/test_nilpy_store_attr_of_an_element.npy /tmp/test_nilpy_elemattr26
 	/tmp/test_nilpy_elemattr26 | diff -u test/test_nilpy_store_attr_of_an_element.expected -

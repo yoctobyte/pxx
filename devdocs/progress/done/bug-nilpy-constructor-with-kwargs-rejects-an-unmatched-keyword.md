@@ -3,6 +3,8 @@ prio: 40
 track: N
 type: bug
 blocked-by: []
+status: done
+owner: claude-A-N
 ---
 
 # A constructor declaring `**kw` still rejects an unmatched keyword
@@ -136,3 +138,25 @@ Loud (a compile error), so nothing computes a wrong answer — which is why this
 was parked rather than half-built. The hole-filling code it must not disturb is
 load-bearing for every façade in the corpus, and a quiet regression there would
 cost far more than the shape this fixes.
+
+## FIXED 2026-08-13 — by its sibling, and this ticket's shape is now a test
+
+`K(1, b=5, z=6)` runs and matches CPython. The fix landed hours earlier in
+[[bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused]], which is
+the same defect found from a different angle: the ctor keyword lookup checked
+parameters, then FIELDS, and only then gave up, so a keyword bound for `**kw`
+had nowhere to go. The `**kwargs` arm now sits between the two, exactly the
+`ProcPyKwIdx` escape this ticket's "shape of a fix" section prescribed.
+
+Kept as its own test rather than folded away, because this ticket's repro is
+the one with the FULL constructor shape — a fixed parameter, a defaulted one,
+`*rest` and `**kw` all at once — where the interesting part is that `b=5` must
+still bind to the PARAMETER while `z=6` goes to the dict. The sibling's rows
+never combine all four.
+
+`test/test_nilpy_ctor_kwargs_fallthrough.{npy,expected}` (`.expected` from
+CPython), wired into `test-nilpy`. Gate: self-host fixedpoint + `gate.sh quick`
+GREEN.
+
+## Log
+- 2026-08-13 — resolved, commit PENDING-COMMIT.
