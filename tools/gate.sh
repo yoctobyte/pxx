@@ -86,7 +86,36 @@ fixedpoint() {     # self-host from the PINNED seed — DELEGATED, not re-implem
     echo "SKIP: no pinned stable to seed from — self-host gate not run"
     return 0
   fi
+  [ "$rc" = 0 ] || stale_binary_hint
   return "$rc"
+}
+
+# The check above is honest — "the binary we test with is not the one these
+# sources define" is TRUE when compiler/pascal26 is merely old. But its stated
+# causes ("local seed contamination, or a self-perpetuating miscompile") send you
+# hunting a miscompile, when on a shared checkout the overwhelmingly common cause
+# is that a SIBLING landed a compiler change and nobody rebuilt here yet.
+#
+# It cost two full gate runs on two consecutive days (2026-08-12, -13) before
+# anyone noticed the pattern: the gate's own testmgr step rebuilds the binary as
+# a side effect, so the FIRST run after a sibling's commit always fails and the
+# re-run always passes, which reads as flakiness rather than staleness.
+#
+# Deliberately a hint, not a fix: gate.sh must NOT rebuild before comparing, or
+# it loses the ability to catch a genuinely contaminated binary — which is the
+# entire point of the anti-Thompson check.
+stale_binary_hint() {
+  local newest binmt
+  newest=$(git log -1 --format=%ct -- compiler/ 2>/dev/null) || return 0
+  binmt=$(stat -c %Y compiler/pascal26 2>/dev/null) || return 0
+  [ -n "$newest" ] && [ -n "$binmt" ] || return 0
+  if [ "$binmt" -lt "$newest" ]; then
+    echo "gate: NOTE compiler/pascal26 is OLDER than the last commit touching"
+    echo "gate:      compiler/ ($(git log -1 --format='%h %s' -- compiler/ | cut -c1-60))"
+    echo "gate:      That is a STALE BINARY, not a miscompile — a sibling landed a"
+    echo "gate:      compiler change and this checkout has not rebuilt."
+    echo "gate:      Run 'make compiler/pascal26' (~12s) and re-gate."
+  fi
 }
 
 echo "gate: mode=$MODE  logs=$LOGDIR"

@@ -946,6 +946,18 @@ def health_check(clone):
         return "DOWN", 2, ["no watcher daemon is running"]
 
     phase = watch.get("phase") or "?"
+    # Paused on a dirty clone is a STANDING stop, not a slow cycle: the daemon
+    # will not test anything until someone commits or stashes, and it will say
+    # so once per cycle forever. Name it exactly, with the files — the 16-hour
+    # outage on 2026-08-12 was one uncommitted tstate file, and the old
+    # diagnosis ("WEDGED: live.json has not moved") described a hang that was
+    # not happening while the real cause went unnamed.
+    if phase == "paused-dirty":
+        files = watch.get("files") or []
+        reasons.append("PAUSED: the clone is dirty, so every cycle is a no-op "
+                       "until it is committed or stashed%s"
+                       % (" — %s" % ", ".join(files) if files else ""))
+        return "DOWN", 2, reasons
     # A quiet repo is NOT a fault. Conflating "idle" with "broken" is exactly
     # what made --status untrustworthy, so idle is only checked for a heartbeat.
     if phase in GATE_PHASES:

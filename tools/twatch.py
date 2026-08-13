@@ -112,6 +112,40 @@ def load_conf(clone_path):
     return conf
 
 
+# testmgr's exit code for "another run holds the repo lock, I refuse to start".
+# NOT a fault: the box is fine and nothing was measured. Kept as a name because
+# the difference between this and a real failure decides whether we reseed the
+# compiler, and reseeding on contention corrupts the run that holds the lock.
+TESTMGR_RC_LOCKED = 2
+
+_GATE_PROC = None      # the testmgr child of the CURRENT cycle, if any
+
+
+def _kill_orphan_gate():
+    """Tear down a gate child left running by a cycle that threw.
+
+    On 2026-08-12 a transient `git fetch` (exit 128) raised inside the cycle
+    that had already started a full-tier testmgr. The handler retried the cycle
+    but nothing killed that child, so it ran on holding the repo lock; the
+    retry's testmgr hit `a run is ALREADY LIVE` and returned rc=2; twatch read
+    that as a broken box and reseeded compiler/pascal26 *underneath the orphan*,
+    which noticed and logged it. The orphan then finished GREEN 2293/2293 and
+    its result was thrown away, while the box sat wedged for 16 hours.
+
+    One transient network error should cost one cycle, not the run in flight
+    and not the next three hours.
+    """
+    global _GATE_PROC
+    proc, _GATE_PROC = _GATE_PROC, None
+    if proc is None or proc.poll() is not None:
+        return False
+    print("twatch: cycle failed with a gate still running (pid %d) — tearing "
+          "it down; leaving it would orphan the repo lock and make the next "
+          "cycle collide with it" % proc.pid, flush=True)
+    kill_child(proc)
+    return True
+
+
 def kill_child(proc, grace=30):
     """Tear down a running testmgr: SIGINT (clean teardown), then SIGKILL.
 
@@ -541,6 +575,12 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
     if CONF.get("max_mem_mb"):
         env["TESTMGR_MEM_CAP_MB"] = str(int(CONF["max_mem_mb"]))
     proc = subprocess.Popen(cmd, cwd=clone.path, start_new_session=True, env=env)
+    # Published so the cycle's exception handler can tear this down. Without it
+    # an exception anywhere in the cycle unwinds past every local `proc`, the
+    # child keeps running and keeps the repo lock, and the retried cycle
+    # collides with its own orphan — see _kill_orphan_gate().
+    global _GATE_PROC
+    _GATE_PROC = proc
     last_check = time.monotonic()
     wp = os.path.join(clone.path, WATCH_REL)
     while proc.poll() is None:
@@ -571,6 +611,7 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
                       flush=True)
                 kill_child(proc)
                 return None, "aborted"
+    _GATE_PROC = None          # reaped: nothing left for the handler to kill
     report = None
     if os.path.exists(rep_path):
         with open(rep_path) as f:
@@ -595,6 +636,21 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
     # miscompiles the current tree into a stage-1 that segfaults on startup).
     # Recovery: reseed from the committed pinned stable and retry once; without
     # this the watcher wedges retesting the same SHA forever.
+    # rc=2 is testmgr REFUSING TO START because another run holds the repo lock.
+    # That is not a degraded box, it is contention, and the two need opposite
+    # responses: a poisoned seed wants a reseed, a busy repo wants patience.
+    # Reseeding here is actively destructive — it unlinks and rebuilds
+    # compiler/pascal26 underneath the run that legitimately holds the lock,
+    # which on 2026-08-12 made a live full-tier run log "compiler/pascal26
+    # changed during this run". Nothing measured, nothing broken: skip the
+    # cycle and come back.
+    if proc.returncode == TESTMGR_RC_LOCKED:
+        print("twatch: testmgr refused — another run holds the repo lock "
+              "(rc=%d). Contention, not a fault: no reseed, no verdict, no "
+              "infra record; retrying next cycle." % TESTMGR_RC_LOCKED,
+              flush=True)
+        return None, "busy"
+
     infra = report is not None and report.get("verdict") == "INFRA"
     if report is None or infra:
         if not _reseeded and (proc.returncode or infra):
@@ -1291,6 +1347,11 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     clone_head_back(clone)
     if rc == "aborted":
         return "aborted"
+    # Contention, not a measurement and not a fault: record NOTHING. Falling
+    # through would hit the `report is None` branch below and mark the host
+    # infra-degraded for the crime of being busy.
+    if rc == "busy":
+        return "busy"
     if report is None:
         print("twatch: testmgr produced no report (rc=%s) — infra problem, "
               "not recording a verdict" % rc, flush=True)
@@ -2732,6 +2793,12 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
     if rc == "aborted":
         print("twatch: pin verify preempted by a push — will resume", flush=True)
         return "aborted"
+    if rc == "busy":
+        # Distinguished from "no usable verdict" below purely so the log does
+        # not read like the pin failed to verify. Nothing ran; it retries.
+        print("twatch: pin verify skipped — the repo lock is held elsewhere",
+              flush=True)
+        return False
     if report is None or report.get("verdict") in ("INFRA", "INVALID") \
             or no_measurement(report):
         # Same rule as everywhere else: a box that could not measure publishes
@@ -3599,6 +3666,15 @@ def main():
             clone.publish_own_writes(host)
             dirty = clone.dirty()
             if dirty:
+                # Say what we ARE, not what we last were. Without this the
+                # phase stays at whatever ran last, so on 2026-08-12 a daemon
+                # paused on a dirty clone reported `phase=testing` and
+                # `trackt health` diagnosed "WEDGED: live.json has not moved in
+                # 57605s" — pointing at a hang that was not happening, while
+                # the actual cause (one uncommitted file) went unnamed for 16h.
+                set_phase(clone, host, "paused-dirty",
+                          files=[ln[3:].strip() for ln in
+                                 dirty.splitlines()][:5])
                 print("twatch: clone dirty — pausing this cycle (commit or "
                       "stash to resume):\n%s" % dirty[:500], flush=True)
                 if args.once:
@@ -3643,7 +3719,14 @@ def main():
                         print("twatch: fast tier gave no report — falling "
                               "back to %s" % args.tier, flush=True)
                         test_sha(clone, host, st, head, args.tier, full=True)
-                    did_work = True
+                    # "busy" leaves did_work False ON PURPOSE: did_work skips
+                    # the poll sleep, so treating contention as work would spin
+                    # the cycle and collide with the lock holder as fast as the
+                    # CPU allows. The sha stays untested and is retried after a
+                    # normal interval. Note it is NOT `is False` either — that
+                    # branch escalates to the full tier, which is the worst
+                    # possible answer to "something else is already running".
+                    did_work = r != "busy"
             elif pin_mid:
                 # AHEAD of idle depth on HEAD, and deliberately so: this is the
                 # binary Tracks B/C/D/E are building with *right now*, whereas
@@ -3659,9 +3742,9 @@ def main():
                 # preempts either; the run is SIGINTed and discarded, no
                 # verdict recorded, and the ladder restarts for the new sha.
                 nxt = idle_phase(st, tested, args.mid_tier, args.tier)
-                test_sha(clone, host, st, tested, nxt,
-                         full=True, abort_check=make_preempted(clone, tested))
-                did_work = True
+                r = test_sha(clone, host, st, tested, nxt,
+                             full=True, abort_check=make_preempted(clone, tested))
+                did_work = r != "busy"      # see the note above: never spin
             elif pin_deep:
                 # HEAD's ladder is exhausted: give the pin platform breadth too.
                 # This is what lets `trackt pinstatus` name a last fully-green
@@ -3679,7 +3762,7 @@ def main():
                 # opt — the silent-miscompile oracle). A push preempts it.
                 r = test_sha(clone, host, st, tested, "opt", full=False,
                              abort_check=make_preempted(clone, tested))
-                if r != "aborted":
+                if r not in ("aborted", "busy"):
                     st = load_state(clone, host)
                     st["last_opt"] = {"sha": tested, "date": utcnow()}
                     if r is False:      # old sha: its testmgr has no tier
@@ -3728,6 +3811,7 @@ def main():
             # persistent failure (10 straight) should, loudly
             errors += 1
             print("twatch: cycle failed (%d/10): %s" % (errors, e), flush=True)
+            _kill_orphan_gate()          # before anything else: it holds the lock
             try:
                 clone_head_back(clone)   # crash mid-test leaves HEAD detached
             except (RuntimeError, subprocess.SubprocessError, OSError):
