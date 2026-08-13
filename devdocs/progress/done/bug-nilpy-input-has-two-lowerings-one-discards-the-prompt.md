@@ -93,4 +93,4 @@ written), `test_nilpy_input_eof_raises`, `test_nilpy_select_stdin_ready`.
 Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-13 — resolved, commit PENDING-COMMIT.
+- 2026-08-13 — resolved, commit b482008cc.
