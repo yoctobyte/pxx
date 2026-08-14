@@ -168,4 +168,4 @@ EConvertError. Name the oracle's binary differently — the provenance rule
 applies to the reference build too, not only to the compiler under test.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 8f0502df1.
