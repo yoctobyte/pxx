@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:9 blocked:5 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1776 rejected:37`
+`urgent:1 working:1 unfinished:9 blocked:5 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1777 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-n-typevar-call-is-an-undefined-variable` [N] — owner: agent-AN
-- `bug-nilpy-dict-update-mixed-positional-and-keyword-args` [N] — owner: agent-AN
 
 ## urgent (1) — jump the queue
 

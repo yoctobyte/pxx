@@ -10,12 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-a-test-asm-avx-gates-on-avx-but-uses-avx2-vbroadcastsd | A | 75 | bug | test_asm_avx gates on AVX + OSXSAVE + XCR0 (and FMA separately, correctly) but NOT on AVX2 — while every `vbroadcastsd ymm, xmm` it uses is the REGISTER-source form, which is AVX2. Only the memory-source form is AVX1. On an AVX1-only CPU the gate passes and the first vbroadcastsd is #UD. Master is RED on plexus (Ivy Bridge). The compiler is fine; the guard has one gap. | — |
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-n-typevar-call-is-an-undefined-variable | N | 55 | bug | `MessageT = TypeVar(\"MessageT\")` at module scope dies with `undefined variable (TypeVar)`: `typing` is a consumed-and-ignored import, so the names it exports that have a RUN-TIME call form — TypeVar, Generic, NewType, cast — are bound to nothing. The largest remaining language gap in the neuzelaar census once unreadable annotations stopped refusing modules. | — |
-| bug-nilpy-dict-update-mixed-positional-and-keyword-args | N | 35 | bug | `d.update(other, a=1)` is a clean compile error (`unexpected token c`) — CPython accepts a mapping followed by keywords. The keywords-are-KEYS builder takes over only when the argument list STARTS with a keyword, so a positional first argument leaves the keyword run unhandled. Same for dict(other, a=1). | — |
 
 ## unfinished (9)
 
@@ -419,9 +418,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1776)
+## done (1777)
 
-1776 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1777 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
