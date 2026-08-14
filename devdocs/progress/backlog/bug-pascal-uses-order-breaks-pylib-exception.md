@@ -2,7 +2,7 @@
 track: A
 prio: 70
 type: bug
-summary: "REOPENED 2026-08-13: `uses sysutils, pylib` fails to compile again. The 2026-08-01 fix (382b75e54) made the then-existing fields resolve but never fixed the root cause, so the FIRST new field on pylib's Exception (`argsv`, added by 67910b097 feat(N)) re-broke it verbatim. Master is red. Track N is the trigger, not the cause."
+summary: "The name `Exception` is DELIBERATELY shared between pylib and sysutils (ClassNameIsDeliberatelyShared), which is what makes `except Exception:` catch either runtime — so this is a design tradeoff with a measured cost, not simply an unfixed bug. Under `uses sysutils, pylib` pylib cannot add any member sysutils lacks. Superseded by decide-pylib-exception-vs-sysutils-exception; do not fix this until that is answered."
 ---
 
 # `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine
@@ -108,3 +108,34 @@ complete because the symptom was gone.
 - 2026-08-13 — REOPENED by Track T. Fix did not hold; root cause never
   addressed. Consolidates the auto-filed stub
   [[regression-test-core-test-uses-order-pylib-exception-a]].
+
+
+## 2026-08-14 — CORRECTED, and superseded by a Track U decision
+
+Two things in my 2026-08-13 reopen above need fixing, and the second matters.
+
+**Master is no longer red.** `feat(N) e.args` was reverted the same night;
+plexus is GREEN across native, full, slow and opt at `618371ac365d` with zero
+open regressions. The summary's "master is red" was true when written and is not
+now.
+
+**And "the 08-01 fix was a microfix, root cause untouched" is too simple.**
+Track N measured what I did not: `ClassNameIsDeliberatelyShared('exception')`
+exempts the name from `FindUClass`'s own-unit preference **on purpose**, and
+that exemption is what makes a bare `except Exception:` catch a raise from
+either runtime. Removing it was tried — pylib then sees its own class correctly
+and the unification breaks, so `_b` fails at run time. The exemption is
+load-bearing exactly as designed.
+
+So this is not a fix someone neglected to finish. It is a **deliberate tradeoff
+whose cost was invisible until the first member was added that sysutils lacks**,
+and the honest statement of the defect is: *pylib can never extend Exception
+beyond sysutils' surface.* My reopen was right that the class of bug survived,
+and wrong about why.
+
+**Do not act on this ticket.** The fork belongs to
+[[decide-pylib-exception-vs-sysutils-exception]] (Track U, p55) — who owns
+`Exception`, and how pylib extends it. Whatever is decided there determines
+whether this ticket becomes an A-lane resolution change (its option 4), a B-lane
+RTL change (option 1), or is closed as working-as-designed (option 3). Prio
+stays 70 so it does not drift out of sight while that is open.
