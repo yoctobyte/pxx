@@ -1412,6 +1412,12 @@ test-nilpy: $(COMPILER)
 	# opened with `Next; Expect(tkLParen)`, so a type could be CALLED, never BOUND.
 	./$(COMPILER) test/test_nilpy_builtin_type_as_a_value.npy /tmp/test_nilpy_btypeval26
 	/tmp/test_nilpy_btypeval26 | diff -u test/test_nilpy_builtin_type_as_a_value.expected -
+	# A NESTED loop target -- `for n, (p, q) in enumerate(pairs):`. The for
+	# lowering is keyed on a FLAT name list, so the group desugars to a hidden
+	# name plus an index-unpack at the top of the body. BOTH body paths, or the
+	# comprehension form reports "undefined variable (p)" while the statement works.
+	./$(COMPILER) test/test_nilpy_nested_loop_target.npy /tmp/test_nilpy_nestedtgt26
+	/tmp/test_nilpy_nestedtgt26 | diff -u test/test_nilpy_nested_loop_target.expected -
 	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma
 	# inside a dict/set literal argument counted as an argument SEPARATOR: a
 	# 2-entry literal made update() look 2-arity, no overload matched, and

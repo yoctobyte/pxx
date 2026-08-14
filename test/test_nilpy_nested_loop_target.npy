@@ -1,0 +1,71 @@
+# A NESTED loop target — `for n, (p, q) in enumerate(pairs):`. Refused with a
+# named diagnostic before this ("loop over the outer level and unpack the inner
+# in the body"), because the whole for lowering is keyed on a FLAT list of
+# names. The group is desugared to a hidden name plus an index-unpack at the top
+# of the body, which is what the two-name `for a, b in pairs` path already does
+# one level up.
+#
+# feature-nilpy-starred-and-nested-unpacking
+
+pairs = [("a", 1), ("b", 2)]
+
+for n, (p, q) in enumerate(pairs):
+    print(n, p, q)
+
+# the group FIRST in the target list
+tri = [(("x", "y"), 9), (("z", "w"), 8)]
+for (a, b), c in tri:
+    print(a, b, c)
+
+# a THREE-name group
+deep = [(1, (2, 3, 4))]
+for h, (i, j, k) in deep:
+    print(h, i, j, k)
+
+# TWO groups in one target
+both = [((1, 2), (3, 4))]
+for (m, n2), (o, p2) in both:
+    print(m, n2, o, p2)
+
+# over a dict's items
+d = {"k": (1, 2)}
+for key, (v1, v2) in d.items():
+    print(key, v1, v2)
+
+# over zip
+for idx, (u, v) in enumerate(zip([1, 2], [3, 4])):
+    print(idx, u, v)
+
+# a group in the THIRD slot
+trip = [(1, 2, (3, 4))]
+for x, y, (z, w) in trip:
+    print(x, y, z, w)
+
+# `continue` still works, and the names stay bound after the loop
+for n, (p, q) in enumerate(pairs):
+    if n == 0:
+        continue
+    print("late", n, p, q)
+print(p, q)
+
+# assigning an inner name inside the body does not disturb the next iteration
+for n, (p, q) in enumerate(pairs):
+    p = "changed"
+    print(n, p, q)
+
+# `break` leaves the inner names holding the iteration it broke on
+for n, (p, q) in enumerate(pairs):
+    if p == "b":
+        break
+print(n, p, q)
+
+# a COMPREHENSION target — the same construct through the other body path. Put
+# the unpack only on the statement side and this reports "undefined variable
+# (p)" while the identical `for` statement above works.
+print([f"{n}{p}{q}" for n, (p, q) in enumerate(pairs)])
+print([b for (a, b) in pairs])
+print({a: b for (a, b) in pairs})
+
+# a parenthesised FLAT target still means nothing, as it always did
+for (only) in [1, 2]:
+    print(only)

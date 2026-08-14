@@ -150,6 +150,17 @@ var
     index, which is the only form that can serve three. }
   PyForExtraName: array[0..5] of AnsiString;
   PyForExtraCount: Integer;
+  { A NESTED target slot — `for n, (p, q) in enumerate(pairs):`. The whole for
+    lowering is keyed on a FLAT name list, so a group is desugared here rather
+    than generalised into it: the slot takes a HIDDEN name like any other, and
+    the inner names are unpacked from it by index at the top of the body, which
+    is exactly what the two-name pair path already does one level up.
+
+    Slot numbering matches the target list: 0 = the first name, 1 = the second,
+    2+ = PyForExtraName[slot-2]. Count 0 means the slot is a plain name.
+    feature-nilpy-starred-and-nested-unpacking }
+  PyForNestName: array[0..PY_FOR_NEST_SLOTS, 0..PY_FOR_NEST_NAMES] of AnsiString;
+  PyForNestCount: array[0..PY_FOR_NEST_SLOTS] of Integer;
   PyHdrName: AnsiString;
   PyHdrNParams: Integer;
   PyHdrIsProc: Boolean;
@@ -409,6 +420,7 @@ function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
   signature is a genuine duplicate FPC rejects even though PXX tolerates it
   (regression-fpc-seed-drift-b1976-stale). }
 function PyParseFor: Integer; forward;
+function PyParseForTargetSlot(slot: Integer): AnsiString; forward; { Nil Python: one entry of a for target list; a `(p, q)` group becomes a hidden name }
 { Defined further down, beside the comprehension machinery that was its first
   caller; PyParseTry now renames an `except ... as` binder with it too, and that
   sits EARLIER in this include — the FPC seed build needs the forward. }
@@ -16309,6 +16321,7 @@ var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, n
     extraSyms: array[0..5] of Integer;
     hName, hName2: AnsiString;
     hExtraNames: array[0..5] of AnsiString;
+    nsSlot, nsI, nsSym, nsNode, nsHostSym: Integer;   { nested target unpack }
 begin
   pairMode := False;
   { A comprehension filter — `[EXPR for V in ITER if COND]` — must not let the
@@ -16886,6 +16899,40 @@ begin
     ASTLeft[node] := PyMakeIdent(sym2);
     ASTRight[node] := elemNode;
     bodyNode := PySeqAppend(bodyNode, node);
+  end;
+
+  { NESTED target slots — `for n, (p, q) in enumerate(pairs):`. The slot was
+    bound to a hidden name above like any other target name; unpack it into the
+    user's inner names HERE, ahead of everything the body does. Ahead of BOTH
+    branches below, not inside the statement one: a comprehension parses its
+    element expression in the branch below, and that expression reads the inner
+    names — put the unpack only on the statement side and
+    `[f(p, q) for n, (p, q) in xs]` reports "undefined variable (p)" while the
+    identical `for` statement works. Same construct, two paths, which is the
+    shape devdocs/dev/normalise-dont-special-case.md is about.
+
+    `continue` and `break` behave exactly as they do for the flat forms because
+    this sits at the top of the body with the other target bindings. Emitted
+    through PyPairItem, the same accessor the two-name pair path one level up
+    uses. feature-nilpy-starred-and-nested-unpacking }
+  for nsSlot := 0 to PY_FOR_NEST_SLOTS do
+  begin
+    if PyForNestCount[nsSlot] = 0 then Continue;
+    if nsSlot = 0 then nsHostSym := symIdx
+    else if nsSlot = 1 then nsHostSym := sym2
+    else if nsSlot - 2 < nExtra then nsHostSym := extraSyms[nsSlot - 2]
+    else Continue;
+    if nsHostSym < 0 then Continue;
+    for nsI := 0 to PyForNestCount[nsSlot] - 1 do
+    begin
+      nsSym := PyAssignTargetSym(PyForNestName[nsSlot][nsI]);
+      if nsSym < 0 then
+        nsSym := AllocVar(PyForNestName[nsSlot][nsI], tyVariant);
+      nsNode := AllocNode(AN_ASSIGN);
+      ASTLeft[nsNode] := PyMakeIdent(nsSym);
+      ASTRight[nsNode] := PyPairItem(PyMakeIdent(nsHostSym), nsI);
+      bodyNode := PySeqAppend(bodyNode, nsNode);
+    end;
   end;
 
   if PyCompTarget >= 0 then
@@ -17559,6 +17606,56 @@ begin
   PyParseRangeList := node;
 end;
 
+function PyParseForTargetSlot(slot: Integer): AnsiString;
+{ One entry of a for target list: either a plain NAME, consumed and returned as
+  itself, or a PARENTHESISED GROUP — `(p, q)` in `for n, (p, q) in ...` — which
+  is consumed here and returned as a HIDDEN name, with the inner names recorded
+  in PyForNestName[slot] for the body prologue to unpack.
+
+  Desugared rather than generalised into the for lowering: that lowering is
+  keyed end to end on a flat list of names, and a nested group is exactly the
+  index-unpack it already performs for `for a, b in pairs`, one level down.
+  feature-nilpy-starred-and-nested-unpacking }
+var n: Integer;
+begin
+  if (slot >= 0) and (slot <= PY_FOR_NEST_SLOTS) then PyForNestCount[slot] := 0;
+  if CurTok.Kind = tkStar then
+    Error('Nil Python: a STARRED loop target (`for a, *rest in ...`) is not '
+          + 'supported yet');
+  if CurTok.Kind <> tkLParen then
+  begin
+    if CurTok.Kind <> tkIdent then
+      Error('Nil Python: expected a loop variable');
+    Result := CurTok.SVal;
+    Next;
+    Exit;
+  end;
+  if (slot < 0) or (slot > PY_FOR_NEST_SLOTS) then
+    Error('Nil Python: too many names in a for target');
+  Next;                                  { '(' }
+  n := 0;
+  repeat
+    if CurTok.Kind = tkStar then
+      Error('Nil Python: a STARRED name inside a nested loop target is not '
+            + 'supported yet');
+    if CurTok.Kind = tkLParen then
+      Error('Nil Python: a loop target nested more than one level deep '
+            + '(`for a, ((b, c), d) in ...`) is not supported yet');
+    if CurTok.Kind <> tkIdent then
+      Error('Nil Python: expected a name inside the nested loop target');
+    if n > PY_FOR_NEST_NAMES then
+      Error('Nil Python: too many names in a nested loop target');
+    PyForNestName[slot][n] := CurTok.SVal;
+    Inc(n);
+    Next;
+  until not Eat(tkComma);
+  Expect(tkRParen, ')');
+  if n < 2 then
+    Error('Nil Python: a nested loop target needs at least two names');
+  PyForNestCount[slot] := n;
+  Result := PyHiddenName('nst');
+end;
+
 function PyParseFor: Integer;
 var name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
@@ -17597,9 +17694,12 @@ begin
       Next;
     end;
   end;
-  if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
-  name := CurTok.SVal;
-  Next;
+  { slot 0 of the target list; a `(p, q)` group here yields a hidden name and
+    records its inner names for the body prologue }
+  for pScan := 0 to PY_FOR_NEST_SLOTS do PyForNestCount[pScan] := 0;
+  if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkLParen) then
+    Error('Nil Python: expected loop variable after for');
+  name := PyParseForTargetSlot(0);
   { `for k, v in d.items():` — a two-name target, which only a dict serves
     today (feature-nilpy-tuple-unpack). No tuple type is invented for it: the
     two names read the dict's parallel key and value lists by the same index. }
@@ -17608,31 +17708,32 @@ begin
   if CurTok.Kind = tkComma then
   begin
     Next;
-    { `for n, (p, q) in nested:` — a NESTED loop target. The target here is a
-      flat name list and the whole lowering is keyed on it, so this is a real
-      gap; what it must not do is report it as a MISSING variable, which is what
-      "expected a second loop variable" says while the user is looking straight
-      at one. feature-nilpy-starred-and-nested-unpacking. }
-    if CurTok.Kind = tkLParen then
-      Error('Nil Python: a NESTED loop target (`for n, (p, q) in ...`) is not '
-            + 'supported yet — loop over the outer level and unpack the inner '
-            + 'in the body');
-    if CurTok.Kind = tkStar then
-      Error('Nil Python: a STARRED loop target (`for a, *rest in ...`) is not '
-            + 'supported yet');
-    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a second loop variable');
-    name2 := CurTok.SVal;
-    Next;
+    { `for n, (p, q) in nested:` — a NESTED loop target, which used to be
+      refused here. PyParseForTargetSlot consumes either shape and hands back a
+      name to bind, so the flat list below is unchanged and the group is
+      unpacked in the body prologue. }
+    { `for (only,) in pairs:` — a ONE-name parenthesised target with a trailing
+      comma, which in Python unpacks a 1-tuple. Named, because the generic
+      "expected a second loop variable" points at a `)` and reads as a typo:
+      the form is understood and the UNPACK is what is missing, since a
+      single-name target binds the element whole.
+      bug-nilpy-a-one-name-tuple-loop-target-is-refused }
+    if parenTarget and (CurTok.Kind = tkRParen) then
+      Error('Nil Python: a one-name tuple loop target (`for (x,) in ...`) is '
+            + 'not supported yet — write `for x in ...` if the element is not '
+            + 'a 1-tuple, or unpack in the body if it is');
+    if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkLParen) and
+       (CurTok.Kind <> tkStar) then
+      Error('Nil Python: expected a second loop variable');
+    name2 := PyParseForTargetSlot(1);
     { and any further names: `for anchor, weight, label in (...)` }
     while CurTok.Kind = tkComma do
     begin
       Next;
-      if CurTok.Kind <> tkIdent then Error('Nil Python: expected a loop variable after ,');
       if PyForExtraCount > High(PyForExtraName) then
         Error('Nil Python: too many names in a for target');
-      PyForExtraName[PyForExtraCount] := CurTok.SVal;
+      PyForExtraName[PyForExtraCount] := PyParseForTargetSlot(PyForExtraCount + 2);
       Inc(PyForExtraCount);
-      Next;
     end;
   end;
   if parenTarget then Expect(tkRParen, ')');

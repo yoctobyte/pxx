@@ -731,6 +731,13 @@ const
     reason VT_CLASSREF_TAG does. bug-n-a-type-name-is-not-a-first-class-value }
   VT_BTYPE_TAG = 13;
 
+  { Bounds of the NESTED for-target tables in pyparser.inc. Named constants, not
+    High() over the array: this dialect's High() on the inner dimension of a 2-D
+    array does not answer the inner bound, and a nested target of two names was
+    refused as "too many names". }
+  PY_FOR_NEST_SLOTS = 7;   { target-list slots that may hold a group }
+  PY_FOR_NEST_NAMES = 7;   { names inside one group }
+
   { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
     match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it
     can never equal a plain block's allocator size word (always a multiple of
