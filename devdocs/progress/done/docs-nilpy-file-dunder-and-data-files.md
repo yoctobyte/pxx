@@ -93,4 +93,4 @@ until 2026-08-13).
   `--data-root` deliberately not mentioned. Internal divergence entry
   (`devdocs/dev/nilpy-semantics-divergences.md:221`) checked as consistent, not
   edited — it is not Track D's file.
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 5692e47fb.
