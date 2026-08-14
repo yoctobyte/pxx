@@ -9,7 +9,7 @@ prio: 45
 
 - **Type:** bug (test infrastructure) — Track T (owns the tooling; the tests
   themselves are Track B's `test/lib_*.pas`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** hitting all three in one session while landing unrelated fixes.
 
@@ -60,3 +60,60 @@ looking at what in it is time- or environment-dependent before assuming ports.
 Track T: `tools/testmgr.py --tier full` green for tooling changes. If the fix
 lands in the tests themselves that is Track B — `tools/gate.sh lib` — and the
 proof is running each 10x with an unchanged compiler and getting one verdict.
+
+## DONE 2026-08-14 — harness half fixed; two root causes found, neither is the network
+
+The ticket's option 1 ("make them deterministic — fixed ports are the usual
+culprit") was half right, and the half it got wrong is the interesting one.
+
+### `lib_platform_esp` — not a network test, not a timing flake
+
+It calls every `Pal*` entry point with **fd 0**, which is stdin. So it measures
+the launch environment. Same binary, four stdin kinds, four different outputs —
+and with fd 0 *closed* its own `PalSocket()` is handed descriptor 0, after which
+every later call operates on a real socket instead of stdin. Full table in the
+Track B ticket.
+
+**This is Track T's to fix at the harness level**, and it is fixed:
+`Manager.launch` now passes `stdin=subprocess.DEVNULL`. Jobs previously
+inherited testmgr's own stdin — a terminal under `make`, a pipe under a gate,
+whatever systemd hands the watcher — so the *same test on the same commit*
+answered differently depending on how the run was started. That is a general
+determinism hole, not an esp-specific one; this test just happened to be the
+one sensitive enough to show it.
+
+### `lib_sockets` — fixed port, exactly as the ticket guessed
+
+`const PORT = 28744`, so two concurrent runs collide. That is the gate-plus-sweep
+overlap that opened this ticket.
+
+### `lib_net_v6only` — no defect found, and said so rather than fixed
+
+**20 consecutive runs, unchanged binary, one identical output.** It already binds
+port 0 and reads it back, so the fixed-port hypothesis never applied. Its single
+observed flake stays **unexplained**. Filed as such rather than
+speculatively "fixed", because a change with no reproduction is indistinguishable
+from a change with no effect.
+
+### Where the rest goes
+
+Both real defects are in `test/lib_*.pas`, which is Track B's — see
+[[bug-b-two-lib-tests-are-environment-dependent-by-construction]], which carries
+the repros. Options 2 (reported retry) and 3 (quarantine list) are **not**
+implemented and should not be: with two of three explained by construction and
+the third unreproducible, a retry mechanism would now be hiding defects rather
+than absorbing noise.
+
+### Gate
+
+`tools/devtest_job_stdin.py` — drives the REAL `Manager.launch` (not a
+reconstruction, since the thing asserted is one keyword a refactor could drop)
+with the parent's stdin pointed at a regular file and at a pipe, and checks the
+child sees `/dev/null` both times. Includes a **control** that spawns the old
+way and confirms the probe would actually have caught the previous behaviour —
+without it, a probe that always passes proves nothing.
+
+`tools/gate.sh quick` GREEN; all eight Track T devtests pass.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

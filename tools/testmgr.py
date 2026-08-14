@@ -1663,7 +1663,23 @@ class Manager:
                 os.nice(10)
             except OSError:
                 pass
+        # stdin=DEVNULL is NOT cosmetic. Without it a job inherits testmgr's own
+        # stdin, which is a terminal under `make`, a pipe under a gate, and
+        # whatever systemd hands the watcher — so a test that touches fd 0 gets
+        # a DIFFERENT ANSWER depending on how the run was launched, and that
+        # reads as a flaky test rather than as an environment difference.
+        #
+        # Measured 2026-08-14 on test/lib_platform_esp.pas, which calls every
+        # Pal* entry point with fd 0: /dev/null, a pipe and a regular file each
+        # produce different `seek`/`flush` values, and with stdin CLOSED the
+        # test's own PalSocket() is handed fd 0 — so every later call operates
+        # on a real socket instead of stdin and half the line changes. Three of
+        # the flakes in bug-t-three-network-tests-flake were this, not networking.
+        #
+        # A job that genuinely wants input must redirect it in its own recipe,
+        # which is also the only way it survives a `--job` repro.
         job.proc = subprocess.Popen(["sh", "-c", job.script()],
+                                    stdin=subprocess.DEVNULL,
                                     stdout=logf, stderr=subprocess.STDOUT,
                                     preexec_fn=presetup, cwd=REPO)
         logf.close()
