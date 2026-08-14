@@ -4485,6 +4485,7 @@ begin
       else
       begin
         ci := FindUClass(fieldName);
+        if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual MEMBER field=', fieldName, ' flat=', ci);
         { …case-SENSITIVELY under NilPy. FindUClass is Pascal-style
           case-insensitive, so a lowercase `f` matched `class F` and became a
           CLASS REFERENCE — since classes-as-values landed that is a VT_CLASSREF
@@ -14607,9 +14608,14 @@ begin
         idx := IsRecordType(name);
         if idx = REC_NONE then
         begin
-          ci := FindUClass(name);
-          if ci >= 0 then
-            idx := REC_UCLASS_BASE + ci;
+          { Use the class ALREADY resolved above, do not resolve it a second
+            time. `ctorCi` honours the unit qualifier; a fresh `FindUClass(name)`
+            here is flat, so it silently answered the other unit's `Exception`
+            and `idx` — which is what every consumer below uses (RecSize, the
+            overload match, the emitted class) — disagreed with `ctorCi`. Two
+            lookups for one question, and only one of them had the fix. }
+          if ctorCi >= 0 then
+            idx := REC_UCLASS_BASE + ctorCi;
         end;
         prevTok := RecSize(idx);
 
@@ -14714,8 +14720,48 @@ begin
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) then
       begin
-        ci := FindUClass(name);
+        { Same qualified resolution as the `.Create` fast path above: a bare
+          FindUClass here is flat, so `sysutils.Exception.CreateFmt` picked
+          whichever unit's `Exception` registered first. }
+        ci := -1;
+        if qUnit >= 0 then ci := FindUClassInUnit(name, qUnit);
+        if ci < 0 then ci := FindUClass(name);
+        if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual STATICM name=', name,
+          ' mem=', GetTokenStr(TokPos+1), ' qunit=', qUnit, ' flat=', FindUClass(name),
+          ' -> ci=', ci);
         mmi := FindUMeth(ci, GetTokenStr(TokPos+1));
+        if (mmi >= 0) and (qUnit >= 0) and UMthIsCtor[mmi] and
+           (not UMthIsStatic[mmi]) then
+        begin
+          { A QUALIFIED, NAMED constructor: `sysutils.Exception.CreateFmt(..)`.
+            The fast path above matches only the exact spelling `Create`, and
+            everything else fell through to ParseLValueAST's class-member arm,
+            which resolves the class flat and never sees a qualifier — so the
+            wrong unit's constructor ran and `CreateFmt('[%5d]',[3])` came out
+            `[%5d]` instead of `[    3]`.
+
+            Construction itself is NOT reimplemented here: this hands off to
+            BuildMetaclassNew, the same builder the unqualified arm uses, so the
+            two shapes differ only in how the class is looked up. Gated on
+            qUnit >= 0 deliberately — with no qualifier there is nothing this
+            path knows that the existing one does not. }
+          mcCtorNm := GetTokenStr(TokPos+1);
+          Next;                        { consume class name }
+          Expect(tkDot, '.');          { CurTok is now the ctor name }
+          i := FindUMethOverloadAhead(ci, mcCtorNm, CountCallArgsAhead);
+          if i < 0 then i := FindUMeth(ci, mcCtorNm);
+          if i >= 0 then
+          begin
+            EnforceMethVis(i, mcCtorNm);
+            Next;                      { consume ctor name }
+            mselfArg := AllocNode(AN_CLASSREF);
+            ASTIVal[mselfArg] := ci;
+            ASTTk[mselfArg] := Ord(tyPointer);
+            CurASTNode := BuildMetaclassNew(mselfArg, ci, i);
+            LastExprTk := tyClass;
+            Exit;
+          end;
+        end;
         if mmi >= 0 then
         begin
           if UMthIsStatic[mmi] then
