@@ -8,3 +8,10 @@ ib: True
 user: 7
 multi: ('a', 42)
 miss: 7 (7,)
+vtype: (42,) 42 42
+vtype: (3.5,) 3.5 3.5
+vtype: (True,) True True
+vtype: ('s',) 's' s
+emptystr: ('',) 1
+noarg: () 0
+subclass: (9,) 10

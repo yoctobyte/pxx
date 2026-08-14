@@ -50,3 +50,35 @@ try:
     d[7]
 except KeyError as e:
     print("miss:", str(e), repr(e.args))
+
+# bug-nilpy-non-keyerror-exception-args-loses-the-argument-type: every exception
+# below the root used to take a STRING message, so a non-string argument was
+# rendered at the construction site and its type was gone —  ValueError(42).args
+# was ('42',), so `e.args[0] == 42` was False and `e.args[0] + 1` raised. The
+# root ctor takes a Variant now, so args keeps the argument's own type for every
+# exception, not only KeyError. The frontend needed no change: it already
+# branches on the ctor's declared parameter type.
+for arg in (42, 3.5, True, "s"):
+    try:
+        raise ValueError(arg)
+    except ValueError as e:
+        print("vtype:", repr(e.args), repr(e.args[0]), str(e))
+
+# an empty STRING is a real one-element tuple; an absent argument is not
+try:
+    raise ValueError("")
+except ValueError as e:
+    print("emptystr:", repr(e.args), len(e.args))
+try:
+    raise ValueError()
+except ValueError as e:
+    print("noarg:", repr(e.args), len(e.args))
+
+# a user subclass inherits the widened ctor
+class MyNum(Exception):
+    pass
+
+try:
+    raise MyNum(9)
+except MyNum as e:
+    print("subclass:", repr(e.args), e.args[0] + 1)
