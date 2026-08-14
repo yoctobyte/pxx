@@ -40,7 +40,7 @@ lives in git, not in a timestamp._
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (220)
+## backlog (221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -152,6 +152,7 @@ lives in git, not in a timestamp._
 | feature-lib-mimic-string | B | 40 | feature | Write lib/pcl/mimic_string.pas — ascii_lowercase, ascii_uppercase, digits, punctuation, whitespace, capwords. The resolver now prefers a mimic_ shim over a same-named C header, so this is the half that makes `import string` in a .npy stop finding /usr/include/string.h. | — |
 | feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | — |
 | feature-lib-strutils-ansi-predicate-family | B | 25 | feature | lib/rtl/strutils is missing the Ansi* predicate family FPC and Delphi ship — AnsiContainsStr/Text, AnsiStartsStr, AnsiEndsStr, AnsiIndexStr, AnsiReplaceStr — plus AddChar/AddCharR. PadLeft/PadRight are already there, so this is a gap in one corner rather than a missing unit. Found when a differential sweep against FPC would not compile until they were deleted from the probe. | — |
+| feature-lib-sysutils-strtodate-and-strtodatetime | B | 30 | feature | lib/rtl/sysutils has StrToTime but no StrToDate, StrToDateTime, or any of the TryStrToDate/Time/DateTime variants — the parse direction of the date surface is half absent while the format direction (FormatDateTime, EncodeDate, DecodeDate) is complete. Found when a differential probe would not compile against pxx. | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 8 | feature | NilPy: type MODULE locals from the AST too | — |
@@ -422,9 +423,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1783)
+## done (1784)
 
-1783 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1784 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -620,6 +621,7 @@ lives in git, not in a timestamp._
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [A] compat-pascal-writeln-of-a-single-uses-double-width
 - [p 30] [D] docs-publish-the-three-language-rounding-table
+- [p 30] [B] feature-lib-sysutils-strtodate-and-strtodatetime
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse

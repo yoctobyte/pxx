@@ -3148,39 +3148,77 @@ begin
     S[i] := Buf[i - 1];
 end;
 
+{ Raises ECONVERTERROR, not a bare Exception: `on E: EConvertError do` is the
+  handler every FPC/Delphi caller writes around a parse, and a bare Exception
+  walks straight past it — the catch is there, it just never fires. The rest of
+  this family (StrToInt, StrToInt64, StrToFloat, StrToQWord) already raises
+  EConvertError; this one was the odd arm out.
+
+  MILLISECONDS are accepted after a DecimalSeparator, as FPC does:
+  StrToTime('13:05:09.250') is 13:05:09.250 there and used to raise here.
+
+  It is a MILLISECOND FIELD, not a decimal fraction — measured, because the
+  obvious reading is wrong: FPC gives '13:05:09.25' → **25** ms and
+  '13:05:09.2' → **2** ms, where a decimal fraction would mean 250 and 200. So
+  the digits are read as a plain integer, at most three of them ('.1234'
+  RAISES rather than truncating), and only after a full h:m:s ('13:05.5'
+  raises).
+  ([[bug-b-strtotime-raises-the-wrong-class-and-rejects-milliseconds]]) }
 function StrToTime(const S: string): TDateTime;
 var
   part: array[0..2] of Integer;
-  np, i, v, digits: Integer;
+  np, i, v, digits, ms, msDigits: Integer;
   c: Char;
+  inFrac: Boolean;
+
+  procedure Bad;
+  begin
+    { FPC's exact wording — "is not a valid time", not "is an invalid time",
+      which is what the integer arms say. Callers match on message text. }
+    raise EConvertError.CreateFmt('"%s" is not a valid time', [S]);
+  end;
+
 begin
   part[0] := 0; part[1] := 0; part[2] := 0;
   np := 0;
   v := 0;
   digits := 0;
+  ms := 0; msDigits := 0; inFrac := False;
   for i := 1 to Length(S) do
   begin
     c := S[i];
     if (c >= '0') and (c <= '9') then
     begin
-      v := v * 10 + (Ord(c) - Ord('0'));
-      digits := digits + 1;
+      if inFrac then
+      begin
+        ms := ms * 10 + (Ord(c) - Ord('0'));
+        msDigits := msDigits + 1;
+        if msDigits > 3 then Bad;      { FPC rejects a 4th digit }
+      end
+      else
+      begin
+        v := v * 10 + (Ord(c) - Ord('0'));
+        digits := digits + 1;
+      end;
     end
-    else if (c = TimeSeparator) and (np < 2) and (digits > 0) then
+    else if (c = TimeSeparator) and (np < 2) and (digits > 0) and (not inFrac) then
     begin
       part[np] := v;
       np := np + 1;
       v := 0;
       digits := 0;
     end
+    else if (c = DecimalSeparator) and (not inFrac) and (digits > 0)
+            and (np = 2) then       { only after h:m:s, as FPC requires }
+      inFrac := True
     else if c <> ' ' then
-      raise Exception.Create('StrToTime: invalid time string');
+      Bad;
   end;
-  if digits = 0 then raise Exception.Create('StrToTime: invalid time string');
+  if digits = 0 then Bad;
+  if inFrac and (msDigits = 0) then Bad;
   part[np] := v;
-  if (part[0] > 23) or (part[1] > 59) or (part[2] > 59) then
-    raise Exception.Create('StrToTime: invalid time string');
-  Result := EncodeTime(part[0], part[1], part[2], 0);
+  if (part[0] > 23) or (part[1] > 59) or (part[2] > 59) then Bad;
+  Result := EncodeTime(part[0], part[1], part[2], ms);
 end;
 
 function FormatDateTime(const Fmt: string; DateTime: TDateTime): string;
