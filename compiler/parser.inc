@@ -14561,7 +14561,19 @@ begin
 
         argsHead := -1;
         lastArg := -1;
-        ctorCi := FindUClass(name);
+        { `sysutils.Exception.Create(..)` must construct SYSUTILS' class. The
+          qualifier was already consumed into qUnit above, and until now it was
+          only consumed — the class itself resolved by flat first match, so a
+          qualified name silently built whichever unit's class registered
+          first. That was invisible while at most one unit declared any given
+          class name; it stopped being invisible when pylib and sysutils each
+          got their own `Exception` (siblings under ExceptionBase). Falls back
+          to the flat lookup when the qualified one finds nothing, so a
+          qualifier that names a module rather than the declaring unit behaves
+          as before. }
+        ctorCi := -1;
+        if qUnit >= 0 then ctorCi := FindUClassInUnit(name, qUnit);
+        if ctorCi < 0 then ctorCi := FindUClass(name);
         ctorArgN := 0;
         if CurTok.Kind = tkLParen then
         begin
