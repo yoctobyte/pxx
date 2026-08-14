@@ -213,4 +213,4 @@ under pinned v300 (2 failures, the literal and the variable) and passes at HEAD,
 which is what makes it a regression test rather than a snapshot.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 92b9e7b8e.
