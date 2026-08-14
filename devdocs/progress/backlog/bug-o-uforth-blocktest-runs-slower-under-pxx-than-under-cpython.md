@@ -434,3 +434,52 @@ guessing which is the next entry below.
 Compiler at aca188198 + the variant half; pin v299 carries the Pascal half.
 Every number above is from a self-hosted fixedpoint build at that tree, not
 from the watcher's clone.
+
+### Re-profiled after the fix — the concat cost centre is gone, and the ticket's remaining 2.28x is something else
+
+Same instrument as the original profile (callgrind, addresses resolved through
+the `.map`; `perf` is still unusable on this box). Subject is a driver that
+INCLUDEs `prelimtest.fth` + `tester.fr` + `core.fr`, 12.1e9 Ir total. Not
+directly comparable to the earlier 2.43e9 run's absolute numbers — a different
+driver — but the SHARES are the point:
+
+| function | share before | share now |
+| --- | --- | --- |
+| **PXXStrConcat** | **62.5%** | **6.79%** |
+| PXXAlloc | 8.9% | 13.18% |
+| PXXStrFromLit | — | 9.28% |
+| PXXFree | 2.0% | 6.06% |
+| PXXStrAppend | (did not exist) | 5.21% |
+| PXXMemZero | 2.0% | 3.87% |
+| PXXRecordRelease | — | 3.36% |
+| pystr_isascii | 4.3% (pre-cause-A) | not in the top 20 |
+
+So the fix did land broadly — concat fell by a factor of nine as a share of a
+much larger run. **The 2.28x that remains is not concatenation.** It is
+allocation churn: `PXXAlloc + PXXStrFromLit + PXXFree` = **28.5%**, and the
+profile is now flat rather than having a pole.
+
+Two follow-ups this suggests, neither started, both needing their own sizing:
+
+1. **`PXXStrFromLit` at 9.28%** — every string literal materialises a fresh
+   heap block on every evaluation. `PXX_FLAG_STATIC` is defined and unused, and
+   interning or a static-block representation is the obvious shape. This is
+   likely the single biggest remaining item.
+2. **The byte-at-a-time copy loops.** `PXXMemMove`, `PXXMemZero`,
+   `PXXStrConcat` and `PXXStrAppend` all copy one byte per iteration in Pascal.
+   A word-at-a-time copy with a byte tail would help all of them at once, and
+   `PXXMemZero` at 3.87% is pure copy cost.
+
+Neither is a NilPy or a frontend question — both are shared runtime, so both
+stay Track O / file-owned by A, same as this ticket.
+
+### Status
+
+Cause A fixed (pin v298), cause B fixed (v299 + the variant half). The ticket's
+original subject — a compiled frontend losing to a bytecode interpreter — is
+**improved but not closed**: 2.80x -> 2.28x with output byte-identical
+throughout. Leaving this open at prio 65 with the allocation-churn diagnosis
+banked is the honest state; closing it on the concat fix would misreport it.
+
+`SLOW_SHARDS` should NOT be dismantled yet — that was conditioned on blocktest
+becoming ordinary, and a 2.28x ratio is not that.
