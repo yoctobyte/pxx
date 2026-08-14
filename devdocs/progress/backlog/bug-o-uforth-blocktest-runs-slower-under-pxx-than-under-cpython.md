@@ -3,6 +3,8 @@ summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython
 type: bug
 track: O
 prio: 65
+status: open
+
 ---
 
 # pxx-compiled uforth is 2.1x slower than CPython on `blocktest`
@@ -162,3 +164,138 @@ byte-exact oracle to hold itself against. Re-run with
 **Provenance:** compiler at f2f56c876, self-hosted fixedpoint build, not rebuilt
 during the runs; same tree, same input, stdin closed for both (the suite blocks
 on an interactive ACCEPT otherwise, which will look like a hang).
+
+## 2026-08-14 — PROFILED. Two O(n²) operations in the NilPy string runtime
+
+The ticket asked for a profile before anything was changed, and warned that its
+own guess ("a per-operation constant in the runtime") was a hypothesis. The
+guess was right in kind and badly understated in degree: these are not
+constants, they are **quadratics**.
+
+### Reproduced first, on the small subjects
+
+`perf` is unusable on this box (`perf_event_paranoid`), so the profile is
+callgrind — exact instruction counts, no sampling error. Subjects run with the
+real driver prelude (`prelimtest`/`tester`/`utilities`/`errorreport`), outputs
+byte-identical to CPython throughout:
+
+| word set | pxx | CPython | ratio |
+| --- | --- | --- | --- |
+| stringtest.fth | 1.75s | 0.47s | 3.7x |
+| memorytest.fth | 1.60s | 0.54s | 3.0x |
+| coreexttest.fth | 2.59s | 0.69s | 3.7x |
+
+Consistent with the ticket's table, so the small subjects are a valid proxy for
+`blocktest` and cost seconds instead of minutes.
+
+### The profile (callgrind, core.fr, 2.43e9 Ir total)
+
+| function | Ir | share | calls | Ir/call |
+| --- | --- | --- | --- | --- |
+| **PXXStrConcat** | 1.52e9 | **62.5%** | 635,620 | 2,712 |
+| PXXAlloc | 2.18e8 | 8.9% | 806,775 | 270 |
+| **pystr_isascii** | 1.04e8 | **4.3%** | 130,052 | 798 |
+| PXXFree | 4.9e7 | 2.0% | | |
+| PXXMemZero | 4.8e7 | 2.0% | | |
+
+633,626 of PXXAlloc's 806,775 calls come **from PXXStrConcat** — one fresh
+block per concatenation. pystr_isascii is called from `PyStrCharLen` (74,440)
+and `pystr_charat` (43,939).
+
+(The binary has no ELF symbols callgrind can read — resolve addresses through
+the `.map` the compiler emits beside the executable. `gdb`'s `info symbol` and
+`readelf` both answer "no symbol"; this is the same blindness noted for
+`readelf` on pxx binaries.)
+
+### Scaling curves — the decisive measurement
+
+Two NilPy micro-benchmarks, timed against CPython on the same box:
+
+```
+A:  s = s + "x"   in a loop            B:  c = s[i]   across the string
+n        pxx        cpython             n        pxx        cpython
+20000    0.836s     0.026s              20000    1.904s     0.018s
+40000    3.479s     0.039s              40000    7.827s     0.023s
+80000   16.049s     0.120s              80000   30.979s     0.029s
+160000 102.630s     0.815s              160000 123.811s     0.050s
+```
+
+**Every doubling of n quadruples the time.** Both are O(n²) where CPython is
+linear or flat. B is the sharper result: merely READING `s[i]` across a string
+is quadratic, and at n=160k pxx is **2,476x** slower than CPython at the same
+work.
+
+So the uforth ratio is not the finding — it is a mild symptom, diluted because
+uforth's strings are short. The finding is that two of the most ordinary
+operations in the language are quadratic.
+
+### Cause A — `s[i]` rescans the whole string, per index
+
+`PyStrCharLen` and `pystr_charat` both begin with `pystr_isascii(s)`, which
+scans every byte to decide whether character offsets equal byte offsets. That
+scan is O(n) and it happens on EVERY index, so an indexing loop is O(n²).
+`len(s)` is O(n) for the same reason.
+
+### Cause B — every concatenation allocates and copies the whole accumulation
+
+`PXXStrConcat` allocates a fresh block and copies both operands (2,712 Ir/call
+average, one PXXAlloc per call). `s = s + c` in a loop therefore copies the
+entire accumulated string every iteration. CPython's `str +=` is amortised O(1)
+because it reallocs in place when the target's refcount is 1. Same shape as the known
+SetLength-has-no-spare-capacity finding: an append that reallocates every time.
+
+### The fix for A already exists in the tree and is DELIBERATELY not wired up
+
+`PXX_FLAG_ASCII` ($0400) is a header bit `PXXStrFromLit` and `PXXStrConcat`
+already compute and stamp — for free, in a loop that touches every byte anyway.
+`pystr_isascii` could read it in O(1). The previous author left the note at
+`pylib.pas:2139` saying exactly why they did not:
+
+> *reading the meta word of a block that may never have carried a header is a
+> claim that has to be MEASURED, and a false positive there is a silent wrong
+> answer — so the flag is deliberately a separate change*
+
+**That hazard is real, and it is structural rather than a matter of coverage.**
+`PXXStrMeta` stamps `PXX_KIND_LEGACY` (= 0) as the kind for BOTH cases:
+
+```pascal
+if (orAll and $80) = 0 then PXXStrMeta := PXX_KIND_LEGACY or PXX_FLAG_ASCII
+else PXXStrMeta := PXX_KIND_LEGACY;
+```
+
+So a zero meta word means either "stamped, and NOT ascii" or "no header here at
+all". A block that never carried one (a `.rodata` literal — note
+`PXX_FLAG_STATIC` is defined and unused) returns whatever bytes precede it, and
+if bit $0400 happens to be set the answer is "ASCII" for a non-ASCII string:
+wrong character offsets, silently.
+
+**So the fix is not "read the flag" — it is "make the meta word self-certifying
+first".** A positive validity marker (a magic in the unused high bits, checked
+before any flag is trusted) turns the ambiguity into a decidable question, and
+only then is the O(1) read safe. That is the design step, and it is exactly the
+kind of thing this ticket's own instructions say not to guess at.
+
+### Recommended sequencing
+
+1. **A first, and it is the bigger win** — it fixes indexing, `len()`,
+   iteration and slicing at once, and it is bounded: a validity marker plus one
+   changed function body.
+2. **B second** — in-place append when the target block's refcount is 1 and the
+   block has spare capacity. Bigger blast radius (it changes the allocator
+   contract) and it shares ground with the SetLength ticket, so they should be
+   sized together.
+3. Re-measure the uforth ratio the way this ticket specifies, and re-measure
+   both scaling curves — a fix that does not flatten the curve has not worked,
+   whatever the wall time says.
+
+### Routing
+
+Stays **O** (file-owned by A): both causes are in `compiler/builtin/**`
+(builtinheap's block header, pylib's string helpers), not in NilPy lowering. The
+ticket's own routing note is satisfied — this was decided from the profile.
+
+### State: diagnosed, not fixed
+
+Parked deliberately rather than microfixed. Nothing is half-applied — no
+compiler change was made — so this returns to the backlog with the diagnosis
+banked, per `devdocs/dev/root-cause-over-microfix.md`.
