@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-13T22:52:38Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b2cb54156a1fe38197653b46a50226ded9d15fde",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-13T23:05:14Z",
    "fixed": [
     "test-core#src:test/test_uses_order_pylib_exception_a.pas"
@@ -415,6 +407,14 @@
    "sha": "20d431781fa7d4bce3b7dd9b3e86909dd08d7221",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-14T16:50:44Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "dfbe25026dae0ff515992ec07c5779e8e51b83d1",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -689,6 +689,7 @@
   "test-arm32#src:test/test_variant_class_cross.pas": "full",
   "test-asm#src:compiler/compiler.pas": "native",
   "test-asm#src:test/hello.pas": "native",
+  "test-asm#src:test/test_asm_cpuid.pas": "native",
   "test-asm#src:test/test_asm_entry_global.asm": "native",
   "test-asm#src:test/test_asm_extern.asm": "native",
   "test-asm#src:test/test_asm_hello.asm": "native",
@@ -696,6 +697,7 @@
   "test-asm#src:test/test_asm_mvp.asm": "native",
   "test-asm#src:test/test_asm_obj.asm": "native",
   "test-asm#src:test/test_asm_so.asm": "native",
+  "test-asm#src:test/test_asm_sse_packed.pas": "native",
   "test-asm#src:test/test_asm_sse_scalar.pas": "native",
   "test-asm#src:test/test_asmcore_aarch64.pas": "native",
   "test-asm#src:test/test_asmcore_arm32.pas": "native",
@@ -3095,6 +3097,7 @@
   "test-arm32#src:test/test_variant_class_cross.pas": "pass",
   "test-asm#src:compiler/compiler.pas": "pass",
   "test-asm#src:test/hello.pas": "pass",
+  "test-asm#src:test/test_asm_cpuid.pas": "pass",
   "test-asm#src:test/test_asm_entry_global.asm": "pass",
   "test-asm#src:test/test_asm_extern.asm": "pass",
   "test-asm#src:test/test_asm_hello.asm": "pass",
@@ -3102,6 +3105,7 @@
   "test-asm#src:test/test_asm_mvp.asm": "pass",
   "test-asm#src:test/test_asm_obj.asm": "pass",
   "test-asm#src:test/test_asm_so.asm": "pass",
+  "test-asm#src:test/test_asm_sse_packed.pas": "pass",
   "test-asm#src:test/test_asm_sse_scalar.pas": "pass",
   "test-asm#src:test/test_asmcore_aarch64.pas": "pass",
   "test-asm#src:test/test_asmcore_arm32.pas": "pass",
@@ -5223,11 +5227,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-14T16:29:11Z",
-  "sha": "20d431781fa7d4bce3b7dd9b3e86909dd08d7221",
+  "date": "2026-08-14T16:50:44Z",
+  "sha": "dfbe25026dae0ff515992ec07c5779e8e51b83d1",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 1144.7
+  "wall": 1207.4
  },
  "last_bench": {
   "conf_rows": 550,
