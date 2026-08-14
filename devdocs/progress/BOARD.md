@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-nilpy-exception-repr-and-type-name-say-pyexception | N | 60 | bug | `repr(Exception('x'))` prints `PyException('x')` and `type(e).__name__` is `PyException`, where CPython says `Exception`. Introduced 2026-08-14 by the option-5 rename: ClassName reports the DECLARED class name and the declared name is now PyException. Ordinary Python branches on type(e).__name__, so this is an upward-compatibility break, not a cosmetic one. | decide-merge-variant-c-with-bare-name-collision |
 
 ## unfinished (9)
 
@@ -36,7 +38,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (217)
+## backlog (216)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,7 +66,6 @@ _none_
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
-| bug-nilpy-exception-repr-and-type-name-say-pyexception | N | 60 | bug | `repr(Exception('x'))` prints `PyException('x')` and `type(e).__name__` is `PyException`, where CPython says `Exception`. Introduced 2026-08-14 by the option-5 rename: ClassName reports the DECLARED class name and the declared name is now PyException. Ordinary Python branches on type(e).__name__, so this is an upward-compatibility break, not a cosmetic one. | decide-merge-variant-c-with-bare-name-collision |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
@@ -463,7 +464,6 @@ _none_
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [U] decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [N] bug-nilpy-exception-repr-and-type-name-say-pyexception
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa

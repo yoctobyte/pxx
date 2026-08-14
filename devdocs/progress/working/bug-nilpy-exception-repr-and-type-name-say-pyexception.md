@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: [decide-merge-variant-c-with-bare-name-collision]
 summary: "`repr(Exception('x'))` prints `PyException('x')` and `type(e).__name__` is `PyException`, where CPython says `Exception`. Introduced 2026-08-14 by the option-5 rename: ClassName reports the DECLARED class name and the declared name is now PyException. Ordinary Python branches on type(e).__name__, so this is an upward-compatibility break, not a cosmetic one."
+status: working
+owner: agent-an
 ---
 
 # `repr()` and `type(e).__name__` leak the internal `PyException` name
