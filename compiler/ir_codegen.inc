@@ -1708,6 +1708,47 @@ begin
   end;
 end;
 
+{ x86's cvttsd2si/cvtsd2si write the "integer indefinite" value, INT64_MIN, when
+  the source does not fit — for a huge positive, a huge negative and a NaN
+  alike. So Trunc(1e30), Trunc(-1e30) and Trunc(0/0) all came back
+  -9223372036854775808: an out-of-range magnitude became a legal-looking number,
+  and a caller narrowing that to Integer got 0 (its low 32 bits), so a range
+  guard like `if Trunc(x) > limit` PASSED.
+
+  aarch64, arm32 and riscv32 already produce the IEEE 754-2008 answer, because
+  fcvtzs and the softfloat kernels saturate: +overflow -> High(Int64),
+  -overflow -> Low(Int64), NaN -> 0. Three targets agreeing is the specification
+  here, and the policy for this whole family was settled in
+  decide-may-uses-math-cost-the-heap-and-exception-runtime: pxx keeps IEEE
+  masked semantics and saturates, FPC's EInvalidOp goes behind an opt-in flag.
+  So the work is making x86 agree with ARM, not inventing behaviour.
+
+  Checking the RESULT rather than pre-checking the float RANGE is what makes
+  this cheap: one integer compare and a not-taken branch on every in-range
+  conversion. The equivalent range guard in Floor64 measured +53%.
+  INT64_MIN is also the correct answer for a source that really is
+  -9223372036854775808.0, and the fixup recomputes exactly that for it, so the
+  false positive costs a few instructions and changes nothing.
+  bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently }
+procedure EmitF2ISaturateX64;
+var pDoneNE, pDoneNaN, pDoneHi: Integer;
+begin
+  EmitB($48); EmitB($BA); EmitI64(Int64($8000000000000000));  { mov rdx, INT64_MIN }
+  EmitB($48); EmitB($39); EmitB($D0);                         { cmp rax, rdx }
+  EmitB($75); pDoneNE := CodeLen; EmitB(0);                   { jne .done }
+  EmitB($31); EmitB($C0);                                     { xor eax, eax (NaN -> 0) }
+  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C0);             { ucomisd xmm0, xmm0 }
+  EmitB($7A); pDoneNaN := CodeLen; EmitB(0);                  { jp .done  (NaN) }
+  EmitB($66); EmitB($0F); EmitB($57); EmitB($C9);             { xorpd xmm1, xmm1 }
+  EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);             { comisd xmm0, xmm1 }
+  EmitB($48); EmitB($B8); EmitI64(Int64($7FFFFFFFFFFFFFFF));  { mov rax, INT64_MAX }
+  EmitB($77); pDoneHi := CodeLen; EmitB(0);                   { ja .done  (source > 0) }
+  EmitB($48); EmitB($B8); EmitI64(Int64($8000000000000000));  { mov rax, INT64_MIN }
+  Code[pDoneNE]  := Byte(CodeLen - (pDoneNE + 1));
+  Code[pDoneNaN] := Byte(CodeLen - (pDoneNaN + 1));
+  Code[pDoneHi]  := Byte(CodeLen - (pDoneHi + 1));
+end;
+
 procedure EmitWriteVariant;
 { On entry rax = address of a 16-byte variant slot: [tag:8][payload:8].
   Reads the tag and dispatches to the matching scalar writer. Clobbers the
@@ -5412,9 +5453,15 @@ begin
             begin
               EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
               if specialId = 203 then
-              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0); end   { cvttsd2si rax, xmm0 }
+              begin
+                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);           { cvttsd2si rax, xmm0 }
+                EmitF2ISaturateX64;
+              end
               else if specialId = 204 then
-              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C0); end   { cvtsd2si rax, xmm0 }
+              begin
+                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C0);           { cvtsd2si rax, xmm0 }
+                EmitF2ISaturateX64;
+              end
               else if specialId = 206 then
               begin
                 EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);           { cvttsd2si rax, xmm0 }

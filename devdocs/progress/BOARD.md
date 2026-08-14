@@ -36,12 +36,11 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (219)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
-| bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently | A | 25 | bug | Trunc(1e30), Round(1e30) and Trunc(Inf) all return -9223372036854775808 — the x86 integer indefinite value that cvttsd2si produces when the conversion is invalid. FPC raises EInvalidOp for every one of them. These are compiler BUILTINS lowered straight to the conversion op, so the RTL cannot guard them the way Floor/Ceil now are; the check belongs at the lowering or in the FPU mode. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-b-rtl-math-transcendentals-lose-argument-reduction | B | 35 | bug | lib/rtl/math.pas's sin/cos lose accuracy as the argument grows — 85 ulps at x=100, 1.2 MILLION ulps at 1e6, and 2.4 BILLION at 1e10, where the answer has no correct digits left. Bad argument reduction, not last-bit rounding. pxx's OWN crtl libm already gets every one of these exactly right, so the fix is to share it, not to write one. | — |
@@ -417,9 +416,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1792)
+## done (1793)
 
-1792 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1793 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -628,7 +627,6 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 30] [D] task-d-document-warn-ignored-directives
-- [p 25] [A] bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [N] bug-n-math-pow-domain-error-raises-the-wrong-exception
 - [p 25] [N] bug-nilpy-a-one-name-tuple-loop-target-is-refused

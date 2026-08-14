@@ -687,6 +687,39 @@ end;
   leave edx:eax; consumers that only need 32 bits keep eax (correct
   truncation). ---- }
 
+{ The i386 twin of EmitF2ISaturateX64 — same defect, different instruction. x87's
+  fisttp/fistp write the "integer indefinite" value, INT64_MIN, when the source
+  does not fit, so Trunc(1e30), Trunc(-1e30) and Trunc(0/0) all came back
+  -9223372036854775808. aarch64/arm32/riscv32 already give the IEEE 754-2008
+  answer (+overflow -> High, -overflow -> Low, NaN -> 0) and that is the decided
+  policy, so x86 is what has to move.
+  Result in edx:eax, source still live in xmm0.
+  bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently }
+procedure EmitF2ISaturate386;
+var pHi, pLo, pNaN, pNeg, pEnd: Integer;
+begin
+  EmitB($81); EmitB($FA); EmitI32(Int32($80000000));   { cmp edx, INT64_MIN>>32 }
+  EmitB($75); pHi := CodeLen; EmitB(0);                { jne .done }
+  EmitB($85); EmitB($C0);                              { test eax, eax }
+  EmitB($75); pLo := CodeLen; EmitB(0);                { jne .done }
+  EmitB($31); EmitB($C0);                              { xor eax, eax }
+  EmitB($31); EmitB($D2);                              { xor edx, edx  (NaN -> 0) }
+  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C0);      { ucomisd xmm0, xmm0 }
+  EmitB($7A); pNaN := CodeLen; EmitB(0);               { jp .done (NaN) }
+  EmitB($66); EmitB($0F); EmitB($57); EmitB($C9);      { xorpd xmm1, xmm1 }
+  EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);      { comisd xmm0, xmm1 }
+  EmitB($76); pNeg := CodeLen; EmitB(0);               { jbe .neg }
+  EmitB($B8); EmitI32(Int32(-1));                      { mov eax, $FFFFFFFF }
+  EmitB($BA); EmitI32(Int32($7FFFFFFF));               { mov edx, $7FFFFFFF (INT64_MAX) }
+  EmitB($EB); pEnd := CodeLen; EmitB(0);               { jmp .done }
+  Code[pNeg] := Byte(CodeLen - (pNeg + 1));            { .neg: eax already 0 }
+  EmitB($BA); EmitI32(Int32($80000000));               { mov edx, $80000000 (INT64_MIN) }
+  Code[pHi]  := Byte(CodeLen - (pHi + 1));
+  Code[pLo]  := Byte(CodeLen - (pLo + 1));
+  Code[pNaN] := Byte(CodeLen - (pNaN + 1));
+  Code[pEnd] := Byte(CodeLen - (pEnd + 1));
+end;
+
 function Is64Bit386(tk: TTypeKind): Boolean;
 begin
   Result := (tk = tyInt64) or (tk = tyUInt64);
@@ -2694,6 +2727,7 @@ begin
                 EmitB($8B); EmitB($04); EmitB($24);                        { mov eax, [esp] }
                 EmitB($8B); EmitB($54); EmitB($24); EmitB($04);            { mov edx, [esp+4] }
                 EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
+                EmitF2ISaturate386;
               end
               else if j = 204 then
               begin
@@ -2706,6 +2740,7 @@ begin
                 EmitB($8B); EmitB($04); EmitB($24);                        { mov eax, [esp] }
                 EmitB($8B); EmitB($54); EmitB($24); EmitB($04);            { mov edx, [esp+4] }
                 EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
+                EmitF2ISaturate386;
               end
               else if j = 205 then
               begin

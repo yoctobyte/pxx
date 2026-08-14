@@ -4,6 +4,8 @@ prio: 25
 type: bug
 blocked-by: []
 summary: "Trunc(1e30), Round(1e30) and Trunc(Inf) all return -9223372036854775808 — the x86 integer indefinite value that cvttsd2si produces when the conversion is invalid. FPC raises EInvalidOp for every one of them. These are compiler BUILTINS lowered straight to the conversion op, so the RTL cannot guard them the way Floor/Ceil now are; the check belongs at the lowering or in the FPU mode."
+status: done
+owner: agent-AN
 ---
 
 # `Trunc` / `Round` of an out-of-range double return INT64_MIN silently
@@ -125,3 +127,81 @@ per the table above.
 
 The table above matches FPC, `make test` + self-host fixedpoint, and the
 cross-target sweep agrees rather than each backend giving its own wrong answer.
+
+## Resolution
+
+Saturate, uniformly, on every backend — the default the ticket says was already
+decided. Implemented by making x86 agree with ARM rather than by inventing
+behaviour, exactly as the ticket predicted the shape would be.
+
+### ARM was the specification, not a data point
+
+`aarch64`, `arm32` AND `riscv32` all already produced the IEEE 754-2008 answer,
+and produced the *same* one:
+
+```
++overflow -> High(Int64)     -overflow -> Low(Int64)     NaN -> 0
+```
+
+Three independent backends agreeing is a specification. x86-64 and i386 wrote
+the integer-indefinite value, INT64_MIN, for all five of those cases. So the
+fix is a fixup after the conversion on those two, and nothing at all on the
+other three.
+
+### Cheap, because it checks the RESULT and not the RANGE
+
+The ticket weighed option (2) — a range check before the conversion — and
+priced it at the **+53%** `Floor64`'s guard measured. That is not what this
+costs, because the sentinel is *detectable in the result*: one integer compare
+against INT64_MIN plus a not-taken branch, with the whole recompute (NaN test,
+sign test, two immediate loads) sitting on a path that only an out-of-range
+value reaches.
+
+Measured, 20M `Trunc` calls at `-O2`, three runs each:
+
+| | time |
+| --- | --- |
+| before | 0.10 / 0.09 / 0.09 s |
+| after | 0.09 / 0.09 / 0.10 s |
+
+No measurable cost. That is the whole reason this could be the default rather
+than a flag.
+
+### The false positive is harmless BY CONSTRUCTION, and is tested
+
+`-9223372036854775808.0` is exactly representable and its `Trunc` is
+legitimately INT64_MIN — which is also the sentinel, so the fixup fires on it.
+It then recomputes: not NaN, source negative, therefore `Low(Int64)` — the same
+answer. Cost: a few instructions on one input. Pinned in the test as
+`exactmin`, alongside `two63` (one ulp past representable, which must saturate).
+
+### Verified on every target, not just the one that changed
+
+| | before | after |
+| --- | --- | --- |
+| x86-64 | INT64_MIN for all five | saturating, NaN 0 |
+| i386 | INT64_MIN for all five | saturating, NaN 0 |
+| aarch64 / arm32 / riscv32 | already correct | unchanged |
+
+`test/test_cross_trunc_round_saturate.pas` — the five out-of-range shapes for
+BOTH `Trunc` and `Round`, both boundary values, plus the ordinary values and
+the round-half-to-even cases that must not move — is **byte-identical across all
+five targets**. Wired natively AND as a cross differential against the x86-64
+oracle on aarch64, arm32, i386 and riscv32, which is precisely the ticket's
+warning: a fix verified only on x86-64 would have read as green and stayed
+wrong on ARM, in both directions.
+
+Gate: `gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` + FPC seed
+canary) plus the five-target sweep. Backend code only, no frozen builtin, so no
+re-pin.
+
+### Still open, deliberately
+
+The `--strict-fpc` flag that UNMASKS the invalid-operation exception and raises
+`EInvalidOp` like FPC remains
+[[compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags]]. This ticket was
+only ever the default path, and the default is now consistent and documented
+rather than per-ISA accident.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

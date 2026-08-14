@@ -5037,6 +5037,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_varrec_alloc_after26)" = "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
 	./$(COMPILER) test/test_format_single_arg.pas $(TESTTMP)/test_fmt_single26
 	test "$$($(TESTTMP)/test_fmt_single26)" = "$$(printf '0.10000000149011612\n0.1000\n1.0000000149011612E-001\n2.5000\n3.7500 -0.5000\n0.2000\n0.1000 42 7.5000 x\n0.1000 2.5000\n1.2500')"
+	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_trsat26
+	test "$$($(TESTTMP)/test_trsat26 | head -5)" = "$$(printf 't+1e30=9223372036854775807 r=9223372036854775807\nt-1e30=-9223372036854775808 r=-9223372036854775808\nt+inf =9223372036854775807 r=9223372036854775807\nt-inf =-9223372036854775808 r=-9223372036854775808\ntnan  =0 r=0')"
 	./$(COMPILER) -Futest test/test_array_of_const_cross_unit_overload.pas $(TESTTMP)/test_aoc_xunit26
 	test "$$($(TESTTMP)/test_aoc_xunit26)" = "$$(printf 'g-aoc:one n=1\ng-aoc:two n=2\ng-aoc:none n=0\ng-var:x\nk-set: dTue')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26
@@ -6355,6 +6357,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_i386_varparam.pas $(TESTTMP)/test_i386_varparam
 	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_i386_varparam_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varparam)" = "$$($(TESTTMP)/test_i386_varparam_x64)"
+	./$(COMPILER) --target=i386 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_i386_trsat
+	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_i386_trsat_x64
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_trsat)" = "$$($(TESTTMP)/test_i386_trsat_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_int64.pas $(TESTTMP)/test_i386_int64
 	./$(COMPILER) test/test_i386_int64.pas $(TESTTMP)/test_i386_int64_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_int64)" = "$$($(TESTTMP)/test_i386_int64_x64)"
@@ -6740,6 +6745,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_syscall.pas $(TESTTMP)/test_aarch64_syscall
 	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_aarch64_syscall_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_syscall)" = "$$($(TESTTMP)/test_aarch64_syscall_x64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_aarch64_trsat
+	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_aarch64_trsat_x64
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_trsat)" = "$$($(TESTTMP)/test_aarch64_trsat_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_int64.pas $(TESTTMP)/test_aarch64_int64
 	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_aarch64_int64_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_int64)" = "$$($(TESTTMP)/test_aarch64_int64_x64)"
@@ -7284,6 +7292,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_stack_params.pas $(TESTTMP)/test_rv32x_stack_params
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_stack_params.pas $(TESTTMP)/test_rv32x_stack_params_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_stack_params)" = "$$($(TESTTMP)/test_rv32x_stack_params_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_rv32x_trsat
+	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_rv32x_trsat_x64
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_trsat)" = "$$($(TESTTMP)/test_rv32x_trsat_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_int64.pas $(TESTTMP)/test_rv32x_int64
 	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_rv32x_int64_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_int64)" = "$$($(TESTTMP)/test_rv32x_int64_x64)"
@@ -7581,6 +7592,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_stack_params.pas $(TESTTMP)/test_arm32_stack_params
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_stack_params.pas $(TESTTMP)/test_arm32_stack_params_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_stack_params)" = "$$($(TESTTMP)/test_arm32_stack_params_x64)"
+	./$(COMPILER) --target=arm32 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_arm32_trsat
+	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_arm32_trsat_x64
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_trsat)" = "$$($(TESTTMP)/test_arm32_trsat_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_int64.pas $(TESTTMP)/test_arm32_int64
 	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_arm32_int64_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_int64)" = "$$($(TESTTMP)/test_arm32_int64_x64)"
