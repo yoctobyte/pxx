@@ -246,4 +246,4 @@ covering both halves and the sibling target shapes they share a parser with
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 6ea4ce1d6.
