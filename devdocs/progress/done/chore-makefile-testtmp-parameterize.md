@@ -324,4 +324,4 @@ each other and with any scratch file anyone leaves at that name.
 So a green gate here means *the recipe half is closed*, and nothing more.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit b2cab6b6b.
