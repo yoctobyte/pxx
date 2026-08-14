@@ -4,6 +4,7 @@ prio: 45
 type: decide
 blocked-by: []
 summary: "Settled by the governing rule (user, 2026-08-13): the DEFAULT follows the reference implementation per frontend — CPython for .npy, FPC for .pas — deviations behind --strict-*. So shadowing is ALLOWED and PREFERRED, `reserved` needs the bar 'principally unsolvable', and the tier is a compatibility statement rather than a convenience. What is left to decide: the marker's spelling, whether `print` stops being a token, and whether a --strict-python peer is wanted."
+status: decided
 ---
 
 # Classify library routines by how strongly they own their name
@@ -143,3 +144,62 @@ ignores); `format(7.5, ".1f")` correct with and without `import json`;
 `Format(fmt, [args])` still correct from Pascal; and one intercept deleted per
 mechanism the predicate replaces, so the count of ways to answer this question
 goes DOWN.
+
+## CLOSED 2026-08-14 — the three remainders fall out of rules decided the same day
+
+> *"This is all like one big umbrella ticket, how we deal with the cross-language
+> unit import."*
+
+The **resolution rule** half was already settled by the 2026-08-13 governing
+rule (default follows the reference implementation per frontend — CPython for
+`.npy`, FPC for `.pas`). The three items left were narrower, and two of them are
+now answered by principles established while clearing the rest of the Track U
+queue.
+
+### 1. The marker's spelling — DIRECTIVE
+
+```pascal
+function len(l: TPyList): Integer; builtin;
+```
+
+Not a registry unit listing name + tier + frontend. This is the same principle
+as [[feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit]]
+chose for dialect marking, and the same one `{$MIMIC FPC}` already embodies:
+**the fact lives in the source, with the thing it describes** — explicit,
+greppable, and it travels with the routine if the file moves. A registry splits
+the fact from the routine and rots the moment someone adds a builtin without
+updating it.
+
+### 2. `print` as a token — DEFERRED, and recorded as a known deviation
+
+The rule says `print` must stop being a token, because `def print` is legal
+Python and today's refusal is an implementation accident. But `print` lexes to
+`tkwriteln`, so the cost is a lexer change plus every parser arm keying on that
+token — paid for a shape almost nobody writes.
+
+**Deferred, and it goes in the tier table as a KNOWN DEVIATION rather than being
+left to look like a rule.** That is the same judgement applied all day to
+synthetic cases: the rule is right, the case is not worth the machinery yet, and
+the honest move is to write down that we diverge rather than pretend we do not.
+Revisit when [[feature-nilpy-thirdparty-libraries-as-targets]] trips over it —
+that campaign is what would surface a real `def print`.
+
+### 3. `--strict-python` — MOOT, it already exists
+
+The question was whether to reserve the name. `grep -ohE '\-\-strict-[a-z-]+'
+compiler/*.inc` lists it alongside `--strict-case`, `--strict-fpc`,
+`--strict-uses`, `--strict-operator`, `--strict-overload`, `--strict-visibility`
+and `--strict-ir`. Nothing to decide; what it *enforces* is a separate campaign
+whenever someone wants one.
+
+### Not closed by this
+
+The two defects this ticket uncovered are filed separately and neither waited on
+it: the `open` one-liner and the cross-unit overload merge. C and Zig get the
+same treatment when they need it — the tiers are per-frontend by design.
+
+**If the `print` call is wrong**, it is the one item here worth reopening on:
+say so and it becomes a Track N work ticket rather than a deviation row.
+
+## Log
+- 2026-08-14 — decided, commit PENDING-COMMIT.
