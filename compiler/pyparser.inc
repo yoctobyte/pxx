@@ -9590,6 +9590,20 @@ begin
     helper that cannot live in a builtin unit (see the ticket).
     bug-n-math-trunc-and-log-need-frontend-intercepts }
   else if dotted = 'math.log' then Result := 'Ln'
+  { math.pow -- the RTL spells it `Power`, and the name `pow` cannot be added to
+    the RTL at all: it hijacks libc's in every C program
+    (bug-c-pascal-math-names-hijack-libc-through-pxxcio, measured: pow(2,10)
+    answered 1). A pure NAME difference again, and MEASURED to agree with
+    CPython to the last bit -- unlike NilPy's own float `**`, which is a
+    separate 1-ulp path (bug-nilpy-float-pow-loses-a-ulp-vs-libm) and is NOT
+    what this resolves to.
+
+    math.atan2 is still absent, and stays absent: ArcTan2 is 1 ulp off CPython
+    for atan2(0.5, 1) (0.46364760900080615 vs ...09), so mapping it would be a
+    silently wrong value in the last place. Blocked on a correctly-rounded libm,
+    not on this table.
+    bug-n-math-trunc-and-log-need-frontend-intercepts }
+  else if dotted = 'math.pow' then Result := 'Power'
   else Result := '';
 end;
 
@@ -9624,9 +9638,19 @@ end;
 
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer;
 var procIdx, callNode, argNode, lastArg, i, nArgs: Integer;
+    lnA, lnB, lnArg, divNode: Integer;   { math.log(x, base) — see below }
 begin
   nArgs := 0;
-  procIdx := FindProc(pname);
+  { Python's math module is FLOAT-ONLY, so when the shim name has an all-Double
+    overload that is the one it means. Arity cannot tell them apart —
+    `Power(Integer, Integer): Integer` and `Power(Double, Double): Double` both
+    take two, and the integer one is declared first — so a plain name lookup
+    gave `math.pow(2.0, 0.5)` the truncating integer power and answered 1.
+    Only this one name asks, so no other stdlib shim changes its answer.
+    bug-n-math-trunc-and-log-need-frontend-intercepts }
+  procIdx := -1;
+  if pname = 'Power' then procIdx := FindProcArityDouble(pname, 2);
+  if procIdx < 0 then procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   for i := 1 to nTok do Next;          { the dotted name; CurTok = '(' }
   Expect(tkLParen, '(');
@@ -9671,10 +9695,51 @@ begin
     wrote. Say what is actually unsupported, and why, since the workaround is
     one line of user code.
     bug-n-math-trunc-and-log-need-frontend-intercepts }
+  { math.log(x, base) — lowered HERE, in the frontend, as the division of two
+    Ln calls, and deliberately not mapped to the RTL's LogN.
+
+    The two oracles genuinely disagree and each is right for its own language:
+    CPython computes a plain unsnapped quotient (`log(1000, 10)` is
+    2.9999999999999996) while FPC's LogN lands exactly on 3.0, and pxx's LogN
+    matches FPC. Ordinary code branches on the difference — `int(math.log(n,
+    10))` differs by one — so this is upward compatibility, not a rounding
+    nicety.
+
+    A frontend lowering rather than a `pymath_log` shim because pylib is a
+    BUILTIN unit and there is no `Ln` to call from one: Ln lives in
+    lib/rtl/math.pas, and `uses math` from pylib would put the RTL's Min/Max
+    beside pylib's own min/max overloads — the recorded "builtin overload
+    competes with a used-unit routine" hazard, for a silent re-resolution in
+    every NilPy program. Route 2 of the ticket, and it keeps the builtin unit
+    out of it entirely. The shim table maps a dotted name to ONE proc, which is
+    why this cannot be a table entry.
+
+    It writes exactly the workaround the refusal used to suggest, so the value
+    is the one that was measured to match CPython.
+    bug-n-math-trunc-and-log-need-frontend-intercepts }
   if (pname = 'Ln') and (nArgs = 2) then
-    Error('Nil Python: math.log(x, base) is not supported yet — CPython '
-        + 'computes it as an unsnapped log(x)/log(base), which the RTL''s LogN '
-        + 'does not reproduce. Write math.log(x) / math.log(base)');
+  begin
+    lnArg := ASTLeft[callNode];                  { arg 0 = x }
+    lnA := AllocNode(AN_CALL);
+    ASTIVal[lnA] := procIdx;
+    ASTTk[lnA] := Ord(Procs[procIdx].RetType);
+    ASTRight[lnA] := ProcRetRecId[procIdx];
+    ASTLeft[lnA] := lnArg;
+    lnB := AllocNode(AN_CALL);
+    ASTIVal[lnB] := procIdx;
+    ASTTk[lnB] := Ord(Procs[procIdx].RetType);
+    ASTRight[lnB] := ProcRetRecId[procIdx];
+    ASTLeft[lnB] := ASTRight[lnArg];             { arg 1 = base }
+    ASTRight[lnArg] := -1;                       { each Ln takes ONE argument }
+    divNode := AllocNode(AN_BINOP);
+    ASTIVal[divNode] := Ord(tkSlash);
+    ASTTk[divNode] := Ord(tyDouble);
+    ASTLeft[divNode] := lnA;
+    ASTRight[divNode] := lnB;
+    LastExprTk := tyDouble;
+    Result := divNode;
+    Exit;
+  end;
   if nArgs <> Procs[procIdx].ParamCount then
   begin
     i := FindProcArity(pname, nArgs);

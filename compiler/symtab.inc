@@ -4752,6 +4752,33 @@ end;
 
   Scans rather than walking the hash chain in one pass because it must consider
   EVERY same-named entry, not stop at the first. }
+{ FindProcArity, narrowed to the overload whose parameters are all DOUBLE.
+  Arity alone cannot tell `Power(base, exponent: Integer): Integer` from
+  `Power(base, exponent: Double): Double` — both take two — and the integer one
+  is declared first, so a name lookup hands NilPy's `math.pow` an int-returning
+  truncating power: `math.pow(2.0, 0.5)` answered 1 where CPython says
+  1.4142135623730951. Python's math module is float-only, so "the all-Double
+  arm" is exactly the right question for it to ask.
+  bug-n-math-trunc-and-log-need-frontend-intercepts }
+function FindProcArityDouble(const name: AnsiString; nArgs: Integer): Integer;
+var i, k: Integer; allD: Boolean;
+begin
+  FindProcArityDouble := -1;
+  for i := 0 to ProcCount - 1 do
+    if CaseEqual(Procs[i].Name, name) and (Procs[i].ParamCount = nArgs) and
+       (Procs[i].RetType = tyDouble) then
+    begin
+      allD := True;
+      for k := 0 to nArgs - 1 do
+        if Procs[i].Params[k].TypeKind <> tyDouble then allD := False;
+      if allD then
+      begin
+        FindProcArityDouble := i;
+        Exit;
+      end;
+    end;
+end;
+
 function FindProcArity(const name: AnsiString; nArgs: Integer): Integer;
 var i: Integer;
 begin

@@ -3,6 +3,8 @@ track: N
 prio: 35
 type: bug
 summary: "math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program"
+status: working
+owner: agent-AN
 ---
 
 # `math.trunc`, `math.log(x, base)`, `math.pow`, `math.copysign` and `math.atan2` need `pymath_*` intercepts

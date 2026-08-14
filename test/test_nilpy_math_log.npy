@@ -6,12 +6,16 @@
 # stdlib call table maps it, the same way math.floor/ceil/trunc are mapped for
 # a CONTRACT difference.
 #
-# math.log(x, base) is deliberately still refused: CPython computes it as an
-# unsnapped log(x)/log(base) and the RTL's LogN snaps to an exact integer for
-# powers of the base, so mapping it there would answer 3.0 where CPython says
-# 2.9999999999999996 — a silently wrong value in the last place, which is worse
-# than a refusal. The refusal names math.log rather than the internal Ln, and
-# the exact quotient a user writes instead is the last row here.
+# math.log(x, base) is lowered in the FRONTEND as the division of two Ln calls,
+# and deliberately NOT mapped to the RTL's LogN: CPython computes an unsnapped
+# log(x)/log(base) while LogN snaps to an exact integer for powers of the base,
+# so LogN would answer 3.0 where CPython says 2.9999999999999996 — a silently
+# wrong value in the last place. Ordinary code branches on it: int(math.log(n,
+# 10)) differs by one, which is the int(...) row below.
+#
+# A lowering rather than a pymath_log shim because pylib is a BUILTIN unit and
+# cannot reach Ln at all (it lives in lib/rtl/math.pas), and `uses math` there
+# would put the RTL's Min/Max beside pylib's own min/max overloads.
 #
 # Expectations are CPython's own output.
 
@@ -26,3 +30,34 @@ print("floor/ceil", math.floor(-2.5), math.ceil(-2.5))
 print("trunc    ", math.trunc(-2.5), math.trunc(2.5))
 print("copysign ", math.copysign(3, -1))
 print("base by hand", math.log(1000) / math.log(10))
+
+print("base 10  ", math.log(1000, 10))
+print("base 2   ", math.log(8, 2), math.log(1024, 2))
+print("floats   ", math.log(100.0, 10.0), math.log(2.5, 1.5))
+
+# the row the divergence is ABOUT: LogN's snapped 3.0 would truncate to 3
+print("int()    ", int(math.log(1000, 10)))
+
+# ...and through variables, so it is not a constant-folded literal shape
+n = 1000
+b = 10
+print("via vars ", math.log(n, b))
+
+# math.pow — the RTL spells it `Power`, and `pow` cannot be added to the RTL at
+# all (it hijacks libc's in every C program). Two things had to be true, and
+# only the first was obvious:
+#
+#   the NAME must map                     — a table entry, like math.log
+#   the DOUBLE overload must be chosen    — Power(Integer,Integer):Integer is
+#                                           declared first and arity cannot tell
+#                                           them apart, so a name lookup gave
+#                                           math.pow(2.0, 0.5) the truncating
+#                                           integer power: it answered 1
+#
+# The values are the RTL Power's and were MEASURED equal to CPython's to the
+# last bit — which NilPy's own float `**` is not (it is 1 ulp off, a separate
+# path: bug-nilpy-float-pow-loses-a-ulp-vs-libm). So math.pow is not `**`.
+print("pow ints ", math.pow(2, 10))
+print("pow frac ", math.pow(2.0, 0.5), math.pow(3.0, 2.5))
+print("pow neg  ", math.pow(-2, 3), math.pow(10, -3))
+print("pow edge ", math.pow(0, 0), math.pow(9, 0.5), math.pow(1e150, 2))
