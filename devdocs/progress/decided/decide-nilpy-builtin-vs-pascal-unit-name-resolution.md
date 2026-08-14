@@ -202,4 +202,4 @@ same treatment when they need it — the tiers are per-frontend by design.
 say so and it becomes a Track N work ticket rather than a deviation row.
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit cf922c994.
