@@ -288,4 +288,4 @@ sysutils, no exception runtime.
 FPC 3.2.2, `test_math.pas` still heap-free.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit dfb6299cf.
