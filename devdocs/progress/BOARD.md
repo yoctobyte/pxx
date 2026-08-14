@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-n-an-uninterpretable-annotation-refuses-the-program | N | 60 | bug | A parameter annotation NilPy cannot interpret (`type[X]`, `Sequence[X]`, `Iterable[X]`) is a hard ERROR, so the whole program is refused for a construct CPython does not enforce at all. Upward compatibility says an annotation it cannot read must degrade to Any, exactly as an ABSENT one already does — 29 of 168 neuzelaar files, the largest language gap once dotted imports landed. | — |
+_none_
 
 ## unfinished (8)
 
@@ -38,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (219)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -57,6 +55,7 @@ _none_
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry | N | 50 | bug | A class defining `__eq__` without `__hash__` is unhashable in CPython — `d[V(1)] = x` raises TypeError. NilPy stores it and a content-equal lookup then misses, so the entry goes in and never comes out, silently. Refuse the store with CPython's message. Must NOT touch classes with no `__eq__`, which are identity-hashable in both and are the imported-object-pointer use case. | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
+| bug-n-typevar-call-is-an-undefined-variable | N | 55 | bug | `MessageT = TypeVar(\"MessageT\")` at module scope dies with `undefined variable (TypeVar)`: `typing` is a consumed-and-ignored import, so the names it exports that have a RUN-TIME call form — TypeVar, Generic, NewType, cast — are bound to nothing. The largest remaining language gap in the neuzelaar census once unreadable annotations stopped refusing modules. | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
 | bug-nilpy-a-one-name-tuple-loop-target-is-refused | N | 25 | bug | `for (x,) in pairs:` — a one-name PARENTHESISED loop target with a trailing comma — is refused. Python unpacks the 1-tuple; a single-name target here would bind the whole element, so this needs an unpack, not just comma tolerance. | — |
 | bug-nilpy-case-mapping-cannot-change-code-point-count | N | 30 | bug | `'ß'.upper()` answers 'ß' where CPython answers 'SS', and `'İ'.lower()` answers 'İ' where CPython answers 'i̇'. pystr_upper/pystr_lower map byte by byte, so a case mapping that changes the code-point COUNT cannot be expressed at all. ASCII and Latin-1 are correct. | — |
@@ -419,9 +418,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1771)
+## done (1772)
 
-1771 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1772 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -483,6 +482,7 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [C] bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
 - [p 55] [N] bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent
+- [p 55] [N] bug-n-typevar-call-is-an-undefined-variable
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland

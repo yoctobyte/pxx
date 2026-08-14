@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:6 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1771 rejected:37`
+`unfinished:8 blocked:6 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1772 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-n-an-uninterpretable-annotation-refuses-the-program` [N] — owner: agent-AN
+_none — no lane is locked._
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
@@ -31,7 +31,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 203, ranked
+## Ready — top 30 of 204, ranked
 
 - `[p 70] [T]` regression-test-asm-test-asm-avx
 - `[p 70] [P]` regression-test-core-test-conformance-1
@@ -49,6 +49,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [C]` bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
 - `[p 55] [N]` bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent
+- `[p 55] [N]` bug-n-typevar-call-is-an-undefined-variable
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -62,6 +63,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
 - `[p 50] [N]` bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry
 - `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
-- `[p 50] [D]` doc-cross-language-name-resolution-rules
 
-_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
