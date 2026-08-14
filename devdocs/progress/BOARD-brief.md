@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1741 rejected:35`
+`working:1 unfinished:8 blocked:3 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1741 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-nilpy-thirdparty-libraries-as-targets` [N] — owner: claude-A-N
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
@@ -28,7 +28,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 199, ranked
+## Ready — top 30 of 198, ranked
 
 - `[p 70] [A]` bug-pascal-uses-order-breaks-pylib-exception
 - `[p 70] [P]` regression-test-core-test-conformance-1
@@ -36,7 +36,6 @@ _none — no lane is locked._
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
-- `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
@@ -60,5 +59,6 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
+- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
-_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

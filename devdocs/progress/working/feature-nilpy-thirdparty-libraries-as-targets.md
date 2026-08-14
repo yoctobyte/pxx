@@ -376,3 +376,64 @@ falls out of the ladder:
 
 None of these is a per-library problem: the same nine serve every future Python
 app, which is the point the class-4 row of this ticket already makes.
+
+## RE-SCANNED 2026-08-14 at sha 618371ac3 — the ranking above is stale
+
+Same method as the 2026-08-09 scan, against the fetched pinned sources
+(`tools/install_lib_candidates.sh nilpy-stack`): every non-test `.py` of
+`webencodings` + `tinycss2` + `html5lib` compiled one at a time, ranked by its
+FIRST wall. **58 files, 8 compile.**
+
+| first wall | files |
+| --- | --- |
+| `no unit named six` | 13 |
+| **COMPILES** | **8** |
+| `no unit named webencodings` | 6 |
+| `no unit named xml_dom` | 3 |
+| `no unit named warnings` | 3 |
+| `no unit named codecs` | 3 |
+| `no unit named xml_sax_xmlreader` | 2 |
+| `no unit named genshi_core` | 2 |
+| `no unit named constants` | 2 |
+| `no unit named html5lib` / `tinycss2` / `pyperf` / `_utils` / `urllib_request` / `colorsys` / `argparse` / `setuptools` / `docutils` | 1 each |
+| `undefined variable (MULTILINE)` | 1 |
+| `undefined variable (os)` | 1 |
+| `undefined variable (python_implementation)` | 1 |
+| `unknown base class Mapping` | 1 |
+| a NESTED loop target (`for n, (p, q) in ...`) | 1 |
+
+### What changed since 2026-08-09, and it is worth stating
+
+The three LANGUAGE rows that scan reported are **gone**: `undefined variable
+(iter)` (5 files), `undefined variable (lookup)` (1) and `unexpected token` (1).
+`iter`/`next` were the scan's own "cheapest item on this list" and they are in.
+
+**Everything blocking the ladder now is a missing MODULE except five files.**
+That is the class-4 "stdlib-C edge" cost this ticket's table predicted, and it
+is Track B shim work, not Track N language work — so the honest read is that
+**Track N is no longer the bottleneck for this ladder.**
+
+### The five remaining LANGUAGE rows, and where they belong
+
+- **a NESTED loop target** — `for n, (p, q) in ...`. Ordinary Python, refused
+  with a clear diagnostic. The one genuine Track N item on this list.
+- **`unknown base class Mapping`** — `collections.abc`. A module, wearing a
+  language diagnostic.
+- **`MULTILINE` / `os` / `python_implementation`** — bare names that should have
+  come from `re` / `os` / `platform`; module surface, not syntax.
+
+### Provenance
+
+The compiler was a self-hosted fixedpoint build at **618371ac3**, and it was NOT
+rebuilt during the run — worth recording because the 2026-08-09 note in this
+file documents two scans disagreeing precisely because the pin moved underneath
+one of them.
+
+### Track N's own contribution since the last scan
+
+`bug-n-a-type-name-is-not-a-first-class-value` shipped (pins v287-v289): builtin
+types and `type(x)` are values now, which is what
+[[feature-nilpy-six-and-warnings-shims]] was blocked on. Measured directly
+against pip's vendored `six.py` (998 lines): it clears its whole language
+surface and stops at **line 25, `import functools`**. So `six` — 13 of these 58
+files — is now purely a shim job.
