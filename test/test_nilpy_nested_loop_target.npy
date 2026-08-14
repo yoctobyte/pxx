@@ -69,3 +69,33 @@ print({a: b for (a, b) in pairs})
 # a parenthesised FLAT target still means nothing, as it always did
 for (only) in [1, 2]:
     print(only)
+
+# --- the ASSIGNMENT form, the other half of the same ticket -----------------
+# `a, (b, c) = ...` was refused by name too. Same desugar: the group binds a
+# hidden name and the inner names are read out of it after every outer store.
+aa, (bb, cc) = (1, (2, 3))
+print(aa, bb, cc)
+(dd, ee), ff = ((4, 5), 6)
+print(dd, ee, ff)
+gg, (hh, ii, jj) = (7, (8, 9, 10))
+print(gg, hh, ii, jj)
+kk, (ll, mm) = 11, (12, 13)
+print(kk, ll, mm)
+
+# and every sibling target shape it shares a parser with must still work
+s1, s2 = 1, 2
+print(s1, s2)
+s1, s2 = s2, s1
+print(s1, s2)
+first, *restv = [1, 2, 3]
+print(first, restv)
+arr = [9, 8]
+arr[0], arr[1] = arr[1], arr[0]
+print(arr)
+
+class S:
+    pass
+
+sv = S()
+sv.x, sv.y = 3, 4
+print(sv.x, sv.y)

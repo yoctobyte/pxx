@@ -161,6 +161,13 @@ var
     feature-nilpy-starred-and-nested-unpacking }
   PyForNestName: array[0..PY_FOR_NEST_SLOTS, 0..PY_FOR_NEST_NAMES] of AnsiString;
   PyForNestCount: array[0..PY_FOR_NEST_SLOTS] of Integer;
+  { The same, for an ASSIGNMENT target list — `a, (b, c) = (1, (2, 3))`.
+    PyAsgNestHost is the HIDDEN name the group's slot was bound to, so the
+    unpack can be emitted from one helper at both of PyParseUnpackAssign's
+    exits instead of being written out twice. }
+  PyAsgNestName: array[0..PY_FOR_NEST_SLOTS, 0..PY_FOR_NEST_NAMES] of AnsiString;
+  PyAsgNestCount: array[0..PY_FOR_NEST_SLOTS] of Integer;
+  PyAsgNestHost: array[0..PY_FOR_NEST_SLOTS] of AnsiString;
   PyHdrName: AnsiString;
   PyHdrNParams: Integer;
   PyHdrIsProc: Boolean;
@@ -421,6 +428,7 @@ function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
   (regression-fpc-seed-drift-b1976-stale). }
 function PyParseFor: Integer; forward;
 function PyParseForTargetSlot(slot: Integer): AnsiString; forward; { Nil Python: one entry of a for target list; a `(p, q)` group becomes a hidden name }
+function PySkipTargetGroup(i: Integer): Integer; forward; { Nil Python: step over a `(a, b)` group in an unpack target list, or -1 }
 { Defined further down, beside the comprehension machinery that was its first
   caller; PyParseTry now renames an `except ... as` binder with it too, and that
   sits EARLIER in this include — the FPC seed build needs the forward. }
@@ -19532,6 +19540,72 @@ begin
   ASTTk[Result] := Ord(tyInteger);
 end;
 
+function PyParseAsgNestGroup(slot: Integer): AnsiString;
+{ `(b, c)` as one element of an assignment target list. Consumed here, returned
+  as the HIDDEN name its slot binds to, with the inner names recorded for
+  PyEmitNestedAsgUnpacks. The twin of PyParseForTargetSlot's group arm; kept
+  separate because an assignment target element also admits attributes,
+  subscripts and a star, none of which may appear inside a group here.
+  feature-nilpy-starred-and-nested-unpacking }
+var n: Integer;
+begin
+  if (slot < 0) or (slot > PY_FOR_NEST_SLOTS) then
+    Error('Nil Python: too many unpacking targets');
+  Next;                                  { '(' }
+  n := 0;
+  repeat
+    if CurTok.Kind = tkStar then
+      Error('Nil Python: a STARRED name inside a nested assignment target is '
+            + 'not supported yet');
+    if CurTok.Kind = tkLParen then
+      Error('Nil Python: an assignment target nested more than one level deep '
+            + '(`a, ((b, c), d) = ...`) is not supported yet');
+    if CurTok.Kind <> tkIdent then
+      Error('Nil Python: expected a name inside the nested assignment target');
+    if n > PY_FOR_NEST_NAMES then
+      Error('Nil Python: too many names in a nested assignment target');
+    PyAsgNestName[slot][n] := CurTok.SVal;
+    Inc(n);
+    Next;
+  until not Eat(tkComma);
+  Expect(tkRParen, ')');
+  if n < 2 then
+    Error('Nil Python: a nested assignment target needs at least two names');
+  PyAsgNestCount[slot] := n;
+  Result := PyHiddenName('anst');
+  PyAsgNestHost[slot] := Result;
+end;
+
+function PyEmitNestedAsgUnpacks(seq: Integer): Integer;
+{ `a, (b, c) = ...` — the inner names of every NESTED group in the target list,
+  read out of the hidden name its slot was bound to. Called at BOTH of
+  PyParseUnpackAssign's exits (the one-sequence branch and the
+  value-per-target one) so the two cannot diverge.
+
+  Emitted AFTER every outer store, which is what makes `(a, b), a = x, y` do
+  what Python does: the whole right-hand side is already in temps by then, so
+  ordering only affects which store wins, exactly as it does there.
+  feature-nilpy-starred-and-nested-unpacking }
+var i, j, hostSym, sym, node: Integer;
+begin
+  Result := seq;
+  for i := 0 to PY_FOR_NEST_SLOTS do
+  begin
+    if PyAsgNestCount[i] = 0 then Continue;
+    hostSym := PyProgSym(PyAsgNestHost[i]);
+    if hostSym < 0 then Continue;
+    for j := 0 to PyAsgNestCount[i] - 1 do
+    begin
+      sym := PyAssignTargetSym(PyAsgNestName[i][j]);
+      if sym < 0 then sym := AllocVar(PyAsgNestName[i][j], tyVariant);
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := PyMakeIdent(sym);
+      ASTRight[node] := PyPairItem(PyMakeIdent(hostSym), j);
+      Result := PySeqAppend(Result, node);
+    end;
+  end;
+end;
+
 function PyParseUnpackAssign: Integer;
 var names: array[0..7] of AnsiString;
     flds: array[0..7] of AnsiString;    { attribute target, or '' for a plain name }
@@ -19550,6 +19624,7 @@ var names: array[0..7] of AnsiString;
 begin
   nTargets := 0;
   starAt := -1;
+  for i := 0 to PY_FOR_NEST_SLOTS do PyAsgNestCount[i] := 0;
   repeat
     if CurTok.Kind = tkStar then
     begin
@@ -19561,8 +19636,21 @@ begin
       starAt := nTargets;
       Next;
     end;
-    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a name in the assignment target');
     if nTargets >= 8 then Error('Nil Python: at most 8 unpacking targets');
+    { a NESTED group — `a, (b, c) = ...`. Bound to a hidden name here like any
+      other target, and unpacked into the user's names after every outer store;
+      the same desugar the nested LOOP target uses, and for the same reason
+      (this target list is flat end to end). }
+    if CurTok.Kind = tkLParen then
+    begin
+      names[nTargets] := PyParseAsgNestGroup(nTargets);
+      flds[nTargets] := '';
+      subBase[nTargets] := -1;
+      subIdx[nTargets] := -1;
+      Inc(nTargets);
+      Continue;
+    end;
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a name in the assignment target');
     names[nTargets] := CurTok.SVal;
     flds[nTargets] := '';
     subBase[nTargets] := -1;
@@ -19749,7 +19837,7 @@ begin
         node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
       seq := PySeqAppend(seq, node);
     end;
-    Result := seq;
+    Result := PyEmitNestedAsgUnpacks(seq);
     Exit;
   end;
   if starAt >= 0 then
@@ -19769,7 +19857,7 @@ begin
                                   Syms[tmps[i]].TypeKind, Syms[tmps[i]].RecName);
     seq := PySeqAppend(seq, node);
   end;
-  Result := seq;
+  Result := PyEmitNestedAsgUnpacks(seq);
 end;
 
 { Step over any `[...]` groups a target element ends with, so the lookahead
@@ -19798,11 +19886,39 @@ begin
   Result := i;
 end;
 
+function PySkipTargetGroup(i: Integer): Integer;
+{ Step over a `(a, b)` group in a target list, answering the index just past its
+  `)`, or -1 when it is not a plain comma-separated NAME list — a parenthesised
+  expression, a call's arguments, anything deeper. -1 rather than the index, so
+  the lookahead declines the whole statement instead of half-claiming it.
+  feature-nilpy-starred-and-nested-unpacking }
+var n: Integer;
+begin
+  Result := -1;
+  if (i >= TokCount) or (Tokens[i].Kind <> tkLParen) then Exit;
+  Inc(i);
+  n := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind <> tkIdent then Exit;
+    Inc(i); Inc(n);
+    if (i < TokCount) and (Tokens[i].Kind = tkComma) then begin Inc(i); Continue; end;
+    if (i < TokCount) and (Tokens[i].Kind = tkRParen) then
+    begin
+      if n < 2 then Exit;
+      Result := i + 1;
+      Exit;
+    end;
+    Exit;
+  end;
+end;
+
 { Does an `a, b = ...` target list start here? Only a bare comma-separated name
   list followed by `=` qualifies — anything else is left to the ordinary paths. }
 function PyUnpackTargetAhead: Boolean;
-var i, nstar: Integer;
+var i, nstar: Integer; grp: Boolean;
 begin
+  grp := False;
   { A STAR is accepted as a target element now — `a, *rest = xs` and
     `*init, last = xs`. Exactly one, anywhere in the list, which is Python's own
     rule; a second one is left to PyParseUnpackAssign to refuse by name rather
@@ -19818,12 +19934,25 @@ begin
     Inc(i);
     if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
   end
+  else if Tokens[i].Kind = tkLParen then
+  begin
+    { the FIRST element may be the group — `(a, b), c = ...`. A flag, not a
+      look-back at Tokens[i-1]: after the skip, i points past the group's ')',
+      and inferring "was that a group?" from the token behind it also answers
+      yes for an ordinary name that merely follows a ')' on the previous line. }
+    grp := True;
+    i := PySkipTargetGroup(i);
+    if i < 0 then Exit;
+  end
   else if Tokens[i].Kind <> tkIdent then Exit;
-  Inc(i);                         { past the name }
-  { an ATTRIBUTE target counts as one name — `self.x, self.y = x, y` }
-  if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
-     (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
-  i := PySkipTargetSubscripts(i);
+  if not grp then
+  begin
+    Inc(i);                       { past the name }
+    { an ATTRIBUTE target counts as one name — `self.x, self.y = x, y` }
+    if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+       (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+    i := PySkipTargetSubscripts(i);
+  end;
   if (i >= TokCount) or (Tokens[i].Kind <> tkComma) then Exit;
   while i < TokCount do
   begin
@@ -19836,11 +19965,23 @@ begin
         if nstar > 1 then Exit;   { two stars: not ours, say so elsewhere }
         Inc(i);
       end;
-      if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
-      Inc(i);
-      if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
-         (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
-      i := PySkipTargetSubscripts(i);
+      { a NESTED group is one target element — `a, (b, c) = ...`. Without this
+        the list is not recognised as an unpack at all and the first NAME dies
+        as an expression statement, which is the "undefined variable (a)"
+        message this whole area exists to stop producing. }
+      if (i < TokCount) and (Tokens[i].Kind = tkLParen) then
+      begin
+        i := PySkipTargetGroup(i);
+        if i < 0 then Exit;
+      end
+      else
+      begin
+        if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
+        Inc(i);
+        if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+           (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+        i := PySkipTargetSubscripts(i);
+      end;
     end
     else if Tokens[i].Kind = tkAssign then begin Result := True; Exit; end
     else Exit;

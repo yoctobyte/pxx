@@ -1,4 +1,0 @@
-# feature-nilpy-starred-and-nested-unpacking — a NESTED assignment target.
-# Reported `undefined variable (a)` before.
-a, (b, c) = (1, (2, 3))
-print(a, b, c)
