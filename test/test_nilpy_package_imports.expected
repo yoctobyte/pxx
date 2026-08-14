@@ -1,0 +1,7 @@
+send: bus:hello
+count: 1
+normalise: example.com
+node: bus:div
+reexport same class: True
+module style: a.b c.d
+end

@@ -247,10 +247,34 @@ and splits three ways by `<u>` — the project's own top-level package name,
 a stdlib module name, or anything else. Everything that is not an import failure
 is a language gap.
 
-### The standing caveat
+### The standing caveat, and what was done about it
 
 The driving corpus lives **outside this repo**. No tier runs it, no tstate report
 regresses it, and every number here is a claim only the machine holding that
 checkout can verify. That is fine for exploration and not fine for gating: a
 census finding must be re-derived as an ordinary `.npy` test under `test/` before
 anything depends on it.
+
+**So the finding was vendored, not the corpus** (user, 2026-08-14). The census's
+dominant result — dotted imports never resolving to a source file — now has an
+in-repo fixture, `test/nilpy_units/pkgcorpus/` plus
+`test/test_nilpy_package_imports.npy`, which reproduces the diagnostic on any
+machine and is the gate for
+`feature-nilpy-dotted-imports-resolve-to-source-files`.
+
+Two things worth copying when the next finding gets vendored:
+
+- **Shape the fixture from what the corpus MEASURABLY does.** neuzelaar uses
+  absolute dotted imports exclusively and has **zero** relative imports across
+  168 files, so the fixture has none either. Relative imports are what everyone
+  assumes such a fixture needs; including them would have gated work nothing
+  needs yet.
+- **Do not wire a known-failing fixture into a gated target.** It goes red the
+  day it lands, for a known cause, which is the flakiness-shaped failure mode
+  Track T removes. Wire it in with the fix.
+
+What did NOT need vendoring: `__future__` and `@dataclass` already had thorough
+tests (`test_nilpy_future_import.npy`, and a dozen `test_nilpy_dataclass_*`).
+They were never untested — the ticket was simply never updated when they landed,
+which is the same "regenerate, don't remember" lesson from the top of this
+section wearing different clothes.

@@ -1,0 +1,61 @@
+# Absolute dotted imports must resolve to SOURCE FILES in a real package on
+# disk -- feature-nilpy-dotted-imports-resolve-to-source-files.
+#
+# CURRENTLY EXPECTED TO FAIL. It is the gate for that ticket, not a passing
+# test, and it is deliberately NOT wired into any gated Makefile target: a job
+# that goes red on the day it lands is the failure mode
+# bug-t-three-network-tests-flake-and-cost-real-debugging-time was closed to
+# remove. Wire it in with the fix.
+#
+# Today every line below reports
+#   error: import: no unit named mypkg_core_bus and no shim mimic_mypkg_core_bus
+# because a dotted path is only ever mangled onto a `mimic_*` SHIM unit -- the
+# mechanism built for standing in for third-party libraries -- and is never
+# tried as a file path. Flat sibling imports (`from bus import Bus`) already
+# work, for .py and .npy alike; only the dotted form is missing.
+#
+# Run from test/nilpy_units/pkgcorpus so `mypkg` is the package root:
+#   cd test/nilpy_units/pkgcorpus && pascal26 ../../test_nilpy_package_imports.npy /tmp/x
+#
+# .expected came from CPython and must keep coming from it:
+#   cd test/nilpy_units/pkgcorpus && PYTHONPATH=. python3 ../../test_nilpy_package_imports.npy
+# PYTHONPATH is NOT optional: CPython puts the SCRIPT's directory on sys.path,
+# not the cwd, so running this by path from elsewhere raises ModuleNotFoundError
+# -- which reads exactly like the oracle agreeing with our bug, and is not.
+#
+# The shapes are taken from what the neuzelaar corpus MEASURABLY uses, not from
+# what Python allows -- see pkgcorpus/README.md. Notably there are no relative
+# imports here because there are none in 168 corpus files.
+
+# 3-segment absolute dotted import -- the corpus's most common shape
+from mypkg.core.bus import Bus
+
+# a second one, to pin that it is not a one-off first-import special case
+from mypkg.core.origin import normalise
+
+# a subpackage that itself imports another subpackage: importing this must
+# resolve dom.py AND, transitively, the mypkg.core.bus it depends on
+from mypkg.document.dom import Node
+
+# the package's own __init__.py re-exports Bus, so this must name the SAME class
+from mypkg import Bus as ReexportedBus
+
+# module-style, plain and aliased
+import mypkg.core.origin
+import mypkg.core.origin as org
+
+b = Bus()
+print("send:", b.send("hello"))
+print("count:", b.sent)
+
+print("normalise:", normalise("EXAMPLE.COM"))
+
+n = Node("div")
+print("node:", n.emit())
+
+# the re-export must be the same class, not a second copy of it
+r = ReexportedBus()
+print("reexport same class:", type(r).__name__ == type(b).__name__)
+
+print("module style:", mypkg.core.origin.normalise("A.B"), org.normalise("C.D"))
+print("end")

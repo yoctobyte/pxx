@@ -86,10 +86,39 @@ argument for doing this first, not an argument against the number.
 - The mangled unit name is a flat namespace: `a.b_c` and `a_b.c` both mangle to
   `a_b_c`. Fine today; worth a diagnostic if it ever collides.
 
-## Gate
+## Gate — the fixture is already vendored and already reproduces this
 
-A real package on disk compiles from its entry point: `from a.b.c import X`,
-`import a.b`, `import a.b as ab`, and a package whose `__init__.py` re-exports.
-`test_nilpy_dotted_package_import.npy` still passes (shims must keep working).
-A new test with a genuine multi-directory package under `test/nilpy_units/`.
-Re-run the census: the intra-project column should collapse.
+`test/test_nilpy_package_imports.npy` against the package in
+`test/nilpy_units/pkgcorpus/`. **Written, committed, and currently failing with
+exactly the diagnostic above** — it is this ticket's gate, not a passing test.
+
+It is deliberately **NOT wired into any Makefile target**: a job that goes red on
+the day it lands is the failure mode
+[[bug-t-three-network-tests-flake-and-cost-real-debugging-time]] was closed to
+remove. Wire it in with the fix.
+
+Shapes covered, chosen from what the corpus MEASURABLY uses rather than from
+what Python allows (`pkgcorpus/README.md` has the counts):
+
+- 3-segment absolute dotted import — the corpus's dominant shape
+- a second one, so a fix cannot special-case the first import
+- a subpackage importing another subpackage (`document.dom` <- `core.bus`),
+  which must resolve transitively
+- a re-exporting `__init__.py`, and the re-exported name must be the SAME class
+- `import a.b` and `import a.b as ab`
+
+**No relative imports**, because neuzelaar has zero across 168 files. That is the
+shape everyone assumes such a fixture needs; measuring said otherwise. Relative
+imports are a separate feature — scope them explicitly if wanted, do not assume
+they fall out of this.
+
+`test_nilpy_dotted_package_import.npy` must still pass (shims keep working).
+
+Expected output is CPython's, in `test_nilpy_package_imports.expected`.
+**Regenerate it with `PYTHONPATH=.` from the package dir** — CPython puts the
+SCRIPT's directory on `sys.path`, not the cwd, so running it by path from
+elsewhere raises `ModuleNotFoundError` and reads exactly like the oracle
+agreeing with our bug.
+
+Then re-run the census (`devdocs/dev/python-libraries.md` §7): the intra-project
+column should collapse.
