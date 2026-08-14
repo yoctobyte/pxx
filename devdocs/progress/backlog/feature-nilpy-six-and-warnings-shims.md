@@ -2,7 +2,6 @@
 track: B
 prio: 45
 type: feature
-blocked-by: bug-n-a-type-name-is-not-a-first-class-value
 ---
 
 # `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign
@@ -152,3 +151,23 @@ the shim either.
 [[bug-n-a-type-name-is-not-a-first-class-value]] and its user-class sibling.
 Nothing here is worth writing until a class can be passed as a value.
 
+
+## 2026-08-14 (claude-A-N) — UNBLOCKED. The language half is done; measured against the real six.py
+
+`bug-n-a-type-name-is-not-a-first-class-value` is resolved, so the frontmatter
+blocker is cleared. Every line this ticket called load-bearing now compiles and
+answers correctly:
+
+    text_type = str            binary_type = bytes
+    string_types = (str,)      integer_types = (int,)
+    class_types = (type,)      isinstance(s, string_types)
+
+`type` as a value was the last piece and landed with pin v288.
+
+**Then measured rather than assumed:** compiled pip's vendored `six.py` (998
+lines) with the compiler at HEAD. It no longer stops on anything about types —
+it stops at **line 25, `import functools`**, which is precisely the shim work
+this ticket is for. `itertools` and `operator` are the two imports behind it.
+
+So the remaining job here is what the title says and nothing more: write the
+shims. Nothing in Track N blocks it now.
