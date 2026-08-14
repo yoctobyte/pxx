@@ -7237,7 +7237,7 @@ begin
   Result := node;
 end;
 
-function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean;
+function ParamIsVarRecArrayAt(procIdx, argNo: Integer): Boolean;
 { True when proc procIdx's parameter argNo is an `array of const` (open array whose
   element record is TVarRec) — the signal to parse a `[...]` argument as a
   TVarRec element vector rather than a set literal. }
@@ -7250,6 +7250,47 @@ begin
             (argNo >= 0) and (argNo < Procs[procIdx].ParamCount) and
             Procs[procIdx].Params[argNo].IsArray and
             (Procs[procIdx].Params[argNo].TypeKind = tyRecord);
+end;
+
+function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean;
+{ ...asked of the whole visible OVERLOAD SET, not just the candidate the name
+  happened to resolve to first.
+
+  This decision is made BEFORE overload resolution — the parser has to know
+  whether `[...]` is a TVarRec vector or a set literal in order to parse it at
+  all — so asking only the first candidate made the answer depend on which unit
+  came first in the uses clause. With two units both exporting `g`, one taking
+  `array of const`, putting THAT unit last made `g('%s', ['a'])` fail with
+
+      argument types: (ShortString, set)
+      candidates: g(Variant, AnsiString)
+                  g(AnsiString, record)
+
+  — both candidates found, so the merge was fine; the literal had simply
+  already been parsed as a set and could no longer match. The failure looked
+  like the call was wrong when nothing was.
+
+  A SET parameter anywhere at this slot vetoes it: then `[...]` really may be a
+  set, and guessing the other way would break a working call to buy this one.
+  Nothing in the tree has an overload set that mixes the two, so the veto costs
+  nothing today and keeps the rule honest.
+  bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set }
+var i: Integer; hasVarRec, hasSet: Boolean;
+begin
+  Result := ParamIsVarRecArrayAt(procIdx, argNo);
+  if Result or (procIdx < 0) or not ProcOverloadDirective[procIdx] then Exit;
+  hasVarRec := False;
+  hasSet := False;
+  i := ProcChainHead(Procs[procIdx].Name);
+  while i >= 0 do
+  begin
+    if ParamIsVarRecArrayAt(i, argNo) then hasVarRec := True
+    else if (argNo >= 0) and (argNo < Procs[i].ParamCount) and
+            (not Procs[i].Params[argNo].IsArray) and
+            (Procs[i].Params[argNo].TypeKind = tySet) then hasSet := True;
+    i := ProcHashNext[i];
+  end;
+  Result := hasVarRec and not hasSet;
 end;
 
 function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean;

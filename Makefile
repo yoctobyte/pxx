@@ -5037,6 +5037,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_varrec_alloc_after26)" = "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
 	./$(COMPILER) test/test_format_single_arg.pas $(TESTTMP)/test_fmt_single26
 	test "$$($(TESTTMP)/test_fmt_single26)" = "$$(printf '0.10000000149011612\n0.1000\n1.0000000149011612E-001\n2.5000\n3.7500 -0.5000\n0.2000\n0.1000 42 7.5000 x\n0.1000 2.5000\n1.2500')"
+	./$(COMPILER) -Futest test/test_array_of_const_cross_unit_overload.pas $(TESTTMP)/test_aoc_xunit26
+	test "$$($(TESTTMP)/test_aoc_xunit26)" = "$$(printf 'g-aoc:one n=1\ng-aoc:two n=2\ng-aoc:none n=0\ng-var:x\nk-set: dTue')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26
 	test "$$($(TESTTMP)/test_aoc_types26)" = "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt3: 0.25\nvt11: hi')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_write_pchar26
