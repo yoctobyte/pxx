@@ -329,7 +329,8 @@ function FloatToStrF(value: Double; precision: Integer): AnsiString;
 function FloatToStrExact(value: Double; sigDigits: Integer): AnsiString;
 function FloatToStrShortest(value: Double): AnsiString;
 
-{ String -> float. StrToFloatDef returns def on malformed; StrToFloat returns 0. }
+{ String -> float. StrToFloatDef returns def on malformed; StrToFloat RAISES
+  EConvertError, as FPC does and as the integer arms of this family already did. }
 function StrToFloatDef(const s: AnsiString; def: Double): Double;
 function StrToFloat(const s: AnsiString): Double;
 
@@ -1439,6 +1440,8 @@ end;
 
 function StrToCurr(const s: AnsiString): Currency;
 begin
+  { raises through StrToFloat, and FPC's message for a bad currency is the
+    same '"%s" is an invalid float' — verified, not assumed }
   Result := StrToFloat(s);
 end;
 
@@ -1676,21 +1679,27 @@ const
   EXDEC_INMAX = 1200;
 var i, digit, e, k: Integer; c: Char; neg, eneg: Boolean;
     w, p: Double; in_frac, started, estarted, sticky: Boolean;
-    ds: AnsiString; fracCount, nd, expo, lead: Integer; sig: Int64;
+    ds, t: AnsiString; fracCount, nd, expo, lead: Integer; sig: Int64;
 begin
   Result := def;
+  { FPC skips whitespace at BOTH ends before parsing, and its notion of
+    whitespace is any char <= ' ' — measured, not assumed: #0, #1, #11 and #12
+    around a float are all accepted there, which is exactly Trim's rule. This
+    skipped leading SPACES only, so StrToFloat('1.5 ') and StrToFloat(#9'1.5')
+    were rejected and returned the default.
+    ([[bug-b-strtofloat-returns-0-for-malformed-input-and-rejects-trailing-space]]) }
+  t := Trim(s);
   i := 1; neg := False; w := 0.0; in_frac := False; started := False;
   ds := ''; fracCount := 0; sticky := False;
-  while (i <= Length(s)) and (s[i] = ' ') do i := i + 1;
-  if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
+  if (i <= Length(t)) and ((t[i] = '-') or (t[i] = '+')) then
   begin
-    if s[i] = '-' then neg := True;
+    if t[i] = '-' then neg := True;
     i := i + 1;
   end;
   e := 0; eneg := False; estarted := True;
-  while i <= Length(s) do
+  while i <= Length(t) do
   begin
-    c := s[i];
+    c := t[i];
     if (c >= '0') and (c <= '9') then
     begin
       digit := Ord(c) - Ord('0');
@@ -1714,15 +1723,15 @@ begin
     begin
       { exponent: [+|-]digits to the END of the string ('1e0', '1.2E+003') }
       i := i + 1;
-      if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
+      if (i <= Length(t)) and ((t[i] = '-') or (t[i] = '+')) then
       begin
-        if s[i] = '-' then eneg := True;
+        if t[i] = '-' then eneg := True;
         i := i + 1;
       end;
       estarted := False;
-      while i <= Length(s) do
+      while i <= Length(t) do
       begin
-        c := s[i];
+        c := t[i];
         if (c < '0') or (c > '9') then Exit;
         e := e * 10 + (Ord(c) - Ord('0'));
         estarted := True;
@@ -1794,7 +1803,15 @@ end;
 
 function StrToFloat(const s: AnsiString): Double;
 begin
-  Result := StrToFloatDef(s, 0.0);
+  { FPC parity: raises EConvertError on malformed input (used to return 0).
+    The integer arms of this family — StrToInt, StrToInt64, StrToQWord — were
+    migrated to raising and the FLOAT arms were left behind, so `StrToFloat`
+    of user input answered 0 for garbage. That is the silent-wrong-value shape:
+    0 is a plausible number the caller carries on with. Message text matches
+    FPC's exactly, since callers match on it.
+    ([[bug-b-strtofloat-returns-0-for-malformed-input-and-rejects-trailing-space]]) }
+  if not TryStrToFloat(s, Result) then
+    raise EConvertError.CreateFmt('"%s" is an invalid float', [s]);
 end;
 
 function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
