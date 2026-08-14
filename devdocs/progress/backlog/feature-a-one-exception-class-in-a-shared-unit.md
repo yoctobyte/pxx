@@ -524,3 +524,35 @@ Corrected picture of the whole hunt:
 Three reasoned conclusions, all wrong; three probes, all decisive. The two
 fixes were right the first time and the measurements that said otherwise were
 each reading a different downstream failure.
+
+### FOURTH probe — the two fixes WORK. The residue is PROPERTY/method lookup only.
+
+```pascal
+program q4; uses pylib, sysutils;
+var se: sysutils.Exception;
+begin se := sysutils.Exception.Create('su hi'); WriteLn('msg=[', se.msg, ']'); end.
+```
+```
+msg=[su hi]
+```
+
+Correct. Every earlier probe read `.Message` — a PROPERTY — and got garbage;
+reading the FIELD `.msg` on the identical program works. So:
+
+- qualified class resolution: **FIXED**, both positions, by the two commits on
+  the branch;
+- field access through the resolved class: **correct**;
+- **property and method lookup on the resolved class is the one remaining flat
+  lookup** — `Message` and `CreateFmt` both still bind pylib's, which is why
+  `[%5d]` stayed unpadded and `.Message` stayed garbage.
+
+That is a much smaller, precisely located job than anything this ticket has
+described so far, and it is the LAST piece: find the property/method resolution
+site, give it the class index that was already resolved instead of re-resolving
+the name flat.
+
+Final score of the hunt: four reasoned conclusions, all wrong; four probes, all
+decisive — and the last one overturned the third. Every wrong turn came from
+reading a downstream symptom (garbage bytes) as evidence about an upstream
+mechanism (which parse site ran). The bytes were always telling the truth about
+something else.
