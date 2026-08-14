@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:4 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1760 rejected:35`
+`unfinished:8 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1760 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -36,6 +36,7 @@ _none — no lane is locked._
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -44,15 +45,14 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
+- `[p 55] [A]` feature-a-own-language-first-symbol-resolution (unblocks 1)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [C]` bug-c-cast-to-float-in-value-position-does-not-round-to-single
-- `[p 55] [P]` bug-pascal-uses-clause-duplicate-name-resolves-first-not-last
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` chore-makefile-testtmp-parameterize
 - `[p 55] [U]` decide-reprice-nilpy-ast-typing-module-scope
 - `[p 55] [A]` feature-a-declaration-phase
-- `[p 55] [A]` feature-a-own-language-first-symbol-resolution
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
