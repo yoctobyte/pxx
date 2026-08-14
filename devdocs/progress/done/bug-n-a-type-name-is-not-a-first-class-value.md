@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 summary: "`t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not"
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -223,3 +223,6 @@ the first wall of the html5lib ladder in
 CPython, byte-identical, wired into `test-nilpy`. `make compiler/pascal26`
 fixedpoint + `tools/gate.sh quick` GREEN. This touches `compiler/builtin/**`, so
 it needs a pin before other lanes see it.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
