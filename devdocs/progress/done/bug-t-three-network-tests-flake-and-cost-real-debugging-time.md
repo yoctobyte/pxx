@@ -116,4 +116,4 @@ without it, a probe that always passes proves nothing.
 `tools/gate.sh quick` GREEN; all eight Track T devtests pass.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit c409b2774.
