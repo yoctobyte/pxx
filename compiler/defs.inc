@@ -168,7 +168,13 @@ const
                             Self (Params[0]); paramKinds is `arity` Int64
                             Ord(TTypeKind) words (nil when arity=0); flags bit0 =
                             published — the streaming/published ENUMERATION in
-                            rtti.pas filters on it, invoke-by-name ignores it. }
+                            rtti.pas filters on it, invoke-by-name ignores it.
+                            paramKinds points at 2*arity words: `arity` kind
+                            words THEN `arity` param-NAME pointers. One block and
+                            one record field, so the record stays 48 bytes and
+                            the stride consumers do not move; a kinds-only reader
+                            is unaffected. Names let a reflected caller bind a
+                            KEYWORD argument by name instead of by position. }
   RTTI_METH_FLAG_PUBLISHED = 1;
   { Bits 8..15 of the same Flags word carry a NilPy `*args` parameter's index
     PLUS ONE (0 = the method has none). A reflected caller cannot otherwise tell

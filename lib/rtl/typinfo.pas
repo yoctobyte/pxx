@@ -42,7 +42,11 @@ type
     {$ifdef CPU32} _pad_code: LongInt; {$endif}
     Arity:      Int64;    { param count, incl. Self at index 0 for a method }
     RetKind:    Int64;    { Ord(TTypeKind) of the return type; 0 = a procedure }
-    ParamKinds: Pointer;  { ^array of `Arity` Int64 Ord(TTypeKind) words; nil if 0 }
+    ParamKinds: Pointer;  { ^block of 2*Arity words: `Arity` Int64 Ord(TTypeKind)
+                            words, THEN `Arity` param-NAME pointers. nil if
+                            Arity is 0. Reading only the kinds is the original
+                            contract and still correct; the names are what let a
+                            reflected caller bind a KEYWORD argument by name. }
     {$ifdef CPU32} _pad_pk: LongInt; {$endif}
     Flags:      Int64;    { bit0 = published (RTTI_METH_FLAG_PUBLISHED) }
   end;

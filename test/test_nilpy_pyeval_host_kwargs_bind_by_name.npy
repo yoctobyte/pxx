@@ -1,0 +1,69 @@
+# A KEYWORD argument to a host method, from inside exec(), binds to the
+# parameter it NAMES — not to the position it was written in.
+#
+# pyeval reaches a host method through the RTTI trampoline (PyHostCall) and had
+# the keyword's name with nothing to match it against: the method RTTI carried
+# param kinds and arity but no param NAMES. So kwargs were appended
+# POSITIONALLY, and `w.insert(chars=x, index=y)` bound them swapped. In the
+# reported case Tk silently discarded the call and printed nothing — no error in
+# either direction, which is what let it survive.
+# bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+#
+# The names now live in the second half of the method's param block (see
+# rtti_emit.inc), so the record itself did not grow and the three stride
+# consumers did not move.
+#
+# The assertion that matters is the REVERSED order: written in declaration
+# order the old positional binding was accidentally correct, which is exactly
+# why the defect stayed hidden — uforth passes its kwargs in declaration order.
+
+
+class W:
+    def put(self, index, chars):
+        print("index=" + str(index) + " chars=" + str(chars))
+
+    def one(self, only):
+        print("only=" + str(only))
+
+
+w = W()
+env = {"w": w}
+
+# --- compiled call sites: these never had the bug, and are the control -------
+w.put(index="end", chars="HELLO")
+w.put(chars="HELLO", index="end")
+
+# --- through exec(): declaration order (was accidentally right) -------------
+ns = {}
+exec("def __body__():\n    w.put(index='end', chars='HELLO')\n", env, ns)
+ns["__body__"]()
+
+# --- through exec(): REVERSED order — this is the defect --------------------
+ns2 = {}
+exec("def __body__():\n    w.put(chars='HELLO', index='end')\n", env, ns2)
+ns2["__body__"]()
+
+# --- positional and keyword mixed, the keyword naming the LAST param --------
+ns3 = {}
+exec("def __body__():\n    w.put('end', chars='HELLO')\n", env, ns3)
+ns3["__body__"]()
+
+# --- all positional still works ---------------------------------------------
+ns4 = {}
+exec("def __body__():\n    w.put('end', 'HELLO')\n", env, ns4)
+ns4["__body__"]()
+
+# --- a single parameter, by name and by position ----------------------------
+ns5 = {}
+exec("def __body__():\n    w.one(only='X')\n", env, ns5)
+ns5["__body__"]()
+ns6 = {}
+exec("def __body__():\n    w.one('Y')\n", env, ns6)
+ns6["__body__"]()
+
+# Not asserted here, because each halts the program: an unknown keyword
+# ("host method put has no parameter named zzz"), the same parameter given
+# twice, and a keyword that would leave a MIDDLE parameter with no value —
+# that last one is refused rather than guessed, because the marshaller can only
+# express omitted TRAILING params and inventing a filler would put this right
+# back into the silent-wrong-argument class.

@@ -314,10 +314,27 @@ begin
   end;
   if arity > 0 then
   begin
+    { The param block is `arity` KIND words followed by `arity` NAME pointers —
+      one block, one pointer, so the MethInfo record itself does not grow and
+      neither lib/rtl/typinfo.pas's mirror nor the three stride consumers move
+      (project_rtti_method_table_multi_consumer_stride_landmine). A reader that
+      only wants kinds reads the first `arity` words exactly as before.
+
+      Names exist because a reflected caller cannot otherwise bind a KEYWORD
+      argument: pyeval had the kwarg's name and nothing to match it against, so
+      it appended kwargs POSITIONALLY and `w.put(chars=x, index=y)` silently
+      swapped them (bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position).
+      Reserve the whole block BEFORE interning any name — InternStr appends to
+      Data[], and interning mid-reservation would split the array. }
     paramOff := DataLen;
-    DataPutZeros(arity * 8);
+    DataPutZeros(arity * 8 * 2);
     for p := 0 to arity - 1 do
       PatchDataU64(paramOff + p * 8, Ord(Procs[procIdx].Params[p].TypeKind));
+    for p := 0 to arity - 1 do
+    begin
+      strIdx := InternStr(Procs[procIdx].Params[p].Name);
+      AddDataPtrFix(paramOff + (arity + p) * 8, Strs[strIdx].Offset);
+    end;
     AddDataPtrFix(miPos + 32, paramOff);
   end;
   flags := 0;

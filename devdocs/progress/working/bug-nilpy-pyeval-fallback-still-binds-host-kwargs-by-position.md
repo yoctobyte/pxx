@@ -2,6 +2,8 @@
 track: N
 prio: 45
 type: bug
+status: working
+owner: claude-AN
 ---
 
 # The pyeval fallback still binds a host method's kwargs by POSITION
@@ -97,3 +99,97 @@ wants a live Tk widget and the xvfb lock, and uforth still DEPENDS on the
 positional binding, so a fix must bind correctly rather than refuse.
 
 Left claim-free at prio 45. Not started.
+
+## 2026-08-14 — FIXED via route 1 (param names in the method RTTI)
+
+Both reasons this ticket was picked up and put down twice are gone.
+
+### The display dependency was never real
+
+The repro was written against `tk.Text`, so every previous attempt wanted xvfb
+and the Tk lock. But the defect is **keyword binding**, not Tk — Tk only made it
+*silent* (an invalid index is discarded without an error). A NilPy class reached
+through `exec()` goes down the identical `PyHostCall` path, so the whole thing
+reproduces headlessly:
+
+```python
+class W:
+    def put(self, index, chars):
+        print("index=" + str(index) + " chars=" + str(chars))
+w = W()
+env = {"w": w}; ns = {}
+exec("def __body__():\n    w.put(chars='HELLO', index='end')\n", env, ns)
+ns["__body__"]()
+```
+
+Before: `index=HELLO chars=end`. After: `index=end chars=HELLO`. CPython agrees
+with the latter.
+
+Worth stating on its own: **a repro that needs a display is often a repro
+written at the wrong layer.** The Tk widget was incidental to a defect in the
+reflected-call marshaller.
+
+### Route 1, without moving the stride
+
+The ticket's route 1 was "emit param names in the method RTTI", flagged with the
+three-stride-consumer landmine
+(`project_rtti_method_table_multi_consumer_stride_landmine`). That landmine is
+avoided entirely rather than navigated: `MethInfo` **does not grow**, and no
+mirror moves.
+
+`ParamKinds` now points at `2*arity` words — the `arity` kind words exactly as
+before, followed by `arity` param-name pointers. One block, one record field,
+`RTTI_METH_SIZE` still 48. Every existing reader wants kinds, reads the first
+`arity` words, and is unaffected; `lib/rtl/typinfo.pas`'s mirror needed only a
+comment. The reservation happens **before** any `InternStr`, because interning
+appends to `Data[]` and would otherwise split the array.
+
+### The binding rule, and what it refuses
+
+`PyBindHostKwArgs` runs in `PyHostCall` — one site, so every caller and every
+future one gets it — and applies CPython's rule: positionals fill left to right,
+then each keyword goes to the parameter it names. `ParseArgs` grew a `kwNames`
+list parallel to `args` ('' for a positional), padded **before** each keyword is
+appended so earlier arguments are marked at their own index.
+
+Three shapes are now loud instead of silent: an unknown keyword, a parameter
+given twice, and a keyword that would leave a **middle** parameter with no
+value. That last one matters — the marshaller can only express omitted TRAILING
+params (it tests `(i-1) >= nargs` against a dense list), so a gap has no
+representation, and inventing a filler would put this straight back into the
+silent-wrong-argument class this ticket exists about.
+
+### uforth's dependency is satisfied, not merely unbroken
+
+The ticket's sharp constraint was that uforth **depends** on the positional
+behaviour, so a fix had to bind CORRECTLY rather than refuse.
+`vm.define_word(name, native=_w)` passes `name` positionally and `native` by
+keyword; the keyword now resolves to the parameter actually called `native`,
+which is the same slot the positional append happened to hit. The full ANS Forth
+suite still reports Total errors 0 with stdout byte-identical to CPython's.
+
+### Found on the way, not fixed here
+
+A host method with **three** user parameters fails in pyeval's marshaller
+(`pyeval: int-return arity 3 unsupported for put`) — reproduced on the PINNED
+compiler with all-positional arguments, so it is pre-existing and unrelated to
+keywords. Filed separately.
+
+### Gate
+
+`test/test_nilpy_pyeval_host_kwargs_bind_by_name.npy` + `.expected` from CPython
+(both orders, positional/keyword mixed, all-positional, and the one-parameter
+form by name and by position, with the compiled call sites as a control).
+`make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN + the uforth
+corpus. A pin, because `compiler/builtin/pyeval.pas` changed.
+
+### One deliberate laxness
+
+Parameter names are matched with `PyEqCI`, case-INsensitively, so
+`w.put(INDEX='a')` binds where CPython raises. That is consistent with
+`PyFindMethCI`, which already resolves the METHOD name the same way, and with
+the host language: a Pascal class cannot declare two parameters differing only
+by case, so there is nothing to be ambiguous about. It also lands on the right
+side of NilPy's own rule — accepting something CPython rejects is a language
+feature, not a defect; the direction that must hold is that working CPython code
+works here (`devdocs/dev/nilpy-semantics-divergences.md`).

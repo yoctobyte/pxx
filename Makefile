@@ -1380,6 +1380,16 @@ test-nilpy: $(COMPILER)
 	# TPyList, so a string handle was dereferenced as an object pointer.
 	./$(COMPILER) test/test_nilpy_str_as_an_iterable_argument.npy /tmp/test_nilpy_striter26
 	/tmp/test_nilpy_striter26 | diff -u test/test_nilpy_str_as_an_iterable_argument.expected -
+	# a keyword arg to a host method from inside exec() binds to the parameter it
+	# NAMES. The method RTTI carried no param names, so pyeval appended kwargs
+	# positionally and put(chars=x, index=y) bound them swapped, silently.
+	./$(COMPILER) test/test_nilpy_pyeval_host_kwargs_bind_by_name.npy /tmp/test_nilpy_pyevalkw26
+	/tmp/test_nilpy_pyevalkw26 | diff -u test/test_nilpy_pyeval_host_kwargs_bind_by_name.expected -
+	# {*xs} deduplicates: the set display's STAR arm called extend (appends)
+	# while its ordinary elements went through add (dedups). The list rows are
+	# what says [*xs] did not become a set.
+	./$(COMPILER) test/test_nilpy_set_star_spread_dedups.npy /tmp/test_nilpy_setstar26
+	/tmp/test_nilpy_setstar26 | diff -u test/test_nilpy_set_star_spread_dedups.expected -
 	# bytes.hex() -- zero-padded to two digits per byte, lowercase.
 	./$(COMPILER) test/test_nilpy_bytes_hex.npy /tmp/test_nilpy_byteshex26
 	/tmp/test_nilpy_byteshex26 | diff -u test/test_nilpy_bytes_hex.expected -
