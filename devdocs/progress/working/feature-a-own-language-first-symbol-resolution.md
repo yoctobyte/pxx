@@ -235,3 +235,78 @@ NilPy suite the other. This repo's standing rule is quick + self-host and let
 Track T sweep, so land in small pushed steps and **watch `tools/twatch.py
 --follow`** rather than widening locally; the C corpus and NilPy are exactly what
 T's limited/full tiers cover.
+
+### CORRECTION, same session — it is NOT builtin demotion, and the current behaviour matches FPC
+
+The entry above says the mechanism is "likely" builtin demotion and to verify
+before fixing. Verified. It is more subtle than that, and the correction changes
+what this ticket should build.
+
+**The discriminator.** Define a C body returning 42.0 for each name, `uses math,
+'./x.c'`, call the Pascal spelling:
+
+| Pascal name | a Pascal intrinsic? | result |
+| --- | --- | --- |
+| `Exp` `Sqrt` `Sin` `Cos` `Ln` `ArcTan` | yes | **42.0 — the C body wins** |
+| `Power` | no | 1024.0 — Pascal wins |
+
+Exactly the six names `parser.inc`'s auto-pull list treats as intrinsics lose,
+and the one non-intrinsic does not. So a used unit's routine is shadowing the
+INTRINSIC, not out-ranking `math.pas`.
+
+**And that shadowing is CORRECT.** The control everyone skipped — do it with a
+*Pascal* unit instead of a C file:
+
+```pascal
+unit pexp; function Exp(x: Double): Double;   { returns 42.0 }
+program ctl2; uses math, pexp;  WriteLn(Exp(1.0));
+```
+
+| | result |
+| --- | --- |
+| pxx | `42.0000` |
+| **FPC** | **`42.0000`** |
+
+FPC does the same thing. A unit's routine shadowing a built-in is ordinary,
+correct Pascal, and pxx already matches the reference implementation here.
+
+**So the C case is that same correct mechanism, reached by a different door.**
+`uses './cm.c'` imports the C file AS A UNIT, and its `exp` shadows the intrinsic
+`Exp` case-insensitively, exactly as `pexp`'s would. There is no separate
+cross-language defect to fix underneath it.
+
+### Which turns this ticket into a genuine design fork
+
+The ticket's safety argument is that explicit import is a clean override —
+*"programmers, if they insist, can do it anyway... there is no conflict"*. The
+measurement says otherwise, and the reason is structural:
+
+> **Pascal is case-insensitive, so a Pascal program cannot SPELL the difference
+> between its own `Exp` and an imported C `exp`.**
+
+Importing `./math.c` therefore does not ADD `exp` alongside `Exp` — it REPLACES
+it. "Ask for it by name" has no distinct name to ask with. That is not a bug in
+the resolver; it is a property of the language pair, and it means
+own-language-first cannot be both "a hard precedence" and "overridable by
+explicit import" in Pascal. One of the two has to give:
+
+- **Hard precedence wins:** `Exp` is always Pascal's, and an imported C `exp`
+  becomes UNREACHABLE from Pascal by ordinary call — the override the ticket
+  promises does not exist. Needs a spelling (qualified `cm.exp(...)`?) to stay
+  honest.
+- **Explicit import wins:** today's behaviour, consistent with FPC's
+  unit-shadows-builtin rule, and the hazard stays — but only for a file the
+  programmer explicitly named, which is a much smaller blast radius than the
+  original `pxxcio` bug (that one hit EVERY C program with no opt-in at all).
+
+Escalated as [[decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language]]
+rather than guessed. **No code written** — implementing to the wrong horn here
+would either break the documented override or leave the rule toothless.
+
+### What is NOT in doubt
+
+- The C -> Pascal direction is closed (first section above), so the ten
+  `__crtl_*` prefixes are still probably deletable — `task-c-retire-the-crtl-name-dodge-prefixes`,
+  independent of this fork.
+- If the rule is built, it still needs a real `ProcLang` parallel array;
+  `ProcCdecl` remains the wrong instrument.

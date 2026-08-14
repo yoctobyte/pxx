@@ -36,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (219)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -100,6 +100,7 @@ _none_
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-eval-at-runtime | U | 35 | decide | Does NilPy support `eval(s)` / `exec(s)` over a runtime string at all? A compiled dialect either ships a parser in every binary or it does not — this is a design call, not work, and it has sat as a to-do row on a bug ticket for three sessions. | — |
 | decide-nilpy-object-dict-key-hashing | U | 40 | decide | A class with __eq__ and no __hash__ is unhashable in CPython, so `d[V(1)] = x` raises. NilPy stores it and then never finds it again — data in, nothing out, silently. Refuse the store (faithful), make content lookup work (friendlier, needs a __hash__ story), or document the divergence. The ticket that found it says explicitly to decide rather than guess. | — |
+| decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language | U | 60 | decide | Own-language-first was decided with explicit import as its safety valve — 'nothing becomes unreachable, it just has to be asked for by name'. Measured: in Pascal there IS no distinct name to ask with, because Pascal is case-insensitive, so `uses './math.c'` does not ADD `exp` alongside `Exp`, it REPLACES it. The rule cannot be both a hard precedence and overridable by explicit import. Pick which gives. | — |
 | decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
 | decide-reprice-nilpy-ast-typing-module-scope | U | 55 | decide | feature-n-nilpy-ast-typing-module-scope sits at prio 55 — top of the ranked Track N queue after the META — but its own 2026-08-09 note concludes it is now an OPTIMISATION, not a correctness item, and asks to be re-priced. prio is the user's field, so: re-price, or leave it steering the queue? | — |
 | decide-t-mem-floor-policy-on-a-small-box | U | 40 | decide | MEM_FLOOR is an absolute 1500 MB, so any box with under ~1.75 GB available admits no job of any class — including a 2 GB machine, not just the 512 MB Pi. Two questions that should not be guessed: what the floor should be relative to, and whether a below-floor box should run at all or refuse loudly. The silence is fixed; the policy is not. | — |
@@ -462,6 +463,7 @@ _none_
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
+- [p 60] [U] decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
