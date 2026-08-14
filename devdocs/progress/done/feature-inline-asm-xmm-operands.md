@@ -8,7 +8,7 @@ owner: agent-an
 
 - **Type:** feature — **Track A** (`compiler/asmfront.inc`, `compiler/asmtext.inc`,
   `compiler/asmtext_386.inc`; the asm frontend).
-- **Status:** working
+- **Status:** done
   version of this ticket said "plausibly a small change" — that was wrong, see
   Correction below).
 - **Found by:** Track E, building the Mandelbrot demos
@@ -440,3 +440,4 @@ skipping — otherwise "ok" would prove nothing.
 Nothing in the compiler emits AVX. Mirroring would add an unexercised encoder
 path to the compiler's own emitter. The byte-checked opcode table above is the
 data to mirror if an `-O3` vectoriser ever wants it.
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

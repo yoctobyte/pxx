@@ -10,11 +10,9 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-a-threadsafe-segfaults-on-every-nilpy-program | A | 70 | bug | `--threadsafe` segfaults on EVERY NilPy program, including a one-line `print(\"hi\")`. Pre-existing — the pinned stable does it too. Invisible because the Makefile has ZERO --threadsafe .npy jobs, so no tier covers the combination. It is also the blocker behind the single finding of the --strict-uses corpus sweep, whose diagnostic tells you to rebuild with the flag that crashes. | — |
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-inline-asm-xmm-operands | A | 55 | feature | Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid) | — |
+_none_
 
 ## unfinished (9)
 
@@ -413,9 +411,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1762)
+## done (1763)
 
-1762 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1763 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -533,6 +531,7 @@ lives in git, not in a timestamp._
 - [p 45] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
+- [p 45] [B] feature-random-library
 - [p 45] [T] feature-t-uforth-benchmark-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
@@ -675,7 +674,6 @@ lives in git, not in a timestamp._
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-a-own-language-first-symbol-resolution
 - **1** — feature-b-tkhtmlview-in-nilpy
-- **1** — feature-inline-asm-xmm-operands
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-nilpy-tkinter-facade
