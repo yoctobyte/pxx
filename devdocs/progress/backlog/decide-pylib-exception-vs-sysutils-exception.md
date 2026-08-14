@@ -100,3 +100,67 @@ Both `test_uses_order_pylib_exception_a` and `_b` green — they are the canary
 and they only fail in the NATIVE tier, so `gate.sh quick` will NOT catch a
 regression here. Plus `e.args` correct for a KeyError with an int key, and
 `except Exception:` still catching a `StrToInt` failure in both uses orders.
+
+## 2026-08-14 — root cause found; this ticket is DOWNSTREAM of it
+
+Track T traced the arrangement to its origin. This is not an open design
+question about class ownership; it is the visible symptom of an unfinished fix.
+
+- `ClassNameIsDeliberatelyShared('exception')` is **option 2 of
+  [[decide-class-namespace-scoping]]**, landed 2026-07-28 (`c9aa7a13d`) and
+  described in that ticket as *"cheap, and it is a list that will rot."*
+- That decision was closed **RESOLVED-BY-CAUSE** on 2026-08-01 on the premise
+  that the fork *"dissolves once [[bug-pascal-uses-is-transitive]] is fixed"*,
+  with the instruction that per-site patches *"should be reverted as it lands,
+  not kept."*
+- **The premise never came true.** That bug was closed on its MEASUREMENT step;
+  the fix was never built. Reopened 2026-08-14 at **prio 80, urgent**.
+
+So the four options above are all ways to live with a patch that was supposed to
+be temporary. **Do not pick one to "solve Exception".** Settle the root fix, and
+three of the four stop being necessary.
+
+### Measured: the "only a direct import collides" hope is false
+
+A Pascal library with `uses sysutils` in its implementation, pulled in by a
+`.npy` that never mentions sysutils, breaks exactly like a direct import once
+the exemption is removed — because `uses` is transitive, so the library's
+sysutils lands in the program's namespace either way. Table in
+[[bug-pascal-uses-is-transitive]].
+
+## Option 5 — rename pylib's class; `Exception` is a LANGUAGE builtin, not a library class
+
+Raised by the user 2026-08-14, and it is the strongest argument in this ticket:
+
+> *in python, Exception is part of the language, whereas in pascal it is a
+> choice (runtime errors vs exceptions)*
+
+That is a category difference, not a naming clash. pylib's `Exception` is the
+implementation of a **Python language builtin**; sysutils' is one **library's
+design choice** in a language that also offers plain runtime errors. Giving the
+Python builtin a Pascal-namespace class name of `Exception` puts a language-level
+concept into a library namespace where it can collide with an unrelated
+library's class — and then the collision has to be papered over.
+
+**Shape:** pylib declares `PyException`; the NilPy frontend maps Python's
+`Exception` (and the builtin hierarchy under it) to it. No shared class name, no
+exemption, and **pylib extends freely** — `args` lands without argument. The
+bridging case (a NilPy `except Exception:` catching a Pascal raise) becomes an
+explicit catch rule rather than a namespace merge, which is also the honest
+description of what it actually is.
+
+**Why this ranks above options 1-3:** it is the only one that fixes a
+*correctness* problem rather than routing around a constraint, it is contained
+in Track N plus one catch rule, and it does not block the root fix — when
+non-transitive `uses` lands, the catch rule is the only thing left to remove.
+
+**Unverified, and must be before committing:** that the frontend can map the
+builtin name cleanly, and what it does to Pascal code doing `uses pylib` and
+naming `Exception` directly — `test_uses_order_pylib_exception_a`/`_b` do
+exactly that, so under option 5 those tests change meaning rather than pass, and
+what they should assert instead needs deciding.
+
+**Recommended sequencing:** option 5 now (unblocks `e.args` and everything
+Python-shaped after it), [[bug-pascal-uses-is-transitive]] properly after — they
+are complementary, not alternatives. The rename fixes a category error; the root
+fix fixes the namespace leak.

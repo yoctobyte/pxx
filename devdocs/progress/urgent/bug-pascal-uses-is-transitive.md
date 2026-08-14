@@ -1,8 +1,8 @@
 ---
-summary: "Pascal: uses is transitive — a unit's own uses leak into everything that uses IT, for routines and classes alike (one flat global namespace)"
+summary: "REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix the user decided on 2026-08-01 (land the real non-transitive rule) was never built, and the ticket sat in done/ hiding that. It is the root cause of the pylib/sysutils Exception ceiling, the tkinter/reportlab class collision, and the ClassNameIsDeliberatelyShared patch that was supposed to be temporary. Re-measured cost: 35 RTL-internal unit pairs, no user-program-facing leak."
 type: bug
 track: A
-prio: 65
+prio: 80
 ---
 
 # Pascal: `uses` is transitive, so every unit's imports leak to its consumers
@@ -318,3 +318,77 @@ lands). No user-program-facing leak appears in the corpus at all.
 
 That is a tractable, boring list — not a campaign. Folded back into
 [[decide-pascal-uses-campaign-scope]] for the re-sizing call.
+
+
+## REOPENED 2026-08-14 — the fix was decided, measured, and then never built
+
+**This ticket was closed on its MEASUREMENT step.** `--warn-uses-leak`, the edge
+table and `VisibilityAllows` landed; the actual non-transitive rule did not. The
+`## Log` line reads "resolved" and the commit subject says
+`(measurement step)` — so from the queue's point of view this was finished
+work, and it has been invisible for two weeks.
+
+Meanwhile the user had already decided what to do:
+[[decide-pascal-uses-campaign-scope]], **2026-08-01, option 2** — close the
+instrumentation gap, re-measure, *"then land the real non-transitive rule"*, and
+sequence it as **one effort** with [[decide-class-namespace-scoping]] because
+"fixing real `uses` scoping IS the class-namespace fix, viewed from a different
+symptom."
+
+Steps one and two are done. Step three is what this ticket now holds.
+
+### The cost is already measured, and it is small
+
+From this ticket's own re-measurement: **35 RTL-internal unit pairs**, each
+needing either an explicit `uses` or nothing at all. In its own words, *"a
+tractable, boring list — not a campaign"* — and **no user-program-facing leak
+appears in the corpus at all**. The "hundreds of files" framing was a
+measurement artifact and is gone.
+
+So the input everyone was waiting for exists. There is nothing left to size.
+
+### What is downstream of this, and what it is costing right now
+
+- **`ClassNameIsDeliberatelyShared('exception')`** (`compiler/symtab.inc:432`)
+  is a per-site patch that [[decide-class-namespace-scoping]] said should be
+  *"reverted as it lands, not kept"*. It was never reverted, and it is
+  load-bearing today — verified 2026-08-14 by removing it and rebuilding.
+- **pylib's `Exception` can never gain a member sysutils lacks.** The two
+  classes are member-for-member identical and must stay so. This killed
+  `e.args` after it had shipped and passed a pin
+  ([[bug-nilpy-exception-args-attribute-missing]]).
+- **[[decide-pylib-exception-vs-sysutils-exception]]** (Track U, p55) is asking
+  "who owns Exception" — a question that only exists because of this. Its four
+  options are all ways to live with the patch.
+- **tkinter/reportlab `Canvas`** — same root, per the campaign-scope decision.
+
+### Measured 2026-08-14: transitivity is what makes it unfixable in isolation
+
+The hoped-for narrowing — "only a NilPy program that explicitly imports sysutils
+collides" — is **false while `uses` is transitive**. A Pascal library with
+`uses sysutils` in its *implementation*, pulled in by a `.npy` that never
+mentions sysutils, collides identically:
+
+```
+                                        exemption ON            exemption OFF
+NilPy -> Pascal lib -> sysutils    caught: "abc" is an     caught: unsupported
+  (indirect, no import)            invalid integer         format spec ""
+NilPy -> import sysutils           caught: "abc" is an     caught: unsupported
+  (direct)                         invalid integer         format spec ""
+```
+
+Note the failure is a **wrong message**, not an uncaught exception — `CreateFmt`
+picks up the wrong `Format` too. The Exception exemption has been masking more
+than Exception, which is further evidence the right fix is the general one.
+
+### Gate
+
+`test_uses_order_pylib_exception_a` and `_b` both green, `test_nilpy_rtl_exception_surface`
+green, and `ClassNameIsDeliberatelyShared` **deleted** rather than left in place —
+if the list survives the fix, the fix did not land. These only fail in the NATIVE
+tier, so `gate.sh quick` will not catch a regression here.
+
+## Log
+- 2026-07-31 — measurement step resolved, commit d86bc20ec. **Not the fix.**
+- 2026-08-14 — REOPENED at the user's direction, prio 65 -> 80, moved to urgent.
+  Filed by Track T; the work is Track A's.
