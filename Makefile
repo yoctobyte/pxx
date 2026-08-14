@@ -1121,7 +1121,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_dyncall.npy $(TESTTMP)/test_nilpy_dyncall26
 	test "$$($(TESTTMP)/test_nilpy_dyncall26)" = "42"
 	./$(COMPILER) test/test_nilpy_exec_stub.npy $(TESTTMP)/test_nilpy_exec_stub26
-	test "$$($(TESTTMP)/test_nilpy_exec_stub26)" = "5"
+	test "$$($(TESTTMP)/test_nilpy_exec_stub26)" = "$$(printf '5 1\n10 30\n4 8\n42\n3 7\n15')"
 	./$(COMPILER) test/test_nilpy_genexpr.npy $(TESTTMP)/test_nilpy_genexpr26
 	test "$$($(TESTTMP)/test_nilpy_genexpr26)" = "$$(printf '%b' '1-2-3\nA, B, C\n3\n6')"
 	./$(COMPILER) test/test_nilpy_list_comp.npy $(TESTTMP)/test_nilpy_list_comp26

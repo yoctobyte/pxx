@@ -11369,11 +11369,26 @@ begin
       end
       else if NilPyUserCode and (name = 'exec') then
       begin
-        { exec(src, globals[, locals]) -> pyexec(src, g, l). Compiles now; the
-          evaluator is feature-lib-pyexec (see the pylib stub). A missing
-          locals argument passes the globals dict for both, as Python does. }
+        { exec(src, globals[, locals]) -> EvalPyStmts(src, g, l), which now
+          actually BINDS into the locals dict — it used to run and publish
+          nothing (bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent).
+          A missing locals argument passes the globals dict for both, as
+          Python does. }
         Next; Expect(tkLParen, '(');
         ParseExpr; atRecv := CurASTNode;         { src }
+        { The AMBIENT form `exec(src)` writes into the CALLER's own locals, and
+          in a compiled dialect those are stack slots with no run-time name
+          table to write through — a genuinely different and much harder thing
+          than the explicit-dict form. Refused BY NAME rather than left to
+          fail as "expected ," on the closing paren, which reads like a parser
+          limitation when the real answer is a scoping one.
+          nilpy-semantics-divergences.md }
+        if CurTok.Kind = tkRParen then
+          Error('Nil Python: exec(src) with no namespace is not supported — ' +
+                'it would bind into the caller''s own locals, which are ' +
+                'compiled stack slots with no run-time name table. Use the ' +
+                'explicit form Python also has: d = {}; exec(src, d, d), then ' +
+                'read the results out of d');
         Expect(tkComma, ',');
         ParseExpr; atFld := CurASTNode;          { globals }
         if CurTok.Kind = tkComma then
@@ -11397,6 +11412,58 @@ begin
         ASTLeft[node] := argSeq;
         CurASTNode := node;
         LastExprTk := tyUnknown;
+        Exit;
+      end
+      else if NilPyUserCode and (name = 'eval') and (FindSym(name) < 0) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { eval(expr[, globals[, locals]]) -> EvalPyExpr, the expression twin of
+          exec above. It was absent entirely — `undefined variable (eval)`.
+          Loud, so far less dangerous than exec's silence, but still a program
+          CPython runs that this did not.
+
+          Unlike exec, the no-namespace form IS supported: an expression only
+          READS, and reading nothing is a run-time NameError naming the name,
+          not a silent wrong answer. What it cannot see is the caller's
+          compiled locals — so `eval("1+2")` works and `eval("x+1")` raises
+          rather than quietly finding some other x.
+          bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; atRecv := CurASTNode;         { the expression source }
+        if CurTok.Kind = tkComma then
+        begin
+          Next;
+          ParseExpr; atFld := CurASTNode;        { globals }
+          if CurTok.Kind = tkComma then
+          begin
+            Next;
+            ParseExpr; atDflt := CurASTNode;     { locals }
+          end
+          else
+            atDflt := atFld;
+        end
+        else
+        begin
+          { no namespaces: nil for both, which EvalPyExpr treats as empty }
+          atFld := AllocNode(AN_INT_LIT);
+          ASTIVal[atFld] := 0; ASTTk[atFld] := Ord(tyPointer);
+          atDflt := AllocNode(AN_INT_LIT);
+          ASTIVal[atDflt] := 0; ASTTk[atDflt] := Ord(tyPointer);
+        end;
+        Expect(tkRParen, ')');
+        idx := FindProc('pyeval_expr');
+        if idx < 0 then Error('Nil Python: pyeval (pyeval_expr) not loaded');
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := idx;
+        ASTTk[node] := Ord(tyVariant);           { the expression's value }
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := atRecv;
+        argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := atFld;
+        argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := atDflt;
+        ASTRight[argSeq] := argSeq2; ASTRight[argSeq2] := argSeq3;
+        ASTRight[argSeq3] := -1;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := tyVariant;
         Exit;
       end
       else if NilPyUserCode and (name = 'input') and (FindSym(name) < 0) and

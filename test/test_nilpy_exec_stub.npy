@@ -1,4 +1,37 @@
+# exec(src, globals, locals) must actually BIND into the locals dict.
+#
+# This test used to assert only a PRE-EXISTING key -- that exec did not crash
+# and did not clobber the dict -- so it was green against a no-op, and stayed
+# green for as long as exec was one. `d` came back EMPTY where CPython had
+# ['__builtins__', 'x']: the call compiled, ran, returned, and bound nothing,
+# so a program relying on it ran to completion producing wrong results.
+# bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent
+#
+# NOTE the keys are asserted by NAME, not by listing sorted(d.keys()): CPython
+# also injects `__builtins__` into the globals dict and NilPy has no module
+# object to put there (decide-nilpy-exec-injects-a-builtins-key). Listing the
+# keys would pin that divergence into an unrelated test.
+
 d = {}
 d["k"] = 5
 exec("x = 1", d, d)
-print(d["k"])
+print(d["k"], d["x"])
+
+# a pre-existing binding is VISIBLE to the exec'd source, not just preserved
+e = {"base": 10}
+exec("scaled = base * 3", e, e)
+print(e["base"], e["scaled"])
+
+# several statements, and a later one reading an earlier one's binding
+f = {}
+exec("y = 4\nz = y * 2", f, f)
+print(f["y"], f["z"])
+
+# a rebind overwrites rather than shadowing
+g = {"v": 1}
+exec("v = v + 41", g, g)
+print(g["v"])
+
+# eval() is the expression twin, and it was absent entirely
+print(eval("1+2"), eval("2*3+1"))
+print(eval("a + 5", {"a": 10}))

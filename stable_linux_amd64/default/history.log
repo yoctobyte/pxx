@@ -302,3 +302,4 @@
 2026-08-14T18:57:36Z  v302  481fb92f6ea4794fc247e3c02caca581b3059d80959f8cd8aa583735ceb35c4a  3b881c52bf7060ffa3967765cf6bb7c4e1db0d87  fix(N): __name__ read off a CLASS, on both routes
 2026-08-14T19:32:02Z  v303  1bfa1e596ad9f5cf5eecb396f9ee92734f865b0f23f11bb69120f9d73281502f  ecb8b0d1843ea8c0369c089188c84b9ca577cf7e  fix(N): TypeVar and NewType are calls, not annotation metadata
 2026-08-14T19:46:40Z  v304  44ca47c950df2ae6c39891c5128f2001569c7fcbc1c8a8236a3357d25134c787  41ef3daea62687ff8f84cc9d4c2d867b475c7721  fix(N): a positional mapping before the keyword run in dict()/update()
+2026-08-14T21:54:46Z  v305  50c34ae6434a84487f2571fbc1032c3d5c2ec3d43fcc4d744aec2f937d849439  8bd7c5694746438bdc3e871a20b9e2682241fd33  docs(progress): record the shas the resolves landed as

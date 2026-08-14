@@ -49,6 +49,14 @@ uses pylib, typinfo, promocore;
   exec form; uforth always passes both). Assignments write locals; name reads
   try locals then globals. }
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
+{ eval(src) — evaluate ONE expression against the same namespaces and yield its
+  value. The var-out procedure is the real one (see the IMPLEMENTATION NOTE
+  above); the function is the shape a call site can use as an expression, and
+  it only ever writes its Result THROUGH the var parameter, never assigns it
+  from another Variant call, which is the form that corrupts. }
+procedure EvalPyExpr(const src: AnsiString; g: TPyDict; l: TPyDict;
+                     var res: Variant);
+function pyeval_expr(const src: AnsiString; g: TPyDict; l: TPyDict): Variant;
 
 { Reflect `name` on vm's class and call it with the variant args held in the
   TPyList `args` (args.at(0..count-1)); the boxed result comes back in `res`.
@@ -1350,6 +1358,14 @@ var
   Cur:  Integer;      { current token index during eval }
 
   EnvG: TPyDict;   { host-provided globals (read-only here); holds "vm" etc. }
+  { host-provided LOCALS — exec(src, g, l)'s third argument. Consulted on a name
+    MISS rather than copied in at entry: copying would put every pre-existing
+    entry into LclNames, and LclFind is a linear scan, so seeding an N-entry
+    namespace would make every name lookup in the exec'd source O(N). uforth
+    calls exec in a hot loop against a namespace that grows across a run, so
+    that cost is not hypothetical. A miss here is one dict indexof.
+    bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent }
+  EnvL: TPyDict;
 
   { Local scope kept as parallel arrays rather than a TPyDict: TPyDict keyed by a
     Variant boxed from an AnsiString is unreliable (store/indexof box the string
@@ -2905,6 +2921,9 @@ begin
   i := LclFind(name);
   if i >= 0 then
     res := LclVals[i]
+  { locals dict, THEN globals — Python's order. }
+  else if (EnvL <> nil) and (EnvL.indexof(name) >= 0) then
+    res := EnvL.fetch(name)
   else if (EnvG <> nil) and (EnvG.indexof(name) >= 0) then
     res := EnvG.fetch(name)
   else
@@ -5210,14 +5229,31 @@ begin
 end;
 
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
-var cslot: Integer;
+var cslot, si: Integer;
 begin
   EnvG := g;
-  { locals live in pyeval's own arrays (see LclSet); the `l` dict argument is
-    accepted for API compatibility with Python's exec(src, g, l) but is not the
-    backing store — uforth's block locals are function-internal and never read
-    back by the host. }
+  { Locals live in pyeval's own arrays (see LclSet), and `l` is SEEDED FROM and
+    FLUSHED BACK TO them — which is what makes exec bind anything at all.
+
+    It used to be accepted for API compatibility and otherwise ignored, on the
+    reasoning that uforth's block locals are function-internal and never read
+    back by the host. True of uforth, and false of `exec` as a Python builtin:
+
+      d = {}; exec("x = 1 + 2", d, d); print(sorted(d.keys()))
+
+    left `d` EMPTY where CPython has `['__builtins__', 'x']`. The call compiled,
+    ran, returned, and bound nothing — a program depending on it ran to
+    completion producing wrong results, which is the failure mode the
+    upward-compatibility rule exists to prevent.
+
+    The flush is frame-correct without doing anything about frames: CallUserFn
+    saves and restores the whole local frame around a call, so by the time
+    control returns here LclN holds exactly the TOP-LEVEL bindings — which is
+    precisely the set CPython puts in `l`. A function body's locals were never
+    in this frame to leak.
+    bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent }
   LclN := 0;
+  EnvL := l;
   FnN := 0;
   Executing := True;
   BreakFlag := False;
@@ -5274,6 +5310,66 @@ begin
     code address, which is what this is, and takes no phantom reference. }
   if (l <> nil) and (FnFind('__body__') >= 0) then
     l.store(MakeStr('__body__'), pyvar_of_callable(Pointer(@PyBodyTramp)));
+  { ...and every other top-level binding, which is the general case the
+    `__body__` line above was the one hand-wired instance of. }
+  if l <> nil then
+    for si := 0 to LclN - 1 do
+      l.store(MakeStr(LclNames[si]), LclVals[si]);
+end;
+
+{ eval(src) — the EXPRESSION twin of the above. Same namespaces, same seeding;
+  the difference is that it parses one expression and yields its value instead
+  of running a statement sequence.
+
+  A var-out procedure, not a Variant function: a Variant function whose Result
+  is assigned from another Variant call corrupts the value under the current
+  codegen (see the IMPLEMENTATION NOTE at the top of this unit). Nothing is
+  flushed back — an expression binds no names. }
+procedure EvalPyExpr(const src: AnsiString; g: TPyDict; l: TPyDict;
+                     var res: Variant);
+var cslot, si: Integer;
+begin
+  EnvG := g;
+  LclN := 0;
+  FnN := 0;
+  Executing := True;
+  BreakFlag := False;
+  ReturnFlag := False;
+  EnvL := l;
+  cslot := PyTokCacheSlot(src);
+  if TokCache[cslot].Src = src then
+  begin
+    TkKind := TokCache[cslot].Kinds;
+    TkText := TokCache[cslot].Texts;
+    TkInt := TokCache[cslot].Ints;
+    TkFloat := TokCache[cslot].Floats;
+    TkN := TokCache[cslot].NTok;
+  end
+  else
+  begin
+    TkKind := nil; TkText := nil; TkInt := nil; TkFloat := nil;
+    Tokenize(PreprocessFStrings(pytextwrap_dedent(src)));
+    TokCache[cslot].Src := src;
+    TokCache[cslot].Kinds := TkKind;
+    TokCache[cslot].Texts := TkText;
+    TokCache[cslot].Ints := TkInt;
+    TokCache[cslot].Floats := TkFloat;
+    TokCache[cslot].NTok := TkN;
+  end;
+  Cur := 0;
+  SkipSeparators;
+  ParseExpr(res);
+  SkipSeparators;
+  { CPython's eval takes an EXPRESSION, not a suite: `eval("x = 1")` is a
+    SyntaxError there. Refusing trailing tokens keeps that, and keeps the much
+    worse silent shape out — half an input evaluated and the rest dropped. }
+  if (CurKind <> PK_EOF) and (CurKind <> PK_DEDENT) then
+    EvalError('eval() takes a single expression, got "' + CurText + '"');
+end;
+
+function pyeval_expr(const src: AnsiString; g: TPyDict; l: TPyDict): Variant;
+begin
+  EvalPyExpr(src, g, l, Result);
 end;
 
 initialization

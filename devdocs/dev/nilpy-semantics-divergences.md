@@ -302,6 +302,41 @@ the header names exactly one REAL base, so it is single inheritance, and the
 multiple-inheritance refusal correctly does not fire. It still fires for
 `class C(A, B)` where both are real. bug-n-typevar-call-is-an-undefined-variable
 
+## `exec` binds, but injects no `__builtins__` key (2026-08-14)
+
+`exec(src, g, l)` now really does bind into `l` — it used to run and publish
+nothing at all, which was a bug and is fixed
+(bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent). Two differences
+remain, and they are different in kind.
+
+**A divergence.** CPython injects a `__builtins__` key into the globals dict;
+NilPy does not, having no module object to put there.
+
+| | CPython | pxx |
+| --- | --- | --- |
+| `d={}; exec("x=1", d, d); sorted(d.keys())` | `['__builtins__', 'x']` | `['x']` |
+| `d["x"]` | `1` | `1` |
+
+Only a program that ENUMERATES the namespace can see it; reading a bound name
+agrees. Open as [[decide-nilpy-exec-injects-a-builtins-key]].
+
+**Not a divergence — a refusal.** The AMBIENT form `exec(src)` with no
+namespace, which writes into the caller's own locals, is a COMPILE ERROR here
+and names itself:
+
+```
+exec(src) with no namespace is not supported — it would bind into the
+caller's own locals, which are compiled stack slots with no run-time name
+table. Use the explicit form Python also has: d = {}; exec(src, d, d)
+```
+
+Loud, at compile time, with the working spelling in the message. That is the
+opposite of the failure this whole area just came out of, and it is why it is
+refused rather than accepted-and-ignored.
+
+`eval(src)` has no such restriction — an expression only READS, so a name it
+cannot see is a run-time error naming the name, never a silent wrong value.
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython
