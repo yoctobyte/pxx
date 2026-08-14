@@ -207,4 +207,4 @@ expectations, plus `test_nilpy_rtl_exception_surface` and
   frontend-synthesised access and never reaches the renderer.
 
 Neither is a regression and neither is what this ticket was about.
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 52c37f07a.
