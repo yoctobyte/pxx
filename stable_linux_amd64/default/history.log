@@ -293,3 +293,4 @@
 2026-08-14T09:33:25Z  v293  fe2678b688991307ce2d8766b6933f23ac31d176ed109c9d757435811c7eb167  d6f4669743214baec0357245e206357bd90876aa  tickets(N): resolve the pyeval kwarg binding and the set star-spread dedup
 2026-08-14T10:06:19Z  v294  57c9bfb4883b901d7bbff50504162da43fa39c3d9331e130d849c54e5d769d72  6ed45773f29a9cedf9d1be839964499d6621570b  feat(A+N): pylib's Python root is PyException; delete the shared-name exemption
 2026-08-14T10:27:54Z  v295  f78d543f037cbe800ac63d932d770eed0ba77d3cbb81f755721b933afa52b016  24fdea55435e8be21da087119a71bd0d6eb8df70  feat(A): --strict-uses is behaviour-preserving on the whole examples corpus
+2026-08-14T10:42:36Z  v296  f1b5cf727172578dc81c29cece563208185cdef9bc3e62c4608a603bb9533bfa  52c37f07a36c5f7e16c51e9842eed815f1c5cf55  feat(N): re-land e.args, unchanged, now that PyException owns its own name
