@@ -556,3 +556,22 @@ decisive — and the last one overturned the third. Every wrong turn came from
 reading a downstream symptom (garbage bytes) as evidence about an upstream
 mechanism (which parse site ran). The bytes were always telling the truth about
 something else.
+
+### Caveat on the entry above — "property lookup is flat" is NOT yet established
+
+`FindUProp` takes a CLASS INDEX at every call site in `compiler/parser.inc`
+(4023, 4260, 4270, 4593, 5646, 5712 — all `FindUProp(ci, ...)` or
+`FindUProp(recName - REC_UCLASS_BASE, ...)`). So property resolution is already
+class-scoped, and the previous entry's "still a flat lookup" is a HYPOTHESIS
+from the symptom, not a fact from the code — exactly the move that has been
+wrong four times in this hunt.
+
+What is actually established: `.msg` (field) works, `.Message` (property) does
+not, on the same object of the same resolved class. Both lookups are
+class-scoped, so the difference lies elsewhere — the class index reaching the
+property site, or the property's own accessor binding.
+
+**Do not act on the previous entry's phrasing.** Probe it: print the class
+index at the `FindUProp` call that resolves `se.Message`, and compare with 86.
+That is the fifth probe, and on this ticket's record the probe will be right
+and the reasoning will not.
