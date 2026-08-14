@@ -134,7 +134,7 @@ Worth adding while there: a diagnostic when a `.npy` import resolves to a host
    whose first comment is the design statement this ticket contradicted.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 1707175de.
 
 ## RESOLVED 2026-08-14 — the shim was the missing half
 
