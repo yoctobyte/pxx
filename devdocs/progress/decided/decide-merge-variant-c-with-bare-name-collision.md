@@ -30,7 +30,7 @@ The BARE name under a collision does not, and the reason is general:
 | FPC (measured against the oracle) | **sysutils'** — the LAST unit named wins |
 | pxx today | **pylib's** — the first registered wins |
 
-That is [[bug-pascal-uses-clause-duplicate-name-resolves-first-not-last]], filed
+That is [[bug-p-class-name-collision-across-units-resolves-first-not-last]], filed
 separately because it is far wider than exceptions: it applies to any name two
 used units share — type, routine, constant — and it is silent.
 
@@ -98,7 +98,7 @@ constructed to exercise it; no real program is in that position.
 > what cross importing was intended for."*
 
 So: **merge**, accept the bare-name answer, and let
-[[bug-pascal-uses-clause-duplicate-name-resolves-first-not-last]] carry the
+[[bug-p-class-name-collision-across-units-resolves-first-not-last]] carry the
 parity fix on its own schedule. Not option C — a diagnostic for a case nobody
 reaches is noise with a maintenance cost.
 
@@ -139,3 +139,24 @@ about collisions in general.
 
 ## Log
 - 2026-08-14 — decided, commit 953a902d6.
+
+
+## Correction 2026-08-14 — the parity ticket this decision cited did not exist
+
+The argument above says *"the parity ticket is filed with a measured oracle
+repro, so nothing is being lost track of."* It was not filed:
+`bug-pascal-uses-clause-duplicate-name-resolves-first-not-last` was cited here
+and in `feature-a-one-exception-class-in-a-shared-unit`, and no such file
+existed on the board.
+
+Now filed as
+[[bug-p-class-name-collision-across-units-resolves-first-not-last]] (Track P,
+p45), and the link above repointed. The decision stands unchanged — it rested
+mainly on the exposed case being synthetic — but the "it is tracked elsewhere"
+half of it is only true as of now.
+
+Worth recording alongside: the **routine** half of that divergence is already
+DONE ([[bug-p-uses-order-does-not-decide-which-unit-wins]], last-in-clause wins,
+gated at `--tier limited` 1726/1726). It is specifically **classes** that were
+never done, which `devdocs/dev/name-resolution.md` §2.2 states outright:
+*"Scope hiding — BUILT for routines, MISSING for types/classes."*
