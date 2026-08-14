@@ -92,7 +92,7 @@ regular file and a closed fd 0. That last one is the real check; port
 independence is the easy half.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 2e508c822.
 
 ## Resolved 2026-08-14 (Track B)
 
