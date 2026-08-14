@@ -103,4 +103,4 @@ a NESTED call (which must not be mistaken for ours). Diffed against CPython.
 Pinned v304 for the pylib half.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit d7db6f8b5.
