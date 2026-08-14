@@ -109,4 +109,4 @@ covering both routes and asserting they agree with the instance spellings;
 wired into `test-nilpy`. Pinned as v302 so the pylib half reaches Track B.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit dfe66cbcd.

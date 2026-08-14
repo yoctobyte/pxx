@@ -194,4 +194,4 @@ an unsupported type annotation", at 29 files across three parameter names.
 `test-nilpy` with the fix.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit dfe66cbcd.
