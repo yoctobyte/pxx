@@ -4,6 +4,8 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=))"
+status: working
+owner: claude-A-N
 ---
 
 # Builtin surface gaps found by the 2026-08-12 sweep

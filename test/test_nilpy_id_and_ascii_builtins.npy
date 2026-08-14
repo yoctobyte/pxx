@@ -1,0 +1,53 @@
+# `id(x)` and `ascii(x)` — two of the absent builtins from the 2026-08-12 sweep.
+#
+# Frontend intercepts, not pylib routines named `id` / `ascii`. A later `uses`
+# unit SHADOWS a whole name rather than joining its overload set, which is how a
+# pylib `format` stopped existing the moment a program said `import json`; a
+# builtin that vanishes when you add an import is worse than a missing one. The
+# `import json` row below keeps that honest.
+#
+# bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep
+
+import json
+
+# --- id: the documented contract is "unique among LIVE objects" -------------
+a = [1, 2]
+b = a
+c = [1, 2]
+print(id(a) == id(b))          # the same object
+print(id(a) == id(c))          # equal contents, different objects
+d = {"k": 1}
+e = d
+print(id(d) == id(e))
+print(id(a) == id(d))
+
+# an id is an int and behaves like one
+print(type(id(a)).__name__)
+print(id(a) == id(a))
+
+# --- ascii: repr(), with the non-ASCII escaped ------------------------------
+print(ascii("hi"))
+print(ascii(5), ascii(1.5), ascii(True), ascii(None))
+print(ascii([1, "x"]))
+print(ascii({"k": 2}))
+print(ascii((1, 2)))
+print(ascii(""))
+
+# ascii agrees with repr for pure ASCII, which is the whole of its contract here
+print(ascii("abc") == repr("abc"))
+
+# in an expression position, not only as a statement
+n = len(ascii("abcd"))
+print(n)
+print([ascii(v) for v in [1, "s"]])
+
+# --- a user def SHADOWS the builtin, as it does in CPython ------------------
+def id(x):
+    return "shadowed"
+
+
+def ascii(x):
+    return "also shadowed"
+
+
+print(id(3), ascii(3))

@@ -5144,6 +5144,28 @@ begin
   pyhash_v := Int64(PyVarHashKey(PPyVarRec(@v)));
 end;
 
+function pyid_v(const v: Variant): Int64;
+begin
+  pyid_v := PPyVarRec(@v)^.Payload;
+end;
+
+function pyascii_v(const v: Variant): AnsiString;
+var r, hexd, acc: AnsiString; i, b: Integer;
+begin
+  r := pyvar_repr(v);
+  hexd := '0123456789abcdef';
+  acc := '';
+  for i := 1 to Length(r) do
+  begin
+    b := Ord(r[i]);
+    if b < 128 then
+      acc := acc + r[i]
+    else
+      acc := acc + '\x' + hexd[(b div 16) + 1] + hexd[(b mod 16) + 1];
+  end;
+  pyascii_v := acc;
+end;
+
 function TPyDict.indexof(const k: Variant): Integer;
 var
   i: Integer;

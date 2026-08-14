@@ -13645,6 +13645,42 @@ begin
         Exit;
       end;
 
+      { `id(x)` and `ascii(x)`, the same shape as `hash(x)` above — a pylib
+        helper the language could not reach. `procIdx < 0` keeps a user `def id`
+        in charge, which is Python's own rule for shadowing a builtin, and is
+        why these are intercepts rather than pylib routines named `id`/`ascii`:
+        a later `uses` unit SHADOWS a whole name rather than joining its
+        overload set, so a pylib `format` stopped existing the moment a program
+        said `import json` (see the format note in
+        bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep).
+        A builtin that vanishes when you add an import is worse than a missing one. }
+      if PyExprMode and CaseEqual(name, 'id') and (procIdx < 0) and
+         (Tokens[TokPos].Kind = tkLParen) and (FindProc('pyid_v') >= 0) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('pyid_v');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyInt64);
+        LastExprTk := tyInt64;
+        Exit;
+      end;
+      if PyExprMode and CaseEqual(name, 'ascii') and (procIdx < 0) and
+         (Tokens[TokPos].Kind = tkLParen) and (FindProc('pyascii_v') >= 0) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('pyascii_v');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyAnsiString);
+        LastExprTk := tyAnsiString;
+        Exit;
+      end;
+
       { Abs(e)/Sqr(e): System intrinsics lowered to builtin helpers (eval-once;
         int and float variants by the argument type). No `uses`; user routine of
         the same name shadows. ESP (no builtin unit) errors with a clear message. }

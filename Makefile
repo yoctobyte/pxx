@@ -1423,6 +1423,12 @@ test-nilpy: $(COMPILER)
 	# The first half of the file is the single-binding case that must NOT widen.
 	./$(COMPILER) test/test_nilpy_block_unreadable_binding_widens.npy /tmp/test_nilpy_blkunk26
 	/tmp/test_nilpy_blkunk26 | diff -u test/test_nilpy_block_unreadable_binding_widens.expected -
+	# id() and ascii(). Frontend intercepts, not pylib routines of those names:
+	# a later `uses` unit shadows a whole name rather than joining its overload
+	# set, which is how a pylib `format` vanished on `import json`. The test
+	# imports json for exactly that reason.
+	./$(COMPILER) test/test_nilpy_id_and_ascii_builtins.npy /tmp/test_nilpy_idascii26
+	/tmp/test_nilpy_idascii26 | diff -u test/test_nilpy_id_and_ascii_builtins.expected -
 	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma
 	# inside a dict/set literal argument counted as an argument SEPARATOR: a
 	# 2-entry literal made update() look 2-arity, no overload matched, and
