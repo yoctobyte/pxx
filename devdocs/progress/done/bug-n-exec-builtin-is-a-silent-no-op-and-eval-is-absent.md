@@ -180,4 +180,4 @@ fallback that can only turn a NameError into a value — but Track T's matrix
 against this sha is what actually covers it.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 000ad05dd.
