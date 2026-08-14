@@ -208,4 +208,4 @@ byte-identical, and the four class/attribute-layout nilpy tests re-diffed
 unchanged.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit b9e8a9b3c.
