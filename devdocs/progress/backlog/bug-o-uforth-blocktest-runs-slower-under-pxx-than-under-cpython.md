@@ -299,3 +299,55 @@ ticket's own routing note is satisfied — this was decided from the profile.
 Parked deliberately rather than microfixed. Nothing is half-applied — no
 compiler change was made — so this returns to the backlog with the diagnosis
 banked, per `devdocs/dev/root-cause-over-microfix.md`.
+
+## 2026-08-14 — CAUSE A FIXED (pin v298). Cause B is what uforth actually pays.
+
+`PXX_FLAG_ASCII_KNOWN` makes the header's ASCII bit decidable, so
+`pystr_isascii` scans at most once per string instead of once per index.
+
+| `c = s[i]` across the string | before | after |
+| --- | --- | --- |
+| n=20000 | 1.904s | 0.015s |
+| n=40000 | 7.827s | 0.028s |
+| n=80000 | 30.979s | 0.047s |
+| n=160000 | **123.811s** | **0.106s** |
+
+Linear, 1168x at n=160k. `len(s)` in a loop is linear too and marginally faster
+than CPython (0.031s vs 0.033s at n=80k) where it had been quadratic.
+
+The hazard this ticket flagged was handled rather than hoped away: a zero meta
+word meant BOTH "scanned, not ASCII" and "nobody looked", so the new KNOWN bit
+separates them, and `pystr_isascii` records what it finds — producers that never
+stamped are self-healing, so no audit of every string-producing site was needed.
+Soundness rests on one checkable claim: byte mutation goes through
+`PXXStrUnique`'s COW, both of whose paths hand back a writable block, so both
+forget the answer; `PXXStrSetLen` always allocates fresh and `PXXHdrInit` zeroes
+the meta.
+
+Verified against CPython — unicode indexing, slicing, iteration, mixed
+derivations, both repeat forms, and a Pascal in-place `s[7] := Chr(200)` after
+the question was asked. New test `test_nilpy_str_ascii_cache.npy`.
+
+### And it does NOT fix this ticket's own subject
+
+uforth's word sets moved 1.748s -> 1.736s. That is the honest result and it was
+predictable from the profile: **62.5% of uforth's instructions are in
+PXXStrConcat**, against 4.3% in `pystr_isascii`. uforth builds output strings by
+appending; it does not index them.
+
+So the remaining work IS cause B, and the ticket should not be closed on A.
+
+### Cause B, scoped
+
+`s = s + c` copies the whole accumulation per append. The fix is NOT a builtin
+tweak, and it is worth stating why so nobody starts one: `PXXStrConcat(lenA,
+srcA, srcB, lenB)` returns a fresh handle and **does not know the destination
+slot**, so it cannot append in place without guessing. Deciding to mutate from
+the left operand's refcount alone is a silent-wrong-value bug: `t := s + 'x'`
+with a refcount-1 `s` would grow `s` itself, and `s` would appear to have
+changed.
+
+It needs the CALLER's intent — an IR-level append when the destination IS the
+left operand — plus spare capacity in the block so the append is amortised O(1).
+That is Track A codegen work sharing ground with the SetLength-no-spare-capacity
+finding, and the two should be sized together.
