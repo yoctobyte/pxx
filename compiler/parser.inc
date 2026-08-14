@@ -23367,7 +23367,9 @@ begin
         table, so the qualifier only disambiguates the parse, not the lookup. }
       tkQUnit := -1;
       if (CurTok.Kind = tkIdent) then tkQUnit := ConsumeUnitQualifier(lo);
-      if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual TYPEARM lo=', lo, ' qunit=', tkQUnit);
+      if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual TYPEARM lo=', lo, ' qunit=', tkQUnit,
+        ' foa_su=', FindUnitOrAlias('sysutils'), ' foa_py=', FindUnitOrAlias('pylib'),
+        ' inunit=', FindUClassInUnit(lo, tkQUnit), ' flat=', FindUClass(lo));
       { lo is now the member name; CurTok sits on it. The unit index is KEPT —
         it used to be dropped on the floor because "types live in one global
         table, so the qualifier only disambiguates the parse, not the lookup".
