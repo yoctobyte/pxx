@@ -301,6 +301,43 @@ stand-in code — for a dependency audit, or to find out how much of a program
 actually rests on shimmed surface. It is not a hardening flag: a build that
 passes `--no-shims` is not more correct, only more honest about what it used.
 
+## `__file__`, `sys.executable`, and where data files live
+
+A compiled Nil Python program has no source file at run time, so `__file__`
+names the **executable**:
+
+- for the **main module**, it is the binary's own absolute path;
+- for an **imported module**, it is that binary's directory joined with the
+  module's file name — a path that need not exist;
+- `sys.executable` is the same binary. (Under CPython it is the interpreter,
+  which is the same idea: the thing that is actually running.)
+
+All three are absolute and independent of the current directory. The practical
+consequence is the line every program that ships data files already has:
+
+```python
+here = os.path.dirname(os.path.abspath(__file__))   # the executable's directory
+path = os.path.join(here, "data.json")
+```
+
+Under CPython that finds data next to your `.py` sources. In a compiled build it
+finds data next to the **binary** — so that is where to put it. Copy the
+executable somewhere else and `here` follows it, because the path is resolved
+from the running program, not baked in at compile time.
+
+Frozen Python does the same thing for the same reason: PyInstaller and cx_Freeze
+also point `__file__` at the bundle rather than at sources that are no longer
+there. If you have shipped a frozen app, this is the shape you already know.
+
+Two things follow that are worth knowing before you meet them:
+
+- `open(__file__)` in the main module **succeeds, and opens the executable** —
+  a couple of megabytes of ELF, not Python source. In an imported module it
+  fails, because that path is synthesized and no file is there.
+- Code that keeps data beside its `.py` sources and reaches it through
+  `__file__` needs the data moved next to the binary, or the path supplied
+  some other way (an argument, an environment variable, a config file).
+
 ## Known gotchas
 
 These are open, tracked issues — real-world `.py`/`.npy` programs can still
