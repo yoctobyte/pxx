@@ -77,4 +77,4 @@ its own merits, and has better justifications than type inference:
 multiple-error reporting, better diagnostics, and any other speculative parse.
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit c7d65da83.
