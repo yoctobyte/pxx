@@ -14127,6 +14127,59 @@ begin
     Result := True;
 end;
 
+{ A keyword run (`name=` or `**e`) appears LATER in this argument list, at
+  depth 0, after a positional argument we are standing on. `d.update(m, c=2)`
+  is ordinary Python — the mapping first, keywords winning — and
+  PyDictKwArgsAhead alone says False for it, so the ordinary argument path
+  parsed `m` and then met `c=2` with nothing to do about it ("unexpected
+  token c"). Scans to the closing ')' of THIS call, so a keyword belonging to a
+  nested call cannot be mistaken for one of ours.
+  bug-nilpy-dict-update-mixed-positional-and-keyword-args }
+function PyDictKwRunFrom(start: Integer): Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  if not isNilPy then Exit;
+  depth := 0;
+  i := start;
+  while i < TokCount do
+  begin
+    if (Tokens[i].Kind = tkLParen) or (Tokens[i].Kind = tkLBrack) or
+       (Tokens[i].Kind = tkBegin) then
+      Inc(depth)
+    else if (Tokens[i].Kind = tkRBrack) or (Tokens[i].Kind = tkEnd) then
+      Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;      { this call's closer — no keyword run }
+      Dec(depth);
+    end
+    else if depth = 0 then
+    begin
+      if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+         (Tokens[i + 1].Kind = tkAssign) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      if (Tokens[i].Kind = tkStar) and (i + 1 < TokCount) and
+         (Tokens[i + 1].Kind = tkStar) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ ...asked from where the parser is STANDING, which is how an argument loop
+  needs it. }
+function PyDictKwArgsLaterInCall: Boolean;
+begin
+  Result := PyDictKwRunFrom(TokPos - 1);
+end;
+
 function PyKeywordsAreKeys(mpi: Integer): Boolean;
 { The callees for which Python's keyword arguments are dict KEYS rather than
   parameter names. This is a special case in the LANGUAGE, not a gap in keyword
@@ -14198,10 +14251,16 @@ begin
   else
     Exit;
   if lp + 1 >= TokCount then Exit;
-  if not (((Tokens[lp + 1].Kind = tkIdent) and (lp + 2 < TokCount) and
-           (Tokens[lp + 2].Kind = tkAssign)) or
-          ((Tokens[lp + 1].Kind = tkStar) and (lp + 2 < TokCount) and
-           (Tokens[lp + 2].Kind = tkStar))) then Exit;
+  { ...anywhere at depth 0 in this argument list, not only at its FIRST token.
+    `d.update(m, c=2)` is a keywords-are-KEYS call too — the mapping is merged
+    into the same one dict — and asking only about the first token left the
+    arity filter counting it as a TWO-argument call. No update arm has arity 2,
+    so the candidate set came back empty and the caller fell through to the
+    first-declared arm, update(TPyList), which read a TPyDict as a list and
+    SEGFAULTED. That is the identical failure this function was written to
+    remove, reached by the one shape its lookahead did not cover.
+    bug-nilpy-dict-update-mixed-positional-and-keyword-args }
+  if not PyDictKwRunFrom(lp + 1) then Exit;
   base := UClsMBase[dictCi];
   cnt := UClsMCount[dictCi];
   for i := 0 to cnt - 1 do
@@ -14219,7 +14278,7 @@ begin
   end;
 end;
 
-function PyBuildKeywordDict: Integer;
+function PyBuildKeywordDict(seeded: Boolean): Integer;
 { Build the TPyDict that `a=1, b=2, **e` describes and yield an AN_IDENT of it.
   Stops AT the closing ')' without consuming it.
 
@@ -14258,6 +14317,35 @@ begin
   mmi := FindUMeth(ci, 'setitem');
   if mmi < 0 then Error('Nil Python: TPyDict.setitem not found');
   mpi := UMthProc_[mmi];
+  if seeded then
+  begin
+    { `d.update(m, c=2)` — the POSITIONAL mapping comes first and the keywords
+      win over it, which is precisely `{**m, 'c': 2}`. So it is merged in with
+      the very same pydict_merge the `**e` arm below uses, before any pair is
+      stored, and the result is still the ONE dict argument the callee takes.
+
+      pydict_merge is typed `src: TPyDict`, so a NON-mapping seed
+      (`d.update([("a", 1)], b=2)`) is a type error at compile time rather than
+      a silent wrong answer — the deliberate restriction this ticket scoped.
+      bug-nilpy-dict-update-mixed-positional-and-keyword-args }
+    PyParseBoolExpr;
+    valArg := AllocNode(AN_ARG);
+    ASTLeft[valArg] := CurASTNode;
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+    ASTRight[selfArg] := valArg;
+    callNode := AllocNode(AN_CALL);
+    { pydict_merge_ANY, not pydict_merge: `update` accepts a mapping OR an
+      iterable of pairs, and which one the seed is is a run-time fact. The
+      typed merge compiled a list seed and segfaulted on it. }
+    ASTIVal[callNode] := FindProc('pydict_merge_any');
+    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pydict_merge_any) not loaded');
+    ASTTk[callNode] := Ord(tyInteger);
+    ASTLeft[callNode] := selfArg;
+    PyHoistStmt(callNode);
+    if not Eat(tkComma) then
+      Error('Nil Python: expected , after the mapping in dict()/update()');
+  end;
   while CurTok.Kind <> tkRParen do
   begin
     if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
@@ -14317,6 +14405,33 @@ begin
   Result := PyMakeIdent(tmpSym);
 end;
 
+{ The two questions every argument loop must ask together: is this a callee
+  whose keywords are dict KEYS, and does a keyword run appear in this argument
+  list — standing on it, or past a leading positional mapping? Five loops
+  spelled the pair out by hand as `PyKeywordsAreKeys(mpi) and
+  PyDictKwArgsAhead`, which is why adding the seeded form had to be done in one
+  place or in five: the comment at the first of them already said "asking ONE
+  function is how it is kept honest", and they were not.
+  bug-nilpy-dict-update-mixed-positional-and-keyword-args }
+function PyKwDictArgsHere(mpi: Integer): Boolean;
+begin
+  Result := isNilPy and PyKeywordsAreKeys(mpi) and
+            (PyDictKwArgsAhead or
+             ((CurTok.Kind <> tkRParen) and PyDictKwArgsLaterInCall));
+end;
+
+{ ...and its builder half: seeded exactly when we are NOT already standing on
+  the keyword run, i.e. a positional mapping comes first. }
+function PyBuildKeywordDictHere: Integer;
+begin
+  { Seeded exactly when a positional mapping comes first. NOT at a closing
+    ')': the empty `dict()` rides this builder too (it is the keyword form with
+    no keywords), and seeding it would try to parse an expression off the
+    closer. }
+  Result := PyBuildKeywordDict((CurTok.Kind <> tkRParen) and
+                               (not PyDictKwArgsAhead));
+end;
+
 function PyKwDictArgNode(mpi: Integer): Integer;
 { The ONE entry point the argument loops call: -1 unless this callee's keywords
   are dict keys AND we are standing at one, in which case the whole keyword run
@@ -14325,9 +14440,8 @@ function PyKwDictArgNode(mpi: Integer): Integer;
   they cannot answer differently. }
 begin
   Result := -1;
-  if not PyKeywordsAreKeys(mpi) then Exit;
-  if not PyDictKwArgsAhead then Exit;
-  Result := PyBuildKeywordDict;
+  if not PyKwDictArgsHere(mpi) then Exit;
+  Result := PyBuildKeywordDictHere;
 end;
 
 procedure PyParseSetLiteral;

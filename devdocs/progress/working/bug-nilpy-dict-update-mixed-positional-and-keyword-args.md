@@ -4,6 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "`d.update(other, a=1)` is a clean compile error (`unexpected token c`) — CPython accepts a mapping followed by keywords. The keywords-are-KEYS builder takes over only when the argument list STARTS with a keyword, so a positional first argument leaves the keyword run unhandled. Same for dict(other, a=1)."
+status: working
+owner: agent-AN
 ---
 
 # `d.update(other, a=1)` — a positional argument before the keyword run

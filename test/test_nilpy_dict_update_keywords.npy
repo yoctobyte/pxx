@@ -81,3 +81,42 @@ alias = orig
 alias.update(y=2)
 print(orig)
 print(orig is alias)
+
+# A POSITIONAL mapping BEFORE the keyword run -- `d.update(m, c=2)`, which is
+# `{**m, 'c': 2}` and was the row of this gate never built. It refused with
+# "unexpected token c", because both the argument loops and the OVERLOAD
+# lookahead only ever asked whether the run started at the FIRST token.
+#
+# The overload half is what makes this more than a parse fix: with the seed
+# counted as an argument the call looked like arity 2, no update arm has that
+# arity, and the caller fell through to the first-declared arm -- update(TPyList)
+# reading a TPyDict -- and SEGFAULTED. Exactly the failure PyDictKwOverloadAhead
+# was written to remove, reached by the one shape its lookahead did not cover.
+# bug-nilpy-dict-update-mixed-positional-and-keyword-args
+h2 = {"a": 0}
+h2.update({"b": 1}, c=2)
+print(h2)
+
+# ...through dict() too, and with a `**` spread in the same run
+m2 = {"k": 1}
+print(dict(m2, y=2))
+print(dict(m2, **{"z": 9}, w=5))
+
+# the seed is a mapping OR an iterable of pairs -- which one is a RUN-TIME
+# fact, so it dispatches on the object's class. A list seed used to be the
+# worse outcome: it compiled and then segfaulted.
+g2 = {}
+g2.update([("x", 1)], b=2)
+print(g2)
+
+# a keyword belonging to a NESTED call is not one of ours
+def mk(a=0):
+    return {"f": a}
+
+h3 = {}
+h3.update(mk(a=7))
+print(h3)
+
+# and the empty / no-seed forms still take the same route
+print(dict())
+print(dict(**{"q": 1}))

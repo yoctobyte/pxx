@@ -978,7 +978,8 @@ function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python 
 function PyKwDictArgNode(mpi: Integer): Integer; forward; { Nil Python: `dict(a=1)` / `d.update(a=1)` keywords are KEYS (pyparser.inc) }
 function PyKeywordsAreKeys(mpi: Integer): Boolean; forward; { Nil Python: is this the dict()/update() callee? (pyparser.inc) }
 function PyDictKwArgsAhead: Boolean; forward; { Nil Python: at `name=` or `**expr` in an argument list? (pyparser.inc) }
-function PyBuildKeywordDict: Integer; forward; { Nil Python: the dict `a=1, **e` describes (pyparser.inc) }
+function PyBuildKeywordDictHere: Integer; forward; { Nil Python: the dict `a=1, **e` describes, seeding it with a leading positional mapping when there is one (pyparser.inc) }
+function PyKwDictArgsHere(mpi: Integer): Boolean; forward; { Nil Python: this callee's keywords are dict KEYS and a keyword run is in this argument list (pyparser.inc) }
 function PyMinMaxDefaultAhead: Boolean; forward; { Nil Python: is there a `default=` keyword in this min/max call? (pyparser.inc) }
 function PyBuiltinTypeCode(const nm: AnsiString): Integer; forward; { Nil Python: PYBT_* code for a builtin type NAME, else 0 (pyparser.inc) }
 function PyMakeBuiltinTypeValue(code: Integer): Integer; forward; { Nil Python: a builtin type in VALUE position, as pybtype(code) (pyparser.inc) }
@@ -6538,10 +6539,10 @@ begin
               (four of them ask it now; that they are four is the shape
               devdocs/dev/normalise-dont-special-case.md warns about, and asking
               ONE function is how it is kept honest). }
-            if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+            if PyKwDictArgsHere(mpi) then
             begin
               margSeq := AllocNode(AN_ARG);
-              ASTLeft[margSeq] := PyBuildKeywordDict;
+              ASTLeft[margSeq] := PyBuildKeywordDictHere;
               ASTIVal[margSeq] := 0;
               ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
               mai := Procs[mpi].ParamCount;
@@ -6664,10 +6665,10 @@ begin
               `update` a `**` is not a kwargs pack to bind: its keys ARE the
               dict to merge. The plain-keyword form is caught in the loop, and
               both go through the one builder. }
-            if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+            if PyKwDictArgsHere(mpi) then
             begin
               margSeq := AllocNode(AN_ARG);
-              ASTLeft[margSeq] := PyBuildKeywordDict;
+              ASTLeft[margSeq] := PyBuildKeywordDictHere;
               ASTIVal[margSeq] := 0;
               ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
               mai := Procs[mpi].ParamCount;    { the argument list is complete }
@@ -10014,10 +10015,10 @@ begin
               end;
               { `d.update(a=1)` / `d.update(**e)` — the keywords-are-KEYS case,
                 asked the same way every other argument loop asks it. }
-              if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+              if PyKwDictArgsHere(mpi) then
               begin
                 margSeq := AllocNode(AN_ARG);
-                ASTLeft[margSeq] := PyBuildKeywordDict;
+                ASTLeft[margSeq] := PyBuildKeywordDictHere;
                 ASTIVal[margSeq] := 0;
                 ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
                 mai := Procs[mpi].ParamCount;
@@ -14963,16 +14964,16 @@ begin
           being built, so the spread merges rather than binding parameters.
           The keyword form is handled inside the loop; both go through the one
           builder. }
-        if isNilPy and PyKeywordsAreKeys(procIdx) and
-           (PyDictKwArgsAhead or
-            (CaseEqual(Procs[procIdx].Name, 'dict') and (CurTok.Kind = tkRParen))) then
+        if PyKwDictArgsHere(procIdx) or
+           (isNilPy and PyKeywordsAreKeys(procIdx) and
+            CaseEqual(Procs[procIdx].Name, 'dict') and (CurTok.Kind = tkRParen)) then
         begin
           { The empty `dict()` rides the same builder: it is the keyword form
             with no keywords, and pylib's `dict` has no zero-argument overload
             (`dict()` answered "no overload of dict matches these arguments"
             before this, on the pinned binary too). }
           argSeq := AllocNode(AN_ARG);
-          ASTLeft[argSeq] := PyBuildKeywordDict;
+          ASTLeft[argSeq] := PyBuildKeywordDictHere;
           ASTIVal[argSeq] := 0;
           argsHead := argSeq;
           lastArg := argSeq;
@@ -15488,10 +15489,10 @@ begin
                 "expected expression"), while `d.update(a=1)` reaches the
                 arity-driven loop above — the same construct through two paths,
                 so both ask the one builder. }
-              if isNilPy and PyKeywordsAreKeys(mpi) and PyDictKwArgsAhead then
+              if PyKwDictArgsHere(mpi) then
               begin
                 argSeq := AllocNode(AN_ARG);
-                ASTLeft[argSeq] := PyBuildKeywordDict;
+                ASTLeft[argSeq] := PyBuildKeywordDictHere;
                 ASTIVal[argSeq] := 0;
                 ASTRight[mlastArg] := argSeq;
                 mlastArg := argSeq;
