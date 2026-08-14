@@ -3026,6 +3026,18 @@ begin
   UClsHasGuid[ci] := True;
 end;
 
+{ NilPy spells `TFoo.ClassName` as `Foo.__name__` — the CLASS-side counterpart of
+  `type(x).__name__`, which already answers through the same RTTI name. Mapped to
+  the Pascal op rather than given a second lowering, so the two spellings cannot
+  drift apart. bug-n-pyexception-leaks-through-name-and-repr }
+function MapNilPyClassRefOpName(const nm: AnsiString): AnsiString;
+begin
+  if isNilPy and CaseEqual(nm, '__name__') then
+    MapNilPyClassRefOpName := 'ClassName'
+  else
+    MapNilPyClassRefOpName := nm;
+end;
+
 { The class-reference operations FPC puts on TObject in System, so they are reached
   with no `uses`:
 
@@ -3040,10 +3052,13 @@ end;
 
   blobNode is that blob. Returns -1 when the builtin helpers are not linked, so the
   caller can fall through to its normal handling. }
-function GenMakeClassRefOp(blobNode: Integer; const op: AnsiString; var outTk: TTypeKind): Integer;
-var pi, callNode, argSeq, argSeq2: Integer;
+function GenMakeClassRefOp(blobNode: Integer; const opRaw: AnsiString; var outTk: TTypeKind): Integer;
+var pi, callNode, argSeq, argSeq2: Integer; op: AnsiString;
 begin
   Result := -1;
+  { NilPy's `__name__` is ClassName — mapped here as well as in the predicate,
+    so the two always agree about which names this handles. }
+  op := MapNilPyClassRefOpName(opRaw);
 
   if CaseEqual(op, 'ClassType') then
   begin
@@ -3102,9 +3117,11 @@ end;
 
 { True for the three names GenMakeClassRefOp handles. }
 function IsClassRefOpName(const nm: AnsiString): Boolean;
+var m: AnsiString;
 begin
-  IsClassRefOpName := CaseEqual(nm, 'ClassName') or CaseEqual(nm, 'ClassType') or
-                      CaseEqual(nm, 'InheritsFrom');
+  m := MapNilPyClassRefOpName(nm);
+  IsClassRefOpName := CaseEqual(m, 'ClassName') or CaseEqual(m, 'ClassType') or
+                      CaseEqual(m, 'InheritsFrom');
 end;
 
 { The class RTTI blob of an INSTANCE expression. An IR node, not a builtin call:

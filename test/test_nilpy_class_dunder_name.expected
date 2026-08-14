@@ -1,0 +1,8 @@
+Exception
+ValueError
+MyErr
+Plain
+MyErr
+True
+MyErr MyErr MyErr('boom')
+True

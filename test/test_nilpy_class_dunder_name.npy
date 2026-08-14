@@ -1,0 +1,37 @@
+# `__name__` read off the CLASS, not off an instance's type. Variant C fixed
+# `type(e).__name__` and `repr(e)`; the class-side spelling still reported
+# "class method not found: __name__", which is what an exception class is
+# usually named through (`except E: print(E.__name__)`).
+# bug-n-pyexception-leaks-through-name-and-repr
+#
+# Two independent sites, which is why both are here: a STATIC class name is a
+# compile-time classref (lowered to the same ClassName the instance route
+# uses), while a class held in a VARIABLE is a VT_CLASSREF variant resolved at
+# run time -- fixing only the first left `cls = MyErr; cls.__name__` raising
+# AttributeError, and only the second would not compile at all.
+
+
+class MyErr(Exception):
+    pass
+
+
+class Plain:
+    pass
+
+
+print(Exception.__name__)
+print(ValueError.__name__)
+print(MyErr.__name__)
+print(Plain.__name__)
+
+# a class in a variable -- the run-time route
+alias = MyErr
+print(alias.__name__)
+print(hasattr(alias, "__name__"))
+
+# and it must still agree with the instance spellings it is derived from
+try:
+    raise MyErr("boom")
+except Exception as e:
+    print(type(e).__name__, e.__class__.__name__, repr(e))
+    print(type(e).__name__ == MyErr.__name__)

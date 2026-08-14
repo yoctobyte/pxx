@@ -2563,6 +2563,10 @@ test-nilpy: $(COMPILER)
 	# feature-nilpy-dotted-imports-resolve-to-source-files
 	cd test/nilpy_units/pkgcorpus && $(CURDIR)/$(COMPILER) $(CURDIR)/test/test_nilpy_package_imports.npy $(TESTTMP)/test_nilpy_pkgimp26
 	$(TESTTMP)/test_nilpy_pkgimp26 | diff -u test/test_nilpy_package_imports.expected -
+	# `__name__` off the CLASS -- both routes: a static class reference and a
+	# class held in a variable (VT_CLASSREF, resolved at run time).
+	./$(COMPILER) test/test_nilpy_class_dunder_name.npy $(TESTTMP)/test_nilpy_dname26
+	$(TESTTMP)/test_nilpy_dname26 | diff -u test/test_nilpy_class_dunder_name.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

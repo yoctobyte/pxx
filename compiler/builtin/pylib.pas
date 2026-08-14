@@ -3757,6 +3757,13 @@ begin
   begin
     Result := PyClsAttrRefGet(v, name, declFound);
     if declFound then Exit;
+    { `cls.__name__` where cls is a class held in a VARIABLE. The compile-time
+      route answers the static spelling (`MyErr.__name__`), and a class object
+      reaching this one knows its name just as well — the AttributeError below
+      was already printing it. AFTER the attribute registry, because CPython
+      lets a class that declares `__name__ = 'x'` shadow the real one.
+      bug-n-pyexception-leaks-through-name-and-repr }
+    if name = '__name__' then begin Result := PyClsRefName(v); Exit; end;
     raise AttributeError.Create('type object ''' + PyClsRefName(v)
       + ''' has no attribute ''' + name + '''');
   end;
@@ -3836,7 +3843,11 @@ function pydynattr_has_v(const v: Variant; const name: AnsiString): Boolean;
 var k: Int64;
 begin
   if pyvartag(v) = 11 then
-    Result := PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k) <> nil
+    { `__name__` must answer here too, or hasattr(cls, '__name__') says False
+      about something the read above returns — the exact split this routine
+      exists to close. }
+    Result := (name = '__name__') or
+              (PyClsAttrSlotOf(Pointer(NativeInt(PPyVarRec(@v)^.Payload)), name, k) <> nil)
   else
     Result := pydynattr_has(pyvarobj(v), name);
 end;
