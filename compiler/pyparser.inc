@@ -11803,6 +11803,7 @@ end;
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
+    kwDictNode: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
     { room for a real class hierarchy: songformatter has EIGHT detector classes
@@ -12203,6 +12204,24 @@ begin
     if hitMmi >= 0 then hitPi := UMthProc_[hitMmi];
   end;
 
+  { keywords-are-KEYS on a DYNAMICALLY dispatched receiver — `def f(m):
+    m.update(a=1)` and `xs[0].update(r=1)`, both of which arrive here rather
+    than through FindUMethOverloadAhead. `update` is a name TPyList and TPySet
+    carry too, so the dynamic scan above answered with whichever class it met
+    first and the call was reported against `TPyList.setupdate`. A KEYWORD run
+    only ever means dict.update — CPython's list and set take no keywords —
+    so the dict arm is the one answer, exactly as the static path picks it. }
+  if isNilPy then
+  begin
+    i := PyDictKwOverloadAhead(FindUClass('TPyDict'), mname);
+    if i >= 0 then
+    begin
+      hitCi := FindUClass('TPyDict');
+      hitMmi := i;
+      hitPi := UMthProc_[i];
+    end;
+  end;
+
   { Runtime tag guard, same shape as the str-method guard above: this hard
     cast assumes VT_OBJECT and dereferences the raw payload as an instance
     pointer. A receiver whose declared default never evaluates (`def f(a,
@@ -12305,6 +12324,20 @@ begin
       method; a runtime candidate re-uses the reordered argument list, which is
       right as long as the candidates agree on parameter order, and they do
       when they agree on the name and arity that got them here. }
+    { `m.update(a=1)` / `m.update(**e)` on this dynamic path: the keyword run is
+      the ONE dict argument, built by the same PyBuildKeywordDict every other
+      argument loop asks for, so the dynamic and static receivers cannot drift. }
+    kwDictNode := PyKwDictArgNode(hitPi);
+    if kwDictNode >= 0 then
+    begin
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := kwDictNode;
+      ASTIVal[argNode] := 0;                  { positional, not a keyword }
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(i);
+      Break;
+    end;
     { a starred argument on a dynamically-dispatched receiver — same expansion
       as the statically-bound method path above }
     if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
@@ -13744,18 +13777,90 @@ function PyKeywordsAreKeys(mpi: Integer): Boolean;
   binding — `update` really has no parameter called `a`, and PyKwArgIndex is
   right to say so.
 
-  `dict` ONLY, deliberately. `d.update(a=1)` wants exactly the same lowering and
-  was built and measured, and it is NOT shipped: with ONE keyword it is correct,
-  with TWO it SEGFAULTS, while the identical dict handed over as a literal
-  (`d.update({"z": 7, "y": 8})`) is fine — so the builder is right and something
-  on the METHOD-argument path mishandles its hoisted setitem statements (the
-  trial-parse-rewind-replays-hoists shape is the suspect). A form that works for
-  one keyword and corrupts memory for two is worse than the compile error it
-  would replace, so update() keeps the error until that is understood. Measured
-  notes in bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep. }
+  Two callees: `dict(a=1)` and `d.update(a=1)`, both taking the one dict
+  PyBuildKeywordDict makes, so the two forms cannot drift apart.
+
+  `update` is asked for by PROC INDEX against EVERY overload of TPyDict.update,
+  not against the first one FindUMeth answers with. There are three
+  (TPyList / TPyDict / Variant), the call site's lookahead picks between them,
+  and a predicate that compared against `FindUMeth`'s single hit therefore said
+  True for a two-keyword call and False for a one-keyword one — the same
+  construct answered differently by argument count. }
+var ci, mmi, base, cnt, i: Integer;
 begin
   Result := isNilPy and (mpi >= 0) and (mpi < ProcCount) and
             CaseEqual(Procs[mpi].Name, 'dict');
+  if Result then Exit;
+  if not isNilPy then Exit;
+  if (mpi < 0) or (mpi >= ProcCount) then Exit;
+  ci := FindUClass('TPyDict');
+  if ci < 0 then Exit;
+  mmi := FindUMeth(ci, 'update');
+  if mmi < 0 then Exit;
+  base := UClsMBase[ci];
+  cnt := UClsMCount[ci];
+  for i := 0 to cnt - 1 do
+    if (UMthProc_[base + i] = mpi) and
+       CaseEqual(Procs[mpi].Name, 'TPyDict.update') then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+function PyDictKwOverloadAhead(ci: Integer; const name: AnsiString): Integer;
+{ The UMeth index `d.update(a=1, b=2)` / `d.update(**e)` must resolve to, or -1
+  when this is not that call.
+
+  Keywords-are-KEYS means the whole keyword run is ONE TPyDict argument, however
+  many keywords it holds — and neither half of ordinary overload selection can
+  see that. The arity filter COUNTS the keywords, so `update(z=7, y=8)` looked
+  like a two-argument call, matched none of the three arms, and fell through to
+  FindUMethArity's first name hit: the `update(l: TPyList)` arm, which then
+  received a TPyDict and SEGFAULTED — while `update(z=6)` happened to land on the
+  Variant arm and worked. The speculative probe cannot see it either: a `**` is
+  not an expression, so it died as a bare "expected expression" raised from a
+  place no argument loop could explain (four loops were instrumented across two
+  earlier sessions before a gdb backtrace named this function).
+
+  So both symptoms are ONE cause — the argument list was described to the
+  overload machinery in the wrong units — and this answers it in the one place
+  where the units are still known, ahead of the filter and the probe alike.
+
+  bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep }
+var base, cnt, i, pi, lp, dictCi: Integer;
+begin
+  Result := -1;
+  if not isNilPy then Exit;
+  dictCi := FindUClass('TPyDict');
+  if (dictCi < 0) or (ci <> dictCi) then Exit;
+  { standing just before, or on, the '(' — the run starts at the token after it }
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+    lp := TokPos
+  else if CurTok.Kind = tkLParen then
+    lp := TokPos - 1
+  else
+    Exit;
+  if lp + 1 >= TokCount then Exit;
+  if not (((Tokens[lp + 1].Kind = tkIdent) and (lp + 2 < TokCount) and
+           (Tokens[lp + 2].Kind = tkAssign)) or
+          ((Tokens[lp + 1].Kind = tkStar) and (lp + 2 < TokCount) and
+           (Tokens[lp + 2].Kind = tkStar))) then Exit;
+  base := UClsMBase[dictCi];
+  cnt := UClsMCount[dictCi];
+  for i := 0 to cnt - 1 do
+  begin
+    pi := UMthProc_[base + i];
+    if (pi < 0) or (pi >= ProcCount) then Continue;
+    if not PyKeywordsAreKeys(pi) then Continue;
+    if not UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], dictCi,
+                            name, ULower(name)) then Continue;
+    if Procs[pi].ParamCount <> 2 then Continue;
+    if Procs[pi].Params[1].TypeKind <> tyClass then Continue;
+    if ProcParamRecId[pi * MAX_PROC_PARAMS + 1] <> REC_UCLASS_BASE + dictCi then Continue;
+    Result := base + i;
+    Exit;
+  end;
 end;
 
 function PyBuildKeywordDict: Integer;

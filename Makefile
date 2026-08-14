@@ -1400,6 +1400,13 @@ test-nilpy: $(COMPILER)
 	# unannotated parameter matches neither, so it read a dict as a list.
 	./$(COMPILER) test/test_nilpy_dict_update_variant.npy /tmp/test_nilpy_dictupdv26
 	/tmp/test_nilpy_dictupdv26 | diff -u test/test_nilpy_dict_update_variant.expected -
+	# d.update(a=1) -- the keywords are dict KEYS. The overload machinery was
+	# told the argument list in the WRONG UNITS: the arity filter counted the
+	# keywords (two of them matched no arm, fell through to update(TPyList) and
+	# SEGFAULTED on a TPyDict) and the speculative probe cannot parse a `**` at
+	# all. Every receiver shape, because they reach the call by three routes.
+	./$(COMPILER) test/test_nilpy_dict_update_keywords.npy /tmp/test_nilpy_dictupdkw26
+	/tmp/test_nilpy_dictupdkw26 | diff -u test/test_nilpy_dict_update_keywords.expected -
 	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma
 	# inside a dict/set literal argument counted as an argument SEPARATOR: a
 	# 2-entry literal made update() look 2-arity, no overload matched, and

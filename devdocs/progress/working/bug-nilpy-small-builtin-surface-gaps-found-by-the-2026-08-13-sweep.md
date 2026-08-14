@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 summary: "Four small refusals found by the 2026-08-13 CPython sweep: `issubclass(A, B)`, `d.update(k=v)` (the keyword form), `key=str.lower` (an unbound method as a callable value), and Unicode special-casing in upper()/lower() ('ß'.upper() is 'ß', CPython 'SS'). Each is a parse error or a wrong string, none is a silent wrong VALUE"
 status: working
-owner: claude-A-C-N
+owner: claude-A-N
 ---
 
 # Small builtin-surface gaps from the 2026-08-13 sweep
@@ -243,3 +243,82 @@ it worked. Same construct, two routes — this file's recurring shape.)
 
 - `d.update(a=1)` / `d.update(**e)`, per the two sections above.
 - `"ß".upper()` / `"İ".lower()`, scoped to the wider unicode question.
+
+## Row 2 DONE 2026-08-14 — `d.update(a=1)` and `d.update(**e)`, both halves
+
+Shipped, matching CPython on every receiver shape. The two symptoms the previous
+sessions recorded separately — the **segfault on two keywords** and the
+**"expected expression" from a place no argument loop explains** — are ONE cause,
+and neither is where the notes above looked.
+
+### The cause: the argument list was described to overload selection in the wrong units
+
+Keywords-are-KEYS means the whole run is **one TPyDict argument**, however many
+keywords it holds. `FindUMethOverloadAhead` was never told that, and both of its
+halves then went wrong on the same call:
+
+- its **arity filter counts the keywords**, so `d.update(z=7, y=8)` looked like a
+  two-argument call, matched none of the three `update` arms
+  (TPyList / TPyDict / Variant), and fell through to `FindUMethArity`'s first
+  name hit — `update(l: TPyList)` — which then received a TPyDict. That is the
+  segfault, and it is the same type confusion as
+  [[bug-nilpy-dict-update-with-a-variant-argument-segfaults]] arriving by a new
+  road. `d.update(z=6)` *happened* to land on the Variant arm, which is the whole
+  reason one keyword worked and two corrupted memory.
+- its **speculative probe** parses each argument to learn its type, and a `**` is
+  not an expression, so it raised a bare `expected expression`.
+
+So the parked note's suspicion — "the METHOD-argument path mishandles the
+builder's hoisted setitem statements, the trial-parse-rewind shape is the
+suspect" — was wrong. The builder and its hoists were never at fault; the callee
+was already the wrong one before an argument was parsed.
+
+### How it was found, since the notes above say guessing cost four rebuilds
+
+Instrumenting argument loops is what failed twice. **Ten** loops call
+`PyKwArgIndex`; all ten were instrumented this time and the failing call reached
+none of them. One `gdb -batch -ex "break Error" -ex bt` on `compiler/pascal26-debug`
+named `FindUMethOverloadAhead` in the first frame that mattered. The tool was
+`make pxx-debug`, which is one line in the playbook and cheaper than every probe
+tried before it.
+
+### The fix — one intercept, ahead of both halves
+
+`PyDictKwOverloadAhead(ci, name)` answers the UMeth index a keywords-are-KEYS run
+resolves to, and `FindUMethOverloadAhead` asks it before the arity filter and
+before the probe. Placed there deliberately: an intercept *after* selection would
+have to repair the chosen call node instead, and an earlier cut of this fix did
+exactly that (`PyDictKwRetarget`, patched into all four builder sites) — it
+worked, and it was **deleted** once the upstream fix landed, because two
+mechanisms for one concept is the shape `normalise-dont-special-case.md` warns
+about and the second one is the one that stays broken.
+
+`PyKeywordsAreKeys` also had a real bug of its own: it compared `mpi` against
+`FindUMeth`'s **single** hit, so it answered True or False for the same construct
+depending on which of the three overloads the call site had picked. It now checks
+every arm of TPyDict.
+
+### The dynamic receiver is a THIRD route and needed its own arm
+
+`def f(m): m.update(a=1)` and `xs[0].update(r=1)` never reach
+`FindUMethOverloadAhead` — they go through the dynamic-dispatch path, where
+`update` is a name TPyList and TPySet carry too, so the scan answered with
+`TPyList.setupdate`. That path now asks the same `PyDictKwOverloadAhead` for the
+callee and the same `PyKwDictArgNode` for the argument. A keyword run only ever
+means `dict.update` — CPython's list and set take no keywords — so there is one
+right answer and every route gives it.
+
+### Gate
+
+`test/test_nilpy_dict_update_keywords.npy` + `.expected` **generated from
+CPython**, byte-identical, wired into `test-nilpy`. Covers one/two/three
+keywords, `**` spread, spread mixed with a keyword, later-key-wins, the plain
+dict argument, `dict()`/`dict(p=1)`/`dict(**e, q=2)`, non-literal values, and
+name / field / subscript / unannotated-parameter receivers. `make
+compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN; the seven sibling
+kwarg/update tests re-run by hand and green.
+
+### Still open in this ticket
+
+- `"ß".upper()` / `"İ".lower()` — case mappings that change the code-point count,
+  scoped by this ticket to the wider unicode question rather than to itself.

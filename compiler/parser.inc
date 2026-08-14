@@ -976,6 +976,7 @@ function PyKwDictArgNode(mpi: Integer): Integer; forward; { Nil Python: `dict(a=
 function PyKeywordsAreKeys(mpi: Integer): Boolean; forward; { Nil Python: is this the dict()/update() callee? (pyparser.inc) }
 function PyDictKwArgsAhead: Boolean; forward; { Nil Python: at `name=` or `**expr` in an argument list? (pyparser.inc) }
 function PyBuildKeywordDict: Integer; forward; { Nil Python: the dict `a=1, **e` describes (pyparser.inc) }
+function PyDictKwOverloadAhead(ci: Integer; const name: AnsiString): Integer; forward; { Nil Python: the TPyDict.update arm a keywords-are-KEYS run resolves to (pyparser.inc) }
 function PyKwNamesTokPos: Integer; forward; { Nil Python: '(' token index of the call at the current parse position, or -1 (pyparser.inc) }
 function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer; forward; { Nil Python: pick the UMeth overload a keyword argument names (pyparser.inc) }
 function PyPromoteProcOverloadByKwAt(procIdx, firstParam, parenTok: Integer): Integer; forward; { Nil Python: pick the Procs[] overload a keyword argument names (pyparser.inc) }
@@ -3420,6 +3421,16 @@ begin
   Result := -1;
   name2 := name;
   lo := ULower(name2);
+
+  { NilPy `d.update(a=1, b=2)` / `d.update(**e)`: the keywords are dict KEYS, so
+    the argument list is ONE TPyDict however many of them there are. Answered
+    before the arity filter (which counts them) and before the speculative probe
+    (which cannot parse a `**` at all). PyDictKwOverloadAhead carries the why. }
+  if isNilPy then
+  begin
+    i := PyDictKwOverloadAhead(ci, name);
+    if i >= 0 then begin Result := i; Exit; end;
+  end;
 
   { 1. collect the arity-viable candidates }
   nCand := 0;

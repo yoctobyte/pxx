@@ -1,0 +1,83 @@
+# dict.update() with KEYWORD arguments — the keywords are dict KEYS, not
+# parameter names. Every receiver shape in one file, because they reach the
+# call through different routes: a plain name goes through
+# FindUMethOverloadAhead, a subscript result and an unannotated parameter go
+# through the dynamic-dispatch path.
+#
+# bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep
+
+# one keyword, then two, then three — the COUNT is what used to change the
+# answer: the arity filter counted the keywords, so two of them matched no
+# overload and fell through to update(l: TPyList), which then received a
+# TPyDict and segfaulted.
+a = {"k": 0}
+a.update(z=6)
+print(a)
+
+b = {"k": 0}
+b.update(z=7, y=8)
+print(b)
+
+c = {"k": 0}
+c.update(z=7, y=8, w=9)
+print(c)
+
+# a `**` spread, which is not an expression and so could not be probed at all
+d = {"k": 0}
+d.update(**{"z": 7})
+print(d)
+
+# mixed: a spread and a keyword, later keys winning
+e = {"k": 0}
+e.update(**{"z": 1}, y=2)
+print(e)
+
+f = {"k": 0, "z": 1}
+f.update(**{"z": 99})
+print(f)
+
+# no keywords at all — the ordinary dict argument must keep working
+g = {"k": 0}
+g.update({"z": 7, "y": 8})
+print(g)
+
+# dict() itself, the sibling that shares the builder
+print(dict(p=1, q=2))
+print(dict(**{"p": 1}, q=2))
+print(dict())
+
+# values that are ordinary expressions, not literals
+n = 5
+h = {}
+h.update(sum=n + 1, txt="a" + "b", none=None, lst=[1, 2])
+print(h)
+
+# a FIELD receiver
+class W:
+    def __init__(self):
+        self.d = {}
+
+w = W()
+w.d.update(p=1, q=2)
+print(w.d)
+
+# a SUBSCRIPT-result receiver — the dynamic path
+xs = [{}]
+xs[0].update(r=1, s=2)
+print(xs[0])
+
+# an unannotated PARAMETER — also dynamic, and `update` is a name TPyList and
+# TPySet carry too, so this used to resolve against TPyList.setupdate
+def fill(m):
+    m.update(a=1, b=2)
+    m.update(**{"c": 3})
+    return m
+
+print(fill({}))
+
+# the receiver keeps its identity — update mutates in place
+orig = {"x": 1}
+alias = orig
+alias.update(y=2)
+print(orig)
+print(orig is alias)
