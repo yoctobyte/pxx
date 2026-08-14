@@ -2841,6 +2841,11 @@ test-asm: $(COMPILER)
 	/tmp/test_asmcore_xtensa_26 | tail -1 | grep -q "all asmcore_xtensa checks passed"
 	./$(COMPILER) test/test_asm_loop.asm /tmp/test_asm_loop26
 	/tmp/test_asm_loop26; test "$$?" = "45"
+	# scalar SSE from a Pascal inline asm block (feature-inline-asm-xmm-operands
+	# phase 1). Runs the arithmetic rather than pinning bytes: a correct opcode
+	# with a wrong ModRM still encodes, and only execution catches that.
+	./$(COMPILER) test/test_asm_sse_scalar.pas /tmp/test_asm_sse_scalar26
+	test "$$(/tmp/test_asm_sse_scalar26)" = "asm sse scalar ok"
 	./$(COMPILER) test/test_asm_hello.asm /tmp/test_asm_hello26
 	test "$$(/tmp/test_asm_hello26)" = "Hello, asm world!"
 	./$(COMPILER) test/test_asm_entry_global.asm /tmp/test_asm_entry_global26

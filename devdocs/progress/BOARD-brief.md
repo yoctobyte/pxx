@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:9 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1762 rejected:35`
+`urgent:1 working:1 unfinished:9 blocked:4 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1762 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-inline-asm-xmm-operands` [A] — owner: agent-an
 
 ## urgent (1) — jump the queue
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 203, ranked
+## Ready — top 30 of 202, ranked
 
 - `[p 70] [A]` bug-a-threadsafe-segfaults-on-every-nilpy-program
 - `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 2)
@@ -51,7 +51,6 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
-- `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` chore-makefile-testtmp-parameterize
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
+- `[p 50] [B]` bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14
 
-_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

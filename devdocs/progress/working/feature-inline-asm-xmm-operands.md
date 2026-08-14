@@ -1,13 +1,14 @@
 ---
 prio: 55  # auto — blocks all float and vector asm; gates the per-ISA optimization story
 track: A
+owner: agent-an
 ---
 
 # Inline asm cannot express float or vector code (no xmm operands, no packed SSE, no VEX, no cpuid)
 
 - **Type:** feature — **Track A** (`compiler/asmfront.inc`, `compiler/asmtext.inc`,
   `compiler/asmtext_386.inc`; the asm frontend).
-- **Status:** backlog — filed 2026-07-20, **rescoped the same day** (the first
+- **Status:** working
   version of this ticket said "plausibly a small change" — that was wrong, see
   Correction below).
 - **Found by:** Track E, building the Mandelbrot demos
@@ -116,3 +117,92 @@ dispatch to extend) · `compiler/asmenc.inc` (has the xmm names already).
 - 2026-07-20 — **Rescoped** after surveying the mnemonic table: packed SSE, all
   of AVX/VEX, and `cpuid` are absent too, so this is a phased project rather
   than a small fix. Original estimate withdrawn.
+
+---
+
+## 2026-08-14 — PHASE 1 DONE, and a scope correction: it was TWO gaps, not one
+
+### The correction
+
+This ticket's phase 1 says *"xmm operands in `asmfront.inc` (size 16), so the
+ALREADY-ENCODED scalar SSE becomes reachable from Pascal inline asm."* That is
+wrong, and the "Correction to the original scope" section above inherited the
+same conflation: it lists the scalar-SSE row as **encoded** without saying
+*where*.
+
+There are **three** x86 encoders in this compiler, with three separate mnemonic
+tables:
+
+| file | drives | had scalar SSE? |
+| --- | --- | --- |
+| `asmfront.inc` | standalone `.asm` FILES, via `lib/asmcore` | n/a — its gap was the REGISTER table |
+| `asmenc.inc` | Pascal inline `asm ... end` | **NO — zero SSE mnemonics** |
+| `asmtext.inc` | compiler-emitted `EmitAsmX64` | yes, the 17 the ticket lists |
+
+So the scalar SSE was encoded in the encoder that inline asm does **not** use.
+Measured rather than assumed: `grep -c` for the scalar mnemonics gives **0** in
+`asmenc.inc` and **17** in `asmtext.inc`. And the two gaps are in different
+files from each other:
+
+- `asmfront.inc`'s `AsmRegLookup` was a GP-only name table — that is the one the
+  ticket names, and it affects `.asm` files, not inline asm;
+- `asmenc.inc`'s operand parser already resolved `xmm0..15` (via `AsmRegNum`,
+  size 16) and had done all along. Its missing piece was the MNEMONIC.
+
+That is why the first attempt still failed with `asm: unknown instruction:
+movsd` *after* the register table was fixed — the registers had never been the
+inline-asm problem.
+
+### What landed
+
+1. **`asmfront.inc`: `AsmRegLookup` now delegates to `AsmRegNum`** instead of
+   carrying a second hand-written table. `AsmRegNum` already resolves the whole
+   register file including xmm at size 16, and `reg_rax..reg_r15` ARE 0..15
+   (`asmcore_x64.pas`), so no translation is needed. A size filter (4/8/16)
+   keeps the change to exactly "xmm is now nameable" — `AsmRegNum` also answers
+   the 1- and 2-byte names, which this operand model has never accepted, and
+   silently widening to them would be a second, unrelated change.
+2. **`asmenc.inc`: a scalar-SSE arm**, deliberately the same prefix/opcode data
+   as `asmtext.inc`'s (these are x86 facts, not a policy either encoder gets to
+   pick):
+   `movsd movss addsd addss subsd subss mulsd mulss divsd divss sqrtsd comisd
+   ucomisd cvtsd2ss cvtss2sd xorpd xorps andpd pxor`, plus `cvtsi2sd`,
+   `cvttsd2si` and `cvtsd2si`.
+
+`cvtsd2si` is included on purpose: it is `cvttsd2si`'s ROUNDING sibling ($2D vs
+$2C), and shipping only the truncating form is a trap, since truncation is not
+the default behaviour anywhere else.
+
+### Verified against gas, byte for byte
+
+21 instructions covering every prefix family, both REX-extended registers
+(`xmm9`, `xmm10`) and both GP widths of the conversions, assembled from
+identical Intel syntax by `gcc -c` and by pxx:
+
+**88 bytes, byte-identical.** (`objdump -d -Mintel` on the gas object vs a byte
+search of the pxx binary; compared programmatically, not by eye.)
+
+### Regression test
+
+`test/test_asm_sse_scalar.pas`, wired into `make test-asm` beside the other asm
+tests. It RUNS the arithmetic rather than pinning the bytes, because the bytes
+are already pinned by the gas comparison above and pinning them twice would say
+nothing new — whereas **a correct opcode with a wrong ModRM still encodes**, and
+only execution catches that. Covers the store direction (`movsd r, xmm0` is
+opcode $11, a different path from the load), `xmm9`/`xmm10` (REX.B/REX.R),
+`cvtsi2sd` from both `Int64` and `Integer` (REX.W present vs absent — getting
+that backwards reads the wrong half), and the truncate-vs-round pair on one
+input.
+
+### Phase 2+ unchanged
+
+`cpuid`/`xgetbv`, packed SSE2, then VEX/AVX — as phased above. Two notes for
+whoever takes them:
+
+- **`movq` (xmm↔GP) is NOT in this phase.** `asmtext.inc` has it; `asmenc.inc`
+  still does not. It is the natural bridge for moving a double between register
+  files and should ride along with phase 2.
+- **Add to BOTH encoders, or say why not.** The three-table split above is the
+  real shape of this area, and the whole reason phase 1 was mis-scoped. A
+  mnemonic added to `asmtext.inc` alone is invisible to Pascal inline asm, and
+  vice versa.

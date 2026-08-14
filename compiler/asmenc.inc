@@ -525,10 +525,77 @@ end;
 { Forward decls for the per-instruction dispatcher. }
 function AsmEncodeOneNamed(const mn: AnsiString; mnLine: Integer): Boolean; forward;
 
+{ ---- Scalar SSE for INLINE asm ------------------------------------------
+
+  There are three x86 encoders in this compiler and they are not the same table:
+
+    asmfront.inc  standalone `.asm` FILES, encoding through lib/asmcore
+    asmenc.inc    Pascal inline `asm ... end`   <- here
+    asmtext.inc   compiler-emitted EmitAsmX64
+
+  asmtext has had scalar SSE for months; this one had NONE, which is why
+  `asm movsd xmm0, x end` in Pascal answered "unknown instruction" even though
+  the register names resolved fine (AsmRegNum has known xmm0..15 at size 16 all
+  along). The ticket read that as one gap and it was two.
+
+  The prefix/opcode table below is deliberately the SAME data as asmtext.inc's
+  SSE arm -- F2 for *sd, F3 for *ss, 66 for the packed-logical and compare
+  forms, none for xorps -- because these are x86 facts, not a policy either
+  encoder gets to choose. If one gains an opcode the other should too.
+  (feature-inline-asm-xmm-operands, phase 1) }
+function AsmSseOpcode(const mn: AnsiString; var pfx, op: Integer): Boolean;
+begin
+  Result := True;
+  pfx := $F2;
+  if      CaseEqual(mn,'movsd')    then op := $10
+  else if CaseEqual(mn,'movss')    then begin pfx := $F3; op := $10; end
+  else if CaseEqual(mn,'addsd')    then op := $58
+  else if CaseEqual(mn,'addss')    then begin pfx := $F3; op := $58; end
+  else if CaseEqual(mn,'subsd')    then op := $5C
+  else if CaseEqual(mn,'subss')    then begin pfx := $F3; op := $5C; end
+  else if CaseEqual(mn,'mulsd')    then op := $59
+  else if CaseEqual(mn,'mulss')    then begin pfx := $F3; op := $59; end
+  else if CaseEqual(mn,'divsd')    then op := $5E
+  else if CaseEqual(mn,'divss')    then begin pfx := $F3; op := $5E; end
+  else if CaseEqual(mn,'sqrtsd')   then op := $51
+  else if CaseEqual(mn,'comisd')   then begin pfx := $66; op := $2F; end
+  else if CaseEqual(mn,'ucomisd')  then begin pfx := $66; op := $2E; end
+  else if CaseEqual(mn,'cvtsd2ss') then op := $5A
+  else if CaseEqual(mn,'cvtss2sd') then begin pfx := $F3; op := $5A; end
+  else if CaseEqual(mn,'xorpd')    then begin pfx := $66; op := $57; end
+  else if CaseEqual(mn,'xorps')    then begin pfx := 0;   op := $57; end
+  else if CaseEqual(mn,'andpd')    then begin pfx := $66; op := $54; end
+  else if CaseEqual(mn,'pxor')     then begin pfx := $66; op := $EF; end
+  else begin op := 0; Result := False; end;
+end;
+
+{ Emit `<pfx> <REX> 0F <op> <modrm>` with modrm.reg = xmmReg and r/m = the
+  operand in rmSlot. opSize is 8 ONLY for the conversion forms that need REX.W
+  (a 64-bit GP side); every pure-xmm form passes 4, which makes AsmPrefixAndREX
+  emit no W bit and no $66 -- the $66 an SSE form wants is the PREFIX above,
+  emitted before REX, and letting the size logic also produce one would encode a
+  different instruction. }
+procedure AsmSseEmit(pfx, op, xmmReg, rmSlot, opSize: Integer);
+var hi: Integer;
+begin
+  if pfx <> 0 then AsmB(pfx);
+  hi := 0; if xmmReg >= 8 then hi := 1;
+  AsmPrefixAndREX(opSize, xmmReg and 7, hi, rmSlot);
+  AsmB($0F); AsmB(op);
+  AsmModRM(xmmReg and 7, rmSlot);
+end;
+
+{ 8 only when the GP side of a conversion is 64-bit; a mem operand with no
+  size keyword reports 0, which must not become REX.W. }
+function AsmSseGpWidth(sz: Integer): Integer;
+begin
+  if sz = 8 then AsmSseGpWidth := 8 else AsmSseGpWidth := 4;
+end;
+
 { Encode a single instruction whose mnemonic is in mn and whose operands have
   already been parsed into AsmOp[0..nops-1]. Returns False if mnemonic unknown. }
 function AsmDispatch(const mn: AnsiString; nops: Integer): Boolean;
-var opSize, rf, rh, ext, cc: Integer; tail: AnsiString;
+var opSize, rf, rh, ext, cc: Integer; ssePfx, sseOp: Integer; tail: AnsiString;
 begin
   Result := True;
 
@@ -546,6 +613,43 @@ begin
   begin
     if (nops <> 1) or (AsmOpKind[0] <> AOP_IMM) then Error('asm: int needs imm8');
     AsmB($CD); AsmB(Integer(AsmOpVal[0] and $FF)); Exit;
+  end;
+
+  { ---- scalar SSE ---- }
+  if AsmSseOpcode(mn, ssePfx, sseOp) then
+  begin
+    if nops <> 2 then Error('asm: ' + mn + ' needs two operands');
+    if (AsmOpKind[0] = AOP_REG) and (AsmOpSize[0] = 16) then
+      { xmm <- xmm/mem, the load-or-arithmetic direction }
+      AsmSseEmit(ssePfx, sseOp, AsmOpReg[0], 1, 4)
+    else if (CaseEqual(mn,'movsd') or CaseEqual(mn,'movss')) and
+            (AsmOpKind[1] = AOP_REG) and (AsmOpSize[1] = 16) then
+      { mem <- xmm. Only the MOVES have a store direction, and it is a
+        different opcode ($11), not the same one with operands swapped. }
+      AsmSseEmit(ssePfx, $11, AsmOpReg[1], 0, 4)
+    else
+      Error('asm: unsupported ' + mn + ' operand form');
+    Exit;
+  end;
+
+  { int <-> double conversions. cvtsi2sd takes a GP SOURCE, so REX.W follows
+    operand 1; cvttsd2si/cvtsd2si produce a GP DEST, so it follows operand 0.
+    cvtsd2si is the rounding sibling of cvttsd2si ($2D vs $2C) -- truncation is
+    not the default anywhere else, so having only the truncating form is a trap. }
+  if CaseEqual(mn,'cvtsi2sd') then
+  begin
+    if nops <> 2 then Error('asm: cvtsi2sd needs two operands');
+    AsmSseEmit($F2, $2A, AsmOpReg[0], 1, AsmSseGpWidth(AsmOpSize[1])); Exit;
+  end;
+  if CaseEqual(mn,'cvttsd2si') then
+  begin
+    if nops <> 2 then Error('asm: cvttsd2si needs two operands');
+    AsmSseEmit($F2, $2C, AsmOpReg[0], 1, AsmSseGpWidth(AsmOpSize[0])); Exit;
+  end;
+  if CaseEqual(mn,'cvtsd2si') then
+  begin
+    if nops <> 2 then Error('asm: cvtsd2si needs two operands');
+    AsmSseEmit($F2, $2D, AsmOpReg[0], 1, AsmSseGpWidth(AsmOpSize[0])); Exit;
   end;
 
   { ---- two-operand ALU ---- }

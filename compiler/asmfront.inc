@@ -88,35 +88,33 @@ end;
 
 { Resolve a register name to its asmcore number + width (8 = 64-bit, 4 = 32-bit).
   Returns False if not a recognised GP register. }
+{ Resolve an inline-asm register OPERAND name.
+
+  This used to be a second, hand-written GP-only name table sitting beside
+  `AsmRegNum` (asmenc.inc), which already resolves the whole x86-64 register
+  file — including `xmm0..xmm15` at size 16. Two tables for one question, and
+  only one of them knew about SSE, which is why inline asm could not name a
+  float register at all while the encoders behind it had handled scalar SSE for
+  months (feature-inline-asm-xmm-operands, phase 1).
+
+  So: delegate. `AsmRegNum` returns 0..15, and `reg_rax..reg_r15` ARE 0..15
+  (asmcore_x64.pas) — the same x86 encoding order — so its numbering is this
+  function's numbering with no translation.
+
+  The SIZE FILTER is what keeps this to one change. `AsmRegNum` also answers the
+  1- and 2-byte names (`al`, `r8w`), which the operand model above has never
+  accepted and which are not part of this phase; rejecting them here leaves
+  those spellings exactly as they were — not a register, fall through to
+  whatever the caller does next. Widening to 1/2 is a separate change with its
+  own encoder work, not a side effect of naming xmm. }
 function AsmRegLookup(const nm: AnsiString; var reg: Integer; var size: Integer): Boolean;
-var r, sz: Integer; found: Boolean;
+var r, sz: Integer;
 begin
-  r := -1; sz := 8; found := True;
-  { 64-bit }
-  if nm = 'rax' then r := reg_rax else if nm = 'rcx' then r := reg_rcx
-  else if nm = 'rdx' then r := reg_rdx else if nm = 'rbx' then r := reg_rbx
-  else if nm = 'rsp' then r := reg_rsp else if nm = 'rbp' then r := reg_rbp
-  else if nm = 'rsi' then r := reg_rsi else if nm = 'rdi' then r := reg_rdi
-  else if nm = 'r8'  then r := reg_r8  else if nm = 'r9'  then r := reg_r9
-  else if nm = 'r10' then r := reg_r10 else if nm = 'r11' then r := reg_r11
-  else if nm = 'r12' then r := reg_r12 else if nm = 'r13' then r := reg_r13
-  else if nm = 'r14' then r := reg_r14 else if nm = 'r15' then r := reg_r15
-  else found := False;
-  if not found then
-  begin
-    found := True; sz := 4;
-    if nm = 'eax' then r := reg_rax else if nm = 'ecx' then r := reg_rcx
-    else if nm = 'edx' then r := reg_rdx else if nm = 'ebx' then r := reg_rbx
-    else if nm = 'esp' then r := reg_rsp else if nm = 'ebp' then r := reg_rbp
-    else if nm = 'esi' then r := reg_rsi else if nm = 'edi' then r := reg_rdi
-    else if nm = 'r8d'  then r := reg_r8  else if nm = 'r9d'  then r := reg_r9
-    else if nm = 'r10d' then r := reg_r10 else if nm = 'r11d' then r := reg_r11
-    else if nm = 'r12d' then r := reg_r12 else if nm = 'r13d' then r := reg_r13
-    else if nm = 'r14d' then r := reg_r14 else if nm = 'r15d' then r := reg_r15
-    else found := False;
-  end;
-  if found then begin reg := r; size := sz; end;
-  Result := found;
+  r := -1; sz := 0;
+  Result := AsmRegNum(nm, r, sz);
+  if Result then
+    Result := (sz = 4) or (sz = 8) or (sz = 16);
+  if Result then begin reg := r; size := sz; end;
 end;
 
 { Parse a signed decimal or 0x-hex literal. Sets ok=False on a malformed token. }
