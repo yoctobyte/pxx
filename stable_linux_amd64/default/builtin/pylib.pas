@@ -29,7 +29,14 @@ interface
   arithmetic below must not narrow it — pyvar_to_int's mod-2^64 reading turns
   2**70 into 0, so `v + 1` answered 1 for a 22-digit number. promocore has no
   uses clause of its own, so this adds no cycle. }
-uses pypal, promocore, typinfo;
+{ `builtin` is pxx's System unit and it is where FloatToStr lives, which
+  PyFloatStr and the `{x:g}` / `{x:s}` format specs call. It was reached only
+  because it happens to be loaded into most compilations — measured under
+  --strict-uses (bug-pascal-uses-is-transitive): in a Pascal program that pulls
+  pylib indirectly and does NOT trigger builtin's conditional injection, the only
+  FloatToStr in scope was SYSUTILS', which pylib must never depend on (it drags
+  the whole RTL into every .npy). Naming it makes the dependency real. }
+uses builtin, pypal, promocore, typinfo;
 
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
