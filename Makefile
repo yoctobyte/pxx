@@ -2975,6 +2975,11 @@ test-core: $(COMPILER)
 	# an `array of const` LITERAL to an OVERLOADED constructor (fcl-json TJSONArray.Create)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_ctor_arrayofconst_overload_b298.pas /tmp/test_ctor_arrayofconst_overload_b29826
 	test "$$(/tmp/test_ctor_arrayofconst_overload_b29826)" = "$$(printf 'noarg n=-1\narr n=3')"
+	# a derived ctor SHADOWING an inherited one with a different signature: the
+	# ctor that runs and the signature the argument was marshalled for must be
+	# the same one, or the callee reads a Variant record as an AnsiString handle
+	./$(COMPILER) test/test_ctor_shadowing_signature.pas /tmp/test_ctor_shadowing_signature26
+	test "$$(/tmp/test_ctor_shadowing_signature26)" = "ctor shadowing signature ok"
 	# a PARENTHESISED expression keeps its class id: (b as T)[i] / (b as T).ClassName
 	./$(COMPILER) test/test_paren_expr_class_b297.pas /tmp/test_paren_expr_class_b29726
 	test "$$(/tmp/test_paren_expr_class_b29726)" = "$$(printf 'direct index   : 20\nas-cast index  : 20\nas-cast chained: TB\nas-cast member : TArr\nas-cast inherit: TRUE')"

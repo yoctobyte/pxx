@@ -9004,7 +9004,12 @@ begin
           else if (specialId = Ord(tkGetMem)) and (pathIdx > 0) then
           begin
             classIdx := ASTRight[node];
-            slot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+            { Same resolution as the arg coercion and the call target — see the
+              note there. A by-ref decision taken from a different ctor than the
+              one that runs is the same disagreement in a nastier place. }
+            slot := FindUCtorOverloadArgs(classIdx - REC_UCLASS_BASE,
+                      ASTRight[ASTLeft[node]]);
+            if slot < 0 then slot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
             if slot >= 0 then
             begin
               slot := UMthProc_[slot];
@@ -9079,7 +9084,21 @@ begin
           if (cpi = -Ord(tkGetMem)) and (pathIdx > 0) and
              (classIdx >= REC_UCLASS_BASE) then
           begin
-            ctorArgSlot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+            { Resolve the ctor the SAME way the call target is resolved below
+              (`IRCtorProc`, via FindUCtorOverloadArgs). FindUMeth is name-only
+              and derived-first; FindUCtorOverloadArgs ranks the whole parent
+              chain by argument type. When a derived class SHADOWS an inherited
+              ctor with a different signature they answer differently, and then
+              the argument is boxed for one signature and handed to the other —
+              `TDer.Create('x')` with `TDer.Create(const m: Variant)` over
+              `TBase.Create(const m: AnsiString)` boxed a Variant and called the
+              base, which read an AnsiString handle out of a Variant record and
+              got garbage. One question, one lookup.
+              (bug-a-shadowing-ctor-call-target-and-argument-marshalling-disagree) }
+            ctorArgSlot := FindUCtorOverloadArgs(classIdx - REC_UCLASS_BASE,
+                             ASTRight[ASTLeft[node]]);
+            if ctorArgSlot < 0 then
+              ctorArgSlot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
             if ctorArgSlot >= 0 then ctorArgCpi := UMthProc_[ctorArgSlot];
           end;
           value := IRLowerCallArg(ctorArgCpi, pathIdx, ASTLeft[item], isRefArg);

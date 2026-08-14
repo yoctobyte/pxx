@@ -112,3 +112,88 @@ The table above matches FPC on every row (or, if the hiding rule is deferred,
 every row prints a correct message rather than garbage), the sweep list agrees
 with `tools/fpc_diff_probe.sh`, `make compiler/pascal26` self-host converges,
 `tools/gate.sh quick` green.
+
+---
+
+## Progress — STEP 1 DONE (agent-an, 2026-08-14). Step 2 deliberately not done.
+
+### The two lookups, located
+
+Found by `PXXDBG=a.ir:<proc>` on the repro, after `PXXDBG=a.ast` had shown the
+AST holds a plain AnsiString literal — so the boxing is introduced during
+lowering, not by the parser:
+
+```
+3: const_str ... tk=4        <- the literal, AnsiString
+4: var_store ... tk=22       <- boxed into a VARIANT temp
+6: arg  a=5 ... tk=4         <- passed as the Variant's address, tagged AnsiString
+7: call a=-45 ...            <- ...to the BASE ctor
+```
+
+The two sites, both in `compiler/ir.inc`, both answering "which ctor is this?":
+
+| site | lookup | policy |
+| --- | --- | --- |
+| argument coercion (`ctorArgCpi`, the `-tkGetMem` arg loop) | `FindUMeth(ci, 'create')` | name only, **derived first** → `TDer.Create(Variant)` |
+| by-ref decision (`specialId = tkGetMem` arm) | `FindUMeth(ci, 'create')` | same |
+| call target (`IRCtorProc`) | `FindUCtorOverloadArgs(ci, args)` | ranks the **whole chain** by arg type → `TBase.Create(AnsiString)` |
+
+Two policies, one question. The argument was boxed for the derived signature and
+handed to the base body, which read an AnsiString handle out of a Variant
+record.
+
+### Fix
+
+Both marshalling sites now resolve with `FindUCtorOverloadArgs` — the same
+lookup the call target uses — falling back to `FindUMeth` only when it declines,
+so a class with no overload set behaves exactly as before.
+
+Measured, the whole table:
+
+| call | before | after | FPC |
+| --- | --- | --- | --- |
+| `TDer.Create('hello')` | garbage | `hello` | `hello` |
+| `TDer.Create(s)` | garbage | `hello` | `hello` |
+| `TDer.Create(v)` | `hello` | `hello` | `hello` |
+| `TBase.Create('hello')` | `hello` | `hello` | `hello` |
+
+**The silent wrong value is gone.** `tools/gate.sh quick` GREEN, self-host
+converges.
+
+### Regression test
+
+`test/test_ctor_shadowing_signature.pas`, registered in the Makefile beside
+`test_ctor_arrayofconst_overload_b298`. It asserts the **message**, never which
+body produced it — deliberately, because which ctor wins is step 2 and this test
+must not have to change when that is decided. What it pins is the invariant that
+survives either answer: *the ctor that runs and the signature the argument was
+marshalled for are the same one.* It includes the exact-Variant argument (so a
+"fix" that stopped boxing everything is caught) and the base-ctor control (so a
+fix that moved the bug rather than removing it is caught).
+
+### Step 2 is still open, and is a DIALECT decision
+
+pxx now runs `TBase.Create` for a string literal — the exact type match, ranked
+across the chain. FPC runs `TDer.Create`, because a descendant's method **hides**
+the inherited set unless declared `overload`. Both print `hello` now, so the
+divergence is a surprise rather than a corruption.
+
+Deciding it is not free: making a derived `Create` hide the inherited set changes
+what compiles for any class whose own ctor has a different arity from a base ctor
+its callers currently reach. The mechanism already exists —
+`FindUCtorOverloadArgs` has an `isNilPy` arm that breaks on the first class with
+candidates, added because this same bug constructed a bare `tk.Frame` — so the
+work is small and the RISK is what needs a human. Per this repo's lax-by-default
+rule that is a `--strict-fpc` / `--strict-overload` question.
+
+**Not filed as a separate ticket** — it is the second half of this one, and
+splitting it would lose the measured table above. Re-open here when the
+strictness umbrella is next touched (`meta-dialect-extensions-and-fpc-strict`).
+
+### Sweep — NOT yet done
+
+The ticket's own sweep list (named shadowing ctor `CreateFmt`, metaclass cast
+`TSomeClass(x).Create`, `class of` dispatch via `BuildMetaclassNew`, `inherited
+Create(..)` from a derived body) has not been run. Each is a distinct
+construction route and each has its own ctor lookup, so each can carry the same
+disagreement. That is the next session's first job, before this is closed.
