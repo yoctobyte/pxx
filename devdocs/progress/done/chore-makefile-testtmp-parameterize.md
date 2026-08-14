@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: chore
 summary: "Route the Makefile's 6755 fixed /tmp paths through $(TESTTMP) so two concurrent raw `make test*` runs on one box stop clobbering each other. Mechanically verified by Track T: the sweep is byte-identical in `make -n` across all 90 targets, and `make test-smoke TESTTMP=<scratch>` passes end to end. Script + proof below — this is a 20-minute job, not a careful pass."
-status: working
+status: done
 owner: agent-an
 ---
 
@@ -243,3 +243,77 @@ isolation and its job ordering.
 
 Noted in the code at both sites as of 2026-08-13. Teach the regexes the value
 before setting it.
+
+---
+
+## Done — 2026-08-14
+
+Landed exactly as Track T de-risked it, in one commit, with the total
+verification rather than a sample.
+
+### Numbers, re-measured at landing
+
+| | ticket (2026-08-13) | landed |
+|---|---|---|
+| sites rewritten | 6755 | **6855** |
+| left pinned | 4 | **4** |
+| targets captured for the expansion diff | 90 | **90** |
+| `make -n` lines compared | 37825 | **39807** |
+| expansion diff | clean | **clean** |
+
+The site count grew by 100 in a day, which is the ticket's own argument for
+doing this now rather than later.
+
+The four pinned occurrences resolve to three distinct paths —
+`/tmp/test_nilpy_sqlite_crud.db`, `/tmp/pxx_lua_input.lua`, `/tmp/httpdemo` —
+each hardcoded in a compiled source that the recipe must agree with. The
+ticket predicted the pinned set would be far smaller than testmgr's stale
+docstring implies, and it is: the `liblazycasing.so` / `libspill.so` cases it
+called out as retired are indeed gone.
+
+### Verification as run
+
+Both halves, as specified:
+
+- **Default behaviour:** `make -n` captured for every target before and after,
+  with `PXX_TMP=/tmp/PINNED` so the per-pid default cannot make two captures
+  differ for an unrelated reason. 90 targets, 39807 lines, `diff -r` clean.
+  Because testmgr builds its job list from `make -n`, an identical expansion is
+  also proof the sweep is transparent to testmgr — and `testmgr --tier quick`
+  passing afterwards confirms it directly.
+- **Non-default `TESTTMP`:** `test-asm`'s recipe extracted with a non-default
+  `TESTTMP` — 66 recipe lines, all green, 44 files written under the scratch
+  dir and none under `/tmp`.
+
+**One practical note for whoever repeats this**: the recipe lines must be run
+**each in its own shell**, the way make runs them. Flattening a target's `make
+-n` output into a single script exits early and silently reports success,
+because the self-host prerequisite chain ends in `exit 0` on convergence — the
+remaining 60-odd lines never run, and a naive `rc=0` reads as a pass. That is a
+verification that proves nothing, and it looked exactly like a real one.
+
+`gate.sh quick` GREEN (self-host fixedpoint + testmgr quick). The ticket's
+`Gate:` line naming `make test` and the full tier is superseded by CLAUDE.md's
+per-fix loop (user, 2026-08-01, `decide-gate-line-convention`); the total
+expansion diff is both cheaper and strictly stronger than the suites here,
+since a mistake cannot hide in an unsampled target.
+
+### Residual — filed, not silently inherited
+
+The ticket's own warning stands and is now a ticket:
+[[chore-t-test-binaries-hardcode-unsweepable-tmp-paths]]. Re-measured exactly:
+**63** distinct `/tmp` paths hardcoded in compiled sources, **3** of them pinned
+because the Makefile names them too, leaving **60** written only at runtime by
+the test binary across **37** source files. No Makefile sweep can reach those,
+and testmgr does not privatize them either — it rewrites recipe text, not string
+constants inside a binary — so **two concurrent runs still share those files
+even under testmgr**.
+
+Worth singling out: `test/csqlite_parity_selfcompiled.c` and
+`test/csqlite_thread_test.c` both write plain `/tmp/x`, which collides with
+each other and with any scratch file anyone leaves at that name.
+
+So a green gate here means *the recipe half is closed*, and nothing more.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

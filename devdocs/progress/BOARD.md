@@ -82,8 +82,8 @@ _none_
 | bug-pyeval-three-param-host-method-unsupported | N | 35 | bug | pyeval refuses a host method with three user parameters — `pyeval: int-return arity 3 unsupported for put` — with all-positional args, so ordinary reflected calls of arity 3 cannot be made from inside exec() | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
-| chore-makefile-testtmp-parameterize | A | 55 | chore | Route the Makefile's 6755 fixed /tmp paths through $(TESTTMP) so two concurrent raw `make test*` runs on one box stop clobbering each other. Mechanically verified by Track T: the sweep is byte-identical in `make -n` across all 90 targets, and `make test-smoke TESTTMP=<scratch>` passes end to end. Script + proof below — this is a 20-minute job, not a careful pass. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
+| chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-calling-convention-directives-uneven | P | 35 | compat | `stdcall`/`safecall`/`pascal`/`mwpascal` are accepted on a class METHOD declaration but are a parse ERROR on a plain routine, an `external`, or a procedural type — so FPC sources that spell a convention on a routine do not compile, and which spelling works depends on where it is written. | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1766)
+## done (1767)
 
-1766 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1767 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -473,7 +473,6 @@ _none_
 - [p 55] [C] bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
 - [p 55] [N] bug-n-pyexception-leaks-through-name-and-repr
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- [p 55] [A] chore-makefile-testtmp-parameterize
 - [p 55] [U] decide-reprice-nilpy-ast-typing-module-scope
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
@@ -501,6 +500,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
+- [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [U] decide-nilpy-builtin-vs-pascal-unit-name-resolution
 - [p 45] [D] doc-variant-conversion-rules-and-the-fpc-char-divergence
 - [p 45] [D] docs-nilpy-file-dunder-and-data-files
