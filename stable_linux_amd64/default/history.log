@@ -285,3 +285,4 @@
 2026-08-14T05:31:25Z  v285  595a1732b4d2f41150663bdfa4ddfe42a853860853c79276b0e2009b65e7a96b  3043a91490fb6083a1819bdb9e631acecc240438  fix(N): repr() escapes non-printables; mimic_string so `import string` resolves
 2026-08-14T05:40:02Z  v286  be37c7239166f346e7f811b77dee721a8fda77952d3262a94fecfbae094744bc  056066cc8d6ae46e0a03ba4ca78fa94f69fa0803  feat(N): __file__ and sys.executable from the resolved executable
 2026-08-14T06:30:32Z  v287  cc14691723a7fedc4f45c3e48410b0c2c22afd7829b3052c998c96d90dc25665  123c9f9fb9a3b930985581a01f611b3c9059c159  feat(N): a builtin type is a first-class value
+2026-08-14T06:35:36Z  v288  0fa12e8801c7bbdd0cf835a0ec0be4ab710c15080fb3cfac3133f6b9ab00fb08  1db03538681d459f40885b9a7e94f086ee9004ab  feat(N): `type` is a builtin type value too
