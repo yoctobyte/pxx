@@ -92,4 +92,4 @@ OWN internal raises now carry proper args too, all four identical to CPython.
 1; `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit e3d0870c6.
