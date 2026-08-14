@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-13T20:40:29Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "be7f80936b0c0c95afadcb4d093ae8ba95ecea1c",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-13T22:37:11Z",
    "fixed": [],
    "new_red": [],
@@ -417,6 +409,14 @@
    "sha": "de063b059604f6b7500ef9ad40c41f0c7151ce3d",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-14T15:39:12Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6206d0e7bf3b3613f572f58e48c4dc2ac827fbaa",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -737,11 +737,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#131": "native",
   "test-core#132": "native",
   "test-core#133": "native",
   "test-core#134": "native",
   "test-core#135": "native",
+  "test-core#136": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1253,6 +1253,7 @@
   "test-core#src:test/test_cross_write_pchar.pas": "native",
   "test-core#src:test/test_ctor_arrayofconst_overload_b298.pas": "native",
   "test-core#src:test/test_ctor_result_member.pas": "native",
+  "test-core#src:test/test_ctor_shadowing_signature.pas": "native",
   "test-core#src:test/test_ctor_string_literal_arg.pas": "native",
   "test-core#src:test/test_decl_order_global_error.pas@2": "native",
   "test-core#src:test/test_decl_order_lax.pas": "native",
@@ -3140,11 +3141,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#131": "pass",
   "test-core#132": "pass",
   "test-core#133": "pass",
   "test-core#134": "pass",
   "test-core#135": "pass",
+  "test-core#136": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -3656,6 +3657,7 @@
   "test-core#src:test/test_cross_write_pchar.pas": "pass",
   "test-core#src:test/test_ctor_arrayofconst_overload_b298.pas": "pass",
   "test-core#src:test/test_ctor_result_member.pas": "pass",
+  "test-core#src:test/test_ctor_shadowing_signature.pas": "pass",
   "test-core#src:test/test_ctor_string_literal_arg.pas": "pass",
   "test-core#src:test/test_decl_order_global_error.pas@2": "pass",
   "test-core#src:test/test_decl_order_lax.pas": "pass",
@@ -5221,11 +5223,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-14T15:06:21Z",
-  "sha": "de063b059604f6b7500ef9ad40c41f0c7151ce3d",
+  "date": "2026-08-14T15:39:12Z",
+  "sha": "6206d0e7bf3b3613f572f58e48c4dc2ac827fbaa",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 1344.6
+  "wall": 1880.5
  },
  "last_bench": {
   "conf_rows": 550,
