@@ -14574,6 +14574,9 @@ begin
         ctorCi := -1;
         if qUnit >= 0 then ctorCi := FindUClassInUnit(name, qUnit);
         if ctorCi < 0 then ctorCi := FindUClass(name);
+        if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual CTOR name=', name,
+          ' qunit=', qUnit, ' inunit=', FindUClassInUnit(name, qUnit),
+          ' flat=', FindUClass(name), ' -> ctorCi=', ctorCi);
         ctorArgN := 0;
         if CurTok.Kind = tkLParen then
         begin
