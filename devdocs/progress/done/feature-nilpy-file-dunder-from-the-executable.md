@@ -66,4 +66,4 @@ Worth checking in the same pass: any other place the frontend answers a
 "where am I" question from an unresolved `argv[0]`.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 5a71fe0be.
