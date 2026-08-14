@@ -43,3 +43,28 @@ red is a real regression, no baseline noise.
 A pxx frontend regression that flips a passing FPC-conformance test shows up
 as a tstate NEW-RED tied to the offending SHA, with no human running the
 sweep manually.
+
+## Scope, decided by the user 2026-08-14 — x86-64 native ONLY
+
+> *"Our compliance test just goes to PC platforms, and preferably only 64-bit.
+> We are not going into historic compliance — that just doesn't make sense."*
+
+FPC supports the ESP32 family too, so its suite carries its own truckload of
+target `{$ifdef}`s. Chasing those would mean conforming to *FPC's embedded
+decisions* rather than to Pascal, which is not what parity is for.
+
+**So when this is enrolled: native x86-64 only. Do NOT add
+`test-pascal-conformance-i386` / `-aarch64` / `-arm32` / `-riscv32` shards**, the
+way `test-c-conformance` has them. That mirroring would look like consistency and
+would be the wrong call here.
+
+Already true in practice, which is why this is a scope note rather than work:
+`tools/run_pascal_conformance.sh` states that *"tests gated on other
+CPUs/targets/FPC-versions or needing suite infra we don't model are auto-skipped
+and counted separately from the curated skip list"*, and it runs against
+`compiler/pascal26`. The risk is drift at enrolment time, not today.
+
+Related: [[decide-may-uses-math-cost-the-heap-and-exception-runtime]] settled the
+same question one level down — FPC parity is opt-in behind `--strict-fpc`
+because FPC's choices (unmasking the FPU, raising from `math`) are policy, not
+Pascal, and are actively wrong on embedded targets.
