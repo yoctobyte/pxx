@@ -39,4 +39,4 @@ fma NO` — so the gate passes and the first broadcast is #UD.
 
 Filed as [[bug-a-test-asm-avx-gates-on-avx-but-uses-avx2-vbroadcastsd]]
 (Track A, p75, urgent — master is red).
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 48adc9e31.
