@@ -110,4 +110,4 @@ Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN
 (self-host, testmgr quick, FPC seed canary).
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit d135e88d1.
