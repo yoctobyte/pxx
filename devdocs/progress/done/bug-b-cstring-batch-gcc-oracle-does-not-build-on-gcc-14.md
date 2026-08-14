@@ -3,6 +3,8 @@ track: B
 prio: 50
 type: bug
 summary: "test/cstring_batch.c calls memrchr without _GNU_SOURCE, so its gcc ORACLE fails to compile on gcc >= 14 (implicit-function-declaration is an error there). The recipe discards gcc's stderr AND its exit status, then diffs against a missing or stale binary and reports 'cstring_batch differs from gcc' — so a broken oracle is indistinguishable from a real pxx defect. Blocks enrolling lib-test in the watcher."
+status: done
+owner: track-b-bughunt
 ---
 
 # `cstring_batch`'s gcc oracle does not build, and the recipe reports it as a pxx diff
@@ -78,3 +80,35 @@ the enrolment is held until this lands.
 `gcc -w -D_GNU_SOURCE -o /tmp/x test/cstring_batch.c` builds, the step passes,
 and deliberately breaking the oracle (rename `memrchr`) produces a SKIP naming
 the build failure rather than a diff verdict.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
+
+## Resolved 2026-08-14 (Track B)
+
+1. `test/cstring_batch.c` now `#define _GNU_SOURCE` before the includes, with a
+   comment naming this ticket. `memrchr`, `strsep` and `strcasestr` are all GNU
+   extensions, so the file needed it for three functions, not one.
+2. **All sixteen** gcc-oracle steps in `lib-test` now check gcc's exit status
+   and route the failure to a SKIP naming the first stderr line:
+   `SKIP: <name> (gcc cannot build the oracle: <first error>)`, versus the
+   unchanged `FAIL: <name> differs from gcc`. stderr goes to
+   `/tmp/<name>_oracle.err` instead of `/dev/null`, so the reason survives.
+   The pxx binary is still run on the SKIP path, exactly as the no-gcc path
+   already did.
+
+Point 3 of the ticket (grep for the same shape elsewhere) was done as part of
+2 — every `gcc … 2>/dev/null;` oracle compile in the `lib-test` recipe had it,
+including the two `crtl_*_oracle` blocks whose bodies already contain a nested
+`if`/`else`/`fi`.
+
+**Verified on this box:** gcc 13.3.0, so the original failure does not
+reproduce here (implicit declarations are still a warning, and `-w` hides it).
+Checked instead by compiling every oracle with
+`-Werror=implicit-function-declaration` — all sixteen already build clean —
+and by exercising the new SKIP path with a deliberately broken copy
+(`memrchr` renamed), which printed the SKIP line rather than a diff verdict.
+
+**Gate:** `make lib-test` green against stable v300 — all sixteen steps still
+report `identical to gcc`, so the rc check did not turn a real comparison into
+a silent skip.

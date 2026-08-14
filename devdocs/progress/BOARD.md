@@ -35,14 +35,13 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (220)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set | A | 40 | bug | `f(fmt, ['a'])` stops compiling when the routine is in a CROSS-UNIT overload set and its unit is used LAST: the literal is typed (ShortString, set) against an `array of const` parameter reported as `record`. Same-unit overload sets are fine, single cross-unit routines are fine, and reversing the uses order fixes it — so the array-of-const conversion is lost on one path through the cross-unit merge. | — |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14 | B | 50 | bug | test/cstring_batch.c calls memrchr without _GNU_SOURCE, so its gcc ORACLE fails to compile on gcc >= 14 (implicit-function-declaration is an error there). The recipe discards gcc's stderr AND its exit status, then diffs against a missing or stale binary and reports 'cstring_batch differs from gcc' — so a broken oracle is indistinguishable from a real pxx defect. Blocks enrolling lib-test in the watcher. | — |
 | bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises | B | 20 | bug | Floor(1e30) returns 0 and Floor64(1e30) returns Int64 MIN, silently. FPC raises EInvalidOp. A silent wrong VALUE where the reference implementation refuses — found while documenting the C-vs-Pascal math split, 2026-08-14. | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
@@ -410,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1764)
+## done (1765)
 
-1764 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1765 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -485,7 +484,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [B] bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
 - [p 50] [P] bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - [p 50] [D] docs-devnotes-ai-assisted-build

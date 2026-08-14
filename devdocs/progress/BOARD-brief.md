@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1764 rejected:35`
+`unfinished:9 blocked:4 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1765 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 203, ranked
+## Ready — top 30 of 202, ranked
 
 - `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 2)
 - `[p 70] [P]` regression-test-core-test-conformance-1
@@ -61,6 +61,6 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [B]` bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14
+- `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
 
-_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -14,6 +14,12 @@
  *   strndup  NUL-terminates even when the source is longer than n
  *   setenv   with overwrite = 0 must NOT replace an existing value
  */
+/* memrchr, strsep and strcasestr are GNU extensions: glibc only declares them
+ * when _GNU_SOURCE is defined. Without it the gcc ORACLE builds on an implicit
+ * declaration, which GCC 14 turned from a warning into an error — so the oracle
+ * stops building and the diff step reports it as a pxx divergence.
+ * ([[bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14]]) */
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

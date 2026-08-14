@@ -9484,25 +9484,33 @@ lib-test: pxx-stable-check
 	# to drift. Cases chosen where these differ from their obvious cousins.
 	$(PXX_STABLE) test/cstring_batch.c /tmp/cstring_batch
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cstring_batch_gcc test/cstring_batch.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cstring_batch_gcc test/cstring_batch.c 2> /tmp/cstring_batch_oracle.err; then \
+	    echo "SKIP: cstring_batch (gcc cannot build the oracle: $$(head -1 /tmp/cstring_batch_oracle.err))"; \
+	    /tmp/cstring_batch >/dev/null; \
+	  else \
 	  /tmp/cstring_batch_gcc > /tmp/cstring_batch_gcc.txt; \
 	  /tmp/cstring_batch > /tmp/cstring_batch_pxx.txt; \
 	  diff /tmp/cstring_batch_gcc.txt /tmp/cstring_batch_pxx.txt || \
 	    { echo 'FAIL: cstring_batch differs from gcc'; exit 1; }; \
 	  echo 'cstring_batch: identical to gcc'; \
+	fi; \
 	else echo 'cstring_batch: SKIP (no gcc)'; /tmp/cstring_batch >/dev/null; fi
 	# strerror was a stub returning "error" for every errnum, which made perror
 	# and strerror_r useless. Table generated FROM gcc, so both streams are
 	# diffed against it — stderr separately, since perror writes there.
 	$(PXX_STABLE) test/cerrno_strings.c /tmp/cerrno_strings
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cerrno_strings_gcc test/cerrno_strings.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cerrno_strings_gcc test/cerrno_strings.c 2> /tmp/cerrno_strings_oracle.err; then \
+	    echo "SKIP: cerrno_strings (gcc cannot build the oracle: $$(head -1 /tmp/cerrno_strings_oracle.err))"; \
+	    /tmp/cerrno_strings >/dev/null 2>&1; \
+	  else \
 	  /tmp/cerrno_strings_gcc > /tmp/cerrno_gcc.out 2> /tmp/cerrno_gcc.err; \
 	  /tmp/cerrno_strings > /tmp/cerrno_pxx.out 2> /tmp/cerrno_pxx.err; \
 	  diff /tmp/cerrno_gcc.out /tmp/cerrno_pxx.out && \
 	  diff /tmp/cerrno_gcc.err /tmp/cerrno_pxx.err || \
 	    { echo 'FAIL: cerrno_strings differs from gcc'; exit 1; }; \
 	  echo 'cerrno_strings: identical to gcc'; \
+	fi; \
 	else echo 'cerrno_strings: SKIP (no gcc)'; /tmp/cerrno_strings >/dev/null 2>&1; fi
 	# LINKAGE, not just output: this file calls htons/ntohl, and the whole point
 	# of bug-cfront-spurious-dt-needed-libc-with-no-imports is that doing so used
@@ -9522,32 +9530,44 @@ lib-test: pxx-stable-check
 	# %s read a garbage pointer. Diffed against gcc.
 	$(PXX_STABLE) test/cprintf_hexfloat.c /tmp/cprintf_hexfloat
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cprintf_hexfloat_gcc test/cprintf_hexfloat.c -lm 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cprintf_hexfloat_gcc test/cprintf_hexfloat.c -lm 2> /tmp/cprintf_hexfloat_oracle.err; then \
+	    echo "SKIP: cprintf_hexfloat (gcc cannot build the oracle: $$(head -1 /tmp/cprintf_hexfloat_oracle.err))"; \
+	    /tmp/cprintf_hexfloat >/dev/null; \
+	  else \
 	  /tmp/cprintf_hexfloat_gcc > /tmp/chf_gcc.out; /tmp/cprintf_hexfloat > /tmp/chf_pxx.out; \
 	  diff /tmp/chf_gcc.out /tmp/chf_pxx.out || \
 	    { echo 'FAIL: cprintf_hexfloat differs from gcc'; exit 1; }; \
 	  echo 'cprintf_hexfloat: identical to gcc'; \
+	fi; \
 	else echo 'cprintf_hexfloat: SKIP (no gcc)'; /tmp/cprintf_hexfloat >/dev/null; fi
 	# read/write/close/lseek: declared by <unistd.h>, implemented nowhere until
 	# 2026-08-05, so raw I/O silently imported them from glibc. Diffed against
 	# gcc; the linkage is asserted too, since the diff passes either way here.
 	$(PXX_STABLE) test/cposix_io.c /tmp/cposix_io
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cposix_io_gcc test/cposix_io.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cposix_io_gcc test/cposix_io.c 2> /tmp/cposix_io_oracle.err; then \
+	    echo "SKIP: cposix_io (gcc cannot build the oracle: $$(head -1 /tmp/cposix_io_oracle.err))"; \
+	    /tmp/cposix_io >/dev/null; \
+	  else \
 	  /tmp/cposix_io_gcc > /tmp/cposix_io_gcc.out; /tmp/cposix_io > /tmp/cposix_io_pxx.out; \
 	  diff /tmp/cposix_io_gcc.out /tmp/cposix_io_pxx.out || \
 	    { echo 'FAIL: cposix_io differs from gcc'; exit 1; }; \
 	  echo 'cposix_io: identical to gcc'; \
+	fi; \
 	else echo 'cposix_io: SKIP (no gcc)'; /tmp/cposix_io >/dev/null; fi
 	# atof/bsearch diffed against gcc; rand asserts only the PROPERTIES C fixes,
 	# since the sequence is deliberately not glibc's and must not be compared
 	$(PXX_STABLE) test/cstdlib_batch3.c /tmp/cstdlib_batch3
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cstdlib_batch3_gcc test/cstdlib_batch3.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cstdlib_batch3_gcc test/cstdlib_batch3.c 2> /tmp/cstdlib_batch3_oracle.err; then \
+	    echo "SKIP: cstdlib_batch3 (gcc cannot build the oracle: $$(head -1 /tmp/cstdlib_batch3_oracle.err))"; \
+	    /tmp/cstdlib_batch3 >/dev/null; \
+	  else \
 	  /tmp/cstdlib_batch3_gcc > /tmp/csb3_gcc.out; /tmp/cstdlib_batch3 > /tmp/csb3_pxx.out; \
 	  diff /tmp/csb3_gcc.out /tmp/csb3_pxx.out || \
 	    { echo 'FAIL: cstdlib_batch3 differs from gcc'; exit 1; }; \
 	  echo 'cstdlib_batch3: identical to gcc'; \
+	fi; \
 	else echo 'cstdlib_batch3: SKIP (no gcc)'; /tmp/cstdlib_batch3 >/dev/null; fi
 	@if command -v readelf >/dev/null 2>&1; then \
 	  for b in /tmp/cposix_io /tmp/cstdlib_batch3; do \
@@ -9561,11 +9581,15 @@ lib-test: pxx-stable-check
 	# test would not catch an over-clever implementation failing.
 	$(PXX_STABLE) test/cwctype.c /tmp/cwctype
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cwctype_gcc test/cwctype.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cwctype_gcc test/cwctype.c 2> /tmp/cwctype_oracle.err; then \
+	    echo "SKIP: cwctype (gcc cannot build the oracle: $$(head -1 /tmp/cwctype_oracle.err))"; \
+	    /tmp/cwctype >/dev/null; \
+	  else \
 	  /tmp/cwctype_gcc > /tmp/cwctype_gcc.out; /tmp/cwctype > /tmp/cwctype_pxx.out; \
 	  diff /tmp/cwctype_gcc.out /tmp/cwctype_pxx.out || \
 	    { echo 'FAIL: cwctype differs from gcc'; exit 1; }; \
 	  echo 'cwctype: identical to gcc'; \
+	fi; \
 	else echo 'cwctype: SKIP (no gcc)'; /tmp/cwctype >/dev/null; fi
 	# and it must be STATICALLY linked -- these functions existing as glibc
 	# imports is the bug this file was written for, and the output diff above
@@ -9579,19 +9603,26 @@ lib-test: pxx-stable-check
 	# booleans, so the same expected output holds on 32- and 64-bit targets.
 	$(PXX_STABLE) test/cstrtol_range.c /tmp/cstrtol_range
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cstrtol_range_gcc test/cstrtol_range.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cstrtol_range_gcc test/cstrtol_range.c 2> /tmp/cstrtol_range_oracle.err; then \
+	    echo "SKIP: cstrtol_range (gcc cannot build the oracle: $$(head -1 /tmp/cstrtol_range_oracle.err))"; \
+	    /tmp/cstrtol_range >/dev/null; \
+	  else \
 	  /tmp/cstrtol_range_gcc > /tmp/cstrtol_gcc.txt; \
 	  /tmp/cstrtol_range > /tmp/cstrtol_pxx.txt; \
 	  diff /tmp/cstrtol_gcc.txt /tmp/cstrtol_pxx.txt || \
 	    { echo 'FAIL: cstrtol_range differs from gcc'; exit 1; }; \
 	  echo 'cstrtol_range: identical to gcc'; \
+	fi; \
 	else echo 'cstrtol_range: SKIP (no gcc)'; /tmp/cstrtol_range >/dev/null; fi
 	# localtime honouring the timezone. Run ONCE PER ZONE with TZ in the
 	# environment — glibc caches the zone until tzset(), so a self-contained
 	# setenv loop silently compares UTC against UTC and passes for every zone.
 	$(PXX_STABLE) test/ctime_localtime.c /tmp/ctime_localtime
 	@if command -v gcc >/dev/null 2>&1 && [ -d /usr/share/zoneinfo ]; then \
-	  gcc -w -o /tmp/ctime_localtime_gcc test/ctime_localtime.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/ctime_localtime_gcc test/ctime_localtime.c 2> /tmp/ctime_localtime_oracle.err; then \
+	    echo "SKIP: ctime_localtime (gcc cannot build the oracle: $$(head -1 /tmp/ctime_localtime_oracle.err))"; \
+	    /tmp/ctime_localtime >/dev/null; \
+	  else \
 	  for z in UTC Europe/Amsterdam America/New_York Asia/Kolkata Australia/Sydney; do \
 	    TZ=$$z /tmp/ctime_localtime_gcc > /tmp/ctl_gcc.txt; \
 	    TZ=$$z /tmp/ctime_localtime > /tmp/ctl_pxx.txt; \
@@ -9599,82 +9630,109 @@ lib-test: pxx-stable-check
 	      { echo "FAIL: ctime_localtime differs from gcc for $$z"; exit 1; }; \
 	  done; \
 	  echo 'ctime_localtime: identical to gcc (5 zones)'; \
+	fi; \
 	else echo 'ctime_localtime: SKIP (no gcc or no zoneinfo)'; /tmp/ctime_localtime >/dev/null; fi
 	# sscanf's EOF-vs-0 return contract, and the math surface. The boundary
 	# cases are the point: EOF means input ran out before any conversion, 0
 	# means input was there and did not match, and callers loop on != EOF.
 	$(PXX_STABLE) test/cscanf_math.c /tmp/cscanf_math
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cscanf_math_gcc test/cscanf_math.c -lm 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cscanf_math_gcc test/cscanf_math.c -lm 2> /tmp/cscanf_math_oracle.err; then \
+	    echo "SKIP: cscanf_math (gcc cannot build the oracle: $$(head -1 /tmp/cscanf_math_oracle.err))"; \
+	    /tmp/cscanf_math >/dev/null; \
+	  else \
 	  /tmp/cscanf_math_gcc > /tmp/csm_gcc.txt 2>&1; \
 	  /tmp/cscanf_math > /tmp/csm_pxx.txt 2>&1; \
 	  diff /tmp/csm_gcc.txt /tmp/csm_pxx.txt || \
 	    { echo 'FAIL: cscanf_math differs from gcc'; exit 1; }; \
 	  echo 'cscanf_math: identical to gcc'; \
+	fi; \
 	else echo 'cscanf_math: SKIP (no gcc)'; /tmp/cscanf_math >/dev/null; fi
 	# dup/dup2 — asserted behaviourally (the duplicate reads the same file, and
 	# dup2 lands on the descriptor it was given), not just that it returned >= 0.
 	$(PXX_STABLE) test/cdup.c /tmp/cdup
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cdup_gcc test/cdup.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cdup_gcc test/cdup.c 2> /tmp/cdup_oracle.err; then \
+	    echo "SKIP: cdup (gcc cannot build the oracle: $$(head -1 /tmp/cdup_oracle.err))"; \
+	    /tmp/cdup >/dev/null; \
+	  else \
 	  /tmp/cdup_gcc > /tmp/cdup_gcc.txt 2>&1; /tmp/cdup > /tmp/cdup_pxx.txt 2>&1; \
 	  diff /tmp/cdup_gcc.txt /tmp/cdup_pxx.txt || \
 	    { echo 'FAIL: cdup differs from gcc'; exit 1; }; \
 	  echo 'cdup: identical to gcc'; \
+	fi; \
 	else echo 'cdup: SKIP (no gcc)'; /tmp/cdup >/dev/null; fi
 	# chdir/symlink/link. Behavioural: chdir must make a RELATIVE path resolve
 	# against the new directory, lstat must see a link where stat follows it.
 	# Run from /tmp because the test chdir's around.
 	$(PXX_STABLE) test/cfileops.c /tmp/cfileops
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cfileops_gcc test/cfileops.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cfileops_gcc test/cfileops.c 2> /tmp/cfileops_oracle.err; then \
+	    echo "SKIP: cfileops (gcc cannot build the oracle: $$(head -1 /tmp/cfileops_oracle.err))"; \
+	    (cd /tmp && /tmp/cfileops) >/dev/null; \
+	  else \
 	  (cd /tmp && /tmp/cfileops_gcc) > /tmp/cfo_gcc.txt 2>&1; \
 	  (cd /tmp && /tmp/cfileops) > /tmp/cfo_pxx.txt 2>&1; \
 	  diff /tmp/cfo_gcc.txt /tmp/cfo_pxx.txt || \
 	    { echo 'FAIL: cfileops differs from gcc'; exit 1; }; \
 	  echo 'cfileops: identical to gcc'; \
+	fi; \
 	else echo 'cfileops: SKIP (no gcc)'; (cd /tmp && /tmp/cfileops) >/dev/null; fi
 	# struct stat's fields: nlink/uid/gid/rdev and atime/ctime were hardcoded.
 	# Asserted through consequences — nlink rises with a hard link and falls
 	# when it is removed, a directory's nlink counts its subdirectories.
 	$(PXX_STABLE) test/cstat_fields.c /tmp/cstat_fields
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cstat_fields_gcc test/cstat_fields.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cstat_fields_gcc test/cstat_fields.c 2> /tmp/cstat_fields_oracle.err; then \
+	    echo "SKIP: cstat_fields (gcc cannot build the oracle: $$(head -1 /tmp/cstat_fields_oracle.err))"; \
+	    /tmp/cstat_fields >/dev/null; \
+	  else \
 	  /tmp/cstat_fields_gcc > /tmp/csf_gcc.txt 2>&1; \
 	  /tmp/cstat_fields > /tmp/csf_pxx.txt 2>&1; \
 	  diff /tmp/csf_gcc.txt /tmp/csf_pxx.txt || \
 	    { echo 'FAIL: cstat_fields differs from gcc'; exit 1; }; \
 	  echo 'cstat_fields: identical to gcc'; \
+	fi; \
 	else echo 'cstat_fields: SKIP (no gcc)'; /tmp/cstat_fields >/dev/null; fi
 	# Process/user ids, pipe, kill, sleep, getpagesize. Behavioural: the pipe
 	# must move bytes and kill(pid,0) must tell a live process from an absent
 	# one, so a stub returning success would fail here.
 	$(PXX_STABLE) test/cproc_ids.c /tmp/cproc_ids
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cproc_ids_gcc test/cproc_ids.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cproc_ids_gcc test/cproc_ids.c 2> /tmp/cproc_ids_oracle.err; then \
+	    echo "SKIP: cproc_ids (gcc cannot build the oracle: $$(head -1 /tmp/cproc_ids_oracle.err))"; \
+	    /tmp/cproc_ids >/dev/null; \
+	  else \
 	  /tmp/cproc_ids_gcc > /tmp/cpi_gcc.txt 2>&1; \
 	  /tmp/cproc_ids > /tmp/cpi_pxx.txt 2>&1; \
 	  diff /tmp/cpi_gcc.txt /tmp/cpi_pxx.txt || \
 	    { echo 'FAIL: cproc_ids differs from gcc'; exit 1; }; \
 	  echo 'cproc_ids: identical to gcc'; \
+	fi; \
 	else echo 'cproc_ids: SKIP (no gcc)'; /tmp/cproc_ids >/dev/null; fi
 	# isatty via the TCGETS ioctl. Checks /dev/null and a directory as well as
 	# a real tty (/dev/ptmx): the tempting fstat+S_ISCHR implementation answers
 	# 1 for /dev/null, so a one-sided test would pass against it.
 	$(PXX_STABLE) test/cisatty.c /tmp/cisatty
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -w -o /tmp/cisatty_gcc test/cisatty.c 2>/dev/null; \
+	  if ! gcc -w -o /tmp/cisatty_gcc test/cisatty.c 2> /tmp/cisatty_oracle.err; then \
+	    echo "SKIP: cisatty (gcc cannot build the oracle: $$(head -1 /tmp/cisatty_oracle.err))"; \
+	    /tmp/cisatty >/dev/null; \
+	  else \
 	  /tmp/cisatty_gcc > /tmp/cia_gcc.txt 2>&1; /tmp/cisatty > /tmp/cia_pxx.txt 2>&1; \
 	  diff /tmp/cia_gcc.txt /tmp/cia_pxx.txt || \
 	    { echo 'FAIL: cisatty differs from gcc'; exit 1; }; \
 	  echo 'cisatty: identical to gcc'; \
+	fi; \
 	else echo 'cisatty: SKIP (no gcc)'; /tmp/cisatty >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.
 	$(PXX_STABLE) test/crtl_libc_oracle.c /tmp/crtl_libc_oracle
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -o /tmp/crtl_libc_oracle_gcc test/crtl_libc_oracle.c -lm 2>/dev/null; \
+	  if ! gcc -o /tmp/crtl_libc_oracle_gcc test/crtl_libc_oracle.c -lm 2> /tmp/crtl_libc_oracle_oracle.err; then \
+	    echo "SKIP: crtl_libc_oracle (gcc cannot build the oracle: $$(head -1 /tmp/crtl_libc_oracle_oracle.err))"; \
+	  else \
 	  /tmp/crtl_libc_oracle_gcc > /tmp/crtl_libc_gcc.txt; \
 	  /tmp/crtl_libc_oracle > /tmp/crtl_libc_pxx.txt; \
 	  if diff /tmp/crtl_libc_gcc.txt /tmp/crtl_libc_pxx.txt >/dev/null; then \
@@ -9683,12 +9741,15 @@ lib-test: pxx-stable-check
 	    echo "  crtl-oracle: FAIL (diverges from gcc)"; \
 	    diff /tmp/crtl_libc_gcc.txt /tmp/crtl_libc_pxx.txt; exit 1; \
 	  fi; \
+	  fi; \
 	else echo "  crtl-oracle: SKIP (no gcc to diff against)"; fi
 	# setjmp/longjmp + fenv against gcc. Separate file: longjmp unwinds out of
 	# the enclosing function, so it must not share a main() with the rest.
 	$(PXX_STABLE) test/crtl_setjmp_oracle.c /tmp/crtl_setjmp_oracle
 	@if command -v gcc >/dev/null 2>&1; then \
-	  gcc -o /tmp/crtl_setjmp_gcc test/crtl_setjmp_oracle.c -lm 2>/dev/null; \
+	  if ! gcc -o /tmp/crtl_setjmp_gcc test/crtl_setjmp_oracle.c -lm 2> /tmp/crtl_setjmp_oracle.err; then \
+	    echo "SKIP: crtl_setjmp_oracle (gcc cannot build the oracle: $$(head -1 /tmp/crtl_setjmp_oracle.err))"; \
+	  else \
 	  /tmp/crtl_setjmp_gcc > /tmp/crtl_setjmp_g.txt; \
 	  /tmp/crtl_setjmp_oracle > /tmp/crtl_setjmp_p.txt; \
 	  if diff /tmp/crtl_setjmp_g.txt /tmp/crtl_setjmp_p.txt >/dev/null; then \
@@ -9696,6 +9757,7 @@ lib-test: pxx-stable-check
 	  else \
 	    echo "  crtl-setjmp: FAIL (diverges from gcc)"; \
 	    diff /tmp/crtl_setjmp_g.txt /tmp/crtl_setjmp_p.txt; exit 1; \
+	  fi; \
 	  fi; \
 	else echo "  crtl-setjmp: SKIP (no gcc to diff against)"; fi
 	# exec() as a library, driven from a .npy: the whole output is diffed
