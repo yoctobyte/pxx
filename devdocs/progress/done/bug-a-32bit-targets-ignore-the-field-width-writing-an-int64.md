@@ -118,4 +118,4 @@ canary) plus the five-target sweep. Backend code only, no frozen builtin
 touched, so no re-pin.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 638ef7e6f.
