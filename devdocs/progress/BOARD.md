@@ -8,19 +8,18 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | — |
+_none_
 
-## unfinished (8)
+## unfinished (9)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | feature-a-one-exception-class-in-a-shared-unit | A | 75 | feature | VARIANT C BUILT AND GREEN on wip/exception-sibling-design (gate.sh quick, self-host, both uses orders identical). sysutils and pylib each declare their own class named Exception as SIBLINGS under a shared ExceptionBase in compiler/builtin/exceptions.pas -- no hook, and bug-nilpy-exception-repr-and-type-name-say-pyexception is fixed by construction. The parked blocker (qualified class references resolving flat) is CLEARED: the design was half built -- sysutils had never been re-rooted -- plus two more flat lookups (idx recomputed after ctorCi, and named constructors like CreateFmt taking a path with no qualifier). NOT MERGED: needs a re-pin in the same landing (sysutils now uses a builtin unit the pinned compiler lacks) and one user decision on bare-name collisions. | decide-merge-variant-c-with-bare-name-collision |
+| feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -461,9 +460,9 @@ _none_
 - [p 75] [U] decide-merge-variant-c-with-bare-name-collision (unblocks 2)
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- [p 60] [U] decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
-- [p 60] [U] decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
@@ -669,6 +668,7 @@ _none_
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
+- **1** — decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-a-own-language-first-symbol-resolution
 - **1** — feature-b-tkhtmlview-in-nilpy

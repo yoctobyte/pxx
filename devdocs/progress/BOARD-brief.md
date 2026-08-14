@@ -5,17 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1761 rejected:35`
+`unfinished:9 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1761 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-a-own-language-first-symbol-resolution` [A] — owner: agent-an
+_none — no lane is locked._
 
-## unfinished (8) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `feature-a-one-exception-class-in-a-shared-unit` [A] — blocked-by: decide-merge-variant-c-with-bare-name-collision
+- `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
@@ -35,9 +36,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 2)
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- `[p 60] [U]` decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
-- `[p 60] [U]` decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
