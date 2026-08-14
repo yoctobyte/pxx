@@ -1,0 +1,49 @@
+# The math names that used to be `undefined variable`, degrees' associativity,
+# and the `random` module. bug-nilpy-math-surface-remaining-gaps-and-degrees-
+# association. The math half is diffed against CPython value for value; the
+# random half asserts the CONTRACT, because the sequence is deliberately not
+# CPython's (see pylib's block comment).
+
+import math
+import random
+
+# degrees forms the conversion FACTOR first — x * (180/pi), not x * 180 / pi
+print(math.degrees(3.14), math.radians(180.0))
+print(math.degrees(0.0), math.degrees(-1.0))
+
+# names that resolve to the RTL's Arc* under a different spelling
+print(math.asin(0), math.acos(1), math.atan(1))
+print(math.asin(-1) == -math.pi / 2, math.atan(0))
+
+# modf keeps the SIGN on both halves
+print(math.modf(2.5), math.modf(-2.5), math.modf(0.0), math.modf(-0.25))
+
+# perm is the falling factorial, 0 past the end, 1 for k = 0
+print(math.perm(5, 2), math.perm(5, 0), math.perm(5, 6), math.perm(10, 10))
+
+# prod keeps the int type, and is 1 over an empty sequence
+print(math.prod([1, 2, 3]), math.prod([]), math.prod([2.0, 3]))
+
+# fsum is compensated — this is the whole reason it exists beside sum()
+print(math.fsum([0.1] * 10))
+print(math.fsum([1e100, 1.0, -1e100]))
+print(math.fsum([]), math.fsum([1, 2, 3]))
+
+# --- random: the contract, not the values
+random.seed(42)
+a = random.random()
+b = random.random()
+print(0.0 <= a < 1.0, 0.0 <= b < 1.0, a != b)
+
+# the same seed repeats
+random.seed(42)
+print(random.random() == a)
+
+xs = [1, 2, 3, 4, 5]
+random.shuffle(xs)
+print(sorted(xs), len(xs))
+print(random.choice(xs) in xs)
+print(3 <= random.randint(3, 7) <= 7)
+print(random.randint(4, 4))
+print(random.randrange(5) in [0, 1, 2, 3, 4])
+print(2.0 <= random.uniform(2.0, 3.0) <= 3.0)

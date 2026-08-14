@@ -41,6 +41,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
+| bug-b-arcsin-arccos-lose-2-ulps-vs-libm | B | 20 | bug | ArcSin/ArcCos in lib/rtl/math.pas are 1-2 ulps off libm for mid-range arguments (asin(0.5) answers ...982991 where libm and CPython say ...982989); ArcTan agrees exactly | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-b-rtl-math-transcendentals-lose-argument-reduction | B | 35 | bug | lib/rtl/math.pas's sin/cos lose accuracy as the argument grows — 85 ulps at x=100, 1.2 MILLION ulps at 1e6, and 2.4 BILLION at 1e10, where the answer has no correct digits left. Bad argument reduction, not last-bit rounding. pxx's OWN crtl libm already gets every one of these exactly right, so the fix is to share it, not to write one. | — |
@@ -60,7 +61,6 @@ _none_
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
-| bug-nilpy-math-surface-remaining-gaps-and-degrees-association | N | 35 | bug | Seven math names still resolve to 'undefined variable' — asin, acos, atan, fsum, modf, perm, dist, prod — and math.degrees(3.14) answers 179.90874767107852 where CPython answers 179.9087476710785, because it computes x*180/pi instead of CPython's x*(180/pi). The `random` module is absent entirely | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
 | bug-nilpy-max-and-min-do-not-iterate-a-dict | N | 30 | bug | `max(d)` / `min(d)` over a DICT raise `TypeError: max() argument is not iterable`; CPython answers the largest/smallest KEY. Every other iterable works, and `sorted(d)` over the same dict already does the right thing. | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
@@ -410,9 +410,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1803)
+## done (1804)
 
-1803 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1804 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -568,7 +568,6 @@ _none_
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [B] bug-b-rtl-math-transcendentals-lose-argument-reduction
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
-- [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
 - [p 35] [N] bug-pyeval-three-param-host-method-unsupported
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
@@ -634,6 +633,7 @@ _none_
 - [p 25] [W] feature-promo-launch-plan
 - [p 25] [M] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 20] [B] bug-b-arcsin-arccos-lose-2-ulps-vs-libm
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 20] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins

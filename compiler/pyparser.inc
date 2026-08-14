@@ -9749,6 +9749,37 @@ begin
     bug-n-math-trunc-and-log-need-frontend-intercepts }
   else if dotted = 'math.trunc' then Result := 'pymath_trunc'
   else if dotted = 'math.copysign' then Result := 'pymath_copysign'
+  { asin/acos/atan are a pure NAME difference — the RTL spells them ArcSin,
+    ArcCos, ArcTan, so `import math` had nothing to resolve them to and each
+    died as `undefined variable`, exactly as `log` did above. Same contract,
+    same values; nothing to compute here.
+    bug-nilpy-math-surface-remaining-gaps-and-degrees-association }
+  else if dotted = 'math.asin' then Result := 'ArcSin'
+  else if dotted = 'math.acos' then Result := 'ArcCos'
+  else if dotted = 'math.atan' then Result := 'ArcTan'
+  { ...and the five that need a container or an exact algorithm rather than a
+    rename. All of them are pure arithmetic, which is what lets them live in a
+    builtin unit at all — see math.log's note. }
+  else if dotted = 'math.modf' then Result := 'pymath_modf'
+  else if dotted = 'math.prod' then Result := 'pymath_prod'
+  else if dotted = 'math.fsum' then Result := 'pymath_fsum'
+  else if dotted = 'math.perm' then Result := 'pymath_perm'
+  { `import random` resolved to nothing at all — every name under it was
+    `undefined variable`, and it is one of the first imports a script reaches
+    for. The generator is pylib's own (SplitMix64); the SEQUENCE is not
+    CPython's and is not meant to be, but the contract is. }
+  else if dotted = 'random.random' then Result := 'pyrandom_random'
+  else if dotted = 'random.seed' then Result := 'pyrandom_seed'
+  else if dotted = 'random.randint' then Result := 'pyrandom_randint'
+  else if dotted = 'random.randrange' then Result := 'pyrandom_randrange'
+  else if dotted = 'random.uniform' then Result := 'pyrandom_uniform'
+  else if dotted = 'random.choice' then Result := 'pyrandom_choice'
+  else if dotted = 'random.shuffle' then Result := 'pyrandom_shuffle'
+  { math.dist is NOT here: it needs Sqrt, which lives in lib/rtl/math.pas and a
+    BUILTIN unit cannot reach (the same wall math.log/math.pow hit — see their
+    note above), while its arguments are pylib CONTAINERS the RTL cannot name.
+    It is the one entry of this sweep that needs a composed lowering rather than
+    a table row. bug-nilpy-math-surface-remaining-gaps-and-degrees-association }
   { math.log -- the RTL spells the natural log `Ln`, so `import math` had
     nothing to resolve `log` to and it died as `undefined variable (log)` while
     log10 and log2 (same names in both languages) worked. This is a pure NAME
@@ -9787,7 +9818,7 @@ begin
   base := LowerCase(GetTokenStr(TokPos - 1));
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
      (base <> 'select') and (base <> 'dict') and (base <> 'math') and
-     (base <> 'str') then Exit;
+     (base <> 'random') and (base <> 'str') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));
@@ -28799,7 +28830,7 @@ begin
         bug-n-overload-decorator-is-refused }
       if not (CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
               CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
-              CaseEqual(impRoot, 'typing') or
+              CaseEqual(impRoot, 'typing') or CaseEqual(impRoot, 'random') or
               CaseEqual(impRoot, 'itertools')) then
         ParseUsesUnit(impName);
       if PyIsIdent('as') then
@@ -29026,7 +29057,7 @@ begin
           root is added and the others are not. }
         if CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
            CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
-           CaseEqual(impRoot, 'typing') or
+           CaseEqual(impRoot, 'typing') or CaseEqual(impRoot, 'random') or
            CaseEqual(impRoot, 'itertools') then
           { skip }
         else

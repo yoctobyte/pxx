@@ -1105,14 +1105,19 @@ begin
   if a > b then Result := a else Result := b;
 end;
 
+{ The conversion FACTOR is formed first and then multiplied — CPython and FPC
+  both associate it that way, and `x * 180 / pi` differs from `x * (180 / pi)`
+  in the last bit: math.degrees(3.14) answered 179.90874767107852 where both
+  references say 179.9087476710785.
+  bug-nilpy-math-surface-remaining-gaps-and-degrees-association }
 function DegToRad(d: Double): Double;
 begin
-  Result := d * 3.14159265358979323846 / 180.0;
+  Result := d * (3.14159265358979323846 / 180.0);
 end;
 
 function RadToDeg(r: Double): Double;
 begin
-  Result := r * 180.0 / 3.14159265358979323846;
+  Result := r * (180.0 / 3.14159265358979323846);
 end;
 
 { ================= Single overloads ================= }
