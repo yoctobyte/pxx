@@ -43,6 +43,18 @@ model as a whole; the individual switches are listed on the
   `--strict-case`, `--strict-operator`, `--strict-visibility`, and
   `--require-forward`. In-source form: `{$STRICT_FPC ON}`.
 
+  **It also changes semantics, not only diagnostics** — so do not read "checks"
+  too literally. Two rules under the umbrella change a computed *value* rather
+  than accepting or rejecting a program:
+
+  - **shift widths** — FPC's masking of the shift count, rather than PXX's;
+  - **`Variant` to `Char`** — FPC takes character 1 of the variant's string form
+    (`65` gives `'6'`) where PXX answers `Chr(n)` (`'A'`). See
+    [Variants](../language/types.md#converting-a-variant-to-a-scalar).
+
+  Both are cases where FPC's answer is the one ported code depends on, which is
+  why they ride the parity umbrella rather than a switch of their own.
+
   `--strict-overload` is **not** part of the umbrella. PXX's own libraries
   overload freely without the `overload;` marker — that is the intended lax
   dialect — so requiring the marker would reject the very libraries FPC-oriented

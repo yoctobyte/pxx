@@ -4,6 +4,8 @@ prio: 45
 type: doc
 blocked-by: []
 summary: "Document the Variant->scalar conversion rules now that they are settled: a boolean variant converts to -1 (OLE VARIANT_TRUE, matching FPC) while Ord(True) stays 1, and Variant->Char answers Chr(n) by default where FPC takes character 1 of the variant's string form ('65' -> '6') — the one row that deliberately diverges, available under --strict-fpc. Also CORRECTS an existing note in docs/language/types.md that is factually wrong."
+status: done
+owner: claude-D
 ---
 
 # Document the Variant conversion rules, and fix the wrong note about them
@@ -104,3 +106,23 @@ modes rather than transcribing from this ticket.
 
 Docs stay internally consistent; every snippet compiles and produces the stated
 output under `$(PXX_STABLE)`. No compiler or library changes.
+
+## Log
+- 2026-08-14 — done. All three parts landed, everything measured against pinned
+  v303 with FPC 3.2.2 as the oracle rather than transcribed from this ticket.
+  §1: the wrong `> [!NOTE]` in `docs/language/types.md` is replaced — confirmed
+  `writeln(v)` on a boolean variant prints `True`/`False` and a plain Boolean
+  prints `TRUE`/`FALSE`, identically in both compilers, so the note now states
+  the real quirk instead of a non-existent divergence. §2: new "Converting a
+  Variant to a scalar" section; the eight boolean values (-1 / 255 / -1.0, vs
+  Ord(True)=1) match FPC exactly, and every row of the Char table reproduces —
+  default gives `A z #0 #1 h`, `--strict-fpc` gives `6 1 2 T h`, byte-identical
+  to FPC's own output. §3: `--strict-fpc` re-described as checks **plus two
+  semantic rules** in `modes.md`, `cli.md` and `directives.md`.
+  **One ticket claim dropped as unreachable:** the `Null`-variant edge (raises
+  with FPC's String-naming message) cannot be written in PXX today — `Null` and
+  `VarClear` are both `undefined variable` on the pinned compiler, so there is
+  no user program that observes it. Documented the empty-string edge instead
+  (`#0`, verified in both modes and in FPC). Whether `Null` should exist at all
+  is a language question, not a docs one.
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

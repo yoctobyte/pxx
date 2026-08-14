@@ -75,7 +75,7 @@ effect where one exists.
 | Option | Effect | Directive |
 | --- | --- | --- |
 | `--strict` | FPC-parity strictness umbrella (currently the routine-visibility check below). | `{$STRICT ON}` |
-| `--strict-fpc` | The FPC-parity umbrella: `--strict-case`, `--strict-operator`, `--strict-visibility` and `--require-forward` together — the checks that match FPC *and* are proven against the real FPC corpora. `--strict-overload` is deliberately **not** included; see [modes](./modes.md). | `{$STRICT_FPC ON}` |
+| `--strict-fpc` | The FPC-parity umbrella: `--strict-case`, `--strict-operator`, `--strict-visibility` and `--require-forward` together — the checks that match FPC *and* are proven against the real FPC corpora. Also switches two rules that change a *value* rather than a diagnostic: FPC shift widths, and `Variant`→`Char`. `--strict-overload` is deliberately **not** included; see [modes](./modes.md). | `{$STRICT_FPC ON}` |
 | `--require-forward` | A routine must be defined above its call, `forward;`-declared, in an interface section, or be a class method — no whole-source pre-scan. First check under `--strict`. | `{$STRICT ON}` |
 | `--strict-overload` | Require explicit `overload;` on overloaded routines. | `{$STRICT_OVERLOAD ON}` |
 | `--permissive-overload` | Relax the overload marker requirement (the default). | `{$STRICT_OVERLOAD OFF}` |

@@ -205,7 +205,10 @@ PXX supports a built-in `Variant` type. A `Variant` can hold values of different
 - **String Support**: Variants can hold managed Pascal strings (`AnsiString`) and support concatenation and comparison.
 
 > [!NOTE]
-> In this dialect, boolean values stored in a `Variant` print as `0` for `False` and `1` for `True` when using `writeln`.
+> A boolean **variant** prints as `True` / `False`, while a plain `Boolean`
+> prints as `TRUE` / `FALSE`. That is not a PXX quirk — FPC prints the same
+> six letters, for the same reason: the variant is rendered through its own
+> string conversion, not through `Write`'s boolean case.
 
 ```pascal
 var
@@ -225,6 +228,62 @@ begin
   writeln(v + w); { prints "hello world" }
 end;
 ```
+
+### Converting a Variant to a scalar
+
+Reading a `Variant` into a scalar **converts** it — it does not reinterpret the
+stored bits. An assignment and a typecast are the same operation here, so
+`i := v` and `Int64(v)` always agree.
+
+Two rows of that conversion surprise people often enough to state outright.
+
+**A boolean variant converts to `-1`, not `1`.**
+
+```pascal
+var v: Variant; b: Boolean;
+begin
+  v := True;
+  writeln(Int64(v));      { -1   }
+  writeln(Byte(v));       { 255  }
+  writeln(Double(v):0:1); { -1.0 }
+
+  b := True;
+  writeln(Ord(True));     { 1 — unchanged }
+  writeln(Integer(b));    { 1 — unchanged }
+end;
+```
+
+The `-1` is OLE Automation's `VARIANT_TRUE`, which every COM consumer expects,
+and it belongs to the **variant** conversion rather than to booleans in general
+— hence the last two lines. FPC gives the same eight values.
+
+**Converting a Variant to `Char` is the one place PXX deliberately differs from
+FPC.** PXX answers `Chr(n)` for a numeric variant; FPC renders the variant to
+its string form and takes character 1.
+
+| `v` | `Char(v)` in PXX | `Char(v)` in FPC, and in PXX under `--strict-fpc` |
+| --- | --- | --- |
+| `65` | `A` | `6` |
+| `122` | `z` | `1` |
+| `2.5` | `#0` | `2` |
+| `True` | `#1` | `T` |
+| `'hi'` | `h` | `h` |
+
+This is the rare case where differing from FPC is the defensible side, so the
+reason is worth having when you port code:
+
+- **FPC contradicts itself here.** The same numeric variant converts as a
+  *number* for `Byte`, `Word` and `Int64` — `Byte(v)` is `65` — and as a
+  *string* for `Char`.
+- The string rule comes from OLE Automation's `VARIANT`, which has no character
+  type at all, so Delphi defined a `Char` target as "a string of length one" and
+  FPC inherited it.
+- The intermediate is not something you could write by hand anyway: `c :=
+  someAnsiString` is a type error in FPC.
+
+If you are porting code that relies on FPC's rule, `--strict-fpc` reproduces it
+exactly, edges included — an empty-string variant yields `#0` under both
+compilers and both modes.
 
 ## Putting it together
 
