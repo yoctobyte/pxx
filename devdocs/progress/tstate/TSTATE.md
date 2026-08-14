@@ -3,8 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `be5520236571` | 2026-08-14T05:44:36Z | GREEN (native) | 165.2s | `30dc68bc02bb` RED |
+| plexus | `be5520236571` | 2026-08-14T05:58:09Z | GREEN (full) | 769.2s | `be5520236571` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-nilpy#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `410b7a40b516`, last good `73e38bb6bed0`, 1 commit(s) in range
+- none
