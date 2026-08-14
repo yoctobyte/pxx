@@ -173,3 +173,74 @@ tests matched on the FIRST TOKEN of the right-hand side only, so
 literal and `len()` read garbage. `PyBlkRhsEndsAt` / `PyBlkRhsEndsAfterGroup`
 now require a literal to be the WHOLE right-hand side. Any new shape added to
 this list must ask the same question.
+
+## 2026-08-14 (claude-A-N) — item (3)'s COST is closed, by re-reading what it costs
+
+The 2026-08-11 note split item (3) into two halves and closed the first
+(a name RESOLVES via a phantom). It described the second — "contributing a TYPE
+to the widening table" — as still shape-by-shape and still the losing game.
+
+That framing is what kept it open, and it is slightly wrong. The remaining
+damage was never "we cannot type an unreadable shape". It was **"we type the
+readable shape and pretend the unreadable one is not there"**, which is a
+different and much smaller problem: an unreadable binding next to a readable one
+means the name's type is UNKNOWN, and unknown next to known is not known.
+
+### Measured first — two silent wrong values, both inside a block
+
+```python
+z = c.two(1)   # unreadable: a method call
+z = 3.5
+print(z)       # 4615063718147915776   <- 3.5's IEEE bits read as an integer
+```
+```python
+y = "a-b".split("-")
+y = 5
+print(len(y))  # TypeError: expected a str, list, dict or bytes, got int
+```
+
+Both are the worst class: a plausible number and a wrong-type crash, from
+ordinary Python, with no diagnostic.
+
+### The fix is the INTERSECTION, not blanket widening
+
+`PyUnkBindNames` records every name whose block-nested binding the arm could not
+read. At the end of each round, a name in **both** that list and the constraint
+table goes `tyVariant`. A name only in the list is left exactly as it is today.
+
+That distinction is the whole design, and `PyPhantomNames`'s own note is why:
+blanket tyVariant was tried before and **broke `tok is None` for a str-typed
+Optional**. That failure is the single-binding case — which this does not touch,
+and which is the first half of the new test, kept as a control.
+
+### A missing literal shape was hiding half of it
+
+The depth>0 readable list had `tkString`, `tkInteger`, list/dict literals and
+name/arith forms — and **no `tkFloat`**, though the sibling scanner
+`PyFieldTypeFromBlock` reads one. So `z = 3.5` inside a block put the name in the
+table not at all, and the intersection had nothing to widen against. Added, with
+`tkTrue`/`tkFalse` beside it. Worth noting as its own lesson: two scanners
+answering the same question with different shape lists is the sibling-arm smell
+`normalise-dont-special-case.md` warns about, and the difference between them was
+invisible until a value came out wrong.
+
+### What is still open, honestly
+
+- The **route this ticket names as the real close** — a pre-pass that does not
+  `Error()`-and-Halt on an as-yet-unseen name, so the RHS could simply be
+  trial-parsed and the safe-shape list would disappear — is UNCHANGED. `Error`
+  still calls `Halt` directly.
+- What changed is the PRICE of not doing it. An unreadable shape no longer costs
+  a wrong value; it costs a `tyVariant` slot where a narrower one would have
+  done. That is a performance cost, not a correctness one, so this ticket should
+  now be read as an OPTIMISATION item rather than a correctness one — and
+  re-priced accordingly.
+- `PyInferExprType` still has seven callers, per the 2026-08-09 note.
+
+### Gate
+
+`test/test_nilpy_block_unreadable_binding_widens.npy` + `.expected` from CPython
+— the single-binding control, both measured shapes, each ordering of the pair,
+the pair split across two blocks, a top-level target with an unreadable block
+binding, and the bare float/bool literals. The four inference-lineage tests
+re-run green. `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
