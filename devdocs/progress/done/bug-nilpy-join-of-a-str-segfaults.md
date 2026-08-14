@@ -111,4 +111,4 @@ already worked (`sorted`, `max`/`min`, `list`, `tuple`, `enumerate`, `zip`,
 `in`) so they stay working. No pylib change, so no pin needed.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit fd6c86dad.
