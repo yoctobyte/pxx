@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 50
+prio: 20
 type: bug
 blocked-by: []
 summary: "`except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field."
@@ -67,3 +67,16 @@ printing an empty string under a diverged layout; every existing `except (A, B)`
 row in the NilPy suite unchanged; the bridge tests
 (`test_nilpy_rtl_exception_surface`, `test_nilpy_pyexception_bare_vs_qualified`)
 green.
+
+## HOLD 2026-08-14 (user) — do not build the join fix yet
+
+The user is reconsidering the approach and will look at this later: *"maybe we
+do need another approach after all."* So the "bind at the JOIN of the arms"
+section above is a RECOMMENDATION, not a decision — do not start on it.
+
+Priced down to 20 to keep it out of `next`. The bridge case is guarded
+(`PyBridgeRootCi` refuses to compile on a diverged layout), so nothing here is a
+live silent-wrong-value: reaching it needs a hand-written cross-hierarchy
+`except` tuple AND a layout change to sysutils' Exception.
+
+Raise the prio again when the direction is settled.
