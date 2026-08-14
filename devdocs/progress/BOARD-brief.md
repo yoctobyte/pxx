@@ -5,11 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:4 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1761 rejected:35`
+`urgent:1 unfinished:9 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1762 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
+
+## urgent (1) — jump the queue
+
+- `bug-a-threadsafe-segfaults-on-every-nilpy-program` [A]
 
 ## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
@@ -32,7 +36,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 203, ranked
 
-- `[p 80] [T]` task-t-strict-uses-corpus-sweep (unblocks 1)
+- `[p 70] [A]` bug-a-threadsafe-segfaults-on-every-nilpy-program
 - `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 2)
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
