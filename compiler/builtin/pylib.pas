@@ -71,7 +71,10 @@ const
     other TYPE objects, so it is the one code whose isinstance arm asks about
     the tag rather than about the value's Python type name. }
   PYBT_TYPE      = 12;
-  PYBT_LAST      = 12;
+  { `type(None)` is `<class 'NoneType'>` in CPython, and NoneType is a real type
+    object there — so it needs a code even though no one writes `NoneType`. }
+  PYBT_NONETYPE  = 13;
+  PYBT_LAST      = 13;
 
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
@@ -1392,6 +1395,12 @@ function pybtype_repr(const v: Variant): AnsiString;
 { The code the VALUE x is an instance of, or 0 when it is nothing this table
   names. The one place variant tags are mapped onto Python type identity. }
 function pybtype_of_value(const x: Variant): Int64;
+{ `type(x)` as a VALUE — the type OBJECT, which is a builtin type object for a
+  builtin value and a class object (VT_CLASSREF) for a user instance. The
+  frontend keeps its own cheap lowering for `type(x).__name__`; every other
+  shape (`type(x) == int`, `print(type(x))`, `type(x) is str`) comes here.
+  bug-n-a-type-name-is-not-a-first-class-value }
+function pytype_of_v(const x: Variant): Variant;
 { `t = str` then `t(5)` — calling a builtin type held as a VALUE, which in
   Python is the CONVERSION. The dynamic-call sites route here for a VT_BTYPE
   callee exactly as they route a VT_CLASSREF one to PyClassRefNew. }
@@ -13594,6 +13603,7 @@ begin
     PYBT_BYTEARRAY: Result := 'bytearray';
     PYBT_FROZENSET: Result := 'frozenset';
     PYBT_TYPE:      Result := 'type';
+    PYBT_NONETYPE:  Result := 'NoneType';
   else
     Result := '?';
   end;
@@ -13673,6 +13683,31 @@ begin
     raise TypeError.Create(pybtype_name(pybtype_code(t))
       + '() through a type held as a value is not supported yet');
   end;
+end;
+
+function pytype_of_v(const x: Variant): Variant;
+{ A FUNCTION, unlike pybtype_call0/1 beside it: this one is called straight from
+  generated user code into an ordinary temp, which is the shape every other
+  Variant-returning pylib entry (pyint_v, pyadd_v) already uses. The var-out
+  form is only needed where the value is forwarded into ANOTHER Variant
+  function's Result, which is the NRVO hazard. }
+var code: Int64; o: Pointer;
+begin
+  { a builtin value answers with its builtin type object }
+  code := pybtype_of_value(x);
+  if code > 0 then begin Result := pybtype(code); Exit; end;
+  { a user INSTANCE answers with its class object — the same VT_CLASSREF a
+    class name binds to, so `type(a) == A` and `isinstance(a, A)` agree by
+    construction rather than by two tables saying the same thing. }
+  if (pyvartag(x) = 7) and (PPyVarRec(@x)^.Payload <> 0) then
+  begin
+    o := Pointer(NativeInt(PPyVarRec(@x)^.Payload));
+    PPyVarRec(@Result)^.VType := 11;
+    PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(o)));
+    Exit;
+  end;
+  { None, and anything else with no type object of its own }
+  Result := pybtype(PYBT_NONETYPE);
 end;
 
 function pyisinstance_v(const x: Variant; const t: Variant): Boolean;

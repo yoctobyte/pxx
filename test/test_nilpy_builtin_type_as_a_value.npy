@@ -79,6 +79,25 @@ print(isinstance(A, class_types), isinstance(a, class_types))
 print(type)
 print(type(5).__name__)
 
+# --- `type(x)` as a VALUE, not only as `type(x).__name__` -------------------
+# This was refused outright ("type(x) is only supported as type(x).__name__")
+# for want of a representation for the answer. There is one now.
+class C(A):
+    pass
+
+c = C()
+print(type(5) == int, type(5) == str)
+print(type("x") == str, type(1.5) == float, type(True) == bool)
+print(type([1]) == list, type({}) == dict, type((1,)) == tuple, type({1}) == set)
+print(type(a) == A, type(a) == C, type(c) == C, type(c) == A)
+print(type(None))
+print(type(5), type("x"), type([1]), type(a))
+print(type(5).__name__, type(a).__name__)
+ty = type(5)
+print(ty, ty == int)
+print(isinstance(5, type(5)), isinstance("s", type(5)))
+print(type(5) is int, type(5) is str)
+
 # --- a user name SHADOWS the builtin, as it does in CPython -----------------
 def list_shadow_check():
     dict = 7

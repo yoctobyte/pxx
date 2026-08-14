@@ -25,4 +25,14 @@ False False
 True False
 <class 'type'>
 int
+True False
+True True True
+True True True True
+True False True False
+<class 'NoneType'>
+<class 'int'> <class 'str'> <class 'list'> <class '__main__.A'>
+int A
+<class 'int'> True
+True False
+True False
 8

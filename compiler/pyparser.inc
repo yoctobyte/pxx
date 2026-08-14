@@ -1848,7 +1848,31 @@ begin
   hadTuple := CurTok.Kind = tkLParen;
   if hadTuple then Next;                 { optional tuple of types }
   repeat
-    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a type in isinstance');
+    { A second argument that is not an identifier at all — `isinstance(x, type(y))`,
+      `isinstance(x, types[0])`. CPython evaluates the expression, so hand it to
+      the same runtime test a type held in a NAME already uses rather than
+      refusing. Only reachable now that a type is a VALUE; before that there was
+      nothing an expression could have evaluated TO.
+      bug-n-a-type-name-is-not-a-first-class-value }
+    if CurTok.Kind <> tkIdent then
+    begin
+      if CurTok.Kind = tkRParen then
+        Error('Nil Python: expected a type in isinstance');
+      PyParseBoolExpr;
+      rtArg := AllocNode(AN_ARG);
+      ASTLeft[rtArg] := PyForceVariant(xNode);
+      rtArg2 := AllocNode(AN_ARG);
+      ASTLeft[rtArg2] := PyForceVariant(CurASTNode);
+      ASTRight[rtArg] := rtArg2;
+      term := AllocNode(AN_CALL);
+      ASTIVal[term] := FindProc('pyisinstance_v');
+      if ASTIVal[term] < 0 then Error('Nil Python: pylib (pyisinstance_v) not loaded');
+      ASTTk[term] := Ord(tyBoolean);
+      ASTLeft[term] := rtArg;
+      left := OrJoin(left, term);
+      if hadTuple and (CurTok.Kind = tkComma) then begin Next; Continue; end;
+      Break;
+    end;
     nm := LowerCase(CurTok.SVal);
     if nm = 'int' then
       { VT_PROMO_INT64: a heap-tier promotable int (a masked cell past 2^63)
@@ -1876,6 +1900,28 @@ begin
       so it goes to the same runtime test a type held in a NAME already uses,
       with `type` itself as the second argument. six line 43,
       `class_types = type,`. bug-n-a-type-name-is-not-a-first-class-value }
+    { `isinstance(x, type(y))` — `type` FOLLOWED BY '(' is a call whose value is
+      a type object, not the bare `type` builtin. Parsed as an expression by the
+      non-ident arm's twin below; falling into the bare-`type` arm here consumed
+      only the name and left `(y)` to blow up as "unexpected token". }
+    else if (nm = 'type') and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind = tkLParen) then
+    begin
+      PyParseBoolExpr;                    { consumes `type(y)` whole }
+      rtArg := AllocNode(AN_ARG);
+      ASTLeft[rtArg] := PyForceVariant(xNode);
+      rtArg2 := AllocNode(AN_ARG);
+      ASTLeft[rtArg2] := PyForceVariant(CurASTNode);
+      ASTRight[rtArg] := rtArg2;
+      term := AllocNode(AN_CALL);
+      ASTIVal[term] := FindProc('pyisinstance_v');
+      if ASTIVal[term] < 0 then Error('Nil Python: pylib (pyisinstance_v) not loaded');
+      ASTTk[term] := Ord(tyBoolean);
+      ASTLeft[term] := rtArg;
+      left := OrJoin(left, term);
+      if hadTuple and (CurTok.Kind = tkComma) then begin Next; Continue; end;
+      Break;
+    end
     else if nm = 'type' then
     begin
       rtArg := AllocNode(AN_ARG);

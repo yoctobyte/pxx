@@ -2,6 +2,8 @@
 track: N
 prio: 60
 type: feature
+status: working
+owner: claude-A-N
 ---
 
 # META: third-party Python libraries as pxx targets — classify, then compile

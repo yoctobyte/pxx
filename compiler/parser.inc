@@ -15412,7 +15412,31 @@ begin
     if (CurTok.Kind <> tkDot) or (TokPos >= TokCount) or
        (Tokens[TokPos].Kind <> tkIdent) or
        (not CaseEqual(GetTokenStr(TokPos), '__name__')) then
-      Error('Nil Python: type(x) is only supported as type(x).__name__');
+    begin
+      { Any OTHER shape — `type(x) == int`, `print(type(x))`, `type(x) is str`
+        — is the type OBJECT, which exists now that builtin types are values:
+        pytype_of_v answers a VT_BTYPE for a builtin value and the instance's
+        VT_CLASSREF for a user object, so `type(a) == A` and `isinstance(a, A)`
+        agree by construction. This used to be refused outright
+        ("type(x) is only supported as type(x).__name__") because there was no
+        representation for the answer.
+
+        The `.__name__` form above keeps its own lowering rather than becoming
+        `pytype_of_v(x).__name__`: it is a direct pylib call with no variant to
+        box, it is the overwhelmingly common shape, and it is already pinned by
+        tests. bug-n-a-type-name-is-not-a-first-class-value }
+      tpCallNode := AllocNode(AN_ARG);
+      ASTLeft[tpCallNode] := PyForceVariant(tpObjNode);
+      tpBlobNode := AllocNode(AN_CALL);
+      ASTIVal[tpBlobNode] := FindProc('pytype_of_v');
+      if ASTIVal[tpBlobNode] < 0 then
+        Error('Nil Python: pylib (pytype_of_v) not loaded');
+      ASTTk[tpBlobNode] := Ord(tyVariant);
+      ASTLeft[tpBlobNode] := tpCallNode;
+      CurASTNode := tpBlobNode;
+      LastExprTk := tyVariant;
+      Exit;
+    end;
     Next; Next;                { '.', '__name__' }
     { Answered by pylib at RUN time, not from the RTTI ClassName here. Reading
       ClassName reported the Pascal class backing a pylib container — `TPyList`
