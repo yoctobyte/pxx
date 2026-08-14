@@ -82,7 +82,7 @@ and deliberately breaking the oracle (rename `memrchr`) produces a SKIP naming
 the build failure rather than a diff verdict.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit e568401c1.
 
 ## Resolved 2026-08-14 (Track B)
 
