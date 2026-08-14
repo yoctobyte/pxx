@@ -1618,6 +1618,15 @@ function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
 function pyset_of(const v: Variant): TPyList;
 { `{**a, **b}` — copy src's pairs into dst, later keys winning, which is
   Python's merge rule. The frontend emits one call per `**` in a dict literal. }
+{ `d.update(m, c=2)`'s SEED merge: the positional argument is whatever
+  dict.update itself accepts — a mapping or an iterable of pairs — and which one
+  it is is a RUN-TIME fact, so it is taken as a Variant and dispatched on the
+  object's class, exactly as TPyDict.update(const v: Variant) does. Merging it
+  with the typed pydict_merge instead compiled a list seed happily and then
+  SEGFAULTED reading a TPyList through a TPyDict — a silent wrong answer where
+  the unfixed compiler had a clean refusal, which is the one outcome worse than
+  the bug. bug-nilpy-dict-update-mixed-positional-and-keyword-args }
+procedure pydict_merge_any(dst: TPyDict; const src: Variant);
 procedure pydict_merge(dst: TPyDict; src: TPyDict);
 { The AGGREGATE builtins over a list (a generator expression already desugars to
   one). Each keeps Python's own answer for the empty case: sum([]) is 0, any([])
@@ -6121,6 +6130,20 @@ begin
   kl := src.keylist;
   vl := src.vallist;
   for i := 0 to kl.count - 1 do dst.store(kl.at(i), vl.at(i));
+end;
+
+procedure pydict_merge_any(dst: TPyDict; const src: Variant);
+var o: TObject;
+begin
+  if dst = nil then Exit;
+  if pyvartag(src) <> 7 then
+    raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
+  o := TObject(pyvarobj(src));
+  if o = nil then Exit;
+  if o is TPyDict then pydict_merge(dst, TPyDict(o))
+  else if o is TPyList then dst.update(TPyList(o))
+  else
+    raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
 end;
 
 function pyset_of(const v: Variant): TPyList;
