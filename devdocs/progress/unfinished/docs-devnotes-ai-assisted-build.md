@@ -6,8 +6,9 @@ prio: 50
 
 - **Type:** docs
 - **Track:** D (docs) — the user writes the substance; the agent's job is scaffolding + accuracy
-- **Status:** backlog — opened 2026-07-12.
-- **Owner:** — (user writes the notes; agent may draft structure and check claims)
+- **Status:** unfinished — agent half (scaffold + fact-check) done 2026-08-14;
+  parked awaiting the user's substance. See the Log.
+- **Owner:** claude-D
 - **Related:** [[feature-promo-launch-plan]]
 
 ## Position: LEAD with it, never hide it
@@ -70,3 +71,20 @@ the project already runs.
 ## Log
 - 2026-07-12 — opened. The AI-assisted angle is a *feature* of the story and is to be led with,
   not buried; the human-investment nuance is the part that must survive editing.
+- 2026-08-14 — **agent half done; parked on the user.** Scaffold + verified fact
+  sheet written to `devdocs/dev/how-this-was-built-draft.md` (draft, deliberately
+  NOT in `docs/**` — the website publishes that verbatim, so placeholders would
+  go live). It carries: every number measured from this checkout with the command
+  to re-measure it; the three numbers that need a qualifier in the same sentence
+  or they will be misread (46% of commits carry an agent trailer, not all; the
+  track split covers 865 of 1774 done tickets, not all; 303 pins are checkpoints,
+  not releases); the two-different-"byte-identical" claims-discipline landmine;
+  and the seven-section structure with the user's sections left explicitly empty.
+  Failure material for §5 located and counted rather than asserted — the
+  string-literal family is 15 tickets in `done/`, plus the longjmp/resident-param
+  bug and the wrong-root-cause incident that produced `PXXDBG`.
+  **Four questions for the user are in Part 3 of the draft** (voice/length, does
+  the fact sheet ship, how blunt §5 gets, what happens to the "totally
+  vibe-coded" aside). Moved to `unfinished/`: what remains is substance only the
+  user can write, and the landing spot is decided (`docs/how-this-was-built.md`,
+  `order: 6`, next to Dive).
