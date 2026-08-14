@@ -134,4 +134,4 @@ Needs a **re-pin** — the defect shipped in `v299`, so every lane building with
 `$(PXX_STABLE)` carries it until `stabilize-fast && pin`.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit d21b19feb.
