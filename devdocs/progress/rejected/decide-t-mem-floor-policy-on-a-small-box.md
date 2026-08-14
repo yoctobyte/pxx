@@ -1,6 +1,6 @@
 ---
 track: U
-prio: 40
+prio: 0
 type: decide
 summary: "MEM_FLOOR is an absolute 1500 MB, so any box with under ~1.75 GB available admits no job of any class — including a 2 GB machine, not just the 512 MB Pi. Two questions that should not be guessed: what the floor should be relative to, and whether a below-floor box should run at all or refuse loudly. The silence is fixed; the policy is not."
 ---
@@ -74,3 +74,47 @@ nothing today.
 Whichever way: `tools/devtest_mem_floor.py` still green, and a below-floor box
 either runs with a stated degraded mode or refuses with a reason — never the
 current silent 90-second crawl, which is already fixed.
+
+
+## REJECTED 2026-08-14 by the user — the floor is correct for the design
+
+There is no policy to decide. The floor is what it is *because of what the
+compiler is*.
+
+> *"Our compiler is a big piece of code — it is a monolith by design. That was
+> the whole concept: we don't have all the tooling to generate small object
+> files and then start linking them. That was really in the time where we had a
+> big hard disk and small memory."*
+
+Incremental compilation to object files plus a link step is a workaround for an
+era of large disks and small RAM. pxx deliberately does not do that, so it wants
+its working set in memory, and a floor sized for that is the honest expression
+of the design rather than a limitation to route around.
+
+**And there are no small boxes.** The 64-bit ARM box has 8 GB — comfortably
+above the floor. The scenario in this ticket was an older 32-bit Raspberry Pi,
+which is not in the fleet and is not planned.
+
+### When it comes back
+
+If pxx is ever pointed at something like the Linux kernel, the answer will be
+one of two things, and both are a later concern:
+
+1. state a real requirement — "this needs a box with 192 GB" — or
+2. find a way to split the work.
+
+Neither is a floor-policy question, and neither is answerable now.
+
+### What was built for this stays, and is the useful half
+
+The diagnostic from
+[[bug-t-mem-floor-is-a-fixed-1500mb-so-a-small-box-admits-nothing-ever]] is
+unaffected by this rejection: `report_mem_floor()` still says, at startup and
+with the arithmetic, when a box cannot admit its own smallest job — naming the
+starvation path so the crawl reads as the floor rather than a hang. That was
+always the part that was a bug regardless of policy, and it now serves the
+rejection: anyone who *does* point pxx at a small box learns immediately instead
+of discovering it 90 seconds at a time.
+
+Note it also fires at **~1.75 GB**, so a 2 GB machine is covered, not just a
+512 MB Pi.
