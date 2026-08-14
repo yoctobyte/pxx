@@ -1,0 +1,19 @@
+sig=pxx-vs-fpc_raise
+seed=27561
+sha=30dc68bc02bb
+compiler=/home/neo/trackt-watch/compiler/pascal26
+note=pxx and FPC each self-consistent but disagree -- investigate in order: (a) pasmith emitted UB/impl-defined code, (b) pxx bug, (c) FPC bug. Do NOT auto-dismiss (c).
+
+fpc-O0       18280024074368647542
+fpc-O2       18280024074368647542
+pxx-O0       3815733717474813781
+pxx-O2       3815733717474813781
+pxx-O3       3815733717474813781
+
+first divergence at checkpoint 4 of 21 -- a `raise` statement
+    pxx-O0     1522870226626142672
+    fpc-O0     15503240838730562064
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 27561 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3
