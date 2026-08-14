@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "Four small refusals found by the 2026-08-13 CPython sweep: `issubclass(A, B)`, `d.update(k=v)` (the keyword form), `key=str.lower` (an unbound method as a callable value), and Unicode special-casing in upper()/lower() ('ß'.upper() is 'ß', CPython 'SS'). Each is a parse error or a wrong string, none is a silent wrong VALUE"
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -322,3 +322,6 @@ kwarg/update tests re-run by hand and green.
 
 - `"ß".upper()` / `"İ".lower()` — case mappings that change the code-point count,
   scoped by this ticket to the wider unicode question rather than to itself.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

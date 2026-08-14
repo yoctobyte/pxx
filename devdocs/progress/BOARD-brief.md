@@ -5,19 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1739 rejected:35`
+`unfinished:9 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1740 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (10) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
 - `bug-n-a-type-name-is-not-a-first-class-value` [N]
 - `bug-nilpy-exception-args-attribute-missing` [N] — blocked-by: decide-pylib-exception-vs-sysutils-exception
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
-- `bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep` [N]
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
@@ -30,7 +29,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 197, ranked
+## Ready — top 30 of 198, ranked
 
 - `[p 70] [A]` bug-pascal-uses-order-breaks-pylib-exception
 - `[p 70] [P]` regression-test-core-test-conformance-1
@@ -63,4 +62,4 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
-_167 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

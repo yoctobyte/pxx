@@ -788,6 +788,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-setitem-without-getitem-write-does-not-compile | N | 40 | bug | `obj[k] = v` does not compile when the class has `__setitem__` but no `__getitem__` | — |
 | bug-nilpy-settings-editor-segfaults-on-bound-method-field | N | 80 | bug | SettingsEditor segfaults reading a bound method off a field | — |
 | bug-nilpy-slice-of-variant-local-returned-is-unusable | N | 75 | bug | Returning a SLICE of a variant local gives the caller an unusable value | — |
+| bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep | N | 40 | bug | Four small refusals found by the 2026-08-13 CPython sweep: `issubclass(A, B)`, `d.update(k=v)` (the keyword form), `key=str.lower` (an unbound method as a callable value), and Unicode special-casing in upper()/lower() ('ß'.upper() is 'ß', CPython 'SS'). Each is a parse error or a wrong string, none is a silent wrong VALUE | — |
 | bug-nilpy-songformatter-first-render-walls | N | 75 | bug | songformatter: the walls between "GUI builds" and "first document renders" | — |
 | bug-nilpy-sorted-over-tuples-or-lists-fails | N | 55 | bug | `sorted()` over a list of tuples or lists dies with "expected a number, got object" | — |
 | bug-nilpy-split-with-an-explicit-none-separator-does-not-split | N | 55 | bug | `s.split(None)` does not split — the whole string comes back as one field | — |
