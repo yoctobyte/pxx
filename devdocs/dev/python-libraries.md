@@ -162,3 +162,95 @@ popularity.** Single-file, no-dependency C first.
   varargs), not API design
 - the stdlib surface (class 4) → `lib/rtl`, and it is the same list for every
   app, so it pays forward
+
+## 7. Measuring where you actually are — the census
+
+Everything above classifies *dependencies*. This section is about measuring the
+**application**, and it exists because the campaign's written schedule was wrong
+in a way nobody could see.
+
+### The lesson, first
+
+On 2026-08-14 the plan in `feature-nilpy-thirdparty-libraries-as-targets` named
+two next steps: make `from __future__ import annotations` a no-op, then
+`@dataclass`. **Both were already working.** All nine `__future__` feature names
+compile and match CPython; `@dataclass` produces `Point(x=1, y=2)`, identical to
+CPython. The document had been written from a census taken six weeks earlier and
+had rotted silently — following it would have meant implementing solved problems.
+
+So: **a per-construct schedule does not belong in a document.** The compiler moves
+daily; a census is a *command*, and "what is next" is regenerated from it, never
+remembered. The classification rule in §1 did not rot, because it describes
+Python packaging rather than pxx. Write down rules; regenerate numbers.
+
+### Bucket by KIND, not by count
+
+The raw failure histogram is misleading — it lists symptoms, and one mechanism
+can produce a hundred of them. Bucketing the same 150 failures by kind is what
+schedules work. Measured on neuzelaar, 168 git-tracked files, 26,408 lines,
+**18 compiling (11%)**:
+
+| failure kind | files | what it means |
+| --- | --- | --- |
+| **intra-project imports** | **89** | ONE defect, not 89 |
+| stdlib imports (`enum`, `argparse`, `datetime`, `contextlib`, `threading`, `importlib`) | 28 | class 4 — `lib/` work, reusable across every app |
+| third-party imports (`pytest`, `yaml`, …) | 19 | mostly test-only; not on the app's path |
+| language / frontend gaps | 14 | actual frontend work |
+
+The old plan called `@dataclass` "the one construct that gates most of the
+corpus". Measured: **5 files**. The gate is intra-project imports at 89 — a
+dotted import resolves only to a hand-written `mimic_*` shim and never looks for
+the source file on disk (`feature-nilpy-dotted-imports-resolve-to-source-files`).
+
+**The language-gap column is a LOWER BOUND.** A file that fails on its first
+import is never compiled, so its remaining constructs were never exercised.
+Expect that column to grow as imports start resolving. It is an argument for
+fixing imports first, not a reason to distrust the number.
+
+### Two traps that each produced a confident wrong answer
+
+Both were caught only by noticing the output looked odd, which is not a method.
+Check for them explicitly.
+
+1. **Census the GIT-TRACKED files.** An `os.walk` of a project directory picks up
+   vendored trees. In neuzelaar that is a Web Platform Tests corpus — **549**
+   files of third-party fixtures — producing a clean-looking histogram of
+   entirely the wrong population (`wptserve_utils`, `sec-ch-ua.py`, `beacon.py`).
+   `git ls-files '*.py'` is what defines the corpus; it returns exactly the 168
+   files / 26.4k lines the ticket claims.
+2. **Write results incrementally.** A serial run that only summarises at the end
+   dies on a wall-clock cap with *nothing* to show. Append one JSON line per file
+   as it lands, and a killed run is still a usable partial census.
+
+Also: run it in parallel with a short per-file timeout. 168 files with a 60s
+per-file allowance does not fit in a 15-minute cap; 8 workers and a 20s timeout
+finishes comfortably.
+
+### The recipe
+
+Kept here rather than as a checked-in tool on purpose — it is ~40 lines and the
+corpus path changes per app. If it earns a second regular user, promote it to
+`tools/`.
+
+```python
+# for each git-tracked .py: compile with pxx, keep the FIRST "error:" line,
+# normalise it (strip the file:line prefix, replace quoted identifiers with 'X')
+# so the same defect from different files collapses into one bucket.
+files = subprocess.run(["git","-C",ROOT,"ls-files","*.py"],
+                       capture_output=True, text=True, check=True).stdout.split()
+# ... ProcessPoolExecutor(max_workers=8); subprocess.run([pxx, f, tmp], timeout=20)
+# ... append json.dumps({"f":f,"ok":rc==0,"err":norm(line)}) per result, flush
+```
+
+Then bucket by kind: an error matching `no unit named <u>` is an *import* failure
+and splits three ways by `<u>` — the project's own top-level package name,
+a stdlib module name, or anything else. Everything that is not an import failure
+is a language gap.
+
+### The standing caveat
+
+The driving corpus lives **outside this repo**. No tier runs it, no tstate report
+regresses it, and every number here is a claim only the machine holding that
+checkout can verify. That is fine for exploration and not fine for gating: a
+census finding must be re-derived as an ordinary `.npy` test under `test/` before
+anything depends on it.

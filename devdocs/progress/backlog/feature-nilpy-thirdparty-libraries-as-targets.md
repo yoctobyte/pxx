@@ -158,9 +158,10 @@ by anchoring to an import statement.
 
 ### Reproducing this
 
-`census2.py` (parallel, per-file timeout, incremental NDJSON) produced the table.
-It is scratch, not checked in — see the open question below. Two traps worth
-recording, because both produced confident wrong numbers before being caught:
+**The method, the traps and the lesson are written up in
+[`devdocs/dev/python-libraries.md`](../../dev/python-libraries.md) §7 — read that
+rather than this summary.** Two traps in brief, because both produced confident
+wrong numbers before being caught:
 
 1. **Census the GIT-TRACKED files.** An `os.walk` of `~/neuzelaar2` picks up a
    vendored Web Platform Tests corpus — **549** files of third-party fixtures —
