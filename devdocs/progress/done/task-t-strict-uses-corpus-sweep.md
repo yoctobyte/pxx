@@ -140,4 +140,4 @@ buffered everything to the end and was killed by its own 30-minute `timeout`,
 losing ~1700 completed compiles for nothing.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit da498b969.
