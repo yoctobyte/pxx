@@ -858,6 +858,7 @@ function PyClsAttrOvrSlot(ci: Integer; const fname: AnsiString): Integer; forwar
 function PyClsAttrOvrGet(baseNode: Integer; const fname: AnsiString; gsym: Integer): Integer; forward;  { instance read of an overridable class attribute: has? get : slot (pyparser.inc) }
 function PyParseInputCall: Integer; forward;  { `input([prompt])` -> pyinput / pyinput_p, one builder for both intercepts (pyparser.inc) }
 function PyParseFormatCall: Integer; forward; { `format(v[, spec])` -> pyformat_v, one builder for both intercepts (pyparser.inc) }
+function PyParsePrint: Integer; forward;      { `print(...)`; a STATEMENT node — expression use wraps it in AN_COMMA (pyparser.inc) }
 function PyIsClassNameChainAhead: Boolean; forward;   { CurTok begins `__class__ . __name__` (pyparser.inc) }
 function PyMakeClassNameOf(node: Integer): Integer; forward;   { ...consume it and answer pytype_name_v(node) (pyparser.inc) }
 function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString; forward;  { the name to look up on this class for a Python method spelling — pylib's alias when the class does not declare it as written (pyparser.inc) }
@@ -9375,6 +9376,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
+    pyPrintNode: Integer;      { print(...) in expression position: the write node, wrapped }
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
@@ -11292,6 +11294,34 @@ begin
           was read as the BUILTIN and demanded its parenthesis. }
         CurASTNode := PyParseInputCall;
         LastExprTk := tyAnsiString;
+        Exit;
+      end
+      else if isNilPy and PyExprMode and CaseEqual(name, 'print') and
+              (not PyUserShadowsProc(name)) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { `print(...)` in EXPRESSION position — `lambda first, last: print(...)`
+          above all, which is how a Tk callback is written and how this arm was
+          found: a lifted lambda's body is compiled as a real proc, so the name
+          has to resolve there like any other.
+
+          It works because print IS a function in Python and its value is None.
+          The statement arm (pyparser.inc) builds a write node, which is a
+          STATEMENT, so it is wrapped in AN_COMMA — evaluate the left for its
+          effect, yield the right — with None as the value. That is exactly
+          what CPython's print returns.
+
+          Only reachable since print stopped lexing as tkwriteln; before that
+          the token could not appear in an expression at all, and
+          examples/tk/callbacks.npy compiled by accident because the lambda's
+          body was never name-resolved.
+          regression-test-core-callbacks }
+        pyPrintNode := PyParsePrint;
+        CurASTNode := AllocNode(AN_COMMA);
+        ASTLeft[CurASTNode] := pyPrintNode;
+        ASTRight[CurASTNode] := PyMakeNone;
+        ASTTk[CurASTNode] := Ord(tyVariant);
+        LastExprTk := tyVariant;
         Exit;
       end
       else if isNilPy and CaseEqual(name, 'format') and (FindSym(name) < 0) and

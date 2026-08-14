@@ -2,3 +2,10 @@ builtin: above the def
 a 1 2.5 True None
 xy
 
+lam 1
+zero-arg
+comp 1
+comp 2
+passed
+value is 7
+returns None

@@ -10,6 +10,26 @@ print("y", sep="-")
 print()
 
 
+# print in EXPRESSION position — a lifted lambda's body is compiled as a real
+# proc, so the name must resolve there. examples/tk/callbacks.npy is written
+# this way (a Tk scroll callback) and is what caught it: regression-test-core-
+# callbacks. print IS a function in Python and its value is None.
+f = lambda a: print("lam", a)
+f(1)
+g = lambda: print("zero-arg")
+g()
+[print("comp", x) for x in [1, 2]]
+
+
+def call(fn):
+    fn()
+
+
+call(lambda: print("passed"))
+r = print("value is", 7)
+print("returns", r)
+
+
 def print(x):
     # swallows its argument: nothing more may reach stdout after this point,
     # which is the assertion — if the def did not shadow, "7" would appear.
