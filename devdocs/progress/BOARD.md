@@ -25,25 +25,27 @@ _none_
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 
-## blocked (5)
+## blocked (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises | B | 20 | bug | Floor(1e30) returns 0 and Floor64(1e30) returns Int64 MIN, silently. FPC raises EInvalidOp. A silent wrong VALUE where the reference implementation refuses — found while documenting the C-vs-Pascal math split, 2026-08-14. | decide-may-uses-math-cost-the-heap-and-exception-runtime |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-pascal-uses-is-transitive | A | 80 | bug | REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix the user decided on 2026-08-01 (land the real non-transitive rule) was never built, and the ticket sat in done/ hiding that. It is the root cause of the pylib/sysutils Exception ceiling, the tkinter/reportlab class collision, and the ClassNameIsDeliberatelyShared patch that was supposed to be temporary. Re-measured cost: 35 RTL-internal unit pairs, no user-program-facing leak. | task-t-strict-uses-corpus-sweep |
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (217)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes | A | 45 | bug | On aarch64 ONLY, WriteLn(Low(Int64)) prints -'..--).0-*(+,))+(0( instead of -9223372036854775808. Every one of the 19 digit bytes is Ord('0') - d where it should be Ord('0') + d, so the value is right and the rendering is wrong. Low(Int64)+1 prints correctly, and x86-64 / i386 / arm32 all print correctly. Silent output corruption in the integer writer, reachable from any program that prints Low(Int64). | — |
 | bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set | A | 40 | bug | `f(fmt, ['a'])` stops compiling when the routine is in a CROSS-UNIT overload set and its unit is used LAST: the literal is typed (ShortString, set) against an `array of const` parameter reported as `record`. Same-unit overload sets are fine, single cross-unit routines are fine, and reversing the uses order fixes it — so the array-of-const conversion is lost on one path through the cross-unit merge. | — |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit | A | 40 | bug | Given overloads on Int64 and LongInt, an argument of any OTHER integer type — Integer, SmallInt, Byte, an untyped literal — selects the Int64 one. FPC selects LongInt for all of them (narrowest that fits). Only an exact type-NAME match picks LongInt, so Integer and LongInt behave differently despite both being 4-byte signed. Silent wrong values wherever an overload set exists to give a type its own width. | — |
+| bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently | A | 25 | bug | Trunc(1e30), Round(1e30) and Trunc(Inf) all return -9223372036854775808 — the x86 integer indefinite value that cvttsd2si produces when the conversion is invalid. FPC raises EInvalidOp for every one of them. These are compiler BUILTINS lowered straight to the conversion op, so the RTL cannot guard them the way Floor/Ceil now are; the check belongs at the lowering or in the FPU mode. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises | B | 20 | bug | Floor(1e30) returns 0 and Floor64(1e30) returns Int64 MIN, silently. FPC raises EInvalidOp. A silent wrong VALUE where the reference implementation refuses — found while documenting the C-vs-Pascal math split, 2026-08-14. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-c-cast-to-float-in-value-position-does-not-round-to-single | C | 25 | bug | `(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
@@ -96,6 +98,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
+| decide-may-uses-math-cost-the-heap-and-exception-runtime | U | 30 | decide | Making Floor/Ceil raise EInvalidOp like FPC needs `uses sysutils` in math's implementation — measured, that is the ONLY way to raise anything, since Exception is not visible otherwise. That makes every `uses math` program require the heap + exception runtime: test/test_math.pas stops compiling today. Fork: pay it (and fix the prescan in A), saturate silently, or leave the wrong values. Blocks bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises. | — |
 | decide-nilpy-builtin-vs-pascal-unit-name-resolution | U | 45 | decide | Settled by the governing rule (user, 2026-08-13): the DEFAULT follows the reference implementation per frontend — CPython for .npy, FPC for .pas — deviations behind --strict-*. So shadowing is ALLOWED and PREFERRED, `reserved` needs the bar 'principally unsolvable', and the tier is a compatibility statement rather than a convenience. What is left to decide: the marker's spelling, whether `print` stops being a token, and whether a --strict-python peer is wanted. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-object-dict-key-hashing | U | 40 | decide | A class with __eq__ and no __hash__ is unhashable in CPython, so `d[V(1)] = x` raises. NilPy stores it and then never finds it again — data in, nothing out, silently. Refuse the store (faithful), make content lookup work (friendlier, needs a __hash__ story), or document the divergence. The ticket that found it says explicitly to decide rather than guess. | — |
@@ -502,6 +505,7 @@ _none_
 - [p 50] [C] task-c-retire-the-crtl-name-dodge-prefixes
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes
 - [p 45] [A] bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers
 - [p 45] [P] bug-p-class-name-collision-across-units-resolves-first-not-last
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
@@ -598,6 +602,7 @@ _none_
 - [p 35] [P] feature-pascal-set-symmetric-difference-operator
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
+- [p 30] [U] decide-may-uses-math-cost-the-heap-and-exception-runtime (unblocks 1)
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption
 - [p 30] [N] bug-nilpy-case-mapping-cannot-change-code-point-count
@@ -623,6 +628,7 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 30] [D] task-d-document-warn-ignored-directives
+- [p 25] [A] bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [N] bug-nilpy-a-one-name-tuple-loop-target-is-refused
 - [p 25] [N] bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising
@@ -639,7 +645,6 @@ _none_
 - [p 25] [W] feature-promo-launch-plan
 - [p 25] [M] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets
-- [p 20] [B] bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 20] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins
@@ -667,6 +672,7 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
+- **1** — decide-may-uses-math-cost-the-heap-and-exception-runtime
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
