@@ -76,9 +76,12 @@ const
 
 type
   { Tk's own error, which an application catches around clipboard and widget
-    calls that can fail (`except tk.TclError:`). One class, like the rest of
-    the NilPy exception surface. }
-  TclError = class(Exception)
+    calls that can fail (`except tk.TclError:`). Descends from pylib's
+    PyException — the PYTHON root, which this unit reaches through `uses pylib`
+    — not from sysutils' Pascal `Exception`, which this unit does not import at
+    all and which only resolved here while `uses` was transitive and the two
+    roots shared a name. decide-pylib-exception-vs-sysutils-exception option 5. }
+  TclError = class(PyException)
   end;
 
   Widget = class
