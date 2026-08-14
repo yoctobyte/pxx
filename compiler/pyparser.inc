@@ -1163,8 +1163,14 @@ begin
         while (i < MainProgramTokCount) and (Tokens[i].Kind <> tkRBrack) do
         begin
           if sigN >= 16 then Error('Nil Python: too many Callable parameters');
-          if PyAnnTypeAt(i) = tyUnknown then
-            Error('Nil Python: unsupported Callable parameter type');
+          { The result is DISCARDED — every Callable parameter is registered as
+            tyVariant two lines down, by the note below, because both ends of a
+            function value pass variants. So refusing an unreadable parameter
+            annotation gatekept a value nothing reads, and did it for the whole
+            module: `Callable[[Sequence[int]], None]` walled 11 corpus files.
+            PyAnnTypeAt consumes the term either way, so the loop still
+            advances. bug-n-an-uninterpretable-annotation-refuses-the-program }
+          PyAnnTypeAt(i);
           { Parameters follow the same function-object ABI as the result: the
             annotation is a hint, the def that arrives here decides nothing, so
             both ends pass variants (by reference, nilpy's variant convention).

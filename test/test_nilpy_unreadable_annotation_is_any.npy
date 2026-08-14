@@ -50,6 +50,18 @@ def top(cb: Callable[..., int], k: type[int]) -> Iterable[str]:
     return ["a", str(k)]
 
 
+# an unreadable annotation INSIDE a Callable's parameter list. Its result is
+# discarded -- every Callable parameter is registered as a variant, because both
+# ends of a function value pass variants -- so refusing it gatekept a value
+# nothing reads, for the whole module.
+def calls_back(cb: Callable[[Sequence[int]], None], xs):
+    cb(xs)
+
+
+def shout(v):
+    print("cb", v)
+
+
 def local_ann():
     loc: Iterable[str] = ["z"]
     return loc
@@ -64,6 +76,7 @@ print(D([3], 4).xs, D([3], 4).n)
 print(top(None, 7))
 print(local_ann())
 print(v)
+calls_back(shout, [9])
 
 # a readable annotation must still be READ, not swept into Any along with them
 def typed(x: int) -> int:
