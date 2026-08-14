@@ -55,7 +55,7 @@ _none_
 | bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising | N | 25 | bug | `min(3, None)` answers None where CPython raises TypeError — pyvar_gt orders None against a number instead of refusing. Low priority: comparing None is a bug in the calling program, and every shape CPython accepts is unaffected. But it is the wrong DIRECTION of laxity: we answer a question CPython refuses to answer, silently. | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
-| bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords | N | 40 | bug | `d.update(a=1)` lowers correctly for ONE keyword and SEGFAULTS for two, through the same builder that makes `dict(a=1, b=2)` correct — so the method-argument path mishandles the builder's hoisted setitem statements. Not shipped for that reason; `dict(...)` is. Also: `d.update(**e)` is refused by a route that is none of parser.inc's five argument loops. | — |
+| bug-nilpy-dict-update-mixed-positional-and-keyword-args | N | 35 | bug | `d.update(other, a=1)` is a clean compile error (`unexpected token c`) — CPython accepts a mapping followed by keywords. The keywords-are-KEYS builder takes over only when the argument list STARTS with a keyword, so a positional first argument leaves the keyword run unhandled. Same for dict(other, a=1). | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
@@ -403,9 +403,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1755)
+## done (1756)
 
-1755 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1756 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -537,7 +537,6 @@ _none_
 - [p 40] [A] bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
 - [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
-- [p 40] [N] bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
 - [p 40] [N] bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses
@@ -568,6 +567,7 @@ _none_
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
+- [p 35] [N] bug-nilpy-dict-update-mixed-positional-and-keyword-args
 - [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association

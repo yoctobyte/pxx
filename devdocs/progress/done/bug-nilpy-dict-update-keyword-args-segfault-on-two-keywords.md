@@ -4,6 +4,8 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "`d.update(a=1)` lowers correctly for ONE keyword and SEGFAULTS for two, through the same builder that makes `dict(a=1, b=2)` correct — so the method-argument path mishandles the builder's hoisted setitem statements. Not shipped for that reason; `dict(...)` is. Also: `d.update(**e)` is refused by a route that is none of parser.inc's five argument loops."
+status: done
+owner: agent-N
 ---
 
 # `d.update(a=1, b=2)` segfaults — the method half of keywords-are-KEYS
@@ -121,3 +123,56 @@ one structural difference left is that the keyword form's hoists are queued
 Reverted rather than shipped: a form correct with one keyword and corrupting
 memory with two is worse than the compile error it replaces, which is the same
 call the earlier session made.
+
+## RESOLVED 2026-08-14 — already fixed by its own sibling; verified, not assumed
+
+Both headline symptoms are gone at HEAD, and neither was fixed by this ticket:
+[[bug-nilpy-small-builtin-surface-gaps-found-by-the-2026-08-13-sweep]] landed
+`PyDictKwOverloadAhead` (`compiler/pyparser.inc`), and its comment names exactly
+the two failures described above.
+
+Measured at HEAD, diffed against CPython:
+
+```
+d.update(z=6)        -> {'z': 6}                 correct
+d.update(z=7, y=8)   -> {'z': 7, 'y': 8}         correct (was a SEGFAULT)
+g.update(**e)        -> {'q': 1, 'r': 2}         correct (was "expected expression")
+```
+
+`PyKeywordsAreKeys` is no longer gated to `dict` — it answers True for
+`TPyDict.update` too, by PROC INDEX against every overload — so the lowering is
+shipped, not merely built. `test_nilpy_dict_update_keywords.{npy,expected}`
+covers one keyword, two, three, a `**` spread, a spread plus an explicit key,
+and a method-call receiver; it is green.
+
+### The cause, since this ticket guessed wrong about it
+
+The suspicion recorded above was a trial parse replaying hoisted statements
+(`PyHoistPark`/`Restore`/`Merge`). It was not. **The argument list was described
+to overload selection in the wrong UNITS**: keywords-are-KEYS means the whole
+keyword run is ONE TPyDict argument however many keywords it holds, but the
+arity filter COUNTED the keywords — so `update(z=7, y=8)` looked like a
+two-argument call, matched none of the three arms, and fell through to
+`FindUMethArity`'s first name hit, the `update(l: TPyList)` arm, which received
+a TPyDict and died. `update(z=6)` happened to land on the Variant arm and
+worked, which is what made it look like a replay bug ("one keyword hides it").
+The `**` refusal was the same cause seen from the speculative probe's side.
+
+Worth keeping: *"one keyword works and two segfault"* reads like a repetition
+bug and is not one. The argument-count asymmetry was the tell that the call was
+being COUNTED wrongly, not replayed.
+
+### Left, and re-filed rather than left implicit
+
+The mixed form `d.update(other, a=1)` from this ticket's gate is still a compile
+error — a clean refusal, not a wrong value.
+[[bug-nilpy-dict-update-mixed-positional-and-keyword-args]], prio 35, with the
+two candidate lowerings and why the choice is not obvious.
+
+Also corrected here: `test_nilpy_dict_keyword_args.npy` carried a NOTE saying
+the `update` half was "built and measured but not shipped (one keyword correct,
+two segfault)". That has been false since the sibling landed, and a stale note
+in a test is how a fixed thing gets re-investigated.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

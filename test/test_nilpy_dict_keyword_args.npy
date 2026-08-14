@@ -11,9 +11,11 @@ print(sorted(d.keys()), d["a"], d["b"])
 src = {"p": 1, "q": 2}
 f = dict(**src)
 print(sorted(f.keys()), f["p"], f["q"])
-# NOTE: the `d.update(a=1)` / `d.update(**e)` half is NOT here — it is built
-# and measured but not shipped (one keyword correct, two segfault). See the
-# ticket; `dict(**src)` above is the same spread through the working path.
+# NOTE: the `d.update(a=1)` / `d.update(**e)` half lives in
+# test_nilpy_dict_update_keywords.npy — it shipped once
+# PyDictKwOverloadAhead described the keyword run to overload selection in the
+# right UNITS (one dict argument, not one per keyword), which is what the
+# two-keyword segfault and the `**` "expected expression" both were.
 
 # a later explicit key wins over an earlier spread of a DIFFERENT name
 h = dict(**src, r=9)
