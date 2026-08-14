@@ -35,7 +35,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (216)
+## backlog (215)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -78,7 +78,6 @@ _none_
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
-| bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler | T | 45 | bug | gate.sh's self-host check compares the hermetic fixedpoint against the LIVE compiler/pascal26, so a concurrent build in the same clone flips it red transiently — testmgr snapshots the binary per run for exactly this reason | — |
 | bug-t-mem-floor-is-a-fixed-1500mb-so-a-small-box-admits-nothing-ever | T | 45 | bug | MEM_FLOOR is a fixed 1500 MB and admission requires `avail - est_mem > MEM_FLOOR`, so any box with under ~1.7 GB available admits NO job of any class, forever — the scheduler does not report a small box, it silently never starts. Fixing est_mem does not reach this. | — |
 | bug-t-three-network-tests-flake-and-cost-real-debugging-time | T | 45 | bug | lib_net_v6only, lib_sockets and lib_platform_esp each pass or fail run-to-run with the SAME compiler, so a gate.sh lib RED and two cross-sweep A/B deltas in one night were all noise that had to be disproved by hand | — |
 | chore-makefile-testtmp-parameterize | A | 55 | chore | Route the Makefile's 6755 fixed /tmp paths through $(TESTTMP) so two concurrent raw `make test*` runs on one box stop clobbering each other. Mechanically verified by Track T: the sweep is byte-identical in `make -n` across all 90 targets, and `make test-smoke TESTTMP=<scratch>` passes end to end. Script + proof below — this is a 20-minute job, not a careful pass. | — |
@@ -405,9 +404,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1743)
+## done (1744)
 
-1743 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1744 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -499,7 +498,6 @@ _none_
 - [p 45] [A] bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers
 - [p 45] [N] bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
-- [p 45] [T] bug-t-gate-sh-fixedpoint-reads-the-live-mutable-compiler
 - [p 45] [T] bug-t-mem-floor-is-a-fixed-1500mb-so-a-small-box-admits-nothing-ever
 - [p 45] [T] bug-t-three-network-tests-flake-and-cost-real-debugging-time
 - [p 45] [U] decide-nilpy-builtin-vs-pascal-unit-name-resolution

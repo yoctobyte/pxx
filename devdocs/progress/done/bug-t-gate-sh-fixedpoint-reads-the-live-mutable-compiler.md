@@ -3,6 +3,7 @@ summary: "gate.sh's self-host check compares the hermetic fixedpoint against the
 type: bug
 track: T
 prio: 45
+status: done
 ---
 
 # `gate.sh` self-host reads the live `compiler/pascal26`, so a concurrent build flakes it
@@ -61,3 +62,47 @@ honest without a copy, but it is a retry, not a fix.
 
 `gate.sh quick` green; a devtest that replaces `compiler/pascal26` mid-check
 must not produce a self-host FAIL.
+
+## DONE 2026-08-14 — snapshot, with the torn-read hazard the ticket missed
+
+Took the ticket's preferred fix (snapshot, not retry): `selfhost_fixedpoint.sh`
+copies `compiler/pascal26` once before the rounds start and judges property 2
+against that copy, so the verdict describes one instant.
+
+**The ticket's fix shape needed one addition.** A plain `cp` can capture a
+**half-written** binary — the same hazard `testmgr` documents for its own
+snapshot — which would swap the reported false red for a different one, harder
+to recognise. So the snapshot hashes the live file either side of the copy and
+retries until the two agree; three torn attempts means a build is actively
+running, and the agreement check is skipped with a NOTE rather than guessed at.
+Convergence, the real gate, still runs.
+
+**A second thing surfaced while testing:** with a stable snapshot the concurrent
+replacement becomes *invisible* — the comparison never sees it, so the run is
+simply green. The "changed during the check" message therefore fires only in the
+narrower case where the snapshot genuinely disagrees AND the live binary has
+since moved. Both paths are covered; the first devtest asserted the fallback for
+the primary case and passed for the wrong reason until that was split.
+
+### Gate
+
+`tools/devtest_selfhost_race.sh` — 14 checks against a scratch tree of
+self-reproducing stub "compilers", so every branch runs in ~10s instead of ~40s
+per case against the real compiler, and nothing touches the live binary while
+the watcher may be building:
+
+| case | asserted |
+|---|---|
+| agreement | rc 0, says so |
+| genuine mismatch (stable, different) | rc 1, reported as self-host FAIL — **the Thompson check must not be softened** |
+| replaced mid-check, BUILT was correct | rc 0, no FAIL, agreement still asserted from the snapshot |
+| BUILT stale AND changed under us | rc 0, named as the race, not as self-host |
+| never converges | rc 1, reported as a self-host regression |
+| no `compiler/pascal26` at all | rc 0, and claims no agreement it did not check |
+
+`tools/gate.sh quick` GREEN. Note the real run also caught a genuine stale
+binary while this was being written (a sibling landed `e5702ed75` mid-session),
+which is the check doing its job — the fix does not blunt it.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

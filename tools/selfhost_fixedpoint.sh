@@ -42,6 +42,36 @@ trap 'rm -rf "$T"' EXIT
 
 test -x "$PINNED" || { echo "no pinned stable at $PINNED"; exit 77; }   # skip, not fail
 
+# --- snapshot the binary property 2 judges, so the verdict describes ONE instant
+#
+# `compiler/pascal26` is a single mutable path and a prerequisite of every test
+# target, so any concurrent `make` in the same clone replaces it mid-check —
+# observed on plexus with 17 other build processes on the box, reported as a
+# self-host FAIL when nothing was wrong. testmgr already solved this by taking
+# the run's own copy (RUN_COMPILER); this is the same move.
+#
+# Copy-and-verify rather than a plain `cp`: a reader can transiently see a
+# HALF-WRITTEN binary, which would swap one false red for another. Hash either
+# side of the copy and retry until the two agree, so the snapshot is a whole
+# file that existed at one moment.
+SNAP="$T/tested"
+snap_sha=""
+sha() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+if [ -x "$BUILT" ]; then
+  for _try in 1 2 3; do
+    h1=$(sha "$BUILT")
+    cp -f "$BUILT" "$SNAP" 2>/dev/null || break
+    h2=$(sha "$BUILT")
+    if [ -n "$h1" ] && [ "$h1" = "$h2" ]; then snap_sha="$h1"; break; fi
+    sleep 1
+  done
+  if [ -z "$snap_sha" ]; then
+    echo "NOTE compiler/pascal26 is being rewritten right now (3 attempts, all torn)."
+    echo "     Skipping the agreement check; convergence below is still authoritative."
+    rm -f "$SNAP"
+  fi
+fi
+
 cur="$PINNED"
 for r in $(seq 1 $MAX_ROUNDS); do
   a="$T/stage_${r}a"; b="$T/stage_${r}b"
@@ -50,16 +80,30 @@ for r in $(seq 1 $MAX_ROUNDS); do
   if cmp -s "$a" "$b"; then
     echo "converged after $r round(s) from pinned: the compiler reproduces itself"
     # --- property 2: the hermetic fixedpoint must match what we actually test with
-    if [ -x "$BUILT" ] && ! cmp -s "$a" "$BUILT"; then
+    if [ -n "$snap_sha" ] && ! cmp -s "$a" "$SNAP"; then
+      # Before calling this a self-host failure, rule out the race: if the live
+      # binary is no longer the one we snapshotted, a build landed underneath us
+      # and the mismatch says nothing about self-host. Report it as its own
+      # thing — an intermittent false red trains agents to ignore the gate just
+      # as effectively as a deterministic one.
+      if [ "$(sha "$BUILT")" != "$snap_sha" ]; then
+        echo "NOTE compiler/pascal26 changed DURING this check — a concurrent build"
+        echo "     replaced it, so the agreement check compared against a binary that"
+        echo "     no longer exists. This is NOT a self-host failure."
+        echo "     Convergence (the real gate) passed. Re-run to check agreement."
+        exit 0
+      fi
       echo "FAIL: the fixedpoint reached from PINNED differs from compiler/pascal26"
       echo "      (both may self-reproduce — that is exactly the point: two distinct"
       echo "       fixedpoints means the binary we test with is not the one these"
       echo "       sources define. Local seed contamination, or a self-perpetuating"
       echo "       miscompile.)"
-      cmp "$a" "$BUILT" | head -2
+      cmp "$a" "$SNAP" | head -2
       exit 1
     fi
-    echo "agrees with compiler/pascal26 (the binary the suite is testing with)"
+    if [ -n "$snap_sha" ]; then
+      echo "agrees with compiler/pascal26 (the binary the suite is testing with)"
+    fi
     exit 0
   fi
   cur="$a"
