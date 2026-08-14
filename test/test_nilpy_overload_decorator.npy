@@ -1,0 +1,66 @@
+# `@overload` from typing. CPython registers the decorated function in an
+# overload registry and the IMPLEMENTATION def that follows REPLACES it, so a
+# stub's body -- `...` by convention -- never runs and its signature never
+# binds. The honest lowering is therefore to DROP the stub, header and body,
+# which is a different mechanism from its siblings among typing's run-time
+# names: TypeVar/NewType/cast are expressions, answered by saying what value
+# they have. bug-n-overload-decorator-is-refused
+#
+# Dropping it in the body was not enough. The shell pre-pass registers a
+# bodyless proc from the HEADER, so a skipped stub still bound its annotated
+# signature and the real def lost to it -- `g(1)` then failed with
+# "by-reference argument must be a variable", pointing at the CALL rather than
+# at the stub that mis-registered it. Both the module pre-pass and the class
+# MEMBER pre-pass had to learn to skip it too: one concept, three independent
+# sites, which is this frontend's recurring shape.
+
+import typing
+from typing import overload
+
+
+@overload
+def g(x: int) -> int:
+    """an INDENTED stub body, not a one-liner"""
+    ...
+
+
+@typing.overload
+def g(x: str) -> str: ...
+
+
+def g(x):
+    return x
+
+
+# a stub carrying defaults and keyword-only params must skip cleanly too --
+# the header scan balances brackets so an annotation or default containing a
+# colon cannot end it early
+@overload
+def h(a: int, b: int = 3, *, c: str = "z") -> int: ...
+def h(a, b=3, c="z"):
+    return a + b
+
+
+class K:
+    @overload
+    def m(self, x: int) -> int: ...
+
+    @overload
+    def m(self, x: str) -> str: ...
+
+    def m(self, x):
+        return x
+
+    # the other decorators in the same class body must be unaffected
+    @staticmethod
+    def s(y):
+        return y + 1
+
+    @property
+    def p(self):
+        return 7
+
+
+print(g(1), g("a"), h(1), h(1, 2))
+k = K()
+print(k.m(5), k.m("q"), K.s(1), k.p)

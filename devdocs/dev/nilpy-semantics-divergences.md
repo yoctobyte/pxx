@@ -337,6 +337,23 @@ refused rather than accepted-and-ignored.
 `eval(src)` has no such restriction — an expression only READS, so a name it
 cannot see is a run-time error naming the name, never a silent wrong value.
 
+## `@overload` with no implementation fails at COMPILE time (2026-08-15)
+
+`@overload`-decorated stubs are dropped, header and body, because CPython
+replaces them with the implementation def that follows
+(bug-n-overload-decorator-is-refused). If no implementation follows:
+
+| | result |
+| --- | --- |
+| CPython | runs, and the call raises `NotImplementedError` — *"A series of @overload-decorated functions ... should always be followed by an implementation"* |
+| pxx | `error: undefined variable (only)` at compile time |
+
+Both refuse the program; pxx refuses it earlier. **Not a divergence under the
+upward-compatibility rule** — CPython does not accept-and-run such a program
+either, so nothing that works there breaks here. The message names the call
+rather than the missing implementation, which is worse than CPython's; improving
+it would mean carrying the dropped stub names, and no real code has needed it.
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython

@@ -15632,6 +15632,75 @@ begin
   end;
 end;
 
+{ Step over a `@overload`-decorated def, header and body, without registering
+  anything. CPython's `overload` records the decorated function in an overload
+  registry and the IMPLEMENTATION def that follows REPLACES it, so the stub's
+  body — `...` by convention — never runs and its signature never binds. Its
+  siblings among typing's run-time names (TypeVar, NewType, cast) are
+  EXPRESSIONS and were answered by saying what value they have; this one is a
+  statement, and the honest lowering is to drop it.
+
+  The body may be one-line (`def f(x: int) -> int: ...`, which is what stubs
+  almost always are) or indented, so both shapes are handled.
+  bug-n-overload-decorator-is-refused }
+procedure PySkipBalancedGroup; forward;
+{ CurTok is the first token AFTER `@`. If the decorator's (possibly dotted)
+  name is `overload`, consume the whole name and answer True; otherwise consume
+  nothing and answer False, so the caller's other decorator arms still see an
+  untouched cursor. Accepts `@overload` and `@typing.overload` alike — the
+  latter is why plain `import typing` had to become a consumed root.
+  bug-n-overload-decorator-is-refused }
+function PyEatOverloadDecorator: Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  k := TokPos - 1;                    { CurTok's own index }
+  while (k + 2 < TokCount) and (Tokens[k + 1].Kind = tkDot) and
+        (Tokens[k + 2].Kind = tkIdent) do
+    k := k + 2;
+  if GetTokenStr(k) <> 'overload' then Exit;
+  while (TokPos - 1) <= k do Next;
+  Result := True;
+end;
+
+procedure PySkipOverloadStubDef;
+begin
+  Expect(tkFunction, 'def');
+  { header: everything up to the colon that ends it, brackets balanced so a
+    default or an annotation containing one cannot end it early }
+  while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind in [tkLParen, tkLBrack] then
+    begin
+      PySkipBalancedGroup;
+      Continue;
+    end;
+    Next;
+  end;
+  Expect(tkColon, ':');
+  if CurTok.Kind = tkNewline then
+  begin
+    PySkipNewlines;
+    if CurTok.Kind = tkIndent then PySkipIndentedBlock;
+  end
+  else
+    while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+  PySkipNewlines;
+end;
+
+{ Step over a balanced (...) / [...] group at the cursor. }
+procedure PySkipBalancedGroup;
+var depth: Integer;
+begin
+  depth := 0;
+  repeat
+    if CurTok.Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if CurTok.Kind in [tkRParen, tkRBrack] then Dec(depth);
+    Next;
+  until (depth = 0) or (CurTok.Kind = tkEOF);
+end;
+
 { `try: <imports> except ImportError: <imports>` resolved at compile time. The
   try-branch imports are attempted with the resolver in soft mode; if every
   module resolves, the except branch is skipped, and if any one misses, the
@@ -23623,6 +23692,33 @@ end;
   register the Proc. From then on inference and codegen both just call
   FindProc. Bodies are skipped by span, so this emits no code and allocates no
   symbols. }
+{ Is the `def` at token index i decorated with `@overload`? The stub must be
+  invisible to the shell pre-pass as well as to the body parse: the pre-pass
+  registers a bodyless shell from the HEADER, so a skipped stub would still have
+  bound its annotated signature and the implementation's own registration would
+  lose to it — `f(1)` then failed with "by-reference argument must be a
+  variable", pointing at the call rather than at the stub that mis-registered.
+
+  Accepts `@overload` and `@typing.overload`; walks back over the newlines
+  between the decorator and the def, and over any dotted qualifier.
+  bug-n-overload-decorator-is-refused }
+function PyDefAtIsOverloadStub(i: Integer): Boolean;
+var j: Integer;
+begin
+  Result := False;
+  j := i - 1;
+  while (j >= 1) and (Tokens[j].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(j);
+  if (j < 1) or (Tokens[j].Kind <> tkIdent) then Exit;
+  if GetTokenStr(j) <> 'overload' then Exit;
+  Dec(j);
+  while (j >= 1) and (Tokens[j].Kind = tkDot) do
+  begin
+    Dec(j);
+    if (j >= 1) and (Tokens[j].Kind = tkIdent) then Dec(j) else Exit;
+  end;
+  Result := (j >= 0) and (Tokens[j].Kind = tkAt);
+end;
+
 procedure PyRegisterDefShells;
 var savedTok, i, depth, procIdx, savedHoist: Integer;
 begin
@@ -23641,7 +23737,8 @@ begin
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then Dec(depth)
-    else if (depth = 0) and (Tokens[i].Kind = tkFunction) then
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
+            not PyDefAtIsOverloadStub(i) then
     begin
       TokPos := i;
       Next;                      { CurTok = 'def' }
@@ -25930,6 +26027,17 @@ begin
       i := j;
       while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
     end
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
+            PyDefAtIsOverloadStub(i) then
+    begin
+      { an `@overload` stub METHOD — invisible here for the same reason its
+        module-level twin is invisible to PyRegisterDefShells: registering the
+        stub's annotated signature would make the implementation that follows
+        lose to it. bug-n-overload-decorator-is-refused }
+      i := PySkipNestedSuite(i);
+      if i < 0 then Break;
+      Continue;
+    end
     else if (depth = 0) and (Tokens[i].Kind = tkFunction) then
     begin
       methodStart := i;
@@ -27812,6 +27920,16 @@ begin
         property registered by the member pre-pass, so this only has to consume
         the decorator and parse the def that follows. }
       Next;
+      { `@overload` on a METHOD — dropped, header and body, exactly as at module
+        level. bug-n-overload-decorator-is-refused }
+      if PyEatOverloadDecorator then
+      begin
+        PySkipNewlines;
+        if CurTok.Kind <> tkFunction then
+          Error('Nil Python: @overload must precede a def');
+        PySkipOverloadStubDef;
+        Continue;
+      end;
       if CurTok.Kind <> tkIdent then
         Error('Nil Python: unsupported decorator inside class (only @property, '
               + '@<name>.setter and @staticmethod)');
@@ -28019,8 +28137,19 @@ begin
     while CurTok.Kind = tkIdent do
     begin
       impName := PyConsumeDottedModule(impRoot);
+      { `import typing` joins the consumed roots. The from-import form was
+        already consumed (PyImportRootIsConsumedOnly); the PLAIN form was not,
+        so `import typing` died with "no unit named typing" — which matters now
+        that `@typing.overload` is a spelling this frontend accepts. typing has
+        no run-time existence at all, so consuming it drops nothing: a name from
+        it that IS called walls loudly at its use site, as the from-import path
+        already does. The other consumed-only roots are deliberately NOT widened
+        here — `import collections` then `collections.Counter(...)` is an
+        ordinary pylib symbol and must keep resolving.
+        bug-n-overload-decorator-is-refused }
       if not (CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
               CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
+              CaseEqual(impRoot, 'typing') or
               CaseEqual(impRoot, 'itertools')) then
         ParseUsesUnit(impName);
       if PyIsIdent('as') then
@@ -28243,8 +28372,11 @@ begin
           sites wall visibly (same policy as itertools above). Everything
           else goes through the unit resolver (sqlite3, C headers, ...). }
         impName := PyConsumeDottedModule(impRoot);
+        { `typing` — see the twin list in PyParseOneImport for why only this
+          root is added and the others are not. }
         if CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
            CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
+           CaseEqual(impRoot, 'typing') or
            CaseEqual(impRoot, 'itertools') then
           { skip }
         else
@@ -28763,8 +28895,20 @@ begin
     else if CurTok.Kind = tkAt then
     begin
       Next;
+      { `@overload` — the stub is dropped, header and body: CPython registers it
+        and then the IMPLEMENTATION def that follows REPLACES it, so the stub's
+        body never runs and its signature never binds.
+        bug-n-overload-decorator-is-refused }
+      if PyEatOverloadDecorator then
+      begin
+        PySkipNewlines;
+        if CurTok.Kind <> tkFunction then
+          Error('Nil Python: @overload must precede a def');
+        PySkipOverloadStubDef;
+        Continue;
+      end;
       if not PyIsIdent('dataclass') then
-        Error('Nil Python: unsupported decorator (only @dataclass)');
+        Error('Nil Python: unsupported decorator (only @dataclass and @overload)');
       Next;
       PyParseDataclassArgs;
       Expect(tkNewline, 'newline');
@@ -29074,8 +29218,20 @@ begin
     else if CurTok.Kind = tkAt then
     begin
       Next;
+      { `@overload` — the stub is dropped, header and body: CPython registers it
+        and then the IMPLEMENTATION def that follows REPLACES it, so the stub's
+        body never runs and its signature never binds.
+        bug-n-overload-decorator-is-refused }
+      if PyEatOverloadDecorator then
+      begin
+        PySkipNewlines;
+        if CurTok.Kind <> tkFunction then
+          Error('Nil Python: @overload must precede a def');
+        PySkipOverloadStubDef;
+        Continue;
+      end;
       if not PyIsIdent('dataclass') then
-        Error('Nil Python: unsupported decorator (only @dataclass)');
+        Error('Nil Python: unsupported decorator (only @dataclass and @overload)');
       Next;
       PyParseDataclassArgs;
       Expect(tkNewline, 'newline');
