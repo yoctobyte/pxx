@@ -57,7 +57,7 @@ procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
   Track A ticket), and a class value is just a pointer that lowers cleanly.
   Public so the eventual bound-method path (M3) and tests can share it. }
 procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
-                     args: TPyList; var res: Variant);
+                     args: TPyList; kwNames: TPyList; var res: Variant);
 
 { Reverse bridge: invoke a captured pyeval closure (a nested `def` passed to a
   host method as a value) with one Variant argument. NilPy's PyMakeDynCall routes
@@ -742,8 +742,113 @@ begin
   end;
 end;
 
+{ Reorder `args` so a KEYWORD argument lands on the parameter it names.
+
+  pyeval had the keyword's name and nothing to match it against — the method
+  RTTI carried param kinds and arity but no names — so ParseArgs appended
+  kwargs POSITIONALLY and `w.insert(chars=x, index=y)` silently bound them
+  swapped. Tk discarded the call and printed nothing; no error either way
+  (bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position). The names now
+  live in the second half of the param block (see rtti_emit.inc), which is what
+  makes this possible at all.
+
+  `kwNames` is parallel to `args`: entry i is the keyword arg i was written
+  with, or '' if it was positional. CPython's rule: positionals fill left to
+  right, then each keyword goes to its own parameter.
+
+  A GAP — a keyword targeting parameter 3 while 2 has no value — is refused
+  loudly rather than guessed. The marshaller below can only express omitted
+  TRAILING params (it tests `(i-1) >= nargs` against a dense list), so a gap has
+  no representation; inventing a filler would put this straight back into the
+  silent-wrong-argument class the whole ticket is about. }
+procedure PyBindHostKwArgs(args, kwNames: TPyList; mi: PMethInfo;
+                           n: Integer; const mname: AnsiString);
+var i, p, cnt, arity, tgt, nextPos, maxIdx: Integer;
+    anyKw: Boolean;
+    nm: AnsiString;
+    pk: PInt64;
+    src: TPyList;
+    seen: array[0..31] of Boolean;
+begin
+  if (kwNames = nil) or (args = nil) then Exit;
+  cnt := args.count;
+  if (cnt = 0) or (kwNames.count <> cnt) then Exit;
+  anyKw := False;
+  for i := 0 to cnt - 1 do
+    if pystr_of(kwNames.at(i)) <> '' then begin anyKw := True; Break; end;
+  if not anyKw then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if (pk = nil) or (n <= 0) or (n > 31) then Exit;
+  arity := Integer(mi^.Arity);
+
+  for p := 0 to n - 1 do seen[p] := False;
+  src := TPyList.Create;
+  for i := 0 to cnt - 1 do src.append(args.at(i));
+
+  { positionals first, in the order written }
+  nextPos := 0;
+  for i := 0 to cnt - 1 do
+    if pystr_of(kwNames.at(i)) = '' then
+    begin
+      if nextPos >= n then
+      begin
+        src.Free;
+        EvalError('too many positional args to ' + mname);
+      end;
+      args.put(nextPos, src.at(i));
+      seen[nextPos] := True;
+      Inc(nextPos);
+    end;
+
+  { then every keyword, at the index its NAME declares }
+  maxIdx := nextPos - 1;
+  for i := 0 to cnt - 1 do
+  begin
+    nm := pystr_of(kwNames.at(i));
+    if nm = '' then Continue;
+    tgt := -1;
+    { param p of the user-visible signature is Params[p+1]; Self is 0 }
+    for p := 0 to n - 1 do
+      if PyEqCI(PString(NativeInt(pk[arity + p + 1]))^, nm) then
+      begin tgt := p; Break; end;
+    if tgt < 0 then
+    begin
+      src.Free;
+      EvalError('host method ' + mname + ' has no parameter named ' + nm);
+    end;
+    if seen[tgt] then
+    begin
+      src.Free;
+      EvalError(mname + ' got multiple values for parameter ' + nm);
+    end;
+    { `args` keeps its length through this whole permutation, so a target at or
+      past it is precisely the GAP case — `put(chars=x)` on `put(index, chars)`
+      wants slot 1 while slot 0 has no value. Caught HERE rather than by the
+      completeness check below, because reaching that check would mean writing
+      out of range first. }
+    if tgt >= cnt then
+    begin
+      src.Free;
+      EvalError('cannot bind ' + nm + '= in a call to ' + mname +
+                ': it would leave an earlier parameter with no value, and this' +
+                ' call shape can only omit TRAILING parameters');
+    end;
+    args.put(tgt, src.at(i));
+    seen[tgt] := True;
+    if tgt > maxIdx then maxIdx := tgt;
+  end;
+  src.Free;
+
+  { every slot up to the highest one used must actually have a value }
+  for p := 0 to maxIdx do
+    if not seen[p] then
+      EvalError('cannot bind keyword args to ' + mname +
+                ': parameter ' + pystr_of(Int64(p)) +
+                ' has no value and this call shape cannot omit a middle one');
+end;
+
 procedure PyHostCall(vmobj: Pointer; const name: AnsiString;
-                     args: TPyList; var res: Variant);
+                     args: TPyList; kwNames: TPyList; var res: Variant);
 var
   cls: PClassRTTI;
   mi:  PMethInfo;
@@ -780,6 +885,7 @@ begin
   if mi = nil then begin writeln('pyeval: vm has no method ', name); Halt(1); end;
 
   n := Integer(mi^.Arity) - 1;   { drop Self }
+  PyBindHostKwArgs(args, kwNames, mi, n, name);
   nargs := args.count;
   pk := PInt64(mi^.ParamKinds);
   rk := mi^.RetKind;
@@ -1050,7 +1156,7 @@ begin
     if (mi <> nil) and (mi^.Arity = 1) then
     begin
       noArgs := TPyList.Create;
-      PyHostCall(obj, gname, noArgs, res);
+      PyHostCall(obj, gname, noArgs, TPyList(nil), res);
       noArgs.Free;
       Exit;
     end;
@@ -3608,7 +3714,9 @@ begin
     if not pycallback_is(vmv) then
       EvalError('host call ' + callee + ' is not a bound method');
     vmobj := pybound_recv(vmv);
-    PyHostCall(vmobj, callee, args, res);
+    { ParseCall's own loop above REFUSES any keyword it does not know, so a
+      host call reached this way never carries an unbound keyword. }
+    PyHostCall(vmobj, callee, args, TPyList(nil), res);
     args.Free;
     Exit;
   end;
@@ -3619,7 +3727,7 @@ end;
 { `( expr, ... )` into `args`; a `signed=<bool>` keyword arg (to_bytes/from_bytes)
   is captured into signedKw, other keyword args are ignored (e.g. byteorder is
   positional and consumed as an ordinary arg). }
-procedure ParseArgs(args: TPyList; var signedKw: Boolean);
+procedure ParseArgs(args: TPyList; kwNames: TPyList; var signedKw: Boolean);
 var v, itv, item: Variant; kw, gname: AnsiString;
     exprStart, endPos, gi, gn: Integer;
     gres, glist: TPyList; go: TObject; gby: TPyBytes; gs: AnsiString;
@@ -3638,7 +3746,16 @@ begin
         method's declaration order, and PyHostCall fills any omitted trailing
         params from their per-kind defaults, so positional order is correct. }
       if kw = 'signed' then signedKw := pyvar_to_bool(v)
-      else args.append(v);
+      else
+      begin
+        { pad the parallel list up to here FIRST, so every earlier argument is
+          marked positional at its own index — then append the two together.
+          Padding only at the end would put the '' markers after the names. }
+        if kwNames <> nil then
+          while kwNames.count < args.count do kwNames.append(MakeStr(''));
+        args.append(v);
+        if kwNames <> nil then kwNames.append(MakeStr(kw));
+      end;
     end
     else
     begin
@@ -3736,6 +3853,7 @@ procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
                           var res: Variant);
 var
   args: TPyList;
+  kwNames: TPyList;
   o: TObject; li: TPyList; by: TPyBytes;
   s: AnsiString; b2: TPyBytes;
   i: Integer;
@@ -3743,8 +3861,11 @@ var
   rvt: Int64;
 begin
   args := TPyList.Create;
-  ParseArgs(args, signedKw);
-  if not Executing then begin res := MakeNone; Exit; end;
+  kwNames := TPyList.Create;
+  ParseArgs(args, kwNames, signedKw);
+  { trailing positionals get their '' markers here — see the pad in ParseArgs }
+  while kwNames.count < args.count do kwNames.append(MakeStr(''));
+  if not Executing then begin res := MakeNone; kwNames.Free; Exit; end;
   rvt := PPyRec(@recv)^.VType;
 
   { int.to_bytes(length, byteorder, *, signed=…) -> bytes }
@@ -3853,7 +3974,8 @@ begin
       Exit;
     end;
     { otherwise: a reflected host object (vm) — dispatch through the trampoline }
-    PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, res);
+    PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
+    kwNames.Free;
     Exit;
   end;
 
@@ -4185,7 +4307,7 @@ begin
     if IsOp('(') then
     begin
       args := TPyList.Create;
-      ParseArgs(args, sk);
+      ParseArgs(args, TPyList(nil), sk);   { a raise's argument list has no keywords to bind }
       if args.count > 0 then begin v := args.at(0); msg := pystr_of(v); end;
     end;
   end
@@ -4549,7 +4671,7 @@ begin
   if n >= 1 then args.append(a0);
   if n >= 2 then args.append(a1);
   if n >= 3 then args.append(a2);
-  PyHostCall(inst, '__call__', args, res);
+  PyHostCall(inst, '__call__', args, TPyList(nil), res);
   args.Free;
   PyCallDunder := True;
 end;
