@@ -33,7 +33,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (216)
+## backlog (215)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -171,7 +171,6 @@ _none_
 | feature-nilpy-process-exec-binding | N | 45 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-six-and-warnings-shims | B | 45 | feature | `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign | — |
 | feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep | N | 30 | feature | Ordinary Python forms NilPy diagnoses cleanly but does not accept. print(sep=) and str.format() with 3+ (and 0) placeholders are DONE (2026-08-08); ten rows remain: enumerate(str), type(x) other than .__name__, a non-name lambda default, dict(x=1), .update(b=2), extended-slice assign, self.__class__.__name__, nested unpacking, bare tuple, two-for comprehension | — |
-| feature-nilpy-starred-and-nested-unpacking | N | 40 | feature | Starred and NESTED unpacking targets | — |
 | feature-nilpy-staticmethod-and-classmethod | N | 35 | feature | `@staticmethod` and `@classmethod` are rejected | — |
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-named-keyword-fields | N | 25 | feature | `"{name} is {age}".format(name=..., age=...)` — named fields not supported | — |
@@ -403,9 +402,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1741)
+## done (1742)
 
-1741 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1742 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -564,7 +563,6 @@ _none_
 - [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-enum-class
 - [p 40] [N] feature-nilpy-hasattr-per-instance-assigned-tracking
-- [p 40] [N] feature-nilpy-starred-and-nested-unpacking
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [P] feature-p-assertions-directive-and-position
 - [p 40] [T] feature-twatch-full-tier-coverage-age

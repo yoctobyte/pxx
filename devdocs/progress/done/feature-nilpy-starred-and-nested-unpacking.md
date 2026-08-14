@@ -2,6 +2,7 @@
 track: N
 prio: 40
 type: feature
+status: done
 ---
 
 # Starred and NESTED unpacking targets
@@ -181,3 +182,68 @@ Nil Python: a NESTED loop target (`for n, (p, q) in ...`) is not supported yet
 So what remains of this ticket is exactly the nested-target row. Left open and
 NOT retitled: the two halves were filed together because they are one feature
 to a reader, and splitting the record now would lose that.
+
+## 2026-08-14 (claude-A-N) — the NESTED half SHIPS. This ticket is COMPLETE.
+
+`for n, (p, q) in enumerate(pairs):` and `a, (b, c) = (1, (2, 3))` both work and
+match CPython. With the starred half already done, nothing in this ticket is
+open.
+
+### The cheaper route this ticket itself recommended is the one taken
+
+The 2026-08-04 note weighed "make the scan recurse" against "DESUGAR a nested
+target into a temp plus an inner unpack", and preferred the second. That is what
+landed, in both places: the group binds a **hidden name** exactly like any other
+target element, and the inner names are read out of it by index — through
+`PyPairItem`, the same accessor the flat two-name path one level up already uses.
+The flat name-list machinery is untouched, and there is no target TREE.
+
+### Both halves needed the SAME lesson about entry points, twice
+
+- **The loop form** has two body paths. Put the unpack only on the statement
+  side and `[f(p, q) for n, (p, q) in xs]` reports `undefined variable (p)`
+  while the identical `for` statement works. It is emitted ahead of both.
+- **The assignment form** has two exits (the one-sequence branch and the
+  value-per-target one). One helper, called at both.
+
+Neither was visible by reading; both surfaced by widening the test.
+
+### Two bugs worth recording, because both looked like the feature failing
+
+- **`High()` on the inner dimension of a 2-D array** does not answer the inner
+  bound in this dialect, so a two-name group was refused as "too many names in a
+  nested loop target". `PY_FOR_NEST_SLOTS`/`PY_FOR_NEST_NAMES` are named
+  constants in `defs.inc` now.
+- **Inferring "the first element was a group" from `Tokens[i-1]` being `)`**
+  also answers yes for an ordinary name following a `)` on the previous line. An
+  explicit flag. The first test case failed on this and it read as the whole
+  lookahead not working.
+
+### All FOUR of this ticket's {%FAIL} recipes are now retired
+
+The 2026-08-09 note recorded the trap when the starred half retired its two:
+implementing a feature makes its own refusal test compile, the `! $(COMPILER)`
+recipe then turns the nilpy suite RED, and **`gate.sh quick` does not run that
+target**, so the per-fix gate is green while the suite is broken and only Track
+T finds it. It happened again here, twice, for `nested_for_target_fail` and
+`nested_assign_target_fail` — both caught before pushing only because this
+ticket says to grep for them. The Makefile comment now states the rule instead
+of the instance.
+
+### Left open, deliberately, as separate items
+
+- `for (x,) in pairs:` — a one-name tuple target. Needs a one-element unpack, not
+  comma tolerance, since a single-name target binds the element whole. Filed as
+  [[bug-nilpy-a-one-name-tuple-loop-target-is-refused]] and now refused by name.
+- Targets nested more than one level (`a, ((b, c), d)`) and a star inside a
+  group. Both refused by name; neither has appeared in the corpus.
+
+### Gate
+
+`test/test_nilpy_nested_loop_target.npy` + `.expected` generated from CPython,
+covering both halves and the sibling target shapes they share a parser with
+(swap, starred, subscript, attribute). `make compiler/pascal26` fixedpoint +
+`tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

@@ -1418,6 +1418,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-set-methods-issubset-union-etc | N | 35 | feature | set methods missing: issubset/issuperset/union/intersection/difference/discard | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
+| feature-nilpy-starred-and-nested-unpacking | N | 40 | feature | Starred and NESTED unpacking targets | — |
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-nilpy-str-rsplit-partition-rpartition | N | 35 | feature | str.rsplit()/partition()/rpartition() missing | — |
