@@ -89,4 +89,4 @@ verified), and a 20-row `TStringList` sweep — `Sort`, `CommaText`, `Values`,
 identical to FPC. `make lib-test` green.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 8f6e4a794.
