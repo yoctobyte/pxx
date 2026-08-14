@@ -119,4 +119,4 @@ been cleaned — worse than no test. The script is now copied into the scratch
 tree.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit f5999b9ce.
