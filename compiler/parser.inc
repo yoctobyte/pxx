@@ -24,6 +24,9 @@ procedure EmitSignalRuntimeRISCV32; forward;
 procedure EmitSignalRuntimeArm32; forward;
 procedure EmitSignalRuntime386; forward;
 procedure EmitIoLockStubsArm32; forward;
+{ The per-arch dispatcher every frontend driver must call instead of picking a
+  stub itself — see its body in ir_codegen.inc for why that is not optional. }
+procedure EmitIoLockStubsForTarget; forward;
 
 { pxx pre-scans declarations, so a routine may be CALLED above its definition; FPC
   cannot, and the cold-bootstrap seed is built by FPC. Anything defined later in this
@@ -32720,8 +32723,11 @@ begin
   BSS_PEEK_BYTE   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
-  BSS_IO_OWNER    := BSSSize; Inc(BSSSize, 8);
-  BSS_IO_DEPTH    := BSSSize; Inc(BSSSize, 8);
+  { BSS_IO_OWNER / BSS_IO_DEPTH are NOT allocated here any more: they belong to
+    EmitIoLockStubsForTarget, alongside the stubs that are their only reader.
+    Allocating them here meant every non-Pascal driver left both at 0 — i.e.
+    aliased onto the same eight bytes — which is a second, independent way for
+    --threadsafe to break (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
   BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
   BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
   BSS_SIG_CODE    := BSSSize; Inc(BSSSize, 8);
@@ -33306,16 +33312,14 @@ begin
             + 'that turns the trap into a runtime error (drop --no-signals)');
     EmitFpcFloatErrStub;
   end;
-  { --threadsafe statement-atomic I/O lock stubs (x86-64 only, like the
-    threadsafe atomics themselves). }
-  if (TargetArch = TARGET_X86_64) and ThreadSafeMode then EmitIoLockStubs;
-  if (TargetArch = TARGET_I386) and ThreadSafeMode then EmitIoLockStubs386;
   if (TargetArch = TARGET_AARCH64) and not NoSignals then EmitSignalRuntimeA64;
   if (TargetArch = TARGET_RISCV32) and not NoSignals and (not EspBareBoot) then EmitSignalRuntimeRISCV32;
   if (TargetArch = TARGET_ARM32) and not NoSignals then EmitSignalRuntimeArm32;
   if (TargetArch = TARGET_I386) and not NoSignals then EmitSignalRuntime386;
-  if (TargetArch = TARGET_AARCH64) and ThreadSafeMode then EmitIoLockStubsA64;
-  if (TargetArch = TARGET_ARM32) and ThreadSafeMode then EmitIoLockStubsArm32;
+  { --threadsafe statement-atomic I/O lock stubs. The per-arch choice used to be
+    spelled out here, in the Pascal driver only, which is precisely why the
+    other eight frontends shipped without it. }
+  EmitIoLockStubsForTarget;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 

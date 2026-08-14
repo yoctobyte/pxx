@@ -2649,6 +2649,19 @@ test-threads: $(COMPILER)
 	# heap contract: every allocation family safe under concurrent churn (strings, dynarrays, classes, raw+realloc)
 	./$(COMPILER) --threadsafe test/test_thread_heap_mixed.pas /tmp/test_thread_heap_mixed26
 	test "$$(/tmp/test_thread_heap_mixed26)" = "$$(printf 'errors=0\nHEAP MIXED OK')"
+	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
+	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
+	# combination had never been executed by any gate on any box -- which is how
+	# --threadsafe shipped in the pin hanging on every NilPy program, down to a
+	# one-line print (bug-a-threadsafe-segfaults-on-every-nilpy-program).
+	# Differential against the SAME source built without the flag: the I/O lock
+	# must serialize the writes without changing what they say, and pinning a
+	# literal here would just rot. The nested-write case in the .npy is what
+	# exercises the reentrancy depth counter, which was aliased onto the owner.
+	./$(COMPILER) --threadsafe test/test_threadsafe_nilpy_io.npy /tmp/test_ts_npy_on26
+	./$(COMPILER) test/test_threadsafe_nilpy_io.npy /tmp/test_ts_npy_off26
+	test "$$(/tmp/test_ts_npy_on26)" = "$$(/tmp/test_ts_npy_off26)"
+	test "$$(/tmp/test_ts_npy_on26)" = "$$(printf 'hi\ninner 3\nouter 6\ninner 0\ninner 1\ninner 2\ntotal 6')"
 	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_thread_clone.pas /tmp/test_thread_clone_guard26 > /tmp/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" /tmp/test_thread_clone_guard.log

@@ -28476,6 +28476,12 @@ begin
     builtinheap div site compiled before PXXDivZero registers fell back to a
     zero Div0StubAddr. Python '//'/'%' always need the check; unconditional. }
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
+    call every frontend driver needs: without it IOLockAddr stays 0 and any
+    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
+    point -- which jumps back to main and hangs until the stack is gone
+    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
+  EmitIoLockStubsForTarget;
   { Bitwise-on-float TypeError abort stub — EmitVarBinOp's double path calls it
     when a bitwise op has a float variant operand (Python raises, we abort like
     pylib's PyTypeError). bug-nilpy-bitwise-on-float-variant-truncates. }

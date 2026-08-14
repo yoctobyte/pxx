@@ -8558,6 +8558,12 @@ begin
     (latent; exposed by the feature-opt-div0-stub-on-use safety net). C
     '%'/'/' sites always need the check, so emit unconditionally. }
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
+    call every frontend driver needs: without it IOLockAddr stays 0 and any
+    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
+    point -- which jumps back to main and hangs until the stack is gone
+    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
+  EmitIoLockStubsForTarget;
 
   { Auto-pull the C IO bridge (pxxcio) so the stdio veneer's
     `extern __pxx_write`/`__pxx_read` resolve to bodied Pascal procs over the

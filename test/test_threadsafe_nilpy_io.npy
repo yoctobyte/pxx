@@ -1,0 +1,45 @@
+# --threadsafe on a NON-PASCAL frontend. This combination had NEVER been
+# executed by any gate on any box, which is how `--threadsafe` shipped in the
+# pin hanging or segfaulting on every single NilPy program, down to a one-line
+# print (bug-a-threadsafe-segfaults-on-every-nilpy-program).
+#
+# Two independent defects had to line up to produce that, and this file is
+# written to catch either one coming back:
+#
+#   1. only the Pascal driver emitted the I/O-lock stubs, so IOLockAddr stayed
+#      0 and every write called code offset 0 -- the ELF ENTRY POINT -- which
+#      jumps back to main, re-mmaps the arena and pushes a return address, until
+#      the 8 MB stack is gone. A plain `print` catches that.
+#
+#   2. BSS_IO_OWNER and BSS_IO_DEPTH were likewise allocated only by the Pascal
+#      driver, so both stayed 0 and the owner tid and the depth counter WERE THE
+#      SAME EIGHT BYTES. `inc [depth]` scribbled on the owner, nothing could
+#      ever win the cmpxchg, and the acquire stub spun forever. That one only
+#      shows up once the depth counter is actually USED -- i.e. when the lock is
+#      taken re-entrantly -- which is why the nested case below is not optional
+#      decoration. A single flat print would have passed with the fields still
+#      aliased.
+#
+# The lock is REENTRANT by design: a write argument may call a function that
+# itself writes, and that must not self-deadlock.
+
+def emit(n):
+    # writes while the caller's write statement already holds the I/O lock ->
+    # depth goes to 2 and back. This is the case that needs owner and depth to
+    # be distinct storage.
+    print("inner", n)
+    return n * 2
+
+
+def outer():
+    # the argument evaluation writes, then the enclosing print writes
+    print("outer", emit(3))
+
+
+print("hi")
+outer()
+
+total = 0
+for i in range(3):
+    total = total + emit(i)
+print("total", total)

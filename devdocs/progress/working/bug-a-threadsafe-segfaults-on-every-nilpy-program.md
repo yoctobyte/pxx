@@ -3,6 +3,8 @@ track: A
 prio: 70
 type: bug
 summary: "`--threadsafe` segfaults on EVERY NilPy program, including a one-line `print(\"hi\")`. Pre-existing — the pinned stable does it too. Invisible because the Makefile has ZERO --threadsafe .npy jobs, so no tier covers the combination. It is also the blocker behind the single finding of the --strict-uses corpus sweep, whose diagnostic tells you to rebuild with the flag that crashes."
+status: working
+owner: agent-an
 ---
 
 # `--threadsafe` segfaults on every NilPy program

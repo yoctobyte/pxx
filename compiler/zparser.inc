@@ -1997,6 +1997,12 @@ begin
     (silent call into the entry stub). Emit unconditionally after the entry
     stub; never reached by fall-through. }
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
+    call every frontend driver needs: without it IOLockAddr stays 0 and any
+    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
+    point -- which jumps back to main and hangs until the stack is gone
+    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
+  EmitIoLockStubsForTarget;
 
   while CurTok.Kind <> tkEOF do
   begin

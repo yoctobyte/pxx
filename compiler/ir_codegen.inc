@@ -4,7 +4,28 @@
 procedure IREmitNode(node: Integer); forward;
 
 procedure IREmitCodeCall(addr: Integer);
+{ Direct call to a runtime stub, by CODE OFFSET.
+
+  Offset 0 is never a valid target and the check is not paranoia: offset 0 is
+  the ELF ENTRY POINT (the header occupies the bytes before it), and the entry
+  stub ends by JUMPING to main rather than returning. So `call 0` builds a
+  perfect infinite loop — main re-enters the entry, which re-mmaps the heap
+  arena and jumps back to main, pushing 8 bytes of return address each time
+  until the 8 MB stack is gone. The crash then lands in whatever ordinary code
+  happened to touch the stack next, with a garbage backtrace and no hint that a
+  stub address was the cause.
+
+  That is exactly how `--threadsafe` shipped broken on every NilPy program:
+  IOLockAddr stayed 0 because only the Pascal driver emitted the stubs
+  (bug-a-threadsafe-segfaults-on-every-nilpy-program). Every one of the ~50
+  callers passes a `*Addr` stub variable, none legitimately 0, so one guard
+  here turns that whole failure class from a silent runtime hang into a
+  compiler error naming the cause. }
 begin
+  if addr = 0 then
+    Error('compiler error: call to a runtime stub that was never emitted '
+          + '(code offset 0 is the ELF entry point). A frontend driver is '
+          + 'missing its stub-emission call for the current flags/target.');
   EmitB($E8);
   EmitI32(addr - (CodeLen + 4));
 end;
@@ -591,6 +612,45 @@ begin
     'mov [@glob], rcx', BSS_IO_OWNER,  { release: plain store is a release on x86 }
     'ret'
   ]);
+end;
+
+procedure EmitIoLockStubsForTarget;
+{ THE one place that decides which I/O-lock stubs a build needs. Every frontend
+  driver calls this; none of them may spell out the per-arch choice itself.
+
+  It exists because the per-arch choice used to live inline in ParseProgram —
+  the PASCAL driver — and the other eight drivers (NilPy, C, Rust, Zig, and the
+  rest) simply never emitted the stubs. IOLockAddr then stayed 0, and every
+  `--threadsafe` program from those frontends whose I/O lowered through
+  AN_WRITE called code offset 0 and hung until the stack ran out. It shipped
+  that way, in the pin, because no gate anywhere runs `--threadsafe` on a
+  non-Pascal source (bug-a-threadsafe-segfaults-on-every-nilpy-program).
+
+  This is the second time this shape has bitten: the same "driver forgot a stub,
+  address stayed 0" hole was fixed for Div0StubAddr by COPYING the line into
+  each driver, which is what left it free to drift again here. So the fix is a
+  single call, not a ninth copy. The complementary half is the addr=0 guard in
+  IREmitCodeCall above, which catches any future sibling at compile time. }
+begin
+  if not ThreadSafeMode then Exit;
+  { The lock's STORAGE is allocated here too, next to the only code that uses
+    it. Splitting the two is what turned the first fix into a second bug: after
+    the stubs started being emitted for every frontend, NilPy still hung —
+    because BSS_IO_OWNER and BSS_IO_DEPTH were also allocated only by the Pascal
+    driver, so both stayed 0 and the owner and the depth counter were THE SAME
+    EIGHT BYTES. `inc [depth]` then scribbled on the owner tid, no thread could
+    ever win the cmpxchg, and the acquire stub spun forever. A lock whose two
+    fields alias is not a lock. }
+  BSS_IO_OWNER := BSSSize; Inc(BSSSize, 8);
+  BSS_IO_DEPTH := BSSSize; Inc(BSSSize, 8);
+  if      TargetArch = TARGET_X86_64  then EmitIoLockStubs
+  else if TargetArch = TARGET_I386    then EmitIoLockStubs386
+  else if TargetArch = TARGET_AARCH64 then EmitIoLockStubsA64
+  else if TargetArch = TARGET_ARM32   then EmitIoLockStubsArm32;
+  { riscv32/xtensa deliberately absent: --threadsafe atomics are not ported
+    there, and the AN_WRITE lowering does not emit IR_IO_LOCK for them either
+    (see the arch test at the emission site in ir.inc), so there is nothing to
+    call and a stub would be dead bytes. }
 end;
 
 procedure EmitDiv0Stub;
