@@ -2115,6 +2115,21 @@ var
                             global namespace today; this counts what a real
                             non-transitive rule would break, without changing
                             resolution. Opt-in: an ordinary build is unaffected. }
+  StrictUses : Boolean;   { --strict-uses: ENFORCE the rule --warn-uses-leak only
+                            counts. A declaration in a unit the resolving scope
+                            cannot legitimately see is skipped during lookup, so
+                            the name resolves elsewhere or is simply undefined —
+                            exactly as it would in FPC. bug-pascal-uses-is-transitive.
+                            Staged behind a flag while the RTL's own accidental
+                            leaks are closed; the endpoint is default-on. }
+  { Memoized visibility row for VisibilityAllows. The BFS is over the whole edge
+    table and lookups are hot once StrictUses enforces, so the answer is cached
+    per (curUnit, UsesEdgeCount) — the edge count is part of the key because
+    clauses are appended AS parsing proceeds, so a row computed earlier in the
+    same unit can be stale. }
+  VisCacheUnit  : Integer;
+  VisCacheEdges : Integer;
+  VisCacheVis   : array[0..MAX_STRS] of Boolean;
   WarnIgnoredDirectives : Boolean; { --warn-ignored-directives: a routine
                             directive that is accepted and then dropped is
                             reported, with WHY it could not be honored, so the

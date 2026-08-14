@@ -533,27 +533,34 @@ function VisibilityAllows(curUnit, declUnit: Integer): Boolean;
   transitively (an implementation-section `uses` is private to the unit that
   wrote it — it is not re-exported to that unit's own importers).
   Strs[] indices offset by 1 so curUnit = -1 (the main program) indexes slot 0.
-  Read-only measurement helper (bug-pascal-uses-is-transitive) — never called
-  outside a --warn-uses-leak check, so a full array-clear + BFS per query is
-  fine; nothing here runs in an ordinary build. }
+  Memoized per (curUnit, UsesEdgeCount) in VisCacheVis: under --strict-uses this
+  is called from every routine and class lookup, and a clear-plus-BFS per query
+  would be quadratic in the edge table. The edge count is part of the key
+  because clauses are appended as parsing proceeds. }
 var
-  visited: array[0..MAX_STRS] of Boolean;
   queue: array[0..MAX_USES_EDGES-1] of Integer;
   qHead, qTail, i, u, v: Integer;
 begin
   if declUnit = curUnit then begin VisibilityAllows := True; Exit; end;
   if UnitIsAmbient(declUnit) then begin VisibilityAllows := True; Exit; end;
-  for i := 0 to MAX_STRS do visited[i] := False;
-  visited[curUnit + 1] := True;
+  if (VisCacheUnit = curUnit) and (VisCacheEdges = UsesEdgeCount) then
+  begin
+    VisibilityAllows := VisCacheVis[declUnit + 1];
+    Exit;
+  end;
+  VisCacheUnit := curUnit;
+  VisCacheEdges := UsesEdgeCount;
+  for i := 0 to MAX_STRS do VisCacheVis[i] := False;
+  VisCacheVis[curUnit + 1] := True;
   qHead := 0; qTail := 0;
   { direct edges out of curUnit: either section is visible to curUnit itself }
   for i := 0 to UsesEdgeCount - 1 do
     if UsesEdgeFrom[i] = curUnit then
     begin
       v := UsesEdgeTo[i];
-      if not visited[v + 1] then
+      if not VisCacheVis[v + 1] then
       begin
-        visited[v + 1] := True;
+        VisCacheVis[v + 1] := True;
         if qTail < MAX_USES_EDGES then begin queue[qTail] := v; Inc(qTail); end;
       end;
     end;
@@ -566,14 +573,36 @@ begin
       if (UsesEdgeFrom[i] = u) and UsesEdgeIface[i] then
       begin
         v := UsesEdgeTo[i];
-        if not visited[v + 1] then
+        if not VisCacheVis[v + 1] then
         begin
-          visited[v + 1] := True;
+          VisCacheVis[v + 1] := True;
           if qTail < MAX_USES_EDGES then begin queue[qTail] := v; Inc(qTail); end;
         end;
       end;
   end;
-  VisibilityAllows := visited[declUnit + 1];
+  VisibilityAllows := VisCacheVis[declUnit + 1];
+end;
+
+function DeclVisible(declUnit: Integer): Boolean;
+{ The ENFORCEMENT predicate --strict-uses turns on: may the scope being compiled
+  see a declaration that lives in `declUnit`? False means the row is skipped
+  during lookup, so the name resolves somewhere else or is simply undefined —
+  which is what a non-transitive `uses` means (bug-pascal-uses-is-transitive).
+
+  `declUnit < 0` is ALWAYS visible, and that is not a loophole being left open
+  by accident: -1 is two things at once in this table — a compiler-registered
+  intrinsic (RegisterBuiltin*, and every proc the frontend mints, which
+  MatchEligBase's `userOnly` test already reads as "not user code") and a
+  routine declared by the main program. The first is System-ambient by
+  definition; separating the second would need a marker the rows do not carry,
+  and a unit reaching the program's own routine is not a case the corpus shows.
+  Same artifact ClassNameIsAmbientIntrinsic handles by name on the class side. }
+begin
+  DeclVisible := True;
+  if not StrictUses then Exit;
+  if declUnit < 0 then Exit;
+  if declUnit = CurrentUnitIdx then Exit;
+  DeclVisible := VisibilityAllows(CurrentUnitIdx, declUnit);
 end;
 
 procedure WarnUsesLeakHit(const kind, name: AnsiString; curUnit, declUnit: Integer);
@@ -640,7 +669,14 @@ begin
          not ClassNameIsAmbientIntrinsic(lo) and
          not VisibilityAllows(CurrentUnitIdx, UClsUnitIdx[i]) then
         WarnUsesLeakHit('class', name, CurrentUnitIdx, UClsUnitIdx[i]);
-      Result := i; Exit;
+      { --strict-uses: a class this scope cannot see is not a candidate, so the
+        scan continues to a visible one of the same name rather than stopping at
+        the first row. ClassNameIsAmbientIntrinsic keeps TObject/TGuid reachable
+        (they are System's, stamped with the program's index). }
+      if ClassNameIsAmbientIntrinsic(lo) or DeclVisible(UClsUnitIdx[i]) then
+      begin
+        Result := i; Exit;
+      end;
     end;
     Inc(i);
   end;
@@ -4583,7 +4619,8 @@ begin
       being compiled is invisible, like the DeclOrderStrict global-var gate.
       ProcHdrTok = 0 (builtins/units/interface/methods/nested) always passes. }
     if (Procs[i].Name = lo) and
-       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
+       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
+       DeclVisible(ProcUnitIdx[i]) then
       begin
         { LAST declaration wins, not first. The chain is FIFO = registration
           order, and used units are registered before the compiling scope's own
@@ -4628,7 +4665,8 @@ begin
   begin
     if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
        CaseEqual(Procs[i].Name, lo) and
-       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
+       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
+       DeclVisible(ProcUnitIdx[i]) then
     begin
       if (ProcUnitIdx[i] = CurrentUnitIdx) and (own < 0) then own := i;
       if last < 0 then last := i;
@@ -5343,6 +5381,10 @@ function MatchEligBase(idx: Integer; const name: AnsiString; demote: Boolean;
                   bIdx: Integer; userOnly, dropLateDef: Boolean): Boolean;
 begin
   Result := ProcNameMatches(idx, name) and not (demote and (ProcUnitIdx[idx] = bIdx));
+  { ...and, under --strict-uses, a routine declared in a unit this scope cannot
+    legitimately see is not a candidate at all — the non-transitive `uses` rule
+    applied where CALLS actually resolve. bug-pascal-uses-is-transitive. }
+  if Result and not DeclVisible(ProcUnitIdx[idx]) then Result := False;
   { ...and, in a NilPy program that declares this name itself, ONLY that
     declaration is a candidate — see PyUserShadowsProc. }
   if Result and userOnly and (ProcUnitIdx[idx] <> -1) then Result := False;

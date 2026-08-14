@@ -3,12 +3,13 @@ summary: "REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix
 type: bug
 track: A
 prio: 80
+owner: agent-A
 ---
 
 # Pascal: `uses` is transitive, so every unit's imports leak to its consumers
 
 - **Type:** bug (name resolution / unit visibility) — **Track A**
-- **Status:** done
+- **Status:** working
 - **Opened:** 2026-07-28, from [[decide-class-namespace-scoping]]. This is the
   root cause that ticket is a symptom of.
 

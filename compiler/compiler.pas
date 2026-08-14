@@ -181,6 +181,9 @@ begin
   CrtlSrcPulledCount := 0;
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
+  StrictUses := False;
+  VisCacheUnit := -2;
+  VisCacheEdges := -1;
   WarnIgnoredDirectives := False;
   UsesEdgeCount := 0;
   DumpRTTI := False;
@@ -550,6 +553,16 @@ begin
         Pascal uses rule. Opt-in and read-only — resolution itself is
         unchanged, this only counts what a real rule would break. }
       WarnUsesLeak := True;
+      Inc(i);
+    end
+    else if option = '--strict-uses' then
+    begin
+      { bug-pascal-uses-is-transitive, the ENFORCEMENT step: a declaration in a
+        unit the resolving scope cannot legitimately reach stops being a lookup
+        candidate, so `uses` is finally non-transitive. Behind a flag while the
+        RTL's own accidental leaks are closed one at a time; the endpoint is
+        default-on and this flag retiring. }
+      StrictUses := True;
       Inc(i);
     end
     else if option = '--warn-ignored-directives' then
