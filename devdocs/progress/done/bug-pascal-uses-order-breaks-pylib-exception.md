@@ -158,4 +158,4 @@ ticket describes, written down as if it were correct. Both are `[    3]` now
 `ClassNameIsDeliberatelyShared`, the mechanism this ticket is about, is deleted.
 The "design tradeoff with a measured cost" in the summary above is no longer a
 tradeoff anyone has to make.
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 84dcd2326.

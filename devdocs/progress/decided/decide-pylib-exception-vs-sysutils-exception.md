@@ -258,4 +258,4 @@ killed `e.args` — "pylib can never add a member sysutils lacks" — no longer
 exists.
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit 84dcd2326.
