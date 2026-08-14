@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-nilpy-dotted-imports-resolve-to-source-files | N | 65 | feature | A dotted import (`from neuzelaar.core.bus import Bus`) resolves ONLY to a hand-written `mimic_<mangled>` shim unit; it never looks for the source file `neuzelaar/core/bus.py` on disk. FLAT sibling imports already work for both .py and .npy. So NilPy can compile a single file plus shims, but cannot compile a multi-module Python PACKAGE — 89 of 150 failures in the neuzelaar census, the single largest blocker by 3x. | — |
 
 ## unfinished (8)
 
@@ -36,7 +38,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -158,7 +160,6 @@ _none_
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-cpyext-cycle-collector | N | 40 | feature | cpyext: a cycle collector for the extension object model | — |
 | feature-nilpy-cycle-collector | A | 35 | feature | NilPy: collect reference cycles (the reserved half of the GC decision) | feature-nilpy-object-reclamation |
-| feature-nilpy-dotted-imports-resolve-to-source-files | N | 65 | feature | A dotted import (`from neuzelaar.core.bus import Bus`) resolves ONLY to a hand-written `mimic_<mangled>` shim unit; it never looks for the source file `neuzelaar/core/bus.py` on disk. FLAT sibling imports already work for both .py and .npy. So NilPy can compile a single file plus shims, but cannot compile a multi-module Python PACKAGE — 89 of 150 failures in the neuzelaar census, the single largest blocker by 3x. | — |
 | feature-nilpy-enum-class | N | 40 | feature | `from enum import Enum` — enum classes are not supported | — |
 | feature-nilpy-for-loop-getitem-protocol-fallback | N | 25 | feature | `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container | — |
 | feature-nilpy-fstring-nested-spec-and-nested-fstring | N | 30 | feature | f-string: a nested format spec and a nested f-string | — |
@@ -469,7 +470,6 @@ _none_
 - [p 70] [T] regression-test-asm-test-asm-avx
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-- [p 65] [N] feature-nilpy-dotted-imports-resolve-to-source-files
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - [p 60] [C] feature-c-csmith-differential-fuzzing

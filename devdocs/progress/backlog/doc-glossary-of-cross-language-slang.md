@@ -73,3 +73,41 @@ A Pascal programmer can read the NilPy pages, and a Python programmer the Pascal
 pages, without meeting an unexplained term. Concretely: `cls` is defined, and it
 says which class it binds to for an inherited method — because that is the part
 that is not guessable.
+
+## Worked example for the page: `this` vs `self` vs `cls` vs `Self`
+
+The clearest case of "the same idea, four spellings, and one of them means two
+different things". Measured in pxx 2026-08-14:
+
+```pascal
+class function TBase.Who: string; begin Result := Self.ClassName; end;
+function       TBase.Me:  string; begin Result := Self.ClassName; end;
+```
+```
+TBase.Who    -> TBase        { class function }
+TDerived.Who -> TDerived     { inherited, called on the descendant }
+d.Me         -> TDerived     { instance method }
+```
+
+| | refers to | supplied how |
+|---|---|---|
+| `this` — C++ / Java / C# | the **instance** | implicit keyword (a pointer in C++) |
+| `self` — Python | the **instance** | **explicit first parameter**, by convention |
+| `cls` — Python | the **class** | explicit first parameter of a `@classmethod` |
+| `Self` — Pascal | **both** — the instance in a method, the **class** in a `class function` | implicit keyword |
+| `self` / `Self` — Rust | the value vs the **type** | distinguished **by capitalisation** |
+
+Two points the page should make, because neither is guessable:
+
+1. **Pascal overloads `Self`; Python splits it into two names.** Which role you
+   get is decided by the kind of method you are in, not by the identifier. The
+   semantics match, though: a Pascal `class function` and a Python
+   `@classmethod` both bind to the class the call was made ON, not the class the
+   method was declared IN — shown by `TDerived.Who -> TDerived` above.
+2. **Rust's convention cannot be borrowed into Pascal.** Rust separates `self`
+   (the value) from `Self` (the type) by capitalisation; Pascal is
+   case-insensitive, so those are one identifier. Same constraint that forces
+   the case-agreement rule in
+   [[decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language]].
+   Worth stating so nobody proposes it for the Rust frontend and then discovers
+   it cannot survive contact with `.pas`.
