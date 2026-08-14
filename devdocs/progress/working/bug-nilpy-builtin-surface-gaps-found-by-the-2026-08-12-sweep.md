@@ -278,7 +278,7 @@ lines were written before the last two landed.
 | row | status at 2026-08-14 |
 | --- | --- |
 | 1. `sorted(key=None)` | **done** (2026-08-13) |
-| 1b. `min`/`max` with `key=None` | **still open** — see below |
+| 1b. `min`/`max` with `key=None` | **DONE** — measured, works in every spelling; the "still open" note below is stale |
 | 2. three-way `zip` | **done** (2026-08-13) |
 | 3. computed precision `f"{7.5:.{n}f}"` | **DONE** — answers `7.500`, matching CPython. Landed since, unrecorded here |
 | `callable` | **done** (2026-08-13) |
@@ -289,7 +289,7 @@ lines were written before the last two landed.
 | `type(x) == int` | **DONE 2026-08-14** — bug-n-a-type-name-is-not-a-first-class-value |
 | `id(x)` | **DONE 2026-08-14**, here |
 | `ascii(x)` | **DONE 2026-08-14**, here |
-| `max(xs, default=0)` | **still open** — `max has no parameter named 'default'` |
+| `max(xs, default=0)` | **DONE 2026-08-14**, here |
 | `slice(1, 3)` | still open — `undefined variable (slice)` |
 | `complex(1, 2)` | still open — no complex type at all |
 | `dir(x)` / `vars()` / `memoryview(b)` | still open |
@@ -314,3 +314,40 @@ Nobody has answered it in three sessions, and it is a design call rather than
 work — a compiled dialect either carries a parser at run time or it does not.
 Filed as [[decide-nilpy-eval-at-runtime]] rather than left as a table row that
 reads like a to-do.
+
+
+## 2026-08-14 — `id`, `ascii`, `max(default=)` landed; FOUR names left
+
+Closing out the re-measurement above.
+
+- **`id(x)`** and **`ascii(x)`** — frontend intercepts, following this ticket's
+  own `format` lesson (a pylib routine of that name vanishes the moment a later
+  `uses` unit shadows it; the test imports json to keep that honest).
+- **`max(xs, default=D)` / `min(xs, default=D)`** — a lowering, because
+  `default=` names no parameter and the binder is right to refuse it. TWO
+  dedicated routines rather than another overload: a second Variant parameter is
+  the slot `max(a, b)` already claims, and that exact collision is what this
+  ticket's own item 1 spent two sessions working around for `key=`.
+- **`min`/`max` with `key=None` was already fixed.** The "Still open in item 1"
+  section above is stale — measured today in every spelling, including threaded
+  through a helper's `key=None` default. Left in place rather than deleted, since
+  it records why the two mechanisms differ.
+
+### Remaining, and honestly: four names and one question
+
+`slice`, `complex`, `dir`, `vars`, `memoryview` — plus
+[[decide-nilpy-eval-at-runtime]], which is now a Track U ticket rather than a
+row here.
+
+None of them has appeared in the html5lib ladder or any corpus scan, and
+`complex` is not a name — it is a numeric TYPE this dialect does not have, which
+makes it a feature rather than a missing builtin and probably its own ticket if
+anyone wants it. **This ticket should be closed and the residue re-filed**
+rather than kept open as a five-row list nobody is reaching for; it has served
+its purpose, which was to turn one sweep into eleven landed builtins.
+
+### Found while here, filed separately
+
+[[bug-nilpy-max-and-min-do-not-iterate-a-dict]] — `max(d)` raises where CPython
+answers the largest KEY, while `for k in d` / `sorted(d)` / `list(d)` all agree
+with CPython. An inconsistency inside NilPy rather than a deliberate divergence.
