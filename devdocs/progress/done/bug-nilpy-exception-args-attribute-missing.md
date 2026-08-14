@@ -208,3 +208,18 @@ expectations, plus `test_nilpy_rtl_exception_surface` and
 
 Neither is a regression and neither is what this ticket was about.
 - 2026-08-14 — resolved, commit 52c37f07a.
+
+## 2026-08-14, measured after the ctor widening — one of the two residuals is GONE
+
+Re-ran both residuals at HEAD instead of carrying the old text forward:
+
+- `str(KeyError("inner"))` is **`'inner'`**, matching CPython. It was `inner`
+  when the residual was written; widening the base ctor to a Variant fixed it as
+  a side effect, because the message KeyError stores is now the repr on every
+  construction path and `str(e)` reads that field. **Do not go hunting for it.**
+- The multi-argument raise is still real and is now its own ticket:
+  [[bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text]].
+  `MyErr('a', 404).args` is a 1-tuple of the rendered text, so `len(e.args)` is
+  1 and `e.args[1]` is wrong. `str(e)` agrees with CPython.
+
+That is the whole remaining gap in this family.

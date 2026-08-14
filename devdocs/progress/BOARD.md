@@ -33,7 +33,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (215)
+## backlog (216)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -65,6 +65,7 @@ _none_
 | bug-nilpy-math-surface-remaining-gaps-and-degrees-association | N | 35 | bug | Seven math names still resolve to 'undefined variable' — asin, acos, atan, fsum, modf, perm, dist, prod — and math.degrees(3.14) answers 179.90874767107852 where CPython answers 179.9087476710785, because it computes x*180/pi instead of CPython's x*(180/pi). The `random` module is absent entirely | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
 | bug-nilpy-max-and-min-do-not-iterate-a-dict | N | 30 | bug | `max(d)` / `min(d)` over a DICT raise `TypeError: max() argument is not iterable`; CPython answers the largest/smallest KEY. Every other iterable works, and `sorted(d)` over the same dict already does the right thing. | — |
+| bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text | N | 35 | bug | `MyErr('no such user', 404).args` is `(\"('no such user', 404)\",)` — one string — where CPython gives `('no such user', 404)`, two elements. The multi-argument fold renders the arguments at the construction site, so args gets the TEXT. str(e) agrees with CPython; only args and len(args) differ. | — |
 | bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-non-ascii-string-surface-measured | N | 35 | bug | The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge | — |
@@ -571,6 +572,7 @@ _none_
 - [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
+- [p 35] [N] bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [N] bug-pyeval-three-param-host-method-unsupported
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
