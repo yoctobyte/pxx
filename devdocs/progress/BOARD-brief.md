@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:9 blocked:5 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1778 rejected:37`
+`urgent:1 working:2 unfinished:9 blocked:5 backlog:217 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1780 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-n-math-trunc-and-log-need-frontend-intercepts` [N] — owner: agent-AN
 - `bug-n-typevar-call-is-an-undefined-variable` [N] — owner: agent-AN
 
 ## urgent (1) — jump the queue
@@ -35,12 +36,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 200, ranked
+## Ready — top 30 of 202, ranked
 
 - `[p 75] [A]` bug-a-test-asm-avx-gates-on-avx-but-uses-avx2-vbroadcastsd
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [A]` bug-a-a-single-in-array-of-const-is-boxed-4-bytes-and-read-as-8
 - `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -66,6 +68,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
 - `[p 50] [N]` bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry
 - `[p 50] [A]` bug-no-qualified-syntax-for-a-cross-language-import
-- `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 
-_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

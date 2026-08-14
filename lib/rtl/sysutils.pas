@@ -295,8 +295,21 @@ type
   Currency = Double;
 
 { Float -> string. FloatToStr gives a compact representation; FloatToStrF
-  gives fixed-point with precision digits after the decimal point. }
-function FloatToStr(value: Double): AnsiString;
+  gives fixed-point with precision digits after the decimal point.
+
+  TWO overloads because the digit count is a property of the ARGUMENT'S WIDTH,
+  exactly as in FPC: a Double gets 15 significant digits, a Single 10. With
+  only the Double spelling a Single widened into it and printed its full Double
+  expansion — 15 digits of a value that never had them:
+
+    FloatToStr(Single(0.1))  was 0.100000001490116   FPC 0.1000000015
+    FloatToStr(Single(1/3))  was 0.333333343267441   FPC 0.3333333433
+
+  The digit count also decides when the exponent form kicks in, so the same one
+  parameter fixes `Single(1e10)` printing as 10000000000 where FPC gives 1E10.
+  ([[bug-b-floattostr-of-a-single-prints-15-digits-where-fpc-prints-10]]) }
+function FloatToStr(value: Double): AnsiString; overload;
+function FloatToStr(value: Single): AnsiString; overload;
 { FloatToStr with an explicit significant-digit count (1..15). Format's `%.Ng`
   is the caller that needs it; FloatToStr is this with FPC's fifteen. }
 function FloatToStrSig(value: Double; sigDigits: Integer): AnsiString;
@@ -1405,6 +1418,13 @@ end;
 function FloatToStr(value: Double): AnsiString;
 begin
   Result := FloatToStrSig(value, 15);
+end;
+
+{ 10, not 15: a Single carries ~7 decimal digits, and FPC prints 10 of them.
+  Measured against FPC 3.2.2 rather than derived — see the interface note. }
+function FloatToStr(value: Single): AnsiString;
+begin
+  Result := FloatToStrSig(value, 10);
 end;
 
 function CurrToStr(C: Currency): AnsiString;
@@ -3205,6 +3225,26 @@ begin
                else Result := Result + IntToStr(ms);
         end;
         i := i + runLen;
+      end
+      else if c = '/' then
+      begin
+        { '/' is not a literal slash: Delphi and FPC define it as "the date
+          separator character", so it renders whatever DateSeparator holds.
+          Measured against FPC 3.2.2 — with DateSeparator '.',
+          FormatDateTime('dd/mm/yy') gives 14.08.26, where this returned
+          14/08/26 whatever the setting was. A caller that sets the separator
+          for a locale got its format string ignored.
+          ([[bug-b-formatdatetime-emits-slash-and-colon-literally]]) }
+        Result := Result + DateSeparator;
+        Inc(i);
+      end
+      else if c = ':' then
+      begin
+        { likewise TimeSeparator. This one LOOKED correct only because the
+          default happens to be ':' — with TimeSeparator '_', FPC gives
+          13_05_09 and this still gave 13:05:09. }
+        Result := Result + TimeSeparator;
+        Inc(i);
       end
       else
       begin
