@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-nilpy-dotted-imports-resolve-to-source-files | N | 65 | feature | A dotted import (`from neuzelaar.core.bus import Bus`) resolves ONLY to a hand-written `mimic_<mangled>` shim unit; it never looks for the source file `neuzelaar/core/bus.py` on disk. FLAT sibling imports already work for both .py and .npy. So NilPy can compile a single file plus shims, but cannot compile a multi-module Python PACKAGE — 89 of 150 failures in the neuzelaar census, the single largest blocker by 3x. | — |
+_none_
 
 ## unfinished (8)
 
@@ -38,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (220)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,7 +54,6 @@ _none_
 | bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent | N | 55 | bug | `exec(s, d, d)` compiles, runs, and does NOTHING — the target dict is left empty where CPython has the bound name. A program using it runs and is silently wrong. `eval(s)` is absent entirely (loud, so much less dangerous). Both should map onto the already-shipped feature-lib-pyexec, which does the real work today. | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry | N | 50 | bug | A class defining `__eq__` without `__hash__` is unhashable in CPython — `d[V(1)] = x` raises TypeError. NilPy stores it and a content-equal lookup then misses, so the entry goes in and never comes out, silently. Refuse the store with CPython's message. Must NOT touch classes with no `__eq__`, which are identity-hashable in both and are the imported-object-pointer use case. | — |
-| bug-n-pyexception-leaks-through-name-and-repr | N | 55 | bug | The lexer rename of `Exception` -> `PyException` leaks into observable Python: `type(e).__name__` gives 'PyException' and `repr(e)` gives \"PyException('plain')\" where CPython gives 'Exception'. Reproduces in a plain .npy that imports nothing — NOT the synthetic sysutils-collision case. Also `Exception.__name__` is not supported at all. | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
 | bug-nilpy-a-one-name-tuple-loop-target-is-refused | N | 25 | bug | `for (x,) in pairs:` — a one-name PARENTHESISED loop target with a trailing comma — is refused. Python unpacks the 1-tuple; a single-name target here would bind the whole element, so this needs an unpack, not just comma tolerance. | — |
@@ -419,9 +416,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1769)
+## done (1771)
 
-1769 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1771 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -483,7 +480,6 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [C] bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
 - [p 55] [N] bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent
-- [p 55] [N] bug-n-pyexception-leaks-through-name-and-repr
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [U] decide-reprice-nilpy-ast-typing-module-scope
 - [p 55] [A] feature-a-declaration-phase

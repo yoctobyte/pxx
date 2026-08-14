@@ -197,6 +197,15 @@ schedules work. Measured on neuzelaar, 168 git-tracked files, 26,408 lines,
 | third-party imports (`pytest`, `yaml`, …) | 19 | mostly test-only; not on the app's path |
 | language / frontend gaps | 14 | actual frontend work |
 
+**That table is a snapshot from 2026-08-14 and the top row is already closed** —
+[[feature-nilpy-dotted-imports-resolve-to-source-files]] shipped the same day and
+the intra-project column went to **zero**. Re-running the recipe put the same 150
+failures at 101 stdlib/third-party imports and 49 language gaps, with the
+compiling count unchanged at 18: each file has more than one blocker, so what
+moved is which wall it hits, and the two remaining columns grew by exactly the
+amount this section predicted they would. Which is the point of the section —
+**do not read numbers out of it, run the recipe.**
+
 The old plan called `@dataclass` "the one construct that gates most of the
 corpus". Measured: **5 files**. The gate is intra-project imports at 89 — a
 dotted import resolves only to a hand-written `mimic_*` shim and never looks for

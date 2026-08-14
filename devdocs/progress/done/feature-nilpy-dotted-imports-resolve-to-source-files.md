@@ -3,7 +3,7 @@ track: N
 prio: 65
 type: feature
 summary: "A dotted import (`from neuzelaar.core.bus import Bus`) resolves ONLY to a hand-written `mimic_<mangled>` shim unit; it never looks for the source file `neuzelaar/core/bus.py` on disk. FLAT sibling imports already work for both .py and .npy. So NilPy can compile a single file plus shims, but cannot compile a multi-module Python PACKAGE — 89 of 150 failures in the neuzelaar census, the single largest blocker by 3x."
-status: working
+status: done
 owner: agent-AN
 ---
 
@@ -124,3 +124,74 @@ agreeing with our bug.
 
 Then re-run the census (`devdocs/dev/python-libraries.md` §7): the intra-project
 column should collapse.
+
+## Resolution (2026-08-14)
+
+Shipped. Two halves, because resolving the file was only half of it.
+
+**Finding the source.** The `a.b.c -> a_b_c` mangling is lossy and cannot be
+turned back into a path, so `PyConsumeDottedModule` now hands the DOTTED
+spelling to the resolver in `PyDottedImport`. `ParseUsesUnitBody` claims and
+clears it on entry and keeps it only when re-mangling reproduces the unit name
+it was called with — so a path consumed and then ignored (`import typing`)
+cannot steer a later import. It then probes `mypkg/core/bus.py`, `.npy`, and the
+package directory's `__init__`, over the main script's directory (Python's
+`sys.path[0]`), the working directory, and the `-Fu` roots.
+
+Search order, as the design notes asked for it stated rather than fallen into:
+**source before shim.** The program's own tree wins over a bundled stand-in of
+the same dotted name; the shim mapping is untouched below it and
+`test_nilpy_dotted_package_import.npy` still passes.
+
+Roots, not the importing file's directory: an ABSOLUTE dotted path resolves from
+the package root no matter which submodule wrote it, which is what makes
+`mypkg/document/dom.py`'s own `from mypkg.core.bus import ...` work.
+
+A SINGLE-segment name probes only the `<name>/__init__` package form at this
+position. Re-trying `<name>.py` here would move a flat module ahead of the
+`.pas` chain and let a stray `re.py` shadow `lib/rtl/re.pas`
+([[bug-nilpy-stdlib-name-binds-pascal-unit]]).
+
+`__init__.py` policy: it is compiled as the package's unit, so a re-exporting
+`__init__` works and the fixture asserts the re-exported name is the SAME class.
+
+**Using the result.** Not predicted by the ticket and found by running the
+fixture: `ConsumeUnitQualifier` looks the dotted qualifier up VERBATIM, which is
+right for a Pascal namespace unit (`Posix.SysSocket`) and never matches NilPy's
+underscore-joined one — so `import mypkg.core.origin` bound a name no expression
+could then use (`undefined variable (core)`). Under `isNilPy` it now also tries
+the mangled spelling.
+
+Relative imports remain out of scope, as scoped.
+
+## Census re-run — the mechanism is gone, the corpus number did not move
+
+Same recipe (`devdocs/dev/python-libraries.md` §7), 168 git-tracked files,
+compiled FROM the package root:
+
+| failure kind | before | after |
+| --- | --- | --- |
+| **intra-project imports** | **89** | **0** |
+| stdlib / third-party imports | 47 | 101 |
+| language / frontend gaps | 14 | 49 |
+| compiling | 18 (11%) | 18 (11%) |
+
+The blocker this ticket names is **completely gone** — not one `neuzelaar.*`
+import fails. The compiling count did not move because each file has more than
+one blocker: what changed is which wall it hits. Both other columns grew by
+exactly what the ticket predicted they would ("the language-gap column is a
+LOWER BOUND and will grow once imports resolve"), because a file that failed at
+its first import was never compiled and its remaining constructs were never
+exercised.
+
+What the corpus now asks for, regenerated rather than remembered — the top
+stdlib imports are `enum` (22), `functools` (12), `hashlib` (10), `threading`
+(9), `datetime` (8), and the top language gap is one message, "parameter X has
+an unsupported type annotation", at 29 files across three parameter names.
+
+**Gate:** `test/test_nilpy_package_imports.npy` against
+`test/nilpy_units/pkgcorpus/`, output matching the CPython oracle, wired into
+`test-nilpy` with the fix.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

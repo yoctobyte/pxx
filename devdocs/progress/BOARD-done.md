@@ -475,6 +475,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale | N | 55 | bug | test_nilpy_operator_dunder_missing_fail still expects a COMPILE error; the missing-dunder case now raises a runtime TypeError like CPython, so the assertion is stale | — |
 | bug-n-nilpy-subscript-of-split-on-a-variable-receiver | N | 60 | bug | s.split(sep)[i] fails IR_UNSUPPORTED when s is a variable, while \"lit\".split(sep)[i] compiles — the frontend loses the result type in subscript position | — |
 | bug-n-pyeval-per-exec-leaks | N | 45 | bug | pyeval leaks per exec() call — forensics from the object-reclamation night | — |
+| bug-n-pyexception-leaks-through-name-and-repr | N | 55 | bug | The lexer rename of `Exception` -> `PyException` leaks into observable Python: `type(e).__name__` gives 'PyException' and `repr(e)` gives \"PyException('plain')\" where CPython gives 'Exception'. Reproduces in a plain .npy that imports nothing — NOT the synthetic sysutils-collision case. Also `Exception.__name__` is not supported at all. | — |
 | bug-n-static-operand-clash-diagnostic-and-guard-test-escaping | N | 70 | bug | 7f111d229 landed with both its new tests red: the static clash diagnostic fires 1 of 6 times, and the mixed-type-guard expectation is double-escaped (%% vs %) | — |
 | bug-named-dynarray-field-setlength | A | 50 | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | 50 | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
@@ -1396,6 +1397,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-default-args-on-nested-defs | N | 55 | feature | NilPy: default arguments as explicit by-value capture | — |
 | feature-nilpy-dict | N | 60 | feature | NilPy: dict v1 — TPyDict | — |
+| feature-nilpy-dotted-imports-resolve-to-source-files | N | 65 | feature | A dotted import (`from neuzelaar.core.bus import Bus`) resolves ONLY to a hand-written `mimic_<mangled>` shim unit; it never looks for the source file `neuzelaar/core/bus.py` on disk. FLAT sibling imports already work for both .py and .npy. So NilPy can compile a single file plus shims, but cannot compile a multi-module Python PACKAGE — 89 of 150 failures in the neuzelaar census, the single largest blocker by 3x. | — |
 | feature-nilpy-dotted-package-imports | N | 55 | feature | nilpy: dotted package imports — `from reportlab.pdfgen import canvas`, so a shim can be NAMED for the module it implements | — |
 | feature-nilpy-exception-message-text | N | 30 | feature | NilPy: exception message text — super().__init__(msg) discarded, str(e) empty | — |
 | feature-nilpy-exception-message | N | 55 | feature | NilPy: `Exception(msg)` — the root class takes no arguments | — |
