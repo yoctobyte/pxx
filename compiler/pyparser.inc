@@ -90,6 +90,27 @@ var
     source of type information and a phantom would swallow it. }
   PyPhantomNames: array[0..PY_MAX_LOCALS-1] of AnsiString;
   PyPhantomCount: Integer;
+  { Names with an UNREADABLE block-nested binding — the same `raw = f.read()` /
+    `z = c.two(1)` shapes the phantom covers, recorded by NAME rather than as a
+    symbol.
+
+    The phantom's cost is "no widening for that name", and that is harmless
+    while the unreadable binding is the ONLY one. It is not harmless when the
+    same name ALSO has a binding the arm can read: the table then commits to
+    that one representation while a value of another shape is stored through
+    the same slot. Measured: `z = c.two(1)` (unreadable, int) then `z = 3.5` in
+    one block printed 4615063718147915776 — 3.5's IEEE bits read as an integer
+    — and `y = "a-b".split("-")` then `y = 5` made len(y) raise on an int.
+
+    So the intersection is what widens: a name in BOTH this list and the
+    constraint table cannot be pinned to the shape we happen to have read, and
+    goes tyVariant. A name only in this list keeps today's behaviour, which is
+    what the PyPhantomNames note above requires — blanket tyVariant was tried
+    and broke `tok is None` for a str-typed Optional, and that failure is
+    exactly the single-binding case this leaves alone.
+    feature-n-nilpy-ast-typing-module-scope }
+  PyUnkBindNames: array[0..PY_MAX_LOCALS-1] of AnsiString;
+  PyUnkBindCount: Integer;
   { names bound at module TOP level (depth 0) anywhere in the file — the
     over-inclusive token prescan behind the PyTopTarget guard above. Over-
     inclusion only means FEWER phantoms, i.e. today's behaviour, which is the
@@ -21679,6 +21700,25 @@ begin
   Inc(PyPhantomCount);
 end;
 
+function PyHasUnkBinding(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  PyHasUnkBinding := False;
+  for i := 0 to PyUnkBindCount - 1 do
+    if PyUnkBindNames[i] = nm then begin PyHasUnkBinding := True; Exit; end;
+end;
+
+procedure PyNoteUnkBinding(const nm: AnsiString);
+{ Same silent-stop discipline as PyNotePhantom: running out costs the widening,
+  never a wrong answer, because this table is only ever read to make a name MORE
+  general than the shapes the arm managed to read. }
+begin
+  if PyHasUnkBinding(nm) then Exit;
+  if PyUnkBindCount >= PY_MAX_LOCALS then Exit;
+  PyUnkBindNames[PyUnkBindCount] := nm;
+  Inc(PyUnkBindCount);
+end;
+
 function PyTopTarget(const nm: AnsiString): Boolean;
 var i: Integer;
 begin
@@ -21841,6 +21881,8 @@ begin
   repeat
     changed := False;
     PyTypingChanged := False;
+    PyUnkBindCount := 0;   { per-ROUND, like the phantoms below: the arm that
+      fills it re-runs every round }
     PyPhantomCount := 0;   { phantoms are per-ROUND: their symbols die with the
       scratch scope below, and the block statement that creates each one is
       re-scanned before any statement that reads it }
@@ -21939,6 +21981,20 @@ begin
         else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkInteger) and
                 PyBlkRhsEndsAt(blkJ) then
           blkTk := tyInt64
+        { a FLOAT literal, which this list simply did not have — the sibling
+          scanner PyFieldTypeFromBlock reads one. Its absence meant `z = 3.5`
+          inside a block put the name in the table not at all, so a name whose
+          OTHER binding is unreadable had nothing to widen AGAINST and the slot
+          took whatever the real parse's first assignment made it: `z =
+          c.two(1)` then `z = 3.5` printed 4615063718147915776, 3.5's bits read
+          as an integer. feature-n-nilpy-ast-typing-module-scope }
+        else if (blkJ < MainProgramTokCount) and (Tokens[blkJ].Kind = tkFloat) and
+                PyBlkRhsEndsAt(blkJ) then
+          blkTk := tyDouble
+        else if (blkJ < MainProgramTokCount) and
+                (Tokens[blkJ].Kind in [tkTrue, tkFalse]) and
+                PyBlkRhsEndsAt(blkJ) then
+          blkTk := tyBoolean
         else if (blkJ < MainProgramTokCount) and
                 (Tokens[blkJ].Kind in [tkLBrack, tkBegin]) and
                 PyBlkRhsEndsAfterGroup(blkJ) then
@@ -22075,16 +22131,27 @@ begin
           (tyVariant / per-shape widening / tyUnknown) each failed, and why
           this one is the "register without asserting a type" the ticket asked
           for. bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later }
-        else if (PyProgSym(blkName) < 0) and (PyFindConstraint(blkName) < 0) and
-                (not PyTopTarget(blkName)) then
+        else
         begin
-          { tyVariant is what the SCRATCH symbol is made of, not what the name
-            is claimed to be: the trial parse has to be able to build an
-            expression out of it, and a variant is the only kind that accepts
-            every operator without a conversion error. It never leaves this
-            scope — the harvest skips it and SymRollbackTo deletes it. }
-          si := AllocVar(blkName, tyVariant);
-          PyNotePhantom(blkName);
+          { Recorded for EVERY name with an unreadable binding, ahead of the
+            phantom's own guards. A module-top-level target is excluded from the
+            phantom (the depth-0 arm types it properly) but can still carry an
+            unreadable binding inside a block, and that is exactly the case
+            where the table would otherwise pin the one shape it could read
+            while the other is stored through the same slot. See
+            PyUnkBindNames. }
+          PyNoteUnkBinding(blkName);
+          if (PyProgSym(blkName) < 0) and (PyFindConstraint(blkName) < 0) and
+             (not PyTopTarget(blkName)) then
+          begin
+            { tyVariant is what the SCRATCH symbol is made of, not what the name
+              is claimed to be: the trial parse has to be able to build an
+              expression out of it, and a variant is the only kind that accepts
+              every operator without a conversion error. It never leaves this
+              scope — the harvest skips it and SymRollbackTo deletes it. }
+            si := AllocVar(blkName, tyVariant);
+            PyNotePhantom(blkName);
+          end;
         end;
       end
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
@@ -22532,6 +22599,25 @@ begin
     PyTypingPass := False;
     PyExprMode := savedExprMode;
     if PyTypingChanged then changed := True;
+    { A name with BOTH a readable and an unreadable binding cannot be pinned to
+      the shape that happened to be readable — the other binding stores a value
+      of a different shape through the same slot, and nothing converts it.
+      Measured: `z = c.two(1)` then `z = 3.5` in one block printed
+      4615063718147915776, which is 3.5's IEEE bits read as an integer.
+      Widened to tyVariant, which holds either.
+
+      Only the INTERSECTION. A name whose unreadable binding is its only one is
+      left exactly as it is today: blanket tyVariant was tried before and broke
+      `tok is None` for a str-typed Optional (see PyPhantomNames), and that
+      failure is the single-binding case this does not touch. }
+    for i := 0 to PyLocalCount - 1 do
+      if (PyLocals[i].TypeKind <> tyVariant) and
+         PyHasUnkBinding(PyLocals[i].Name) then
+      begin
+        PyLocals[i].TypeKind := tyVariant;
+        PyLocals[i].RecCi := -1;
+        changed := True;
+      end;
     for i := savedSC to SymCount - 1 do
     begin
       nm := Syms[i].Name;

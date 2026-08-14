@@ -1417,6 +1417,12 @@ test-nilpy: $(COMPILER)
 	# comprehension form reports "undefined variable (p)" while the statement works.
 	./$(COMPILER) test/test_nilpy_nested_loop_target.npy /tmp/test_nilpy_nestedtgt26
 	/tmp/test_nilpy_nestedtgt26 | diff -u test/test_nilpy_nested_loop_target.expected -
+	# A name with BOTH a readable and an UNREADABLE block-nested binding must
+	# widen to variant. Pinned to the wrong shape it is a SILENT WRONG VALUE:
+	# `z = c.two(1)` then `z = 3.5` printed 3.5's IEEE bits as an integer.
+	# The first half of the file is the single-binding case that must NOT widen.
+	./$(COMPILER) test/test_nilpy_block_unreadable_binding_widens.npy /tmp/test_nilpy_blkunk26
+	/tmp/test_nilpy_blkunk26 | diff -u test/test_nilpy_block_unreadable_binding_widens.expected -
 	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma
 	# inside a dict/set literal argument counted as an argument SEPARATOR: a
 	# 2-entry literal made update() look 2-arity, no overload matched, and

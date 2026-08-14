@@ -1,0 +1,108 @@
+# A name with BOTH a readable and an UNREADABLE block-nested binding must widen.
+#
+# The module pre-pass reads a short list of safe RHS token shapes; anything else
+# (a method call, a call at all) is a "phantom" that resolves but asserts no
+# type. That is harmless while the unreadable binding is the name's ONLY one —
+# and it is a SILENT WRONG VALUE when the name also has a readable binding,
+# because the table then pins that one shape while a value of another is stored
+# through the same slot. Measured before the fix:
+#
+#   z = c.two(1) ; z = 3.5   ->  4615063718147915776   (3.5's IEEE bits as int)
+#   y = "a-b".split("-") ; y = 5   ->  TypeError from len() on an int
+#
+# The first half of this file is the case that must NOT widen: blanket
+# tyVariant was tried once and broke `tok is None` for a str-typed Optional.
+# Only the INTERSECTION widens.
+#
+# feature-n-nilpy-ast-typing-module-scope
+
+# the single-binding case the phantom protects: an unreadable RHS and nothing
+# else must NOT widen — this is what blanket tyVariant broke.
+def find(s):
+    if s == "x":
+        return None
+    return s
+
+if True:
+    tok = find("y")
+    print(tok is None, tok)
+
+if True:
+    tok2 = find("x")
+    print(tok2 is None)
+
+# a readable binding alone still pins its type
+if True:
+    n = 5
+    print(n + 1)
+if True:
+    fs = 1.25
+    print(fs * 2)
+if True:
+    bs = True
+    print(bs, not bs)
+if True:
+    ss = "abc"
+    print(ss.upper(), len(ss))
+
+# mixed readable shapes widen as before
+if True:
+    m = 1
+    m = "two"
+    print(m)
+
+# an unreadable + readable pair, each way round
+class K:
+    def val(self): return 7
+
+k = K()
+if True:
+    a1 = k.val()
+    a1 = 2.5
+    print(a1)
+if True:
+    a2 = 2.5
+    a2 = k.val()
+    print(a2)
+
+# unreadable + readable across two separate blocks
+if True:
+    b1 = k.val()
+if True:
+    b1 = 9.5
+print(b1)
+
+# a top-level target that ALSO has an unreadable block binding
+t1 = 1
+if True:
+    t1 = k.val()
+print(t1)
+
+# the two shapes measured in the ticket, verbatim
+class C2:
+    def two(self, v):
+        return v * 2
+
+c2 = C2()
+if True:
+    z = c2.two(1)
+    print(z)
+    z = 3.5
+    print(z)
+
+if True:
+    y = "a-b".split("-")
+    print(len(y), y)
+    y = 5
+    print(y)
+
+# a float literal alone in a block — this shape was missing from the readable
+# list entirely, so the name reached the table not at all
+if True:
+    fl = 3.5
+    print(fl)
+
+# ...and a bool literal, added beside it
+if True:
+    bl = False
+    print(bl)
