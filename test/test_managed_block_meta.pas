@@ -78,6 +78,14 @@ begin
   Check(not IsAscii(both), 'inline-allocated string carries no flag (unknown)');
   Check((PXXHdrMeta(Pointer(both)) shr 32) = 0, 'reserved bits zero (inline path)');
 
+  { The mirror of the growth assertion above, and the one a careless fix breaks:
+    appending to a string whose ASCII-ness was never established must leave it
+    UNKNOWN, not invent ascii from the appended bytes alone. `both` here came
+    from the inline SetLength path, so it carries no flag; 'a'..'e' plus 'x' are
+    all ascii, yet nothing has scanned the payload. }
+  both := both + 'x';
+  Check(not IsAscii(both), 'append to an unknown-kind string does not invent ascii');
+
   { nil handle answers LEGACY rather than faulting }
   a := '';
   Check(PXXHdrMeta(Pointer(a)) = PXX_KIND_LEGACY, 'nil handle reads LEGACY');
