@@ -123,6 +123,24 @@ TIERS = {
     # ordinary ticket, while a tier-1 red is what the tracks are building on.
     "full": [
         "test-smoke",
+        # Track B's ENTIRE gate is still invisible to tstate: 166 jobs of RTL
+        # smoke, PAL-cross under qemu and ESP object emission that run only when
+        # a B agent types `make lib-test` (task-t-enroll-libtest-demos-watcher).
+        #
+        # Everything needed to enrol it is DONE and tested -- COMPILE_RE knows
+        # the pinned compiler so it splits into 166 attributed jobs instead of
+        # one opaque blob, CORPUS_ROOTS skips the two that need an unfetched
+        # external/synapse, and report_pin_identity() prints which pin they
+        # built with (a lib-test red means EITHER a Track B regression OR a
+        # stale pin, and those route to different tracks).
+        #
+        # It is held out of the tier by exactly one thing:
+        # bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14. That job's
+        # gcc oracle stopped compiling at gcc 14, and its recipe reports the
+        # broken oracle as "differs from gcc" -- so enrolling today would make
+        # this tier permanently RED for something that is not a pxx defect,
+        # which is the failure mode the flaky-test work just finished removing.
+        # Add "lib-test" here the day that lands; 163/166 already pass.
         "test-core", "test-threads", "test-asm", "test-debug-g",
         "test-nilpy", "test-uforth",
         "lib-fpc-clean",
@@ -390,7 +408,37 @@ LIVE_PATH = os.path.join(REPO, ".testmgr", "live.json")
 LOCK_PATH = os.path.join(REPO, ".testmgr", "run.lock")
 # How long the scheduler may make NO progress (nothing running, nothing
 # admitted) before it forces a job through the memory gates. See admit_forced().
+# Targets that build with $(PXX_STABLE) (the PIN) rather than HEAD.
+PIN_BUILT_TARGETS = ("lib-test", "demos")
 STARVE_GRACE = 90.0
+
+
+def report_pin_identity():
+    """Print which PINNED binary the $(PXX_STABLE) jobs will use.
+
+    lib-test builds with the pin, not HEAD, so a red there has two causes that
+    route to DIFFERENT tracks: a lib/examples change broke it (Track B), or the
+    pin is stale relative to what lib/ now expects (Track A, re-pin needed).
+    The esptimer red this enrolment was filed for was the second kind, and it
+    cost real time precisely because the report did not say which binary it had
+    tested with. Printing the identity turns that from a re-derivation into a
+    glance.
+    """
+    ver = pin_file("VERSION")
+    sha = pin_file("last.sha256")
+    if not (ver or sha):
+        return
+    sha = sha.split()[0][:16] if sha else "?"
+    print("testmgr: pin=%s sha256=%s (lib-test and demos build with THIS, not HEAD)"
+          % (ver or "?", sha), flush=True)
+
+
+def pin_file(name):
+    try:
+        with open(os.path.join(REPO, "stable_linux_amd64/default", name)) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
 
 
 def report_mem_floor():
@@ -882,7 +930,23 @@ def sample_sessions(sids):
                         int(rest[13]) + int(rest[14])) / hz    # +children
     return agg
 
-COMPILE_RE = re.compile(r"^\.?/?" + re.escape(COMPILER) + r"\b")
+# A recipe line that INVOKES a compiler — the boundary split_jobs cuts on.
+#
+# Two spellings, not one. Track A/C/N/P targets run the HEAD compiler
+# (`./compiler/pascal26`); Track B's `lib-test` and `demos` run the PINNED
+# stable (`$(PXX_STABLE)` -> stable_linux_amd64/default/pinned) because B must
+# never rebuild the compiler. Matching only the first meant lib-test's 824
+# expanded lines contained zero recognised compile boundaries and collapsed into
+# ONE job — so a red would have said "lib-test#00 failed" without naming which
+# of its 48 steps, which is not a usable regression signal.
+#
+# Verified inert for every existing tier before widening: no target currently in
+# TIERS invokes the stable compiler at line start, so no job identity moves.
+# (That check matters — renumbering jobs reads as mass migration in tstate, see
+# bug-t-optdiff-positional-sharding-migrates-job-identity.)
+COMPILE_RE = re.compile(
+    r"^\.?/?(?:" + re.escape(COMPILER)
+    + r"|stable_[A-Za-z0-9_]+/[A-Za-z0-9_.-]+/(?:pinned|latest))\b")
 # corpus trees under library_candidates/ are gitignored scratch; a box that
 # hasn't fetched them must SKIP the jobs that reference them, not fail them
 #
@@ -894,6 +958,23 @@ COMPILE_RE = re.compile(r"^\.?/?" + re.escape(COMPILER) + r"\b")
 # warning printed (`install_lib_candidates.sh stb)`) was itself invalid.
 # bug-t-corpus-regex-invents-phantom-tree.
 CORPUS_RE = re.compile(r"library_candidates/([A-Za-z0-9_.+-]+)")
+# Corpus trees are gitignored scratch under more than one root. `lib-test`
+# reaches external/synapse, which no Makefile guard protects — so before this
+# table existed, enrolling lib-test made the full tier permanently RED on any
+# box that had not fetched it, which is the opposite of a useful signal.
+# Each entry is (regex over a recipe line, directory root, how to fetch it).
+CORPUS_ROOTS = [
+    (CORPUS_RE, "library_candidates",
+     "tools/install_lib_candidates.sh %s"),
+    # Matched BARE, with no leading boundary of any kind: the path arrives
+    # glued to its flag as `-Fuexternal/synapse`, so the preceding character is
+    # a word char and both `\bexternal` and `[^\w]external` fail — each leaving
+    # every affected job FAILED instead of skipped. A false positive here (a
+    # directory literally named `...external/`) costs a SKIP, which this file
+    # announces loudly, so the permissive direction is the safe one.
+    (re.compile(r"external/([A-Za-z0-9_.+-]+)"), "external",
+     "these are NOT fetchable by script — clone each into external/: %s"),
+]
 # A recipe line that tests for its own corpus path before using it handles the
 # absence itself (prints SKIP, exits 0), so it must NOT drag the whole job into
 # a skip: jobs bundle several sources, and the stb probe shared one with the
@@ -1461,19 +1542,22 @@ def corpus_warning(absent, njobs):
     trees and prints the exact fetch command, because the failure mode this
     guards against is a box reporting GREEN for tests it never ran.
     """
-    names = sorted(absent)
-    width = max(len(n) for n in names)
+    names = sorted(absent)                       # [(root, tree), ...]
+    width = max(len("%s/%s" % k) for k in names)
     lines = ["",
              "  " + "!" * 68,
              "  !! CORPUS MISSING — %d job(s) will SKIP, not run." % njobs,
              "  !! A green verdict here does NOT cover them.",
              "  !!"]
-    for n in names:
-        lines.append("  !!   %-*s  %3d job(s)" % (width, n, absent[n]))
+    for k in names:
+        lines.append("  !!   %-*s  %3d job(s)" % (width, "%s/%s" % k, absent[k]))
     lines += ["  !!",
-              "  !! Fetch them (gitignored, nothing enters the repo):",
-              "  !!   tools/install_lib_candidates.sh %s" % " ".join(names),
-              "  " + "!" * 68, ""]
+              "  !! Fetch them (gitignored, nothing enters the repo):"]
+    hints = {root: hint for _, root, hint in CORPUS_ROOTS}
+    for root in sorted({r for r, _ in names}):
+        trees = " ".join(m for r, m in names if r == root)
+        lines.append("  !!   " + hints[root] % trees)
+    lines += ["  " + "!" * 68, ""]
     return "\n".join(lines)
 
 
@@ -3439,14 +3523,15 @@ def main():
     for j in jobs:
         unguarded = "\n".join(ln for ln in j.lines
                               if not CORPUS_GUARD_RE.search(ln))
-        missing = sorted({m for m in CORPUS_RE.findall(unguarded)
-                          if not os.path.isdir(
-                              os.path.join(REPO, "library_candidates", m))})
+        missing = sorted({(root, m)
+                          for rx, root, _ in CORPUS_ROOTS
+                          for m in rx.findall(unguarded)
+                          if not os.path.isdir(os.path.join(REPO, root, m))})
         if missing:
             j.status = "skip"
             nabsent += 1
-            for m in missing:
-                absent[m] = absent.get(m, 0) + 1
+            for key in missing:
+                absent[key] = absent.get(key, 0) + 1
     # A skipped corpus job is INVISIBLE in a green verdict — the run looks just
     # as green as one that actually ran it.  That is how the i386/arm32/riscv32
     # c-conformance reds hid on a box without c-testsuite.  So say it loudly,
@@ -3503,6 +3588,8 @@ def main():
              " skip=%d(corpus-absent)" % nskip if nskip else "",
              mgr.hard_cap, scale, logdir), flush=True)
     report_mem_floor()
+    if any(j.target in PIN_BUILT_TARGETS for j in run_jobs):
+        report_pin_identity()
     t0 = time.monotonic()
     rc = mgr.run()
     wall = time.monotonic() - t0

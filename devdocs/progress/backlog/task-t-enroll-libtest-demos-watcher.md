@@ -45,3 +45,71 @@ so a triaging agent can tell (a) from (b) without re-deriving it.
 A commit that breaks a library smoke or a demo compile shows up as a tstate
 NEW-RED with the pin identity attached; the esptimer-style silent red cannot
 recur.
+
+## 2026-08-14 — everything needed is built and tested; enrolment HELD on one Track B bug
+
+Track B's gate now *can* be enrolled — it is one line in `TIERS["full"]`. It is
+deliberately not that line yet, for a reason below.
+
+### What was blocking it, and was not obvious
+
+`split_jobs` collapsed all 824 expanded lines of `lib-test` into **one job**. Its
+boundary is `COMPILE_RE`, which only knew `./compiler/pascal26` — but Track B
+builds with `$(PXX_STABLE)`, the *pinned* binary, because B must never rebuild
+the compiler. So a red would have said `lib-test#00 failed` without naming which
+of 166 steps, which is not a regression signal.
+
+Widened `COMPILE_RE` to know both spellings. **Verified inert before landing**:
+every target currently in `TIERS` was split with the old and new regex and the
+job list compared by name+source — **29 targets, all IDENTICAL, zero job
+identity moved.** That check was not optional; renumbering jobs reads as mass
+migration in tstate ([[bug-t-optdiff-positional-sharding-migrates-job-identity]]).
+
+`lib-test` now yields **166 jobs**, correctly classed (162 unit, 2 qemu, 2
+corpus), each attributed to its source.
+
+### Corpus roots are no longer library_candidates-only
+
+Two jobs need `external/synapse`, which nothing fetches and no Makefile guard
+protects — so they FAILED rather than skipped. `CORPUS_ROOTS` now generalises
+the existing self-skip to any corpus root, and the missing-corpus banner names
+the root and the right fetch instruction per root.
+
+Note the regex has **no leading word boundary**, deliberately: the path arrives
+glued to its flag as `-Fuexternal/synapse`, so both `\bexternal` and
+`[^\w]external` fail to match and every affected job stays FAILED. Two attempts
+went that way before measuring it.
+
+### Pin identity, per this ticket's own caveat
+
+`report_pin_identity()` prints next to the banner whenever a pin-built target is
+scheduled:
+
+```
+testmgr: pin=291 sha256=63390fe0bc9b9a4e (lib-test and demos build with THIS, not HEAD)
+```
+
+so a triaging agent can tell a Track B regression from a stale pin without
+re-deriving it — which is exactly the esptimer case that filed this ticket.
+
+### Measured: 163 pass, 2 skip, 1 fail
+
+The one failure is why this is held.
+[[bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14]]: `cstring_batch.c`
+calls `memrchr` without `_GNU_SOURCE`, so its **gcc oracle** stopped compiling
+at gcc 14 (implicit declarations became errors). The recipe discards gcc's
+stderr *and* its exit status, then diffs against a missing binary and announces
+`FAIL: cstring_batch differs from gcc` — naming pxx as the party that differs
+when no comparison happened at all.
+
+Enrolling today would therefore make the **full tier permanently RED on every
+box with a modern gcc**, for something that is not a pxx defect. That is the
+precise failure mode [[bug-t-three-network-tests-flake-and-cost-real-debugging-time]]
+was just closed to remove, so it would be a poor trade. **Add `"lib-test"` to
+`TIERS["full"]` the day that Track B fix lands.**
+
+### `demos` is not attempted
+
+Still blocked as this ticket originally described: it prints FAIL without
+exiting nonzero, so it needs a gating mode or output parsing — and that is a
+Makefile change, which is not Track T's ground.
