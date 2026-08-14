@@ -1,0 +1,80 @@
+---
+track: A
+prio: 75
+type: bug
+summary: "`9ffbba0bd perf(A): append in place for s := s + x` loses the managed block's ascii kind flag when the string grows through the new inline resize path, so an all-ASCII string built by accumulation reports IsAscii=false. Master is RED on test_managed_block_meta. The test anticipated exactly this — its own comment says the resize path 'must not lose or invent the flag'."
+---
+
+# In-place append drops the ascii kind flag when the string grows
+
+- **Type:** bug (regression, master is RED) — **Track A**.
+  Found by the Track T watcher at `cdff889a0bfe` (native tier); diagnosed by T.
+  **T owns the tool, never the bug.**
+- **Caused by:** `9ffbba0bd perf(A): append in place for \`s := s + x\` — Pascal
+  accumulation goes linear`, then carried into the pin by
+  `86da0606d chore(A): pin v299`.
+
+## Reproduce (compiler rebuilt at HEAD)
+
+```
+$ make compiler/pascal26 && ./compiler/pascal26 test/test_managed_block_meta.pas /tmp/x && /tmp/x
+FAIL grown ascii string stays ascii
+managed block meta FAILED 1
+```
+
+Expected `managed block meta ok`.
+
+## The assertion, and why it is the right one
+
+`test/test_managed_block_meta.pas:60`:
+
+```pascal
+{ growth through the inline resize path must not lose or invent the flag }
+grown := '';
+for i := 1 to 300 do grown := grown + 'x';
+Check(IsAscii(grown), 'grown ascii string stays ascii');
+```
+
+That comment predates the change and names the hazard exactly. `s := s + x` in
+a loop is precisely the construct `9ffbba0bd` optimises, and 300 iterations
+forces the buffer through at least one resize — so the new in-place path is
+reached, and the kind flag is not carried across it.
+
+Note the neighbouring assertions still pass (`concat with non-ascii is not
+ascii`, and its mirror), so plain concat still maintains the flag correctly.
+**It is specifically the in-place growth path that loses it.**
+
+## Where to look
+
+`9ffbba0bd` touches, in order of likelihood:
+
+| file | why |
+|---|---|
+| `compiler/builtin/builtinheap.pas` (+104) | the managed block header and the resize itself — the flag lives here |
+| `compiler/ir_codegen.inc` (+99) | emits the in-place append sequence |
+| `compiler/defs.inc`, `parser.inc`, `pyparser.inc` | the recognition of the `s := s + x` shape |
+
+The likely shape is that the resize allocates a fresh block and copies the
+payload without propagating the kind bits, so the grown string inherits a
+default (non-ascii) kind rather than the source's.
+
+## Not a candidate for revert-and-forget
+
+The optimisation is real work with a real payoff (linear accumulation instead of
+quadratic), and the defect is narrow — one flag across one path. Fixing the
+propagation is almost certainly smaller than losing the optimisation.
+
+**But it is in the pin** (`v299`), so every lane building with `$(PXX_STABLE)`
+has it now, not just HEAD.
+
+## Note for whoever verifies
+
+Rebuild first. `make compiler/pascal26` — the binary on disk may predate the
+range, and this repo has recorded wrong conclusions from exactly that.
+
+## Gate
+
+`test/test_managed_block_meta.pas` prints `managed block meta ok`, plus
+`tools/gate.sh quick`. The full assertion set matters here rather than just the
+one line: the test checks that the flag is neither *lost* nor *invented*, and a
+fix that force-sets ascii would pass this line while breaking the two above it.

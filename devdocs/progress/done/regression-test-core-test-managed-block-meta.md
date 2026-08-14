@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 3 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -24,3 +25,15 @@ ok: /tmp/testmgr-scratch-392706/test_managed_block_meta26  [code=91020B  data=33
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGED 2026-08-14 by Track T — consolidated into a Track A bug
+
+Reproduced at HEAD with a rebuilt compiler: `FAIL grown ascii string stays ascii`.
+
+Cause is `9ffbba0bd perf(A): append in place for \`s := s + x\``, which is
+literally the construct the failing assertion exercises — and the test's own
+comment names the hazard ("growth through the inline resize path must not lose
+or invent the flag"). Filed as
+[[bug-a-in-place-append-loses-the-ascii-kind-flag-on-growth]] (Track A, p75,
+urgent — it is in pin v299, so every `$(PXX_STABLE)` lane has it).
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
