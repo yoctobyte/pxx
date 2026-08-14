@@ -566,4 +566,4 @@ sharper constraint, and it is what decided the split actually taken: coordinates
 (pure optimisation, composes with nothing).
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit c13e54b16.
