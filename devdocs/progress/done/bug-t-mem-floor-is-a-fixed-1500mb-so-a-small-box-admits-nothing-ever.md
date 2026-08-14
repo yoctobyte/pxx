@@ -123,4 +123,4 @@ the threshold silently.
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit aadb064ea.
