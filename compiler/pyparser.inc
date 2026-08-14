@@ -296,6 +296,14 @@ var
   { True while a flattened base's body is being REPLAYED against the derived
     class, so the member sites can tell a losing definition from a real one. }
   PyMixReplay: Boolean;
+  { Construct with NO parenthesised argument list at the cursor — `raise
+    ValueError`, the bare-CLASS raise, which CPython treats as `raise
+    ValueError()`. Set immediately before PyClassCreate and cleared by it, so
+    the whole ctor path (parameter defaults, dataclass fields, the Exception
+    shells) is reused rather than a second zero-argument construction being
+    written beside it.
+    bug-nilpy-raise-of-a-bare-exception-class-is-refused-at-runtime }
+  PyCtorNoParens: Boolean;
   { This class is named as a SECOND (or later) base somewhere in the program,
     so it exists to be flattened. Its body is therefore NOT compiled standalone:
     the canonical mixin reads members it does not declare (`self.name`,
@@ -500,6 +508,7 @@ function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { compreh
 function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
 function PyUserNameShadowsHere(const nm: AnsiString): Boolean; forward; { does this module define the name itself? — the `cast` intercept asks }
 function PyMakeTupleFromArgs(firstArg: Integer): Integer; forward; { a PYSEQ_TUPLE from an already-parsed AN_ARG chain — the multi-arg exception fold asks, and is defined above it }
+function PyEnsureExceptionClass: Integer; forward; { pylib's Exception, shelled lazily — the bare-class `raise` resolver asks, ~12000 lines above the definition }
 function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in parser.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
@@ -2941,6 +2950,34 @@ begin
   ASTIVal[castNode] := ci;
   ASTTk[castNode]   := Ord(tyClass);
   Result := castNode;
+end;
+
+{ `raise ValueError` — the bare CLASS, which CPython instantiates for you
+  (`raise C` IS `raise C()`). Answers the class index when the name at the
+  cursor is an exception class and NOT a variable, else -1.
+
+  Both halves matter. A NAME that is a variable wins — `raise e` on a local
+  holding an instance is the common shape and must not be re-constructed. And
+  the class must derive from Exception: `raise SomeOrdinaryClass` is CPython's
+  TypeError, and constructing it to find that out would run its ctor's side
+  effects first, so it stays on the old path where pyraise_check answers.
+  bug-nilpy-raise-of-a-bare-exception-class-is-refused-at-runtime }
+function PyRaiseBareClassCi(const nm: AnsiString): Integer;
+var g: Integer;
+begin
+  Result := -1;
+  if FindSym(nm) >= 0 then Exit;
+  if CaseEqual(nm, 'Exception') then Result := PyEnsureExceptionClass
+  else Result := FindUClassNonRecord(nm);
+  if Result < 0 then Exit;
+  if PyLibExceptionCi < 0 then begin Result := -1; Exit; end;
+  g := Result;
+  while g >= 0 do
+  begin
+    if g = PyLibExceptionCi then Exit;
+    g := UClsParent[g];
+  end;
+  Result := -1;
 end;
 
 { Wrap a variant in pylib's pyraise_check — the value passes through, a
@@ -6041,6 +6078,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     excFoldA, excFoldC: Integer;   { the multi-arg Exception fold }
     szArgNode, starHead: Integer;  { *args packing (see below) }
     kwExtraHead, kwExtraLast, kwKeyNode: Integer;   { keywords bound for **kwargs }
+    noParens: Boolean;   { `raise ValueError` — construct with no argument list }
 begin
   name := CurTok.SVal;
   ci := -1;
@@ -6052,8 +6090,10 @@ begin
   if ci < 0 then ci := FindUClass(name);
   if ci < 0 then Error('Nil Python: class not found: ' + name);
   recId := REC_UCLASS_BASE + ci;
+  noParens := PyCtorNoParens;
+  PyCtorNoParens := False;   { one construction only — never inherited inwards }
   Next;
-  Expect(tkLParen, '(');
+  if not noParens then Expect(tkLParen, '(');
   node := AllocNode(AN_CALL);
   ASTIVal[node] := -Ord(tkGetMem);
   ASTTk[node] := Ord(tyClass);
@@ -6114,7 +6154,7 @@ begin
     CurASTNode := node;
     Exit;
   end;
-  while CurTok.Kind <> tkRParen do
+  while (not noParens) and (CurTok.Kind <> tkRParen) do
   begin
     kwFld := -1;
     if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
@@ -6202,7 +6242,7 @@ begin
     Inc(nArgs);
     if not Eat(tkComma) then break;
   end;
-  Expect(tkRParen, ')');
+  if not noParens then Expect(tkRParen, ')');
   { Re-emit in FIELD order. A hole below the highest supplied field is filled
     from the declared default — uforth's Word(...) skips data_addr between
     immediate and wid, so interior holes are the normal case, not an edge one.
@@ -20950,6 +20990,21 @@ begin
       ASTLeft[node] := -1
     else
     begin
+      { the bare CLASS form first — `raise StopIteration`, `raise ValueError`,
+        which is how an exception carrying no message is normally written (and
+        how an `__next__` body ends). CPython instantiates it; so does this,
+        through the ordinary ctor path. Anything else falls through unchanged. }
+      if (CurTok.Kind = tkIdent) and (TokPos <= TokCount) and
+         ((Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF]) or
+          ((Tokens[TokPos].Kind = tkIdent) and
+           CaseEqual(GetTokenStr(TokPos), 'from'))) and
+         (PyRaiseBareClassCi(CurTok.SVal) >= 0) then
+      begin
+        PyCtorNoParens := True;
+        CurASTNode := PyClassCreate;
+        LastExprTk := tyClass;
+      end
+      else
       PyParseBoolExpr;
       { A VARIANT operand — `raise xs[0]`, `raise d[k]`, `raise cls(msg)`
         through a class value, a for-in variable. IR_RAISE wants the instance
@@ -20964,10 +21019,18 @@ begin
         matching reads the object's own VMT, so the base class is the honest
         static answer. A non-object tag unboxes to nil and pyraise_check turns
         that into the TypeError CPython raises for `raise 5`. }
-      if (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) and
-         (PyLibExceptionCi >= 0) then
-        CurASTNode := PyUnboxVariantToClass(PyRaiseCheckVariant(CurASTNode),
-                                            PyLibExceptionCi);
+      { ...and the same for any operand that is not a class at all — `raise 42`,
+        `raise "x"`, `raise 3.5`. Those never reached the variant arm (an int
+        literal is tyInteger, not tyVariant), so the raw value went to IR_RAISE
+        where an instance pointer belongs and the process died with no
+        diagnostic — where CPython gives the very TypeError this check exists to
+        produce. Boxed first, so one path answers for every non-instance shape.
+        bug-nilpy-raise-of-a-bare-exception-class-is-refused-at-runtime }
+      if (PyLibExceptionCi >= 0) and
+         (IntToTypeKind(ASTTk[CurASTNode]) <> tyClass) then
+        CurASTNode := PyUnboxVariantToClass(
+                        PyRaiseCheckVariant(PyForceVariant(CurASTNode)),
+                        PyLibExceptionCi);
       ASTLeft[node] := CurASTNode;
       { `raise X from e` — PEP 3134 exception chaining. The cause is metadata
         (it sets __cause__ for the traceback); the raise itself is unchanged, so

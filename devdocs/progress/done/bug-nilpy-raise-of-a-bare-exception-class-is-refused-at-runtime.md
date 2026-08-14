@@ -3,6 +3,8 @@ track: N
 prio: 35
 type: bug
 summary: "`raise ValueError` (the CLASS, no call) compiles and then dies at run time with 'exceptions must derive from BaseException' — the instantiating form `raise ValueError()` works"
+status: done
+owner: agent-AN
 ---
 
 # `raise ValueError` — the bare CLASS form — fails at run time
@@ -62,3 +64,46 @@ instance, as it does today for the call form.
 `except Exception:` catching one of them; and a control that
 `raise ValueError("msg")` and `raise 42` are unchanged (the second must still
 be the TypeError this ticket is about being produced *wrongly*).
+
+## Resolution (2026-08-15)
+
+`raise C` now instantiates, as CPython does — through the ORDINARY constructor
+path, not a second zero-argument construction written beside it. `PyClassCreate`
+learned one flag (`PyCtorNoParens`) that makes it skip the `(` … `)` and the
+argument loop; everything else it does — parameter defaults, the inherited-ctor
+under-call fill, the dataclass arms, the Exception folds — applies unchanged.
+That reuse is what makes `raise MyErr` on `class MyErr(Exception): pass` give
+`str(e) == ''` for free, which is the CPython answer.
+
+Two guards decide when the bare form fires, and both matter:
+
+- **a variable wins.** `raise e` on a local holding an instance must not be
+  re-constructed, so `FindSym` is asked first.
+- **the class must derive from Exception.** `raise SomeOrdinaryClass` is
+  CPython's TypeError; constructing it to find that out would run its ctor's
+  side effects first, so it stays on the old path where `pyraise_check` answers.
+
+**A second, pre-existing crash was found and fixed in the same statement.**
+`raise 42` SEGFAULTED (confirmed on the pinned binary, so not a regression):
+the `pyraise_check` guard was reached only from the tyVariant arm, and an int
+literal is tyInteger, so the raw value went to IR_RAISE where an instance
+pointer belongs. The condition is now "not a class" rather than "is a variant",
+with the operand boxed first — one path answering for every non-instance shape,
+which is the normalise-don't-special-case call. `raise 42`, `raise "x"` and
+`raise 3.5` all give CPython's TypeError now instead of dying.
+
+`test/test_nilpy_iterator_protocol.npy` was switched back to the natural
+`raise StopIteration` spelling its subject actually uses; its output is
+unchanged, and CPython's is too.
+
+**Gate:** `test/test_nilpy_raise_bare_class.npy` (+`.expected`, wired into the
+Makefile) — bare `ValueError`/`StopIteration`/`NotImplementedError`/`KeyError`,
+a bare user subclass, `raise C from e`, and controls for `raise C("msg")`,
+`raise <variable>` and `raise 42`. All byte-identical to CPython.
+`tools/gate.sh quick` GREEN, self-host byte-identical.
+
+The FPC seed caught `PyEnsureExceptionClass` used ~12000 lines above its
+definition — the fourth instance of that shape this session; forward added.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

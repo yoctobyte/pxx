@@ -10,7 +10,7 @@ class Countdown:
         return self
     def __next__(self):
         if self.n <= 0:
-            raise StopIteration()
+            raise StopIteration
         self.n -= 1
         return self.n
 
@@ -30,7 +30,7 @@ class BagIter:
         self.i = 0
     def __next__(self):
         if self.i >= len(self.items):
-            raise StopIteration()
+            raise StopIteration
         v = self.items[self.i]
         self.i += 1
         return v

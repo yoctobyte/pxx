@@ -1,0 +1,9 @@
+bare ValueError ''
+bare StopIteration
+bare NotImplementedError via Exception NotImplementedError
+bare KeyError ''
+user class MyErr ''
+from-chained TypeError ''
+with msg msg
+instance variable kept
+TypeError: exceptions must derive from BaseException

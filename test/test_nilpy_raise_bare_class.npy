@@ -1,0 +1,58 @@
+# `raise C` — the bare exception CLASS, which CPython instantiates for you.
+# bug-nilpy-raise-of-a-bare-exception-class-is-refused-at-runtime.
+# Diffed against CPython.
+
+try:
+    raise ValueError
+except ValueError as e:
+    print("bare ValueError", repr(str(e)))
+
+try:
+    raise StopIteration
+except StopIteration:
+    print("bare StopIteration")
+
+try:
+    raise NotImplementedError
+except Exception as e:
+    print("bare NotImplementedError via Exception", type(e).__name__)
+
+try:
+    raise KeyError
+except KeyError as e:
+    print("bare KeyError", repr(str(e)))
+
+class MyErr(Exception):
+    pass
+
+try:
+    raise MyErr
+except MyErr as e:
+    print("user class", type(e).__name__, repr(str(e)))
+
+# `raise C from e` — the cause is metadata; the bare class still instantiates
+try:
+    try:
+        raise ValueError("inner")
+    except ValueError as inner:
+        raise TypeError from inner
+except TypeError as e:
+    print("from-chained", type(e).__name__, repr(str(e)))
+
+# controls: the instantiating forms and a variable are unchanged
+try:
+    raise ValueError("msg")
+except ValueError as e:
+    print("with msg", e)
+
+held = ValueError("kept")
+try:
+    raise held
+except ValueError as e:
+    print("instance variable", e)
+
+# ...and a NON-exception is still CPython's TypeError, not a crash
+try:
+    raise 42
+except TypeError as e:
+    print("TypeError:", e)
