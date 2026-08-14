@@ -3,7 +3,13 @@ prio: 30
 track: N
 type: bug
 blocked-by: []
+<<<<<<<< HEAD:devdocs/progress/working/bug-nilpy-exception-args-attribute-missing.md
+owner: agent-N
+status: done
+========
+status: done
 owner: claude-A-N
+>>>>>>>> parent of 2277bf349 (revert(N): e.args -- pylib's Exception cannot carry a member sysutils lacks):devdocs/progress/done/bug-nilpy-exception-args-attribute-missing.md
 ---
 
 # `e.args` is missing on exceptions
@@ -115,6 +121,7 @@ Gate: self-host fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
 - 2026-08-13 — resolved, commit 67910b097.
+<<<<<<<< HEAD:devdocs/progress/working/bug-nilpy-exception-args-attribute-missing.md
 
 
 ## REVERTED 2026-08-13, same day it shipped — and why it cannot be re-landed as written
@@ -163,3 +170,41 @@ the section above is superseded.
 caught this the first time and they run only in the NATIVE tier, so
 `gate.sh quick` still cannot see a regression here. Both must be green, and they
 now assert IDENTICAL output for the two uses orders.
+========
+>>>>>>>> parent of 2277bf349 (revert(N): e.args -- pylib's Exception cannot carry a member sysutils lacks):devdocs/progress/done/bug-nilpy-exception-args-attribute-missing.md
+
+## RE-LANDED 2026-08-14 — the original member-based shape, unchanged
+
+`git revert` of the revert (2277bf349), conflicts resolved onto the
+`PyException` rename. Nothing about the FEATURE was redesigned: `argsv` is a
+stored field again, `GetArgs` a method, `args` a property — exactly what "do not
+re-add a member to pylib's Exception" forbade, and exactly what is fine now that
+the class is pylib's own and shares its name with nothing.
+
+Option 3 (a pointer-keyed side table reached through plain functions) was NOT
+built and should not be: it existed only to route around a constraint that no
+longer exists.
+
+### The canary that killed it last time, in both uses orders
+
+`test_uses_order_pylib_exception_a` and `_b` are green — that is the whole
+proof, because they are what turned RED in Track T's native tier the night this
+shipped, and `gate.sh quick` still cannot see them. Both print identical output
+now (see [[bug-pascal-uses-order-breaks-pylib-exception]]).
+
+Also green: `test_nilpy_exception_args` and
+`test_nilpy_exception_non_string_argument` against their recorded CPython
+expectations, plus `test_nilpy_rtl_exception_surface` and
+`test_nilpy_pyexception_bare_vs_qualified`.
+
+### Still open, unchanged from the original write-up
+
+- a MULTI-argument raise folds its arguments to a rendered string at the
+  construction site, so `args` is a 1-tuple of that text until the fold stashes
+  the real tuple (needs argument-node clones — frontend work);
+- `str(KeyError("inner"))` is `inner` here and `'inner'` in CPython, because
+  `str(e)` for a CAUGHT exception reads the `msg` FIELD through a
+  frontend-synthesised access and never reaches the renderer.
+
+Neither is a regression and neither is what this ticket was about.
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

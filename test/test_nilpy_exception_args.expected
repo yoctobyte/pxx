@@ -1,0 +1,8 @@
+single    ('boom',) 1 boom
+no arg    () 0
+custom    ('mine',) mine
+keyerror  ('inner',) KeyError('inner') 'inner'
+real miss ('nope',) KeyError('nope') 'nope'
+branched  ok
+repr      ValueError('v') v
+int key   7 KeyError(7) (7,)

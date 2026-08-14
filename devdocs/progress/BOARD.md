@@ -12,12 +12,11 @@ _none_
 
 _none_
 
-## unfinished (8)
+## unfinished (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
-| bug-nilpy-exception-args-attribute-missing | N | 30 | bug | `e.args` is missing on exceptions | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
@@ -405,9 +404,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1753)
+## done (1754)
 
-1753 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1754 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 

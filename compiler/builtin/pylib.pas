@@ -399,11 +399,22 @@ type
     property FMessage: AnsiString read msg write msg;
     property Message: AnsiString read msg write msg;
     property HelpContext: Integer read FHelpContext write FHelpContext;
-    { `e.args` used to live here and was removed while this class was still
-      called `Exception` and merged with sysutils' — only members BOTH classes
-      had could be reached, so a pylib-only field broke one `uses` order.
-      That constraint is GONE now that the class has its own name: pylib
-      extends freely. bug-nilpy-exception-args-attribute-missing. }
+    { Python's `e.args`. A PROPERTY rather than a field, and derived rather than
+      stored, because a pxx Exception carries one Message string: `args` is
+      what the constructor was given, and for every raise this dialect emits
+      that is exactly the message. So it answers `()` for an empty message and
+      `(msg,)` otherwise — CPython's own relationship between args and str(e)
+      for the one-argument case, which is every builtin raise and almost all
+      user code.
+      A MULTI-argument raise (`raise MyErr("no such user", 404)`) is folded to
+      the rendered string `('no such user', 404)` at the construction site, so
+      its args would come back as a 1-tuple of that text. That is why the fold
+      stashes the real tuple in argsv when it runs, and why this reads argsv
+      first.
+      bug-nilpy-exception-args-attribute-missing }
+    argsv: TPyList;
+    function GetArgs: TPyList;
+    property args: TPyList read GetArgs;
   end;
   ValueError        = class(PyException) end;
   { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
@@ -5094,18 +5105,21 @@ procedure PyKeyError(const k: Variant); overload;
   string key reports 'nope' WITH the quotes. Using the repr here makes the
   message match CPython's for free, and keeps an int key unquoted the way
   CPython does. }
+var e: KeyError;
 begin
-  { One call, because KeyError.Create TAKES the variant now: it reprs the key
-    for `str(e)` and keeps the raw value for `e.args`, which is exactly what
-    this raise site wants. CPython's KeyError('nope').args is ('nope',) —
-    unquoted — while its str() is the quoted repr, so the two genuinely differ
-    for this one exception (bug-nilpy-exception-args-attribute-missing).
-
-    It used to construct and then assign an `argsv` field from OUT HERE, which
-    broke `uses sysutils, pylib` — see decide-pylib-exception-vs-sysutils-
-    exception. One ctor call reaches nothing pylib-only and is also simply
-    less code. }
-  raise KeyError.Create(k);
+  { …and the KEY ITSELF goes into `args`, not the repr'd message. CPython's
+    KeyError('nope').args is ('nope',) — unquoted — while its str() is the
+    quoted repr, so the two genuinely differ for this one exception and the
+    derive-from-message default would hand back the quoted form.
+    bug-nilpy-exception-args-attribute-missing }
+  { The ctor reprs the message now, so the raw TEXT goes in; argsv is then
+    overwritten with the raw VARIANT, so an int key's args is (42,) and not
+    ('42',). }
+  e := KeyError.CreateRendered(pyvar_repr(k));
+  e.argsv := TPyList.Create;
+  e.argsv.FKind := PYSEQ_TUPLE;
+  e.argsv.append(k);
+  raise e;
 end;
 
 constructor TPyDict.Create;
@@ -9441,17 +9455,20 @@ begin
   { `KeyError()` with no argument at all: the frontend fills an unsupplied
     variant slot with None (an empty variant is the only addressable "not
     supplied" this dialect has), and CPython's str(KeyError()) is the empty
-    string, not 'None'. The cost is that an EXPLICIT `KeyError(None)` renders
-    as '' rather than 'None'; the no-argument spelling is much the commoner,
-    and this is the same call already made for `ValueError('')`. }
+    string, not 'None'. So an empty tag means the no-argument form — and
+    argsv is left nil, so GetArgs derives `()` the way it does for every other
+    empty exception. The cost is that an EXPLICIT `KeyError(None)` renders as
+    '' rather than 'None'; the no-argument spelling is much the commoner, and
+    this is the same call already made for `ValueError('')`. }
   if pyvartag(m) = 0 then
   begin
     inherited Create('');
     Exit;
   end;
-  { The message is the key's REPR on both construction paths, so str() and
-    repr() are CPython-exact without needing `args`. }
   inherited Create(pyvar_repr(m));
+  argsv := TPyList.Create;
+  argsv.FKind := PYSEQ_TUPLE;
+  argsv.append(m);
 end;
 
 constructor KeyError.CreateRendered(const shown: AnsiString);
@@ -9459,11 +9476,22 @@ begin
   inherited Create(shown);
 end;
 
+function PyException.GetArgs: TPyList;
+begin
+  if argsv <> nil then
+  begin
+    Result := argsv;
+    Exit;
+  end;
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  if Length(msg) > 0 then Result.append(msg);
+end;
+
 constructor PyException.Create(const m: AnsiString);
 begin
   msg := m;
 end;
-
 
 { One `array of const` element as a string / as an integer's decimal text. The
   same shape as sysutils' FmtArgStr/FmtArgInt, duplicated rather than shared
@@ -14465,14 +14493,19 @@ begin
     address either way. }
   if (mi = nil) and (not wantRepr) and (o is PyException) then
   begin
-    { KeyError's str() is the REPR of its argument — `str(KeyError('inner'))`
-      is "'inner'", with the quotes — and that needs no special arm here: BOTH
-      construction paths now store the message already repr'd, the raise path
-      through PyKeyError and a user's `KeyError(k)` through the variant ctor.
-      They used to disagree, which is what an args-based arm was written to
-      settle; unifying the constructors settled it one level earlier and
-      survives the uses-order constraint that sank args. }
-    outS := PyException(o).Message;
+    { KeyError is the one builtin whose str() is the REPR of its argument —
+      `str(KeyError('inner'))` is "'inner'", with the quotes. That used to come
+      out right only on the RAISE path, because PyKeyError stores the message
+      already repr'd, and wrong for a user-constructed KeyError. Now that
+      `args` exists, both are the same question asked of the same place: repr
+      the single argument. A KeyError carrying zero or several arguments falls
+      through to the message, as CPython's own __str__ does.
+      bug-nilpy-exception-args-attribute-missing }
+    if (o is KeyError) and (PyException(o).GetArgs <> nil) and
+       (PyException(o).GetArgs.count = 1) then
+      outS := pyvar_repr(PyException(o).GetArgs.at(0))
+    else
+      outS := PyException(o).Message;
     PyUserObjStr := True;
     Exit;
   end;
@@ -14483,12 +14516,10 @@ begin
     raised. `args` settles it: repr the ARGUMENT, whoever built the exception,
     and the two cases agree.
     bug-nilpy-exception-args-attribute-missing }
-  { repr(KeyError) — the Message is ALREADY the key's repr (see above), so
-    wrapping it in ClassName(...) gives CPython's `KeyError('nope')` for a
-    string key and `KeyError(7)` for an int one, with no second rendering. }
-  if (mi = nil) and wantRepr and (o is KeyError) then
+  if (mi = nil) and wantRepr and (o is KeyError) and
+     (PyException(o).GetArgs <> nil) and (PyException(o).GetArgs.count = 1) then
   begin
-    outS := TObject(o).ClassName + '(' + PyException(o).Message + ')';
+    outS := TObject(o).ClassName + '(' + pyvar_repr(PyException(o).GetArgs.at(0)) + ')';
     PyUserObjStr := True;
     Exit;
   end;

@@ -2,35 +2,25 @@
 # took an AnsiString, so an integer arrived as a string handle and the raise
 # SEGFAULTED with no diagnostic.
 # bug-nilpy-raise-keyerror-with-a-non-string-argument-segfaults
-#
-# `e.args` is NOT asserted here: it was removed again the same day, because
-# pylib's Exception cannot carry a member sysutils' Exception lacks —
-# decide-pylib-exception-vs-sysutils-exception. str() and repr() below are the
-# part that survives, and they are CPython-exact.
 try:
     raise KeyError(42)
 except KeyError as e:
-    print("int:", str(e), repr(e))
+    print("int:", str(e), repr(e.args), e.args[0] + 1)
 try:
     raise KeyError("k")
 except KeyError as e:
-    print("str:", str(e), repr(e))
+    print("str:", str(e), repr(e.args))
 try:
     raise KeyError((1, 2))
 except KeyError as e:
-    print("tup:", str(e))
+    print("tup:", str(e), repr(e.args))
 try:
     raise KeyError()
 except KeyError as e:
-    print("empty:", repr(str(e)))
+    print("empty:", repr(str(e)), repr(e.args))
 try:
     raise ValueError(42)
 except ValueError as e:
-    # repr() is NOT asserted for a non-KeyError with a non-string argument:
-    # pxx says ValueError('42') where CPython says ValueError(42), because the
-    # argument reaches the string ctor and its type is gone. That is the
-    # residual filed as
-    # bug-nilpy-non-keyerror-exception-args-loses-the-argument-type.
     print("ve:", str(e))
 try:
     raise ValueError(3.5)
@@ -59,4 +49,4 @@ d = {"a": 1}
 try:
     d[7]
 except KeyError as e:
-    print("miss:", str(e), repr(e))
+    print("miss:", str(e), repr(e.args))
