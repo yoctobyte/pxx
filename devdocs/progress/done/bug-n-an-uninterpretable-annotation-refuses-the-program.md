@@ -141,4 +141,4 @@ CPython), covering all seven positions and pinning that a READABLE annotation is
 still read; wired into `test-nilpy`.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 17faabc3e.
