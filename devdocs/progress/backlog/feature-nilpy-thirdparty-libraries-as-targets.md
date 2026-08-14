@@ -2,8 +2,7 @@
 track: N
 prio: 60
 type: feature
-status: working
-owner: agent-an
+status: backlog
 ---
 
 # META: third-party Python libraries as pxx targets — classify, then compile
@@ -99,21 +98,105 @@ typing urllib uuid xml`
 This list, not the third-party packages, is the honest measure of the work. It
 is also reusable: every future app wants most of it.
 
-## First walls, already probed
+## RE-BASELINED 2026-08-14 — the section below replaces the 2026-07-30 probe
 
-- `from __future__ import annotations` — **86 files**, and it is the very first
-  error (`no unit named __future__`). In NilPy this is a no-op the frontend
-  should swallow. Small Track N fix, do it first.
-- construct census over the 168 files: 60 `@dataclass`, 70 f-strings, 22
-  lambda, 11 `Enum`, 11 generators (`yield`), 9 `@property`, 8 `super()`,
-  6 `@classmethod`, 4 threading, 3 `match`, 2 walrus, 1 `Protocol`,
-  1 `__slots__`. No `async def`, no `@abstractmethod`.
-  **`@dataclass` at 60 files decides the schedule.**
+**Both items the old plan scheduled were already done**, and nothing said so.
+Measured at HEAD:
+
+- `from __future__ import annotations` compiles and runs. So do all nine feature
+  names (`division`, `print_function`, `generator_stop`, `unicode_literals`,
+  `absolute_import`, `nested_scopes`, `with_statement`, `barry_as_FLUFL`), each
+  matching CPython.
+- `@dataclass` works, including the generated `repr`: `Point(x=1, y=2)`,
+  identical to CPython.
+
+That is the important finding about this ticket, more than any number below: a
+schedule written into prose, in a repo whose compiler moves daily, goes stale
+without emitting a signal. Acting on it would have meant implementing solved
+problems. **The step list is therefore deleted rather than updated** — the
+census is a command now, not a paragraph.
+
+### Census — 168 git-tracked files, 26,408 lines, compiled with HEAD
+
+**18 compile (11%).** The 150 failures, bucketed by KIND, which is the number
+that actually schedules work:
+
+| failure kind | files | lane |
+| --- | --- | --- |
+| **intra-project imports** (the app's own modules) | **89** | N — one mechanism |
+| stdlib imports (`enum`, `argparse`, `datetime`, `contextlib`, `threading`, `importlib`) | 28 | class 4, `lib/` |
+| third-party imports (`pytest`, `yaml`, …) | 19 | mostly test-only |
+| language / frontend gaps | 14 | N |
+
+**The old plan's premise is wrong.** `@dataclass` was said to "decide the
+schedule"; it is **5 files**. The schedule is decided by intra-project imports at
+**89**, and they are ONE defect, not 89:
+[[feature-nilpy-dotted-imports-resolve-to-source-files]] — a dotted import
+resolves only to a hand-written `mimic_*` shim and never looks for the source
+file on disk. Flat sibling imports (`from bus import Bus`) already work, for
+`.py` and `.npy` alike; only the dotted form is missing. Verified on a clean
+purpose-built package, and ruled out as a masked compile error.
+
+**The language-gap column is a lower bound.** A file that fails on its first
+import is never compiled, so its remaining constructs were never exercised. Expect
+14 to grow once imports resolve — an argument for fixing imports first.
+
+The full language-gap list as it stands (small, and mostly typing-shaped):
+dataclass `field(default_factory=...)` (2), unsupported parameter type
+annotation (4), `@dataclass frozen=True` (1), unsupported dataclass field type
+(3), `run has no parameter named 'X'` (2), undefined `Union` / `process_time`.
+
+### Dependency set — unchanged since 2026-07-30
+
+`.so`/`.py` counts re-measured in the venv and identical, so the verdict table
+above still holds. One correction, to the *triage command* rather than to any
+verdict: the documented `grep -rl 'ctypes\|cffi'` matches the substring in
+`doctypeClass`, ordinary HTML-parser vocabulary, and misclassifies **html5lib**
+as class 2 when it is class 1 — the difference between "the biggest single win"
+and work that does not exist. Fixed here and in `devdocs/dev/python-libraries.md`
+by anchoring to an import statement.
+
+### Reproducing this
+
+`census2.py` (parallel, per-file timeout, incremental NDJSON) produced the table.
+It is scratch, not checked in — see the open question below. Two traps worth
+recording, because both produced confident wrong numbers before being caught:
+
+1. **Census the GIT-TRACKED files.** An `os.walk` of `~/neuzelaar2` picks up a
+   vendored Web Platform Tests corpus — **549** files of third-party fixtures —
+   and yields a clean-looking histogram of the wrong population (`wptserve_utils`,
+   `sec-ch-ua.py`). `git ls-files '*.py'` is what defines the corpus, and it
+   returns exactly the ticket's 168 files / 26.4k lines.
+2. **Print incrementally.** A serial run that only summarises at the end dies on
+   a wall-clock cap with nothing to show.
+
+### Open — needs a decision before this campaign files more children
+
+The corpus lives at `~/neuzelaar2`, **outside this repo**. No tier can run it, no
+tstate report can regress it, and every number above is a claim only this machine
+can check. Tolerable for exploration; not tolerable for a campaign that schedules
+work. Either vendor a representative subset into `test/` (a few hundred lines
+covering the census's top constructs) or state explicitly that this stays a local
+exploration whose findings must be re-derived as ordinary `.npy` tests before
+they gate anything. Not guessed at here — filed for the user.
 
 ## Plan
 
-1. `__future__` import is a no-op (Track N, small).
-2. `@dataclass` — the one construct that gates most of the corpus.
+Steps 1 and 2 of the previous plan (`__future__`, `@dataclass`) are **done** —
+see the re-baseline above; both were already working when measured, which is why
+this list no longer carries per-construct steps. **Regenerate the next step from
+a census run, do not read it from here.**
+
+The ordering that survives, because it is strategy rather than a construct list:
+
+1. **[[feature-nilpy-dotted-imports-resolve-to-source-files]]** — a dotted import
+   must find the source file on disk, not only a `mimic_*` shim. 89 of 150
+   census failures, one mechanism, and nothing multi-module compiles until it
+   lands. Everything below is blocked on it in practice.
+2. **Class-4 stdlib surface**, by census frequency rather than by guess: `enum`,
+   `argparse`, `datetime`, `contextlib`, `threading`, `importlib` are what this
+   corpus actually reaches for (28 files). This is the reusable half — every
+   future app wants most of it — and it is `lib/` work, not frontend work.
 3. Compile `webencodings` → `tinycss2` → `html5lib` **bottom-up as standalone
    corpora**, each with its own upstream test suite as the oracle. A library
    that compiles and passes its own tests is a permanent asset, not just a

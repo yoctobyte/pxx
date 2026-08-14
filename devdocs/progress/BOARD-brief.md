@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:6 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:71 done:1769 rejected:37`
+`unfinished:8 blocked:6 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:71 done:1769 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-nilpy-thirdparty-libraries-as-targets` [N] — owner: agent-an
+_none — no lane is locked._
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
@@ -31,15 +31,17 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 204, ranked
+## Ready — top 30 of 206, ranked
 
 - `[p 70] [T]` regression-test-asm-test-asm-avx
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- `[p 65] [N]` feature-nilpy-dotted-imports-resolve-to-source-files
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
+- `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
@@ -61,7 +63,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
-- `[p 50] [N]` bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry
 
-_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
