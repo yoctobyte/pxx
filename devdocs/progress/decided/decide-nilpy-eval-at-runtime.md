@@ -107,3 +107,9 @@ names onto the shipped library, filed as
 
 ## Log
 - 2026-08-14 — decided, commit 1ae19131c.
+
+**Addendum, same session:** and they belong on the BUILTIN surface, auto-included
+like the rest of the Python RTL rather than behind an import — Python has no
+separate runtime library to opt into, so presenting them any other way would be
+the divergence. Recorded on the Track N ticket so the implementer does not
+re-open it.

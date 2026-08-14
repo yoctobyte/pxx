@@ -2,7 +2,7 @@
 summary: "Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently"
 type: decide
 track: U
-prio: 40
+prio: 0
 ---
 
 # Decide: pin plexus's CPU clock for the bench series?
@@ -62,3 +62,32 @@ would pin to base, well below where real multi-core load already sits.
 **Option A.** The measurement was the actual goal, it is landed, and it costs
 nothing. Revisit only if the recorded `mhz` column turns out not to separate the
 populations cleanly once a few hundred plexus rows have accumulated.
+
+
+## REJECTED 2026-08-14 by the user — not relevant at this point
+
+> *"We know that there's boosting the clock, and we have a very quantized 24%
+> speed, which totally aligns with the processor boost speed. It's really not
+> relevant at this point."*
+
+The phenomenon is understood and it is not costing anything. Pinning the clock
+would trade ~13-24% of throughput on everything the box does — the watcher, the
+builds, the human's own work — to buy comparability nobody is currently
+consuming.
+
+**Rejecting costs nothing, because the measurement already landed.** The
+per-run TASK clock is recorded on every bench row
+(`tstate/bench-clock.tsv`: `mhz`, `mhz_lo`, `mhz_hi`, `box_mhz`, sampled from
+the CPU the child actually ran on). So the series stays analysable after the
+fact rather than being made uniform up front — which was the real goal, and the
+option this ticket's own recommendation preferred.
+
+**When it becomes relevant again:** optimisation work that needs accurate,
+comparable absolute numbers. At that point re-open — and note the data to decide
+it with will already exist, because the clock column keeps accumulating whether
+or not anyone is asking. Nothing has to be re-instrumented first.
+
+Related and still open on its own terms:
+[[bug-t-bench-slowdowns-are-quantized-by-cpu-p-state]] holds the analysis, and
+is parked waiting for a few hundred plexus rows on the corrected task-clock
+basis — that accumulation is unaffected by this rejection.

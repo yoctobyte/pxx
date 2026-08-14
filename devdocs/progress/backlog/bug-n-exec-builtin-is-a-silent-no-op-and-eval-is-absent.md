@@ -72,3 +72,17 @@ may belong in `nilpy-semantics-divergences.md` rather than in the fix.
 The three rows above match CPython. And `test_nilpy_exec_stub.npy` is rewritten
 to assert the key `exec` was supposed to define — as written it would pass
 against a no-op, which is how this survived.
+
+## Settled 2026-08-14 (user): they are BUILTINS, auto-included — do not ask again
+
+> *"In Python we don't really have some runtime library in that sense. Everything
+> is already part of the Python RTL — it's sort of auto-included in every Python
+> application as soon as we need it."*
+
+So there is no "expose it as a builtin, or require an import?" question to
+resolve while implementing. `eval` and `exec` are **language builtins**, pulled
+in on demand like the rest of the NilPy RTL, exactly as CPython presents them.
+A program must not have to import anything to use them.
+
+That also settles the naming: the user-visible names are `eval` and `exec`. The
+`pyexec` library stays the mechanism underneath; it is not the interface.
