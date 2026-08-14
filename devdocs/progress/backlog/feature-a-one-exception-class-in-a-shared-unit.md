@@ -354,3 +354,31 @@ Recorded because the previous entry would have sent the next session hunting
 for a parse path that is very likely not the problem — the sort of plausible
 wrong root cause `devdocs/dev/root-cause-over-microfix.md` exists to catch, and
 it was one re-read away rather than one experiment away.
+
+### The type-position site, located — and it DISCARDS the qualifier on purpose
+
+`compiler/parser.inc`, ParseTypeKind's identifier arm:
+
+```pascal
+{ Unit-qualified type reference — `sockets.Tin6_addr` ... Types live in one
+  global table, so the qualifier only disambiguates the parse, not the lookup. }
+if (CurTok.Kind = tkIdent) and (ConsumeUnitQualifier(lo) <> -1) then
+  ;   { lo is now the member name; CurTok sits on it }
+```
+
+The unit index is computed and **thrown away** — the empty statement is the
+whole handler. The sibling CLASS-qualified branch just below says the same
+thing ("the qualifier disambiguates the parse, not the lookup"), and so does
+the NilPy `except` path. That invariant — *type names are globally unique, so a
+qualifier is only punctuation* — is the actual thing variant C breaks, and it is
+stated identically in at least three places rather than being an oversight in
+one.
+
+So the work is: capture that return value and thread it to the class lookup in
+the same arm, alongside the `ctorCi` change already on the branch. Both are
+small; what was missing was knowing they are ONE change, not two, and that the
+invariant being revised is written down and load-bearing elsewhere.
+
+Not attempted here: on `master` there is only one `Exception`, so the change is
+unobservable and would be an unverifiable edit to shared parser files. It is
+testable only on top of variant C, i.e. on the branch.
