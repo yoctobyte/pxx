@@ -630,6 +630,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic | N | 60 | bug | User-defined dunders are ignored, and the operator then does arithmetic on the object HANDLE | — |
 | bug-nilpy-dunders-not-dispatched-through-containers | N | 45 | bug | NilPy: __repr__/__str__ of a class instance held in a container silently print EMPTY; ordering/sorted raise — no runtime dunder dispatch on a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class | N | 40 | bug | SILENT->CRASH: with two classes declaring the same field name, a call through a dynamically-typed receiver hard-casts to whichever class the scan found FIRST — the field offset is read from the wrong layout, no diagnostic | — |
+| bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-enumerate-with-start-fails-in-a-for-header | N | 45 | bug | `for i, v in enumerate(xs, 1):` — the start offset works everywhere EXCEPT a for header | — |
 | bug-nilpy-eq-dunder-ignored | N | 70 | bug | `__eq__` is ignored — `==` on user objects compares identity | — |
 | bug-nilpy-eq-dunder-skipped-when-either-operand-is-a-variant | N | 55 | bug | `a == b` skips __eq__ and compares identity as soon as ONE operand is a variant (a container element, a for-in variable). Both-static works, so the dunder LOOKS wired up; `a == xs[0]` is silently False. | — |

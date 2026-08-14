@@ -2,6 +2,7 @@
 track: N
 prio: 30
 type: bug
+status: done
 ---
 
 # NilPy: str.encode / bytes.decode ignore the codec argument
@@ -26,3 +27,30 @@ and NilPy has no keyword arguments on str methods.
 Needs a code-point model, or at least a real UTF-8 encoder over the byte
 string, plus a decision about what a "character" is in NilPy. Worth pairing
 with any wider Unicode work rather than doing alone.
+
+## Resolution (2026-08-15) — duplicate, already fixed
+
+This is the same defect as `bug-n-str-encode-and-bytes-decode-ignore-the-encoding`,
+which landed the real codec layer (`PyEncNormalize`/`PyEncCode`/`PyEncRequire`,
+`PyCpToUtf8`/`PyUtf8CpAt`, `pystr_encode_enc`/`pystr_encode_enc_err`, and the
+rewritten `TPyBytes.decode`), plus the `wantArgs = -11` mode in
+`PyParseStrMethod` that evaluates the encoding argument instead of skipping it
+and strips the `encoding=`/`errors=` keyword forms.
+
+Verified against CPython at pin v308 — byte-identical:
+
+```
+5 [99, 97, 102, 195, 169]
+café
+4 [99, 97, 102, 233]
+b'caf?'
+```
+
+which is exactly the case this ticket says is wrong: `"café".encode("utf-8")`
+is 5 bytes with the two-byte sequence, and `errors="replace"` on ascii is
+honoured rather than dropped. Closing as a duplicate; see the other ticket for
+the implementation and the codec-subset note in
+`devdocs/dev/nilpy-semantics-divergences.md`.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
