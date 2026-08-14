@@ -779,4 +779,4 @@ Not option C either — a diagnostic for a case nobody reaches is noise with a
 maintenance cost.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit fb2e88334.

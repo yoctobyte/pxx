@@ -171,4 +171,4 @@ stable tree missing a source. Caught here by listing the frozen directory
 against `git status`; fixed in a follow-up commit.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit fb2e88334.
