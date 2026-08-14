@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1758 rejected:35`
+`unfinished:8 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1759 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-shadowing-ctor-call-target-and-argument-marshalling-disagree` [A] — owner: agent-an
+_none — no lane is locked._
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 

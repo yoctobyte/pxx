@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-a-shadowing-ctor-call-target-and-argument-marshalling-disagree | A | 70 | bug | When a derived class declares a constructor that shadows an inherited one with a DIFFERENT signature, `TDer.Create(arg)` calls the BASE body while marshalling the argument for the DERIVED signature — a Variant record is passed where an AnsiString handle is expected, so the ctor receives garbage. Silent wrong value, no diagnostic, reproduces on master with no pylib involved. FPC runs the DERIVED ctor (measured). | — |
+_none_
 
 ## unfinished (8)
 
@@ -411,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1758)
+## done (1759)
 
-1758 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1759 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 

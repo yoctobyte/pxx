@@ -3,7 +3,7 @@ track: A
 prio: 70
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: agent-an
 summary: "When a derived class declares a constructor that shadows an inherited one with a DIFFERENT signature, `TDer.Create(arg)` calls the BASE body while marshalling the argument for the DERIVED signature — a Variant record is passed where an AnsiString handle is expected, so the ctor receives garbage. Silent wrong value, no diagnostic, reproduces on master with no pylib involved. FPC runs the DERIVED ctor (measured)."
 ---
@@ -190,10 +190,27 @@ rule that is a `--strict-fpc` / `--strict-overload` question.
 splitting it would lose the measured table above. Re-open here when the
 strictness umbrella is next touched (`meta-dialect-extensions-and-fpc-strict`).
 
-### Sweep — NOT yet done
+### Sweep — DONE, and it is CLEAN
 
-The ticket's own sweep list (named shadowing ctor `CreateFmt`, metaclass cast
-`TSomeClass(x).Create`, `class of` dispatch via `BuildMetaclassNew`, `inherited
-Create(..)` from a derived body) has not been run. Each is a distinct
-construction route and each has its own ctor lookup, so each can carry the same
-disagreement. That is the next session's first job, before this is closed.
+All five other construction routes measured on the same shadowed pair:
+
+| route | result |
+| --- | --- |
+| named shadowing ctor (`TDer.Make('b')`) | correct |
+| `class of` dispatch, `Create` | correct |
+| `class of` dispatch, named ctor | correct |
+| inline metaclass cast `TDerClass(o.ClassType).Create` | correct |
+| `inherited Create(m)` from the derived body | correct |
+
+**Controlled against the PRE-FIX compiler, not against a text edit** — the same
+source built with `stable_linux_amd64/default/pinned` (v300, which predates this
+fix) shows route 1 garbled and these five already correct. So the sweep is a
+real instrument: it does show the bug where the bug is, and it found no second
+instance. Plain `Create` was the only route whose two lookups disagreed.
+
+All six are now in `test/test_ctor_shadowing_signature.pas`. The test FAILS
+under pinned v300 (2 failures, the literal and the variable) and passes at HEAD,
+which is what makes it a regression test rather than a snapshot.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

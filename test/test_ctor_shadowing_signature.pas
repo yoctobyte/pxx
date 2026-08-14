@@ -27,10 +27,17 @@ type
   TBase = class
     msg: AnsiString;
     constructor Create(const m: AnsiString);
+    { A NAMED ctor shadowed the same way. `Create` has a parse fast path all to
+      itself, so a named ctor reaches construction by a different route and
+      needs its own assertion. }
+    constructor Make(const m: AnsiString);
   end;
   TDer = class(TBase)
     constructor Create(const m: Variant);
+    constructor Make(const m: Variant);
+    procedure ViaInherited(const m: AnsiString);
   end;
+  TDerClass = class of TDer;
 
 var failures: Integer;
 
@@ -48,14 +55,31 @@ begin
   msg := m;
 end;
 
+constructor TBase.Make(const m: AnsiString);
+begin
+  msg := m;
+end;
+
 constructor TDer.Create(const m: Variant);
 begin
   msg := m;
 end;
 
+constructor TDer.Make(const m: Variant);
+begin
+  msg := m;
+end;
+
+procedure TDer.ViaInherited(const m: AnsiString);
+begin
+  inherited Create(m);
+end;
+
 var
   d: TDer;
   b: TBase;
+  o: TObject;
+  cls: TDerClass;
   s: AnsiString;
   v: Variant;
 
@@ -83,6 +107,29 @@ begin
     regression here means the fix moved the bug rather than removing it. }
   b := TBase.Create('hello');
   Check(b.msg, 'hello', 'base ctor named directly');
+
+  { The SWEEP. A constructor is reachable by several routes and each resolves
+    the ctor for itself, so each can carry the same disagreement independently.
+    Measured against the pre-fix pinned compiler: only the plain `Create` above
+    was ever broken and these five were already correct — they are here so they
+    STAY correct, and because a future change to ctor resolution is exactly the
+    kind that fixes one route and leaves the others behind. }
+  d := TDer.Make('named');
+  Check(d.msg, 'named', 'named shadowing ctor');
+
+  cls := TDer;
+  d := cls.Create('classof');
+  Check(d.msg, 'classof', 'class-of dispatch, Create');
+  d := cls.Make('classofnamed');
+  Check(d.msg, 'classofnamed', 'class-of dispatch, named ctor');
+
+  o := TDer.Create('seed');
+  d := TDerClass(o.ClassType).Create('metacast');
+  Check(d.msg, 'metacast', 'inline metaclass cast');
+
+  d := TDer.Create('seed');
+  d.ViaInherited('inherited');
+  Check(d.msg, 'inherited', 'inherited Create from the derived body');
 
   if failures = 0 then WriteLn('ctor shadowing signature ok')
   else WriteLn('ctor shadowing signature FAILED ', failures);
