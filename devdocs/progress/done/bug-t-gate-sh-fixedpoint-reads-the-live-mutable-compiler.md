@@ -105,4 +105,4 @@ binary while this was being written (a sibling landed `e5702ed75` mid-session),
 which is the check doing its job — the fix does not blunt it.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 58f84eb3b.
