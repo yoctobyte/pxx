@@ -354,6 +354,31 @@ either, so nothing that works there breaks here. The message names the call
 rather than the missing implementation, which is worse than CPython's; improving
 it would mean carrying the dropped stub names, and no real code has needed it.
 
+## Codecs: the supported set is a SUBSET, refused by name (2026-08-15)
+
+`str.encode` / `bytes.decode` honour their encoding argument
+(bug-n-str-encode-and-bytes-decode-ignore-the-encoding). Supported: `utf-8`,
+`ascii`, `latin-1`/`iso-8859-1`, `utf-16le`/`be`, `utf-32le`/`be`, and
+`utf-16`/`utf-32` with a BOM — with CPython's alias spellings and its
+`-`/`_`/space normalisation, and `errors=` as `strict` / `replace` / `ignore`.
+
+Anything else raises `LookupError` **by name**. CPython ships dozens more
+(`big5`, `gb18030`, `shift_jis`, the other `iso-8859-*` …), so:
+
+| | CPython | pxx |
+| --- | --- | --- |
+| `"hé".encode("big5")` | `UnicodeEncodeError` (big5 exists; é is not in it) | `LookupError: unknown encoding: big5` |
+| `"ab".encode("big5")` | `b'ab'` | `LookupError` |
+| `"ab".encode("no-such-codec")` | `LookupError` | `LookupError` |
+
+**A missing feature, deliberately, not an approximation.** Returning UTF-8 bytes
+labelled `big5` would be a wrong answer that no caller could detect; refusing is
+one a caller can. Row 2 is the honest cost: a program that only ever passes
+ASCII through an unimplemented codec worked in CPython and is refused here. Add
+a codec when a real target needs it — each is a table, and the one place that
+decides what an encoding NAME means is `PyEncCode`, so a future `codecs.lookup`
+delegates there rather than becoming a second mechanism.
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython

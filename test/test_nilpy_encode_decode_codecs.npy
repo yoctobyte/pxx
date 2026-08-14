@@ -1,0 +1,76 @@
+# str.encode(enc) and bytes.decode(enc) used to IGNORE the encoding argument
+# and always do UTF-8 -- a byte-for-byte copy in each direction. So
+# "he".encode("latin-1") returned 3 UTF-8 bytes where CPython gives 2,
+# encode("ascii") silently succeeded on non-ASCII, and decode never raised.
+#
+# It LOOKS right on ASCII, which is why it survived: every encoding agrees
+# there, and most test strings are ASCII. The first non-ASCII character is
+# where it went wrong, silently -- and only at a BOUNDARY, since a program
+# that encodes and decodes with the same wrong assumption round-trips fine.
+#
+# decode swallowing invalid input is the same failure in reverse: code that
+# relies on UnicodeDecodeError to detect a wrong-encoding guess -- which is
+# exactly what encoding-sniffing code does -- silently took the wrong branch.
+# bug-n-str-encode-and-bytes-decode-ignore-the-encoding
+
+
+def show(b):
+    return str(len(b)) + " " + str([x for x in b])
+
+
+s = "hé"
+for enc in ["utf-8", "latin-1", "iso-8859-1", "utf-16le", "utf-16be", "utf-32le"]:
+    print(enc, show(s.encode(enc)))
+print("default", show(s.encode()))
+
+# ascii RAISES outside 0..127, and the error handlers work
+try:
+    s.encode("ascii")
+    print("ascii NOT REFUSED")
+except UnicodeEncodeError:
+    print("ascii refused")
+print("ascii-replace", show(s.encode("ascii", "replace")))
+print("ascii-ignore", show(s.encode("ascii", "ignore")))
+
+# Python's keyword spellings for both arguments
+print("kw", show(s.encode(encoding="latin-1")))
+print("kw2", show(s.encode(encoding="ascii", errors="ignore")))
+
+# decode honours it too, and strict decode REJECTS -- which is the half that
+# encoding sniffing depends on
+b = bytes([104, 233])
+print("dec-latin1", b.decode("latin-1"))
+print("dec-16le", b.decode("utf-16le"))
+try:
+    b.decode("utf-8")
+    print("utf8 NOT REFUSED")
+except UnicodeDecodeError:
+    print("utf8 refused")
+print("utf8-replace", b.decode("utf-8", "replace"))
+print("utf8-ignore", b.decode("utf-8", "ignore"))
+try:
+    b.decode("ascii")
+    print("ascii-dec NOT REFUSED")
+except UnicodeDecodeError:
+    print("ascii-dec refused")
+print("valid-utf8", bytes([104, 195, 169]).decode("utf-8"))
+
+# round trips, including a BOM-bearing form and above the BMP
+print("rt-latin1", "hé".encode("latin-1").decode("latin-1"))
+print("rt-16le", "héllo".encode("utf-16le").decode("utf-16le"))
+print("rt-32be", "héllo".encode("utf-32be").decode("utf-32be"))
+print("rt-bom16", "hé".encode("utf-16").decode("utf-16"))
+print("rt-astral", "a𝄞b".encode("utf-16le").decode("utf-16le"))
+
+# an unknown encoding is refused BY NAME: returning UTF-8 bytes labelled
+# something else is a wrong answer, refusing is a missing feature
+try:
+    s.encode("no-such-codec")
+    print("bogus-enc NOT REFUSED")
+except LookupError:
+    print("bogus-enc refused")
+try:
+    b.decode("no-such-codec")
+    print("bogus-dec NOT REFUSED")
+except LookupError:
+    print("bogus-dec refused")

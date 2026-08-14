@@ -1120,6 +1120,8 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_variant_subscript26)" = "$$(printf '%b' '1\n2\n20\n99')"
 	./$(COMPILER) test/test_nilpy_dyncall.npy $(TESTTMP)/test_nilpy_dyncall26
 	test "$$($(TESTTMP)/test_nilpy_dyncall26)" = "42"
+	./$(COMPILER) test/test_nilpy_encode_decode_codecs.npy $(TESTTMP)/test_nilpy_codecs26
+	$(TESTTMP)/test_nilpy_codecs26 | diff -u test/test_nilpy_encode_decode_codecs.expected -
 	./$(COMPILER) test/test_nilpy_overload_decorator.npy $(TESTTMP)/test_nilpy_overload26
 	test "$$($(TESTTMP)/test_nilpy_overload26)" = "$$(printf '1 a 4 3\n5 q 2 7')"
 	./$(COMPILER) test/test_nilpy_unhashable_eq_without_hash.npy $(TESTTMP)/test_nilpy_unhashable26

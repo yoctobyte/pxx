@@ -885,10 +885,18 @@ function len(b: TPyBytes): Integer; overload;
   three element types: a negative bound counts from the end, both bounds clamp
   into [0, n], and an inverted or empty range yields an EMPTY result rather
   than an error. This is deliberately unlike INDEXING, which raises. }
-{ str.encode(encoding [, errors]) -> bytes. Our strings ARE byte strings, so
-  this is a byte-for-byte copy: exact for latin-1, and for utf-8 exact only
-  while every character is ASCII (see the ticket noted at the call site). }
+{ str.encode([encoding [, errors]]) -> bytes. The encoding is HONOURED — it used
+  to be accepted and dropped, so every encoding produced UTF-8 bytes and
+  `"he".encode("latin-1")` returned 3 bytes where CPython gives 2. Supported:
+  utf-8, ascii, latin-1/iso-8859-1, utf-16le/be, utf-32le/be, and utf-16/utf-32
+  with a BOM; anything else raises LookupError BY NAME, because returning UTF-8
+  bytes labelled big5 is a wrong answer while refusing is a missing feature.
+  errors= is 'strict' (raise), 'replace' or 'ignore'.
+  bug-n-str-encode-and-bytes-decode-ignore-the-encoding }
 function pystr_encode(const s: AnsiString): TPyBytes;
+function pystr_encode_enc(const s: AnsiString; const enc: AnsiString): TPyBytes;
+function pystr_encode_enc_err(const s: AnsiString; const enc: AnsiString;
+                              const errors: AnsiString): TPyBytes;
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
 function pylist_slice(l: TPyList; lo, hi: Integer): TPyList;
@@ -8268,19 +8276,153 @@ begin
 end;
 
 function TPyBytes.decode(const encoding: AnsiString): AnsiString; overload;
-var k: Integer; p: PByte;
 begin
-  Result := '';
-  for k := 0 to FLen - 1 do
-  begin
-    p := PByte(NativeInt(FData) + k);
-    Result := Result + Chr(p^);
-  end;
+  Result := decode(encoding, 'strict');
 end;
 
 function TPyBytes.decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
+var code, eh, k, n, seqLen: Integer; p: PByte; cp, lead, trail: Int64;
+    bswap: Boolean;
+
+  function ByteAt(idx: Integer): Int64;
+  var q: PByte;
+  begin
+    q := PByte(NativeInt(FData) + idx);
+    ByteAt := q^;
+  end;
+
+  procedure BadInput(const what: AnsiString; at: Integer);
+  begin
+    if eh = 0 then
+      raise UnicodeDecodeError.Create(
+        what + ' codec cannot decode byte at position ' + pystr_of(Int64(at)) +
+        ': invalid data');
+  end;
+
 begin
-  Result := decode(encoding);
+  code := PyEncCode(encoding);
+  PyEncRequire(encoding, code);
+  eh := PyErrCode(errors);
+  Result := '';
+
+  if code = PYENC_LATIN1 then
+  begin
+    { every byte is its own code point — the one encoding that cannot fail }
+    for k := 0 to FLen - 1 do PyCpToUtf8(Result, ByteAt(k));
+    Exit;
+  end;
+
+  if code = PYENC_ASCII then
+  begin
+    for k := 0 to FLen - 1 do
+    begin
+      cp := ByteAt(k);
+      if cp > $7F then
+      begin
+        BadInput('ascii', k);
+        if eh = 2 then Continue;
+        cp := $FFFD;
+      end;
+      PyCpToUtf8(Result, cp);
+    end;
+    Exit;
+  end;
+
+  if code = PYENC_UTF8 then
+  begin
+    { The internal form IS utf-8, so a VALID input is a byte-for-byte copy —
+      but it must be VALIDATED now, because strict decode is exactly what
+      encoding-sniffing code relies on to reject a wrong guess. Substituting
+      U+FFFD unconditionally, as this used to, made every guess look right. }
+    k := 0;
+    while k < FLen do
+    begin
+      cp := ByteAt(k);
+      if cp < $80 then seqLen := 0
+      else if (cp and $E0) = $C0 then begin seqLen := 1; cp := cp and $1F; end
+      else if (cp and $F0) = $E0 then begin seqLen := 2; cp := cp and $0F; end
+      else if (cp and $F8) = $F0 then begin seqLen := 3; cp := cp and $07; end
+      else seqLen := -1;
+      if (seqLen < 0) or (k + seqLen >= FLen) then
+      begin
+        BadInput('utf-8', k);
+        Inc(k);
+        if eh = 2 then Continue;
+        PyCpToUtf8(Result, $FFFD);
+        Continue;
+      end;
+      for n := 1 to seqLen do
+      begin
+        if (ByteAt(k + n) and $C0) <> $80 then begin seqLen := -1; Break; end;
+        cp := (cp shl 6) or (ByteAt(k + n) and $3F);
+      end;
+      if seqLen < 0 then
+      begin
+        BadInput('utf-8', k);
+        Inc(k);
+        if eh = 2 then Continue;
+        PyCpToUtf8(Result, $FFFD);
+        Continue;
+      end;
+      PyCpToUtf8(Result, cp);
+      k := k + seqLen + 1;
+    end;
+    Exit;
+  end;
+
+  if (code = PYENC_UTF16LE) or (code = PYENC_UTF16BE) or (code = PYENC_UTF16) then
+  begin
+    k := 0;
+    bswap := (code = PYENC_UTF16BE);
+    if code = PYENC_UTF16 then
+    begin
+      { honour a BOM; CPython's bare `utf-16` defaults to LE without one }
+      if (FLen >= 2) and (ByteAt(0) = $FF) and (ByteAt(1) = $FE) then k := 2
+      else if (FLen >= 2) and (ByteAt(0) = $FE) and (ByteAt(1) = $FF) then
+      begin k := 2; bswap := True; end;
+    end;
+    while k + 1 < FLen do
+    begin
+      if bswap then lead := (ByteAt(k) shl 8) or ByteAt(k + 1)
+      else lead := ByteAt(k) or (ByteAt(k + 1) shl 8);
+      k := k + 2;
+      if (lead >= $D800) and (lead <= $DBFF) then
+      begin
+        if k + 1 >= FLen then begin BadInput('utf-16', k); Break; end;
+        if bswap then trail := (ByteAt(k) shl 8) or ByteAt(k + 1)
+        else trail := ByteAt(k) or (ByteAt(k + 1) shl 8);
+        k := k + 2;
+        lead := $10000 + ((lead - $D800) shl 10) + (trail - $DC00);
+      end;
+      PyCpToUtf8(Result, lead);
+    end;
+    if k < FLen then BadInput('utf-16', k);
+    Exit;
+  end;
+
+  { utf-32 }
+  k := 0;
+  bswap := (code = PYENC_UTF32BE);
+  if code = PYENC_UTF32 then
+  begin
+    if (FLen >= 4) and (ByteAt(0) = $FF) and (ByteAt(1) = $FE) and
+       (ByteAt(2) = 0) and (ByteAt(3) = 0) then k := 4
+    else if (FLen >= 4) and (ByteAt(0) = 0) and (ByteAt(1) = 0) and
+            (ByteAt(2) = $FE) and (ByteAt(3) = $FF) then
+    begin k := 4; bswap := True; end;
+  end;
+  while k + 3 < FLen do
+  begin
+    if bswap then
+      cp := (ByteAt(k) shl 24) or (ByteAt(k + 1) shl 16) or
+            (ByteAt(k + 2) shl 8) or ByteAt(k + 3)
+    else
+      cp := ByteAt(k) or (ByteAt(k + 1) shl 8) or
+            (ByteAt(k + 2) shl 16) or (ByteAt(k + 3) shl 24);
+    k := k + 4;
+    PyCpToUtf8(Result, cp);
+  end;
+  if k < FLen then BadInput('utf-32', k);
 end;
 
 function bytearray: TPyBytes; overload;
@@ -8471,15 +8613,228 @@ begin
   end;
 end;
 
+
+{ ===== Codecs: str.encode / bytes.decode HONOUR their encoding argument =====
+
+  Both used to ignore it and always do UTF-8 — a byte-for-byte copy in each
+  direction — so `"hé".encode("latin-1")` returned 3 UTF-8 bytes where CPython
+  gives 2, `encode("ascii")` silently succeeded on non-ASCII, and `decode` never
+  raised. It LOOKS right on ASCII, which is why it survived: every encoding
+  agrees there, and most test strings are ASCII.
+
+  Internally a NilPy str is UTF-8, so both directions go through code points:
+  decode the source to code points, encode them to the target. That is also what
+  makes ONE place decide what an encoding name means, so a future codecs.lookup
+  can delegate here instead of becoming a second mechanism that disagrees.
+
+  An unknown encoding RAISES LookupError by name. Returning UTF-8 bytes labelled
+  big5 is a wrong answer; refusing is a missing feature.
+  bug-n-str-encode-and-bytes-decode-ignore-the-encoding }
+
+const
+  PYENC_UNKNOWN  = 0;
+  PYENC_UTF8     = 1;
+  PYENC_ASCII    = 2;
+  PYENC_LATIN1   = 3;
+  PYENC_UTF16LE  = 4;
+  PYENC_UTF16BE  = 5;
+  PYENC_UTF32LE  = 6;
+  PYENC_UTF32BE  = 7;
+  PYENC_UTF16    = 8;   { BOM: emits one on encode, honours one on decode }
+  PYENC_UTF32    = 9;
+
+{ Normalise the way CPython does: case-insensitive, and '-'/'_'/' ' are all the
+  same separator, so 'UTF_8', 'utf-8' and 'Utf 8' are one encoding. }
+function PyEncNormalize(const enc: AnsiString): AnsiString;
+var i: Integer; c: Char;
+begin
+  Result := '';
+  for i := 1 to Length(enc) do
+  begin
+    c := enc[i];
+    if (c = '_') or (c = ' ') then c := '-'
+    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result := Result + c;
+  end;
+end;
+
+function PyEncCode(const enc: AnsiString): Integer;
+var n: AnsiString;
+begin
+  n := PyEncNormalize(enc);
+  if (n = 'utf-8') or (n = 'utf8') or (n = 'u8') then PyEncCode := PYENC_UTF8
+  else if (n = 'ascii') or (n = 'us-ascii') or (n = '646') then PyEncCode := PYENC_ASCII
+  else if (n = 'latin-1') or (n = 'latin1') or (n = 'iso-8859-1') or
+          (n = 'iso8859-1') or (n = '8859') or (n = 'cp819') or
+          (n = 'latin') or (n = 'l1') then PyEncCode := PYENC_LATIN1
+  else if (n = 'utf-16le') or (n = 'utf16le') then PyEncCode := PYENC_UTF16LE
+  else if (n = 'utf-16be') or (n = 'utf16be') then PyEncCode := PYENC_UTF16BE
+  else if (n = 'utf-32le') or (n = 'utf32le') then PyEncCode := PYENC_UTF32LE
+  else if (n = 'utf-32be') or (n = 'utf32be') then PyEncCode := PYENC_UTF32BE
+  else if (n = 'utf-16') or (n = 'utf16') or (n = 'u16') then PyEncCode := PYENC_UTF16
+  else if (n = 'utf-32') or (n = 'utf32') or (n = 'u32') then PyEncCode := PYENC_UTF32
+  else PyEncCode := PYENC_UNKNOWN;
+end;
+
+procedure PyEncRequire(const enc: AnsiString; code: Integer);
+begin
+  if code = PYENC_UNKNOWN then
+    raise LookupError.Create('unknown encoding: ' + enc);
+end;
+
+{ errors=: 0 strict (raise), 1 replace, 2 ignore. Anything else is a
+  LookupError in CPython too. }
+function PyErrCode(const errors: AnsiString): Integer;
+var n: AnsiString;
+begin
+  n := PyEncNormalize(errors);
+  if (n = '') or (n = 'strict') then PyErrCode := 0
+  else if n = 'replace' then PyErrCode := 1
+  else if n = 'ignore' then PyErrCode := 2
+  else raise LookupError.Create('unknown error handler name ' + errors);
+end;
+
+{ Append one code point to an internal (UTF-8) NilPy string. }
+procedure PyCpToUtf8(var out_: AnsiString; cp: Int64);
+begin
+  if cp < $80 then
+    out_ := out_ + Chr(cp)
+  else if cp < $800 then
+  begin
+    out_ := out_ + Chr($C0 or (cp shr 6));
+    out_ := out_ + Chr($80 or (cp and $3F));
+  end
+  else if cp < $10000 then
+  begin
+    out_ := out_ + Chr($E0 or (cp shr 12));
+    out_ := out_ + Chr($80 or ((cp shr 6) and $3F));
+    out_ := out_ + Chr($80 or (cp and $3F));
+  end
+  else
+  begin
+    out_ := out_ + Chr($F0 or (cp shr 18));
+    out_ := out_ + Chr($80 or ((cp shr 12) and $3F));
+    out_ := out_ + Chr($80 or ((cp shr 6) and $3F));
+    out_ := out_ + Chr($80 or (cp and $3F));
+  end;
+end;
+
+{ Read the code point starting at 1-based byte i of an internal UTF-8 string;
+  advances i past it. A malformed byte yields itself, which is what the rest of
+  this unit's UTF-8 walkers already do — the internal form is our own output, so
+  this is a robustness path, not a decoder. }
+function PyUtf8CpAt(const s: AnsiString; var i: Integer): Int64;
+var b, n, k, cp: Int64;
+begin
+  b := Ord(s[i]);
+  if b < $80 then begin Inc(i); PyUtf8CpAt := b; Exit; end;
+  if (b and $E0) = $C0 then begin n := 1; cp := b and $1F; end
+  else if (b and $F0) = $E0 then begin n := 2; cp := b and $0F; end
+  else if (b and $F8) = $F0 then begin n := 3; cp := b and $07; end
+  else begin Inc(i); PyUtf8CpAt := b; Exit; end;
+  if i + n > Length(s) then begin Inc(i); PyUtf8CpAt := b; Exit; end;
+  for k := 1 to n do
+    cp := (cp shl 6) or (Ord(s[i + k]) and $3F);
+  i := i + Integer(n) + 1;
+  PyUtf8CpAt := cp;
+end;
+
+procedure PyBytesPut(b: TPyBytes; var at: Integer; v: Int64);
+var p: PByte;
+begin
+  p := PByte(NativeInt(b.FData) + at);
+  p^ := Byte(v and $FF);
+  Inc(at);
+end;
+
 function pystr_encode(const s: AnsiString): TPyBytes;
 var k: Integer; p: PByte;
 begin
+  { the no-argument form is utf-8, and the internal representation IS utf-8, so
+    this stays the byte-for-byte copy it always was }
   Result := TPyBytes.Create(Length(s));
   for k := 1 to Length(s) do
   begin
     p := PByte(NativeInt(Result.FData) + (k - 1));
     p^ := Ord(s[k]);
   end;
+end;
+
+function pystr_encode_enc(const s: AnsiString; const enc: AnsiString): TPyBytes;
+begin
+  Result := pystr_encode_enc_err(s, enc, 'strict');
+end;
+
+function pystr_encode_enc_err(const s: AnsiString; const enc: AnsiString;
+                              const errors: AnsiString): TPyBytes;
+var code, eh, i, at, wide: Integer; cp: Int64; outp: AnsiString; nb: Integer;
+begin
+  code := PyEncCode(enc);
+  PyEncRequire(enc, code);
+  eh := PyErrCode(errors);
+  if code = PYENC_UTF8 then begin Result := pystr_encode(s); Exit; end;
+
+  { Walk code points once, building the target bytes in an AnsiString (the
+    length is not known up front for the variable-width targets), then copy in.
+    A BOM-bearing form emits its BOM first, as CPython's utf-16/utf-32 do. }
+  outp := '';
+  if code = PYENC_UTF16 then outp := outp + Chr($FF) + Chr($FE)
+  else if code = PYENC_UTF32 then
+    outp := outp + Chr($FF) + Chr($FE) + Chr(0) + Chr(0);
+  i := 1;
+  while i <= Length(s) do
+  begin
+    cp := PyUtf8CpAt(s, i);
+    if (code = PYENC_ASCII) and (cp > $7F) then
+    begin
+      if eh = 0 then
+        raise UnicodeEncodeError.Create(
+          'ascii codec cannot encode character ' + pystr_of(cp) +
+          ': ordinal not in range(128)');
+      if eh = 2 then Continue;
+      cp := Ord('?');
+    end
+    else if (code = PYENC_LATIN1) and (cp > $FF) then
+    begin
+      if eh = 0 then
+        raise UnicodeEncodeError.Create(
+          'latin-1 codec cannot encode character ' + pystr_of(cp) +
+          ': ordinal not in range(256)');
+      if eh = 2 then Continue;
+      cp := Ord('?');
+    end;
+    if (code = PYENC_ASCII) or (code = PYENC_LATIN1) then
+      outp := outp + Chr(cp and $FF)
+    else if (code = PYENC_UTF32LE) or (code = PYENC_UTF32) then
+      outp := outp + Chr(cp and $FF) + Chr((cp shr 8) and $FF) +
+                     Chr((cp shr 16) and $FF) + Chr((cp shr 24) and $FF)
+    else if code = PYENC_UTF32BE then
+      outp := outp + Chr((cp shr 24) and $FF) + Chr((cp shr 16) and $FF) +
+                     Chr((cp shr 8) and $FF) + Chr(cp and $FF)
+    else
+    begin
+      { utf-16: a code point above the BMP becomes a surrogate PAIR }
+      if cp > $FFFF then
+      begin
+        cp := cp - $10000;
+        wide := $D800 or Integer((cp shr 10) and $3FF);
+        if code = PYENC_UTF16BE then
+          outp := outp + Chr((wide shr 8) and $FF) + Chr(wide and $FF)
+        else
+          outp := outp + Chr(wide and $FF) + Chr((wide shr 8) and $FF);
+        cp := $DC00 or (cp and $3FF);
+      end;
+      if code = PYENC_UTF16BE then
+        outp := outp + Chr((cp shr 8) and $FF) + Chr(cp and $FF)
+      else
+        outp := outp + Chr(cp and $FF) + Chr((cp shr 8) and $FF);
+    end;
+  end;
+
+  nb := Length(outp);
+  Result := TPyBytes.Create(nb);
+  at := 0;
+  for i := 1 to nb do PyBytesPut(Result, at, Ord(outp[i]));
 end;
 
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;

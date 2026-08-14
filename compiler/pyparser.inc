@@ -3546,9 +3546,12 @@ begin
   else if CaseEqual(mname, 'rindex') then
     begin pname := 'pystr_rindex'; retTk := tyInteger; wantArgs := 1; end
   else if CaseEqual(mname, 'encode') then
-    { .encode(enc [, errors=...]) — the arguments are accepted and DROPPED; see
-      the -4 case in PyParseStrMethod and pystr_encode for what that means. }
-    begin pname := 'pystr_encode'; retTk := tyClass; wantArgs := -4; end
+    { .encode([enc [, errors=...]]) — the arguments are PARSED now and reach
+      pylib, which honours them. They used to be swallowed, so every encoding
+      produced UTF-8 bytes. One pylib name per arity (see the -9 case's note:
+      FindProc never consults overloads).
+      bug-n-str-encode-and-bytes-decode-ignore-the-encoding }
+    begin pname := 'pystr_encode'; retTk := tyClass; wantArgs := -11; end
   else if CaseEqual(mname, 'format') then
     { one or two positional arguments — see the -6 case in PyParseStrMethod }
     begin pname := 'pystr_format'; retTk := tyAnsiString; wantArgs := -6; end
@@ -7012,6 +7015,20 @@ begin
   end;
   while (wantArgs <> -4) and (CurTok.Kind <> tkRParen) do
   begin
+    { `s.encode(encoding="latin-1", errors="replace")` — Python's keyword
+      spellings for the two arguments. Consumed down to the VALUE, which is
+      what the positional slot wants: both names are fixed and in declaration
+      order, so nothing has to be re-ordered. This is the whole reason the old
+      -4 mode skipped the arguments as tokens rather than parsing them — a bare
+      `errors` is not an expression.
+      bug-n-str-encode-and-bytes-decode-ignore-the-encoding }
+    if (wantArgs = -11) and (CurTok.Kind = tkIdent) and
+       (PyIsIdent('encoding') or PyIsIdent('errors')) and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      Next;
+      Next;
+    end;
     { A bare generator expression as an argument — `"\n".join(x for x in it)`.
       Detected BEFORE the EXPR is parsed, because the EXPR references the loop
       variable, which is not in scope until the `for`. PyParseCompExprValue
@@ -7139,6 +7156,16 @@ begin
     else if i = 2 then pname := 'pystr_rsplit_sep_max'
     else if i <> 1 then
       Error('Nil Python: str method .' + mname + '() takes at most two arguments');
+    procIdx := FindProc(pname);
+    if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  end
+  else if wantArgs = -11 then
+  begin
+    { .encode: one pylib name per arity. }
+    if i = 1 then pname := 'pystr_encode_enc'
+    else if i = 2 then pname := 'pystr_encode_enc_err'
+    else if i <> 0 then
+      Error('Nil Python: str method .encode() takes at most two arguments');
     procIdx := FindProc(pname);
     if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   end

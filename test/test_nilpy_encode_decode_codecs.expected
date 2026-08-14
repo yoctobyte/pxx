@@ -1,0 +1,26 @@
+utf-8 3 [104, 195, 169]
+latin-1 2 [104, 233]
+iso-8859-1 2 [104, 233]
+utf-16le 4 [104, 0, 233, 0]
+utf-16be 4 [0, 104, 0, 233]
+utf-32le 8 [104, 0, 0, 0, 233, 0, 0, 0]
+default 3 [104, 195, 169]
+ascii refused
+ascii-replace 2 [104, 63]
+ascii-ignore 1 [104]
+kw 2 [104, 233]
+kw2 1 [104]
+dec-latin1 hé
+dec-16le 
+utf8 refused
+utf8-replace h�
+utf8-ignore h
+ascii-dec refused
+valid-utf8 hé
+rt-latin1 hé
+rt-16le héllo
+rt-32be héllo
+rt-bom16 hé
+rt-astral a𝄞b
+bogus-enc refused
+bogus-dec refused

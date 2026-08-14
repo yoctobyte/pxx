@@ -304,3 +304,4 @@
 2026-08-14T19:46:40Z  v304  44ca47c950df2ae6c39891c5128f2001569c7fcbc1c8a8236a3357d25134c787  41ef3daea62687ff8f84cc9d4c2d867b475c7721  fix(N): a positional mapping before the keyword run in dict()/update()
 2026-08-14T21:54:46Z  v305  50c34ae6434a84487f2571fbc1032c3d5c2ec3d43fcc4d744aec2f937d849439  8bd7c5694746438bdc3e871a20b9e2682241fd33  docs(progress): record the shas the resolves landed as
 2026-08-14T22:02:29Z  v306  50c34ae6434a84487f2571fbc1032c3d5c2ec3d43fcc4d744aec2f937d849439  5d8cd70876fbba95802289832298e3404e35e049  docs(progress): record the shas the resolves landed as
+2026-08-14T22:44:21Z  v307  102230e44a3923769134badddf8729cba730d47fb8dcd9d407a492cb6bdfad13  3bf1484cfada354ddfc841c7ada23a4affd12226  docs(progress): record the shas the resolves landed as

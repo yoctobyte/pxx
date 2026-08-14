@@ -3,6 +3,8 @@ track: N
 prio: 25
 type: bug
 summary: "str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim"
+status: done
+owner: agent-AN
 ---
 
 # `str.encode` / `bytes.decode` ignore the encoding argument
@@ -130,3 +132,81 @@ different silent wrong answer.
 
 Released unchanged rather than started at the end of a long session, since a
 codec landed half-way is worse than one not started.
+
+## Resolution
+
+Both directions honour the argument now, through code points, with one place
+deciding what an encoding NAME means.
+
+### Shape
+
+The internal representation of a NilPy str is UTF-8, so neither direction can be
+a byte copy any more except for utf-8 itself. Both go through code points:
+decode the source to code points, encode those to the target. `PyEncCode` is the
+single name→codec map, with CPython's alias spellings (`utf8`, `u8`, `latin1`,
+`l1`, `cp819`, `iso8859-1`, …) and its `-`/`_`/space normalisation, so `UTF_8`,
+`utf-8` and `Utf 8` are one encoding.
+
+Implemented: `utf-8`, `ascii`, `latin-1`/`iso-8859-1`, `utf-16le`/`be`,
+`utf-32le`/`be`, and `utf-16`/`utf-32` with a BOM (emitted on encode, honoured
+on decode, defaulting to LE without one). `errors=` is `strict` (raise),
+`replace`, `ignore` — and an unknown handler name is a `LookupError`, as in
+CPython.
+
+Anything else raises **`LookupError` by name**, which is the ticket's call:
+returning UTF-8 bytes labelled `big5` is a wrong answer no caller can detect;
+refusing is a missing feature a caller can. Recorded with its honest cost in
+`nilpy-semantics-divergences.md` — a program passing only ASCII through an
+unimplemented codec worked in CPython and is refused here.
+
+### The decode half is the one that was quietly dangerous
+
+`decode` did not merely ignore the encoding, it never RAISED: invalid input
+became U+FFFD. Encoding-sniffing code — which is what webencodings and html5lib
+ARE — detects a wrong guess precisely by catching `UnicodeDecodeError`, so every
+guess looked right and the wrong branch was taken silently. Strict decode now
+validates, including UTF-8 itself: a truncated or ill-formed sequence is
+rejected rather than substituted, even though the internal form is our own
+output.
+
+### Two frontend facts this ran into
+
+- **`.encode`'s arguments were SKIPPED AS TOKENS**, not parsed (`wantArgs = -4`),
+  because `errors="replace"` is a keyword argument and a bare `errors` is not an
+  expression. New mode `-11` parses them and consumes a leading `encoding=` /
+  `errors=`; both names are fixed and in declaration order, so nothing has to be
+  re-ordered.
+- **`FindProc` never consults overloads** — the `-9` case says so outright
+  ([[bug-nilpy-stdlib-shim-table-cannot-reach-an-overload]]). So the pylib entry
+  points are one name per arity (`pystr_encode`, `pystr_encode_enc`,
+  `pystr_encode_enc_err`) rather than the Pascal overloads I first wrote, which
+  would have silently kept binding the zero-argument form.
+
+### Verified
+
+`test/test_nilpy_encode_decode_codecs.npy` — 26 rows, **byte-identical to
+CPython**, including surrogate pairs for an astral-plane character
+(`"a𝄞b"` through utf-16le), BOM round-trips, both keyword spellings, all three
+error handlers, and the refusals in both directions. Compared with `diff -u`
+against an `.expected` file rather than an inline `printf`, since the output
+contains non-ASCII and a U+FFFD.
+
+Every pre-existing test that touches `.encode`/`.decode` re-diffed against
+CPython and unchanged: `bytes_hex`, `bytes_decode`, `bytearray_vs_bytes`,
+`encode`, `method_str_chain`, `method_kwarg`, `str_method_subscript`.
+
+Gate: `gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` + FPC seed
+canary), before and after the pin. **Pinned (v307)** — `pylib.pas` is the
+runtime of a compiled `.npy` program, so not a gate requirement, but without it
+the fix does not reach programs built with `$(PXX_STABLE)`. Frozen builtin set
+unchanged at 8 files.
+
+### What this unblocks
+
+[[feature-nilpy-codecs-shim]]: `codecs.lookup(name)` can now delegate to
+`PyEncCode` and the two entry points instead of inheriting an ignored argument.
+That is the normalise-don't-special-case shape the ticket asked for — one place
+decides, the shim delegates.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
