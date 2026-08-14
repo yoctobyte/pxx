@@ -164,3 +164,35 @@ what they should assert instead needs deciding.
 Python-shaped after it), [[bug-pascal-uses-is-transitive]] properly after — they
 are complementary, not alternatives. The rename fixes a category error; the root
 fix fixes the namespace leak.
+
+### Option 5, implementation shape (user, 2026-08-14): do it in the LEXER
+
+> *a small lexer fix that in any python code replaces the keyword `Exception`
+> by `PyException`*
+
+Right level, and cheaper than a semantic mapping: `.npy` source only, one token,
+in `compiler/pylexer.inc`. Two properties come for free at that level —
+
+- **string literals are safe by construction.** A lexer sees tokens, so
+  `print("Exception")` is untouched. A textual pre-pass would have to care.
+- **`class MyError(Exception)` maps too**, without special-casing, because the
+  base-class reference is the same bare identifier.
+
+**The one rule to get right: map the BARE identifier, not one preceded by a dot.**
+
+```python
+except Exception as e:     ->  except PyException as e:      # Python's builtin
+class MyErr(Exception):    ->  class MyErr(PyException):     # ditto
+import sysutils as su
+except su.Exception:       ->  unchanged                     # Pascal's, qualified
+```
+
+That split is what makes the bridging case expressible instead of impossible: a
+`.npy` that deliberately wants the Pascal class can still name it, qualified,
+and the two stop being the same row. Worth an explicit test per line above.
+
+Open question for whoever builds it: whether the rest of the builtin hierarchy
+(`ValueError`, `KeyError`, `TypeError`, …) needs the same treatment or only the
+root. They descend from pylib's `Exception` and do not collide with sysutils by
+name today — but `EConvertError`-style names could collide tomorrow, and doing
+the root alone leaves the family half-renamed.
