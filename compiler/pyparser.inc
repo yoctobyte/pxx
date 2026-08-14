@@ -6927,10 +6927,21 @@ begin
   procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   { `"-".join(map(str, xs))` — pystr_join takes a real TPyList and is reached by
-    NAME (FindProc, not overload resolution), so a cursor argument has to be
-    drained here. CPython consumes it too. }
+    NAME (FindProc, not overload resolution), so nothing type-checks its
+    argument and every iterable shape has to be normalised to a list HERE.
+    A cursor is drained (CPython consumes it too); a str is exploded into its
+    characters, which it was NOT — the string HANDLE went through where a
+    TPyList object pointer was expected and got dereferenced, so
+    `"-".join("hello")` was a SIGSEGV with no diagnostic
+    (bug-nilpy-join-of-a-str-segfaults). That is the same defect
+    PyIterArgAsList was written for when zip/enumerate had it; join was the
+    sibling left behind, which is the shape
+    devdocs/dev/normalise-dont-special-case.md is about. }
   if CaseEqual(pname, 'pystr_join') and (argCount = 1) and (ASTRight[argHead] >= 0) then
+  begin
     ASTLeft[ASTRight[argHead]] := PyDrainIfCursor(ASTLeft[ASTRight[argHead]]);
+    ASTLeft[ASTRight[argHead]] := PyIterArgAsList(ASTLeft[ASTRight[argHead]]);
+  end;
   argNode := argHead;
   i := argCount;
   { An EXPLICIT None separator — `s.split(None)`, `s.split(None, 1)` — means
@@ -11594,6 +11605,14 @@ end;
 function PyStarOperandAsList(node, listCi: Integer): Integer;
 var unboxArg, unboxCall: Integer;
 begin
+  { A str is an iterable, so `f(*s)` / `print(*s)` / `[*s]` spread its
+    CHARACTERS. This is the one normalisation point every star operand passes
+    through, so the str arm belongs here rather than at each caller — the
+    by-name-FindProc sites downstream take a real TPyList and would otherwise
+    receive a string handle (bug-nilpy-join-of-a-str-segfaults, the same defect
+    zip/enumerate had and join inherited). PyIterArgAsList returns a non-str
+    node untouched. }
+  node := PyIterArgAsList(node);
   if IntToTypeKind(ASTTk[node]) <> tyVariant then
   begin
     PyStarOperandAsList := node;
@@ -13256,6 +13275,12 @@ begin
   listCi := FindUClass('TPyList');
   dictCi := FindUClass('TPyDict');
   if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  { `f(*s)` spreads a str's characters. Normalised HERE rather than at the call
+    site, because this is the second entry into star expansion —
+    PyStarOperandAsList covers the other — and a str reaching the arity
+    dispatch below is read as a list by pystar_argc, which answered 56 for a
+    3-character string (bug-nilpy-join-of-a-str-segfaults). }
+  listNode := PyIterArgAsList(listNode);
   { bind both containers to temps: each arm reads the list again, and the
     expression must not be rebuilt per arm }
   listSym := AllocVar(PyHiddenName('fwd'), tyClass);
@@ -13799,7 +13824,13 @@ begin
     begin
       Next;
       PyParseBoolExpr;
-      starExt := PyCallMeth1(ci, 'extend', PyMakeIdent(tmpSym), CurASTNode);
+      { ...ANY sequence except a str, which reached TPyList.extend as a raw
+        string HANDLE and was dereferenced as an object pointer — `[*s]` and
+        `{*s}` were a SIGSEGV with no diagnostic on every pin before this one.
+        Third and last of the star sites this normalisation was missing
+        (bug-nilpy-join-of-a-str-segfaults). }
+      starExt := PyCallMeth1(ci, 'extend', PyMakeIdent(tmpSym),
+                             PyIterArgAsList(CurASTNode));
       if starExt < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
       PyHoistStmt(starExt);
       if not Eat(tkComma) then break;
@@ -14811,6 +14842,8 @@ begin
         sawStar := True;
         Next;                  { the '*' }
         PyParseBoolExpr;
+        { a str spreads as its characters, like every other iterable }
+        CurASTNode := PyIterArgAsList(CurASTNode);
         if IntToTypeKind(ASTTk[CurASTNode]) <> tyClass then
           Error('Nil Python: print(*x) needs a list; got a value of another type');
         starProc := FindProc('pyprint_star');

@@ -1,0 +1,72 @@
+# A str is an ITERABLE, so every place that takes one must accept it and spread
+# its characters. Four sites did not, and each of them CRASHED rather than
+# diagnosing: the routines behind them are reached by NAME (FindProc, not
+# overload resolution) and take a real TPyList, so a string handle went through
+# where an object pointer was expected and got dereferenced.
+#
+#   "-".join(s)   print(*s)   f(*s)   [*s] / {*s}
+#
+# All four were SIGSEGV with no diagnostic on every pin up to v292.
+# bug-nilpy-join-of-a-str-segfaults
+#
+# The fix is one call — PyIterArgAsList, which already existed for zip() and
+# enumerate() and returns a non-str node untouched. That it had to be added at
+# four sites is the point: the zip/enumerate fix normalised its own two callers
+# and left the siblings, which is the shape
+# devdocs/dev/normalise-dont-special-case.md is about. Every star path now goes
+# through it, so a fifth site would have to be a NEW star path, not a missed one.
+
+s = "abc"
+
+# --- join -------------------------------------------------------------------
+print("-".join(s))
+print("".join(s))
+print("|".join("日本語"))
+print("+".join(""))
+
+# join still takes what it always took
+print(",".join(["a", "b"]))
+print("-".join([str(x) for x in [1, 2, 3]]))
+print("-".join(map(str, [4, 5])))
+print("/".join(("x", "y")))
+
+# --- print(*x) --------------------------------------------------------------
+print(*s)
+print(*"日本語")
+print(*[1, 2])
+
+
+# --- f(*x) ------------------------------------------------------------------
+def f(a, b, c):
+    return a + b + c
+
+
+print(f(*s))
+print(f(*["x", "y", "z"]))
+
+
+def g(a, b):
+    return b + a
+
+
+print(g(*"pq"))
+
+# --- [*x] and {*x} in a display ---------------------------------------------
+print([*s])
+print([*s, "d"])
+print(["z", *s])
+print([*[1, 2], 3])
+print(sorted({*s}))
+print((*s,))
+# NOT asserted here: len({*"aab"}). `{*xs}` does not deduplicate — the star arm
+# of the set display calls TPyList.extend where the ordinary elements go through
+# TPyList.add. Pre-existing and independent of this ticket (a plain list shows
+# it too), so it is bug-nilpy-set-star-spread-does-not-dedup rather than a row
+# of this test that would have to be recorded WRONG to stay green.
+
+# --- and the shapes that already worked, so they keep working ---------------
+print(sorted(s), list(reversed(s)))
+print(max(s), min(s))
+print(list(s), tuple(s))
+print(list(enumerate(s)), list(zip(s, s)))
+print("b" in s, "z" in s)

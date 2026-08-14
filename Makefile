@@ -1375,6 +1375,11 @@ test-nilpy: $(COMPILER)
 	# is broken by any half-conversion. ASCII stays byte-identical.
 	./$(COMPILER) test/test_nilpy_str_counts_characters.npy /tmp/test_nilpy_strchars26
 	/tmp/test_nilpy_strchars26 | diff -u test/test_nilpy_str_counts_characters.expected -
+	# a str is an ITERABLE: "-".join(s), print(*s), f(*s), [*s]/{*s}. All four
+	# SEGFAULTED -- the routines behind them are reached by name and take a real
+	# TPyList, so a string handle was dereferenced as an object pointer.
+	./$(COMPILER) test/test_nilpy_str_as_an_iterable_argument.npy /tmp/test_nilpy_striter26
+	/tmp/test_nilpy_striter26 | diff -u test/test_nilpy_str_as_an_iterable_argument.expected -
 	# bytes.hex() -- zero-padded to two digits per byte, lowercase.
 	./$(COMPILER) test/test_nilpy_bytes_hex.npy /tmp/test_nilpy_byteshex26
 	/tmp/test_nilpy_byteshex26 | diff -u test/test_nilpy_bytes_hex.expected -
