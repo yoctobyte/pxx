@@ -785,4 +785,4 @@ was compiled from. Correctness first was the right order, and this is now the
 open question on this corpus rather than any wall.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit de5a7a9bb.
