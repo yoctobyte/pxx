@@ -2,7 +2,7 @@
 track: N
 prio: 55
 type: feature
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -720,3 +720,69 @@ The full `runtests.fth` driver under both engines is the real oracle and is the
 next measurement. Note that CPython itself needs more than 600s for it, which is
 its own data point for
 [[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]].
+
+## 2026-08-14 — THE CORPUS TARGET IS MET. Full ANS Forth suite, zero errors, byte-identical to CPython.
+
+`tests/runtests.fth` — the suite's own driver, which loads prelimtest, the
+tester harness, `core.fr` and eleven word-set test files — run under BOTH
+engines from an identical tree:
+
+```
+cpy rc=0   54.66 s   252 lines
+pxx rc=0  153.18 s   252 lines
+diff       IDENTICAL
+```
+
+And the suite's own verdict, from the pxx-built binary:
+
+```
+        Error Report
+Word Set             Errors
+Core                    0      Locals                  0
+Core extension          0      Memory-allocation       0
+Block                   0      Programming-tools       0
+Double number           0      Search-order            0
+Exception               0      String                  0
+Facility                0
+File-access             0
+---------------------------
+Total                   0
+```
+
+**A 4357-line real Python program, compiled by pxx, passes the entire ANS
+Forth / Forth 2012 conformance suite with stdout byte-for-byte CPython's.**
+That is what this ticket set out to reach, so it is resolved.
+
+Note which claim that is, per CLAUDE.md's claims-discipline table: the
+identical thing is the **program's OUTPUT** against a CPython-run oracle —
+behavioural parity, the zlib row, not the self-host binary row.
+
+### Two traps that cost a cycle each, recorded so the next corpus drive skips them
+
+- **`STD LIB NOT FOUND`.** `load_stdlib_if_any` falls back to
+  `dirname(abspath(__file__))`, and for a compiled binary `__file__` IS the
+  binary — deliberately, per pin v286. So the executable must sit inside the
+  tree beside `STD.UFO`. The first differential run here did not, and reported
+  a wall of "differences" that were entirely a stdlib-less pxx being compared
+  against a stdlib-loaded CPython.
+- **The suite is INTERACTIVE.** `prelimtest.fth` reaches
+  `PLEASE TYPE UP TO 80 CHARACTERS:` and blocks on ACCEPT. Both engines hung
+  there and both were killed at the 600 s timeout — which reads exactly like
+  "pxx is too slow to finish" and is neither engine's fault. `< /dev/null` is
+  the whole fix.
+
+### The real performance number, for Track O
+
+**pxx 153.18 s vs CPython 54.66 s on the full suite — 2.80x SLOWER.** That is a
+whole-suite figure on a real workload, which
+[[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]] currently
+has only for blocktest. Measured at sha f2f56c876, self-hosted fixedpoint build,
+same tree and same input for both, stdin closed for both.
+
+Worth stating plainly because it is the uncomfortable half of this result: the
+compiled program is CORRECT and it is nearly 3x slower than the interpreter it
+was compiled from. Correctness first was the right order, and this is now the
+open question on this corpus rather than any wall.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

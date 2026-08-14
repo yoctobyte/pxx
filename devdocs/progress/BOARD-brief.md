@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1742 rejected:35`
+`urgent:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1743 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-nilpy-corpus-uforth` [N] — owner: claude-A-N
+_none — no lane is locked._
 
 ## urgent (1) — jump the queue
 

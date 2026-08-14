@@ -138,3 +138,27 @@ Raised 45 -> 65 by the user, on seeing the 72% number.
 Nothing about the diagnosis changed: the "where the cause probably is NOT"
 section above is still a hypothesis from the shape of the numbers, and the
 suggested first step is still to profile before touching anything.
+
+## 2026-08-14 (claude-A-N, Track N) — a WHOLE-SUITE number, not just blocktest
+
+While closing [[feature-nilpy-corpus-uforth]], the full ANS Forth / Forth 2012
+suite (`tests/runtests.fth`: prelimtest, the tester harness, `core.fr` and
+eleven word-set files) was run under both engines from an identical tree:
+
+| engine | wall | result |
+| --- | --- | --- |
+| CPython 3.12 | **54.66 s** | 252 lines, 0 errors |
+| pxx-compiled uforth | **153.18 s** | 252 lines, 0 errors, stdout byte-identical |
+
+**2.80x slower**, on a real mixed workload rather than one test. So this ticket's
+finding is not a blocktest peculiarity — blocktest is where it was first noticed,
+and the ratio holds across the whole conformance suite.
+
+The correctness half is settled and should not be re-litigated while optimising:
+the compiled binary produces CPython's exact output, so any change here has a
+byte-exact oracle to hold itself against. Re-run with
+`cd <tree>/tests && ../uforth_pxx runtests.fth < /dev/null`.
+
+**Provenance:** compiler at f2f56c876, self-hosted fixedpoint build, not rebuilt
+during the runs; same tree, same input, stdin closed for both (the suite blocks
+on an interactive ACCEPT otherwise, which will look like a hang).

@@ -10,11 +10,9 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-pascal-uses-is-transitive | A | 80 | bug | REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix the user decided on 2026-08-01 (land the real non-transitive rule) was never built, and the ticket sat in done/ hiding that. It is the root cause of the pylib/sysutils Exception ceiling, the tkinter/reportlab class collision, and the ClassNameIsDeliberatelyShared patch that was supposed to be temporary. Re-measured cost: 35 RTL-internal unit pairs, no user-program-facing leak. | — |
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
+_none_
 
 ## unfinished (8)
 
@@ -407,9 +405,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1742)
+## done (1743)
 
-1742 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1743 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
