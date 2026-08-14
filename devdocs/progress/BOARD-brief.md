@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1761 rejected:35`
+`unfinished:9 blocked:4 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1761 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 202, ranked
+## Ready — top 30 of 203, ranked
 
 - `[p 80] [T]` task-t-strict-uses-corpus-sweep (unblocks 1)
 - `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 2)
@@ -49,6 +49,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [B]` bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises
 - `[p 55] [C]` bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` chore-makefile-testtmp-parameterize
@@ -61,6 +62,5 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
-- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
-_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

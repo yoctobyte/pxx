@@ -58,11 +58,16 @@ belongs back on that ticket — say so there rather than re-prefixing silently.
    RESULTS, not just exit codes — `tools/gcc_diff_probe.sh` is the instrument for
    the math ones.
 
-## Also
+## Also — three stale docs, same visit
 
-`devdocs/dev/c-linking-and-crtl-autopull.md` still describes math.c's
-`sqrt`/`sin`/`pow` as "a thin bridge to the Pascal RTL". That is stale — they
-have real double-double C bodies now. Fix that line here.
+- `devdocs/dev/c-linking-and-crtl-autopull.md` still describes math.c's
+  `sqrt`/`sin`/`pow` as "a thin bridge to the Pascal RTL". Stale — they have real
+  double-double C bodies now (`math.c:959` etc.).
+- `lib/crtl/README.md` and `lib/crtl/src/README.md` both still say `src/` is
+  *"reserved for the matching implementations once real candidates need them"*.
+  It holds a 114-function correctly-rounded libm, `stdio`, `string`, and more.
+
+Background for all of it: `devdocs/dev/math-implemented-twice.md`.
 
 ## Gate
 

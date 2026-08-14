@@ -62,7 +62,13 @@ correct outcome here, not debt.
 The retrospective that produced the rule: **letting C reach into Pascal's math
 was the design error, not the naming.**
 
-**Status: `feature-a-own-language-first-symbol-resolution` (Track A, backlog).**
+**Why two implementations exist at all** — and why sharing them was tried and
+failed — is `math-implemented-twice.md`. Read it first if the rule looks like
+needless duplication: `Round(2.5)` is 2 in Pascal and 3 in C, both correct, and
+no single implementation can serve both.
+
+**Status: `feature-a-own-language-first-symbol-resolution` (Track A, unfinished,
+blocked on a design fork — see `decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language`).**
 The acute cause is gone — `pxxcio.pas` no longer does `uses math`, so the Pascal
 RTL is no longer in scope for every C program by default. What remains is a
 standing workaround: ten functions in `lib/crtl/src/math.c` are deliberately
