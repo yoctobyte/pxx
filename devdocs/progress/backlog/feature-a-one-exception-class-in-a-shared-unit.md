@@ -3,7 +3,7 @@ track: A
 prio: 75
 type: feature
 blocked-by: []
-summary: "One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work."
+summary: "Also FIXES bug-nilpy-exception-repr-and-type-name-say-pyexception by construction. One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work."
 ---
 
 # One `Exception`, declared once, re-exported by both units
@@ -115,3 +115,33 @@ padding is what proves the hook installed), `test_nilpy_rtl_exception_surface`,
 `test_nilpy_exception_non_string_argument` all green, plus a `.npy` with NO
 sysutils anywhere confirming the minimal formatter still runs. Self-host
 byte-identical.
+
+## 2026-08-14 — two variants MEASURED and rejected; the hook stands
+
+**Variant A (user's simplification): let sysutils INHERIT the root and add
+`CreateFmt` to the descendant**, avoiding the hook and the `Format` split
+entirely. It does not work, and it fails on the very thing this ticket exists to
+remove:
+
+- `class(exceptions.Exception)` — a QUALIFIED base class — is a parse error
+  here (`base type not found: excroot`). So the base must be named by a
+  bare identifier, which means the root needs a second name.
+- With the root named `Exception` and sysutils' descendant ALSO named
+  `Exception`, a program that uses sysutils resolves `Exception` to the ROOT
+  (registered first, first-match wins) and `Exception.CreateFmt` reports
+  *"class method not found"*. **Two classes, one name — the original bug.**
+
+**Variant B: name the root `ExceptionBase`** so the descendant can be
+`Exception`. No collision, but pylib's alias then reports `ExceptionBase` as
+`ClassName`, i.e. [[bug-nilpy-exception-repr-and-type-name-say-pyexception]]
+again with a different spelling. `repr()` follows the DECLARED name and there is
+only one declared name to give it.
+
+So the constraint is tighter than it looks: **the class that pylib reaches must
+itself be named `Exception`**, which forces sysutils to share that exact class
+rather than descend from it — and therefore forces `CreateFmt` onto the shared
+root, and therefore the hook. The hook is measured to work (pointer+count; a
+procedural type taking `array of const` is not expressible).
+
+Both variants were worth trying — the hook is a real cost and A would have
+avoided it. It just cannot hold the name.

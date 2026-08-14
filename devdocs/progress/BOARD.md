@@ -33,7 +33,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -59,6 +59,7 @@ _none_
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
+| bug-nilpy-exception-repr-and-type-name-say-pyexception | N | 60 | bug | `repr(Exception('x'))` prints `PyException('x')` and `type(e).__name__` is `PyException`, where CPython says `Exception`. Introduced 2026-08-14 by the option-5 rename: ClassName reports the DECLARED class name and the declared name is now PyException. Ordinary Python branches on type(e).__name__, so this is an upward-compatibility break, not a cosmetic one. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
@@ -109,7 +110,7 @@ _none_
 | feature-a-expose-rounding-mode-intrinsic-to-pascal | A | 30→35 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
 | feature-a-extended-is-an-alias-for-double | A | 25 | feature | `Extended` is silently an alias for `Double` | — |
 | feature-a-index-an-array-returning-call-directly | A | 40 | feature | Index an array-returning call directly: `MkArr[i]`, `MkR2[i,j].field` | — |
-| feature-a-one-exception-class-in-a-shared-unit | A | 75 | feature | One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work. | — |
+| feature-a-one-exception-class-in-a-shared-unit | A | 75 | feature | Also FIXES bug-nilpy-exception-repr-and-type-name-say-pyexception by construction. One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work. | — |
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
@@ -457,6 +458,7 @@ _none_
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [N] bug-nilpy-exception-repr-and-type-name-say-pyexception
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
