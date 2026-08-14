@@ -157,4 +157,4 @@ above). The byte-vs-code-point model question this ticket deferred is settled �
 NilPy strings are UTF-8 and character-indexed.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 90a59fc9e.
