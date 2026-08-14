@@ -146,4 +146,4 @@ rather than a pylib declaration alongside sysutils' `Format`
 open — not taken here, since it is a separate change with its own gate.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 5a7c9ab60.
