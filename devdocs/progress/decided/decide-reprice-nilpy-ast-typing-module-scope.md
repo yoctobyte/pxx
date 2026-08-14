@@ -4,7 +4,7 @@ prio: 55
 type: decide
 blocked-by: []
 summary: "feature-n-nilpy-ast-typing-module-scope sits at prio 55 — top of the ranked Track N queue after the META — but its own 2026-08-09 note concludes it is now an OPTIMISATION, not a correctness item, and asks to be re-priced. prio is the user's field, so: re-price, or leave it steering the queue?"
-status: backlog
+status: decided
 ---
 
 # Re-price `feature-n-nilpy-ast-typing-module-scope`?
@@ -59,3 +59,22 @@ gap that was hiding half of it).
 
 **Recommendation: option 3.** The capability and the optimisation are being
 ranked as one item, and it is the capability that carries the value.
+
+## DECIDED 2026-08-14 by the user — prio 8
+
+> *"Eight. It makes no sense to optimize a halt()."*
+
+Lower than the ticket's own suggested 25-30, and for a better reason than
+"optimisation ranks below correctness". The work **cannot be done as written**:
+the inference needs a pre-pass that trial-parses an unseen name, and `Error()`
+calls `Halt` directly, so a speculative parse cannot back out. An optimisation
+gated behind a fatal path is not a low-priority item, it is a blocked one.
+
+`feature-n-nilpy-ast-typing-module-scope` re-priced 55 -> 8, so it stops being
+the top actionable Track N item. The real work is filed as
+[[feature-a-error-does-not-halt-so-a-parse-can-be-speculative]] — which ranks on
+its own merits, and has better justifications than type inference:
+multiple-error reporting, better diagnostics, and any other speculative parse.
+
+## Log
+- 2026-08-14 — decided, commit PENDING-COMMIT.

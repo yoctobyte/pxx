@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 8
 type: feature
 ---
 
@@ -244,3 +244,20 @@ invisible until a value came out wrong.
 the pair split across two blocks, a top-level target with an unreadable block
 binding, and the bare float/bool literals. The four inference-lineage tests
 re-run green. `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
+
+
+## RE-PRICED 55 -> 8 (user, 2026-08-14)
+
+> *"It makes no sense to optimize a halt()."*
+
+Sharper than this ticket's own request to be "re-priced accordingly". The point
+is not that the remaining work is low value — it is that **the work is not
+workable as written**. The inference this ticket wants needs a pre-pass that
+trial-parses an as-yet-unseen name; `Error()` calls `Halt` directly, so the
+speculative parse cannot back out. There is nothing to optimise on a path that
+terminates the process.
+
+So this stops steering the Track N queue, and the real item is the plumbing
+underneath it: [[feature-a-error-does-not-halt-so-a-parse-can-be-speculative]].
+Fix that and this ticket's safe-shape list evaporates rather than being
+optimised.
