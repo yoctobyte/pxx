@@ -1933,6 +1933,21 @@ function pytype_name_v(const v: Variant): AnsiString;
   carry yet. uforth's word names are ASCII plus emoji, and emoji are
   case-stable, so the corpus is unaffected; a non-ASCII byte passes through
   untouched rather than being mangled. Tracked in feature-nilpy-str-methods. }
+{ `T = TypeVar("T")` — typing's run-time constructor for a type parameter.
+  `typing` is a consumed-and-ignored import (what it exports is annotation
+  metadata, read statically by PyAnnTypeAt and never evaluated), which is right
+  for `List`/`Optional`/`Dict` and wrong for the few names that are CALLED at
+  run time: the name was simply unbound and the module died at the call with
+  `undefined variable (TypeVar)`, naming the call rather than the import that
+  dropped it.
+
+  NilPy erases generics, and an annotation naming the result is degraded to Any
+  (bug-n-an-uninterpretable-annotation-refuses-the-program), so the VALUE is
+  never inspected — returning CPython's own `~T` spelling keeps a debug print
+  byte-identical. The extra keyword forms (`bound=`, `covariant=`) are not modelled;
+  they change nothing that survives erasure.
+  bug-n-typevar-call-is-an-undefined-variable }
+function TypeVar(const name: AnsiString): AnsiString;
 function pystr_upper(const s: AnsiString): AnsiString;
 function pystr_lower(const s: AnsiString): AnsiString;
 function pystr_strip(const s: AnsiString): AnsiString;
@@ -2094,6 +2109,14 @@ begin
       c := Chr(Ord(c) - 32);
     Result[i] := c;
   end;
+end;
+
+function TypeVar(const name: AnsiString): AnsiString;
+begin
+  { CPython prints a TypeVar as `~T` — matched exactly rather than approximated,
+    because it costs one character and a program that logs the value would
+    otherwise diverge for no reason. }
+  Result := '~' + name;
 end;
 
 function pystr_lower(const s: AnsiString): AnsiString;
