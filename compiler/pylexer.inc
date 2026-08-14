@@ -910,23 +910,21 @@ begin
           Inc(P);
         end;
         k := PyKeyword(s);
-        { Python's `Exception` is a LANGUAGE builtin; sysutils' Pascal class of
-          that name is one library's design choice. They are different concepts
-          that happened to share a spelling, and sharing it cost pylib the
-          ability to give its own class any member sysutils lacks — the whole of
-          decide-pylib-exception-vs-sysutils-exception. So the Python builtin is
-          renamed to pylib's `PyException` HERE, at the token, which is the level
-          the user specified and the cheapest one that gets two properties free:
-          a string literal `"Exception"` is untouched (a lexer sees tokens), and
-          `class MyErr(Exception)` maps with no special case because the base
-          reference is the same bare identifier.
+        { There is DELIBERATELY no `Exception` -> `PyException` rename here any
+          more. It existed while pylib's root had to carry a different name
+          from sysutils', and it renamed the identifier on the way IN but never
+          on the way out — so `repr(e)` and `type(e).__name__` printed
+          `PyException('x')` where CPython says `Exception('x')`
+          (bug-nilpy-exception-repr-and-type-name-say-pyexception). That
+          asymmetry is the lesson: a rename at the token boundary is invisible
+          to the user until something prints the name back.
 
-          BARE ONLY — never after a dot. `import sysutils as su` then
-          `su.Exception` still means the Pascal class, which is what makes the
-          bridging case expressible rather than impossible. }
-        if (k = tkIdent) and (s = 'Exception') and
-           ((TokCount = streamBase) or (Tokens[TokCount - 1].Kind <> tkDot)) then
-          s := 'PyException';
+          Both units now declare their OWN class named `Exception` under the
+          shared `ExceptionBase` (compiler/builtin/exceptions.pas), so the
+          spelling no longer needs to be unique — the LOOKUP does. pyparser
+          resolves NilPy's `Exception` with FindUClassInUnit against pylib
+          rather than by flat first match, which is precise where this was
+          merely early. }
         { the FIRST token of the logical line decides whether an inline suite is
           possible at all — `x = {1: 2}` must not be mistaken for a header }
         if (parenDepth = 0) and (not lineSawColon) and

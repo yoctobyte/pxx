@@ -36,7 +36,7 @@ interface
   pylib indirectly and does NOT trigger builtin's conditional injection, the only
   FloatToStr in scope was SYSUTILS', which pylib must never depend on (it drags
   the whole RTL into every .npy). Naming it makes the dependency real. }
-uses builtin, pypal, promocore, typinfo;
+uses builtin, exceptions, pypal, promocore, typinfo;
 
 const
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
@@ -373,21 +373,24 @@ type
     finds this one and the whole tree shares a root — which is what makes a bare
     `except Exception:` catch a ValueError.
 
-    NAMED `PyException`, not `Exception`, and that is the point: Python's
-    `Exception` is a LANGUAGE builtin, while sysutils' is one library's design
-    choice in a language that also offers plain runtime errors (user,
-    2026-08-14, decide-pylib-exception-vs-sysutils-exception option 5). Giving
-    the Python builtin a Pascal-namespace name of `Exception` put a
-    language-level concept into a library namespace where it collided with an
-    unrelated library's class — and then the collision had to be papered over
-    with ClassNameIsDeliberatelyShared, which cost pylib the ability to add any
-    member sysutils lacks (it killed `e.args` after that had shipped). NilPy
-    source still SAYS `Exception`: pylexer.inc maps the bare identifier to this
-    name, so a qualified `su.Exception` still reaches the Pascal one. }
-  PyException = class
+    NAMED `Exception`, and descending from `ExceptionBase` in the shared
+    `exceptions` unit — which is how it can carry that name while sysutils'
+    class carries it too. They are SIBLINGS, not one class with two hats.
+
+    That matters for more than tidiness. `ClassName` reports the DECLARED name,
+    so this one answers `Exception` and Python's `repr(e)` /
+    `type(e).__name__` come out right with no renaming anywhere in the
+    frontend. The previous arrangement named it `Exception` and had
+    pylexer.inc map the bare identifier on the way IN but never on the way out,
+    and that asymmetry is exactly what made repr print `Exception('x')`.
+
+    It also lifts the old constraint: pylib may now add any member sysutils
+    lacks, because the two are different rows. `msg` and `argsv` are inherited
+    from the shared root at one offset for every descendant of either tree,
+    which is what lets a bare `except Exception:` catch an RTL exception and
+    still read `.msg` off it. }
+  Exception = class(ExceptionBase)
   public
-    msg: AnsiString;
-    FHelpContext: Integer;
     { A VARIANT, not an AnsiString. Every exception below this one used to take
       a string message, so the frontend rendered a non-string argument through
       pyexc_msgstr at the construction site and its TYPE was gone —
@@ -399,7 +402,7 @@ type
       Variant (pyparser.inc, the single-argument arm).
       This was blocked while pylib's root SHADOWED sysutils' Exception — every
       RTL `raise EConvertError.Create('..')` would have recompiled against the
-      new signature. PyException shares its name with nothing, so the blast
+      new signature. Exception shares its name with nothing, so the blast
       radius is pylib's own tree.
       bug-nilpy-non-keyerror-exception-args-loses-the-argument-type }
     constructor Create(const m: Variant);
@@ -410,9 +413,6 @@ type
       frontend synthesises that access), so `msg` must stay the field and
       everything else a view on it. }
     constructor CreateFmt(const m: AnsiString; const args: array of const);
-    property FMessage: AnsiString read msg write msg;
-    property Message: AnsiString read msg write msg;
-    property HelpContext: Integer read FHelpContext write FHelpContext;
     { Python's `e.args`. A PROPERTY rather than a field, and derived rather than
       stored, because a pxx Exception carries one Message string: `args` is
       what the constructor was given, and for every raise this dialect emits
@@ -426,18 +426,21 @@ type
       stashes the real tuple in argsv when it runs, and why this reads argsv
       first.
       bug-nilpy-exception-args-attribute-missing }
-    argsv: TPyList;
+    { argsv itself lives on ExceptionBase as an untyped TObject, so that a
+      NilPy `except Exception:` can read `.args` off an RTL exception too and
+      get nil rather than a short object's neighbouring bytes. Everything in
+      here casts it; pylib is the only code that ever stores into it. }
     function GetArgs: TPyList;
     property args: TPyList read GetArgs;
   end;
-  ValueError        = class(PyException) end;
+  ValueError        = class(Exception) end;
   { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
     integer paths fell through to the Pascal runtime's error 200 (which no
     `except` can see) and true division produced garbage
     (bug-nilpy-runtime-raised-errors-bypass-try-except). }
-  ZeroDivisionError = class(PyException) end;
-  TypeError         = class(PyException) end;
-  IndexError        = class(PyException) end;
+  ZeroDivisionError = class(Exception) end;
+  TypeError         = class(Exception) end;
+  IndexError        = class(Exception) end;
   { CPython's KeyError is the one builtin whose str() is the REPR of its
     argument — `str(KeyError('inner'))` is "'inner'", with the quotes, which is
     why every "key not found" line in a real log looks like that. So the repr
@@ -446,7 +449,7 @@ type
     disagree — which they did, the raise path being correct because PyKeyError
     pre-repr'd its message and a user raise not.
     bug-nilpy-exception-str-and-repr-diverge-from-cpython }
-  KeyError          = class(PyException)
+  KeyError          = class(Exception)
     { A VARIANT, not a string: `raise KeyError(42)` is ordinary Python, and an
       integer arriving at a `const m: AnsiString` parameter was read as a string
       handle and SEGFAULTED at the raise — no diagnostic, a dead process
@@ -460,14 +463,14 @@ type
       missing 7. }
     constructor CreateRendered(const shown: AnsiString);
   end;
-  OSError           = class(PyException) end;
-  AttributeError    = class(PyException) end;
-  EOFError          = class(PyException) end;
-  KeyboardInterrupt = class(PyException) end;
-  RuntimeError      = class(PyException) end;
+  OSError           = class(Exception) end;
+  AttributeError    = class(Exception) end;
+  EOFError          = class(Exception) end;
+  KeyboardInterrupt = class(Exception) end;
+  RuntimeError      = class(Exception) end;
   NotImplementedError = class(RuntimeError) end;
-  StopIteration     = class(PyException) end;
-  OverflowError     = class(PyException) end;
+  StopIteration     = class(Exception) end;
+  OverflowError     = class(Exception) end;
   { CPython 3 makes IOError and EnvironmentError aliases of OSError, and
     FileNotFoundError / PermissionError subclasses of it. Real code catches
     them by name — songformatter has `except IOError:` around a file read. }
@@ -479,21 +482,21 @@ type
   IsADirectoryError = class(OSError) end;
   NotADirectoryError = class(OSError) end;
   InterruptedError  = class(OSError) end;
-  ArithmeticError   = class(PyException) end;
+  ArithmeticError   = class(Exception) end;
   FloatingPointError = class(ArithmeticError) end;
-  LookupError       = class(PyException) end;
-  NameError         = class(PyException) end;
+  LookupError       = class(Exception) end;
+  NameError         = class(Exception) end;
   UnboundLocalError = class(NameError) end;
   RecursionError    = class(RuntimeError) end;
   UnicodeError      = class(ValueError) end;
   UnicodeDecodeError = class(UnicodeError) end;
   UnicodeEncodeError = class(UnicodeError) end;
-  MemoryError       = class(PyException) end;
-  BufferError       = class(PyException) end;
-  AssertionError    = class(PyException) end;
-  SystemError       = class(PyException) end;
-  SystemExit        = class(PyException) end;
-  GeneratorExit     = class(PyException) end;
+  MemoryError       = class(Exception) end;
+  BufferError       = class(Exception) end;
+  AssertionError    = class(Exception) end;
+  SystemError       = class(Exception) end;
+  SystemExit        = class(Exception) end;
+  GeneratorExit     = class(Exception) end;
   TimeoutError      = class(OSError) end;
   ConnectionError   = class(OSError) end;
   BrokenPipeError   = class(ConnectionError) end;
@@ -503,13 +506,13 @@ type
   BlockingIOError   = class(OSError) end;
   ChildProcessError = class(OSError) end;
   ProcessLookupError = class(OSError) end;
-  ImportError       = class(PyException) end;
+  ImportError       = class(Exception) end;
   ModuleNotFoundError = class(ImportError) end;
-  IndentationError  = class(PyException) end;
-  SyntaxError       = class(PyException) end;
+  IndentationError  = class(Exception) end;
+  SyntaxError       = class(Exception) end;
   TabError          = class(IndentationError) end;
-  ReferenceError    = class(PyException) end;
-  StopAsyncIteration = class(PyException) end;
+  ReferenceError    = class(Exception) end;
+  StopAsyncIteration = class(Exception) end;
 
   TPyBytes = class
   public
@@ -4906,10 +4909,10 @@ var o: TObject;
 begin
   o := nil;
   if pyvartag(v) = 7 then o := TObject(pyvarobj(v));
-  { `is PyException`, not merely "is an object": a LIST is tag 7 too, and
+  { `is Exception`, not merely "is an object": a LIST is tag 7 too, and
     `raise [1]` must be the TypeError CPython gives, not a raised TPyList that
     an `except Exception:` arm then catches as if it were one. }
-  if (o = nil) or (not (o is PyException)) then
+  if (o = nil) or (not (o is Exception)) then
     raise TypeError.Create('exceptions must derive from BaseException');
   Result := v;
 end;
@@ -5135,7 +5138,7 @@ procedure PyKeyError(const k: Variant); overload;
   string key reports 'nope' WITH the quotes. Using the repr here makes the
   message match CPython's for free, and keeps an int key unquoted the way
   CPython does. }
-var e: KeyError;
+var e: KeyError; kargs: TPyList;
 begin
   { …and the KEY ITSELF goes into `args`, not the repr'd message. CPython's
     KeyError('nope').args is ('nope',) — unquoted — while its str() is the
@@ -5146,9 +5149,12 @@ begin
     overwritten with the raw VARIANT, so an int key's args is (42,) and not
     ('42',). }
   e := KeyError.CreateRendered(pyvar_repr(k));
-  e.argsv := TPyList.Create;
-  e.argsv.FKind := PYSEQ_TUPLE;
-  e.argsv.append(k);
+  { argsv is TObject on the shared root (so an RTL exception has the slot too),
+    so build the tuple in a typed local and store the upcast. }
+  kargs := TPyList.Create;
+  kargs.FKind := PYSEQ_TUPLE;
+  kargs.append(k);
+  e.argsv := kargs;
   raise e;
 end;
 
@@ -9481,6 +9487,7 @@ begin
 end;
 
 constructor KeyError.Create(const m: Variant);
+var kargs: TPyList;
 begin
   { `KeyError()` with no argument at all: the frontend fills an unsupplied
     variant slot with None (an empty variant is the only addressable "not
@@ -9506,12 +9513,16 @@ begin
   inherited Create(pyvar_repr(m));
   if argsv = nil then
   begin
-    argsv := TPyList.Create;
-    argsv.FKind := PYSEQ_TUPLE;
+    kargs := TPyList.Create;
+    kargs.FKind := PYSEQ_TUPLE;
+    argsv := kargs;
   end
   else
-    argsv.clear;
-  argsv.append(m);
+  begin
+    kargs := TPyList(argsv);
+    kargs.clear;
+  end;
+  kargs.append(m);
 end;
 
 constructor KeyError.CreateRendered(const shown: AnsiString);
@@ -9519,11 +9530,11 @@ begin
   inherited Create(shown);
 end;
 
-function PyException.GetArgs: TPyList;
+function Exception.GetArgs: TPyList;
 begin
   if argsv <> nil then
   begin
-    Result := argsv;
+    Result := TPyList(argsv);
     Exit;
   end;
   Result := TPyList.Create;
@@ -9531,7 +9542,8 @@ begin
   if Length(msg) > 0 then Result.append(msg);
 end;
 
-constructor PyException.Create(const m: Variant);
+constructor Exception.Create(const m: Variant);
+var cargs: TPyList;
 begin
   { An EMPTY tag is the no-argument form — the frontend fills an unsupplied
     variant slot with None, which is the only addressable "not supplied" this
@@ -9539,9 +9551,10 @@ begin
     call KeyError.Create already makes. }
   if pyvartag(m) = 0 then Exit;
   msg := pyexc_msgstr(m);
-  argsv := TPyList.Create;
-  argsv.FKind := PYSEQ_TUPLE;
-  argsv.append(m);
+  cargs := TPyList.Create;
+  cargs.FKind := PYSEQ_TUPLE;
+  cargs.append(m);
+  argsv := cargs;
 end;
 
 { One `array of const` element as a string / as an integer's decimal text. The
@@ -9586,7 +9599,7 @@ end;
   actually use — %s, %d and %% — and an unsupported spec is left VERBATIM rather
   than guessed at, so a wrong message is visible as a stray %spec instead of
   silently losing its argument. }
-constructor PyException.CreateFmt(const m: AnsiString; const args: array of const);
+constructor Exception.CreateFmt(const m: AnsiString; const args: array of const);
 var i, ai: Integer; c: Char; outS: AnsiString;
 begin
   outS := '';
@@ -9905,7 +9918,7 @@ end;
 function pyoptional_missing(const what: AnsiString): Variant;
 begin
   pyoptional_missing := pynone;
-  raise PyException.Create('this build has no ' + what
+  raise Exception.Create('this build has no ' + what
     + ': the import it came from could not be resolved, and the code guarding '
     + 'that (the flag its except-branch sets) let this call through anyway');
 end;
@@ -9913,7 +9926,7 @@ end;
 function pyos_startfile(const path: AnsiString): Integer;
 begin
   pyos_startfile := 0;
-  raise PyException.Create('os.startfile is Windows-only and is not implemented; '
+  raise Exception.Create('os.startfile is Windows-only and is not implemented; '
     + 'guard the call with sys.platform or use subprocess');
 end;
 
@@ -11640,7 +11653,7 @@ begin
         Inc(argi);
       end;
       if useIdx >= nArgs then
-        raise PyException.Create('str.format: more placeholders than arguments');
+        raise Exception.Create('str.format: more placeholders than arguments');
       { pyvar_print_of, NOT pystr_of: pystr_of answers '' for a CONTAINER
         payload, so `"{}".format([1, 2])` produced an EMPTY string — silent, and
         the value vanished rather than looking wrong. pyvar_print_of is the same
@@ -14542,7 +14555,7 @@ begin
     str(KeyError) is. A user-CONSTRUCTED `KeyError("k")` still loses the quotes;
     that is the `e.args` gap, and the message is a strict improvement on an
     address either way. }
-  if (mi = nil) and (not wantRepr) and (o is PyException) then
+  if (mi = nil) and (not wantRepr) and (o is Exception) then
   begin
     { KeyError is the one builtin whose str() is the REPR of its argument —
       `str(KeyError('inner'))` is "'inner'", with the quotes. That used to come
@@ -14552,11 +14565,11 @@ begin
       the single argument. A KeyError carrying zero or several arguments falls
       through to the message, as CPython's own __str__ does.
       bug-nilpy-exception-args-attribute-missing }
-    if (o is KeyError) and (PyException(o).GetArgs <> nil) and
-       (PyException(o).GetArgs.count = 1) then
-      outS := pyvar_repr(PyException(o).GetArgs.at(0))
+    if (o is KeyError) and (Exception(o).GetArgs <> nil) and
+       (Exception(o).GetArgs.count = 1) then
+      outS := pyvar_repr(Exception(o).GetArgs.at(0))
     else
-      outS := PyException(o).Message;
+      outS := Exception(o).Message;
     PyUserObjStr := True;
     Exit;
   end;
@@ -14568,18 +14581,18 @@ begin
     and the two cases agree.
     bug-nilpy-exception-args-attribute-missing }
   if (mi = nil) and wantRepr and (o is KeyError) and
-     (PyException(o).GetArgs <> nil) and (PyException(o).GetArgs.count = 1) then
+     (Exception(o).GetArgs <> nil) and (Exception(o).GetArgs.count = 1) then
   begin
-    outS := TObject(o).ClassName + '(' + pyvar_repr(PyException(o).GetArgs.at(0)) + ')';
+    outS := TObject(o).ClassName + '(' + pyvar_repr(Exception(o).GetArgs.at(0)) + ')';
     PyUserObjStr := True;
     Exit;
   end;
-  if (mi = nil) and wantRepr and (o is PyException) and (not (o is KeyError)) then
+  if (mi = nil) and wantRepr and (o is Exception) and (not (o is KeyError)) then
   begin
-    if PyException(o).Message = '' then
+    if Exception(o).Message = '' then
       outS := TObject(o).ClassName + '()'
     else
-      outS := TObject(o).ClassName + '(' + pyrepr_of(PyException(o).Message) + ')';
+      outS := TObject(o).ClassName + '(' + pyrepr_of(Exception(o).Message) + ')';
     PyUserObjStr := True;
     Exit;
   end;

@@ -80,3 +80,21 @@ try:
     nums[7]
 except KeyError as e:
     print("int key  ", str(e), repr(e), e.args)
+
+# THE BARE ROOT. Its absence from this file is exactly why
+# bug-nilpy-exception-repr-and-type-name-say-pyexception shipped: every row
+# above uses a NAMED subclass, and each of those declares its own Python
+# spelling, so they all stayed correct while `Exception` itself reported the
+# internal name `PyException`. `type(e).__name__` is not cosmetic -- ordinary
+# Python branches on it, and NilPy's rule is that code working on CPython must
+# work here.
+e = Exception("x")
+print("bare root", repr(e), str(e), type(e).__name__, e.args)
+
+try:
+    raise Exception("raised")
+except Exception as e:
+    print("bare cat ", type(e).__name__, repr(e), e.args)
+
+# a subclass's __name__ must still be the SUBCLASS, not the root it inherits
+print("sub name ", type(MyErr("m")).__name__, type(ValueError("v")).__name__)

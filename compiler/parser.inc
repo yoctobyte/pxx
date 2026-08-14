@@ -4488,6 +4488,7 @@ begin
       else
       begin
         ci := FindUClass(fieldName);
+        if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual MEMBER field=', fieldName, ' flat=', ci);
         { …case-SENSITIVELY under NilPy. FindUClass is Pascal-style
           case-insensitive, so a lowercase `f` matched `class F` and became a
           CLASS REFERENCE — since classes-as-values landed that is a VT_CLASSREF
@@ -14564,7 +14565,22 @@ begin
 
         argsHead := -1;
         lastArg := -1;
-        ctorCi := FindUClass(name);
+        { `sysutils.Exception.Create(..)` must construct SYSUTILS' class. The
+          qualifier was already consumed into qUnit above, and until now it was
+          only consumed — the class itself resolved by flat first match, so a
+          qualified name silently built whichever unit's class registered
+          first. That was invisible while at most one unit declared any given
+          class name; it stopped being invisible when pylib and sysutils each
+          got their own `Exception` (siblings under ExceptionBase). Falls back
+          to the flat lookup when the qualified one finds nothing, so a
+          qualifier that names a module rather than the declaring unit behaves
+          as before. }
+        ctorCi := -1;
+        if qUnit >= 0 then ctorCi := FindUClassInUnit(name, qUnit);
+        if ctorCi < 0 then ctorCi := FindUClass(name);
+        if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual CTOR name=', name,
+          ' qunit=', qUnit, ' inunit=', FindUClassInUnit(name, qUnit),
+          ' flat=', FindUClass(name), ' -> ctorCi=', ctorCi);
         ctorArgN := 0;
         if CurTok.Kind = tkLParen then
         begin
@@ -14595,9 +14611,14 @@ begin
         idx := IsRecordType(name);
         if idx = REC_NONE then
         begin
-          ci := FindUClass(name);
-          if ci >= 0 then
-            idx := REC_UCLASS_BASE + ci;
+          { Use the class ALREADY resolved above, do not resolve it a second
+            time. `ctorCi` honours the unit qualifier; a fresh `FindUClass(name)`
+            here is flat, so it silently answered the other unit's `Exception`
+            and `idx` — which is what every consumer below uses (RecSize, the
+            overload match, the emitted class) — disagreed with `ctorCi`. Two
+            lookups for one question, and only one of them had the fix. }
+          if ctorCi >= 0 then
+            idx := REC_UCLASS_BASE + ctorCi;
         end;
         prevTok := RecSize(idx);
 
@@ -14702,8 +14723,48 @@ begin
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) then
       begin
-        ci := FindUClass(name);
+        { Same qualified resolution as the `.Create` fast path above: a bare
+          FindUClass here is flat, so `sysutils.Exception.CreateFmt` picked
+          whichever unit's `Exception` registered first. }
+        ci := -1;
+        if qUnit >= 0 then ci := FindUClassInUnit(name, qUnit);
+        if ci < 0 then ci := FindUClass(name);
+        if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual STATICM name=', name,
+          ' mem=', GetTokenStr(TokPos+1), ' qunit=', qUnit, ' flat=', FindUClass(name),
+          ' -> ci=', ci);
         mmi := FindUMeth(ci, GetTokenStr(TokPos+1));
+        if (mmi >= 0) and (qUnit >= 0) and UMthIsCtor[mmi] and
+           (not UMthIsStatic[mmi]) then
+        begin
+          { A QUALIFIED, NAMED constructor: `sysutils.Exception.CreateFmt(..)`.
+            The fast path above matches only the exact spelling `Create`, and
+            everything else fell through to ParseLValueAST's class-member arm,
+            which resolves the class flat and never sees a qualifier — so the
+            wrong unit's constructor ran and `CreateFmt('[%5d]',[3])` came out
+            `[%5d]` instead of `[    3]`.
+
+            Construction itself is NOT reimplemented here: this hands off to
+            BuildMetaclassNew, the same builder the unqualified arm uses, so the
+            two shapes differ only in how the class is looked up. Gated on
+            qUnit >= 0 deliberately — with no qualifier there is nothing this
+            path knows that the existing one does not. }
+          mcCtorNm := GetTokenStr(TokPos+1);
+          Next;                        { consume class name }
+          Expect(tkDot, '.');          { CurTok is now the ctor name }
+          i := FindUMethOverloadAhead(ci, mcCtorNm, CountCallArgsAhead);
+          if i < 0 then i := FindUMeth(ci, mcCtorNm);
+          if i >= 0 then
+          begin
+            EnforceMethVis(i, mcCtorNm);
+            Next;                      { consume ctor name }
+            mselfArg := AllocNode(AN_CLASSREF);
+            ASTIVal[mselfArg] := ci;
+            ASTTk[mselfArg] := Ord(tyPointer);
+            CurASTNode := BuildMetaclassNew(mselfArg, ci, i);
+            LastExprTk := tyClass;
+            Exit;
+          end;
+        end;
         if mmi >= 0 then
         begin
           if UMthIsStatic[mmi] then
@@ -23232,7 +23293,7 @@ end;
 { ===== Declaration parsing ===== }
 
 function ParseTypeKind: TTypeKind;
-var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci: Integer;
+var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     tnHasAlias: Boolean;   { a source/RTL alias of this name beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
     wasPacked: Boolean;
@@ -23356,8 +23417,18 @@ begin
         member name like a bare type; ConsumeUnitQualifier consumes nothing
         when the prefix is not a compiled unit. Types live in one global
         table, so the qualifier only disambiguates the parse, not the lookup. }
-      if (CurTok.Kind = tkIdent) and (ConsumeUnitQualifier(lo) <> -1) then
-        ;   { lo is now the member name; CurTok sits on it }
+      tkQUnit := -1;
+      if (CurTok.Kind = tkIdent) then tkQUnit := ConsumeUnitQualifier(lo);
+      if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual TYPEARM lo=', lo, ' qunit=', tkQUnit,
+        ' foa_su=', FindUnitOrAlias('sysutils'), ' foa_py=', FindUnitOrAlias('pylib'),
+        ' inunit=', FindUClassInUnit(lo, tkQUnit), ' flat=', FindUClass(lo));
+      { lo is now the member name; CurTok sits on it. The unit index is KEPT —
+        it used to be dropped on the floor because "types live in one global
+        table, so the qualifier only disambiguates the parse, not the lookup".
+        That invariant holds only while no two units declare a class of the same
+        name, which stops being true the moment sysutils and pylib each declare
+        their own `Exception`. Kept and threaded to the class lookup below so
+        `var e: sysutils.Exception` means what it says. }
 
       { CLASS-qualified type reference — `TTest.TRecord`, a type nested inside a class
         body (`TTest = class public type TRecord = record ... end; end;`). A nested type
@@ -23590,7 +23661,9 @@ begin
         { `Text`/`TextFile` resolve here as the record from the implicitly-loaded
           textfile unit (loaded up front in ParseProgram when a Text token is
           present), so no special-case is needed at this point. }
-        ci := FindUClass(lo);
+        ci := -1;
+        if tkQUnit >= 0 then ci := FindUClassInUnit(lo, tkQUnit);
+        if ci < 0 then ci := FindUClass(lo);
         if (ci >= 0) and UClsIsInterface[ci] then
         begin
           { Interface-typed variable: a 16-byte fat pointer {IMT, instance}.
@@ -23600,7 +23673,9 @@ begin
         end
         else if IsClassType(lo) then
         begin
-          ci := FindUClass(lo);
+          ci := -1;
+          if tkQUnit >= 0 then ci := FindUClassInUnit(lo, tkQUnit);
+          if ci < 0 then ci := FindUClass(lo);
           if ci >= 0 then
             LastTypeRecId := REC_UCLASS_BASE + ci
           else

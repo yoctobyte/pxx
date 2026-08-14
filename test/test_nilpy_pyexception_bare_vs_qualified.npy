@@ -1,13 +1,23 @@
-# decide-pylib-exception-vs-sysutils-exception option 5: Python's `Exception` is
-# a LANGUAGE builtin and pylib implements it as `PyException`; sysutils' class of
-# that name is one Pascal library's design choice. pylexer.inc maps the BARE
-# identifier and nothing else, which is what keeps the two nameable apart.
+# The two `Exception` classes must stay separately nameable from a .npy:
 #
-#   Exception        -> PyException   (the Python builtin)
-#   su.Exception     -> unchanged     (sysutils' Pascal class)
-#   "Exception"      -> unchanged     (a lexer sees tokens, not text)
-#   class E(Exception) -> maps too, with no special case: the base-class
-#                         reference is the same bare identifier
+#   Exception          -> the PYTHON root (pylib's)
+#   su.Exception       -> sysutils' Pascal class, and only it
+#   "Exception"        -> a string, untouched
+#   class E(Exception) -> the Python root, with no special case
+#
+# HOW that is achieved changed, and the assertions below deliberately did not.
+# Under decide-pylib-exception-vs-sysutils-exception option 5 the separation came
+# from a pylexer RENAME (bare `Exception` -> `PyException`). That mechanism is
+# GONE: it mapped the name on the way in and never on the way out, so `repr()`
+# and `type(e).__name__` reported the internal spelling
+# (bug-nilpy-exception-repr-and-type-name-say-pyexception).
+#
+# Since variant C (feature-a-one-exception-class-in-a-shared-unit) the two are
+# genuine SIBLING classes named `Exception`, under a shared `ExceptionBase`, each
+# exported by its own unit — so they are told apart by which unit you name, which
+# is the ordinary rule rather than a special case. This file is the regression
+# test that the observable contract survived swapping the mechanism underneath
+# it: every line below asserts exactly what it did before.
 import sysutils as su
 
 

@@ -76,12 +76,18 @@ const
 
 type
   { Tk's own error, which an application catches around clipboard and widget
-    calls that can fail (`except tk.TclError:`). Descends from pylib's
-    PyException — the PYTHON root, which this unit reaches through `uses pylib`
+    calls that can fail (`except tk.TclError:`).
+
+    Descends from the PYTHON root, which this unit reaches through `uses pylib`
     — not from sysutils' Pascal `Exception`, which this unit does not import at
-    all and which only resolved here while `uses` was transitive and the two
-    roots shared a name. decide-pylib-exception-vs-sysutils-exception option 5. }
-  TclError = class(PyException)
+    all. Since variant C the Python root is named `Exception` again (a sibling
+    of sysutils' class of the same name under a shared `ExceptionBase`), so the
+    bare name is unambiguous HERE precisely because this unit's `uses` names
+    pylib and not sysutils. It spelled `PyException` only for the short window
+    when that rename existed; the rename is gone, and with it the "maps in,
+    never maps out" asymmetry that made `repr()` say the internal name.
+    feature-a-one-exception-class-in-a-shared-unit. }
+  TclError = class(Exception)
   end;
 
   Widget = class

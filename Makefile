@@ -307,20 +307,29 @@ test-nilpy: $(COMPILER)
 	# rescanning; a stale cache would give wrong CHARACTER offsets, silently
 	./$(COMPILER) test/test_nilpy_str_ascii_cache.npy $(TESTTMP)/test_nilpy_asciicache26
 	test "$$($(TESTTMP)/test_nilpy_asciicache26)" = "$$(cat test/test_nilpy_str_ascii_cache.expected)"
-	# bare `Exception` maps to PyException, `su.Exception` does NOT, a string
-	# literal is untouched, and a class base reference maps with no special case
+	# bare `Exception` is the PYTHON root, `su.Exception` is sysutils' and only
+	# it, a string literal is untouched, and a class base reference needs no
+	# special case. The MECHANISM changed (variant C sibling classes replaced
+	# the pylexer rename) while these assertions deliberately did not -- which
+	# is what makes this the regression test for swapping it underneath.
 	./$(COMPILER) test/test_nilpy_pyexception_bare_vs_qualified.npy $(TESTTMP)/test_nilpy_pyexcbq26
 	test "$$($(TESTTMP)/test_nilpy_pyexcbq26)" = "$$(printf '%b' 'bare caught: mine\nbridge caught: \042abc\042 is an invalid integer\nqualified caught: \042nope\042 is an invalid integer\nliteral: Exception\nend')"
-	# uses order must not change what `Exception` means in a Pascal program:
-	# sysutils named first, then reversed, IDENTICAL output both ways. pylib's
-	# Python root is PyException now (decide-pylib-exception-vs-sysutils-exception
-	# option 5), so only sysutils declares `Exception` and CreateFmt is always
-	# sysutils' own Format() — `[    3]`, padded. Before the rename the answer
-	# depended on which unit registered first, which is what the bug was.
+	# uses order must not change what a QUALIFIED name means: each unit's surface
+	# stays reachable in either order -- sysutils named first, then reversed,
+	# IDENTICAL output both ways. Under variant C BOTH units export a class named
+	# `Exception` (siblings under ExceptionBase), so this pair asserts the
+	# QUALIFIED property, which is a real invariant, rather than the bare one.
+	# CreateFmt is still sysutils' own Format(): `[    3]`, padded.
+	# The BARE name under that collision resolves to the FIRST unit registered
+	# where FPC takes the LAST. That is deliberately not asserted here and is
+	# carried by bug-pascal-uses-clause-duplicate-name-resolves-first-not-last
+	# (decide-merge-variant-c-with-bare-name-collision, option A: merge now,
+	# the collision is only reachable from a program importing both pylib and
+	# sysutils, which no real Python program does).
 	./$(COMPILER) test/test_uses_order_pylib_exception_a.pas $(TESTTMP)/test_uses_order_pylib_exc_a26
-	test "$$($(TESTTMP)/test_uses_order_pylib_exc_a26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[    3]\nend')"
+	test "$$($(TESTTMP)/test_uses_order_pylib_exc_a26)" = "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
 	./$(COMPILER) test/test_uses_order_pylib_exception_b.pas $(TESTTMP)/test_uses_order_pylib_exc_b26
-	test "$$($(TESTTMP)/test_uses_order_pylib_exc_b26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[    3]\nend')"
+	test "$$($(TESTTMP)/test_uses_order_pylib_exc_b26)" = "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
 	# a method on a fresh construction: class return, and omitted defaults filled
 	./$(COMPILER) test/test_nilpy_ctor_suffix_defaults.npy $(TESTTMP)/test_nilpy_ctorsfx26
 	test "$$($(TESTTMP)/test_nilpy_ctorsfx26)" = "$$(printf 'a\nba\na 1\nba 1')"
@@ -5836,20 +5845,29 @@ test-core: $(COMPILER)
 	# rescanning; a stale cache would give wrong CHARACTER offsets, silently
 	./$(COMPILER) test/test_nilpy_str_ascii_cache.npy $(TESTTMP)/test_nilpy_asciicache26
 	test "$$($(TESTTMP)/test_nilpy_asciicache26)" = "$$(cat test/test_nilpy_str_ascii_cache.expected)"
-	# bare `Exception` maps to PyException, `su.Exception` does NOT, a string
-	# literal is untouched, and a class base reference maps with no special case
+	# bare `Exception` is the PYTHON root, `su.Exception` is sysutils' and only
+	# it, a string literal is untouched, and a class base reference needs no
+	# special case. The MECHANISM changed (variant C sibling classes replaced
+	# the pylexer rename) while these assertions deliberately did not -- which
+	# is what makes this the regression test for swapping it underneath.
 	./$(COMPILER) test/test_nilpy_pyexception_bare_vs_qualified.npy $(TESTTMP)/test_nilpy_pyexcbq26
 	test "$$($(TESTTMP)/test_nilpy_pyexcbq26)" = "$$(printf '%b' 'bare caught: mine\nbridge caught: \042abc\042 is an invalid integer\nqualified caught: \042nope\042 is an invalid integer\nliteral: Exception\nend')"
-	# uses order must not change what `Exception` means in a Pascal program:
-	# sysutils named first, then reversed, IDENTICAL output both ways. pylib's
-	# Python root is PyException now (decide-pylib-exception-vs-sysutils-exception
-	# option 5), so only sysutils declares `Exception` and CreateFmt is always
-	# sysutils' own Format() — `[    3]`, padded. Before the rename the answer
-	# depended on which unit registered first, which is what the bug was.
+	# uses order must not change what a QUALIFIED name means: each unit's surface
+	# stays reachable in either order -- sysutils named first, then reversed,
+	# IDENTICAL output both ways. Under variant C BOTH units export a class named
+	# `Exception` (siblings under ExceptionBase), so this pair asserts the
+	# QUALIFIED property, which is a real invariant, rather than the bare one.
+	# CreateFmt is still sysutils' own Format(): `[    3]`, padded.
+	# The BARE name under that collision resolves to the FIRST unit registered
+	# where FPC takes the LAST. That is deliberately not asserted here and is
+	# carried by bug-pascal-uses-clause-duplicate-name-resolves-first-not-last
+	# (decide-merge-variant-c-with-bare-name-collision, option A: merge now,
+	# the collision is only reachable from a program importing both pylib and
+	# sysutils, which no real Python program does).
 	./$(COMPILER) test/test_uses_order_pylib_exception_a.pas $(TESTTMP)/test_uses_order_pylib_exc_a26
-	test "$$($(TESTTMP)/test_uses_order_pylib_exc_a26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[    3]\nend')"
+	test "$$($(TESTTMP)/test_uses_order_pylib_exc_a26)" = "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
 	./$(COMPILER) test/test_uses_order_pylib_exception_b.pas $(TESTTMP)/test_uses_order_pylib_exc_b26
-	test "$$($(TESTTMP)/test_uses_order_pylib_exc_b26)" = "$$(printf '%b' 'pylib hi\ncaught: \042abc\042 is an invalid integer\n[    3]\nend')"
+	test "$$($(TESTTMP)/test_uses_order_pylib_exc_b26)" = "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
 	# a method on a fresh construction: class return, and omitted defaults filled
 	./$(COMPILER) test/test_nilpy_ctor_suffix_defaults.npy $(TESTTMP)/test_nilpy_ctorsfx26
 	test "$$($(TESTTMP)/test_nilpy_ctorsfx26)" = "$$(printf 'a\nba\na 1\nba 1')"

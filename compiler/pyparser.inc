@@ -348,6 +348,7 @@ begin
 end;
 
 function PySeqAppend(head, stmt: Integer): Integer; forward;
+function PyLibExceptionCi: Integer; forward; { pylib's `Exception`, BY UNIT }
 { An integer literal node, for the pair-unpack indices below. }
 function PyMakeIntLit(v: Int64): Integer;
 begin
@@ -6226,7 +6227,7 @@ begin
     nArgs > 1. }
   if (ctorMi >= 0) and (nArgs = 1) and (Procs[ctorPi].ParamCount - 1 = 1) then
   begin
-    excFoldCi := FindUClass('PyException');
+    excFoldCi := PyLibExceptionCi;
     if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
     begin
       excFoldN := ASTRight[ASTLeft[node]];   { the single user arg }
@@ -6253,7 +6254,7 @@ begin
      (Procs[ctorPi].ParamCount - 1 = 1) and
      (Procs[ctorPi].Params[1].TypeKind in [tyString, tyAnsiString, tyVariant]) then
   begin
-    excFoldCi := FindUClass('PyException');
+    excFoldCi := PyLibExceptionCi;
     if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
     begin
       { pyvar_repr, NOT pyrepr_of: the latter is OVERLOADED per argument type
@@ -6329,7 +6330,7 @@ begin
   if (ctorMi >= 0) and (nArgs = 0) and (Procs[ctorPi].ParamCount - 1 = 1) and
      (Procs[ctorPi].Params[1].TypeKind = tyVariant) then
   begin
-    excFoldCi := FindUClass('PyException');
+    excFoldCi := PyLibExceptionCi;
     if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
     begin
       argNode := AllocNode(AN_ARG);
@@ -14571,7 +14572,7 @@ begin
                                   node, -1);
     Exit;
   end;
-  excCi := FindUClass('PyException');
+  excCi := PyLibExceptionCi;
   if (excCi >= 0) and ((argCi = excCi) or IsSubclassOf(argCi, excCi)) then
   begin
     fieldNode := AllocNode(AN_FIELD);
@@ -15127,6 +15128,27 @@ begin
   Result := node;
 end;
 
+{ pylib's own `Exception` — resolved BY UNIT, never by flat first match.
+
+  This precision is REQUIRED, not defensive. Both pylib and sysutils now
+  declare a class named `Exception` (siblings under ExceptionBase — see
+  compiler/builtin/exceptions.pas), so `FindUClass('Exception')` answers
+  whichever was registered first, which depends on import order. In a .npy that
+  also pulls sysutils that would silently bind NilPy's `Exception` to the Pascal
+  class — silently, because both are real classes and both have `msg`. The
+  Pascal side of the same ambiguity is at least a compile error; this side
+  would not be.
+
+  -1 when pylib is not in this compilation at all. }
+function PyLibExceptionCi: Integer;
+var u: Integer;
+begin
+  PyLibExceptionCi := -1;
+  u := FindUnitOrAlias('pylib');
+  if u < 0 then Exit;
+  PyLibExceptionCi := FindUClassInUnit('Exception', u);
+end;
+
 { Nil Python's `Exception` root. It is registered lazily — as an empty shell —
   because nothing declares it: a user writes `class ForthThrow(Exception)` or
   `except Exception:` and expects the base to already be there. Both sites call
@@ -15138,12 +15160,17 @@ begin
     is the one construct whose meaning differs between dialects — objfpc reads
     the result, delphi makes a recursive call — so --warn-self-result (on by
     default) flags it. This was the compiler's only occurrence. }
-  Result := FindUClass('PyException');
+  Result := PyLibExceptionCi;
+  if Result >= 0 then Exit;
+  { pylib is not in this compilation. Fall back to the lazy shell, and look it
+    up FLAT — there is no pylib unit to scope to, so first match is all there
+    is and is unambiguous by construction. }
+  Result := FindUClass('Exception');
   if Result < 0 then
   begin
-    k := PyStoredName('PyException');
+    k := PyStoredName('Exception');
     AddUClass(k, 9);
-    Result := FindUClass('PyException');
+    Result := FindUClass('Exception');
   end;
 end;
 
@@ -15382,12 +15409,16 @@ function PyBridgeRootCi: Integer;
   directly through a frontend-synthesised access). Checking the whole surface
   would refuse divergence that costs nothing.
   decide-pylib-exception-vs-sysutils-exception, bug-pascal-uses-is-transitive }
-var bridgeCi, pyCi, pf, bf: Integer;
+var bridgeCi, pyCi, pf, bf, suIdx: Integer;
 begin
   PyBridgeRootCi := -1;
-  bridgeCi := FindUClass('Exception');
+  { BY UNIT. pylib declares a class named `Exception` too now, so a flat
+    FindUClass would answer with pylib's own row and "bridge" it to itself. }
+  suIdx := FindUnitOrAlias('sysutils');
+  if suIdx < 0 then Exit;
+  bridgeCi := FindUClassInUnit('Exception', suIdx);
   if bridgeCi < 0 then Exit;
-  pyCi := FindUClass('PyException');
+  pyCi := PyLibExceptionCi;
   if pyCi < 0 then Exit;
   pf := FindUField(pyCi, 'msg');
   bf := FindUField(bridgeCi, 'msg');
@@ -15453,7 +15484,7 @@ begin
             className := CurTok.SVal;
             Next;
           end;
-          if CaseEqual(className, 'PyException') then ci := PyEnsureExceptionClass
+          if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
           else ci := FindUClass(className);
           if ci < 0 then Error('Nil Python: unknown exception class ' + className);
           if nExc > 15 then Error('Nil Python: too many exception classes in one except');
@@ -15468,7 +15499,7 @@ begin
             here. A QUALIFIED `su.Exception` is not this arm — className is
             'Exception' there, unmapped by the lexer — and stays one class,
             which is what makes the two distinguishable at all. }
-          if CaseEqual(className, 'PyException') then
+          if CaseEqual(className, 'Exception') then
           begin
             bridgeCi := PyBridgeRootCi;
             if (bridgeCi >= 0) and (nExc <= 15) then
@@ -15493,7 +15524,7 @@ begin
           className := CurTok.SVal;
           Next;
         end;
-        if CaseEqual(className, 'PyException') then ci := PyEnsureExceptionClass
+        if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
         else ci := FindUClass(className);
         if ci < 0 then Error('Nil Python: unknown exception class ' + className);
         recId := REC_UCLASS_BASE + ci;
@@ -15508,7 +15539,7 @@ begin
             here. A QUALIFIED `su.Exception` is not this arm — className is
             'Exception' there, unmapped by the lexer — and stays one class,
             which is what makes the two distinguishable at all. }
-        if CaseEqual(className, 'PyException') then
+        if CaseEqual(className, 'Exception') then
         begin
           bridgeCi := PyBridgeRootCi;
           if bridgeCi >= 0 then
@@ -20354,9 +20385,9 @@ begin
         static answer. A non-object tag unboxes to nil and pyraise_check turns
         that into the TypeError CPython raises for `raise 5`. }
       if (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) and
-         (FindUClass('PyException') >= 0) then
+         (PyLibExceptionCi >= 0) then
         CurASTNode := PyUnboxVariantToClass(PyRaiseCheckVariant(CurASTNode),
-                                            FindUClass('PyException'));
+                                            PyLibExceptionCi);
       ASTLeft[node] := CurASTNode;
       { `raise X from e` — PEP 3134 exception chaining. The cause is metadata
         (it sets __cause__ for the traceback); the raise itself is unchanged, so
@@ -20706,7 +20737,7 @@ begin
     if CaseEqual(name, '__init__') and (CurSelfClass >= REC_UCLASS_BASE) and
        (CurTok.Kind <> tkRParen) then
     begin
-      ci := FindUClass('PyException');
+      ci := PyLibExceptionCi;
       if (ci >= 0) and (CurSelfClass - REC_UCLASS_BASE <> ci) and
          (not IsSubclassOf(CurSelfClass - REC_UCLASS_BASE, ci)) then ci := -1;
       if ci >= 0 then
@@ -26963,13 +26994,14 @@ begin
             { NonRecord — same reason as PyParseClass's own base lookup below:
               the first row of the name may be a same-named RECORD.
               bug-nilpy-text-class-name-binds-the-rtl-file-record. }
-            baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
-            if (baseCi < 0) and CaseEqual(GetTokenStr(i + 3), 'PyException') then
-            begin
-              k := PyStoredName('PyException');
-              AddUClass(k, 9);
-              baseCi := FindUClass('PyException');
-            end;
+            { `Exception` FIRST and by unit: sysutils declares a class of that
+              name too now, and a flat lookup would inherit the Pascal one
+              order-dependently. PyEnsureExceptionClass is the unit-scoped
+              answer (with the lazy shell when pylib is absent). }
+            if CaseEqual(GetTokenStr(i + 3), 'Exception') then
+              baseCi := PyEnsureExceptionClass
+            else
+              baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
           end;
           if baseCi >= 0 then
             UClsParent[ci] := baseCi
@@ -27183,13 +27215,11 @@ begin
       the FIRST row of the name — the RTL's `Text` RECORD sits ahead of a `Text`
       class, so `class H(Text)` inherited a record with no methods.
       bug-nilpy-text-class-name-binds-the-rtl-file-record. }
-    baseCi := FindUClassNonRecord(CurTok.SVal);
-    if (baseCi < 0) and CaseEqual(CurTok.SVal, 'PyException') then
-    begin
-      k := PyStoredName('PyException');
-      AddUClass(k, 9);
-      baseCi := FindUClass('PyException');
-    end;
+    { see the sibling site above: `Exception` resolves by UNIT, not flat. }
+    if CaseEqual(CurTok.SVal, 'Exception') then
+      baseCi := PyEnsureExceptionClass
+    else
+      baseCi := FindUClassNonRecord(CurTok.SVal);
     if baseCi < 0 then
       Error('Nil Python: unknown base class ' + CurTok.SVal);
     UClsParent[ci] := baseCi;

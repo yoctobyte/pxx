@@ -7,6 +7,13 @@ unit sysutils;
 
 interface
 
+{ ExceptionBase, the root BOTH exception trees descend from. It lives in
+  compiler/builtin because pylib cannot reach lib/rtl, and pylib needs it too:
+  a NilPy `except Exception:` binds the shared root, which is what lets one arm
+  catch an RTL raise without the frontend bridging two unrelated hierarchies.
+  See feature-a-one-exception-class-in-a-shared-unit. }
+uses exceptions;
+
 type
   { FPC's SysUtils character set — the parameter type of the CharInSet / character
     classification family, and what real code writes for `set of char` work
@@ -57,24 +64,28 @@ const
 
 type
 
-  { pylib's Python root is a DIFFERENT class now — `PyException`
-    (decide-pylib-exception-vs-sysutils-exception option 5) — so this
-    declaration is free again: it no longer has to match pylib's member for
-    member, and neither unit blocks the other from growing.
+  { Pascal's exception root — a SIBLING of pylib's class of the same name, both
+    descending from `ExceptionBase`. Two classes named `Exception`, one root.
 
-    ONE contract survives, and it is narrow: `msg` stays the FIRST field. A
-    NilPy `except Exception:` bridges to this class as well (Python's root
-    catches everything a program can raise, and an RTL raise is still that), so
-    the binder reads the message through pylib's class layout. First field,
-    same type — that is all the bridge needs, and it is the only coupling left. }
-  Exception = class
-    msg: string;
-    FHelpContext: Integer;
+    That shape is the whole design, and each half of it is load-bearing:
+    - SIBLINGS, because `CreateFmt` cannot merge. Ours calls the real `Format`
+      and pads (`CreateFmt('[%5d]',[3])` is `[    3]`, which is FPC parity);
+      pylib's does minimal substitution because it must not drag sysutils into
+      every `.npy`. Each unit keeps its own body and no hook is needed.
+    - ONE ROOT, because `msg` and `argsv` then sit at ONE offset for every
+      exception in either tree. That is what retires the old bridge: a NilPy
+      `except Exception:` binds `ExceptionBase` and catches an RTL raise by
+      INHERITANCE rather than by the frontend checking two hierarchies and a
+      `msg`-must-be-first layout contract nothing kept in step.
+    - BOTH NAMED `Exception`, because `ClassName` reports the DECLARED name, so
+      Python's `repr(e)` and `type(e).__name__` come out right with no rename.
+
+    So `msg`, `FHelpContext`, `HelpContext`, `FMessage` and `Message` are NOT
+    redeclared here — they are inherited, and redeclaring any of them would
+    reintroduce the two-layouts-one-name bug this replaced. }
+  Exception = class(ExceptionBase)
     constructor Create(const msg: string);
     constructor CreateFmt(const msg: string; const args: array of const);
-    property HelpContext: Integer read FHelpContext write FHelpContext;
-    property FMessage: string read msg write msg;
-    property Message: string read msg write msg;
   end;
 
   { FPC System.TMethod: the two words a method pointer is made of. A `procedure of

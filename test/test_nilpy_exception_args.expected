@@ -6,3 +6,6 @@ real miss ('nope',) KeyError('nope') 'nope'
 branched  ok
 repr      ValueError('v') v
 int key   7 KeyError(7) (7,)
+bare root Exception('x') x Exception ('x',)
+bare cat  Exception Exception('raised') ('raised',)
+sub name  MyErr ValueError
