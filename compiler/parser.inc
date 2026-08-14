@@ -976,6 +976,8 @@ function PyKwDictArgNode(mpi: Integer): Integer; forward; { Nil Python: `dict(a=
 function PyKeywordsAreKeys(mpi: Integer): Boolean; forward; { Nil Python: is this the dict()/update() callee? (pyparser.inc) }
 function PyDictKwArgsAhead: Boolean; forward; { Nil Python: at `name=` or `**expr` in an argument list? (pyparser.inc) }
 function PyBuildKeywordDict: Integer; forward; { Nil Python: the dict `a=1, **e` describes (pyparser.inc) }
+function PyBuiltinTypeCode(const nm: AnsiString): Integer; forward; { Nil Python: PYBT_* code for a builtin type NAME, else 0 (pyparser.inc) }
+function PyMakeBuiltinTypeValue(code: Integer): Integer; forward; { Nil Python: a builtin type in VALUE position, as pybtype(code) (pyparser.inc) }
 function PyDictKwOverloadAhead(ci: Integer; const name: AnsiString): Integer; forward; { Nil Python: the TPyDict.update arm a keywords-are-KEYS run resolves to (pyparser.inc) }
 function PyKwNamesTokPos: Integer; forward; { Nil Python: '(' token index of the call at the current parse position, or -1 (pyparser.inc) }
 function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer; forward; { Nil Python: pick the UMeth overload a keyword argument names (pyparser.inc) }
@@ -10648,6 +10650,32 @@ begin
         parser on the dot and reporting "Expected: =". The module had imported
         and resolved perfectly well; only the dotted form broke.
         bug-nilpy-import-lost-after-a-fallback-import-block. }
+      { A BUILTIN TYPE NAME in VALUE position — `t = str`, `f(str)`,
+        `string_types = (str,)`, `{"k": int}`, `[str, int]`.
+
+        AHEAD of the function-value arm below and of every conversion arm
+        further down, and it has to be both. The conversion arms all open with
+        `Next; Expect(tkLParen, '(')`, so with no '(' after the name they
+        reported a bare "unexpected token" — a builtin type could be CALLED and
+        never BOUND. And `list` / `dict` / `tuple` / `bytes` / `bool` are also
+        pylib PROCS, so the function-value arm below claimed those five first
+        and `print([str, list])` rendered `[<class 'str'>, <function at 0x...>]`
+        — the same name answering two different things depending on which
+        builtin happened to exist. One arm for all eleven names.
+
+        A following '.' is excluded for the same reason that arm excludes it:
+        `str.lower` as an unbound method value is a different construct with its
+        own path. bug-n-a-type-name-is-not-a-first-class-value }
+      if isNilPy and PyExprMode and (TokPos <= TokCount) and
+         (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
+         (PyBuiltinTypeCode(name) > 0) and (not PyUserShadowsProc(name)) and
+         (FindSym(name) < 0) then
+      begin
+        Next;
+        CurASTNode := PyMakeBuiltinTypeValue(PyBuiltinTypeCode(name));
+        LastExprTk := tyVariant;
+        Exit;
+      end;
       if PyExprMode and (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
          (FindSym(name) < 0) and

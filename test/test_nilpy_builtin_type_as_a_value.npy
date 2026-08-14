@@ -1,0 +1,75 @@
+# A BUILTIN TYPE used as a VALUE — `t = str`, `f(str)`, `string_types = (str,)`,
+# `{"k": int}`. Functions were first-class in NilPy and types were not: every
+# row below was `error: unexpected token`, because each builtin-conversion arm
+# in the parser opened with `Next; Expect(tkLParen, '(')`.
+#
+# bug-n-a-type-name-is-not-a-first-class-value
+
+# --- isinstance against a literal type name still works (the old path) ------
+print(isinstance("a", str), isinstance(5, int), isinstance(5, str))
+print(isinstance(True, int), isinstance(1.5, float), isinstance([1], list))
+print(isinstance({}, dict), isinstance((1,), tuple), isinstance({1}, set))
+
+# --- a type BOUND to a name -------------------------------------------------
+t = str
+print(t)
+print(t(5), t("x"))
+
+i = int
+print(i("42"), i(3.7))
+
+fl = float
+print(fl("1.5"), fl(2))
+
+b = bool
+print(b(0), b(3))
+
+# `list` / `dict` / `tuple` / `bytes` / `bool` are ALSO pylib procs, so the
+# function-value path claimed those five and `L = list` bound the ROUTINE:
+# L("abc") then answered an int. `t = str` worked the whole time because `str`
+# is not a proc — one construct, two answers, by accident of which builtins
+# happen to exist.
+L = list
+print(L("abc"), L())
+D = dict
+print(D())
+S = set
+print(sorted(S("aab")))
+
+# --- a type in a CONTAINER --------------------------------------------------
+ts = [str, int]
+print(ts)
+print([str, int, float, bool, bytes, list, dict, set, tuple])
+print({"k": str})
+
+# --- a type PASSED as an argument -------------------------------------------
+def f(ty):
+    return isinstance("q", ty)
+
+print(f(str), f(int))
+
+# --- the six idiom: a TUPLE of types held in a name -------------------------
+string_types = (str,)
+print(isinstance("q", string_types), isinstance(1, string_types))
+integer_types = (int,)
+print(isinstance(1, integer_types), isinstance("q", integer_types))
+text_type = str
+print(isinstance("q", text_type), text_type(12))
+
+# --- a registry, which is the pattern this unblocks in real libraries -------
+m = {"int": int, "str": str}
+print(m["int"]("7"), m["str"](7))
+
+# --- identity and equality --------------------------------------------------
+print(str == str, str == int)
+print(type("a").__name__, type(1).__name__)
+
+# --- bool is a SUBCLASS of int in Python; the only such pair among these ----
+print(isinstance(True, bool), isinstance(True, int), isinstance(1, bool))
+
+# --- a user name SHADOWS the builtin, as it does in CPython -----------------
+def list_shadow_check():
+    dict = 7
+    return dict + 1
+
+print(list_shadow_check())

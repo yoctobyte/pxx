@@ -1407,6 +1407,11 @@ test-nilpy: $(COMPILER)
 	# all. Every receiver shape, because they reach the call by three routes.
 	./$(COMPILER) test/test_nilpy_dict_update_keywords.npy /tmp/test_nilpy_dictupdkw26
 	/tmp/test_nilpy_dictupdkw26 | diff -u test/test_nilpy_dict_update_keywords.expected -
+	# A BUILTIN TYPE as a VALUE -- `t = str`, `string_types = (str,)`, `{"k": int}`.
+	# Functions were first-class in NilPy and types were not: every conversion arm
+	# opened with `Next; Expect(tkLParen)`, so a type could be CALLED, never BOUND.
+	./$(COMPILER) test/test_nilpy_builtin_type_as_a_value.npy /tmp/test_nilpy_btypeval26
+	/tmp/test_nilpy_btypeval26 | diff -u test/test_nilpy_builtin_type_as_a_value.expected -
 	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma
 	# inside a dict/set literal argument counted as an argument SEPARATOR: a
 	# 2-entry literal made update() look 2-arity, no overload matched, and

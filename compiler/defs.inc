@@ -714,6 +714,23 @@ const
     callee guard SEE that a payload is code. }
   VT_CALLABLE_TAG = 12;
 
+  { payload = a PYBT_* code (pylib) — a BUILTIN TYPE used as a VALUE: `t = str`,
+    `string_types = (str,)`, `isinstance(s, text_type)`. The sibling of
+    VT_CLASSREF_TAG for the types that are NOT user classes: `str`/`int`/`bytes`
+    have no RTTI blob to point at, so they need a payload space of their own.
+
+    A small code rather than a synthesized RTTI blob riding tag 11: a `str`
+    VALUE is variant tag 6, not an object carrying an RTTI pointer, so the
+    ancestry walk a fake blob would buy is unreachable for the scalar types and
+    isinstance must switch on the variant tag either way. The blob would have
+    bought only repr, at the price of a record that looks like a class to every
+    consumer that walks one.
+
+    The payload is a plain integer code — no address, no heap block — so this
+    tag stays OUT of the variant clear/retain object-tag lists for the same
+    reason VT_CLASSREF_TAG does. bug-n-a-type-name-is-not-a-first-class-value }
+  VT_BTYPE_TAG = 13;
+
   { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
     match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it
     can never equal a plain block's allocator size word (always a multiple of

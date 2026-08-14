@@ -4,7 +4,7 @@ prio: 45
 type: bug
 summary: "`t = str`, `f(str)`, `[str, int]`, `{\"k\": str}` are all parse errors in NilPy, and a user-class alias `A = B` parses but is unusable (`A()` fails, isinstance says unknown type) — functions ARE first-class values, types are not"
 status: working
-owner: claude-A
+owner: claude-A-N
 ---
 
 # A type name is not a first-class value
@@ -141,3 +141,85 @@ negative test). Needs a pin before other lanes see it (`compiler/builtin`).
 
 **Left OPEN** for the builtin-type half; moved back to the backlog rather than
 resolved, with the user-class rows struck out above.
+
+## 2026-08-14 (claude-A-N) — the BUILTIN half SHIPS. The ticket is done.
+
+`t = str`, `f(str)`, `[str, int]`, `{"k": str}`, `(str,)`, `t(5)` and
+`isinstance(x, t)` all work and match CPython. With the user-class half already
+struck out above, that closes the ticket.
+
+### Representation: a tag with a small code, not a synthesized RTTI blob
+
+`VT_BTYPE_TAG = 13`, payload = a `PYBT_*` code — the sibling of
+`VT_CLASSREF_TAG` for the types that are not user classes. The alternative
+considered and rejected was giving each builtin a fake `TClassRTTI` so it could
+ride tag 11 and reuse the ancestry walk: a `str` VALUE is variant tag 6, not an
+object carrying an RTTI pointer, so that walk is unreachable for exactly the
+scalar types this is about and isinstance must switch on the variant tag either
+way. The blob would have bought repr alone, at the price of a record that looks
+like a class to every consumer that walks one.
+
+`pybtype_of_value` is deliberately NOT a second tag→code switch. `pytype_name_v`
+is already the one place that decides a value's Python type — and it knows what
+a tag cannot, since list/tuple/set share one class and differ by FKind, and
+bytes/bytearray share TPyBytes and differ by a flag. So the code is recovered by
+asking that function and mapping its answer back through the same name table
+repr uses. One mechanism.
+
+### THREE entry points, and the third was found only by running it
+
+The construct is reached three ways, and each had to be told:
+
+1. **`ParseFactorCore`'s tkIdent path** — a type in an expression. Ahead of the
+   conversion arms, which all open `Next; Expect(tkLParen, '(')` and so reported
+   a bare "unexpected token" with no '(' after the name.
+2. **`PyMakeFuncValue`** — an assignment RHS. This is the one that was missed
+   first, and the symptom is the interesting part: **five of the eleven type
+   names (`list`, `dict`, `tuple`, `bytes`, `bool`) are ALSO pylib procs**, so
+   the function-value arm claimed those five and `L = list` bound the pylib
+   ROUTINE. `L("abc")` then went through the callable ABI and answered an
+   **int**, while `t = str` had worked from the first build because `str` is not
+   a proc. One construct, two answers, decided by which builtins happen to
+   exist — invisible to any test written only around `str`.
+3. **`pyvar_callv0/1`** — calling a type held in a name is the CONVERSION, so it
+   sits beside the `pyclassref_is` arm that constructs, because it is the same
+   concept: a type used as a value, called.
+
+That is the `normalise-dont-special-case.md` shape twice over, and both were
+caught by widening the test to every builtin rather than by reading.
+
+### One landmine avoided and one theory disproved
+
+`pybtype_call0/1` are PROCEDURES with a var result, not Variant-returning
+functions: the value is forwarded straight into `pyvar_callv1`'s own Variant
+Result, which is the NRVO corruption shape
+(`project_variant_fn_return_forward_nrvo_corruption`). Worth saying plainly that
+this was **not** what caused the empty `list("abc")` — that was entry point 2
+above, and converting to var-out changed nothing. The conversion is kept anyway
+because the hazard is real; the wrong diagnosis is recorded because it was
+wrong.
+
+### Scope, stated
+
+`bytes` / `bytearray` / `tuple` / `frozenset` bind, print, sit in containers and
+answer isinstance, but CALLING one through a name raises a named TypeError
+rather than converting — they need constructors pylib does not expose as a
+one-argument variant conversion. Refused at the boundary of what can be answered
+exactly, the same call the unbound-str-method arm makes for an arity it cannot
+express. `type(str)` still hits the pre-existing `type(x) is only supported as
+type(x).__name__` restriction, which is its own ticket.
+
+### What this unblocks
+
+[[feature-nilpy-six-and-warnings-shims]]'s load-bearing lines — `text_type = str`,
+`binary_type = bytes`, `string_types = (str,)`, `integer_types = (int,)` and
+`isinstance(s, string_types)` — all compile and answer correctly now. `six` is
+the first wall of the html5lib ladder in
+[[feature-nilpy-thirdparty-libraries-as-targets]], blocking 13 of its 48 files.
+
+### Gate
+
+`test/test_nilpy_builtin_type_as_a_value.npy` + `.expected` generated from
+CPython, byte-identical, wired into `test-nilpy`. `make compiler/pascal26`
+fixedpoint + `tools/gate.sh quick` GREEN. This touches `compiler/builtin/**`, so
+it needs a pin before other lanes see it.

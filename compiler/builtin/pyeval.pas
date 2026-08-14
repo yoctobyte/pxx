@@ -1844,6 +1844,7 @@ const VT_PYCLOSURE = 9;
         callee guard can tell code and a class apart from an integer. }
       VT_CLASSREF  = 11;
       VT_CALLABLE  = 12;
+      VT_BTYPE     = 13;   { a BUILTIN type used as a value — converts }
 { The two tags PyNotCallable still names by number. Same mirror rule as the
   block above — they restate compiler/defs.inc's VT_BOUNDMETHOD / VT_OBJECT and
   must change with them. Prefixed VT_NC_ so the duplicate names cannot collide
@@ -4492,7 +4493,7 @@ begin
 
   t := PPyRec(@cb)^.VType;
   if (t = VT_NC_BOUNDMETHOD) or (t = VT_PYCLOSURE) or (t = VT_BOUNDFN) or
-     (t = VT_CLASSREF) or (t = VT_CALLABLE) then Exit;
+     (t = VT_CLASSREF) or (t = VT_CALLABLE) or (t = VT_BTYPE) then Exit;
 
   { A class INSTANCE (tag 7) — a list, dict, tuple or a user object. Callable
     only if its class defines `__call__`; otherwise the payload is an instance
@@ -4563,6 +4564,8 @@ begin
     indistinguishable from the code address a plain def rides as, and this
     site would have jumped into the RTTI blob). }
   if pyclassref_is(cb) then begin PyClassRefNew(cb, 0, pynone, pynone, pynone, pynone, Result); Exit; end;
+  { the zero-argument form of the same thing — `list()` through a binding }
+  if pybtype_is(cb) then begin pybtype_call0(cb, Result); Exit; end;
   PyNotCallable(cb);
   if PyCallDunder(cb, 0, pynone, pynone, pynone, Result) then Exit;
   o := PyCallableObj(cb);
@@ -4593,6 +4596,10 @@ begin
     indistinguishable from the code address a plain def rides as, and this
     site would have jumped into the RTTI blob). }
   if pyclassref_is(cb) then begin PyClassRefNew(cb, 1, a0, pynone, pynone, pynone, Result); Exit; end;
+  { a BUILTIN TYPE reached as a value CONVERTS — `text_type = str` then
+    `text_type(x)`. Beside the class arm because it is the same concept: a type
+    held as a value, called. bug-n-a-type-name-is-not-a-first-class-value }
+  if pybtype_is(cb) then begin pybtype_call1(cb, a0, Result); Exit; end;
   PyNotCallable(cb);
   if PyCallDunder(cb, 1, a0, pynone, pynone, Result) then Exit;
   o := PyCallableObj(cb);

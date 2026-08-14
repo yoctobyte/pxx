@@ -1,0 +1,23 @@
+True True False
+True True True
+True True True
+<class 'str'>
+5 x
+42 3
+1.5 2.0
+False True
+['a', 'b', 'c'] []
+{}
+['a', 'b']
+[<class 'str'>, <class 'int'>]
+[<class 'str'>, <class 'int'>, <class 'float'>, <class 'bool'>, <class 'bytes'>, <class 'list'>, <class 'dict'>, <class 'set'>, <class 'tuple'>]
+{'k': <class 'str'>}
+True False
+True False
+True False
+True 12
+7 7
+True False
+str int
+True True False
+8

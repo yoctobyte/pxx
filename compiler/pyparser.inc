@@ -3538,6 +3538,49 @@ begin
   Result := PyAnyClassDeclaresMeth(mname);
 end;
 
+function PyBuiltinTypeCode(const nm: AnsiString): Integer;
+{ The PYBT_* code for a builtin TYPE name, or 0. Mirrors pylib's own table —
+  the two are a pair, and pylib's pybtype_name is the one that must answer the
+  Python spelling, so add to both or to neither.
+  bug-n-a-type-name-is-not-a-first-class-value }
+var lo: AnsiString;
+begin
+  lo := LowerCase(nm);
+  if lo = 'str' then Result := 1
+  else if lo = 'int' then Result := 2
+  else if lo = 'float' then Result := 3
+  else if lo = 'bool' then Result := 4
+  else if lo = 'bytes' then Result := 5
+  else if lo = 'list' then Result := 6
+  else if lo = 'dict' then Result := 7
+  else if lo = 'set' then Result := 8
+  else if lo = 'tuple' then Result := 9
+  else if lo = 'bytearray' then Result := 10
+  else if lo = 'frozenset' then Result := 11
+  else Result := 0;
+end;
+
+function PyMakeBuiltinTypeValue(code: Integer): Integer;
+{ `str` in VALUE position: the pybtype(<code>) call that boxes it as a VT_BTYPE
+  variant. An ordinary pylib call rather than a new AST node, so nothing below
+  the frontend has to learn about builtin types — the same choice
+  PyBuildKeywordDict makes for a keyword dict. }
+var callNode, argNode, litNode, pi: Integer;
+begin
+  pi := FindProc('pybtype');
+  if pi < 0 then Error('Nil Python: pylib (pybtype) not loaded');
+  litNode := AllocNode(AN_INT_LIT);
+  ASTIVal[litNode] := code;
+  ASTTk[litNode] := Ord(tyInt64);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := litNode;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := pi;
+  ASTLeft[callNode] := argNode;
+  ASTTk[callNode] := Ord(tyVariant);
+  Result := callNode;
+end;
+
 { A name that is BOTH a type name and a builtin conversion call. }
 function PyIsBuiltinConvName(const nm: AnsiString): Boolean;
 var lo: AnsiString;
@@ -10686,6 +10729,22 @@ begin
   if Result >= 0 then Exit;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;  { a CALL }
   if FindSym(CurTok.SVal) >= 0 then Exit;                                 { a variable }
+  { A BUILTIN TYPE NAME — `L = list`, and this is the second entry point for it
+    exactly as it is for the unbound str method above. Five of the eleven type
+    names (`list`, `dict`, `tuple`, `bytes`, `bool`) are ALSO pylib procs, so
+    without this arm the FindProc below claimed them and `L = list` bound the
+    pylib routine instead of the type: `L("abc")` then called it through the
+    callable ABI and answered an int. `t = str` worked the whole time, because
+    `str` is not a proc — one construct, two answers, decided by an accident of
+    which builtins happen to exist. bug-n-a-type-name-is-not-a-first-class-value }
+  if (PyBuiltinTypeCode(CurTok.SVal) > 0) and
+     ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) and
+     (not PyUserShadowsProc(CurTok.SVal)) then
+  begin
+    Result := PyMakeBuiltinTypeValue(PyBuiltinTypeCode(CurTok.SVal));
+    Next;
+    Exit;
+  end;
   { A NESTED def is registered under its enclosing qualifier (`A.build.on_resize`),
     so an unqualified FindProc lands on the bodyless shell the pre-pass made —
     and its address is a plausible-looking pointer one byte below the entry

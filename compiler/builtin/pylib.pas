@@ -44,6 +44,30 @@ const
   PYSEQ_SET   = 2;
   PYSEQ_FROZENSET = 3;   { a frozenset: the same value as a set, its own kind because repr, type() and isinstance all SHOW the difference }
 
+  { A BUILTIN TYPE used as a VALUE — `t = str`, `string_types = (str,)`,
+    `isinstance(s, text_type)`. The payload of a VT_BTYPE (13) variant is one of
+    these codes; the tag is mirrored from defs.inc's VT_BTYPE_TAG the same way
+    PYSEQ_* above is.
+
+    A small CODE rather than a synthesized RTTI blob riding VT_CLASSREF: a `str`
+    VALUE is variant tag 6, not an object with an RTTI pointer, so the ancestry
+    walk a fake blob would buy cannot be reached for the scalar types anyway —
+    the isinstance arm has to switch on the variant tag whatever the payload is.
+    A blob would only have bought repr, at the price of a record that looks like
+    a class to every consumer that walks one. bug-n-a-type-name-is-not-a-first-class-value }
+  PYBT_STR       = 1;
+  PYBT_INT       = 2;
+  PYBT_FLOAT     = 3;
+  PYBT_BOOL      = 4;
+  PYBT_BYTES     = 5;
+  PYBT_LIST      = 6;
+  PYBT_DICT      = 7;
+  PYBT_SET       = 8;
+  PYBT_TUPLE     = 9;
+  PYBT_BYTEARRAY = 10;
+  PYBT_FROZENSET = 11;
+  PYBT_LAST      = 11;
+
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
     per-kind subclass, because the frontend has to name ONE class in the AST. }
@@ -1346,6 +1370,30 @@ function pyint_v(const v: Variant): Variant;      { int(v) as a variant }
   rather than a literal type name. See the body.
   bug-n-a-type-name-is-not-a-first-class-value }
 function pyisinstance_v(const x: Variant; const t: Variant): Boolean;
+{ A BUILTIN TYPE as a VALUE (`t = str`). The frontend lowers a bare `str` /
+  `int` / `list` ... in value position to pybtype(<code>), so a type binds to a
+  name, rides in a tuple or a dict, and reaches isinstance exactly as a user
+  class object already does. bug-n-a-type-name-is-not-a-first-class-value }
+function pybtype(code: Int64): Variant;
+function pybtype_is(const v: Variant): Boolean;
+function pybtype_code(const v: Variant): Int64;
+{ `str`, `int`, ... — the Python spelling, which is both what repr shows and
+  what type(x).__name__ answers, so there is one table. }
+function pybtype_name(code: Int64): AnsiString;
+{ `<class 'str'>` — CPython's repr of a builtin type object. No `__main__.`
+  prefix: a builtin is not in the main module, which is exactly the difference
+  PyClassRefStr's comment records for user classes. }
+function pybtype_repr(const v: Variant): AnsiString;
+{ The code the VALUE x is an instance of, or 0 when it is nothing this table
+  names. The one place variant tags are mapped onto Python type identity. }
+function pybtype_of_value(const x: Variant): Int64;
+{ `t = str` then `t(5)` — calling a builtin type held as a VALUE, which in
+  Python is the CONVERSION. The dynamic-call sites route here for a VT_BTYPE
+  callee exactly as they route a VT_CLASSREF one to PyClassRefNew. }
+procedure pybtype_call1(const t: Variant; const a0: Variant; var res: Variant);
+{ ...and the zero-argument form, `list()` / `str()` / `int()` through a name:
+  Python's empty value of that type. }
+procedure pybtype_call0(const t: Variant; var res: Variant);
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
 { Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
@@ -6179,7 +6227,7 @@ begin
     else callable 'function'. }
   else if t = 8 then Result := 'method'
   else if (t = 9) or (t = 10) or (t = 12) then Result := 'function'
-  else if t = 11 then Result := 'type'
+  else if (t = 11) or (t = 13) then Result := 'type'   { a class object, and a builtin type object }
   { An ARBITRARY-PRECISION int, VT_PROMO_INT64 and anything else at or above
     VT_PROMO_BASE (8192): to Python it is just an `int`, and answering
     '<unknown>' made a program that branches on type(x).__name__ take the wrong
@@ -13505,6 +13553,122 @@ begin
     Result := '<function at 0x' + hx + '>';
 end;
 
+{ ---- A BUILTIN TYPE as a VALUE ------------------------------------------
+  bug-n-a-type-name-is-not-a-first-class-value }
+
+function pybtype(code: Int64): Variant;
+var r: PPyVarRec;
+begin
+  r := PPyVarRec(@Result);
+  r^.VType := 13;                     { VT_BTYPE_TAG }
+  r^.Payload := code;
+end;
+
+function pybtype_is(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) = 13;
+end;
+
+function pybtype_code(const v: Variant): Int64;
+begin
+  if pyvartag(v) = 13 then Result := PPyVarRec(@v)^.Payload else Result := 0;
+end;
+
+function pybtype_name(code: Int64): AnsiString;
+begin
+  case code of
+    PYBT_STR:       Result := 'str';
+    PYBT_INT:       Result := 'int';
+    PYBT_FLOAT:     Result := 'float';
+    PYBT_BOOL:      Result := 'bool';
+    PYBT_BYTES:     Result := 'bytes';
+    PYBT_LIST:      Result := 'list';
+    PYBT_DICT:      Result := 'dict';
+    PYBT_SET:       Result := 'set';
+    PYBT_TUPLE:     Result := 'tuple';
+    PYBT_BYTEARRAY: Result := 'bytearray';
+    PYBT_FROZENSET: Result := 'frozenset';
+  else
+    Result := '?';
+  end;
+end;
+
+function pybtype_repr(const v: Variant): AnsiString;
+begin
+  Result := '<class ' + Chr(39) + pybtype_name(pybtype_code(v)) + Chr(39) + '>';
+end;
+
+function pybtype_of_value(const x: Variant): Int64;
+var nm: AnsiString; i: Int64;
+begin
+  { Deliberately NOT a second tag->code switch. `pytype_name_v` is already the
+    one place that decides what Python type a value has, and it knows the things
+    a tag cannot: list/tuple/set share one class and differ by FKind, bytes and
+    bytearray share TPyBytes and differ by a flag. A parallel switch here would
+    be a second mechanism for one concept and would drift the first time a kind
+    was added — the shape devdocs/dev/normalise-dont-special-case.md describes.
+    So ask that function and map its answer back through the same name table
+    this unit hands to repr. }
+  Result := 0;
+  nm := pytype_name_v(x);
+  for i := 1 to PYBT_LAST do
+    if pybtype_name(i) = nm then
+    begin
+      Result := i;
+      Exit;
+    end;
+end;
+
+procedure pybtype_call1(const t: Variant; const a0: Variant; var res: Variant);
+{ A PROCEDURE with a var result, not a Variant-returning function: this value is
+  forwarded straight into the Result of pyvar_callv1, which is itself a Variant
+  function, and that forward is the NRVO shape that corrupts
+  (project_variant_fn_return_forward_nrvo_corruption). Measured, not assumed —
+  as a function, `list("abc")` came back tagged int and printed empty while the
+  scalar arms happened to survive. }
+var code: Int64; tmp: Variant;
+begin
+  code := pybtype_code(t);
+  case code of
+    PYBT_STR:       res := pystr_of(a0);
+    PYBT_INT:       res := pyint_v(a0);
+    PYBT_FLOAT:     res := pyfloat_any(a0);   { parses a str too, as float() does }
+    PYBT_BOOL:      res := pyvar_of_bool(pyvar_to_bool(a0));
+    { through a LOCAL, never straight into Result: a Variant function result
+      handed to a `var` parameter is the NRVO shape that corrupts
+      (project_variant_fn_return_forward_nrvo_corruption — measured here as
+      `list("abc")` printing an empty line). }
+    PYBT_LIST:      begin PyObjAsVar(pylist_v(a0), tmp); res := tmp; end;
+    PYBT_DICT:      begin PyObjAsVar(pydict_v(a0), tmp); res := tmp; end;
+    PYBT_SET:       begin PyObjAsVar(pyset_of(a0), tmp); res := tmp; end;
+  else
+    { bytes / bytearray / tuple / frozenset through a NAME are not wired yet.
+      Refused by name rather than silently answering something else — the same
+      call the str-method-as-a-value arm makes for an arity it cannot express. }
+    raise TypeError.Create(pybtype_name(code)
+      + '() through a type held as a value is not supported yet');
+  end;
+end;
+
+procedure pybtype_call0(const t: Variant; var res: Variant);
+var tmp: Variant;
+begin
+  { the empty value of the type — `list()`, `str()`, `int()`, spelled through a
+    binding. Built by handing the conversion an empty value of its own shape,
+    so there is no second table of "what is empty for this type". }
+  case pybtype_code(t) of
+    PYBT_STR:   res := '';
+    PYBT_INT:   res := pyvar_of_int(0);
+    PYBT_FLOAT: res := Double(0.0);
+    PYBT_BOOL:  res := pyvar_of_bool(False);
+    PYBT_LIST:  begin PyObjAsVar(TPyList.Create, tmp); res := tmp; end;
+    PYBT_DICT:  begin PyObjAsVar(TPyDict.Create, tmp); res := tmp; end;
+  else
+    raise TypeError.Create(pybtype_name(pybtype_code(t))
+      + '() through a type held as a value is not supported yet');
+  end;
+end;
+
 function pyisinstance_v(const x: Variant; const t: Variant): Boolean;
 { `isinstance(x, t)` where t is a VALUE rather than a literal type name.
 
@@ -13542,6 +13706,19 @@ begin
         end;
       Exit;
     end;
+  end;
+  { t is a BUILTIN type held as a value — `text_type = str` then
+    `isinstance(s, text_type)`, which is six's whole idiom. }
+  if pyvartag(t) = 13 then                        { VT_BTYPE }
+  begin
+    Result := pybtype_of_value(x) = pybtype_code(t);
+    { `bool` is a SUBCLASS of `int` in Python, so isinstance(True, int) is True
+      while type(True) is bool. The only subclass relation among the builtins
+      here, and the one real program actually depend on. }
+    if (not Result) and (pybtype_code(t) = PYBT_INT) and
+       (pybtype_of_value(x) = PYBT_BOOL) then
+      Result := True;
+    Exit;
   end;
   if pyvartag(t) <> 11 then Exit;                 { VT_CLASSREF }
   want := PClassRTTI(Pointer(NativeInt(PPyVarRec(@t)^.Payload)));
@@ -14049,6 +14226,8 @@ begin
   begin Result := PyCallableStr(v); Exit; end;
   { a CLASS reached as a value renders as CPython's class object }
   if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
+  { ...and a BUILTIN type reached as a value, the same way }
+  if pyvartag(v) = 13 then begin Result := pybtype_repr(v); Exit; end;
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
@@ -14085,6 +14264,8 @@ begin
   begin Result := PyCallableStr(v); Exit; end;
   { a CLASS reached as a value renders as CPython's class object }
   if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
+  { ...and a BUILTIN type reached as a value, the same way }
+  if pyvartag(v) = 13 then begin Result := pybtype_repr(v); Exit; end;
   { a container prints as its repr; every scalar as plain str (no quotes) }
   if pyvartag(v) = 7 then
   begin
@@ -14304,6 +14485,8 @@ begin
   begin Result := PyCallableStr(v); Exit; end;
   { a CLASS reached as a value renders as CPython's class object }
   if pyvartag(v) = 11 then begin Result := PyClassRefStr(v); Exit; end;
+  { ...and a BUILTIN type reached as a value, the same way }
+  if pyvartag(v) = 13 then begin Result := pybtype_repr(v); Exit; end;
   if pyvartag(v) = 4 then
   begin
     if PPyVarRec(@v)^.Payload <> 0 then Result := 'True' else Result := 'False';
