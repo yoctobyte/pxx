@@ -4,6 +4,7 @@ prio: 40
 type: decide
 blocked-by: []
 summary: "A class with __eq__ and no __hash__ is unhashable in CPython, so `d[V(1)] = x` raises. NilPy stores it and then never finds it again — data in, nothing out, silently. Refuse the store (faithful), make content lookup work (friendlier, needs a __hash__ story), or document the divergence. The ticket that found it says explicitly to decide rather than guess."
+status: decided
 ---
 
 # Object dict keys: refuse, support, or document?
@@ -76,3 +77,54 @@ reads as "dicts are broken" from application code.
 The repro matching the chosen direction; identity-keyed dicts unchanged (they
 match CPython today); `in`/`count`/`index` over a list of the same objects still
 correct, since they share the equality route.
+
+## DECIDED 2026-08-14 by the user — option 1 (refuse), and it was never really a fork
+
+> *"Why is it even a decision? It's just an obvious bug / feature request."*
+
+Right, and worth saying why it looked like one: the ticket asked whether NilPy
+should be *friendlier* than CPython here. Two facts collapse that:
+
+1. **CPython's rule exists to prevent exactly the failure we have.** Defining
+   `__eq__` sets `__hash__ = None` deliberately — objects that compare equal
+   must hash equal, Python cannot guess how, so it refuses rather than hand back
+   a dict that silently loses entries.
+2. **NilPy's compatibility promise is one-directional.** Code that *works* on
+   CPython must work on NilPy. Refusing what CPython refuses costs no
+   compatibility at all.
+
+So: **refuse the store when `__eq__` is defined and `__hash__` is not**, with
+CPython's message. Re-filed as work:
+[[bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry]].
+
+### Option 2 rejected, and not only on cost
+
+The ticket recommended synthesising a content hash so the lookup "just works".
+Beyond being more work, it **reintroduces the same class of bug in a subtler
+form**: mutate the object afterwards and its content hash changes, so the entry
+goes missing from the dict. That is the trap CPython's designers backed away
+from, and inheriting it to be friendly is a bad trade.
+
+If real code ever wants content-keyed dicts, that is a `__hash__` story to add
+on evidence, not on speculation.
+
+### The case this must NOT touch — measured
+
+A class with **no `__eq__`** is hashable by identity in CPython and works
+identically in NilPy today:
+
+```python
+class Handle:
+    def __init__(self, n): self.n = n
+a, b = Handle(1), Handle(1)      # same contents, distinct objects
+d[a] = "from a"; d[b] = "from b"
+```
+
+`len(d) == 2` and both lookups correct, in **both** implementations. That is the
+user's real use case — an imported Pascal or C object held by pointer as a dict
+key and handed straight back to SQLite or a Pascal library — and it is normal,
+supported Python. The refusal keys on `__eq__` being present, so it cannot reach
+this path. Written into the new ticket's gate so a fix cannot quietly break it.
+
+## Log
+- 2026-08-14 — decided, commit PENDING-COMMIT.
