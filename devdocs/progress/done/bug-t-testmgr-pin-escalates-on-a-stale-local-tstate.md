@@ -142,4 +142,4 @@ again. **That is Track A's file**, so it is theirs to remove; flagged here
 rather than edited.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 1dbdba4e1.
