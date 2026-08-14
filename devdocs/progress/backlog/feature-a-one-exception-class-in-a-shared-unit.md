@@ -316,3 +316,41 @@ The BARE `Exception` under `uses pylib, sysutils` stays genuinely ambiguous
 even then. That one is ordinary Pascal name-collision behaviour and is
 defensible, but it deserves a diagnostic rather than first-match silence; worth
 its own ticket when this lands.
+
+### Correction to the dead end above — the ctor fix may have been RIGHT and untestable
+
+Re-reading the failing probe rather than the parser: the test that declared it
+insufficient could not have shown it working.
+
+```pascal
+var se: sysutils.Exception;              { <- resolves FLAT, in TYPE position }
+begin
+  se := sysutils.Exception.Create('su hi');
+  WriteLn(se.Message);
+```
+
+`se`'s declared TYPE is resolved by a different path from the constructor, and
+that path is still flat — so `se` is statically pylib's class whatever the
+constructor built. Under variant C pylib's `Exception` inherits `msg` from
+`ExceptionBase` while sysutils' declares its own, so the two are at DIFFERENT
+offsets, and reading `.Message` through the wrong static type yields garbage
+even when the object is correct. The garbage was evidence about the variable's
+type, not about the constructor.
+
+So "scoping ctorCi is not sufficient" is right, but for a reason that changes
+the work: **it is not that the constructor takes another path — it is that
+qualified class references need scoping in TYPE position too**, and the
+constructor fix cannot be observed until they both are.
+
+Next session, in order:
+1. Scope qualified class refs in TYPE position (var/field/param declarations,
+   `ParseTypeKind`'s class lookup) with `FindUClassInUnit(name, qUnit)`.
+2. Keep the `ctorCi` change from the branch — it is probably already correct.
+3. Re-run the probe. It only becomes a valid instrument once (1) lands.
+4. THEN judge whether the qualified form disambiguates, and only then decide
+   about the bare-name ambiguity.
+
+Recorded because the previous entry would have sent the next session hunting
+for a parse path that is very likely not the problem — the sort of plausible
+wrong root cause `devdocs/dev/root-cause-over-microfix.md` exists to catch, and
+it was one re-read away rather than one experiment away.
