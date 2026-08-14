@@ -23241,7 +23241,7 @@ end;
 { ===== Declaration parsing ===== }
 
 function ParseTypeKind: TTypeKind;
-var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci: Integer;
+var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     tnHasAlias: Boolean;   { a source/RTL alias of this name beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
     wasPacked: Boolean;
@@ -23365,8 +23365,15 @@ begin
         member name like a bare type; ConsumeUnitQualifier consumes nothing
         when the prefix is not a compiled unit. Types live in one global
         table, so the qualifier only disambiguates the parse, not the lookup. }
-      if (CurTok.Kind = tkIdent) and (ConsumeUnitQualifier(lo) <> -1) then
-        ;   { lo is now the member name; CurTok sits on it }
+      tkQUnit := -1;
+      if (CurTok.Kind = tkIdent) then tkQUnit := ConsumeUnitQualifier(lo);
+      { lo is now the member name; CurTok sits on it. The unit index is KEPT —
+        it used to be dropped on the floor because "types live in one global
+        table, so the qualifier only disambiguates the parse, not the lookup".
+        That invariant holds only while no two units declare a class of the same
+        name, which stops being true the moment sysutils and pylib each declare
+        their own `Exception`. Kept and threaded to the class lookup below so
+        `var e: sysutils.Exception` means what it says. }
 
       { CLASS-qualified type reference — `TTest.TRecord`, a type nested inside a class
         body (`TTest = class public type TRecord = record ... end; end;`). A nested type
@@ -23599,7 +23606,9 @@ begin
         { `Text`/`TextFile` resolve here as the record from the implicitly-loaded
           textfile unit (loaded up front in ParseProgram when a Text token is
           present), so no special-case is needed at this point. }
-        ci := FindUClass(lo);
+        ci := -1;
+        if tkQUnit >= 0 then ci := FindUClassInUnit(lo, tkQUnit);
+        if ci < 0 then ci := FindUClass(lo);
         if (ci >= 0) and UClsIsInterface[ci] then
         begin
           { Interface-typed variable: a 16-byte fat pointer {IMT, instance}.
@@ -23609,7 +23618,9 @@ begin
         end
         else if IsClassType(lo) then
         begin
-          ci := FindUClass(lo);
+          ci := -1;
+          if tkQUnit >= 0 then ci := FindUClassInUnit(lo, tkQUnit);
+          if ci < 0 then ci := FindUClass(lo);
           if ci >= 0 then
             LastTypeRecId := REC_UCLASS_BASE + ci
           else
