@@ -106,4 +106,4 @@ GRAMMAR, not on an identifier a Pascal library might also declare, so they
 cannot be claimed by a name collision, which is what this ticket is about.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit b1b6f224a.
