@@ -3643,6 +3643,36 @@ begin
   Result := PyAnyClassDeclaresMeth(mname);
 end;
 
+function PyMinMaxDefaultAhead: Boolean;
+{ CurTok is `min`/`max` and the next token is '('. True when a `default=`
+  keyword sits at depth 1 of that argument list. A lookahead rather than a
+  parse: the arm that acts on it has to consume the whole call itself, and
+  every other min/max form must be left completely untouched. }
+var k, depth: Integer;
+begin
+  Result := False;
+  k := TokPos;                          { the '(' }
+  if (k >= TokCount) or (Tokens[k].Kind <> tkLParen) then Exit;
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;
+    end
+    else if (depth = 1) and (Tokens[k].Kind = tkIdent) and
+            CaseEqual(GetTokenStr(k), 'default') and
+            (k + 1 < TokCount) and (Tokens[k + 1].Kind = tkAssign) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyBuiltinTypeCode(const nm: AnsiString): Integer;
 { The PYBT_* code for a builtin TYPE name, or 0. Mirrors pylib's own table —
   the two are a pair, and pylib's pybtype_name is the one that must answer the

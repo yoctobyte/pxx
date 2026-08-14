@@ -5144,6 +5144,24 @@ begin
   pyhash_v := Int64(PyVarHashKey(PPyVarRec(@v)));
 end;
 
+{ `max(xs, default=D)` / `min(xs, default=D)` — CPython's empty-sequence guard.
+  Two routines rather than an overload of max/min: a second Variant parameter is
+  exactly the shape the two-argument NUMERIC overload already claims, and that
+  mis-resolution is what made `min(xs, key=f)` compare a list against a function
+  (PyMinMaxByKey) and `min(xs, key=None)` compare it against None
+  (PyMinMaxNoneKey). Adding a third meaning to that one slot would be a fourth
+  arm of a distinction the call site cannot make.
+  bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
+function pymax_default(const c: Variant; const d: Variant): Variant;
+begin
+  if pylen_v(c) = 0 then pymax_default := d else pymax_default := max(c);
+end;
+
+function pymin_default(const c: Variant; const d: Variant): Variant;
+begin
+  if pylen_v(c) = 0 then pymin_default := d else pymin_default := min(c);
+end;
+
 function pyid_v(const v: Variant): Int64;
 begin
   pyid_v := PPyVarRec(@v)^.Payload;

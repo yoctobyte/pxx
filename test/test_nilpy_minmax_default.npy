@@ -1,0 +1,24 @@
+# `max(xs, default=D)` / `min(xs, default=D)` — CPython's empty-sequence guard,
+# the last absent name from the 2026-08-12 sweep's item 4.
+#
+# A frontend intercept, because `default=` is a keyword whose callee has no such
+# parameter: the ordinary keyword binder is RIGHT to refuse it, and the fix is a
+# lowering, exactly as it was for `dict(a=1)`. And two dedicated pylib routines
+# rather than another max/min overload — a second Variant parameter is the shape
+# the two-argument NUMERIC overload already claims, which is what made
+# `min(xs, key=f)` compare a list against a function and `min(xs, key=None)`
+# compare it against None.
+#
+# bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep
+
+print(max([], default=0), min([], default=9))
+print(max([3, 1], default=0), min([3, 1], default=0))
+print(max("", default="z"), max("ab", default="z"))
+xs = []
+print(max(xs, default=-1))
+xs = [7]
+print(max(xs, default=-1))
+# the ordinary forms must be untouched
+print(max(3, 5), min(3, 5), max([4, 9]), min([4, 9]))
+print(max([1, 2], key=None), min(["bb", "a"], key=len))
+print(max(1, 2, 3), min(1, 2, 3))

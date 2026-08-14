@@ -1429,6 +1429,13 @@ test-nilpy: $(COMPILER)
 	# imports json for exactly that reason.
 	./$(COMPILER) test/test_nilpy_id_and_ascii_builtins.npy /tmp/test_nilpy_idascii26
 	/tmp/test_nilpy_idascii26 | diff -u test/test_nilpy_id_and_ascii_builtins.expected -
+	# max(xs, default=D) / min(xs, default=D). `default=` names no parameter, so
+	# the keyword binder is right to refuse it and the fix is a lowering -- and
+	# two dedicated routines, because a second Variant parameter is the slot the
+	# numeric max(a, b) overload already claims (that collision is what made
+	# min(xs, key=f) compare a list against a function).
+	./$(COMPILER) test/test_nilpy_minmax_default.npy /tmp/test_nilpy_mmdflt26
+	/tmp/test_nilpy_mmdflt26 | diff -u test/test_nilpy_minmax_default.expected -
 	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma
 	# inside a dict/set literal argument counted as an argument SEPARATOR: a
 	# 2-entry literal made update() look 2-arity, no overload matched, and

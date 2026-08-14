@@ -976,6 +976,7 @@ function PyKwDictArgNode(mpi: Integer): Integer; forward; { Nil Python: `dict(a=
 function PyKeywordsAreKeys(mpi: Integer): Boolean; forward; { Nil Python: is this the dict()/update() callee? (pyparser.inc) }
 function PyDictKwArgsAhead: Boolean; forward; { Nil Python: at `name=` or `**expr` in an argument list? (pyparser.inc) }
 function PyBuildKeywordDict: Integer; forward; { Nil Python: the dict `a=1, **e` describes (pyparser.inc) }
+function PyMinMaxDefaultAhead: Boolean; forward; { Nil Python: is there a `default=` keyword in this min/max call? (pyparser.inc) }
 function PyBuiltinTypeCode(const nm: AnsiString): Integer; forward; { Nil Python: PYBT_* code for a builtin type NAME, else 0 (pyparser.inc) }
 function PyMakeBuiltinTypeValue(code: Integer): Integer; forward; { Nil Python: a builtin type in VALUE position, as pybtype(code) (pyparser.inc) }
 function PyDictKwOverloadAhead(ci: Integer; const name: AnsiString): Integer; forward; { Nil Python: the TPyDict.update arm a keywords-are-KEYS run resolves to (pyparser.inc) }
@@ -13665,6 +13666,38 @@ begin
         CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
         ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyInt64);
         LastExprTk := tyInt64;
+        Exit;
+      end;
+      { `max(xs, default=D)` / `min(xs, default=D)` — the empty-sequence guard.
+        Intercepted here because `default=` is a KEYWORD whose callee has no
+        such parameter, so the ordinary keyword binder is right to refuse it
+        ("max has no parameter named 'default'") — the same shape as
+        `d.update(a=1)`, where the fix is also a lowering rather than a binder
+        change. `key=` alongside it is refused by name rather than silently
+        dropped: combining them needs the keyed scan to carry the guard too,
+        and answering the wrong one of two keywords is worse than saying so. }
+      if PyExprMode and (CaseEqual(name, 'max') or CaseEqual(name, 'min')) and
+         (Tokens[TokPos].Kind = tkLParen) and PyMinMaxDefaultAhead and
+         (FindProc('pymax_default') >= 0) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseArgExpr; node := CurASTNode;
+        Expect(tkComma, ',');
+        if not CaseEqual(CurTok.SVal, 'default') then
+          Error('Nil Python: min()/max() take `default=` as their only keyword '
+                + 'here; `key=` together with `default=` is not supported yet');
+        Next; Expect(tkAssign, '=');
+        ParseArgExpr; op := CurASTNode;
+        Expect(tkRParen, ')');
+        if CaseEqual(name, 'max') then helperPi := FindProc('pymax_default')
+        else helperPi := FindProc('pymin_default');
+        if helperPi < 0 then Error('Nil Python: pylib (min/max default) not loaded');
+        left := AllocNode(AN_ARG); ASTLeft[left] := PyForceVariant(op);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
+        ASTRight[argSeq] := left;
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyVariant);
+        LastExprTk := tyVariant;
         Exit;
       end;
       if PyExprMode and CaseEqual(name, 'ascii') and (procIdx < 0) and
