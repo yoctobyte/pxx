@@ -125,4 +125,4 @@ output under `$(PXX_STABLE)`. No compiler or library changes.
   no user program that observes it. Documented the empty-string edge instead
   (`#0`, verified in both modes and in FPC). Whether `Null` should exist at all
   is a language question, not a docs one.
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 28c6f6c75.
