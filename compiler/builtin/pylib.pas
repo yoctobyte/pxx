@@ -2534,13 +2534,29 @@ begin
 end;
 
 function pystr_isascii(const s: AnsiString): Boolean;
-var i: Integer;
+var i: Integer; cached: Int64; found: Boolean;
 begin
   { EMPTY is True here — CPython's rule, and the opposite of the sibling
     predicates above, so it is stated rather than inherited. }
-  Result := True;
+  { ANSWER ONCE PER STRING, not once per call. PyStrCharLen and pystr_charat
+    both open with this predicate, so a full scan here made `s[i]` O(n) and an
+    indexing loop O(n^2) — measured at 2476x CPython for n=160k, and the reason
+    a compiled language was losing to a bytecode interpreter
+    (bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython).
+    The block header carries the answer; PXXStrUnique forgets it whenever bytes
+    are about to change, which is the one place they can. }
+  cached := PXXStrAsciiCached(Pointer(s));
+  if cached >= 0 then
+  begin
+    Result := (cached = 1);
+    Exit;
+  end;
+  found := True;
   for i := 1 to Length(s) do
-    if Ord(s[i]) > 127 then begin Result := False; Exit; end;
+    if Ord(s[i]) > 127 then begin found := False; Break; end;
+  PXXStrSetAscii(Pointer(s), found);
+  Result := found;
+  Exit;
 end;
 function pystr_maketrans(const frm: AnsiString; const t: AnsiString): TPyDict;
 var d: TPyDict; i, n: Integer;

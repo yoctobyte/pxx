@@ -290,6 +290,10 @@ test-nilpy: $(COMPILER)
 	# a bare `except Exception:` in NilPy bridges to both (pyparser's except arm)
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# the ASCII answer is cached in the block header, so s[i] and len() stop
+	# rescanning; a stale cache would give wrong CHARACTER offsets, silently
+	./$(COMPILER) test/test_nilpy_str_ascii_cache.npy /tmp/test_nilpy_asciicache26
+	test "$$(/tmp/test_nilpy_asciicache26)" = "$$(cat test/test_nilpy_str_ascii_cache.expected)"
 	# bare `Exception` maps to PyException, `su.Exception` does NOT, a string
 	# literal is untouched, and a class base reference maps with no special case
 	./$(COMPILER) test/test_nilpy_pyexception_bare_vs_qualified.npy /tmp/test_nilpy_pyexcbq26
@@ -5775,6 +5779,10 @@ test-core: $(COMPILER)
 	# a bare `except Exception:` in NilPy bridges to both (pyparser's except arm)
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy /tmp/test_nilpy_rtlexc26
 	test "$$(/tmp/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	# the ASCII answer is cached in the block header, so s[i] and len() stop
+	# rescanning; a stale cache would give wrong CHARACTER offsets, silently
+	./$(COMPILER) test/test_nilpy_str_ascii_cache.npy /tmp/test_nilpy_asciicache26
+	test "$$(/tmp/test_nilpy_asciicache26)" = "$$(cat test/test_nilpy_str_ascii_cache.expected)"
 	# bare `Exception` maps to PyException, `su.Exception` does NOT, a string
 	# literal is untouched, and a class base reference maps with no special case
 	./$(COMPILER) test/test_nilpy_pyexception_bare_vs_qualified.npy /tmp/test_nilpy_pyexcbq26

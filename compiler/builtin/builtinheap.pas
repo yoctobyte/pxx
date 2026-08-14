@@ -107,6 +107,10 @@ function PXXPCharOf(p: Pointer): Pointer;
   character positions equal byte positions and NilPy indexing stays O(1). Its
   ABSENCE means "unknown", not "non-ASCII" — a consumer must scan. }
 function PXXHdrMeta(p: Pointer): Int64;
+{ The cached ASCII answer: 1 yes, 0 no, -1 not looked yet. See PXX_FLAG_ASCII_KNOWN. }
+function PXXStrAsciiCached(p: Pointer): Int64;
+procedure PXXStrSetAscii(p: Pointer; isAscii: Boolean);
+procedure PXXStrForgetAscii(p: Pointer);
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
@@ -166,6 +170,14 @@ const
   PXX_FLAG_STATIC   = $0100;   { .rodata, never freed — reserved, unused }
   PXX_FLAG_INTERNED = $0200;   { reserved, unused }
   PXX_FLAG_ASCII    = $0400;   { verified: no byte >= $80 }
+  { The ASCII bit ANSWERED. Without this, 0 means both "scanned, has high bytes"
+    and "nobody looked", so a consumer had to rescan every time and NilPy's
+    s[i] was O(n) per index — a plain indexing loop O(n^2), measured 2476x
+    CPython at n=160k (bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-
+    cpython). With it, PXX_FLAG_ASCII is authoritative and the scan happens once
+    per string. Anything that MUTATES bytes must clear both bits; PXXStrUnique
+    is the one place that can, because byte writes go through its COW. }
+  PXX_FLAG_ASCII_KNOWN = $1000;
   PXX_FLAG_EXTENDED = $0800;   { a side-table entry exists — the escape hatch }
 
   { KindData0, bits 16-23: text encoding. A small enum, NOT a codepage —
@@ -345,8 +357,57 @@ end;
   (feature-nilpy-text-string-kind) }
 function PXXStrMeta(orAll: Int64): Int64;
 begin
-  if (orAll and $80) = 0 then PXXStrMeta := PXX_KIND_LEGACY or PXX_FLAG_ASCII
-  else PXXStrMeta := PXX_KIND_LEGACY;
+  { KNOWN either way: this ran over every byte, so the answer is authoritative
+    whichever way it came out. }
+  if (orAll and $80) = 0 then
+    PXXStrMeta := PXX_KIND_LEGACY or PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII
+  else
+    PXXStrMeta := PXX_KIND_LEGACY or PXX_FLAG_ASCII_KNOWN;
+end;
+
+{ The cached ASCII answer for a managed string handle: 1 = ASCII, 0 = has a byte
+  >= $80, -1 = nobody has looked (the caller must scan, and should call
+  PXXStrSetAscii with what it finds so the next caller does not).
+  Every AnsiString handle in this runtime is a PXXAlloc'd block whose meta word
+  PXXHdrInit zeroes, so the read is always of defined memory and an unstamped
+  block answers -1 rather than garbage. }
+function PXXStrAsciiCached(p: Pointer): Int64;
+var meta: Int64;
+begin
+  if p = nil then begin PXXStrAsciiCached := 1; Exit; end;   { '' is ASCII, CPython's rule }
+  meta := PXXHdrMeta(p);
+  if (meta and PXX_FLAG_ASCII_KNOWN) = 0 then
+  begin
+    PXXStrAsciiCached := -1;
+    Exit;
+  end;
+  if (meta and PXX_FLAG_ASCII) <> 0 then PXXStrAsciiCached := 1
+  else PXXStrAsciiCached := 0;
+end;
+
+{ Record what a scan found, so it happens once per string rather than once per
+  index. Safe to call on any managed handle; a nil handle has no header. }
+procedure PXXStrSetAscii(p: Pointer; isAscii: Boolean);
+var base, meta: Int64;
+begin
+  if p = nil then Exit;
+  base := Int64(p) - PXX_HDR_SIZE;
+  meta := PWord(base + PXX_HDR_META)^;
+  meta := meta or PXX_FLAG_ASCII_KNOWN;
+  if isAscii then meta := meta or PXX_FLAG_ASCII
+  else meta := meta and (not PXX_FLAG_ASCII);
+  PWord(base + PXX_HDR_META)^ := meta;
+end;
+
+{ Forget the cached ASCII answer — the bytes are about to change. }
+procedure PXXStrForgetAscii(p: Pointer);
+var base, meta: Int64;
+begin
+  if p = nil then Exit;
+  base := Int64(p) - PXX_HDR_SIZE;
+  meta := PWord(base + PXX_HDR_META)^;
+  PWord(base + PXX_HDR_META)^ :=
+    meta and (not (PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII));
 end;
 
 { The meta word of a live handle, or PXX_KIND_LEGACY for nil. }
@@ -2025,9 +2086,17 @@ begin
     Result := nil;
     Exit;
   end;
+  { Whichever path runs, the caller is about to WRITE bytes through the handle
+    we return, so any cached ASCII answer stops being true. rc<=1 hands back the
+    same block (mutated in place); the COW path copies through PXXStrFromLit,
+    which stamps the flag from the OLD bytes. Both must forget it — this is the
+    single choke point for byte mutation, which is what makes the cache sound.
+    PXXStrSetLen needs no such call: it always allocates a fresh block and
+    PXXHdrInit zeroes its meta. }
   rc := PWord(oldHandle - 16)^;
   if rc <= 1 then
   begin
+    PXXStrForgetAscii(Pointer(oldHandle));
     Result := Pointer(oldHandle);
     Exit;
   end;
@@ -2035,6 +2104,7 @@ begin
   newHandle := Int64(PXXStrFromLit(len, Pointer(oldHandle)));
   PWord(slotAddr)^ := newHandle;
   PXXStrDecRef(Pointer(oldHandle));
+  PXXStrForgetAscii(Pointer(newHandle));
   Result := Pointer(newHandle);
 end;
 

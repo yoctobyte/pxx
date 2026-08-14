@@ -1,0 +1,64 @@
+# bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython, cause A.
+#
+# PyStrCharLen and pystr_charat both used to open with a FULL byte scan
+# (pystr_isascii) to decide whether character offsets equal byte offsets, so
+# every s[i] and every len(s) rescanned the whole string and an indexing loop
+# was O(n^2) — measured at 2476x CPython for n=160k. The answer now lives in the
+# block header (PXX_FLAG_ASCII_KNOWN) and is computed once per string.
+#
+# This test is about CORRECTNESS, not speed: a stale or wrongly-shared cache
+# gives wrong CHARACTER offsets, silently, which is the expensive failure. Every
+# line is diffed against CPython.
+
+# a string that is ASCII, asked repeatedly — the cached answer must not drift
+a = "abcdef"
+print(len(a), a[0], a[5], a.isascii())
+print(len(a), a[0], a[5], a.isascii())
+
+# a string that is NOT ASCII: character offsets differ from byte offsets, and
+# the cache must record "no" rather than leaving the question open
+b = "héllo"
+print(len(b), b[0], b[1], b[4], b.isascii())
+print(len(b), b[0], b[1], b[4], b.isascii())
+
+# derived strings get their OWN answer — an ASCII source must not lend its
+# answer to a non-ASCII result, or the result indexes at byte offsets
+c = a + "é"
+print(len(c), c[5], c[6], c.isascii())
+
+# ...and the other direction: a slice of a non-ASCII string that IS ASCII
+d = b[1:3]
+print(len(d), d.isascii(), list(d))
+
+# empty is ASCII (CPython's rule, and the opposite of isdigit/isalpha)
+print("".isascii(), len(""))
+
+# a repeat, which is a different producer again
+e = "x" * 5
+print(len(e), e[4], e.isascii())
+f = "é" * 3
+print(len(f), f[2], f.isascii())
+
+# iteration and list() go through the same character path as indexing
+print(list(a), list(b))
+
+# a long ASCII string indexed across its whole length: this is the shape that
+# was quadratic. Correctness here is that every character comes back right.
+g = "abcdefghij" * 50
+n = 0
+i = 0
+while i < len(g):
+    if g[i] == "e":
+        n = n + 1
+    i = i + 1
+print(len(g), n)
+
+# the same over a non-ASCII string, where offsets genuinely differ
+h = "aébc" * 25
+m = 0
+i = 0
+while i < len(h):
+    if h[i] == "é":
+        m = m + 1
+    i = i + 1
+print(len(h), m, h[1], h[5])

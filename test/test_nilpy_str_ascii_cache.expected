@@ -1,0 +1,12 @@
+6 a f True
+6 a f True
+5 h é o False
+5 h é o False
+7 f é False
+2 False ['é', 'l']
+True 0
+5 x True
+3 é False
+['a', 'b', 'c', 'd', 'e', 'f'] ['h', 'é', 'l', 'l', 'o']
+500 50
+100 25 é é
