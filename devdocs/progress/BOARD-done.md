@@ -653,6 +653,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module | N | 40 | bug | A def shadowing a builtin that has NO pylib proc (ord, chr, …) takes effect from the top of the module — `print(ord('A'))` ABOVE the def prints the user's answer where CPython prints 65. Silent. | — |
 | bug-nilpy-is-none-followed-by-and-or-else-takes-a-generic-compare | N | 55 | bug | `x is None` answers wrong whenever `and` / `or` / `else` follows it | — |
 | bug-nilpy-is-on-two-lists-compares-contents | N | 55 | bug | `is` on two lists compares CONTENTS, so distinct lists are "identical" | — |
+| bug-nilpy-join-of-a-str-segfaults | N | 60 | bug | `\"-\".join(\"hello\")` SEGFAULTS — pystr_join is reached by name and takes a TPyList, so a string handle is dereferenced as an object pointer; str is an iterable in CPython and join accepts it | — |
 | bug-nilpy-key-analysis-compiles-but-segfaults | N | 70 | bug | nilpy: songformatter's key_analysis.py COMPILES but segfaults at run time | — |
 | bug-nilpy-keyword-arg-collides-with-a-star-defs-default-filler | N | 50 | bug | `f(1, b=7)` rejected when the def also has `*rest` / `**kw` | — |
 | bug-nilpy-keyword-arg-vs-overload-set | N | 50 | bug | nilpy: a keyword argument is resolved against ONE overload, so it fails when a sibling has the parameter | — |

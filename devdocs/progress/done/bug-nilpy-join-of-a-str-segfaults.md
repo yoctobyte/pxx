@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`\"-\".join(\"hello\")` SEGFAULTS — pystr_join is reached by name and takes a TPyList, so a string handle is dereferenced as an object pointer; str is an iterable in CPython and join accepts it"
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -109,3 +109,6 @@ with string handles.
 CPython) is byte-identical, covering all four constructs plus the shapes that
 already worked (`sorted`, `max`/`min`, `list`, `tuple`, `enumerate`, `zip`,
 `in`) so they stay working. No pylib change, so no pin needed.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
