@@ -195,4 +195,4 @@ feature, not a defect; the direction that must hold is that working CPython code
 works here (`devdocs/dev/nilpy-semantics-divergences.md`).
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 2185fb6f2.
