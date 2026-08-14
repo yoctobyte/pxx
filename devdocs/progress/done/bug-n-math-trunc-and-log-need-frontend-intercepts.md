@@ -255,4 +255,4 @@ shape) and the `pow` sweep; expectations regenerated from CPython.
 no re-pin.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 8241847b2.
