@@ -36,4 +36,4 @@ comment names the hazard ("growth through the inline resize path must not lose
 or invent the flag"). Filed as
 [[bug-a-in-place-append-loses-the-ascii-kind-flag-on-growth]] (Track A, p75,
 urgent — it is in pin v299, so every `$(PXX_STABLE)` lane has it).
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 513de4f46.
