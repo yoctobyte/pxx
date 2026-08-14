@@ -209,4 +209,4 @@ That is the normalise-don't-special-case shape the ticket asked for — one plac
 decides, the shim delegates.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 97b1c735c.
