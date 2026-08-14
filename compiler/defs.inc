@@ -2221,6 +2221,16 @@ var
   MainBodyIntfTempSym : array[0..1023] of Integer;
   MainBodyIntfTempCount : Integer;
   SourceFileDir : AnsiString;
+  { The DOTTED spelling of the NilPy module path the next ParseUsesUnit call is
+    about to resolve — `mypkg.core.bus` for the unit name `mypkg_core_bus`.
+    The mangling that produces the unit name is lossy (`a.b_c` and `a_b.c` both
+    give `a_b_c`), and a package on disk has to be found by PATH, so the
+    resolver needs the original. Set by PyConsumeDottedModule, read and cleared
+    by ParseUsesUnitBody, and used only when re-mangling it reproduces the unit
+    name it arrived with — so a stale value (a module path consumed and then
+    ignored, e.g. `import typing`) cannot steer a later, unrelated import.
+    feature-nilpy-dotted-imports-resolve-to-source-files }
+  PyDottedImport : AnsiString;
   { Base name (no dir, no ext) of the source file currently being lexed; used to
     resolve the `*` in $R *.lfm / $R *.res to the current unit. }
   CurSrcBaseName : AnsiString;

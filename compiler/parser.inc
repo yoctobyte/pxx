@@ -1090,6 +1090,24 @@ begin
     PyMapReservedMember := nm + '_';
 end;
 
+{ A dotted qualifier as NILPY spells its units. Pascal namespace units really
+  are named `Posix.SysSocket`, so the candidate below is looked up verbatim; a
+  NilPy dotted import is MANGLED to one underscore-joined unit
+  (`mypkg.core.origin` -> `mypkg_core_origin`), so the same qualifier text has
+  to be tried in that spelling too or `import a.b.c` binds a name no expression
+  can then use. Underscore form only under isNilPy, so no Pascal qualifier
+  changes meaning. feature-nilpy-dotted-imports-resolve-to-source-files }
+function PyFindUnitDotted(const cand: AnsiString): Integer;
+var m: AnsiString; i: Integer;
+begin
+  Result := FindUnitOrAlias(cand);
+  if (Result >= 0) or (not isNilPy) then Exit;
+  m := '';
+  for i := 1 to Length(cand) do
+    if cand[i] = '.' then m := m + '_' else m := m + cand[i];
+  Result := FindUnitOrAlias(m);
+end;
+
 function ConsumeUnitQualifier(var name: AnsiString): Integer;
 var cand: AnsiString; bestUnit, bestExtra, extra, ti, k, u: Integer;
 begin
@@ -1132,7 +1150,7 @@ begin
   cand := name;
   bestUnit := -1; bestExtra := -1;
   { 0-extra: the bare name is the unit, member = Tokens[TokPos+1]. }
-  u := FindUnitOrAlias(cand);
+  u := PyFindUnitDotted(cand);
   if u >= 0 then begin bestUnit := u; bestExtra := 0; end;
 
   { Extend with `.ident` groups; each is a unit-qualifier candidate only while a
@@ -1147,7 +1165,7 @@ begin
     if (ti + 3 < TokCount) and (Tokens[ti + 2].Kind = tkDot) and
        (Tokens[ti + 3].Kind = tkIdent) then
     begin
-      u := FindUnitOrAlias(cand);
+      u := PyFindUnitDotted(cand);
       if u >= 0 then begin bestUnit := u; bestExtra := extra; end;
     end;
     Inc(extra);
@@ -31068,6 +31086,59 @@ begin
   if Length(content) > 0 then begin isCUnit := True; isCHeader := True; end;
 end;
 
+{ `mypkg.core.bus` -> `mypkg/core/bus`. A dotted absolute import names a
+  DIRECTORY PATH under a package root; the underscore-mangled unit name it also
+  carries cannot be turned back into one (`a.b_c` and `a_b.c` mangle alike), so
+  the path is built from the dotted spelling the frontend kept.
+  feature-nilpy-dotted-imports-resolve-to-source-files }
+function PyDottedToRelPath(const dotted: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(dotted) do
+    if dotted[i] = '.' then Result := Result + '/'
+    else Result := Result + dotted[i];
+end;
+
+{ The unit name a dotted path mangles to, lowercased — used to CHECK that a
+  carried-over dotted spelling really belongs to the import being resolved. }
+function PyDottedMangled(const dotted: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(dotted) do
+    if dotted[i] = '.' then Result := Result + '_'
+    else Result := Result + dotted[i];
+  Result := LowerCase(Result);
+end;
+
+{ One package root's worth of probes for a dotted module: the module file
+  itself, then the package directory's `__init__`. `.py` before `.npy` at each
+  step so a package written in plain Python wins over a stray same-named NilPy
+  file, matching the flat sibling probe's order. }
+procedure PyTryPackageSource(const root, relPath: AnsiString;
+                             const wantModuleFile: Boolean;
+                             var path: AnsiString; var content: AnsiString);
+begin
+  if Length(content) > 0 then Exit;
+  if wantModuleFile then
+  begin
+    ConcatThree(root, relPath, '.py', path); LoadFile(path, content);
+    if Length(content) = 0 then
+    begin
+      ConcatThree(root, relPath, '.npy', path); LoadFile(path, content);
+    end;
+  end;
+  if Length(content) = 0 then
+  begin
+    ConcatThree(root, relPath, '/__init__.py', path); LoadFile(path, content);
+  end;
+  if Length(content) = 0 then
+  begin
+    ConcatThree(root, relPath, '/__init__.npy', path); LoadFile(path, content);
+  end;
+end;
+
 { Does a `mimic_<name>` shim exist as a FILE? Asked before falling back to a
   host header for a NilPy import: the shim mapping itself runs later still, and
   by then the header would already have won. A file probe rather than a
@@ -31150,6 +31221,11 @@ var
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
   guardIdx: Integer;   { CompiledUnits key — see the note at its assignment }
   isPyUnit, savedPyExprMode: Boolean;
+  { The dotted module path this import was written with, claimed from the global
+    on entry so a nested unit parse cannot see a stale one. Empty unless it
+    re-mangles to exactly the unit name that arrived. }
+  pyDotted: AnsiString;
+  pyDottedIsPath: Boolean;   { it has >1 segment, so it names a file under a root }
   pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
   savedNestedComments: Boolean;
   unitNeedsText: Boolean;
@@ -31176,6 +31252,17 @@ begin
     helpers); otherwise the miss is a graceful no-op (today's behavior), not an
     error — see the not-found handler below. }
   softMissOK := (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix');
+
+  { Claim the dotted spelling of THIS import and clear the global immediately —
+    the nested parse of whatever we resolve to must not inherit it. Kept only
+    when it re-mangles to the unit name we were called with, which is what makes
+    a value left behind by a consumed-and-ignored module path inert. }
+  pyDotted := PyDottedImport;
+  PyDottedImport := '';
+  if PyDottedMangled(pyDotted) <> lo then pyDotted := '';
+  pyDottedIsPath := False;
+  for i := 1 to Length(pyDotted) do
+    if pyDotted[i] = '.' then pyDottedIsPath := True;
 
   { Check if already compiled }
   strIdx := InternStr(lo);
@@ -31339,6 +31426,49 @@ begin
     begin
       ConcatThree(CurUnitDir, lo, '.npy', path);
       LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) > 0 then isPyUnit := True;
+  end;
+
+  { A NILPY import that names a PACKAGE ON DISK. The sibling probe above is
+    Python's first rule and only ever finds a FLAT module; a dotted path
+    (`from mypkg.core.bus import Bus`) is a directory path under a package
+    ROOT, and until this existed it had exactly one resolution — the
+    `mimic_<mangled>` shim built to stand in for third-party libraries — so no
+    multi-module package could be compiled from its own source at all
+    (feature-nilpy-dotted-imports-resolve-to-source-files).
+
+    SOURCE BEFORE SHIM, deliberately: the program's own tree wins over a
+    bundled stand-in of the same dotted name, which is both Python's sys.path
+    order (the script's directory first) and the spirit of
+    own-language-first resolution. The shim mapping is untouched and still
+    answers everything this misses, so `import reportlab.pdfgen` is unchanged.
+
+    Roots, in order: the MAIN script's directory (Python's sys.path[0] — not
+    CurUnitDir, because an ABSOLUTE dotted path is resolved from the package
+    root no matter which submodule wrote it, which is what makes
+    `mypkg/document/dom.py`'s own `from mypkg.core.bus import ...` resolve),
+    then the working directory, then the -Fu roots.
+
+    A SINGLE-SEGMENT name only probes the `<name>/__init__` package form here:
+    `<name>.py` is already covered — by the sibling probe above and the library
+    -root lookup far below — and re-trying it at THIS position would move a
+    flat module ahead of the `.pas` chain and let a stray `re.py` shadow
+    lib/rtl/re.pas (bug-nilpy-stdlib-name-binds-pascal-unit). A package
+    DIRECTORY shadowing an RTL unit is Python's own answer and is the shape
+    `from mypkg import Bus` needs. }
+  if isNilPy and (not isPath) and (Length(UnitContent) = 0) and (pyDotted <> '') then
+  begin
+    probePath := PyDottedToRelPath(pyDotted);
+    PyTryPackageSource(SourceFileDir, probePath, pyDottedIsPath,
+                       path, UnitContent);
+    PyTryPackageSource('', probePath, pyDottedIsPath, path, UnitContent);
+    pyRootIdx := 0;
+    while (Length(UnitContent) = 0) and (pyRootIdx < PasUnitDirCount) do
+    begin
+      PyTryPackageSource(PasUnitDirs[pyRootIdx], probePath, pyDottedIsPath,
+                         path, UnitContent);
+      Inc(pyRootIdx);
     end;
     if Length(UnitContent) > 0 then isPyUnit := True;
   end;

@@ -3,6 +3,8 @@ track: N
 prio: 65
 type: feature
 summary: "A dotted import (`from neuzelaar.core.bus import Bus`) resolves ONLY to a hand-written `mimic_<mangled>` shim unit; it never looks for the source file `neuzelaar/core/bus.py` on disk. FLAT sibling imports already work for both .py and .npy. So NilPy can compile a single file plus shims, but cannot compile a multi-module Python PACKAGE — 89 of 150 failures in the neuzelaar census, the single largest blocker by 3x."
+status: working
+owner: agent-AN
 ---
 
 # Dotted imports never resolve to a source file, only to a shim

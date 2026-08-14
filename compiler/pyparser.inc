@@ -27461,17 +27461,23 @@ end;
   consume-and-defer stdlib checks are about (`import os.path` is as skipped as
   `import os`). feature-nilpy-dotted-package-imports. }
 function PyConsumeDottedModule(var rootName: AnsiString): AnsiString;
+var dotted: AnsiString;
 begin
   rootName := CurTok.SVal;
   Result := CurTok.SVal;
+  dotted := CurTok.SVal;
   Next;
   while (CurTok.Kind = tkDot) and (TokPos < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) do
   begin
     Next;
     Result := Result + '_' + CurTok.SVal;
+    dotted := dotted + '.' + CurTok.SVal;
     Next;
   end;
+  { Hand the UNMANGLED path to the resolver, which needs it to find a package
+    on disk (`mypkg/core/bus.py`). See PyDottedImport's note in defs.inc. }
+  PyDottedImport := dotted;
 end;
 
 { Module roots whose `from ROOT import a, b` is CONSUMED AND IGNORED rather than

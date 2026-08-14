@@ -2555,6 +2555,14 @@ test-nilpy: $(COMPILER)
 	# correct, so testing only that would have shown nothing.
 	./$(COMPILER) test/test_nilpy_builtin_over_variant_receiver.npy $(TESTTMP)/test_nilpy_bvrecv26
 	$(TESTTMP)/test_nilpy_bvrecv26 | diff -u test/test_nilpy_builtin_over_variant_receiver.expected -
+	# Absolute DOTTED imports resolve to SOURCE FILES in a package on disk --
+	# `from mypkg.core.bus import Bus` -- instead of only ever asking for a
+	# mimic_ shim. Compiled FROM the package root, because that is what puts
+	# `mypkg` on the import path; the CPython run that produced .expected needs
+	# PYTHONPATH=. for the same reason.
+	# feature-nilpy-dotted-imports-resolve-to-source-files
+	cd test/nilpy_units/pkgcorpus && $(CURDIR)/$(COMPILER) $(CURDIR)/test/test_nilpy_package_imports.npy $(TESTTMP)/test_nilpy_pkgimp26
+	$(TESTTMP)/test_nilpy_pkgimp26 | diff -u test/test_nilpy_package_imports.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
