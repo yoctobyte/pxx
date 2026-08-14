@@ -120,4 +120,4 @@ into the Makefile). The math half is byte-identical to CPython; the random half
 asserts the contract. `tools/gate.sh quick` GREEN, self-host byte-identical.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 3799e1d77.
