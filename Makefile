@@ -2856,6 +2856,13 @@ test-asm: $(COMPILER)
 	# and relying on a Pascal array being 16-byte aligned is a coin flip.
 	./$(COMPILER) test/test_asm_sse_packed.pas /tmp/test_asm_sse_packed26
 	test "$$(/tmp/test_asm_sse_packed26)" = "asm sse packed ok"
+	# AVX/FMA from inline asm (phase 4). GATES ITSELF on cpuid + xgetbv, and
+	# reports a clean skip as success: an AVX instruction on a machine without
+	# AVX is #UD, so an ungated test would take the suite down rather than fail.
+	# AVX and FMA are separate feature bits -- Sandy Bridge has one and not the
+	# other -- so they are gated separately.
+	./$(COMPILER) test/test_asm_avx.pas /tmp/test_asm_avx26
+	test "$$(/tmp/test_asm_avx26)" = "asm avx ok"
 	./$(COMPILER) test/test_asm_hello.asm /tmp/test_asm_hello26
 	test "$$(/tmp/test_asm_hello26)" = "Hello, asm world!"
 	./$(COMPILER) test/test_asm_entry_global.asm /tmp/test_asm_entry_global26

@@ -332,11 +332,111 @@ So: not mirrored, on purpose. If a codegen consumer appears (an `-O3` vectoriser
 is the obvious one), mirror then, and the verified opcode table above is the
 data to mirror — it is already byte-checked against gas.
 
-### Remaining: phase 4
+## Phase 4 — VEX, AVX/AVX2 and FMA (done)
 
-VEX prefix emitter, then AVX/AVX2 (`v*pd`, `vbroadcastsd`) and FMA. That is the
-real chunk, and it carries the design decision this ticket named at the start:
-2-byte vs 3-byte VEX selection, and a third SOURCE operand for the
-non-destructive `v` forms. Note the operand model now has three slots, but the
-third is used as an IMMEDIATE here; a `vaddpd dst, src1, src2` needs it to be a
-REGISTER, so phase 4 should check that assumption rather than inherit it.
+The chunk this ticket was really about. Everything before it added opcodes to an
+existing encoder shape; this one adds a **new prefix format**, and with it the
+non-destructive three-operand form that is the whole reason AVX exists.
+
+### The VEX emitter
+
+`AsmVex(pp, mmmmm, w, l, regField, vvvv, rmSlot)` picks the 2-byte (`C5`) form
+when it can and the 3-byte (`C4`) form when it must. The 2-byte form is only
+legal when `X=1, B=1, W=0, mmmmm=1` — i.e. no REX.X/REX.B extension, no 64-bit
+operand flag, and the plain `0F` map. Anything else (a REX-extended source, the
+`0F38` map, FMA's `W=1`) forces `C4`. That selection is not an optimisation; the
+2-byte form has no bits to say those things, so choosing wrong emits a
+*different instruction*.
+
+**Every field that can be inverted, is.** `R`, `X`, `B` are stored complemented,
+and `vvvv` is stored complemented in a 4-bit field. That is one of the two bugs
+below.
+
+### The third operand is a REGISTER now
+
+Phase 3 ended by flagging exactly this: the operand model had three slots but
+the third was always an IMMEDIATE, and `vaddpd dst, src1, src2` needs it to be a
+register. It does — and `vcmppd dst, src1, src2, imm8` needs a FOURTH slot, so
+the parse cap and the six `AsmOp*` arrays went to `[0..3]`.
+
+### Two bugs, both caught by the gas differential, neither by reasoning
+
+**1. The `vvvv` sentinel was 15, which names xmm0.** For instructions with no
+second source (`vmovapd`, `vmovmskpd`, `vbroadcastsd`) the field must be all
+ones *as encoded* — and since the field stores `~vvvv`, the value to pass is
+**0**, not 15. Passing 15 encoded `0000`, which reads as xmm0. gas caught it at
+byte 59: `c5 fd` vs our `c5 85`. Now `VEX_NO_VVVV = 0` with the inversion spelled
+out at the constant, because "15 means none" is what anyone would assume.
+
+**2. An out-of-bounds write onto a neighbouring array — from widening 6 arrays
+with a regex and missing 2.** `AsmOpReg` and `AsmOpVal` had two spaces before
+the colon, so the pattern skipped them and they stayed `[0..2]` while the rest
+went `[0..3]`. `AsmOpReg[3] := 0` in `AsmParseOperand` then wrote one Integer
+past the end, landing on **`AsmOpSize[0]`** and zeroing it — so any 4-operand
+form lost its destination size and got the wrong VEX `L` bit, i.e. a 256-bit
+`vcmppd` quietly encoded as 128-bit.
+
+This one is worth keeping: the symptom was in the *L bit of an unrelated
+instruction*, the cause was a **declaration two lines away in a different
+array**, and it was found by printing the size at PARSE (32) and at DISPATCH (0)
+— not by reading the code. It is the house rule verbatim: the expensive bugs
+here do not crash, they produce a plausible wrong value far from the cause.
+
+Phase 3 as shipped was re-checked and is sound: all six arrays were `[0..2]`
+there and nothing used slot 3.
+
+### Verified against gas — 25 instructions, 110 bytes, byte-identical
+
+Covering both VEX forms; xmm and ymm widths of
+`vaddpd/vsubpd/vmulpd/vdivpd/vmaxpd/vminpd/vandpd/vandnpd/vorpd/vxorpd/vunpcklpd/vunpckhpd`;
+REX-extended registers in each operand role (`vmulpd xmm0, xmm1, xmm9`,
+`vmulpd ymm10, ymm11, ymm12`, `vmovapd xmm13, xmm14`); `vmovapd`/`vmovupd`; the
+4-operand `vcmppd` and `vshufpd`; `vmovmskpd` to a GP register including from
+`ymm11`; `vbroadcastsd` (0F38, forces the 3-byte form); and
+`vfmadd231pd`/`213pd`/`132pd` (0F38 with W=1).
+
+### Test — `test/test_asm_avx.pas`
+
+**It gates itself on CPU support, and that is why phase 2 landed first.** An AVX
+instruction on a machine without AVX is `#UD` — a crash, not a failure message —
+so an ungated test would not report "unsupported", it would take the suite down
+on older hardware. Three conditions, in order, because the third is unreachable
+without the second:
+
+    leaf 1 ecx bit 28    the CPU implements AVX
+    leaf 1 ecx bit 27    OSXSAVE — xgetbv is legal at all
+    XCR0 bits 1 and 2    the OS actually SAVES the SSE and YMM state
+
+The third is the one that gets skipped. A CPU can advertise AVX while the OS
+does not preserve `ymm` across a context switch, and then AVX code corrupts
+silently instead of faulting. **FMA is gated separately** (leaf 1 ecx bit 12):
+it is not implied by AVX — Sandy Bridge has AVX and no FMA — so one combined
+gate would `#UD` on real hardware.
+
+A clean skip prints the success line. The encodings are pinned against gas
+regardless of what the running CPU can execute, so making the suite
+hardware-dependent buys nothing.
+
+What the runtime checks add over the byte comparison:
+
+- **all four lanes are real** — `vcmppd` + `vmovmskpd` must give **15**. If `L`
+  were wrong and this ran 128-bit, at most two bits could ever be set. This is
+  the assertion that the upper half is genuinely computed, and it is exactly
+  what bug 2 above broke.
+- **non-destructive** — after `vaddpd ymm2, ymm0, ymm1`, `ymm0` must still hold
+  its input. An encoder that put the second source in ModRM instead of `vvvv`
+  computes a perfectly plausible sum, so this is checked directly rather than
+  inferred.
+- **FMA accumulates** — `vfmadd231pd` twice must give `0.75`, not `0.375`. That
+  is what separates a real fused multiply-ADD from a multiply into the
+  destination.
+
+The test was mutation-checked (two expectations deliberately falsified) to
+confirm the gated body actually executes on this box rather than silently
+skipping — otherwise "ok" would prove nothing.
+
+### Not mirrored into asmtext.inc — same reason as phase 3
+
+Nothing in the compiler emits AVX. Mirroring would add an unexercised encoder
+path to the compiler's own emitter. The byte-checked opcode table above is the
+data to mirror if an `-O3` vectoriser ever wants it.

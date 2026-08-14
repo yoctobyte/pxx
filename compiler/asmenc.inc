@@ -116,8 +116,11 @@ begin
     if CaseEqual(nm, nm2) then begin num:=i; size:=2; Exit; end;
     if CaseEqual(nm, nm1) then begin num:=i; size:=1; Exit; end;
   end;
-  { xmm0..xmm15 — SSE registers, flagged with size 16 (built by append; string
-    '+' is unreliable when this compiler self-compiles). }
+  { xmm0..xmm15 — SSE registers, flagged with size 16; ymm0..ymm15 — the AVX
+    256-bit views of the same physical registers, size 32. The SIZE is what the
+    VEX emitter reads to choose L (0 = 128-bit, 1 = 256-bit), so the two spellings
+    must stay distinguishable here even though they share a register number.
+    (built by append; string '+' is unreliable when this compiler self-compiles) }
   for i := 0 to 15 do
   begin
     nm8 := '';
@@ -125,6 +128,11 @@ begin
     if i < 10 then AppendChar(nm8, Chr(Ord('0') + i))
     else begin AppendChar(nm8, '1'); AppendChar(nm8, Chr(Ord('0') + (i - 10))); end;
     if CaseEqual(nm, nm8) then begin num := i; size := 16; Exit; end;
+    nm4 := '';
+    AppendChar(nm4, 'y'); AppendChar(nm4, 'm'); AppendChar(nm4, 'm');
+    if i < 10 then AppendChar(nm4, Chr(Ord('0') + i))
+    else begin AppendChar(nm4, '1'); AppendChar(nm4, Chr(Ord('0') + (i - 10))); end;
+    if CaseEqual(nm, nm4) then begin num := i; size := 32; Exit; end;
   end;
   Result := False;
 end;
@@ -617,6 +625,108 @@ begin
   AsmModRM(xmmReg and 7, rmSlot);
 end;
 
+{ ---- VEX prefix, the AVX encoding form -----------------------------------
+
+  VEX replaces the legacy `<prefix> <REX> 0F <op>` chain with a self-contained
+  2- or 3-byte prefix that also carries a SECOND source register, which is what
+  makes the AVX forms non-destructive: `vaddpd d, a, b` leaves a and b alone
+  where `addpd d, b` overwrites d.
+
+  Field packing, both forms:
+      2-byte:  C5  [ R  vvvv  L  pp ]
+      3-byte:  C4  [ RXB  mmmmm ]  [ W  vvvv  L  pp ]
+  where
+      R/X/B  are the REX bits, INVERTED (1 = not extended)
+      vvvv   is the extra source register, INVERTED (so "no register" is 1111)
+      L      0 = 128-bit (xmm), 1 = 256-bit (ymm)   <- read from operand SIZE
+      pp     00 none, 01 = $66, 10 = $F3, 11 = $F2  <- the legacy prefix, folded in
+      mmmmm  1 = 0F map, 2 = 0F38, 3 = 0F3A         <- the legacy escape bytes
+
+  The two forms are not a style choice: the 2-byte form can only express
+  X=B=1 (unextended), W=0 and the 0F map, so anything using r8-r15/xmm8-15 in
+  the r/m or index slot, needing REX.W, or living in the 0F38/0F3A maps MUST
+  use 3 bytes. Choosing wrongly does not error -- it encodes a different
+  instruction. AsmVex below picks the short form only when all of those hold,
+  which is exactly what gas does, so the output is comparable byte for byte. }
+procedure AsmVex(pp, mmmmm, w, l, regField, vvvv, rmSlot: Integer);
+var r, x, b, byte1, byte2: Integer;
+begin
+  { R/X/B come from the operands and are stored INVERTED in the prefix. }
+  r := 1; if regField >= 8 then r := 0;
+  x := 1; b := 1;
+  if AsmOpKind[rmSlot] = AOP_MEMR then
+  begin
+    if AsmOpReg[rmSlot] >= 8 then b := 0;
+    if AsmOpIndex[rmSlot] >= 8 then x := 0;
+  end
+  else if AsmOpKind[rmSlot] = AOP_REG then
+  begin
+    if AsmOpReg[rmSlot] >= 8 then b := 0;
+  end;
+
+  if (x = 1) and (b = 1) and (w = 0) and (mmmmm = 1) then
+  begin
+    { 2-byte form }
+    AsmB($C5);
+    byte1 := (r shl 7) or (((not vvvv) and $0F) shl 3) or (l shl 2) or pp;
+    AsmB(byte1 and $FF);
+  end
+  else
+  begin
+    AsmB($C4);
+    byte1 := (r shl 7) or (x shl 6) or (b shl 5) or (mmmmm and $1F);
+    AsmB(byte1 and $FF);
+    byte2 := (w shl 7) or (((not vvvv) and $0F) shl 3) or (l shl 2) or pp;
+    AsmB(byte2 and $FF);
+  end;
+end;
+
+{ Emit a full VEX instruction: prefix, opcode, ModRM.
+
+  `vvvv` is the extra source REGISTER NUMBER, and for a two-operand form that
+  has no extra source it must be **0**, not 15. The prefix stores the field
+  INVERTED, so the "unused" all-ones field (1111) is what register 0 encodes
+  to; passing 15 inverts to 0000, which names xmm0 as a source and silently
+  encodes a different instruction. Caught by the gas diff on vmovapd, where
+  c5 fd became c5 85. Use VEX_NO_VVVV rather than a bare 0 so the intent is
+  visible at the call site. }
+const VEX_NO_VVVV = 0;   { see the note above: 0 inverts to the all-ones "unused" field }
+
+procedure AsmVexEmit(pp, mmmmm, w, l, op, regField, vvvv, rmSlot: Integer);
+begin
+  AsmVex(pp, mmmmm, w, l, regField, vvvv, rmSlot);
+  AsmB(op);
+  AsmModRM(regField and 7, rmSlot);
+end;
+
+{ L bit from an operand's size: 32 (ymm) = 256-bit, anything else 128-bit. }
+function AsmVexL(sz: Integer): Integer;
+begin
+  if sz = 32 then AsmVexL := 1 else AsmVexL := 0;
+end;
+
+{ The AVX packed-double set that maps 1:1 onto the SSE opcodes -- same opcode
+  byte, same $66 prefix folded into pp, with the extra non-destructive source.
+  Kept separate from AsmSseOpcode because the v-forms take THREE operands and
+  sharing the table would hide that. }
+function AsmAvxOpcode(const mn: AnsiString; var op: Integer): Boolean;
+begin
+  Result := True;
+  if      CaseEqual(mn,'vaddpd')    then op := $58
+  else if CaseEqual(mn,'vsubpd')    then op := $5C
+  else if CaseEqual(mn,'vmulpd')    then op := $59
+  else if CaseEqual(mn,'vdivpd')    then op := $5E
+  else if CaseEqual(mn,'vmaxpd')    then op := $5F
+  else if CaseEqual(mn,'vminpd')    then op := $5D
+  else if CaseEqual(mn,'vandpd')    then op := $54
+  else if CaseEqual(mn,'vandnpd')   then op := $55
+  else if CaseEqual(mn,'vorpd')     then op := $56
+  else if CaseEqual(mn,'vxorpd')    then op := $57
+  else if CaseEqual(mn,'vunpcklpd') then op := $14
+  else if CaseEqual(mn,'vunpckhpd') then op := $15
+  else begin op := 0; Result := False; end;
+end;
+
 { 8 only when the GP side of a conversion is 64-bit; a mem operand with no
   size keyword reports 0, which must not become REX.W. }
 function AsmSseGpWidth(sz: Integer): Integer;
@@ -671,6 +781,91 @@ begin
       AsmSseEmit(ssePfx, sseSt, AsmOpReg[1], 0, 4)
     else
       Error('asm: unsupported ' + mn + ' operand form');
+    Exit;
+  end;
+
+  { ---- AVX (VEX-encoded) ----
+    Three operands and non-destructive: `vaddpd d, a, b` computes a+b into d
+    and leaves both sources alone. The middle operand rides in the prefix's
+    vvvv field, NOT in ModRM -- that is the whole structural difference from
+    the SSE forms above, and it is why these cannot share their dispatch.
+    L (128 vs 256) is read from the DESTINATION's size, so `vaddpd ymm...`
+    and `vaddpd xmm...` are the same line here. }
+  if AsmAvxOpcode(mn, sseOp) then
+  begin
+    if nops <> 3 then Error('asm: ' + mn + ' needs three operands (dest, src1, src2)');
+    if AsmOpKind[1] <> AOP_REG then Error('asm: ' + mn + ' second operand must be a register');
+    AsmVexEmit(1, 1, 0, AsmVexL(AsmOpSize[0]), sseOp, AsmOpReg[0], AsmOpReg[1], 2);
+    Exit;
+  end;
+
+  { vmovapd / vmovupd: two operands, so vvvv is unused and must be the all-ones
+    "no register" encoding (15). Same load/store opcode split as the SSE forms. }
+  if CaseEqual(mn,'vmovapd') or CaseEqual(mn,'vmovupd') then
+  begin
+    if nops <> 2 then Error('asm: ' + mn + ' needs two operands');
+    if CaseEqual(mn,'vmovapd') then sseOp := $28 else sseOp := $10;
+    if (AsmOpKind[0] = AOP_REG) and (AsmOpSize[0] >= 16) then
+      AsmVexEmit(1, 1, 0, AsmVexL(AsmOpSize[0]), sseOp, AsmOpReg[0], VEX_NO_VVVV, 1)
+    else if (AsmOpKind[1] = AOP_REG) and (AsmOpSize[1] >= 16) then
+    begin
+      if CaseEqual(mn,'vmovapd') then sseOp := $29 else sseOp := $11;
+      AsmVexEmit(1, 1, 0, AsmVexL(AsmOpSize[1]), sseOp, AsmOpReg[1], VEX_NO_VVVV, 0);
+    end
+    else Error('asm: unsupported ' + mn + ' operand form');
+    Exit;
+  end;
+
+  { vcmppd is the four-operand shape: dest, src1, src2, imm8 predicate. This is
+    what the operand model was widened to 4 slots for. }
+  if CaseEqual(mn,'vcmppd') then
+  begin
+    if nops <> 4 then Error('asm: vcmppd needs four operands (dest, src1, src2, imm8)');
+    if AsmOpKind[3] <> AOP_IMM then Error('asm: vcmppd predicate must be an immediate');
+    if (AsmOpVal[3] < 0) or (AsmOpVal[3] > 31) then Error('asm: vcmppd predicate must be 0..31');
+    AsmVexEmit(1, 1, 0, AsmVexL(AsmOpSize[0]), $C2, AsmOpReg[0], AsmOpReg[1], 2);
+    AsmB(Integer(AsmOpVal[3] and $FF));
+    Exit;
+  end;
+
+  if CaseEqual(mn,'vshufpd') then
+  begin
+    if nops <> 4 then Error('asm: vshufpd needs four operands (dest, src1, src2, imm8)');
+    if AsmOpKind[3] <> AOP_IMM then Error('asm: vshufpd selector must be an immediate');
+    AsmVexEmit(1, 1, 0, AsmVexL(AsmOpSize[0]), $C6, AsmOpReg[0], AsmOpReg[1], 2);
+    AsmB(Integer(AsmOpVal[3] and $FF));
+    Exit;
+  end;
+
+  { vmovmskpd: GP destination, so vvvv is unused (15) and L follows the SOURCE. }
+  if CaseEqual(mn,'vmovmskpd') then
+  begin
+    if nops <> 2 then Error('asm: vmovmskpd needs two operands');
+    AsmVexEmit(1, 1, 0, AsmVexL(AsmOpSize[1]), $50, AsmOpReg[0], VEX_NO_VVVV, 1);
+    Exit;
+  end;
+
+  { vbroadcastsd lives in the 0F38 map (mmmmm=2), which forces the 3-byte VEX
+    form -- a good canary that the map selection is wired, since a 2-byte
+    encoding here would silently be a different instruction. 256-bit only. }
+  if CaseEqual(mn,'vbroadcastsd') then
+  begin
+    if nops <> 2 then Error('asm: vbroadcastsd needs two operands');
+    AsmVexEmit(1, 2, 0, 1, $19, AsmOpReg[0], VEX_NO_VVVV, 1);
+    Exit;
+  end;
+
+  { FMA: also 0F38, and W=1 for the packed-DOUBLE forms. vfmadd231pd computes
+    dest := src1*src2 + dest, which is why the accumulator is the destination
+    and both sources are read-only. }
+  if CaseEqual(mn,'vfmadd231pd') or CaseEqual(mn,'vfmadd213pd') or
+     CaseEqual(mn,'vfmadd132pd') then
+  begin
+    if nops <> 3 then Error('asm: ' + mn + ' needs three operands');
+    if      CaseEqual(mn,'vfmadd132pd') then sseOp := $98
+    else if CaseEqual(mn,'vfmadd213pd') then sseOp := $A8
+    else sseOp := $B8;
+    AsmVexEmit(1, 2, 1, AsmVexL(AsmOpSize[0]), sseOp, AsmOpReg[0], AsmOpReg[1], 2);
     Exit;
   end;
 
@@ -986,7 +1181,7 @@ begin
   { Operands continue while still on the mnemonic's source line. }
   while (CurTok.Kind <> tkEnd) and (CurTok.Line = mnLine) and (CurTok.Kind <> tkEOF) do
   begin
-    if nops >= 3 then Error('asm: more than 3 operands not supported: ' + mn);
+    if nops >= 4 then Error('asm: more than 4 operands not supported: ' + mn);
     AsmParseOperand(nops);
     Inc(nops);
     if (CurTok.Kind = tkComma) and (CurTok.Line = mnLine) then Next

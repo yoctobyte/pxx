@@ -2379,13 +2379,19 @@ var
     and with two slots they are not merely unencodable, they are unsayable —
     the parser refuses a third operand before any encoder sees it. Widening
     here rather than special-casing the imm in the SSE arm keeps one operand
-    model (feature-inline-asm-xmm-operands phase 3). }
-  AsmOpKind : array[0..2] of Integer;   { AOP_* }
-  AsmOpReg  : array[0..2] of Integer;   { register number 0..15; AOP_MEMR base reg }
-  AsmOpSize : array[0..2] of Integer;   { 1, 2, 4, 8 (bytes), 16 for xmm }
-  AsmOpVal  : array[0..2] of Int64;     { immediate value, or mem disp for AOP_MEM/AOP_MEMR }
-  AsmOpIndex: array[0..2] of Integer;   { AOP_MEMR index reg, -1 = none }
-  AsmOpScale: array[0..2] of Integer;   { AOP_MEMR scale: 1/2/4/8 }
+    model (feature-inline-asm-xmm-operands phase 3).
+
+    FOUR slots since phase 4: an AVX compare is `vcmppd dst, src1, src2, imm8`
+    — non-destructive three-operand form PLUS the predicate. Slot 3 is only ever
+    an immediate today, but slot 2 is a REGISTER for the v-forms and an
+    IMMEDIATE for the SSE ones, so no slot has a fixed meaning and the encoders
+    must check AsmOpKind rather than assume by position. }
+  AsmOpKind : array[0..3] of Integer;   { AOP_* }
+  AsmOpReg  : array[0..3] of Integer;   { register number 0..15; AOP_MEMR base reg }
+  AsmOpSize : array[0..3] of Integer;   { 1, 2, 4, 8 (bytes), 16 for xmm }
+  AsmOpVal  : array[0..3] of Int64;     { immediate value, or mem disp for AOP_MEM/AOP_MEMR }
+  AsmOpIndex: array[0..3] of Integer;   { AOP_MEMR index reg, -1 = none }
+  AsmOpScale: array[0..3] of Integer;   { AOP_MEMR scale: 1/2/4/8 }
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;
