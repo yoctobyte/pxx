@@ -50,6 +50,7 @@ _none_
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
+| bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent | N | 55 | bug | `exec(s, d, d)` compiles, runs, and does NOTHING — the target dict is left empty where CPython has the bound name. A program using it runs and is silently wrong. `eval(s)` is absent entirely (loud, so much less dangerous). Both should map onto the already-shipped feature-lib-pyexec, which does the real work today. | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-pyexception-leaks-through-name-and-repr | N | 55 | bug | The lexer rename of `Exception` -> `PyException` leaks into observable Python: `type(e).__name__` gives 'PyException' and `repr(e)` gives \"PyException('plain')\" where CPython gives 'Exception'. Reproduces in a plain .npy that imports nothing — NOT the synthetic sysutils-collision case. Also `Exception.__name__` is not supported at all. | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
@@ -98,7 +99,6 @@ _none_
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-nilpy-builtin-vs-pascal-unit-name-resolution | U | 45 | decide | Settled by the governing rule (user, 2026-08-13): the DEFAULT follows the reference implementation per frontend — CPython for .npy, FPC for .pas — deviations behind --strict-*. So shadowing is ALLOWED and PREFERRED, `reserved` needs the bar 'principally unsolvable', and the tier is a compatibility statement rather than a convenience. What is left to decide: the marker's spelling, whether `print` stops being a token, and whether a --strict-python peer is wanted. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
-| decide-nilpy-eval-at-runtime | U | 35 | decide | Does NilPy support `eval(s)` / `exec(s)` over a runtime string at all? A compiled dialect either ships a parser in every binary or it does not — this is a design call, not work, and it has sat as a to-do row on a bug ticket for three sessions. | — |
 | decide-nilpy-object-dict-key-hashing | U | 40 | decide | A class with __eq__ and no __hash__ is unhashable in CPython, so `d[V(1)] = x` raises. NilPy stores it and then never finds it again — data in, nothing out, silently. Refuse the store (faithful), make content lookup work (friendlier, needs a __hash__ story), or document the divergence. The ticket that found it says explicitly to decide rather than guess. | — |
 | decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language | U | 60 | decide | Own-language-first was decided with explicit import as its safety valve — 'nothing becomes unreachable, it just has to be asked for by name'. Measured: in Pascal there IS no distinct name to ask with, because Pascal is case-insensitive, so `uses './math.c'` does not ADD `exp` alongside `Exp`, it REPLACES it. The rule cannot be both a hard precedence and overridable by explicit import. Pick which gives. | — |
 | decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
@@ -337,7 +337,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (68)
+## decided (69)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -370,6 +370,7 @@ _none_
 | decide-nilpy-dict-mutation-during-iteration | U | 35 | decide | Raise on dict mutation during iteration, or keep the snapshot? | — |
 | decide-nilpy-dunder-file-for-a-compiled-program | U | 55 | decide | What should __file__ be in a COMPILED NilPy program? Today it is argv[0] (the binary), CPython says the source path. The idiom that cares is `os.path.dirname(os.path.abspath(__file__))` to find data files next to the script — it is how uforth locates STD.UFO, and it fails today when the binary and the sources live in different directories. | — |
 | decide-nilpy-eager-map-filter-reversed-enumerate | U | 55 | decide | map/filter/reversed/enumerate return LISTS, not lazy iterators. MEASURED: `for v in map(risky, xs)` with an early break raises an exception CPython never reaches (f runs 1000x vs 4x), so a working CPython program crashes — this is an upward-compatibility break, not a perf note. Decide: fuse at the for-loop consumption site (recommended), full iterator protocol, or document | — |
+| decide-nilpy-eval-at-runtime | U | 35 | decide | Does NilPy support `eval(s)` / `exec(s)` over a runtime string at all? A compiled dialect either ships a parser in every binary or it does not — this is a design call, not work, and it has sat as a to-do row on a bug ticket for three sessions. | — |
 | decide-nilpy-gui-tk-vs-pcl | A | 25 | decide | RESOLVED 2026-07-21: keep the real Tcl/Tk embed on Linux (works); Windows = opt-in tk emulate/wrap via a platform include, later. Follow-up: feature-pcl-tk-windows-compat | — |
 | decide-nilpy-hasattr-per-instance-semantics | U | 35 | decide | decide: should NilPy's hasattr answer per-INSTANCE or per-CLASS? | — |
 | decide-nilpy-int-promotion-costs-10x-on-ordinary-loops | U | 60 | decide | Option 1 was decided without a number; the number is 10x | — |
@@ -472,6 +473,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [C] bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
+- [p 55] [N] bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent
 - [p 55] [N] bug-n-pyexception-leaks-through-name-and-repr
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [U] decide-reprice-nilpy-ast-typing-module-scope
@@ -581,7 +583,6 @@ _none_
 - [p 35] [N] bug-pyeval-three-param-host-method-unsupported
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
-- [p 35] [U] decide-nilpy-eval-at-runtime
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 35] [S] feature-c-esp-conformance-coverage
 - [p 35] [S] feature-dns-esp-backend
