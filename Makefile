@@ -708,15 +708,16 @@ test-nilpy: $(COMPILER)
 	grep -q "inconsistent dedent" /tmp/test_nilpy_inconsistent_dedent_fail.log
 	! ./$(COMPILER) test/test_nilpy_mixed_indent_fail.npy /tmp/test_nilpy_mixed_indent_fail26 > /tmp/test_nilpy_mixed_indent_fail.log 2>&1
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
-	@# the STARRED forms are IMPLEMENTED now (test_nilpy_starred_unpack.npy);
-	@# their two "must be refused with this message" recipes were retired with
-	@# the feature. The NESTED forms are still unsupported, so theirs stay --
+	@# the STARRED forms are IMPLEMENTED (test_nilpy_starred_unpack.npy) and so
+	@# is the NESTED LOOP TARGET (test_nilpy_nested_loop_target.npy); all three
+	@# "must be refused with this message" recipes were retired WITH the feature
+	@# that made them compile -- a {%FAIL} test outlives its own feature by
+	@# turning this target red, and gate.sh quick cannot see that.
+	@# The nested ASSIGNMENT target is still unsupported, so its recipe stays:
 	@# an unsupported shape must NAME itself rather than report a perfectly good
 	@# name as undefined (feature-nilpy-starred-and-nested-unpacking).
 	! ./$(COMPILER) test/test_nilpy_nested_assign_target_fail.npy /tmp/test_nilpy_nested_assign_target_fail26 > /tmp/test_nilpy_nested_assign_target_fail.log 2>&1
 	grep -q "NESTED assignment target" /tmp/test_nilpy_nested_assign_target_fail.log
-	! ./$(COMPILER) test/test_nilpy_nested_for_target_fail.npy /tmp/test_nilpy_nested_for_target_fail26 > /tmp/test_nilpy_nested_for_target_fail.log 2>&1
-	grep -q "NESTED loop target" /tmp/test_nilpy_nested_for_target_fail.log
 	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\nb\ncd\nok!')"
 	./$(COMPILER) test/test_nilpy_forin.npy /tmp/test_nilpy_forin26

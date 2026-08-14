@@ -1,9 +1,0 @@
-# feature-nilpy-starred-and-nested-unpacking — a NESTED loop target.
-#
-# Reported `expected a second loop variable` before, which claims a variable is
-# MISSING while the user is looking straight at one — it is simply parenthesised.
-# The for-target is a flat name list and the whole lowering is keyed on it, so
-# the gap is real; only the message is fixed here.
-nested = [(1, ("a", "b"))]
-for n, (p, q) in nested:
-    print(n, p, q)
