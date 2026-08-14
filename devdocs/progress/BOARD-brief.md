@@ -5,17 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:9 blocked:5 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:69 done:1767 rejected:37`
+`unfinished:8 blocked:5 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:69 done:1769 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-nilpy-exception-repr-and-type-name-say-pyexception` [N] — owner: agent-an
+_none — no lane is locked._
 
-## unfinished (9) — parked mid-flight; re-claim, do not duplicate
+## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
-- `feature-a-one-exception-class-in-a-shared-unit` [A] — blocked-by: decide-merge-variant-c-with-bare-name-collision
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]

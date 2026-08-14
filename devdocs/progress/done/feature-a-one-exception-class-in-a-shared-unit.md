@@ -2,9 +2,9 @@
 track: A
 prio: 75
 type: feature
-blocked-by: [decide-merge-variant-c-with-bare-name-collision]
+blocked-by: []
 summary: "VARIANT C BUILT AND GREEN on wip/exception-sibling-design (gate.sh quick, self-host, both uses orders identical). sysutils and pylib each declare their own class named Exception as SIBLINGS under a shared ExceptionBase in compiler/builtin/exceptions.pas -- no hook, and bug-nilpy-exception-repr-and-type-name-say-pyexception is fixed by construction. The parked blocker (qualified class references resolving flat) is CLEARED: the design was half built -- sysutils had never been re-rooted -- plus two more flat lookups (idx recomputed after ctorCi, and named constructors like CreateFmt taking a path with no qualifier). NOT MERGED: needs a re-pin in the same landing (sysutils now uses a builtin unit the pinned compiler lacks) and one user decision on bare-name collisions."
-status: unfinished
+status: done
 owner: agent-an
 ---
 
@@ -697,3 +697,86 @@ debugging was actually built before you debug it.**
    sysutils'. Filed as [[decide-merge-variant-c-with-bare-name-collision]].
 
 Everything else is done and measured. Parked on the decision, not on effort.
+
+---
+
+## MERGED 2026-08-14 — landed on master, re-pinned to v301
+
+Both preconditions this ticket named are met: the user decided
+[[decide-merge-variant-c-with-bare-name-collision]] (option A — merge now,
+accept the bare-name answer), and the re-pin landed in the same sequence, which
+was required rather than tidy.
+
+Squash-merged from `wip/exception-sibling-design`: the branch's six commits were
+five probes plus one marked *"PARKED, do not merge"*, so the history was not
+worth preserving — the design write-up above is the record.
+
+### What landed
+
+`compiler/builtin/exceptions.pas` (new) holds `ExceptionBase`. `sysutils` and
+`pylib` each declare their own class named `Exception` descending from it. The
+pylexer `Exception` -> `PyException` rename is **deleted**, and with it the
+"maps in, never maps out" asymmetry that caused
+[[bug-nilpy-exception-repr-and-type-name-say-pyexception]] — which this fixes by
+construction and which is resolved with this.
+
+Three mechanisms retired, as the design predicted: the `except` catch bridge,
+the `msg`-must-be-first layout contract across two files that no rule kept in
+step, and the rename.
+
+### Two gaps in the branch, both found by grepping for the old name
+
+Neither is visible in the branch's own diff, and neither would have been caught
+by `gate.sh quick`:
+
+- **`lib/pcl/tkinter.pas`** declared `TclError = class(PyException)` and no
+  longer compiled. It is a `lib/pcl` unit built with `$(PXX_STABLE)`, so the
+  breakage would have surfaced only *after* the pin, in every Track B build.
+  The pinned compiler was the control — it builds tkinter, HEAD did not.
+- **The Makefile's expectations for both uses-order tests were stale**, in both
+  copies of the recipe: the branch rewrote those tests to assert the QUALIFIED
+  property and the recipes still asserted the old bare-name output.
+
+The lesson worth keeping: a rename is finished when nothing *buildable* still
+says the old name, and the branch's diff is the wrong place to check that.
+
+### The re-pin was load-bearing, and measured
+
+`sysutils` now `uses exceptions`, a `compiler/builtin/` unit. The old pinned
+compiler resolved it **only when cwd happened to be the repo root** — from
+anywhere else, `unit source not found: exceptions`. So Track B's builds were one
+directory away from breaking, which is a sharper version of what this ticket
+predicted. `make stabilize-fast && make pin` -> **v301**, verified
+cwd-independent and in a fresh `git clone`.
+
+**Trap for the next builtin unit:** `make pin` advises `git add -u
+stable_linux_amd64/ … all stable files are tracked, so nothing can dangle`. That
+is true only while the frozen builtin SET is unchanged — `-u` will not stage a
+NEW file, so the first pin after adding a builtin unit ships a stable tree
+missing a source that `lib/**` now needs. Caught by listing
+`stable_linux_amd64/default/builtin/` against `git status`.
+
+### Verified
+
+- CPython oracle: `repr`, `str`, `type(e).__name__`, subclasses, bare
+  raise/catch, `args` — identical on every row.
+- Control against the PINNED pre-merge compiler: differs on **exactly** the two
+  new bare-root rows and nowhere else.
+- Exception test family (7 files) against CPython; the uses-order pair identical
+  in both orders; `test_nilpy_pyexception_bare_vs_qualified` passes **unchanged**
+  (assertions untouched, only its prose described the deleted mechanism).
+- `gate.sh quick` GREEN + self-host fixedpoint; **`make lib-test` GREEN against
+  stable v301** (~80 suites, including tk-nilpy).
+
+### Deliberately not done
+
+The bare name under the new collision resolves to the FIRST unit registered
+where FPC takes the LAST. Carried by
+[[bug-pascal-uses-clause-duplicate-name-resolves-first-not-last]] on its own
+schedule, per the user's decision: the case is reachable only from a program
+importing both `pylib` and `sysutils`, which no real Python program does.
+Not option C either — a diagnostic for a case nobody reaches is noise with a
+maintenance cost.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

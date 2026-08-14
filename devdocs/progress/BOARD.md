@@ -8,19 +8,16 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-nilpy-exception-repr-and-type-name-say-pyexception | N | 60 | bug | `repr(Exception('x'))` prints `PyException('x')` and `type(e).__name__` is `PyException`, where CPython says `Exception`. Introduced 2026-08-14 by the option-5 rename: ClassName reports the DECLARED class name and the declared name is now PyException. Ordinary Python branches on type(e).__name__, so this is an upward-compatibility break, not a cosmetic one. | decide-merge-variant-c-with-bare-name-collision |
+_none_
 
-## unfinished (9)
+## unfinished (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
-| feature-a-one-exception-class-in-a-shared-unit | A | 75 | feature | VARIANT C BUILT AND GREEN on wip/exception-sibling-design (gate.sh quick, self-host, both uses orders identical). sysutils and pylib each declare their own class named Exception as SIBLINGS under a shared ExceptionBase in compiler/builtin/exceptions.pas -- no hook, and bug-nilpy-exception-repr-and-type-name-say-pyexception is fixed by construction. The parked blocker (qualified class references resolving flat) is CLEARED: the design was half built -- sysutils had never been re-rooted -- plus two more flat lookups (idx recomputed after ctorCi, and named constructors like CreateFmt taking a path with no qualifier). NOT MERGED: needs a re-pin in the same landing (sysutils now uses a builtin unit the pinned compiler lacks) and one user decision on bare-name collisions. | decide-merge-variant-c-with-bare-name-collision |
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
@@ -411,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1767)
+## done (1769)
 
-1767 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1769 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -664,7 +661,6 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
-- **2** — decide-merge-variant-c-with-bare-name-collision
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
