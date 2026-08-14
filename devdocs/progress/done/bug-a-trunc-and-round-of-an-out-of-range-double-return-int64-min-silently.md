@@ -204,4 +204,4 @@ only ever the default path, and the default is now consistent and documented
 rather than per-ISA accident.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit c429a571b.
