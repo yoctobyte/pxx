@@ -40,7 +40,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes | A | 45 | bug | On aarch64 ONLY, WriteLn(Low(Int64)) prints -'..--).0-*(+,))+(0( instead of -9223372036854775808. Every one of the 19 digit bytes is Ord('0') - d where it should be Ord('0') + d, so the value is right and the rendering is wrong. Low(Int64)+1 prints correctly, and x86-64 / i386 / arm32 all print correctly. Silent output corruption in the integer writer, reachable from any program that prints Low(Int64). | — |
+| bug-a-32bit-targets-ignore-the-field-width-writing-an-int64 | A | 45 | bug | On i386 and arm32 ONLY, `WriteLn(anInt64:12)` prints the digits with NO padding, where x86-64, aarch64 and FPC all pad to 12. A 32-bit Integer with the same width pads correctly on the same targets, so it is the 64-bit write path specifically. Silent formatting corruption — columns simply do not line up, on two targets. | — |
 | bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set | A | 40 | bug | `f(fmt, ['a'])` stops compiling when the routine is in a CROSS-UNIT overload set and its unit is used LAST: the literal is typed (ShortString, set) against an `array of const` parameter reported as `record`. Same-unit overload sets are fine, single cross-unit routines are fine, and reversing the uses order fixes it — so the array-of-const conversion is lost on one path through the cross-unit merge. | — |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently | A | 25 | bug | Trunc(1e30), Round(1e30) and Trunc(Inf) all return -9223372036854775808 — the x86 integer indefinite value that cvttsd2si produces when the conversion is invalid. FPC raises EInvalidOp for every one of them. These are compiler BUILTINS lowered straight to the conversion op, so the RTL cannot guard them the way Floor/Ceil now are; the check belongs at the lowering or in the FPU mode. | — |
@@ -418,9 +418,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1789)
+## done (1790)
 
-1789 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1790 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -505,7 +505,7 @@ _none_
 - [p 50] [C] task-c-retire-the-crtl-name-dodge-prefixes
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes
+- [p 45] [A] bug-a-32bit-targets-ignore-the-field-width-writing-an-int64
 - [p 45] [A] bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers
 - [p 45] [N] bug-n-overload-decorator-is-refused
 - [p 45] [P] bug-p-class-name-collision-across-units-resolves-first-not-last

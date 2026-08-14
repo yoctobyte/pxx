@@ -6738,6 +6738,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_syscall.pas $(TESTTMP)/test_aarch64_syscall
 	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_aarch64_syscall_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_syscall)" = "$$($(TESTTMP)/test_aarch64_syscall_x64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_int64.pas $(TESTTMP)/test_aarch64_int64
+	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_aarch64_int64_x64
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_int64)" = "$$($(TESTTMP)/test_aarch64_int64_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_heap.pas $(TESTTMP)/test_aarch64_heap
 	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_aarch64_heap_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_heap)" = "$$($(TESTTMP)/test_aarch64_heap_x64)"

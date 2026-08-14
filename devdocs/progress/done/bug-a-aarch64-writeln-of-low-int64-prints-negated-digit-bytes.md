@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "On aarch64 ONLY, WriteLn(Low(Int64)) prints -'..--).0-*(+,))+(0( instead of -9223372036854775808. Every one of the 19 digit bytes is Ord('0') - d where it should be Ord('0') + d, so the value is right and the rendering is wrong. Low(Int64)+1 prints correctly, and x86-64 / i386 / arm32 all print correctly. Silent output corruption in the integer writer, reachable from any program that prints Low(Int64)."
+status: done
+owner: agent-AN
 ---
 
 # aarch64: `WriteLn(Low(Int64))` prints negated digit bytes
@@ -117,3 +119,66 @@ that pair is the cheapest diff available.
 The table above reads `-9223372036854775808` on all four targets, plus the same
 for `IntToStr(Low(Int64))` and `Str(Low(Int64), s)`, `make test` + self-host
 fixedpoint, and cross.
+
+## Resolution
+
+One instruction, in two places. The ticket's narrowing was right down to the
+last line — including "compare against arm32, which is correct and shares the
+div/mod shape; that pair is the cheapest diff available." It was. arm32's digit
+loop says `udiv` and carries the comment *"divides the non-negative
+magnitude"*; aarch64's said `sdiv`. aarch64 was the outlier.
+
+### Why sdiv is wrong there at all
+
+`EmitwriteIntA64` handles the sign first — emit `-`, then `neg x0, x0` — so by
+the digit loop `x0` is a MAGNITUDE, and unsigned division is what a magnitude
+wants. Signed division happened to agree for every value except one:
+
+**`neg` of `Low(Int64)` is `Low(Int64)`.** Its magnitude, 9223372036854775808,
+does not fit a signed 64-bit register, so `x0` stayed negative. Every `msub`
+remainder then came out negative and `add x5, x5, #48` produced `Ord('0') - d`
+— which is exactly the byte table in the report, all nineteen digits. Read as
+unsigned, the very same bit pattern IS the correct magnitude, so `udiv` needs
+no special case for it.
+
+That also answers the ticket's "what makes this odd": `Low+1` and `Low` do take
+the same path and leave the loop with the same quotient. The difference is
+entirely in the operand `neg` produced.
+
+### The sibling site the repro could not reach
+
+`EmitwriteIntWA64` — the FIELD-WIDTH variant — had the identical `sdiv` in its
+identical digit loop. The repro used no width, so the ticket found one site and
+there were two. Both fixed. (`devdocs/dev/normalise-dont-special-case.md`: grep
+for the sibling before closing.)
+
+### Confirmed against every backend
+
+`test/test_cross_int64.pas` extended with `Low(Int64)` built at run time and as
+a constant, `High(Int64)`, and `Low+1` — then run on all five targets:
+**x86-64, aarch64, arm32, riscv32 and i386 now produce byte-identical output.**
+The test was wired for arm32 and riscv32 only; it is now wired for **aarch64**
+too, as a differential against the x86-64 oracle, so this cannot regress
+silently again.
+
+`IntToStr` and `Str` were already correct and are untouched — the ticket's
+suggestion to route WriteLn through them was not needed once the actual
+divergence turned out to be one opcode rather than an algorithm.
+
+### A separate bug this surfaced
+
+With aarch64 fixed, the same sweep showed **i386 and arm32 ignore the field
+width entirely when writing an Int64** (`a:12` prints unpadded), while a 32-bit
+`Integer` with the same width pads correctly on those very targets, and FPC
+pads both. Different targets, different mechanism, not caused by this change —
+filed as
+[[bug-a-32bit-targets-ignore-the-field-width-writing-an-int64]] rather than
+folded in. It is deliberately NOT covered by the extended test above, which
+would otherwise go red on two targets for someone else's defect.
+
+Gate: `gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` + FPC seed
+canary), plus the five-target differential above. `compiler/emit.inc` is
+compiler code, not a frozen builtin, so no re-pin.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

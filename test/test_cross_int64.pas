@@ -62,4 +62,23 @@ begin
   b := $00FF00FF00FF;
   writeln('or=', a or b);
   writeln('and=', a and b);
+
+  { Low(Int64) through the WRITER. The value survives everywhere; what broke
+    was the rendering, and on one target only. aarch64's signed-integer writer
+    ran the digit loop with sdiv AFTER negating, and `neg` of Low(Int64) is
+    Low(Int64) again -- its magnitude does not fit a signed 64-bit register --
+    so every remainder came out negative and every digit byte was Ord('0') - d:
+
+      -'..--).0-*(+,))+(0(     instead of   -9223372036854775808
+
+    All nineteen digits, so the arithmetic was right and only the character
+    formed from each was wrong. Low+1 printed correctly, which is what made it
+    look like an edge case rather than a sign bug.
+    bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes }
+  a := -9223372036854775807; a := a - 1;   { built at run time }
+  writeln('rtlow=', a);
+  b := Low(Int64);                          { and as a constant }
+  writeln('lolow=', b);
+  writeln('lohigh=', High(Int64));
+  writeln('lowp1=', Low(Int64) + 1);
 end.

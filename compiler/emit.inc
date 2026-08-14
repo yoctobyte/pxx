@@ -344,7 +344,19 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($9AC20C04);  { sdiv x4, x0, x2 }
+  { udiv, NOT sdiv: x0 is the NON-NEGATIVE MAGNITUDE by now — the negative
+    case already emitted the minus and ran `neg x0, x0` above. Signed division
+    here was wrong for exactly one value: neg of Low(Int64) is Low(Int64)
+    again (its magnitude does not fit a signed 64-bit register), so x0 stayed
+    negative, every msub remainder came out negative, and `add x5, x5, #48`
+    produced Ord('0') - d for all nineteen digits. WriteLn(Low(Int64)) printed
+    -'..--).0-*(+,))+(0( on aarch64 and correctly everywhere else.
+
+    Unsigned division is right for every OTHER value too, since the operand is
+    a magnitude — which is why arm32's sibling loop has said `udiv` ("divides
+    the non-negative magnitude") all along. aarch64 was the outlier.
+    bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes }
+  EmitI32($9AC20804);  { udiv x4, x0, x2 }
   EmitI32($9B028085);  { msub x5, x4, x2, x0 }
   EmitI32($AA0403E0);  { mov x0, x4 }
   EmitI32($9100C0A5);  { add x5, x5, #48 }
@@ -428,7 +440,19 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($9AC20C04);  { sdiv x4, x0, x2 }
+  { udiv, NOT sdiv: x0 is the NON-NEGATIVE MAGNITUDE by now — the negative
+    case already emitted the minus and ran `neg x0, x0` above. Signed division
+    here was wrong for exactly one value: neg of Low(Int64) is Low(Int64)
+    again (its magnitude does not fit a signed 64-bit register), so x0 stayed
+    negative, every msub remainder came out negative, and `add x5, x5, #48`
+    produced Ord('0') - d for all nineteen digits. WriteLn(Low(Int64)) printed
+    -'..--).0-*(+,))+(0( on aarch64 and correctly everywhere else.
+
+    Unsigned division is right for every OTHER value too, since the operand is
+    a magnitude — which is why arm32's sibling loop has said `udiv` ("divides
+    the non-negative magnitude") all along. aarch64 was the outlier.
+    bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes }
+  EmitI32($9AC20804);  { udiv x4, x0, x2 }
   EmitI32($9B028085);  { msub x5, x4, x2, x0 }
   EmitI32($AA0403E0);  { mov x0, x4 }
   EmitI32($9100C0A5);  { add x5, x5, #48 }
