@@ -382,3 +382,39 @@ invariant being revised is written down and load-bearing elsewhere.
 Not attempted here: on `master` there is only one `Exception`, so the change is
 unobservable and would be an unverifiable edit to shared parser files. It is
 testable only on top of variant C, i.e. on the branch.
+
+### The type-position fix was APPLIED and TESTED. It does not work either.
+
+Threaded `ConsumeUnitQualifier`'s return value through ParseTypeKind's
+identifier arm into both class lookups (`tkQUnit`, `FindUClassInUnit(lo,
+tkQUnit)` with a flat fallback). Self-host converged; on the branch as
+`wip(A): thread unit qualifier into ParseTypeKind class lookup`.
+
+Output UNCHANGED — `var pe: pylib.Exception` / `var se: sysutils.Exception`
+still both resolve to the same class:
+
+```
+py: p`X.t|p`X.t          su: .`X.t          fmt: [%5d]
+```
+
+So `var x: unit.Class` does not reach ParseTypeKind's qualified arm at all.
+Both fixes attempted so far (ctorCi, ParseTypeKind) were aimed at sites that
+are not on the path a qualified class reference actually takes, which means
+**the path is still unlocated** and neither the ticket's guesses nor mine have
+found it.
+
+That is the honest state after three attempts. Whoever picks this up should
+NOT try a fourth site by inspection — instrument instead: `PXXDBG` a print at
+each candidate resolution site, compile the two-line repro, and see which one
+fires. Reasoning about this parser has now been wrong three times, which is the
+signal `devdocs/dev/debugging-playbook.md` names explicitly — measure, do not
+reason.
+
+Repro, on top of variant C:
+
+```pascal
+program q; uses pylib, sysutils;
+var se: sysutils.Exception;
+begin se := sysutils.Exception.Create('x'); WriteLn(se.Message); end.
+```
+Expected `x`; prints garbage.
