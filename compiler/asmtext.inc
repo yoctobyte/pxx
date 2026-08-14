@@ -330,6 +330,16 @@ begin
   if CaseEqual(mnem, 'syscall') then begin x64_syscall; Exit; end;
   if CaseEqual(mnem, 'nop') then begin EncB($90); Exit; end;
   if CaseEqual(mnem, 'cqo') then begin EncB($48); EncB($99); Exit; end;
+  { CPU feature discovery. These gate any RUNTIME ISA dispatch — a program can
+    pick a GP, SSE or AVX kernel only if it can ask what the CPU has — so they
+    are worth having before a single vector opcode exists.
+    cpuid clobbers eax/ebx/ecx/edx; xgetbv reads XCR<ecx> into edx:eax and is
+    what distinguishes "the CPU has AVX" from "the OS saves the YMM state",
+    which is the check that actually matters. Kept in step with asmenc.inc's
+    copy — same instructions, two encoders (feature-inline-asm-xmm-operands). }
+  if CaseEqual(mnem, 'cpuid')  then begin EncB($0F); EncB($A2); Exit; end;
+  if CaseEqual(mnem, 'xgetbv') then begin EncB($0F); EncB($01); EncB($D0); Exit; end;
+  if CaseEqual(mnem, 'rdtsc')  then begin EncB($0F); EncB($31); Exit; end;
   if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
   if CaseEqual(mnem, 'movsb') then begin x64_movsb; Exit; end;
   if CaseEqual(mnem, 'stosb') then begin x64_stosb; Exit; end;

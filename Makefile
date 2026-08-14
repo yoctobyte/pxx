@@ -2846,6 +2846,11 @@ test-asm: $(COMPILER)
 	# with a wrong ModRM still encodes, and only execution catches that.
 	./$(COMPILER) test/test_asm_sse_scalar.pas /tmp/test_asm_sse_scalar26
 	test "$$(/tmp/test_asm_sse_scalar26)" = "asm sse scalar ok"
+	# cpuid/rdtsc from inline asm (phase 2). Assertions are machine-INDEPENDENT:
+	# comparing the vendor string to GenuineIntel would pass here and fail on
+	# every AMD box, which is worse than not testing.
+	./$(COMPILER) test/test_asm_cpuid.pas /tmp/test_asm_cpuid26
+	test "$$(/tmp/test_asm_cpuid26)" = "asm cpuid ok"
 	./$(COMPILER) test/test_asm_hello.asm /tmp/test_asm_hello26
 	test "$$(/tmp/test_asm_hello26)" = "Hello, asm world!"
 	./$(COMPILER) test/test_asm_entry_global.asm /tmp/test_asm_entry_global26

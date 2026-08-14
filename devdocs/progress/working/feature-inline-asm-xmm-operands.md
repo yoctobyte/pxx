@@ -206,3 +206,48 @@ whoever takes them:
   real shape of this area, and the whole reason phase 1 was mis-scoped. A
   mnemonic added to `asmtext.inc` alone is invisible to Pascal inline asm, and
   vice versa.
+
+## 2026-08-14 — PHASE 2 DONE: cpuid / xgetbv / rdtsc
+
+Landed in **both** encoders (`asmenc.inc` and `asmtext.inc`), per the rule phase
+1 ended on — a mnemonic goes in both or the reason is written down. All three
+are zero-operand, so this is small; it matters because it is what makes runtime
+ISA dispatch possible **before** any vector opcode exists. Without it the later
+phases emit instructions no program can safely reach.
+
+Encodings checked against gas: `cpuid` = `0F A2`, `xgetbv` = `0F 01 D0`,
+`rdtsc` = `0F 31`.
+
+Behaviour confirmed against `/proc/cpuinfo` on this box — leaf 0 gives
+`GenuineIntel`, leaf 1 ecx bit 20 (SSE4.2) and bit 28 (AVX) both set, matching
+the `sse4_2` and `avx` flags there.
+
+### The test asserts only machine-INDEPENDENT facts
+
+`test/test_asm_cpuid.pas`. The obvious test — compare the vendor string against
+`GenuineIntel` — passes on the machine that wrote it and fails on every AMD one,
+which is worse than not testing at all. So it pins what holds on any x86-64 CPU
+that can run the binary:
+
+- leaf 0 reports `maxLeaf >= 1`;
+- the vendor string is 12 printable ASCII bytes (catches the
+  register-never-loaded failure without caring which vendor);
+- leaf 1 edx bit 26 (SSE2) is set — **x86-64 requires SSE2**, so this is
+  universal rather than a property of this box;
+- `rdtsc` returns two different values across a delay, tolerating a 32-bit
+  low-half wrap rather than asserting an ordering that is false at the wrap.
+
+**`xgetbv` is deliberately NOT executed** by the test. It faults `#UD` unless
+`CR4.OSXSAVE` is set, which is itself discovered via leaf 1 ecx bit 27 — so
+running it unconditionally would crash on older or restricted machines. Its
+encoding is verified above; a program must gate on OSXSAVE first, and the test
+should not model the wrong usage. That gating is exactly what `xgetbv` is *for*:
+it distinguishes "the CPU has AVX" from "the OS actually saves the YMM state",
+which is the check that decides whether an AVX kernel is safe to run.
+
+### Remaining: phases 3 and 4
+
+Packed SSE2 (`$66` over the existing scalar dispatch), then the VEX emitter and
+AVX/FMA. Both encoders each time. `movq` (xmm↔GP) is still missing from
+`asmenc.inc` and should ride along with phase 3 — it is the natural bridge for
+moving a double between the register files.

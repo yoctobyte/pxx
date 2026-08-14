@@ -608,6 +608,14 @@ begin
   if CaseEqual(mn,'cqo')     then begin AsmB($48); AsmB($99); Exit; end;
   if CaseEqual(mn,'cdqe')    then begin AsmB($48); AsmB($98); Exit; end;
   if CaseEqual(mn,'cwde')    then begin AsmB($98); Exit; end;
+  { CPU feature discovery — see the twin block in asmtext.inc. cpuid clobbers
+    eax/ebx/ecx/edx; xgetbv reads XCR<ecx> into edx:eax, which is how a program
+    tells "the CPU has AVX" from "the OS actually saves the YMM state". Both
+    encoders carry them, per this ticket's rule that a mnemonic lands in BOTH or
+    the reason is written down. }
+  if CaseEqual(mn,'cpuid')   then begin AsmB($0F); AsmB($A2); Exit; end;
+  if CaseEqual(mn,'xgetbv')  then begin AsmB($0F); AsmB($01); AsmB($D0); Exit; end;
+  if CaseEqual(mn,'rdtsc')   then begin AsmB($0F); AsmB($31); Exit; end;
 
   if CaseEqual(mn,'int') then
   begin
