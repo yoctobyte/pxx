@@ -21,7 +21,16 @@ program TestAsmAvx;
   The third is the one people forget. A CPU can advertise AVX while the OS does
   not preserve ymm across a context switch, and then AVX code corrupts silently
   rather than faulting. xgetbv is the only way to ask, and it is itself
-  unreachable unless OSXSAVE is set — hence the order. }
+  unreachable unless OSXSAVE is set — hence the order.
+
+  AND A FOURTH, learned the hard way: `vbroadcastsd` exists in AVX1 only with a
+  MEMORY source. The register-source form `vbroadcastsd ymm, xmm` was introduced
+  with AVX2 (leaf 7 ebx bit 5), so a gate that checks AVX alone passes on an
+  Ivy Bridge box and then #UDs on the first broadcast — which is exactly what
+  happened on the watcher host. The arithmetic blocks below therefore broadcast
+  from MEMORY, so the 256-bit coverage (L bit, four lanes, non-destructive
+  sources, the 0F38 map) still runs everywhere AVX runs; the register-source
+  form gets its own block behind Avx2Usable. }
 
 var failures: Integer;
 
@@ -75,6 +84,36 @@ begin
   AvxUsable := True;
 end;
 
+function Avx2Usable: Boolean;
+var feat, maxLeaf: Integer;
+begin
+  Avx2Usable := False;
+
+  { Leaf 7 does not exist on every CPU that has AVX in principle, and asking for
+    a leaf above the maximum returns the HIGHEST leaf's data instead of zeros —
+    a wrong answer rather than a safe one. }
+  maxLeaf := 0;
+  asm
+    mov eax, 0
+    cpuid
+    mov maxLeaf, eax
+  end;
+  if maxLeaf < 7 then Exit;
+
+  { AVX2 is leaf 7 with SUBLEAF 0 — ecx must be zeroed before cpuid or the
+    answer is some other subleaf's. Callers must have established AvxUsable
+    first; this only adds the AVX2 question on top, the same shape as FmaUsable
+    below. Needed by the REGISTER-source `vbroadcastsd ymm, xmm` only. }
+  feat := 0;
+  asm
+    mov eax, 7
+    xor ecx, ecx
+    cpuid
+    mov feat, ebx
+  end;
+  Avx2Usable := ((feat shr 5) and 1) = 1;
+end;
+
 function FmaUsable: Boolean;
 var feat: Integer;
 begin
@@ -112,20 +151,16 @@ begin
     thing to misbehave. }
   a := 1.5; b := 0.25;
   asm
-    movsd xmm1, a
-    vbroadcastsd ymm0, xmm1      { [1.5 | 1.5 | 1.5 | 1.5] }
-    movsd xmm2, b
-    vbroadcastsd ymm1, xmm2      { [0.25 x4] }
+    vbroadcastsd ymm0, a         { [1.5 | 1.5 | 1.5 | 1.5] }
+    vbroadcastsd ymm1, b         { [0.25 x4] }
     vaddpd ymm2, ymm0, ymm1
     movsd r, xmm2                { low lane }
   end;
   Check(r, 1.75, 'vaddpd (256-bit) low lane');
 
   asm
-    movsd xmm1, a
-    vbroadcastsd ymm0, xmm1
-    movsd xmm2, b
-    vbroadcastsd ymm1, xmm2
+    vbroadcastsd ymm0, a
+    vbroadcastsd ymm1, b
     vmulpd ymm2, ymm0, ymm1
     movsd r, xmm2
   end;
@@ -136,10 +171,8 @@ begin
     put the second source in ModRM instead of vvvv would still compute a
     plausible sum, so this is checked directly. }
   asm
-    movsd xmm1, a
-    vbroadcastsd ymm0, xmm1
-    movsd xmm2, b
-    vbroadcastsd ymm1, xmm2
+    vbroadcastsd ymm0, a
+    vbroadcastsd ymm1, b
     vaddpd ymm2, ymm0, ymm1
     movsd r, xmm0                { ymm0 must still hold 1.5 }
   end;
@@ -150,10 +183,8 @@ begin
     two bits could ever be set, so 15 is the assertion that the upper half is
     really being computed. }
   asm
-    movsd xmm1, a
-    vbroadcastsd ymm0, xmm1      { 1.5 x4 }
-    movsd xmm2, b
-    vbroadcastsd ymm1, xmm2      { 0.25 x4 }
+    vbroadcastsd ymm0, a         { 1.5 x4 }
+    vbroadcastsd ymm1, b         { 0.25 x4 }
     vcmppd ymm2, ymm1, ymm0, 1   { 0.25 < 1.5 -> all four true }
     vmovmskpd eax, ymm2
     mov mask, eax
@@ -161,15 +192,30 @@ begin
   CheckI(mask, 15, 'vcmppd over 4 lanes gives a 4-bit mask');
 
   asm
-    movsd xmm1, a
-    vbroadcastsd ymm0, xmm1
-    movsd xmm2, b
-    vbroadcastsd ymm1, xmm2
+    vbroadcastsd ymm0, a
+    vbroadcastsd ymm1, b
     vcmppd ymm2, ymm0, ymm1, 1   { 1.5 < 0.25 -> all four false }
     vmovmskpd eax, ymm2
     mov mask, eax
   end;
   CheckI(mask, 0, 'vcmppd all-false gives an empty mask');
+
+  { The REGISTER-source broadcast, the one that needs AVX2. Same arithmetic as
+    the first block, reached the other way — an xmm loaded by movsd, then
+    splatted. Behind its own gate because this exact form is what #UDs on an
+    Ivy Bridge box that answers yes to every AVX1 question. }
+  if Avx2Usable then
+  begin
+    asm
+      movsd xmm1, a
+      vbroadcastsd ymm0, xmm1
+      movsd xmm2, b
+      vbroadcastsd ymm1, xmm2
+      vaddpd ymm2, ymm0, ymm1
+      movsd r, xmm2
+    end;
+    Check(r, 1.75, 'vbroadcastsd from a register (AVX2) feeds vaddpd');
+  end;
 
   { FMA: vfmadd231pd computes dest := src1*src2 + dest, so the accumulator is
     the DESTINATION and both sources are read-only. Zero the accumulator with
@@ -177,10 +223,8 @@ begin
   if FmaUsable then
   begin
   asm
-    movsd xmm1, a
-    vbroadcastsd ymm0, xmm1
-    movsd xmm2, b
-    vbroadcastsd ymm1, xmm2
+    vbroadcastsd ymm0, a
+    vbroadcastsd ymm1, b
     vxorpd ymm3, ymm3, ymm3
     vfmadd231pd ymm3, ymm0, ymm1
     movsd r, xmm3
@@ -190,10 +234,8 @@ begin
   { ...and accumulating twice must double it, which is what distinguishes a
     real FMA from a plain multiply into the destination. }
   asm
-    movsd xmm1, a
-    vbroadcastsd ymm0, xmm1
-    movsd xmm2, b
-    vbroadcastsd ymm1, xmm2
+    vbroadcastsd ymm0, a
+    vbroadcastsd ymm1, b
     vxorpd ymm3, ymm3, ymm3
     vfmadd231pd ymm3, ymm0, ymm1
     vfmadd231pd ymm3, ymm0, ymm1

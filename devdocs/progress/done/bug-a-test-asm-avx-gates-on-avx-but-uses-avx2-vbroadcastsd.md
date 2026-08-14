@@ -3,6 +3,8 @@ track: A
 prio: 75
 type: bug
 summary: "test_asm_avx gates on AVX + OSXSAVE + XCR0 (and FMA separately, correctly) but NOT on AVX2 — while every `vbroadcastsd ymm, xmm` it uses is the REGISTER-source form, which is AVX2. Only the memory-source form is AVX1. On an AVX1-only CPU the gate passes and the first vbroadcastsd is #UD. Master is RED on plexus (Ivy Bridge). The compiler is fine; the guard has one gap."
+status: done
+owner: agent-AN
 ---
 
 # `test_asm_avx` gates on AVX but executes an AVX2 instruction
@@ -90,3 +92,40 @@ them.
 `test/test_asm_avx.pas` exits 0 on plexus (AVX yes, AVX2 no, FMA no) by skipping
 what it cannot run and saying so, and still exercises the full set on a Haswell
 or later box. Then the tstate red clears on the next native tier.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
+
+## Resolution
+
+Both fixes, each where it belongs — the ticket offered them as alternatives, but
+they answer different halves and taking only one loses something.
+
+**The arithmetic blocks broadcast from MEMORY** (`vbroadcastsd ymm0, a`), which
+is AVX1. So the coverage that was the point of the test — the L bit over four
+lanes, `vcmppd` + `vmovmskpd` proving mask 15, the non-destructive-source check,
+the 0F38 map — still RUNS on plexus rather than being skipped. Option 1 alone
+would have made the whole test a no-op on the one box that found the bug.
+
+**The register-source form gets its own block behind a real AVX2 gate**
+(`Avx2Usable`: leaf 7 subleaf 0, ebx bit 5, with a `maxLeaf >= 7` guard first —
+asking for a leaf above the maximum returns the highest leaf's data, a wrong
+answer rather than zeros). That keeps `vbroadcastsd ymm, xmm` executed where it
+is legal, which is what the encoder work was for.
+
+Encodings confirmed against gas, both forms:
+
+```
+gas   c4 e2 7d 19 05 34 12 00 00   vbroadcastsd 0x1234(%rip),%ymm0
+gas   c4 e2 7d 19 c1               vbroadcastsd %xmm1,%ymm0
+pxx   c4 e2 7d 19 04 25 <abs32>    (memory, SIB-absolute)
+pxx   c4 e2 7d 19 c1               (register)
+```
+
+Same VEX prefix, same opcode; only the addressing form differs. The compiler was
+never implicated and is unchanged.
+
+Verified: passes on this box (AVX2 + FMA present — every block runs), and passes
+with `Avx2Usable`/`FmaUsable` forced False, which is plexus's shape: `asm avx
+ok`, rc 0, with the five AVX1 blocks still executing. Gate green
+(self-host fixedpoint + `--tier quick`).
