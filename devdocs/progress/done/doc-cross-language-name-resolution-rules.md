@@ -96,4 +96,4 @@ both in scope and I call `exp` — what happens, and how do I say which one I
 meant?"* Any code sample in the page compiles against `$(PXX_STABLE)`.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 6ae11f9fc.
