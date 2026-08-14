@@ -1309,7 +1309,7 @@ function pyhash_v(const v: Variant): Int64;
 function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
-function PyChrRangeCheck(n: Int64): Int64;
+function pychr_s(n: Int64): AnsiString;
 function pymul_v(const a: Variant; const b: Variant): Variant;
 { Python's `**`. int**non-negative-int is exact within Int64 (exponentiation
   by squaring, so it inherits whatever overflow behaviour chained `*` already
@@ -1949,6 +1949,12 @@ function pystr_isupper(const s: AnsiString): Boolean;
 function pystr_islower(const s: AnsiString): Boolean;
 function pystr_ofchar(c: Char): AnsiString;
 function pystr_at(const s: AnsiString; i: Integer): Char;
+{ `s[i]` as Python means it: a whole CHARACTER, as a 1-character str. Python has
+  no char type, so this — not pystr_at — is what a subscript, an iteration
+  variable and list(s) all lower to. Keeping pystr_at (a lead BYTE) beside it
+  would be two mechanisms for one concept; it survives only for callers that
+  genuinely want a byte. }
+function pystr_charat(const s: AnsiString; i: Integer): AnsiString;
 { Length() as a real Proc. The for-in desugar builds its AST directly and so
   needs a callable, not the shared parser's intrinsic path. }
 function pystr_len(const s: AnsiString): Integer;
@@ -2083,9 +2089,78 @@ begin
   Result := c;
 end;
 
+{ --- CHARACTER coordinates over a UTF-8 byte substrate ----------------------
+  A NilPy `str` counts CODE POINTS; a Pascal AnsiString counts BYTES; both are
+  the same block. So every NilPy-visible offset — len, indexing, find, slice —
+  is a CHARACTER offset, and these three helpers are the ONLY place the two
+  coordinate systems meet. Nothing else in pylib does UTF-8 arithmetic: the
+  search, strip, split and justify routines all compose on top of pystr_slice /
+  pystr_find / PyWindowStart, so converting those converts them too.
+
+  A continuation byte is $80..$BF, so a code point is exactly one
+  non-continuation byte plus whatever follows it — counting LEAD bytes is the
+  whole algorithm and it needs no validation pass. Malformed input therefore
+  degrades to "some character count" rather than raising, which is what the byte
+  model did as well; a decoder that REJECTS is a separate decision and not this
+  ticket's.
+
+  ASCII takes the byte-identical fast path, so the overwhelmingly common string
+  is exactly as fast and exactly as correct as before this change. Non-ASCII
+  pays an O(n) walk per offset conversion, which makes a STEPPED slice over a
+  non-ASCII string O(n*k). Correctness first: PXX_FLAG_ASCII (already stamped by
+  PXXStrFromLit and PXXStrConcat) is the O(1) answer for the pystr_isascii scan,
+  but reading the meta word of a block that may never have carried a header is a
+  claim that has to be MEASURED, and a false positive there is a silent wrong
+  answer — so the flag is deliberately a separate change.
+  feature-nilpy-text-string-kind }
+
+function PyStrCharLen(const s: AnsiString): Integer;
+var i, n: Integer;
+begin
+  if pystr_isascii(s) then begin PyStrCharLen := Length(s); Exit; end;
+  n := 0;
+  for i := 1 to Length(s) do
+    if (Ord(s[i]) and $C0) <> $80 then Inc(n);
+  PyStrCharLen := n;
+end;
+
+{ 1-based BYTE index at which 0-based CHARACTER ci begins; Length(s)+1 for any
+  ci at or past the end. That one-past-the-end answer is deliberate — every
+  slice asks for its exclusive upper boundary this way. }
+function PyStrByteOfChar(const s: AnsiString; ci: Integer): Integer;
+var i, n, c: Integer;
+begin
+  n := Length(s);
+  if ci <= 0 then begin PyStrByteOfChar := 1; Exit; end;
+  if pystr_isascii(s) then
+  begin
+    if ci > n then PyStrByteOfChar := n + 1 else PyStrByteOfChar := ci + 1;
+    Exit;
+  end;
+  c := 0;
+  for i := 1 to n do
+    if (Ord(s[i]) and $C0) <> $80 then
+    begin
+      if c = ci then begin PyStrByteOfChar := i; Exit; end;
+      Inc(c);
+    end;
+  PyStrByteOfChar := n + 1;
+end;
+
+{ 0-based CHARACTER index of the character containing 1-based BYTE bi. }
+function PyStrCharOfByte(const s: AnsiString; bi: Integer): Integer;
+var i, c: Integer;
+begin
+  if pystr_isascii(s) then begin PyStrCharOfByte := bi - 1; Exit; end;
+  c := 0;
+  for i := 1 to bi - 1 do
+    if (Ord(s[i]) and $C0) <> $80 then Inc(c);
+  PyStrCharOfByte := c;
+end;
+
 function pystr_len(const s: AnsiString): Integer;
 begin
-  Result := Length(s);
+  Result := PyStrCharLen(s);
 end;
 
 { Python's s[i]: 0-BASED, and a NEGATIVE index counts from the end (s[-1] is the
@@ -2097,13 +2172,33 @@ end;
 { ord() of a str. Python has no char type, so a 1-character literal is a str
   like any other and ord("a") must read its single character. }
 function pyord_s(const s: AnsiString): Int64;
+var n, b, i, cp, extra: Integer;
 begin
-  if Length(s) <> 1 then
+  { "one character" is now counted in CHARACTERS, so ord("€") is 8364 rather
+    than a TypeError about a string of length 3. }
+  n := PyStrCharLen(s);
+  if n <> 1 then
   begin
     raise TypeError.Create('ord() expected a character, but string of length ' +
-                           pystr_of(Int64(Length(s))) + ' found');
+                           pystr_of(Int64(n)) + ' found');
   end;
-  Result := Ord(s[1]);
+  b := Ord(s[1]);
+  if b < $80 then begin Result := b; Exit; end;
+  { UTF-8: the lead byte says how many continuation bytes follow and carries the
+    top bits of the code point; each continuation contributes six more. A byte
+    that is not a lead byte cannot be decoded, so it answers as itself rather
+    than raising — the same "degrade, do not reject" rule the offset helpers
+    follow, and the byte model never raised here either. }
+  if (b and $E0) = $C0 then begin cp := b and $1F; extra := 1; end
+  else if (b and $F0) = $E0 then begin cp := b and $0F; extra := 2; end
+  else if (b and $F8) = $F0 then begin cp := b and $07; extra := 3; end
+  else begin Result := b; Exit; end;
+  for i := 2 to 1 + extra do
+  begin
+    if i > Length(s) then begin Result := b; Exit; end;
+    cp := (cp shl 6) or (Ord(s[i]) and $3F);
+  end;
+  Result := cp;
 end;
 
 { NilPy strings are byte strings (bug-nilpy-encode-ignores-the-codec), so
@@ -2115,23 +2210,68 @@ end;
   (bug-nilpy-non-ascii-string-surface-measured). Loudly refusing what the byte
   model cannot represent, rather than truncating, needs no resolution of the
   larger byte-vs-codepoint string-model question that ticket defers. }
-function PyChrRangeCheck(n: Int64): Int64;
+function pychr_s(n: Int64): AnsiString;
+var k: Integer;
 begin
-  if (n < 0) or (n > 255) then
-    raise ValueError.Create('chr() arg not in range(256) -- NilPy strings are byte strings');
-  Result := n;
+  if (n < 0) or (n > $10FFFF) then
+    raise ValueError.Create('chr() arg not in range(0x110000)');
+  k := Integer(n);
+  if k < $80 then Result := Chr(k)
+  else if k < $800 then
+  begin
+    SetLength(Result, 2);
+    Result[1] := Chr($C0 or ((k shr 6) and $1F));
+    Result[2] := Chr($80 or (k and $3F));
+  end
+  else if k < $10000 then
+  begin
+    SetLength(Result, 3);
+    Result[1] := Chr($E0 or ((k shr 12) and $0F));
+    Result[2] := Chr($80 or ((k shr 6) and $3F));
+    Result[3] := Chr($80 or (k and $3F));
+  end
+  else
+  begin
+    SetLength(Result, 4);
+    Result[1] := Chr($F0 or ((k shr 18) and $07));
+    Result[2] := Chr($80 or ((k shr 12) and $3F));
+    Result[3] := Chr($80 or ((k shr 6) and $3F));
+    Result[4] := Chr($80 or (k and $3F));
+  end;
 end;
 
 function pystr_at(const s: AnsiString; i: Integer): Char;
 var n: Integer;
 begin
-  n := Length(s);
+  { i is a CHARACTER offset now, so `s[i]` agrees with len(s), s.find(...) and
+    slicing on one coordinate system. The Char RESULT is still the character's
+    LEAD byte, which for a multi-byte character is not the character — widening
+    it to tyUCS4Char is the other half of feature-nilpy-text-string-kind and is
+    a frontend/IR change, not an offset one. Splitting there is what keeps this
+    commit free of any silent regression: a non-ASCII subscript was already
+    yielding a lone byte before it. }
+  n := PyStrCharLen(s);
   if i < 0 then i := n + i;
   if (i < 0) or (i >= n) then
   begin
     raise IndexError.Create('string index out of range');
   end;
-  Result := s[i + 1];
+  Result := s[PyStrByteOfChar(s, i)];
+end;
+
+function pystr_charat(const s: AnsiString; i: Integer): AnsiString;
+var n, b0, b1: Integer;
+begin
+  n := PyStrCharLen(s);
+  if i < 0 then i := n + i;
+  if (i < 0) or (i >= n) then
+  begin
+    raise IndexError.Create('string index out of range');
+  end;
+  if pystr_isascii(s) then begin Result := s[i + 1]; Exit; end;
+  b0 := PyStrByteOfChar(s, i);
+  b1 := PyStrByteOfChar(s, i + 1);
+  Result := Copy(s, b0, b1 - b0);
 end;
 
 function pystr_lstrip(const s: AnsiString): AnsiString;
@@ -2226,18 +2366,25 @@ begin
     hit := True;
     for j := 1 to m do
       if s[i + j - 1] <> sub[j] then begin hit := False; Break; end;
-    if hit then begin Result := i - 1; Exit; end;
+    { i is a 1-based BYTE; Python answers a 0-based CHARACTER offset. UTF-8 is
+      self-synchronising, so a byte-level match of a well-formed needle can only
+      land on a character boundary and this map is exact. }
+    if hit then begin Result := PyStrCharOfByte(s, i); Exit; end;
   end;
   Result := -1;
 end;
 
 function pystr_find_from(const s: AnsiString; const sub: AnsiString; start: Integer): Integer;
-var tail: AnsiString; r: Integer;
+var tail: AnsiString; r, n, b: Integer;
 begin
-  if start < 0 then start := start + Length(s);
+  { `start` is a CHARACTER offset. The tail begins on a character boundary, so
+    the offset pystr_find reports inside it simply ADDS to start. }
+  n := PyStrCharLen(s);
+  if start < 0 then start := start + n;
   if start < 0 then start := 0;
-  if start > Length(s) then begin Result := -1; Exit; end;
-  tail := Copy(s, start + 1, Length(s) - start);
+  if start > n then begin Result := -1; Exit; end;
+  b := PyStrByteOfChar(s, start);
+  tail := Copy(s, b, Length(s) - b + 1);
   r := pystr_find(tail, sub);
   if r < 0 then Result := -1 else Result := r + start;
 end;
@@ -2745,7 +2892,10 @@ function pystr_count(const s: AnsiString; const sub: AnsiString): Integer;
 var n, m, i: Integer;
 begin
   n := Length(s); m := Length(sub);
-  if m = 0 then begin Result := n + 1; Exit; end;
+  { "".count in CPython is one hit per CHARACTER boundary, so the empty needle
+    answers the CHARACTER length plus one. The match loop below stays on bytes:
+    it counts occurrences, and an occurrence count is coordinate-free. }
+  if m = 0 then begin Result := PyStrCharLen(s) + 1; Exit; end;
   Result := 0;
   i := 1;
   while i <= n - m + 1 do
@@ -2757,11 +2907,12 @@ function pystr_rfind(const s: AnsiString; const sub: AnsiString): Integer;
 var n, m, i: Integer;
 begin
   n := Length(s); m := Length(sub);
-  if m = 0 then begin Result := n; Exit; end;   { CPython: "abc".rfind("") = 3 }
+  if m = 0 then begin Result := PyStrCharLen(s); Exit; end;   { CPython: "abc".rfind("") = 3 }
   i := n - m + 1;
   while i >= 1 do
   begin
-    if PyStrMatchAt(s, i, sub) then begin Result := i - 1; Exit; end;   { 0-based }
+    { scan by BYTE, answer in CHARACTERS — see pystr_find }
+    if PyStrMatchAt(s, i, sub) then begin Result := PyStrCharOfByte(s, i); Exit; end;
     Dec(i);
   end;
   Result := -1;
@@ -2792,7 +2943,7 @@ end;
 function pystr_find_range(const s, sub: AnsiString; a, b: Integer): Integer;
 begin
   Result := pystr_find(pystr_slice(s, a, b), sub);
-  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+  if Result >= 0 then Result := Result + PyWindowStart(PyStrCharLen(s), a);
 end;
 
 function pystr_index_range(const s, sub: AnsiString; a, b: Integer): Integer;
@@ -2804,13 +2955,13 @@ end;
 function pystr_rfind_from(const s, sub: AnsiString; a: Integer): Integer;
 begin
   Result := pystr_rfind(pystr_slice(s, a, PY_SLICE_OMIT), sub);
-  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+  if Result >= 0 then Result := Result + PyWindowStart(PyStrCharLen(s), a);
 end;
 
 function pystr_rfind_range(const s, sub: AnsiString; a, b: Integer): Integer;
 begin
   Result := pystr_rfind(pystr_slice(s, a, b), sub);
-  if Result >= 0 then Result := Result + PyWindowStart(Length(s), a);
+  if Result >= 0 then Result := Result + PyWindowStart(PyStrCharLen(s), a);
 end;
 
 function pystr_startswith_any(const s: AnsiString; const v: Variant): Boolean;
@@ -2958,14 +3109,18 @@ begin
 end;
 
 function pystr_ljust_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
-var n, i: Integer; f: Char;
+var n, nb, pad, i: Integer; f: Char;
 begin
-  n := Length(s);
+  { the WIDTH is in characters; the BUFFER is in bytes, and for a non-ASCII s
+    those differ }
+  n := PyStrCharLen(s);
   if (w <= n) or (Length(fill) = 0) then begin Result := s; Exit; end;
   f := fill[1];
-  SetLength(Result, Integer(w));
-  for i := 1 to n do Result[i] := s[i];
-  for i := n + 1 to Integer(w) do Result[i] := f;
+  nb := Length(s);
+  pad := Integer(w) - n;
+  SetLength(Result, nb + pad);
+  for i := 1 to nb do Result[i] := s[i];
+  for i := nb + 1 to nb + pad do Result[i] := f;
 end;
 
 function pystr_ljust(const s: AnsiString; w: Int64): AnsiString;
@@ -2974,9 +3129,9 @@ begin
 end;
 
 function pystr_center_c(const s: AnsiString; w: Int64; const fill: AnsiString): AnsiString;
-var n, i, left: Integer; f: Char;
+var n, nb, i, left: Integer; f: Char;
 begin
-  n := Length(s);
+  n := PyStrCharLen(s);   { the width is in CHARACTERS }
   if (w <= n) or (Length(fill) = 0) then begin Result := s; Exit; end;
   f := fill[1];
   { CPython's exact rule (Objects/unicodeobject.c pad()):
@@ -2984,10 +3139,11 @@ begin
     — so the odd extra pad lands on the LEFT only when both marg and width are
     odd. "ab".center(5) = "  ab ", "abc".center(6) = " abc  ". }
   left := (Integer(w) - n) div 2 + ((Integer(w) - n) and Integer(w) and 1);
-  SetLength(Result, Integer(w));
+  nb := Length(s);
+  SetLength(Result, nb + (Integer(w) - n));
   for i := 1 to left do Result[i] := f;
-  for i := 1 to n do Result[left + i] := s[i];
-  for i := left + n + 1 to Integer(w) do Result[i] := f;
+  for i := 1 to nb do Result[left + i] := s[i];
+  for i := left + nb + 1 to nb + (Integer(w) - n) do Result[i] := f;
 end;
 
 function pystr_center(const s: AnsiString; w: Int64): AnsiString;
@@ -3036,17 +3192,18 @@ begin
 end;
 
 function pystr_zfill(const s: AnsiString; w: Int64): AnsiString;
-var n, i, pad, signLen: Integer;
+var n, nb, i, pad, signLen: Integer;
 begin
-  n := Length(s);
+  n := PyStrCharLen(s);   { the width is in CHARACTERS }
   if w <= n then begin Result := s; Exit; end;
+  nb := Length(s);
   signLen := 0;
-  if (n > 0) and ((s[1] = '-') or (s[1] = '+')) then signLen := 1;
+  if (nb > 0) and ((s[1] = '-') or (s[1] = '+')) then signLen := 1;
   pad := Integer(w) - n;
-  SetLength(Result, Integer(w));
+  SetLength(Result, nb + pad);
   for i := 1 to signLen do Result[i] := s[i];
   for i := signLen + 1 to signLen + pad do Result[i] := '0';
-  for i := signLen + 1 to n do Result[i + pad] := s[i];
+  for i := signLen + 1 to nb do Result[i + pad] := s[i];
 end;
 
 function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
@@ -4038,7 +4195,10 @@ end;
   project_builtin_overload_shadows_used_unit does not apply here. }
 function len(const s: AnsiString): Integer; overload;
 begin
-  Result := Length(s);
+  { CHARACTERS, as Python counts them — see PyStrCharLen. This is the overload
+    `len(s)` actually resolves to; pystr_len is the method-call spelling of the
+    same question, and BOTH had to move or one of them stayed byte-flavoured. }
+  Result := PyStrCharLen(s);
 end;
 
 function len(l: TPyList): Integer;
@@ -5610,10 +5770,24 @@ end;
   AnsiString handle got it dereferenced as an object: SIGSEGV, no diagnostic
   (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle). }
 function pystr_charlist(const s: AnsiString): TPyList;
-var i: Integer;
+var i, n, b0, b1: Integer;
 begin
   Result := TPyList.Create;
-  for i := 1 to Length(s) do Result.append(pystr_ofchar(s[i]));
+  if pystr_isascii(s) then
+  begin
+    for i := 1 to Length(s) do Result.append(pystr_ofchar(s[i]));
+    Exit;
+  end;
+  { list("héllo") is five one-CHARACTER strings, and each of those is a whole
+    character — unlike pystr_at, which still hands back a lead byte. This path
+    can be whole because its element type is already a string. }
+  n := PyStrCharLen(s);
+  for i := 0 to n - 1 do
+  begin
+    b0 := PyStrByteOfChar(s, i);
+    b1 := PyStrByteOfChar(s, i + 1);
+    Result.append(Copy(s, b0, b1 - b0));
+  end;
 end;
 
 procedure pyassert(ok: Boolean; const msg: AnsiString);
@@ -8099,18 +8273,36 @@ begin
 end;
 
 function pystr_slice_step(const s: AnsiString; lo, hi, step: Integer): AnsiString;
-var i, k, cnt: Integer;
+var i, j, k, cnt, p, b0, b1: Integer; r: AnsiString;
 begin
-  cnt := PySliceBoundsStep(Length(s), lo, hi, step);
+  cnt := PySliceBoundsStep(PyStrCharLen(s), lo, hi, step);
   { SetLength once and index, never `Result := Result + ch` — that idiom is
     QUADRATIC here (project_pxx_string_concat_in_loop_is_quadratic). }
-  SetLength(Result, cnt);
+  if pystr_isascii(s) then
+  begin
+    SetLength(Result, cnt);
+    i := lo;
+    for k := 1 to cnt do
+    begin
+      Result[k] := s[i + 1];      { Python is 0-based, Pascal strings 1-based }
+      i := i + step;
+    end;
+    Exit;
+  end;
+  { A character is at most 4 bytes, so one allocation covers the worst case and
+    the trim at the end is what makes it exact. }
+  SetLength(r, cnt * 4);
+  p := 0;
   i := lo;
   for k := 1 to cnt do
   begin
-    Result[k] := s[i + 1];        { Python is 0-based, Pascal strings 1-based }
+    b0 := PyStrByteOfChar(s, i);
+    b1 := PyStrByteOfChar(s, i + 1);
+    for j := b0 to b1 - 1 do begin Inc(p); r[p] := s[j]; end;
     i := i + step;
   end;
+  SetLength(r, p);
+  Result := r;
 end;
 
 function pybytes_slice_step(b: TPyBytes; lo, hi, step: Integer): TPyBytes;
@@ -8141,10 +8333,16 @@ begin
 end;
 
 function pystr_slice(const s: AnsiString; lo, hi: Integer): AnsiString;
+var b0, b1: Integer;
 begin
-  PySliceBounds(Length(s), lo, hi);
-  { Copy is 1-based and takes a COUNT; Python's bounds are 0-based }
-  Result := Copy(s, lo + 1, hi - lo);
+  PySliceBounds(PyStrCharLen(s), lo, hi);
+  { Copy is 1-based and takes a COUNT; Python's bounds are 0-based CHARACTERS,
+    so both ends go through the character->byte map. strip, split, partition,
+    count(a,b), startswith(a,b) and the find/rfind windows all compose on this
+    one function, which is why they need no change of their own. }
+  b0 := PyStrByteOfChar(s, lo);
+  b1 := PyStrByteOfChar(s, hi);
+  Result := Copy(s, b0, b1 - b0);
 end;
 
 function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
@@ -9604,10 +9802,30 @@ begin
 end;
 
 function pystr_reverse(const s: AnsiString): AnsiString;
-var i: Integer; r: AnsiString;
+var i, j, k, p, n: Integer; r: AnsiString;
 begin
-  r := '';
-  for i := Length(s) downto 1 do r := r + s[i];
+  n := Length(s);
+  if pystr_isascii(s) then
+  begin
+    SetLength(r, n);
+    for i := 1 to n do r[i] := s[n + 1 - i];
+    pystr_reverse := r;
+    Exit;
+  end;
+  { `s[::-1]` reverses CHARACTERS, not bytes — reversing bytes is what produced
+    malformed UTF-8 on stdout, the worst row of this ticket's defect table.
+    Walk backwards to each character's LEAD byte and copy the character
+    forwards, which is O(n) and needs no offset map. }
+  SetLength(r, n);
+  p := 0;
+  i := n;
+  while i >= 1 do
+  begin
+    j := i;
+    while (j > 1) and ((Ord(s[j]) and $C0) = $80) do Dec(j);
+    for k := j to i do begin Inc(p); r[p] := s[k]; end;
+    i := j - 1;
+  end;
   pystr_reverse := r;
 end;
 
@@ -12803,7 +13021,7 @@ var pad: Char; i, need: Integer;
 begin
   pad := ' ';
   if Length(fill) > 0 then pad := fill[1];
-  need := w - Length(s);
+  need := w - PyStrCharLen(s);   { the width is in CHARACTERS }
   Result := '';
   if need > 0 then
     for i := 1 to need do Result := Result + pad;
@@ -13014,11 +13232,11 @@ begin
 end;
 
 function list(const s: AnsiString): TPyList; overload;
-var r: TPyList; i: Integer;
 begin
-  r := TPyList.Create;
-  for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
-  Result := r;
+  { one exploder, not two: this used to walk BYTES while pystr_charlist (the
+    zip/enumerate path) walked the same string its own way, so `list(s)` and
+    `zip(s, s)` could disagree about how many elements a string has. }
+  Result := pystr_charlist(s);
 end;
 
 function dict(d: TPyDict): TPyDict; overload;

@@ -289,3 +289,4 @@
 2026-08-14T07:17:09Z  v289  4f69c63eaf5ab23ff43170adbee6c83758efe790605b9d779f779ffd598794a4  4373a308f9a70e5b5c5a9c2a4b736a11679e0406  feat(N): type(x) is a value, not only type(x).__name__
 2026-08-14T07:49:08Z  v290  4d5d2a8f8dab37d4d1601bc8c12d0ce7d6d4c32f76132bd4496c492de3477ad1  3d22986695d1a127c631542a785503ab6d29c4e2  feat(N): id() and ascii() builtins
 2026-08-14T07:55:07Z  v291  63390fe0bc9b9a4e39574ec5e1add663e5578e2d7c17b918e05515defa9f5e19  e093a31675eef2a4d03bf078bfc60670d973b28e  feat(N): max(xs, default=D) and min(xs, default=D)
+2026-08-14T08:49:26Z  v292  1ff3349aa2b5c4cf0a152c2f4194adaa0aef33209e9ba4e18c0a012e6fb23391  c44791fb781d5d29cfef051dba93054fcdfd1e9f  feat(N): a NilPy str counts characters, not bytes
