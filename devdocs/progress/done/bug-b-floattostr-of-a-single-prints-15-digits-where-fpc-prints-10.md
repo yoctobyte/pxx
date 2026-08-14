@@ -96,4 +96,4 @@ The table above matches FPC (8 Single rows plus 5 Double rows unchanged), and
 `make lib-test` green.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit d2d5d8a48.

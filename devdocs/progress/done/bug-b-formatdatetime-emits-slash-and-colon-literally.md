@@ -70,4 +70,4 @@ what FPC has always required.
 The table above matches FPC on every row, and `make lib-test` green.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit d2d5d8a48.
