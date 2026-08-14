@@ -1,0 +1,73 @@
+# An annotation NilPy cannot interpret degrades to Any instead of refusing the
+# module. CPython does not enforce annotations at run time at all, so refusing
+# one breaks the upward-compatibility rule over metadata that carries no
+# run-time meaning -- and the tail of unreadable spellings is endless, so the
+# MECHANISM is the fix, not the names.
+# bug-n-an-uninterpretable-annotation-refuses-the-program
+#
+# `type[X]`, `Sequence[X]`, `Iterable[X]` and `Callable[..., X]` are the
+# spellings the neuzelaar corpus actually walled on; they are here as samples of
+# an unreadable annotation, NOT as a claim that these four are special.
+#
+# Every POSITION is here because each was a separate site and each failed
+# differently -- fixing one left the next, and two of them failed at RUN time or
+# at a use site far from the annotation:
+#
+#   parameter               "unsupported type annotation"
+#   def return type         "expected type annotation"
+#   METHOD return type      compiled, then raised TypeError at run time
+#                           (tyUnknown was mapped to Integer, so returning a
+#                            list from `-> Sequence[int]` hit "expected a
+#                            number, got object")
+#   dataclass field         "unsupported dataclass field type for xs"
+#   self.x in __init__      "cannot infer the type of field self.xs - annotate
+#                            it" -- about a field that IS annotated
+#   module-level variable   the statement matched no arm at all, so the name was
+#                           never bound: "undefined variable (v)" at first USE
+
+from typing import Sequence, Iterable, Callable
+from dataclasses import dataclass
+
+
+class C:
+    items: Sequence[int] = None
+
+    def __init__(self):
+        self.xs: Sequence[int] = [1, 2]
+        self.n: int = 3
+
+    def get(self, n: Iterable[str]) -> Sequence[int]:
+        return list(n)
+
+
+@dataclass
+class D:
+    xs: Sequence[int]
+    n: int = 0
+
+
+def top(cb: Callable[..., int], k: type[int]) -> Iterable[str]:
+    return ["a", str(k)]
+
+
+def local_ann():
+    loc: Iterable[str] = ["z"]
+    return loc
+
+
+v: Sequence[int] = [1, 2]
+
+c = C()
+print(c.xs, c.n)
+print(C().get(["p", "q"]))
+print(D([3], 4).xs, D([3], 4).n)
+print(top(None, 7))
+print(local_ann())
+print(v)
+
+# a readable annotation must still be READ, not swept into Any along with them
+def typed(x: int) -> int:
+    return x + 1
+
+
+print(typed(41))

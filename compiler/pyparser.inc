@@ -269,6 +269,25 @@ var
     (bug-nilpy-method-result-copied-to-var-undefined). }
   PyMembersHoisted: array[0..MAX_UCLASS-1] of Boolean;
 
+{ A parameter annotation NilPy could not read. CPython does not enforce
+  annotations at all, so refusing the program over one breaks the
+  upward-compatibility rule for a construct that carries no run-time meaning;
+  the parameter degrades to Any (tyVariant) — precisely where an ABSENT
+  annotation already lands, and a dynamic path that cannot produce a wrong
+  value. Warned rather than silent, because the type information really is
+  lost and a misspelled forward reference should stay visible.
+
+  One routine for both parameter sites (the def header and the method
+  pre-pass): they must agree about the degraded type or the registered
+  signature and the frame disagree, which is the same trap their
+  unannotated branches already carry a note about.
+  bug-n-an-uninterpretable-annotation-refuses-the-program }
+procedure PyWarnUnreadAnnotation(const what: AnsiString; line: Integer);
+begin
+  WarnAt(line, 'Nil Python: ' + what + ' has a type annotation this '
+         + 'frontend cannot read; treating it as Any');
+end;
+
 function PyIsIdent(const s: AnsiString): Boolean;
 { Exact, not CaseEqual: every literal passed here is a lowercase Python soft
   keyword (`for`, `elif`, `pass`, `lambda`, `dataclass`, ...), and Python
@@ -1118,6 +1137,25 @@ begin
     if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
     begin
       Inc(i);
+      { `Callable[..., R]` — Python's "any arguments at all". There is no arity
+        to register, and registering 0 would be an ABI lie the first call with
+        an argument pays for. So consume the whole subscript and report
+        tyUnknown, which lands it on the same Any degrade every other unreadable
+        annotation takes: the value stays dynamic and calls go the dynamic way.
+        Told apart by a leading DOT — nothing else starts a Callable subscript.
+        bug-n-an-uninterpretable-annotation-refuses-the-program }
+      if (i < MainProgramTokCount) and (Tokens[i].Kind = tkDot) then
+      begin
+        depth := 1;
+        while (i < MainProgramTokCount) and (depth > 0) do
+        begin
+          if Tokens[i].Kind = tkLBrack then Inc(depth)
+          else if Tokens[i].Kind = tkRBrack then Dec(depth);
+          Inc(i);
+        end;
+        Result := tyUnknown;
+        Exit;
+      end;
       { the PARAMETER list — `[P1, P2]` or `[]` }
       if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
       begin
@@ -1327,6 +1365,29 @@ begin
     Inc(i);
     Exit;
   end;
+
+  { A term this reader does not know — `type[X]`, `Sequence[X]`, `Iterable[X]`,
+    and whatever the next corpus brings. CONSUME it anyway, name plus any
+    balanced subscript, and still answer tyUnknown: the caller then degrades the
+    parameter to Any (PyWarnUnreadAnnotation) with the token stream sitting
+    where the annotation ends, which is what makes the degrade possible at all —
+    leaving `[X]` behind turned "unsupported annotation" into "unexpected
+    token", one line later and pointing at nothing.
+
+    Same call the `tuple` branch above already makes, generalised: an annotation
+    is erased after it picks a type, so an unreadable one costs inference, not
+    the module. bug-n-an-uninterpretable-annotation-refuses-the-program }
+  Inc(i);
+  if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
+  begin
+    depth := 1; Inc(i);
+    while (i < MainProgramTokCount) and (depth > 0) do
+    begin
+      if Tokens[i].Kind = tkLBrack then Inc(depth)
+      else if Tokens[i].Kind = tkRBrack then Dec(depth);
+      Inc(i);
+    end;
+  end;
 end;
 
 { PEP 604 unions: `int | None`, `str | None`, `A | B`.
@@ -1392,6 +1453,29 @@ begin
   if Result = tyUnknown then
     Error('Nil Python: expected type annotation (int, float, bool, str, Any, Optional/Callable/List[...], or a class name)');
   PyLastTypeCi := PyAnnLastCi;
+  TokPos := i;
+  Next;
+end;
+
+{ PyParseType, but an annotation this reader cannot interpret degrades to Any
+  instead of refusing the module — the RETURN half of
+  bug-n-an-uninterpretable-annotation-refuses-the-program. The METHOD twin
+  (PyMethodRetType) already tolerates tyUnknown, through PyJoinRetAnnotation,
+  and the note beside each of them says the two must stay in step; before this
+  they did not, so `def h(...) -> Sequence[int]:` walled the module from the
+  def-header side alone. }
+function PyParseRetTypeOrAny: TTypeKind;
+var i: Integer;
+begin
+  i := TokPos - 1;
+  Result := PyAnnTypeAt(i);
+  PyLastTypeCi := PyAnnLastCi;
+  if Result = tyUnknown then
+  begin
+    PyWarnUnreadAnnotation('return type', Tokens[i].Line);
+    Result := tyVariant;
+    PyLastTypeCi := -1;
+  end;
   TokPos := i;
   Next;
 end;
@@ -21143,6 +21227,20 @@ begin
     tk := PyAnnTypeAt(annIdx);
     ci := PyAnnLastCi;
     annSig := PyAnnLastProcSig;
+    if (tk = tyUnknown) and (annIdx < TokCount) and
+       (Tokens[annIdx].Kind = tkAssign) then
+    begin
+      { An annotation this reader cannot interpret must not push the statement
+        off this path entirely: `v: Sequence[int] = [1, 2]` then matched NO arm
+        and the name was simply never bound, so the failure surfaced as
+        `undefined variable (v)` at the first USE, naming the variable and not
+        the annotation. Degrade to Any and take the ordinary annotated route.
+        bug-n-an-uninterpretable-annotation-refuses-the-program }
+      PyWarnUnreadAnnotation('variable ' + CurTok.SVal, CurTok.Line);
+      tk := tyVariant;
+      ci := -1;
+      annSig := -1;
+    end;
     if (tk <> tyUnknown) and (annIdx < TokCount) and
        (Tokens[annIdx].Kind = tkAssign) then
     begin
@@ -23075,9 +23173,12 @@ begin
       PyHdrPCis[PyHdrNParams] := PyAnnLastCi;
       PyHdrPSigs[PyHdrNParams] := PyAnnLastProcSig;
       if PyHdrPTypes[PyHdrNParams] = tyUnknown then
-        ErrorAt(Tokens[annIdx].Line,
-                'Nil Python: parameter ' + PyHdrPNames[PyHdrNParams]
-                + ' has an unsupported type annotation');
+      begin
+        PyWarnUnreadAnnotation('parameter ' + PyHdrPNames[PyHdrNParams], Tokens[annIdx].Line);
+        PyHdrPTypes[PyHdrNParams] := tyVariant;
+        PyHdrPCis[PyHdrNParams] := -1;
+        PyHdrPSigs[PyHdrNParams] := -1;
+      end;
       TokPos := annIdx;
       Next;
     end;
@@ -23138,7 +23239,7 @@ begin
     else
     begin
       PyAnnRetScope := True;
-      PyHdrRetType := PyParseType;
+      PyHdrRetType := PyParseRetTypeOrAny;
       PyAnnRetScope := False;
       PyHdrRetCi := PyLastTypeCi;
       { the annotation is metadata, not enforcement — see PyJoinRetAnnotation.
@@ -25057,6 +25158,17 @@ begin
     PyAnnRetScope := True;
     Result := PyAnnTypeAt(k);
     PyAnnRetScope := False;
+    if Result = tyUnknown then
+    begin
+      { An annotation this reader cannot interpret is worth exactly as much as
+        an ABSENT one, so take the absent one's answer: infer from the body.
+        NOT tyInteger — the member pre-pass maps tyUnknown to Integer, so
+        `-> Sequence[int]` registered a method that returns a number and
+        returning the list raised "expected a number, got object" at RUN time,
+        far from the annotation. bug-n-an-uninterpretable-annotation-refuses-the-program }
+      Result := PyInferDefRetType(methodStart, retRec);
+      Exit;
+    end;
     if (Result = tyClass) and (PyAnnLastCi >= 0) then
       retRec := REC_UCLASS_BASE + PyAnnLastCi
     else
@@ -25396,8 +25508,17 @@ begin
         — the parse stopped before the '(' (bug-nilpy-dataclass-callable-field). }
       fldSig := PyAnnLastProcSig;
       if tk = tyUnknown then
-        Error('Nil Python: unsupported dataclass field type for ' +
-              GetTokenStr(i));
+      begin
+        { Same degrade as an unreadable PARAMETER annotation: a field whose
+          annotation this reader cannot interpret becomes Any (a variant slot),
+          which is where an unannotated value already lives, rather than
+          refusing the module over metadata CPython never enforces.
+          bug-n-an-uninterpretable-annotation-refuses-the-program }
+        PyWarnUnreadAnnotation('dataclass field ' + GetTokenStr(i),
+                               Tokens[i].Line);
+        tk := tyVariant;
+        fldSig := -1;
+      end;
       { A tyString FIELD means inline `string[N]` to the shared store path
         (capacity-clamped content copy); NilPy str is pointer-semantics, so
         class fields hold managed strings instead. }
@@ -25658,9 +25779,10 @@ begin
           ptypes[nparams] := PyAnnTypeAt(j);
           PyAnnParamScope := False;
           if ptypes[nparams] = tyUnknown then
-            ErrorAt(Tokens[j].Line,
-                    'Nil Python: parameter ' + pnames[nparams]
-                    + ' has an unsupported type annotation');
+          begin
+            PyWarnUnreadAnnotation('parameter ' + pnames[nparams], Tokens[j].Line);
+            ptypes[nparams] := tyVariant;
+          end;
           end;
           if Tokens[j].Kind = tkAssign then
           begin
@@ -25996,6 +26118,18 @@ begin
               fldRec := REC_NONE;
               if (tk = tyClass) and (PyAnnLastCi >= 0) then
                 fldRec := REC_UCLASS_BASE + PyAnnLastCi;
+              if tk = tyUnknown then
+              begin
+                { An annotation this reader cannot interpret fell THROUGH to the
+                  infer-from-the-right-hand-side path below and came out as
+                  "cannot infer the type of field self.xs - annotate it" — about
+                  a field that IS annotated. Degrade to Any, same as everywhere
+                  else. bug-n-an-uninterpretable-annotation-refuses-the-program }
+                PyWarnUnreadAnnotation('field self.' + GetTokenStr(j + 2),
+                                       Tokens[j].Line);
+                tk := tyVariant;
+                fldSig := -1;
+              end;
             end
             else
             begin
@@ -26423,7 +26557,13 @@ begin
     changes; the header parse was simply stricter than the pre-pass. }
     if isCtor then Expect(tkNil, 'None')
     else if CurTok.Kind = tkNil then Next
-    else PyParseType;
+    { the result is DISCARDED here — PyMethodRetType's pre-pass already decided
+      the type, and this call only walks the tokens. So it must not be STRICTER
+      than that pre-pass, which tolerates an unreadable annotation: with
+      PyParseType it refused `-> Sequence[int]` on a method while the pre-pass
+      had already degraded it to Any. Same shape as the `-> None` note above.
+      bug-n-an-uninterpretable-annotation-refuses-the-program }
+    else PyParseRetTypeOrAny;
   end;
   { An UNANNOTATED `__init__` is ordinary Python — `def __init__(self, parent):`
     is what songformatter's SettingsEditor writes — and it registers exactly as

@@ -2567,6 +2567,12 @@ test-nilpy: $(COMPILER)
 	# class held in a variable (VT_CLASSREF, resolved at run time).
 	./$(COMPILER) test/test_nilpy_class_dunder_name.npy $(TESTTMP)/test_nilpy_dname26
 	$(TESTTMP)/test_nilpy_dname26 | diff -u test/test_nilpy_class_dunder_name.expected -
+	# An annotation this frontend cannot read degrades to Any instead of
+	# refusing the module -- CPython enforces none of them. Six POSITIONS,
+	# because each was its own site and two failed at run time / at a use site
+	# far from the annotation. A readable annotation must still be read.
+	./$(COMPILER) test/test_nilpy_unreadable_annotation_is_any.npy $(TESTTMP)/test_nilpy_uann26
+	$(TESTTMP)/test_nilpy_uann26 | diff -u test/test_nilpy_unreadable_annotation_is_any.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
