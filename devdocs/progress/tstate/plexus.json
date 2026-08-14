@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-14T06:35:20Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6eb36a2a376e7254c814ad53e96ea12020a43b59",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-14T06:40:19Z",
    "fixed": [],
    "new_red": [],
@@ -405,6 +397,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "3e6adf540b4c4b866df1e71fdf517eeeeda75c7d",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-14T22:41:09Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "59f70a2ce7b0881c63b6e08aeced734e926960f4",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1102,6 +1102,7 @@
   "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "native",
   "test-core#src:test/test_array_index_type_b284.pas": "native",
   "test-core#src:test/test_array_of_const.pas": "native",
+  "test-core#src:test/test_array_of_const_cross_unit_overload.pas": "native",
   "test-core#src:test/test_array_of_const_types.pas": "native",
   "test-core#src:test/test_array_of_string.pas": "native",
   "test-core#src:test/test_arrayofconst_to_method_b287.pas": "native",
@@ -3512,6 +3513,7 @@
   "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "pass",
   "test-core#src:test/test_array_index_type_b284.pas": "pass",
   "test-core#src:test/test_array_of_const.pas": "pass",
+  "test-core#src:test/test_array_of_const_cross_unit_overload.pas": "pass",
   "test-core#src:test/test_array_of_const_types.pas": "pass",
   "test-core#src:test/test_array_of_string.pas": "pass",
   "test-core#src:test/test_arrayofconst_to_method_b287.pas": "pass",
@@ -5225,11 +5227,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-14T22:19:09Z",
-  "sha": "3e6adf540b4c4b866df1e71fdf517eeeeda75c7d",
+  "date": "2026-08-14T22:41:09Z",
+  "sha": "59f70a2ce7b0881c63b6e08aeced734e926960f4",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 1371.7
+  "wall": 1201.9
  },
  "last_bench": {
   "conf_rows": 550,
