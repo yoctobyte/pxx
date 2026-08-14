@@ -93,4 +93,4 @@ whitespace grammar (17 rows), the control-character cases (6 rows), the message
 text (4 rows) and the exception surface (16 rows) — plus `make lib-test` green.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 7fc1c25e1.
