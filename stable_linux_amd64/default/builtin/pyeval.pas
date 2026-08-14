@@ -5029,11 +5029,12 @@ end;
   (bug-nilpy-sorted-over-a-string-segfaults). Same shape as list(const s), which
   already had its own overload — this is the sibling that was missing. }
 function sorted(const s: AnsiString; key: Pointer; reverse: Boolean): TPyList; overload;
-var chars: TPyList; i: Integer;
 begin
-  chars := TPyList.Create;
-  for i := 1 to Length(s) do chars.append(pystr_ofchar(s[i]));
-  Result := sorted(chars, key, reverse);
+  { pystr_charlist, not a private byte walk: `sorted("béa")` split the é into
+    its two UTF-8 bytes and answered four elements where list() answered three.
+    Same lesson as the note on pystr_charlist — one exploder, not two.
+    bug-nilpy-non-ascii-string-surface-measured }
+  Result := sorted(pystr_charlist(s), key, reverse);
 end;
 
 function sorted(const v: Variant; key: Pointer; reverse: Boolean): TPyList; overload;

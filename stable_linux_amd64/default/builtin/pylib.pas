@@ -2131,21 +2131,144 @@ begin
                  (c = Chr(11)) or (c = Chr(12)) or (c = Chr(13));
 end;
 
-function pystr_upper(const s: AnsiString): AnsiString;
-var i: Integer;
-    c: Char;
+{ Case mapping for ONE code point, the simple (1:1) part of Unicode's rules.
+
+  ASCII plus the European blocks whose case pairs are pure arithmetic:
+  Latin-1 Supplement, Latin Extended-A, Greek and Cyrillic. That is a few
+  ranges of code, not a Unicode database, and it covers essentially all
+  European text — which is the "256-entry table" the ticket asks for, done at
+  code-point level because NilPy strings are UTF-8 and character-indexed
+  (they stopped being byte-indexed 2026-08-14).
+
+  Deliberately NOT here: any mapping that changes the code-point COUNT.
+  `'ß'.upper()` is `'SS'` and `'ﬁ'.upper()` is `'FI'` in CPython, which a 1:1
+  mapper cannot express — that is its own ticket
+  (bug-nilpy-case-mapping-cannot-change-code-point-count), and leaving those
+  characters ALONE is the honest answer here rather than a wrong single
+  character. bug-nilpy-non-ascii-string-surface-measured }
+function PyCpUpper(cp: Int64): Int64;
 begin
-  { Preallocate to the known final length and write in place. The old
-    `Result := Result + c` reallocated the whole string every byte — O(n^2)
-    per call, and one of the top PXXStrConcat callers in profiles. }
-  SetLength(Result, Length(s));
-  for i := 1 to Length(s) do
+  PyCpUpper := cp;
+  if (cp >= 97) and (cp <= 122) then begin PyCpUpper := cp - 32; Exit; end;
+  if cp < 128 then Exit;
+  { Latin-1 Supplement: à-þ -> À-Þ, minus ÷ (which is not a letter) and ß }
+  if (cp >= $E0) and (cp <= $FE) and (cp <> $F7) then
+  begin PyCpUpper := cp - 32; Exit; end;
+  if cp = $FF then begin PyCpUpper := $178; Exit; end;   { ÿ -> Ÿ }
+  if cp = $B5 then begin PyCpUpper := $39C; Exit; end;   { µ MICRO SIGN -> Μ }
+  if cp = $17F then begin PyCpUpper := $53; Exit; end;   { ſ long s -> S }
+  { The Turkish dotted/dotless I is NOT the adjacent pair its code points look
+    like: `'ı'.upper()` is ASCII `I`, and `'İ'.lower()` is `i` plus a COMBINING
+    DOT — two code points, so it is left alone rather than answered wrongly.
+    Taken as a pair (which the surrounding Extended-A band would do) this
+    produced İ for upper('ı') and ı for lower('İ'), the only two characters in
+    a 0..$500 sweep where we answered a DIFFERENT character rather than none. }
+  if cp = $131 then begin PyCpUpper := $49; Exit; end;
+  if cp = $130 then Exit;
+  { Latin Extended-A comes in adjacent PAIRS, but which half is the capital
+    flips twice across the block: even-upper through $137, ODD-upper for
+    $139-$148 (that is where Ł/ł live — reading the whole block as even-upper
+    left `'łódź'.upper()` with one letter unchanged), even-upper again to $177,
+    then odd-upper for $179-$17E (Ź/Ż/Ž). $138 and $149 have no pair. }
+  if (cp >= $100) and (cp <= $137) and ((cp and 1) = 1) then
+  begin PyCpUpper := cp - 1; Exit; end;
+  if (cp >= $139) and (cp <= $148) and ((cp and 1) = 0) then
+  begin PyCpUpper := cp - 1; Exit; end;
+  if (cp >= $14A) and (cp <= $177) and ((cp and 1) = 1) then
+  begin PyCpUpper := cp - 1; Exit; end;
+  if (cp >= $17A) and (cp <= $17E) and ((cp and 1) = 0) then
+  begin PyCpUpper := cp - 1; Exit; end;
+  { Greek: α-ω -> Α-Ω, with final sigma folding onto Σ like every other sigma }
+  if cp = $3C2 then begin PyCpUpper := $3A3; Exit; end;
+  if (cp >= $3B1) and (cp <= $3C9) then begin PyCpUpper := cp - 32; Exit; end;
+  { ...and the ACCENTED Greek vowels, whose capitals sit in a separate block —
+    scattered, so listed rather than derived. Without these `'αθήνα'.upper()`
+    left the one accented letter alone, which is the same one-character-wrong
+    failure the Latin block had. }
+  if cp = $3AC then begin PyCpUpper := $386; Exit; end;
+  if (cp >= $3AD) and (cp <= $3AF) then begin PyCpUpper := cp - 37; Exit; end;
+  if cp = $3CA then begin PyCpUpper := $3AA; Exit; end;
+  if cp = $3CB then begin PyCpUpper := $3AB; Exit; end;
+  if cp = $3CC then begin PyCpUpper := $38C; Exit; end;
+  if (cp >= $3CD) and (cp <= $3CE) then begin PyCpUpper := cp - 63; Exit; end;
+  { Cyrillic: а-я -> А-Я, and the separate ё-џ block }
+  if (cp >= $430) and (cp <= $44F) then begin PyCpUpper := cp - 32; Exit; end;
+  if (cp >= $450) and (cp <= $45F) then begin PyCpUpper := cp - 80; Exit; end;
+end;
+
+function PyCpLower(cp: Int64): Int64;
+begin
+  PyCpLower := cp;
+  if (cp >= 65) and (cp <= 90) then begin PyCpLower := cp + 32; Exit; end;
+  if cp < 128 then Exit;
+  if (cp >= $C0) and (cp <= $DE) and (cp <> $D7) then
+  begin PyCpLower := cp + 32; Exit; end;
+  if cp = $178 then begin PyCpLower := $FF; Exit; end;
+  { see PyCpUpper: `'İ'.lower()` is two code points, so this one stays put }
+  if (cp = $130) or (cp = $131) then Exit;
+  if (cp >= $100) and (cp <= $137) and ((cp and 1) = 0) then
+  begin PyCpLower := cp + 1; Exit; end;
+  if (cp >= $139) and (cp <= $148) and ((cp and 1) = 1) then
+  begin PyCpLower := cp + 1; Exit; end;
+  if (cp >= $14A) and (cp <= $177) and ((cp and 1) = 0) then
+  begin PyCpLower := cp + 1; Exit; end;
+  if (cp >= $179) and (cp <= $17D) and ((cp and 1) = 1) then
+  begin PyCpLower := cp + 1; Exit; end;
+  if (cp >= $391) and (cp <= $3A9) then begin PyCpLower := cp + 32; Exit; end;
+  if cp = $386 then begin PyCpLower := $3AC; Exit; end;
+  if (cp >= $388) and (cp <= $38A) then begin PyCpLower := cp + 37; Exit; end;
+  if cp = $38C then begin PyCpLower := $3CC; Exit; end;
+  if (cp >= $38E) and (cp <= $38F) then begin PyCpLower := cp + 63; Exit; end;
+  if cp = $3AA then begin PyCpLower := $3CA; Exit; end;
+  if cp = $3AB then begin PyCpLower := $3CB; Exit; end;
+  if (cp >= $410) and (cp <= $42F) then begin PyCpLower := cp + 32; Exit; end;
+  if (cp >= $400) and (cp <= $40F) then begin PyCpLower := cp + 80; Exit; end;
+end;
+
+{ Walk a UTF-8 string, mapping each code point. `mode` 0 = upper, 1 = lower,
+  2 = capitalize (first character up, rest down), 3 = swapcase, 4 = title.
+  ONE walker for all five, because five copies of "decode, map, re-encode" is
+  how the next case-mapping gap gets fixed in four places and missed in the
+  fifth. }
+function PyStrMapCase(const s: AnsiString; mode: Integer): AnsiString;
+var i, n: Integer; cp, mapped: Int64; first, prevAlnum: Boolean;
+begin
+  Result := '';
+  n := Length(s);
+  i := 1;
+  first := True;
+  prevAlnum := False;
+  while i <= n do
   begin
-    c := s[i];
-    if (c >= 'a') and (c <= 'z') then
-      c := Chr(Ord(c) - 32);
-    Result[i] := c;
+    cp := PyUtf8CpAt(s, i);
+    mapped := cp;
+    if mode = 0 then mapped := PyCpUpper(cp)
+    else if mode = 1 then mapped := PyCpLower(cp)
+    else if mode = 2 then
+    begin
+      if first then mapped := PyCpUpper(cp) else mapped := PyCpLower(cp);
+    end
+    else if mode = 3 then
+    begin
+      mapped := PyCpUpper(cp);
+      if mapped = cp then mapped := PyCpLower(cp);
+    end
+    else if mode = 4 then
+    begin
+      if prevAlnum then mapped := PyCpLower(cp) else mapped := PyCpUpper(cp);
+      { a character is "in a word" when it has a case mapping either way or is
+        an ASCII digit — CPython's title() rule, near enough for this block }
+      prevAlnum := (PyCpUpper(cp) <> cp) or (PyCpLower(cp) <> cp) or
+                   ((cp >= 48) and (cp <= 57));
+    end;
+    PyCpToUtf8(Result, mapped);
+    first := False;
   end;
+end;
+
+function pystr_upper(const s: AnsiString): AnsiString;
+begin
+  Result := PyStrMapCase(s, 0);
 end;
 
 function TypeVar(const name: AnsiString): AnsiString;
@@ -2157,17 +2280,8 @@ begin
 end;
 
 function pystr_lower(const s: AnsiString): AnsiString;
-var i: Integer;
-    c: Char;
 begin
-  SetLength(Result, Length(s));   { preallocate — see pystr_upper (no per-byte realloc) }
-  for i := 1 to Length(s) do
-  begin
-    c := s[i];
-    if (c >= 'A') and (c <= 'Z') then
-      c := Chr(Ord(c) + 32);
-    Result[i] := c;
-  end;
+  Result := PyStrMapCase(s, 1);
 end;
 
 { Char -> 1-length str. Python has no character type, so a tyChar base for a
@@ -3157,53 +3271,21 @@ begin
             ((c >= '0') and (c <= '9'));
 end;
 
-function pystr_title(const s: AnsiString): AnsiString;
 { CPython: the first cased character of each run of word characters is upper,
   the rest lower. Digits count as word characters but are not cased. }
-var i: Integer; c: Char; atStart: Boolean;
+function pystr_title(const s: AnsiString): AnsiString;
 begin
-  SetLength(Result, Length(s));
-  atStart := True;
-  for i := 1 to Length(s) do
-  begin
-    c := s[i];
-    if atStart then
-    begin
-      if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
-    end
-    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
-    Result[i] := c;
-    atStart := not PyIsWordCh(s[i]);
-  end;
+  Result := PyStrMapCase(s, 4);
 end;
 
 function pystr_capitalize(const s: AnsiString): AnsiString;
-var i: Integer; c: Char;
 begin
-  SetLength(Result, Length(s));
-  for i := 1 to Length(s) do
-  begin
-    c := s[i];
-    if i = 1 then
-    begin
-      if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
-    end
-    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
-    Result[i] := c;
-  end;
+  Result := PyStrMapCase(s, 2);
 end;
 
 function pystr_swapcase(const s: AnsiString): AnsiString;
-var i: Integer; c: Char;
 begin
-  SetLength(Result, Length(s));
-  for i := 1 to Length(s) do
-  begin
-    c := s[i];
-    if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32)
-    else if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
-    Result[i] := c;
-  end;
+  Result := PyStrMapCase(s, 3);
 end;
 
 function pystr_isalnum(const s: AnsiString): Boolean;
@@ -13757,12 +13839,13 @@ begin
 end;
 
 function tuple(const s: AnsiString): TPyList; overload;
-var r: TPyList; i: Integer;
 begin
-  r := TPyList.Create;
-  r.FKind := PYSEQ_TUPLE;
-  for i := 1 to Length(s) do r.append(pystr_ofchar(s[i]));
-  Result := r;
+  { through the ONE exploder, like list(const s) — a private byte walk here made
+    `tuple("béa")` four elements where `list("béa")` was three, which is the
+    "one exploder, not two" note on pystr_charlist arriving a third time.
+    bug-nilpy-non-ascii-string-surface-measured }
+  Result := pystr_charlist(s);
+  Result.FKind := PYSEQ_TUPLE;
 end;
 
 function list(b: TPyBytes): TPyList; overload;
