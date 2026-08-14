@@ -2,6 +2,8 @@
 track: N
 prio: 50
 type: feature
+status: done
+owner: claude-AN
 ---
 
 # pyeval: a nested `def` passed to a host method, called back later (closure-as-native-word)
@@ -97,3 +99,62 @@ class already deferred elsewhere this session
 (`bug-nilpy-bound-fn-closure-objects-are-never-freed`,
 `bug-nilpy-void-def-assigned-and-called-crashes`), needing a genuine
 runtime tag + trampoline, not a quick patch.
+
+## 2026-08-14 — DONE. Verified against this ticket's own "Done when", at HEAD
+
+Part 2 — the piece the 2026-07-31 recon confirmed still open — **works**. Not
+inferred from the uforth corpus being green: measured against the criteria
+written in this file, with the closure shape still present in the source.
+
+`VARIABLE.UFO:30` is unchanged and still uses the exact construct this ticket
+was opened for — a nested `def _w(vm2)` closing over `name`, passed as
+`native=_w` to the host method `vm.define_word`, and called back much later by
+the interpreter as `word.native(vm2)`:
+
+```python
+name = vm.next_token_strict()
+vm.vars[name] = 0
+def _w(vm2):
+    vm2.push(name)
+vm.define_word(name, native=_w)
+```
+
+Results (compiled `uforth_pxx` at HEAD, self-hosted fixedpoint):
+
+| criterion from "Done when" | result |
+| --- | --- |
+| `VARIABLE Q 42 Q ! Q @ .` | **42** |
+| `100 8192 ! 5 8192 +! 8192 @ .` | **105** |
+| `BL .` | **32** |
+| STD.UFO loads all files | **yes** — the full ANS Forth suite runs, Total errors 0 |
+
+### The assertion the criteria did NOT make, and it is the one that matters
+
+Every listed criterion uses ONE variable, so all four would pass on a closure
+implementation that captured nothing and happened to read the most recent
+`name`. The real property is that each closure carries **its own** captured
+value:
+
+```
+VARIABLE A VARIABLE B 11 A ! 22 B ! A @ . B @ . A @ .
+  ->  11 22 11
+```
+
+`A` still answers 11 after `B` has been defined and used, so the two `_w`
+closures hold distinct captured `name`s across a later, unrelated call. That is
+the "persist + reverse-bridge the closure" half, working.
+
+### Closed by other work, not by this ticket
+
+Nothing here was implemented under this slug. The closure/trampoline
+architecture this ticket described as needed landed with the uforth corpus
+drive; this file is the verification that it covers this ticket's case, so the
+slug does not sit in the queue claiming a wall that is gone.
+
+Worth generalising: this is the second ticket this session whose "still open"
+recon was stale because the blocking capability shipped elsewhere. A `Done when`
+section is cheap to re-run and should be re-run before the analysis above it is
+believed.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

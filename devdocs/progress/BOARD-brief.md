@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1748 rejected:35`
+`urgent:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1749 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -53,6 +53,7 @@ _none — no lane is locked._
 - `[p 55] [C]` bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` chore-makefile-testtmp-parameterize
+- `[p 55] [U]` decide-reprice-nilpy-ast-typing-module-scope
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution
 - `[p 55] [E]` feature-demo-portable-userland
@@ -63,6 +64,5 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
-- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
 _171 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
