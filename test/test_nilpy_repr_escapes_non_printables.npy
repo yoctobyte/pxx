@@ -1,0 +1,12 @@
+# repr() emitted raw control bytes where CPython escapes them as \xNN. A
+# formfeed simply vanished on a terminal, and repr of a string containing #0
+# embedded a NUL that truncates whatever consumes it — an invisible failure in
+# the one function whose whole job is to be unambiguous.
+# Found while writing mimic_string: string.whitespace is six characters and
+# repr'd as four.
+print(repr("plain"), repr("it's"), repr('say "hi"'))
+print(repr("tab\tnl\nret\r"), repr("back\\slash"))
+print(repr("\x00\x01\x1f\x7f\x0b\x0c\x1b"))
+print(repr(["a\tb", "\x00"]), repr({"k": "\x1b"}))
+print(repr("héllo"), repr("naïve"))
+print("%r" % "a\x0bb")

@@ -12254,6 +12254,14 @@ end;
 const
   QuoteCh = #39;   { a single quote, by code point — Python's repr uses it }
 
+function PyHexByte(b: Integer): AnsiString;
+{ two LOWER-case hex digits — CPython's \xNN escapes are lower case, and a repr
+  that differs by case is a diff nobody wants to read twice. }
+const hexd: AnsiString = '0123456789abcdef';
+begin
+  Result := hexd[(b div 16) + 1] + hexd[(b mod 16) + 1];
+end;
+
 function PyReprQuote(const s: AnsiString): AnsiString;
 var i: Integer; ch: Char; useDq, hasSq, hasDq: Boolean;
 begin
@@ -12283,6 +12291,17 @@ begin
     else if ch = #10 then Result := Result + '\n'
     else if ch = #9 then Result := Result + '\t'
     else if ch = #13 then Result := Result + '\r'
+    { …and every OTHER non-printable as \xNN, which is what makes a repr
+      round-trippable and safe to put in a log. They were emitted RAW: a
+      formfeed or a vertical tab simply vanished on a terminal, and repr of a
+      string containing #0 embedded a NUL that truncates whatever consumes it
+      downstream — an invisible failure in the one function whose entire job is
+      to be unambiguous. CPython escapes the same set: everything below space
+      that is not \n / \t / \r, plus DEL.
+      Found while writing mimic_string, whose `whitespace` constant is six
+      characters and repr'd as four. }
+    else if (ch < ' ') or (ch = #127) then
+      Result := Result + '\x' + PyHexByte(Ord(ch))
     else if useDq then
     begin
       if ch = '"' then Result := Result + '\"' else Result := Result + ch;

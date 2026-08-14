@@ -1514,6 +1514,12 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_mathlog26 | diff -u test/test_nilpy_math_log.expected -
 	./$(COMPILER) test/test_nilpy_callable_builtin.npy /tmp/test_nilpy_callable26
 	/tmp/test_nilpy_callable26 | diff -u test/test_nilpy_callable_builtin.expected -
+	# repr() escapes non-printables as \xNN, like CPython
+	./$(COMPILER) test/test_nilpy_repr_escapes_non_printables.npy /tmp/test_nilpy_represcape26
+	/tmp/test_nilpy_represcape26 | diff -u test/test_nilpy_repr_escapes_non_printables.expected -
+	# `import string` reaches mimic_string, not /usr/include/string.h
+	./$(COMPILER) test/test_nilpy_import_string_module.npy /tmp/test_nilpy_impstring26
+	/tmp/test_nilpy_impstring26 | diff -u test/test_nilpy_import_string_module.expected -
 	./$(COMPILER) test/test_nilpy_min_max_key_none.npy /tmp/test_nilpy_mmkeynone26
 	/tmp/test_nilpy_mmkeynone26 | diff -u test/test_nilpy_min_max_key_none.expected -
 	./$(COMPILER) test/test_nilpy_sorted_key_none.npy /tmp/test_nilpy_keynone26

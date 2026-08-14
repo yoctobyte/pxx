@@ -1,0 +1,18 @@
+# `import string` used to resolve to the C header /usr/include/string.h — a
+# NilPy import may legitimately name a C header (import sqlite3 / import
+# stdlib), and the resolver tries a mimic_ shim first for exactly this reason,
+# but that ordering was inert while no mimic_string existed. The failure
+# surfaced later as `undefined variable (ascii_lowercase)`.
+# bug-nilpy-python-import-resolves-against-c-headers
+import string
+
+print(string.ascii_lowercase)
+print(string.ascii_uppercase)
+print(string.ascii_letters)
+print(string.digits, string.octdigits, string.hexdigits)
+print(repr(string.punctuation))
+print(repr(string.whitespace))
+print(string.capwords("hello world"))
+print(string.capwords("  many   spaces  here "))
+print(string.capwords("don't SHOUT at ME"))
+print(repr(string.capwords("")))

@@ -1,0 +1,6 @@
+'plain' "it's" 'say "hi"'
+'tab\tnl\nret\r' 'back\\slash'
+'\x00\x01\x1f\x7f\x0b\x0c\x1b'
+['a\tb', '\x00'] {'k': '\x1b'}
+'héllo' 'naïve'
+'a\x0bb'
