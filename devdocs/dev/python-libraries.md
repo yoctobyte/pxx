@@ -24,7 +24,12 @@ Triage without reading anything:
 
 ```sh
 find <site-packages>/<pkg> -name '*.so' | head    # empty => class 1 or 2
-grep -rl 'ctypes\|cffi' <site-packages>/<pkg>     # non-empty => class 2
+grep -rlE '^[[:space:]]*(import|from)[[:space:]]+(ctypes|cffi)\b' <site-packages>/<pkg>
+#   ^ anchored to an IMPORT on purpose: a plain `grep -rl 'ctypes\|cffi'`
+#     matches the substring in `doctypeClass`, which is ordinary HTML-parser
+#     vocabulary -- it misclassifies html5lib (class 1) as class 2. Measured
+#     2026-08-14 on the neuzelaar venv; the corrected form reproduces every
+#     verdict in the table below.
 ```
 
 **A wheel is a distribution format, not a build strategy.** It ships what
