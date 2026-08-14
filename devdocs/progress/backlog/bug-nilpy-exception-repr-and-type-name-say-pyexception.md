@@ -2,7 +2,7 @@
 track: N
 prio: 60
 type: bug
-blocked-by: []
+blocked-by: [decide-merge-variant-c-with-bare-name-collision]
 summary: "`repr(Exception('x'))` prints `PyException('x')` and `type(e).__name__` is `PyException`, where CPython says `Exception`. Introduced 2026-08-14 by the option-5 rename: ClassName reports the DECLARED class name and the declared name is now PyException. Ordinary Python branches on type(e).__name__, so this is an upward-compatibility break, not a cosmetic one."
 ---
 
@@ -52,3 +52,23 @@ the mapping, and mapping-in-one-direction-only is what caused this.
 `repr(Exception('x'))`, `str(Exception('x'))`, `type(e).__name__`, and a
 subclass's `__name__`, all diffed against CPython. Add the bare-root rows to
 `test_nilpy_exception_args.npy` — their absence is why this shipped.
+
+---
+
+## 2026-08-14 — ALREADY FIXED on a branch. Do not start this from scratch.
+
+`feature-a-one-exception-class-in-a-shared-unit` (variant C) fixes this **by
+construction** rather than by another rename: pylib's root is named `Exception`
+again, as a sibling of sysutils' class of the same name under a shared
+`ExceptionBase`, so `ClassName` reports `Exception` because that IS the declared
+name. Measured green on `wip/exception-sibling-design` for `ValueError`,
+`KeyError`, a user `class MyErr(Exception)`, and `ValueError(42).args[0] + 1`.
+
+That branch also DELETES the pylexer `Exception` -> `PyException` mapping, whose
+"maps in, never maps out" asymmetry is what produced this bug in the first
+place — so the fix removes the mechanism rather than adding a second rename to
+compensate for the first.
+
+**Blocked on [[decide-merge-variant-c-with-bare-name-collision]]**, not on
+effort. Picking this ticket up independently would either duplicate that work or
+add the compensating rename the branch exists to delete.

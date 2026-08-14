@@ -29,14 +29,13 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 204, ranked
+## Ready — top 30 of 203, ranked
 
 - `[p 80] [T]` task-t-strict-uses-corpus-sweep (unblocks 1)
-- `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 1)
+- `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 2)
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [N]` bug-nilpy-exception-repr-and-type-name-say-pyexception
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -61,5 +60,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
+- `[p 53] [A]` feature-threadsafe-heap-optimize
 
-_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
