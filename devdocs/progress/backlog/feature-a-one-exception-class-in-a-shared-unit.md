@@ -239,3 +239,80 @@ resolves; the qualifier just has to be consumed"*), so the qualified form is
 already imprecise and `test_nilpy_pyexception_bare_vs_qualified` passes for a
 weaker reason than it appears to. Deciding that is part of this work, not
 separate from it.
+
+## 2026-08-14 — VARIANT C BUILT AND MEASURED. Parked on ONE prerequisite.
+
+Built in full and verified. Parked, not abandoned — the work is on the branch
+`wip/exception-sibling-design` (single commit, master untouched), and the
+diagnosis below is why it did not land.
+
+### What the design delivers, measured against CPython and byte-identical
+
+- `repr(e)` is `Exception('plain')` and `type(e).__name__` is `Exception`, so
+  [[bug-nilpy-exception-repr-and-type-name-say-pyexception]] is fixed **by
+  construction** rather than by adding a second rename. Confirmed for
+  ValueError, KeyError (including the raw-key `args`), a user
+  `class MyErr(Exception)`, and `ValueError(42).args[0] + 1`.
+- The RTL bridge still works: a bare `except Exception:` catches
+  `su.StrToInt('abc')`.
+- `gate.sh quick` GREEN, self-host converges.
+
+The shape built was exactly variant C: `compiler/builtin/exceptions.pas`
+declaring `ExceptionBase` with `msg`, `FHelpContext` and an untyped
+`argsv: TObject`; pylib's root renamed to `Exception` and re-rooted; the
+pylexer `Exception` -> `PyException` rename DELETED; every by-name lookup in
+pyparser routed through a new `PyLibExceptionCi` that uses
+`FindUClassInUnit('Exception', pylib)`.
+
+### The prerequisite, and the ticket's own prediction was WRONG about it
+
+This ticket's residual section says the Pascal-side collision surfaces as
+*"compile error: class method not found"* and calls that acceptable, because
+"the failure mode moved from a silent wrong body to a compile error".
+
+**Measured: it does not. It is still a silent wrong value.** With `uses pylib,
+sysutils`:
+
+| expression | expected | actual |
+| --- | --- | --- |
+| `Exception.Create('pylib hi').Message` | `pylib hi` | garbage bytes |
+| `sysutils.Exception.Create('su hi').Message` | `su hi` | garbage bytes |
+| `sysutils.Exception.CreateFmt('[%5d]',[3])` | `[    3]` | `[%5d]` (pylib's minimal formatter) |
+| `on ex: Exception do` around `StrToInt('abc')` | caught | **UNCAUGHT** — `Unhandled exception: EConvertError` |
+
+Note the second and third rows: **the QUALIFIED form does not disambiguate
+either.** That is the part the ticket did not anticipate. Its own note that
+"the qualifier is CONSUMED and the member name resolves flat" was recorded as
+an imprecision in the NilPy `except` path; it is in fact the general behaviour
+of qualified CLASS references, which makes the Pascal escape hatch nonexistent
+rather than merely awkward.
+
+So shipping variant C as-is would trade one silent-wrong-value bug for another,
+in a configuration that has a regression test precisely because it was a real
+bug once. `test_uses_order_pylib_exception_b` catches it, and rewriting that
+test to accept the new behaviour would be rewriting a test to bless a silent
+wrong value.
+
+### What must land FIRST
+
+**Qualified class references must resolve by unit.** `ConsumeUnitQualifier`
+already yields `qUnit` and the symbol/proc lookups honour it
+(`FindSymInUnit`/`FindProcInUnit`/`MatchProcCallInUnit`); class lookups do not,
+and `FindUClassInUnit` already exists to do it.
+
+Attempted and NOT sufficient: scoping `ctorCi := FindUClass(name)` at
+`compiler/parser.inc` (the `X.Create` factor branch) to
+`FindUClassInUnit(name, qUnit)`. Rebuilt and re-measured — output unchanged, so
+a qualified constructor reaches a DIFFERENT path than that branch. **That is
+where the next session starts: find which path `sysutils.Exception.Create(..)`
+actually takes.** Do not re-derive the rest; it is all above.
+
+Once qualified references resolve, the two `test_uses_order_pylib_exception_*`
+tests become what this ticket already prescribes — qualify both names, assert
+each unit's surface works in either uses order — and that is then a real
+property rather than an accommodation.
+
+The BARE `Exception` under `uses pylib, sysutils` stays genuinely ambiguous
+even then. That one is ordinary Pascal name-collision behaviour and is
+defensible, but it deserves a diagnostic rather than first-match silence; worth
+its own ticket when this lands.
