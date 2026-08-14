@@ -474,6 +474,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-n-hash-builtin-is-not-implemented | N | 35 | bug | `hash(x)` is not implemented | — |
 | bug-n-inline-multi-entry-dict-literal-arg-loses-its-values | N | 55 | bug | `c.update({\"x\": 5, \"y\": 0})` counts each KEY once and throws the values away (answers 1 1 where CPython answers 5 0). The SAME dict passed through a variable is correct, and a SINGLE-entry literal is correct — so it is the inline multi-entry `{...}` argument that is mislowered, most likely read as a set/iterable of keys rather than a mapping. | — |
 | bug-n-int-bit-length-is-not-implemented | N | 30 | bug | `int.bit_length()` is not implemented | — |
+| bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
 | bug-n-nilpy-char-to-string-arg-leaks | N | 40 | bug | NilPy tyChar arg to a string parameter leaks one handle per call | — |
 | bug-n-nilpy-import-sqlite-asserts-host-sqlite-version | N | 60 | bug | test-nilpy hard-codes sqlite 3.45.1's version number, so the suite is red on any box with a different system sqlite | — |
 | bug-n-nilpy-missing-dunder-expect-fail-assertion-is-stale | N | 55 | bug | test_nilpy_operator_dunder_missing_fail still expects a COMPILE error; the missing-dunder case now raises a runtime TypeError like CPython, so the assertion is stale | — |

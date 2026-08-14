@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 summary: "math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program"
-status: working
+status: done
 owner: agent-AN
 ---
 
@@ -194,3 +194,65 @@ spelling the program never wrote. The suggested workaround is exact: measured,
 
 Test `test/test_nilpy_math_log.{npy,expected}`, wired into `test-nilpy`. The
 ticket stays open for the two-argument form only.
+
+## Resolved 2026-08-14 — `log(x, base)` and `pow` landed; `atan2` handed off
+
+All five names are now settled, four of them working and one deliberately absent
+with a measured reason.
+
+**`math.log(x, base)`** — route 2 of the ticket, a frontend lowering emitting
+`Ln(x) / Ln(base)` as an AST division of two calls, not a `pymath_log` shim. The
+2026-08-11 note was right that a builtin unit has no `Ln` to call; the lowering
+sidesteps that entirely. Measured against CPython: `log(1000, 10)` is
+2.9999999999999996, `log(8, 2)` is 3.0, `log(2.5, 1.5)` is 2.259851004564663,
+and `int(math.log(1000, 10))` is 2 — the row the whole divergence is about, and
+the one LogN would have got wrong.
+
+**`math.pow`** — mapped to the RTL's `Power`, and **the name mapping alone was
+silently wrong**, which is the part worth carrying forward:
+
+> `Power(base, exponent: Integer): Integer` is declared before
+> `Power(base, exponent: Double): Double` and arity cannot tell them apart, so
+> `FindProc('Power')` handed `math.pow` the truncating INTEGER power.
+> `math.pow(2.0, 0.5)` answered **1**, `math.pow(3.0, 2.5)` answered **1**.
+
+`FindProcArityDouble` picks the all-Double arm. That is the right question for
+this table specifically — Python's `math` module is float-only — and only this
+one name asks it, so no other shim changes its answer. This is the type-based
+selection `PyParseStdlibCall`'s own note said was "still not reachable"; it now
+is, for the one case that needs it.
+
+**Correcting the 2026-08-13 note in this ticket:** it recorded that "`math.pow`
+/ `math.atan2` answer CPython's values today". They did not — both were
+`undefined variable` until this change. What that note presumably measured was
+the `**` OPERATOR, which is a different path and is still 1 ulp off
+([[bug-nilpy-float-pow-loses-a-ulp-vs-libm]]). Worth knowing that the RTL's
+`Power` and NilPy's `**` disagree: `Power(2.0, 0.5)` is CPython's exact
+1.41421356237309515 while `2.0 ** 0.5` is 1.414213562373095**0**. So `math.pow`
+is emphatically not `**`, and the ulp ticket is about the operator only.
+
+**`math.atan2` stays absent, deliberately.** Measured on this box:
+`ArcTan2(0.5, 1.0)` = 0.46364760900080615 against CPython's 0.4636476090008060**9**
+— 1 ulp. `atan2(1, 1)` and `atan2(-1, -1)` agree exactly, which is what makes
+this the dangerous kind of gap: it is right most of the time. Mapping it would
+be a silently wrong value in the last place, so it is left as an honest
+`undefined variable` and belongs to whoever wires up crtl's correctly-rounded
+libm ([[project_crtl_libm_correctly_rounded_dd]]), not to this ticket.
+
+**Found while sweeping, filed separately:** every math DOMAIN error in NilPy —
+`sqrt(-1)`, `log(-1)`, `log(0)`, `pow(-8, 0.5)` — raises
+`ZeroDivisionError: division by zero` where CPython raises `ValueError: math
+domain error`, while the same call compiled as Pascal returns a quiet `Nan`.
+One message for all four, so one site.
+[[bug-n-math-pow-domain-error-raises-the-wrong-exception]] has the table and
+records the two causes that were checked and ruled OUT, so the next person does
+not re-derive them.
+
+**Gate:** `test/test_nilpy_math_log.npy` extended with the two-argument log
+(including the `int()` row and a via-variables row so it is not a folded-literal
+shape) and the `pow` sweep; expectations regenerated from CPython.
+`tools/gate.sh quick` GREEN, self-host fixedpoint 1 round. No pylib change, so
+no re-pin.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
