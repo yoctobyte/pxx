@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=))"
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -351,3 +351,6 @@ its purpose, which was to turn one sweep into eleven landed builtins.
 [[bug-nilpy-max-and-min-do-not-iterate-a-dict]] — `max(d)` raises where CPython
 answers the largest KEY, while `for k in d` / `sorted(d)` / `list(d)` all agree
 with CPython. An inconsistency inside NilPy rather than a deliberate divergence.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
