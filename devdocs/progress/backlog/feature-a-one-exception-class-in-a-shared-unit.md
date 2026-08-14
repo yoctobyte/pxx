@@ -209,3 +209,33 @@ a silent wrong body to a compile error.
 `test_uses_order_pylib_exception_a`/`_b` change meaning again: they should
 qualify (`sysutils.Exception` / `pylib.Exception`) and assert that each unit's
 surface works in either order, which is the property that actually matters.
+
+### Open implementation detail: how NilPy names ITS `Exception`
+
+Under variant C, pylib's class is named `Exception` — that is what fixes
+`repr`. But then the 18 by-name lookups in `pyparser.inc` cannot use
+`FindUClass('Exception')`: that is a FLAT first-match, and in a `.npy` that also
+pulls sysutils it can answer with sysutils' class, order-dependently. This is
+the same residual as the Pascal side, except here it would be silent rather than
+a compile error, so it must be closed rather than accepted.
+
+**Use `FindUClassInUnit('Exception', <pylib>)`** — the helper already exists
+(`compiler/symtab.inc`, added for qualified class references). NilPy's
+`Exception` then means pylib's class BY CONSTRUCTION, whatever else is loaded,
+and the except-arm's root binds `ExceptionBase` resolved in the exceptions unit
+the same way. Two precise lookups instead of two ambiguous ones.
+
+**Consequence: the pylexer `Exception` -> `PyException` mapping comes OUT.**
+It exists only because pylib's class had a different name; once the class is
+named `Exception` and the lookup is unit-scoped, the rename has nothing to do
+and would in fact break the lookup. Deleting it also removes the
+"maps in, never maps out" asymmetry that caused the repr regression in the first
+place — worth stating plainly, because that asymmetry is the actual lesson here.
+
+Open question for whoever builds it: what `except su.Exception:` should mean
+once the qualifier is honoured. Today the qualifier is CONSUMED and the member
+name resolves flat (`PyParseTry`: *"Unit scope is flat, so the member name alone
+resolves; the qualifier just has to be consumed"*), so the qualified form is
+already imprecise and `test_nilpy_pyexception_bare_vs_qualified` passes for a
+weaker reason than it appears to. Deciding that is part of this work, not
+separate from it.
