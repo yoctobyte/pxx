@@ -324,4 +324,4 @@ kwarg/update tests re-run by hand and green.
   scoped by this ticket to the wider unicode question rather than to itself.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 2e0b20446.
