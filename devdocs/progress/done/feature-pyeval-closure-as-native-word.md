@@ -157,4 +157,4 @@ section is cheap to re-run and should be re-run before the analysis above it is
 believed.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit c61b43390.
