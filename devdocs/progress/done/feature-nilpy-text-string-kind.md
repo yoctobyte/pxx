@@ -4,7 +4,7 @@ prio: 55
 type: feature
 blocked-by: []   # was feature-a-managed-block-kind-word — landed, see Log 2026-08-10
 summary: "Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1)"
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -564,3 +564,6 @@ conversion breaks code that works today. That is a much smaller and much
 sharper constraint, and it is what decided the split actually taken: coordinates
 + the character accessor together (this commit), the ASCII fast path separately
 (pure optimisation, composes with nothing).
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

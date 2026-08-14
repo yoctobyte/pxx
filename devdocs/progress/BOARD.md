@@ -35,7 +35,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (215)
+## backlog (216)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,6 +63,7 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
+| bug-nilpy-join-of-a-str-segfaults | N | 60 | bug | `\"-\".join(\"hello\")` SEGFAULTS — pystr_join is reached by name and takes a TPyList, so a string handle is dereferenced as an object pointer; str is an iterable in CPython and join accepts it | — |
 | bug-nilpy-math-surface-remaining-gaps-and-degrees-association | N | 35 | bug | Seven math names still resolve to 'undefined variable' — asin, acos, atan, fsum, modf, perm, dist, prod — and math.degrees(3.14) answers 179.90874767107852 where CPython answers 179.9087476710785, because it computes x*180/pi instead of CPython's x*(180/pi). The `random` module is absent entirely | — |
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
 | bug-nilpy-max-and-min-do-not-iterate-a-dict | N | 30 | bug | `max(d)` / `min(d)` over a DICT raise `TypeError: max() argument is not iterable`; CPython answers the largest/smallest KEY. Every other iterable works, and `sorted(d)` over the same dict already does the right thing. | — |
@@ -150,6 +151,7 @@ _none_
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
+| feature-nilpy-ascii-flag-fast-path | N | 35 | feature | Make pystr_isascii O(1) by reading PXX_FLAG_ASCII — but first MEASURE whether every string reaching it carries a header, because a false positive there is a silent wrong answer on exactly the non-ASCII strings the character surface exists for | — |
 | feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | bug-n-str-encode-and-bytes-decode-ignore-the-encoding |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-cpyext-cycle-collector | N | 40 | feature | cpyext: a cycle collector for the extension object model | — |
@@ -177,7 +179,6 @@ _none_
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-named-keyword-fields | N | 25 | feature | `"{name} is {age}".format(name=..., age=...)` — named fields not supported | — |
 | feature-nilpy-str-surface-gaps-2026-08-09 | N | 25 | feature | str/bytes surface gaps found by the 2026-08-09 differential sweep | — |
-| feature-nilpy-text-string-kind | N | 55 | feature | Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1) | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-nilpy-threadsafe-containers | N | 30 | feature | TPyList/TPyDict corrupt under concurrent mutation — append is a read-modify-write over a buffer PyListGrow may realloc, so two threads can use-after-free. Free-threaded CPython guarantees this cannot happen; adopt that contract under --threadsafe with one-way biased sharing. | — |
 | feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | — |
@@ -404,9 +405,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1746)
+## done (1747)
 
-1746 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1747 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -455,6 +456,7 @@ _none_
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
+- [p 60] [N] bug-nilpy-join-of-a-str-segfaults
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
@@ -473,7 +475,6 @@ _none_
 - [p 55] [A] feature-a-own-language-first-symbol-resolution
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
-- [p 55] [N] feature-nilpy-text-string-kind
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [A] feature-signal-siginfo-ucontext
@@ -583,6 +584,7 @@ _none_
 - [p 35] [S] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [A] feature-nilpy-arc-cross-parity
+- [p 35] [N] feature-nilpy-ascii-flag-fast-path
 - [p 35] [N] feature-nilpy-iter-and-next-over-a-container
 - [p 35] [N] feature-nilpy-methods-on-int-and-float
 - [p 35] [N] feature-nilpy-multi-arg-callback-bridges

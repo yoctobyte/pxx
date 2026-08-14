@@ -1426,6 +1426,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
 | feature-nilpy-str-rsplit-partition-rpartition | N | 35 | feature | str.rsplit()/partition()/rpartition() missing | — |
+| feature-nilpy-text-string-kind | N | 55 | feature | Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1) | — |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-nilpy-tk-callbacks | B | 65 | feature | nilpy/PCL: tkinter callbacks — a bound method as command=/bind(), via Tcl_CreateCommand | — |
 | feature-nilpy-tkinter-facade-widening | B | 60 | feature | tkinter façade: the surface a real GUI app needs (callables, ttk, Menu, Text, tuple coords) | — |
