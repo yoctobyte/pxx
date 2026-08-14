@@ -320,6 +320,7 @@ procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
+function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
@@ -1180,9 +1181,32 @@ begin
   else PXXStrAllocSize := PWord(Int64(h) - PXX_HDR_SIZE - 8)^;
 end;
 
+{ The ASCII answer for the RESULT of an append, given what the destination
+  block already knew and the OR of the appended bytes. The append loop touches
+  every appended byte anyway, so the cached answer can be MAINTAINED across a
+  growth instead of dropped — which is the whole reason PXX_FLAG_ASCII_KNOWN
+  exists, and dropping it made an accumulated all-ASCII string report
+  IsAscii=false (bug-a-in-place-append-loses-the-ascii-kind-flag-on-growth).
+
+  The truth table, and why each row is the only sound one:
+  - an appended byte >= $80 makes the result definitely non-ASCII whatever the
+    old block said, so the answer is KNOWN and the ASCII bit clear;
+  - otherwise the result's ASCII-ness is exactly the old block's, INCLUDING
+    "unknown" (both bits clear). Unknown must stay unknown: inventing ASCII for
+    a block nobody scanned is the wrong-and-fast error test_managed_block_meta
+    pins. }
+function PXXStrAppendAsciiBits(oldMeta: Int64; orAll: Int64): Int64;
+begin
+  if (orAll and $80) <> 0 then
+    PXXStrAppendAsciiBits := PXX_FLAG_ASCII_KNOWN
+  else
+    PXXStrAppendAsciiBits := oldMeta and (PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII);
+end;
+
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
 var
   h, oldLen, newLen, rc, cap, need, want, base, d, s2, i: Int64;
+  orAll, oldMeta: Int64;
   newH: Pointer;
 begin
   if strSlot = nil then Exit;
@@ -1198,10 +1222,12 @@ begin
   newLen := oldLen + lenB;
   need := PXX_HDR_SIZE + newLen + 1;          { +1 = nul terminator }
   cap := PXXStrAllocSize(Pointer(h));
+  oldMeta := PXXHdrMeta(Pointer(h));
+  orAll := 0;
 
   { IN PLACE: sole owner, this code allocated the block's spare capacity (so
     the size word below it means what we think), and that capacity is enough. }
-  if (rc <= 1) and ((PXXHdrMeta(Pointer(h)) and PXX_FLAG_APPENDABLE) <> 0) and
+  if (rc <= 1) and ((oldMeta and PXX_FLAG_APPENDABLE) <> 0) and
      (cap >= need) then
   begin
     d := h + oldLen;
@@ -1209,12 +1235,17 @@ begin
     i := 0;
     while i < lenB do
     begin
+      orAll := orAll or PByte(s2 + i)^;      { free: this loop touches them all }
       PByte(d + i)^ := PByte(s2 + i)^;
       i := i + 1;
     end;
     PByte(h + newLen)^ := 0;
     PWord(h - 8)^ := newLen;
-    PXXStrForgetAscii(Pointer(h));           { the bytes changed }
+    { The bytes changed, but not unknowably: carry the answer forward rather
+      than forgetting it. }
+    PWord(h - PXX_HDR_SIZE + PXX_HDR_META)^ :=
+      (oldMeta and (not (PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII))) or
+      PXXStrAppendAsciiBits(oldMeta, orAll);
     Exit;
   end;
 
@@ -1226,7 +1257,9 @@ begin
   base := Int64(PXXAlloc(want, 8));
   PXXHdrInit(base);
   { Stamp APPENDABLE: this block, and only a block from here, carries spare
-    capacity the size word describes. The ASCII bits stay clear (unknown). }
+    capacity the size word describes. The ASCII bits are filled in below, once
+    the appended bytes have been OR'd — the old half's answer comes from
+    oldMeta, so the copy does not have to rescan what was already known. }
   PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
   PWord(base + PXX_HDR_RC)^ := 1;
   PWord(base + PXX_HDR_LEN)^ := newLen;
@@ -1241,10 +1274,13 @@ begin
   i := 0;
   while i < lenB do
   begin
+    orAll := orAll or PByte(s2 + i)^;
     PByte(d + oldLen + i)^ := PByte(s2 + i)^;
     i := i + 1;
   end;
   PByte(d + newLen)^ := 0;
+  PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE or
+                                 PXXStrAppendAsciiBits(oldMeta, orAll);
   newH := Pointer(d);
   PWord(strSlot)^ := Int64(newH);
   PXXStrDecRef(Pointer(h));
@@ -3239,6 +3275,48 @@ begin
       Exit;
     end;
   end;
+end;
+
+{ `v := v + x` on a VARIANT slot, appended in place. Returns 1 when it handled
+  the operation and 0 when the caller must fall back to the general
+  PXXVarBinOp path.
+
+  This is the variant twin of PXXStrAppend, and it is the one that matters for
+  Nil-Python: a loop-carried `s` infers tyVariant, not tyAnsiString, so the
+  typed-store append never sees it and every `s = s + c` went through
+  PXXVarBinOp -> PXXStrConcat, allocating and copying the whole accumulation
+  per iteration (bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-
+  cpython, cause B — 62.5% of uforth's instructions).
+
+  The payload word of a VT_STRING slot IS a managed handle slot, so appending
+  into `dest + 8` is exactly the typed case with a tag word in front of it.
+
+  Only string-into-string and char-into-string are taken; everything else —
+  numbers, objects, an unset dest — answers 0 and keeps the general path, which
+  stays the single definition of what `+` means on variants. }
+function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
+var dTag, rTag: Int64; rp: Pointer; rLen: Int64;
+begin
+  Result := 0;
+  if (dest = nil) or (right = nil) then Exit;
+  dTag := PWord(dest)^;
+  if dTag <> 6 then Exit;                        { VT_STRING }
+  rTag := PWord(right)^;
+  if rTag = 6 then
+  begin
+    rp := Pointer(PWord(Int64(right) + 8)^);
+    if rp = nil then begin Result := 1; Exit; end;   { appending '' }
+    rLen := PWord(Int64(rp) - 8)^;
+  end
+  else if rTag = 5 then                          { VT_CHAR: the byte is the
+                                                   low end of the payload word }
+  begin
+    rp := Pointer(Int64(right) + 8);
+    rLen := 1;
+  end
+  else Exit;
+  PXXStrAppend(Pointer(Int64(dest) + 8), rp, rLen);
+  Result := 1;
 end;
 
 procedure PXXVarClear(v: Pointer);
