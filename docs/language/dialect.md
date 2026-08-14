@@ -176,5 +176,6 @@ Do not use `{$ifdef FPC}` to mean "Object Pascal compiler". PXX does not define
 
 ## Next
 
+- [Name resolution](./name-resolution.md)
 - [FPC compatibility](./fpc-compatibility.md)
 - [Command-line reference](../reference/cli.md)

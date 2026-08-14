@@ -3,6 +3,8 @@ track: D
 prio: 50
 type: doc
 summary: "Write the user-facing page for cross-language name resolution: own-language-first, case must agree, warn on surviving ambiguity, qualification as the escape — plus the per-frontend default rule (CPython for .npy, FPC for .pas). The rules are decided and scattered across seven tickets and two devdocs; nothing in docs/ tells a programmer what happens when two units export the same name."
+status: done
+owner: claude-D
 ---
 
 # Document the cross-language name-resolution rules
@@ -92,3 +94,6 @@ lands — otherwise the page ships a rule the compiler does not yet enforce.
 A programmer reading only `docs/` can answer: *"I have `math.pas` and `math.c`
 both in scope and I call `exp` — what happens, and how do I say which one I
 meant?"* Any code sample in the page compiles against `$(PXX_STABLE)`.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

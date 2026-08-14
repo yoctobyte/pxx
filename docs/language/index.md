@@ -24,5 +24,8 @@ language surface as the compiler actually accepts it.
   named specialization.
 - [Exceptions](./exceptions.md) — try/except/finally blocks, raising, and unwinding.
 - [PXX dialect](./dialect.md) — extensions and deliberate PXX-specific surface.
+- [Name resolution](./name-resolution.md) — which file an import loads, which
+  declaration a name binds to, and what happens when Pascal, C and Nil Python
+  share a name.
 - [FPC compatibility](./fpc-compatibility.md) — what matches FPC, what does not,
   and how to write portable code.
