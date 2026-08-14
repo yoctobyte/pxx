@@ -2,6 +2,7 @@
 track: N
 prio: 60
 type: feature
+status: backlog
 ---
 
 # META: third-party Python libraries as pxx targets — classify, then compile
@@ -435,3 +436,50 @@ types and `type(x)` are values now, which is what
 against pip's vendored `six.py` (998 lines): it clears its whole language
 surface and stops at **line 25, `import functools`**. So `six` — 13 of these 58
 files — is now purely a shim job.
+
+## RE-SCANNED 2026-08-14 (second run, same day) at sha c61b43390
+
+Same method and same 58 files as the scan above, re-run after this session's
+Track N landings (nested loop and assignment targets; the character-string
+surface; `str` as an iterable argument). **8 compile, unchanged; the ranking of
+walls is unchanged in shape.**
+
+The one thing that moved is the row this file called "the one genuine Track N
+item on this list":
+
+- **`a NESTED loop target (for n, (p, q) in ...)` — GONE.** Landed with
+  `feature-nilpy-starred-and-nested-unpacking`. `html5lib/_trie/_base.py` now
+  reaches a different, further wall (`unknown base class Mapping`).
+
+So the five language rows are four, and **every one of them is module surface
+wearing a language diagnostic**:
+
+| row | what it really is |
+| --- | --- |
+| `unknown base class Mapping` | `collections.abc` |
+| `undefined variable (MULTILINE)` | `re` |
+| `undefined variable (ascii_lowercase)` | `string` |
+| `undefined variable (python_implementation)` | `platform` |
+| `undefined variable (os)` | `os` (a Sphinx `docs/conf.py`, not library code) |
+
+**The conclusion the previous scan drew now has no exceptions at all: nothing on
+this ladder is blocked on the NilPy LANGUAGE.** 50 of 58 files stop at a missing
+module, and the remaining 4 stop at a missing module's *name*. That is Track B
+shim work — `six` alone is 13 files and is already measured as pure shim
+(`feature-nilpy-six-and-warnings-shims`).
+
+### Provenance
+
+Compiler was a self-hosted fixedpoint build at `c61b43390`, not rebuilt during
+the run (the 2026-08-09 note in this file records two scans disagreeing because
+a pin moved underneath one of them). Raw per-file results are reproducible with
+the same one-file-at-a-time loop over
+`library_candidates/{webencodings,tinycss2,html5lib}`.
+
+### What this means for the plan
+
+Plan step 3 ("compile webencodings → tinycss2 → html5lib bottom-up") is not
+waiting on Track N. It is waiting on the class-4 stdlib surface this ticket's
+own table predicted would be "the real recurring cost", and that prediction has
+now been measured twice. A Track N agent taking `next --track N` will keep
+landing language work that this ladder does not need; the ladder needs shims.
