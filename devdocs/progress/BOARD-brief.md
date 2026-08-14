@@ -5,11 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:6 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1772 rejected:37`
+`urgent:1 unfinished:8 blocked:6 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1773 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
+
+## urgent (1) — jump the queue
+
+- `bug-a-test-asm-avx-gates-on-avx-but-uses-avx2-vbroadcastsd` [A]
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
@@ -33,7 +37,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 204, ranked
 
-- `[p 70] [T]` regression-test-asm-test-asm-avx
+- `[p 75] [A]` bug-a-test-asm-avx-gates-on-avx-but-uses-avx2-vbroadcastsd
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
