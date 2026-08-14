@@ -2,6 +2,8 @@
 track: N
 prio: 35
 type: bug
+status: done
+owner: agent-AN
 ---
 
 # The measured non-ASCII surface: `len`, `upper`, `chr`, `ord` all diverge
@@ -98,3 +100,61 @@ i.e. the `len` row of the table above also reaches SLICING, and a mid-character
 slice puts invalid UTF-8 on stdout — the `chr` row's corruption arrived at
 through a different door. That is a genuine addition to this ticket's list. It
 cost nothing here: uforth's non-ASCII is confined to comments.
+
+## Resolution (2026-08-15) — the table is now green, minus the count-changing fork
+
+**Re-measured at HEAD first, and most of the original table was already fixed**
+by the 2026-08-14 change that made a NilPy str character-counted and `s[i]` a
+one-character str. `len("héllo")` is 5, slicing is character-aligned,
+`ord("é")` is 233 and `chr(233)` prints `é` — all four rows of the ticket's
+table that were about counting are gone, and the "real fork" the ticket defers
+was in fact decided and built. A ticket's measurements age; this one had.
+
+Two things were genuinely still wrong, and both are fixed here.
+
+**1. `upper`/`lower`/`capitalize`/`title`/`swapcase` only touched ASCII.**
+Now one walker (`PyStrMapCase`) decodes UTF-8, maps the code point and
+re-encodes — five entry points through ONE routine, because five copies of
+"decode, map, re-encode" is how the next gap gets fixed in four places and
+missed in the fifth. The mapping (`PyCpUpper`/`PyCpLower`) covers ASCII,
+Latin-1 Supplement, Latin Extended-A, Greek (including the accented vowels,
+whose capitals sit in a separate block) and Cyrillic — the ticket's suggested
+"256-entry table", done at code-point level because the strings are UTF-8.
+
+Verified by an **exhaustive sweep of every printable code point from U+0020 to
+U+0500 against CPython**, which is what caught the two real traps:
+
+- Latin Extended-A is not uniformly even-upper. The band flips at $139–$148
+  (that is where Ł/ł live) and again at $179–$17E, so a single even/odd rule
+  left `'łódź'.upper()` with one letter unchanged.
+- The Turkish dotted/dotless I looks like an adjacent pair and is not:
+  `'ı'.upper()` is ASCII `I` and `'İ'.lower()` is two code points. Read as a
+  pair it produced İ and ı — **the only two characters in the whole sweep where
+  we answered a DIFFERENT character rather than none.**
+
+The sweep's closing state: **zero wrong answers.** Every remaining divergence
+from CPython is a character left unchanged (Latin Extended-B, IPA, the Greek
+and Cyrillic extension blocks), which is the honest failure here, and the
+count-changing cases (`'ß'.upper()` is `'SS'`, `'ﬁ'.upper()` is `'FI'`,
+`'ŉ'`, `'İ'.lower()`) which belong to
+[[bug-nilpy-case-mapping-cannot-change-code-point-count]].
+
+**2. `sorted(s)` and `tuple(s)` exploded a string by BYTES.** `sorted("béa")`
+answered four elements where `list("béa")` answered three, splitting the é into
+its two UTF-8 bytes. Both now go through `pystr_charlist` — the note already on
+that routine says "one exploder, not two", and this was the third and fourth
+copy. `list`/`tuple`/`sorted`/`zip`/`enumerate`/`for` now agree about how many
+characters a string has.
+
+**Gate:** `test/test_nilpy_non_ascii_case_and_explode.npy` (+`.expected`, wired
+into the Makefile) — the five case routines over Latin-1, Polish, accented
+Greek and Cyrillic, an uncased character in both directions, list/tuple/sorted
+agreeing on element counts, and ASCII controls. Byte-identical to CPython.
+`tools/gate.sh quick` GREEN, self-host byte-identical.
+
+**Still open, unchanged:** the count-changing mappings (own ticket, linked
+above). The byte-vs-code-point model question this ticket deferred is settled —
+NilPy strings are UTF-8 and character-indexed.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

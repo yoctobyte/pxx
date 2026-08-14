@@ -904,6 +904,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_inhclsattr26 | diff -u test/test_nilpy_inherited_class_attribute.expected -
 	./$(COMPILER) test/test_nilpy_class_attr_shared_slot_via_call_result.npy $(TESTTMP)/test_nilpy_clsattr_callres26
 	$(TESTTMP)/test_nilpy_clsattr_callres26 | diff -u test/test_nilpy_class_attr_shared_slot_via_call_result.expected -
+	./$(COMPILER) test/test_nilpy_non_ascii_case_and_explode.npy $(TESTTMP)/test_nilpy_nonascii_case26
+	$(TESTTMP)/test_nilpy_nonascii_case26 | diff -u test/test_nilpy_non_ascii_case_and_explode.expected -
 	./$(COMPILER) test/test_nilpy_raise_bare_class.npy $(TESTTMP)/test_nilpy_raisebare26
 	$(TESTTMP)/test_nilpy_raisebare26 | diff -u test/test_nilpy_raise_bare_class.expected -
 	./$(COMPILER) test/test_nilpy_iterator_protocol.npy $(TESTTMP)/test_nilpy_iterproto26

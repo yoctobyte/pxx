@@ -1,0 +1,28 @@
+# Case mapping and string-to-sequence over NON-ASCII text.
+# bug-nilpy-non-ascii-string-surface-measured. Diffed against CPython.
+
+# --- case mapping: Latin-1, Latin Extended-A, Greek, Cyrillic
+print("héllo".upper(), "HÉLLO".lower())
+print("élan".upper(), "ÉLAN".lower())
+print("ÿ".upper(), "Ÿ".lower())
+print("łódź".upper(), "ŁÓDŹ".lower())
+print("αθήνα".upper(), "ΑΘΉΝΑ".lower())
+print("Москва".upper(), "МОСКВА".lower())
+
+# capitalize / title / swapcase go through the same walker
+print("école".capitalize(), "ÉCOLE".capitalize())
+print("élan vital".title(), "abc123 déf".title())
+print("Héllo".swapcase(), "ÉlAn".swapcase())
+
+# a character with no case mapping is left alone, in either direction
+print("→ 5 ←".upper(), "→ 5 ←".lower())
+
+# --- one exploder: list/tuple/sorted must agree about how many characters
+s = "béa"
+print(list(s), tuple(s), sorted(s))
+print(len(s), len(list(s)), len(tuple(s)), len(sorted(s)))
+print(sorted("École"))
+print("".join(sorted("café")))
+
+# and the ASCII controls are unchanged
+print("hello world".title(), "MiXeD".swapcase(), sorted("cba"), tuple("ab"))
