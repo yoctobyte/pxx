@@ -455,3 +455,36 @@ The lesson is the one the playbook states and I ignored for three rounds: the
 expensive bugs here do not crash, they produce a plausible wrong value far from
 the cause, and reasoning about which site is on the path lost three times to a
 single WriteLn. The probe cost one rebuild.
+
+### Second probe: the index spaces AGREE and the type fix WORKS. The defect is downstream.
+
+```
+lo=Exception qunit=46  foa_su=292 foa_py=46  inunit=26 flat=26
+lo=Exception qunit=292 foa_su=292 foa_py=46  inunit=86 flat=26
+```
+
+Read it line by line, because it settles three questions at once:
+
+- `qunit` matches `foa_py` (46) on the `pylib.Exception` declaration and
+  `foa_su` (292) on the `sysutils.Exception` one. **The index spaces agree** —
+  the previous entry's hypothesis is wrong.
+- `inunit` gives **26** for pylib and **86** for sysutils: two different
+  classes, correctly distinguished.
+- `flat` gives **26** for both — that is the bug, and the ParseTypeKind fix on
+  the branch already avoids it.
+
+So the type-position fix is CORRECT and working. `var se: sysutils.Exception`
+now resolves to sysutils' class. The garbage output therefore comes from
+somewhere downstream of the variable's type — the constructor being the
+obvious candidate, since `sysutils.Exception.CreateFmt('[%5d]',[3])` still runs
+pylib's minimal formatter.
+
+**Where the next session starts:** put the same probe at the `ctorCi` site
+(`compiler/parser.inc`, the `X.Create` factor branch) and print `qUnit`,
+`FindUClassInUnit(name, qUnit)` and `FindUClass(name)`. Either `qUnit` is -1
+there — meaning the qualifier is consumed on a different route for a ctor
+receiver than for a type — or it resolves and something later re-resolves the
+class flat. One rebuild answers it, exactly as the last two did.
+
+Running score of this hunt, kept deliberately: three conclusions reached by
+reading the parser, all three wrong; two probes, both decisive.
