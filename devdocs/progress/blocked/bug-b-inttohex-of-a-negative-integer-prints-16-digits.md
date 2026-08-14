@@ -2,7 +2,7 @@
 track: B
 prio: 40
 type: bug
-blocked-by: [bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit]
+blocked-by: [compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload]
 summary: "`IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used"
 status: working
 owner: track-b-bughunt
@@ -108,3 +108,28 @@ over the natural width — is the ticket's gate. Six rows still differ, all of
 them `Integer`-typed or literal, all of them the blocker above.
 
 `make lib-test` green with the family declared.
+
+## 2026-08-14 (later) — re-framed: the remaining half is COMPAT, not a bug
+
+The blocker was filed as `bug-a-overload-resolution-widens-to-int64-…` on the
+assumption that selecting the wider overload was a defect. The user's call:
+
+> *"this widening is not a bug. BUT it affects `--strict-fpc` mode"*
+
+So the default dialect widening `Integer` into the `Int64` spelling is
+**intended**, and `IntToHex(i, 8)` printing `FFFFFFFFFFFFFFFF` for an `Integer`
+`-1` is the dialect's answer rather than a wrong one — the RTL is handed a
+sign-extended 64-bit value and renders all of it, and `Digits` is a minimum in
+both implementations.
+
+What remains is therefore parity behind a flag, not a fix:
+**blocked-by [[compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload]]**
+(the renamed ticket, now `type: compat`, default behaviour explicitly unchanged).
+
+The library half stands as landed and needs nothing further: the FPC family
+(`Int64` / `LongInt` / `LongWord`) is declared, the `LongInt` body masks through
+`LongWord()` so a `LongInt` argument answers `FFFFFFFF` / `80000000` /
+`00000000FFFFFFFF` exactly like FPC, and that is what the flag will route
+`Integer` arguments to. **No further `lib/rtl` change is expected here** — this
+ticket is now a tracking placeholder for the strict-fpc row and could reasonably
+be closed into the compat ticket instead.

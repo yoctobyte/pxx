@@ -51,6 +51,23 @@ low 32 bits, which are zero. An out-of-range magnitude became the *smallest*
 possible answer, so a range guard like `if Floor(x) > limit` passed. Any caller
 that narrows a `Trunc` result has the same hole today.
 
+## The DEFAULT is now decided — saturate, do not raise
+
+[[decide-may-uses-math-cost-the-heap-and-exception-runtime]] (2026-08-14, commit
+`87ecef258`) settled the policy for this whole family: **pxx keeps IEEE masked
+semantics and saturates; FPC's raise goes behind an opt-in flag**
+([[compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags]]). `Floor`/`Ceil`/
+`Floor64`/`Ceil64` already follow it.
+
+So option (1) below — unmasking the FPU — is now the FLAG's implementation, not
+the default, and this ticket's default-path answer is option (2) narrowed to one
+choice: **make `Trunc`/`Round` saturate to `High`/`Low` of the destination
+width, uniformly on every backend.** That is a smaller job than it looks,
+because two of four targets already saturate (see the table above) — the work is
+making x86 agree with ARM rather than inventing behaviour.
+
+The options below are kept as the record of what was weighed.
+
 ## The options, and why the RTL one does not apply here
 
 `bug-b-floor-…` listed three; Track B took (2), a local range check in the

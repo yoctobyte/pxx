@@ -972,9 +972,78 @@ begin
   Result := res;
 end;
 
+{ ---- out-of-range float -> int: SATURATE, do not raise ----
+
+  A double that no integer can hold used to reach the hardware conversion and
+  come back as the x86 "integer indefinite" value, INT64_MIN. `Floor64(1e30)`
+  was -9223372036854775808 and `Floor(1e30)` was **0**, because narrowing
+  INT64_MIN to Integer keeps its low 32 bits, which are zero. 0 is the
+  dangerous one: an out-of-range MAGNITUDE became the SMALLEST possible answer,
+  so a guard like `if Floor(x) > limit` passed.
+
+  FPC raises EInvalidOp here. We deliberately do not
+  ([[decide-may-uses-math-cost-the-heap-and-exception-runtime]], user
+  2026-08-14: *"We do it our way unless strict-fpc is set."*) — raising means
+  `uses sysutils` in this unit, which is the only way to reach `Exception` at
+  all, and that measured at roughly DOUBLE the code and QUADRUPLE the bss for
+  any program that says `uses math`:
+
+    bare 52 KB code / 9.5 KB bss · +math 123/9.5 · +math,sysutils 251/42.7
+
+  On an ESP32 that is decisive, and FPC's raising is a software policy anyway —
+  it UNMASKS the FP exceptions that x86, ARM, RISC-V and Xtensa all leave
+  masked. pxx follows IEEE masked semantics by design (`1/0` is `Inf` here and
+  a runtime error in FPC), so making Floor alone raise would be an island in our
+  own behaviour. The raise belongs behind an opt-in flag, filed separately.
+
+  Saturation is to the RETURN TYPE, which is why Floor tests before delegating
+  rather than narrowing Floor64's saturated result: `Integer(High(Int64))` is
+  -1, a nonsense answer, where `High(Integer)` is the useful one.
+
+  WHAT IS NOT SATURATED, and this is the subtle half: only the INT64 conversion
+  is policed. `Floor(3e9)` converts to Int64 perfectly well and then wraps on
+  the narrowing to Integer — measured, FPC returns -1294967296 there and does
+  NOT raise, and this unit's own header already documents that "the Integer
+  forms overflow past 2^31 exactly as FPC's do". So 3e9 keeps wrapping and only
+  1e30 saturates. Guarding the Integer range instead would have looked more
+  correct and diverged from FPC on a case FPC defines.
+
+  NaN takes the NEGATIVE sentinel rather than a third answer: it has no
+  magnitude, so no bound is right, and Low() is both what the x86 conversion
+  already delivered for it and out-of-band enough not to read as data. It is a
+  judgement call, not a measurement — the decision covers magnitudes only. }
+const
+  { 2^63 exactly. A double cannot represent High(Int64), so the boundary test
+    is "magnitude >= 2^63" — that value IS representable and is the true edge.
+    -2^63 itself converts fine, hence >= on one side and < on the other.
+
+    NaN needs no separate test in this form: it compares false against both
+    bounds, so the `and` is false and the `not` fires. That is why the guard is
+    a NEGATED IN-RANGE test rather than an out-of-range test — the latter
+    silently lets NaN through. }
+  TWO_POW_63 = 9223372036854775808.0;
+
+{ Cold paths: reached only for a magnitude past Int64/Integer or a NaN, so the
+  branch here costs nothing on the ordinary path. `x > 0.0` is false for NaN,
+  which is how NaN lands on Low() without a test of its own. }
+function SaturateInt64(x: Double): Int64;
+begin
+  if x > 0.0 then Result := High(Int64) else Result := Low(Int64);
+end;
+
+function SaturateInteger(x: Double): Integer;
+begin
+  if x > 0.0 then Result := High(Integer) else Result := Low(Integer);
+end;
+
 function Floor64(x: Double): Int64;
 var t: Double;
 begin
+  if not ((x >= -TWO_POW_63) and (x < TWO_POW_63)) then
+  begin
+    Result := SaturateInt64(x);
+    Exit;
+  end;
   t := Int(x);
   if (x < 0.0) and (t <> x) then t := t - 1.0;
   Result := Trunc(t);
@@ -983,6 +1052,11 @@ end;
 function Ceil64(x: Double): Int64;
 var t: Double;
 begin
+  if not ((x >= -TWO_POW_63) and (x < TWO_POW_63)) then
+  begin
+    Result := SaturateInt64(x);
+    Exit;
+  end;
   t := Int(x);
   if (x > 0.0) and (t <> x) then t := t + 1.0;
   Result := Trunc(t);
@@ -990,12 +1064,21 @@ end;
 
 function Floor(x: Double): Integer;
 begin
-  Result := Integer(Floor64(x));
+  { tested here too, and deliberately: the saturation target is the RETURN
+    type, so this cannot just narrow Floor64's answer. In range, the second
+    test inside Floor64 is a predicted-taken branch. }
+  if not ((x >= -TWO_POW_63) and (x < TWO_POW_63)) then
+    Result := SaturateInteger(x)
+  else
+    Result := Integer(Floor64(x));
 end;
 
 function Ceil(x: Double): Integer;
 begin
-  Result := Integer(Ceil64(x));
+  if not ((x >= -TWO_POW_63) and (x < TWO_POW_63)) then
+    Result := SaturateInteger(x)
+  else
+    Result := Integer(Ceil64(x));
 end;
 
 function FMod(x, y: Double): Double;

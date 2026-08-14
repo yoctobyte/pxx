@@ -10,11 +10,12 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-a-test-asm-avx-gates-on-avx-but-uses-avx2-vbroadcastsd | A | 75 | bug | test_asm_avx gates on AVX + OSXSAVE + XCR0 (and FMA separately, correctly) but NOT on AVX2 — while every `vbroadcastsd ymm, xmm` it uses is the REGISTER-source form, which is AVX2. Only the memory-source form is AVX1. On an AVX1-only CPU the gate passes and the first vbroadcastsd is #UD. Master is RED on plexus (Ivy Bridge). The compiler is fine; the guard has one gap. | — |
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-n-typevar-call-is-an-undefined-variable | N | 55 | bug | `MessageT = TypeVar(\"MessageT\")` at module scope dies with `undefined variable (TypeVar)`: `typing` is a consumed-and-ignored import, so the names it exports that have a RUN-TIME call form — TypeVar, Generic, NewType, cast — are bound to nothing. The largest remaining language gap in the neuzelaar census once unreadable annotations stopped refusing modules. | — |
+| bug-nilpy-dict-update-mixed-positional-and-keyword-args | N | 35 | bug | `d.update(other, a=1)` is a clean compile error (`unexpected token c`) — CPython accepts a mapping followed by keywords. The keywords-are-KEYS builder takes over only when the argument list STARTS with a keyword, so a positional first argument leaves the keyword run unhandled. Same for dict(other, a=1). | — |
 
 ## unfinished (9)
 
@@ -30,12 +31,11 @@ lives in git, not in a timestamp._
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 
-## blocked (6)
+## blocked (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises | B | 20 | bug | Floor(1e30) returns 0 and Floor64(1e30) returns Int64 MIN, silently. FPC raises EInvalidOp. A silent wrong VALUE where the reference implementation refuses — found while documenting the C-vs-Pascal math split, 2026-08-14. | decide-may-uses-math-cost-the-heap-and-exception-runtime |
-| bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit |
+| bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-pascal-uses-is-transitive | A | 80 | bug | REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix the user decided on 2026-08-01 (land the real non-transitive rule) was never built, and the ticket sat in done/ hiding that. It is the root cause of the pylib/sysutils Exception ceiling, the tkinter/reportlab class collision, and the ClassNameIsDeliberatelyShared patch that was supposed to be temporary. Re-measured cost: 35 RTL-internal unit pairs, no user-program-facing leak. | task-t-strict-uses-corpus-sweep |
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
@@ -48,7 +48,6 @@ lives in git, not in a timestamp._
 | bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes | A | 45 | bug | On aarch64 ONLY, WriteLn(Low(Int64)) prints -'..--).0-*(+,))+(0( instead of -9223372036854775808. Every one of the 19 digit bytes is Ord('0') - d where it should be Ord('0') + d, so the value is right and the rendering is wrong. Low(Int64)+1 prints correctly, and x86-64 / i386 / arm32 all print correctly. Silent output corruption in the integer writer, reachable from any program that prints Low(Int64). | — |
 | bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set | A | 40 | bug | `f(fmt, ['a'])` stops compiling when the routine is in a CROSS-UNIT overload set and its unit is used LAST: the literal is typed (ShortString, set) against an `array of const` parameter reported as `record`. Same-unit overload sets are fine, single cross-unit routines are fine, and reversing the uses order fixes it — so the array-of-const conversion is lost on one path through the cross-unit merge. | — |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
-| bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit | A | 40 | bug | Given overloads on Int64 and LongInt, an argument of any OTHER integer type — Integer, SmallInt, Byte, an untyped literal — selects the Int64 one. FPC selects LongInt for all of them (narrowest that fits). Only an exact type-NAME match picks LongInt, so Integer and LongInt behave differently despite both being 4-byte signed. Silent wrong values wherever an overload set exists to give a type its own width. | — |
 | bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently | A | 25 | bug | Trunc(1e30), Round(1e30) and Trunc(Inf) all return -9223372036854775808 — the x86 integer indefinite value that cvttsd2si produces when the conversion is invalid. FPC raises EInvalidOp for every one of them. These are compiler BUILTINS lowered straight to the conversion op, so the RTL cannot guard them the way Floor/Ceil now are; the check belongs at the lowering or in the FPU mode. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
@@ -66,7 +65,6 @@ lives in git, not in a timestamp._
 | bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising | N | 25 | bug | `min(3, None)` answers None where CPython raises TypeError — pyvar_gt orders None against a number instead of refusing. Low priority: comparing None is a bug in the calling program, and every shape CPython accepts is unaffected. But it is the wrong DIRECTION of laxity: we answer a question CPython refuses to answer, silently. | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
-| bug-nilpy-dict-update-mixed-positional-and-keyword-args | N | 35 | bug | `d.update(other, a=1)` is a clean compile error (`unexpected token c`) — CPython accepts a mapping followed by keywords. The keywords-are-KEYS builder takes over only when the argument list STARTS with a keyword, so a positional first argument leaves the keyword run unhandled. Same for dict(other, a=1). | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
@@ -101,6 +99,8 @@ lives in git, not in a timestamp._
 | compat-pascal-index-a-function-call-result | P | 40 | compat | Indexing a function call's result — `Copy(s,2,3)[1]`, `Make[0]`, `b.ArrP(3)[0]` — either fails to parse or reaches IR lowering as an un-lowerable AN_CALL; FPC accepts all three | — |
 | compat-pascal-inline-generic-specialization | P | 35 | compat | pxx accepts only the declaration form `specialize Max<Integer> as MaxInt;` — FPC's inline `specialize Max<Integer>(a, b)` in an expression or statement is rejected with 'undefined variable' | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
+| compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload | A | 30→40 | compat | Given overloads on Int64 and LongInt, pxx selects Int64 for Integer / SmallInt / Byte / an untyped literal; only an exact type-NAME match picks LongInt. FPC picks the narrowest that FITS. The widening is NOT a bug — it is the dialect (user, 2026-08-14) — but --strict-fpc must reproduce FPC's rule, because a width-sensitive routine like IntToHex answers differently under it. Compat work behind the flag, not a default-behaviour change. | — |
+| compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags | A | 30 | compat | FPC unmasks the FP exceptions every ISA leaves masked: 1/0 is a runtime error there and Inf here, and Floor(1e30) raises EInvalidOp where pxx now saturates. Decided that pxx keeps IEEE masked semantics by default and FPC's behaviour goes behind opt-in flags — TWO of them, because div-by-zero -> runtime error 208 is nearly free (an FPU control word bit) while Floor raising EInvalidOp costs sysutils, +127 KB code and +33 KB bss on every `uses math` program. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
@@ -419,9 +419,9 @@ lives in git, not in a timestamp._
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1775)
+## done (1776)
 
-1775 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1776 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -551,8 +551,8 @@ lives in git, not in a timestamp._
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
 - [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
-- [p 40] [A] bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit (unblocks 1)
 - [p 40] [N] bug-n-str-encode-and-bytes-decode-ignore-the-encoding (unblocks 1)
+- [p 40] [A] compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload (unblocks 1)
 - [p 40] [A] bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set
 - [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
@@ -583,7 +583,6 @@ lives in git, not in a timestamp._
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
-- [p 35] [N] bug-nilpy-dict-update-mixed-positional-and-keyword-args
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
 - [p 35] [N] bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text
@@ -614,6 +613,7 @@ lives in git, not in a timestamp._
 - [p 30] [N] bug-nilpy-encode-ignores-the-codec
 - [p 30] [N] bug-nilpy-getattr-dunder-not-supported
 - [p 30] [N] bug-nilpy-max-and-min-do-not-iterate-a-dict
+- [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [D] docs-publish-the-three-language-rounding-table
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
@@ -674,9 +674,8 @@ lives in git, not in a timestamp._
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
-- **1** — decide-may-uses-math-cost-the-heap-and-exception-runtime
+- **1** — compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language

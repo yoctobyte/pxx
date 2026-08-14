@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:9 blocked:6 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1775 rejected:37`
+`urgent:1 working:2 unfinished:9 blocked:5 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1776 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-n-typevar-call-is-an-undefined-variable` [N] — owner: agent-AN
+- `bug-nilpy-dict-update-mixed-positional-and-keyword-args` [N] — owner: agent-AN
 
 ## urgent (1) — jump the queue
 
@@ -27,10 +28,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-generics` [P]
 - `feature-real-dynlib-loader` [B]
 
-## blocked (6) — has an unmet blocker; do not claim
+## blocked (5) — has an unmet blocker; do not claim
 
-- `bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises` [B] — blocked-by: decide-may-uses-math-cost-the-heap-and-exception-runtime
-- `bug-b-inttohex-of-a-negative-integer-prints-16-digits` [B] — blocked-by: bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit
+- `bug-b-inttohex-of-a-negative-integer-prints-16-digits` [B] — blocked-by: compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `bug-pascal-uses-is-transitive` [A] — blocked-by: task-t-strict-uses-corpus-sweep
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path

@@ -63,17 +63,39 @@ have.
 
 ```
 C:      floor(1e30) = 1000000000000000019884624838656    (exact, no range to leave)
-Pascal: Floor(1e30)  = 0                                  (pxx — WRONG, see below)
+Pascal: Floor(1e30)  = 2147483647                         (pxx — saturates)
         Floor(1e30)  = EInvalidOp                         (FPC — raises)
 ```
 
 This is why `Floor64`/`Ceil64` exist on the Pascal side and have no C
 counterpart — the C signature never needed them.
 
-> **Open bug:** pxx returns `0` where FPC raises —
-> `bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises`, found while
-> writing this page. The Pascal column above is what pxx *should* do, not what it
-> does.
+**pxx saturates where FPC raises, and that is BY DESIGN — not an oversight.**
+Decided 2026-08-14 (`decide-may-uses-math-cost-the-heap-and-exception-runtime`,
+user: *"We do it our way unless strict-fpc is set."*). Three reasons, all
+measured:
+
+1. **pxx follows IEEE MASKED semantics.** `1/0` is `Inf` here and a runtime
+   error in FPC. IEEE-754 specifies *flags*, not traps; x86, ARM, RISC-V and
+   Xtensa all leave FP exceptions masked, and FPC deliberately **unmasks** them.
+   Raising from `Floor` alone would be an island in our own behaviour.
+2. **The dependency is not free.** `Exception` is only reachable via `uses
+   sysutils`, and pulling it into `math` roughly doubles code and quadruples bss
+   for anything that says `uses math` (52 KB → 123 KB → 251 KB code; 9.5 KB →
+   9.5 KB → 42.7 KB bss). On an ESP32 that is decisive, and an embedded program
+   should not abort on a math edge case.
+3. **`Floor(1e30) = 0` was the real defect**, and it is gone. INT64_MIN narrowed
+   to `Integer` keeps its zero low half, so an out-of-range *magnitude* became
+   the *smallest* answer and `if Floor(x) > limit` passed. Saturation to
+   `High`/`Low` of the return type makes that guard fire.
+
+Only the **Int64** conversion is policed. `Floor(3e9)` converts to Int64 fine and
+then wraps on the narrowing to `Integer` — FPC returns `-1294967296` there and
+does **not** raise, and pxx matches it. NaN takes the negative sentinel.
+
+FPC's raise is to become opt-in under a strict flag; enrolling it in the
+`--strict-fpc` umbrella is a separate call, since it would change what that
+umbrella costs for the corpora it is proven to compile.
 
 ### 3. The surfaces do not even align by name
 
