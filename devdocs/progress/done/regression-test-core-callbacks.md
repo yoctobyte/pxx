@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 2 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -27,3 +28,4 @@ pascal26:50: error: undefined variable (print)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

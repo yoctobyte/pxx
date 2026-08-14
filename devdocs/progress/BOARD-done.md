@@ -1606,6 +1606,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
+| regression-test-arm32-httpdemo | T | 70 | regression | regression: test-arm32#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-arm32-test-asyncecho | T | 70 | regression | regression: test-arm32#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-arm32-test-channel | T | 70 | regression | regression: test-arm32#src:test/test_channel.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-arm32-test-reactor | T | 70 | regression | regression: test-arm32#src:test/test_reactor.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
@@ -1631,6 +1632,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
+| regression-test-core-callbacks | T | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 410b7a40b516 (auto-filed by twatch) | — |
 | regression-test-core-cgeneric-selection-b209 | T | 70 | regression | regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-cmath-trig-family-b385 | T | 70 | regression | regression: test-core#src:test/cmath_trig_family_b385.c red at 93d6232f05d1 (auto-filed by twatch) | — |
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
@@ -1672,6 +1674,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-widechar-to-utf8-b319 | T | 70 | regression | regression: test-core#src:test/test_widechar_to_utf8_b319.pas red at d94db8d6b0cc (auto-filed by twatch) | — |
 | regression-test-core-test-writeln-nonfinite-float | T | 70 | regression | regression: test-core#src:test/test_writeln_nonfinite_float.pas red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
+| regression-test-i386-httpdemo | T | 70 | regression | regression: test-i386#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-i386-test-asyncecho | T | 70 | regression | regression: test-i386#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-i386-test-channel | T | 70 | regression | regression: test-i386#src:test/test_channel.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-i386-test-dynarray-field | T | 70 | regression | regression: test-i386#src:test/test_dynarray_field.pas red at 899e51cda3ba (auto-filed by twatch) | — |
@@ -1702,6 +1705,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-nilpy#src:test/test_uses_order_pylib_exception_a.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
 | regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |
