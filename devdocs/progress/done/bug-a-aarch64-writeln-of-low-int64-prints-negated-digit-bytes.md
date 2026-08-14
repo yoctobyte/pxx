@@ -181,4 +181,4 @@ canary), plus the five-target differential above. `compiler/emit.inc` is
 compiler code, not a frozen builtin, so no re-pin.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit fb74050e5.
