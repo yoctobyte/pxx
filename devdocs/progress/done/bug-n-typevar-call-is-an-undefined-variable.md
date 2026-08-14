@@ -140,4 +140,4 @@ Gate: `gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` + FPC seed
 canary). `compiler/builtin/**` untouched, so no re-pin.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit b1128981e.
