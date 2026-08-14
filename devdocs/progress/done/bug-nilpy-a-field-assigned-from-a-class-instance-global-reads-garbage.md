@@ -145,4 +145,4 @@ Gate: `gate.sh quick` GREEN (self-host fixedpoint + `--tier quick` + FPC seed
 canary). Parser only, no frozen builtin, so no re-pin.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 52654634e.
