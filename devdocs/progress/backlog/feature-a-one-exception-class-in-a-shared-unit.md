@@ -418,3 +418,40 @@ var se: sysutils.Exception;
 begin se := sysutils.Exception.Create('x'); WriteLn(se.Message); end.
 ```
 Expected `x`; prints garbage.
+
+### INSTRUMENTED. The path was right all along — the INDEX SPACE is wrong.
+
+One probe, and it overturns the previous three entries:
+
+```pascal
+if PxxDbgEnabled('a.qual') then
+  WriteLn('PXXDBG a.qual TYPEARM lo=', lo, ' qunit=', tkQUnit);
+```
+```
+PXXDBG a.qual TYPEARM lo=Exception qunit=46
+PXXDBG a.qual TYPEARM lo=Exception qunit=292
+```
+
+So ParseTypeKind's identifier arm **IS** on the path, it **IS** reached for
+`var se: sysutils.Exception`, and `ConsumeUnitQualifier` **DOES** hand back a
+unit index — a different one for each of the two declarations, exactly as it
+should. Every "this site is not on the path" conclusion above is WRONG.
+
+What is left is the only remaining possibility: `FindUClassInUnit(lo, tkQUnit)`
+returns -1 and the flat fallback answers, which means **the integer
+`ConsumeUnitQualifier` returns is not in the same index space as
+`UClsUnitIdx`**. `UClsUnitIdx` holds a `Strs[]` index (CurrentUnitIdx at
+parse). `PyLibExceptionCi` works because it builds its argument with
+`FindUnitOrAlias`, which evidently agrees with `UClsUnitIdx`;
+`ConsumeUnitQualifier` evidently does not.
+
+**Next step is now a one-line check, not a hunt:** print
+`FindUnitOrAlias('sysutils')` beside `tkQUnit` at that same probe. If they
+differ, the fix is to convert (or to have ConsumeUnitQualifier return the
+Strs index), and both the `ctorCi` and ParseTypeKind changes already on the
+branch become correct as written.
+
+The lesson is the one the playbook states and I ignored for three rounds: the
+expensive bugs here do not crash, they produce a plausible wrong value far from
+the cause, and reasoning about which site is on the path lost three times to a
+single WriteLn. The probe cost one rebuild.
