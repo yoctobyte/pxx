@@ -106,4 +106,4 @@ names onto the shipped library, filed as
 [[bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent]] (Track N).
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit 1ae19131c.
