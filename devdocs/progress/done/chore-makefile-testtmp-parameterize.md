@@ -255,14 +255,22 @@ verification rather than a sample.
 
 | | ticket (2026-08-13) | landed |
 |---|---|---|
-| sites rewritten | 6755 | **6855** |
+| sites rewritten | 6755 | **6902** |
 | left pinned | 4 | **4** |
 | targets captured for the expansion diff | 90 | **90** |
-| `make -n` lines compared | 37825 | **39807** |
+| `make -n` lines compared | 37825 | **38884** |
 | expansion diff | clean | **clean** |
 
-The site count grew by 100 in a day, which is the ticket's own argument for
+The site count grew by ~150 in a day, which is the ticket's own argument for
 doing this now rather than later.
+
+The sweep also had to be **re-applied on top of a concurrent Track B push**
+that rewrote several gcc-oracle recipes mid-rebase. Resolving that hunk by hunk
+would have been error-prone across 6902 sites; because the change is purely
+mechanical it was instead regenerated — take upstream's Makefile whole, re-insert
+the block, re-run the script, and re-capture the expansion diff against a fresh
+baseline. A regenerable change should be regenerated, not merged. The numbers
+above are from that second run.
 
 The four pinned occurrences resolve to three distinct paths —
 `/tmp/test_nilpy_sqlite_crud.db`, `/tmp/pxx_lua_input.lua`, `/tmp/httpdemo` —
