@@ -391,6 +391,48 @@ LOCK_PATH = os.path.join(REPO, ".testmgr", "run.lock")
 # How long the scheduler may make NO progress (nothing running, nothing
 # admitted) before it forces a job through the memory gates. See admit_forced().
 STARVE_GRACE = 90.0
+
+
+def report_mem_floor():
+    """Say, at startup, whether this box can admit anything at all.
+
+    MEM_FLOOR is an ABSOLUTE quantity on a machine whose memory is not, and
+    admission is `avail - est_mem > MEM_FLOOR`. On a small box (the 512 MB arm32
+    Pi proposed as a native oracle) that is unsatisfiable for every class —
+    `400 MB - est_mem > 1500 MB` is false even at est_mem 0.
+
+    Nothing errors. admit_ok() just returns False forever, the queue never
+    drains, and admit_forced()'s starvation path pushes one job through every
+    STARVE_GRACE seconds. So the box LOOKS like it is working while doing ~1
+    job/90s, which is the same shape as the outages this track spent the month
+    fixing: every liveness signal healthy, no useful work happening.
+
+    The floor POLICY (make it relative? refuse to run at all?) is
+    decide-t-mem-floor-policy-on-a-small-box — it needs a number measured on
+    real small hardware, and arguably a call about what the fleet is for.
+    This function is the half that is a bug regardless of that answer: the box
+    should say so next to the banner, not be discovered 90 seconds at a time.
+    """
+    mi = meminfo()
+    avail, total = mi.get("MemAvailable", 0), mi.get("MemTotal", 0)
+    if not avail:
+        return                                   # no /proc/meminfo: nothing to claim
+    smallest = min(c["est_mem"] for c in CLASSES.values())
+    headroom = avail - smallest
+    if headroom > MEM_FLOOR:
+        return                                   # healthy: stay quiet
+    print("testmgr: !! THIS BOX CANNOT ADMIT ANY JOB — MemAvailable %d MB, "
+          "smallest class needs %d MB, floor is %d MB"
+          % (avail >> 20, smallest >> 20, MEM_FLOOR >> 20), flush=True)
+    print("testmgr: !! admission needs avail-est_mem > floor, i.e. %d MB > %d MB, "
+          "which is FALSE for every class%s."
+          % (headroom >> 20, MEM_FLOOR >> 20,
+             " (MemTotal %d MB — the floor is larger than the machine)"
+             % (total >> 20) if total and MEM_FLOOR > total else ""), flush=True)
+    print("testmgr: !! the run will proceed on the STARVATION path only — about "
+          "one job per %ds, indefinitely. This is not a hang and not a hardware "
+          "fault; it is the floor. See decide-t-mem-floor-policy-on-a-small-box."
+          % int(STARVE_GRACE), flush=True)
 # A lock whose heartbeat is older than this is dead, whatever its pid says: a
 # SIGKILLed run leaves the file behind, and a stale lock that blocks every
 # future run is exactly as bad as no lock at all.
@@ -3444,6 +3486,7 @@ def main():
           % (args.tier, len(run_jobs),
              " skip=%d(corpus-absent)" % nskip if nskip else "",
              mgr.hard_cap, scale, logdir), flush=True)
+    report_mem_floor()
     t0 = time.monotonic()
     rc = mgr.run()
     wall = time.monotonic() - t0
