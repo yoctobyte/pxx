@@ -3,6 +3,8 @@ track: N
 prio: 55
 type: bug
 summary: "`MessageT = TypeVar(\"MessageT\")` at module scope dies with `undefined variable (TypeVar)`: `typing` is a consumed-and-ignored import, so the names it exports that have a RUN-TIME call form — TypeVar, Generic, NewType, cast — are bound to nothing. The largest remaining language gap in the neuzelaar census once unreadable annotations stopped refusing modules."
+status: working
+owner: agent-AN
 ---
 
 # `TypeVar(...)` is an undefined variable

@@ -2219,6 +2219,31 @@ begin
     PyParseIssubclass;
     Exit;
   end;
+  { `NodeId = NewType("NodeId", str)` — typing's run-time alias constructor, and
+    the second of the typing names that are CALLED rather than read out of an
+    annotation (TypeVar is the other; it is a pylib routine because its result
+    is opaque). This one's result is NOT opaque: CPython's NewType returns a
+    callable whose __call__ is the identity, so `NodeId("abs")` is `"abs"` and
+    an annotation naming NodeId means the supertype.
+
+    Both fall out of evaluating to the SUPERTYPE itself: `x = str; x("ab")`
+    already works (a builtin type as a value), so the alias becomes the thing it
+    aliases and nothing new is modelled. The name argument is metadata — it is
+    consumed and dropped, exactly as the annotation spelling of it would be.
+    bug-n-typevar-call-is-an-undefined-variable }
+  if PyIsIdent('NewType') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    Next;                        { NewType }
+    Expect(tkLParen, '(');
+    if CurTok.Kind <> tkString then
+      Error('Nil Python: NewType''s first argument is the new type''s NAME, a string literal');
+    Next;                        { the name — metadata, dropped }
+    Expect(tkComma, ',');
+    PyParseBoolExpr;             { the SUPERTYPE, and the value of the call }
+    Expect(tkRParen, ')');
+    Exit;
+  end;
   if CurTok.Kind = tkLogNot then
   begin
     Next;

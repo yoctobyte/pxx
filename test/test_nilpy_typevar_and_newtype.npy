@@ -1,0 +1,57 @@
+# `typing` is a consumed-and-ignored import: what it exports is annotation
+# metadata, read statically and never evaluated. True for List/Optional/Dict --
+# and false for the handful of typing names that are CALLED at run time, which
+# were therefore bound to nothing and died at the call site:
+#
+#   error: undefined variable (TypeVar)
+#
+# naming the call rather than the import that dropped it. 18 of 168 neuzelaar
+# files. bug-n-typevar-call-is-an-undefined-variable
+#
+# The two have different answers because their results differ in kind:
+#
+#   TypeVar   opaque. NilPy erases generics and an annotation naming the
+#             result degrades to Any, so nothing inspects the value -- a pylib
+#             routine returning CPython's own `~T` spelling.
+#   NewType   NOT opaque: CPython's NewType returns a callable whose __call__
+#             is the identity, so `NodeId("abs")` is `"abs"` and an annotation
+#             naming NodeId means the SUPERTYPE. Both fall out of evaluating
+#             the call to the supertype itself -- `x = str; x("ab")` already
+#             works -- so the alias becomes the thing it aliases.
+
+from typing import NewType, TypeVar, Callable
+
+MessageT = TypeVar("MessageT")
+NodeId = NewType("NodeId", str)
+Count = NewType("Count", int)
+
+
+class Bus:
+    def subscribe(self, message_type: type[MessageT], handler: Callable[[MessageT], None]) -> None:
+        self.h = handler
+
+    def fire(self, v):
+        self.h(v)
+
+
+def got(v):
+    print("got", v)
+
+
+def use(i: NodeId) -> NodeId:
+    return i
+
+
+b = Bus()
+b.subscribe(int, got)
+b.fire(7)
+
+# the NewType alias is callable, and the call is the identity
+n = NodeId("abs")
+print(n, use(n), use(NodeId("x")))
+
+# ...over a non-string supertype too, and the result is that type
+print(Count(4) + 1)
+
+# the TypeVar value prints as CPython prints it
+print(MessageT)

@@ -2573,6 +2573,12 @@ test-nilpy: $(COMPILER)
 	# far from the annotation. A readable annotation must still be read.
 	./$(COMPILER) test/test_nilpy_unreadable_annotation_is_any.npy $(TESTTMP)/test_nilpy_uann26
 	$(TESTTMP)/test_nilpy_uann26 | diff -u test/test_nilpy_unreadable_annotation_is_any.expected -
+	# typing's two names that are CALLED at run time rather than read out of an
+	# annotation. TypeVar is opaque (pylib routine, CPython's `~T` spelling);
+	# NewType is not -- it evaluates to the supertype, which makes the alias
+	# callable-as-identity and usable as an annotation for free.
+	./$(COMPILER) test/test_nilpy_typevar_and_newtype.npy $(TESTTMP)/test_nilpy_tvnt26
+	$(TESTTMP)/test_nilpy_tvnt26 | diff -u test/test_nilpy_typevar_and_newtype.expected -
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
