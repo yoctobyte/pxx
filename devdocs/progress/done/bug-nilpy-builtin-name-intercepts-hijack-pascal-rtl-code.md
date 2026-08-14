@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "16 Python-builtin name intercepts in the SHARED parser are gated on `isNilPy`, which is true for the whole compilation including every PASCAL unit loaded into it. Measured biting instance: sysutils' own `Format(fmt, args)` inside Exception.CreateFmt lowered to pyformat_v in any .npy that reached sysutils, so an RTL raise came back as `unsupported format spec \"\"` instead of its message. Fixed for `format`; the other 15 are unaudited."
+status: done
+owner: agent-A
 ---
 
 # NilPy builtin-name intercepts fire inside Pascal RTL units
@@ -62,3 +64,46 @@ list stops being a thing to remember.
 `make test-nilpy` + the NilPy canaries in `--tier quick` + self-host
 byte-identical. `test_nilpy_rtl_exception_surface.npy` is the regression the
 `format` arm produced.
+
+## RESOLVED 2026-08-14 — all 17 swapped, none wanted the wider predicate
+
+Audited every name-keyed intercept in `compiler/parser.inc` and switched each
+from `isNilPy` to `NilPyUserCode`. The ticket's own guess was right: **not one
+of them has a reason to fire while a Pascal unit is being compiled**, so the arm
+list stops being a thing to remember — the predicate is now uniform and the
+question "does this one need the narrow form?" has one answer.
+
+`__name__` `__file__` `pystr_of` `len` `hex`/`bin`/`oct` `int` `exec` `input`
+`open` `float` `map` `filter` `next` `bool` `str` `round` `divmod`
+
+The one that was doing real damage beyond `format` (fixed earlier, commit
+6ed45773f) is **`pystr_of`**: the NilPy lexer desugars an f-string hole `{x}` to
+`pystr_of(x)`, and the arm rewrites the call when the argument is a `tyClass`.
+pylib is Pascal and calls `pystr_of` directly all over its own renderer, so
+those calls were being rewritten too. They now take the ordinary Pascal overload
+path, which is what a Pascal call should do.
+
+### Verified
+
+- The 18 builtins above, exercised in one `.npy` and diffed against CPython —
+  identical output including `hex/bin/oct`, `round(2.567, 2)`, `divmod(7, 2)`,
+  `map`/`filter`/`next`, and an f-string with a `:g` spec.
+- **An imported `.py` module still gets them**: `NilPyUserCode` is
+  `isNilPy and ((CurrentUnitIdx < 0) or PyExprMode)`, and `ParsePyUnit` turns
+  `PyExprMode` on for a module body. A module calling `len`/`str`/`hex` matches
+  CPython — that half is what the predicate exists to keep, and it is the half
+  a naive `CurrentUnitIdx < 0` would have broken
+  (bug-nilpy-object-reclamation-disabled-inside-py-modules, same trap).
+- `test_nilpy_rtl_exception_surface` and
+  `test_nilpy_pyexception_bare_vs_qualified` unchanged; self-host converges at
+  generation 1; `gate.sh quick` green.
+
+### Not covered, deliberately
+
+The non-name-keyed `isNilPy` uses — trailing-comma tolerance, keyword-argument
+binding, star-args, the member-access arms — were left alone. They key on
+GRAMMAR, not on an identifier a Pascal library might also declare, so they
+cannot be claimed by a name collision, which is what this ticket is about.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

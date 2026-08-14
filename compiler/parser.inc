@@ -10753,7 +10753,7 @@ begin
         CurASTNode := node;
         Exit;
       end;
-      if isNilPy and (name = '__name__') then
+      if NilPyUserCode and (name = '__name__') then
       begin
         { compiled as the main program, so __name__ is always "__main__". }
         Next;
@@ -10763,7 +10763,7 @@ begin
         CurASTNode := node; LastExprTk := tyString;
         Exit;
       end;
-      if isNilPy and (name = '__file__') then
+      if NilPyUserCode and (name = '__file__') then
       begin
         { __file__ — derived from the RESOLVED executable at run time, never
           from the source path the compiler happened to see, which would leak
@@ -10806,7 +10806,7 @@ begin
         CurASTNode := node; LastExprTk := tyAnsiString;
         Exit;
       end;
-      if isNilPy and (name = 'pystr_of') and (TokPos < TokCount) and
+      if NilPyUserCode and (name = 'pystr_of') and (TokPos < TokCount) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         { f-string hole: the LEXER desugars {x} to pystr_of(x), so the semantic
@@ -10880,7 +10880,7 @@ begin
         builtin silently (bug-nilpy-user-def-does-not-shadow-a-pylib-builtin).
         Checked here rather than inside, so the dunder rewrite below does not
         run either. }
-      if isNilPy and CaseEqual(name, 'len') and (not PyUserShadowsProc(name)) and
+      if NilPyUserCode and CaseEqual(name, 'len') and (not PyUserShadowsProc(name)) and
          (TokPos < TokCount) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -11011,7 +11011,7 @@ begin
 
         A NON-promo argument REWINDS to the ordinary Int64 overload, so native
         values keep today's code path untouched. }
-      if isNilPy and (not PyUserShadowsProc(name)) and
+      if NilPyUserCode and (not PyUserShadowsProc(name)) and
          (CaseEqual(name, 'hex') or CaseEqual(name, 'bin') or CaseEqual(name, 'oct')) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -11051,7 +11051,7 @@ begin
         { a machine-width argument: rewind, take the ordinary overload }
         TokPos := intBaseArg - 1; Next;
       end;
-      if isNilPy and (name = 'int') and (not PyUserShadowsProc(name)) then
+      if NilPyUserCode and (name = 'int') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
         { `int(s, base)` — the two-argument radix form. A separate pylib
@@ -11327,7 +11327,7 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[atDflt]);
         Exit;
       end
-      else if isNilPy and (name = 'exec') then
+      else if NilPyUserCode and (name = 'exec') then
       begin
         { exec(src, globals[, locals]) -> pyexec(src, g, l). Compiles now; the
           evaluator is feature-lib-pyexec (see the pylib stub). A missing
@@ -11359,7 +11359,7 @@ begin
         LastExprTk := tyUnknown;
         Exit;
       end
-      else if isNilPy and (name = 'input') and (FindSym(name) < 0) and
+      else if NilPyUserCode and (name = 'input') and (FindSym(name) < 0) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { input([prompt]) -> PyParseInputCall, the SHARED builder — this arm
@@ -11431,7 +11431,7 @@ begin
         LastExprTk := tyAnsiString;
         Exit;
       end
-      else if isNilPy and (name = 'open') and (not PyUserShadowsProc(name)) then
+      else if NilPyUserCode and (name = 'open') and (not PyUserShadowsProc(name)) then
       begin
         { open(path[, mode]) -> a TPyFile, whatever the mode. The no-mode form
           goes through pyopen, which is now just pyfile_open(path, 'r') —
@@ -11515,7 +11515,7 @@ begin
         unconditionally and the user's def was NEVER called — silently, on
         both sides of the def.
         bug-nilpy-a-def-named-float-or-bool-is-never-called }
-      else if isNilPy and (name = 'float') and (not PyUserShadowsProc(name)) then
+      else if NilPyUserCode and (name = 'float') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr; Expect(tkRParen, ')');
         { Dispatched on the ARGUMENT type, not by overload: a string is PARSED
@@ -11545,7 +11545,7 @@ begin
         LastExprTk := tyDouble;
         Exit;
       end
-      else if isNilPy and (name = 'map') and (TokPos < TokCount) and
+      else if NilPyUserCode and (name = 'map') and (TokPos < TokCount) and
               (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
       begin
         { `map(int, xs)` — the CONVERSION forms, which is what real code writes
@@ -11622,7 +11622,7 @@ begin
           Exit;
         end;
       end
-      else if isNilPy and (name = 'filter') and (TokPos < TokCount) and
+      else if NilPyUserCode and (name = 'filter') and (TokPos < TokCount) and
               (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
       begin
         { `filter(f, xs)` / `filter(None, xs)` (Python's own "keep the truthy
@@ -11659,7 +11659,7 @@ begin
         LastExprTk := tyClass;
         Exit;
       end
-      else if isNilPy and (name = 'next') and (TokPos < TokCount) and
+      else if NilPyUserCode and (name = 'next') and (TokPos < TokCount) and
               (Tokens[TokPos].Kind = tkLParen) and PyNextOverListAhead then
       begin
         { `next(<list>)` / `next(<list>, default)` — Python's builtin over a
@@ -11699,7 +11699,7 @@ begin
         unconditionally and the user's def was NEVER called — silently, on
         both sides of the def.
         bug-nilpy-a-def-named-float-or-bool-is-never-called }
-      else if isNilPy and (name = 'bool') and (not PyUserShadowsProc(name)) then
+      else if NilPyUserCode and (name = 'bool') and (not PyUserShadowsProc(name)) then
       begin
         { `bool(x)` is Python's TRUTHINESS, the same rule `if x:` and `not x`
           use — so it goes through PyMakeTruthy rather than resolving to pylib's
@@ -11737,7 +11737,7 @@ begin
         LastExprTk := tyBoolean;
         Exit;
       end
-      else if isNilPy and (name = 'str') and (not PyUserShadowsProc(name)) then
+      else if NilPyUserCode and (name = 'str') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
         { str() of an ARBITRARY-PRECISION int renders through the promo runtime.
@@ -11915,7 +11915,7 @@ begin
         { Python's `round(x, ndigits)` — a FLOAT rounded to that many decimals,
           a different operation from the one-argument form (which yields an
           int). songformatter writes `round(pct, 2)` when normalising scores. }
-        if isNilPy and CaseEqual(name, 'round') and (CurTok.Kind = tkComma) then
+        if NilPyUserCode and CaseEqual(name, 'round') and (CurTok.Kind = tkComma) then
         begin
           Next;
           rndArg := CurASTNode;
@@ -13822,7 +13822,7 @@ begin
       { divmod(a, b) -> (a // b, a % b), both already correct on negative
         operands via pyfloordiv_v/pyfloormod_v.
         feature-nilpy-power-operator-and-divmod }
-      if isNilPy and CaseEqual(name, 'divmod') and (procIdx < 0) and
+      if NilPyUserCode and CaseEqual(name, 'divmod') and (procIdx < 0) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
