@@ -468,3 +468,76 @@ that job:
 Suggested next step: run the whole corpus with `--strict-uses` and classify the
 failures, exactly as the warn pass was classified — the flag turns "how much
 breaks" from an estimate into a compile error you can count.
+
+## 2026-08-14 (later) — `--strict-uses` is now behaviour-preserving on the whole examples corpus
+
+Measured, not estimated: **55 example programs (`examples/**/*.pas` + `*.npy`),
+41 of which compile at all today, and every one of the 41 compiles IDENTICALLY
+with `--strict-uses` on.** The starting point of this session's measurement was
+10 new failures; three fixes took it to zero.
+
+### The three real findings, in the order they surfaced
+
+1. **Compiler-INJECTED units are ambient, and only two of them were marked.**
+   `builtin`/`builtinheap` were special-cased by NAME; but the compiler also
+   injects `pylib`/`pyeval` into every `.npy`, and `textfile`/`math`/
+   `promocore`/`softfloat`/`pxxcio`/`palpthread` conditionally. They hold the
+   runtime helpers CODEGEN emits calls to — the tk widgetset's `//` lowers to
+   pylib's `pyfloormod_i`, and tk uses only `strings`, so no source clause could
+   ever have declared it. A program that did not ask for a unit cannot be
+   leaking through it: exactly the argument that made `builtin` ambient.
+   Now marked at the injection site (`ParseUsesUnitAmbient`), one level deep —
+   what the injected unit then pulls in through its OWN clauses is an ordinary
+   edge. That was 9 of the 10 failures.
+
+2. **Two independent filters that have to COMPOSE: scope visibility and
+   builtin demotion.** `MatchProcCall` demotes a builtin-unit routine out of the
+   set when any non-builtin routine of that name exists. Under enforcement an
+   out-of-scope candidate is not an alternative — but it was still doing the
+   demoting, so the builtin was dropped, the out-of-scope one was dropped, and
+   NOTHING was left. That is how a missing `uses` came out as *"no overload of
+   FloatToStr matches these arguments"* with an EMPTY candidate list rather than
+   as an undefined identifier. The demote scan now requires `DeclVisible` too.
+
+3. **One genuine RTL leak, found by the enforcement rather than by the warn
+   pass**: pylib's `{x:g}` / `{x:s}` format specs call `FloatToStr`, which lives
+   in `builtin` — and pylib named neither. It compiled only because SYSUTILS'
+   copy happened to be in scope, which is precisely the dependency pylib's own
+   comments say it must never have. `uses builtin` added; that is the whole fix,
+   and it is the shape the ticket predicted ("either an explicit `uses` or
+   nothing at all").
+
+### The warn instrument's numbers are NOISE — do not size the job with them
+
+Re-measured over the same corpus with `--warn-uses-leak`: 27 pairs / 8741 hits,
+whose top rows are `platform -> pylib [class] TPyDict` (2948) and
+`sysutils -> math [routine] e` (138). `platform` does not mention `TPyDict`
+anywhere and sysutils' `e` is a LOCAL. Those are **speculative lookups** —
+`FindUClass`/`FindProc` called to ask "is this identifier a class/routine?",
+answered yes, and the answer discarded. The warn fires on the probe, not on a
+binding.
+
+That is the third artifact class after `builtin`/`builtinheap` and
+`TObject`/`TGuid`, and it is the one that cannot be filtered by name. So the
+"35 pairs" figure — and everything sized from it — was measuring the wrong
+thing in the same way the "hundreds of files" figure was.
+
+**`--strict-uses` is the honest instrument**: it changes resolution, so it
+produces a compile error exactly where a name really binds through a unit it
+should not see. Count failures, not warnings. The warn pass keeps its use as a
+cheap "where would I look" pointer and nothing more.
+
+(The instrument was also extended this session: the program scope is no longer
+excluded — every warn site was gated on `CurrentUnitIdx >= 0`, so a leak into
+the MAIN PROGRAM, this ticket's own headline repro, was never counted — and
+`MatchEligBase` rejections are reported as `cand`, closing the "FindProc is not
+the lookup a call site resolves through" gap the measurement step left open.)
+
+### What is left
+
+Flip `StrictUses` to default-on. The remaining unknown is the `test/` corpus
+(923 `.pas` + the `.npy` suite), which is a full-corpus compile and therefore
+Track T's kind of run, not a dev-loop one. Sequence: sweep `test/**` under
+`--strict-uses`, classify by the three shapes above (ambient injection missed /
+filters not composing / genuine missing `uses`), fix, then flip the default and
+retire the flag.
