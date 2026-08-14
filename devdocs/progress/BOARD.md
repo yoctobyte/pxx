@@ -8,18 +8,17 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-a-one-exception-class-in-a-shared-unit | A | 75 | feature | SUPERSEDED BY THE SIBLING DESIGN AT THE END — no hook needed. Also FIXES bug-nilpy-exception-repr-and-type-name-say-pyexception by construction. One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work. | — |
+_none_
 
-## unfinished (7)
+## unfinished (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
+| feature-a-one-exception-class-in-a-shared-unit | A | 75 | feature | VARIANT C BUILT AND GREEN on wip/exception-sibling-design (gate.sh quick, self-host, both uses orders identical). sysutils and pylib each declare their own class named Exception as SIBLINGS under a shared ExceptionBase in compiler/builtin/exceptions.pas -- no hook, and bug-nilpy-exception-repr-and-type-name-say-pyexception is fixed by construction. The parked blocker (qualified class references resolving flat) is CLEARED: the design was half built -- sysutils had never been re-rooted -- plus two more flat lookups (idx recomputed after ctorCi, and named constructors like CreateFmt taking a path with no qualifier). NOT MERGED: needs a re-pin in the same landing (sysutils now uses a builtin unit the pinned compiler lacks) and one user decision on bare-name collisions. | decide-merge-variant-c-with-bare-name-collision |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -35,7 +34,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -77,6 +76,8 @@ _none_
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
+| bug-pascal-ansistring-literal-to-variant-param-passes-garbage | A | 60 | bug | Passing an AnsiString LITERAL to a `const m: Variant` parameter passes the raw string handle where a Variant record is expected, so the callee reads garbage. Assigning the literal to a Variant local first works. Silent wrong value, no diagnostic. Found calling pylib's `Exception.Create(const m: Variant)` from Pascal. | — |
+| bug-pascal-uses-clause-duplicate-name-resolves-first-not-last | P | 55 | bug | When two used units export the same identifier, pxx resolves it to the FIRST unit named; FPC resolves it to the LAST. Measured against the FPC oracle 2026-08-14. Backwards from the reference implementation, silent, and it applies to every duplicated name — types, classes, routines, constants — not just the exception case that exposed it. | — |
 | bug-pyeval-three-param-host-method-unsupported | N | 35 | bug | pyeval refuses a host method with three user parameters — `pyeval: int-return arity 3 unsupported for put` — with all-positional args, so ordinary reflected calls of arity 3 cannot be made from inside exec() | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -95,6 +96,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
+| decide-merge-variant-c-with-bare-name-collision | U | 75 | decide | Variant C (sibling Exception classes) is BUILT and GREEN on wip/exception-sibling-design. Merging it makes both sysutils and pylib export a class named `Exception`, and pxx resolves such a collision to the FIRST unit named where FPC resolves it to the LAST. Ship now and accept a backwards bare-name answer for programs using both units, ship behind the parity fix, or change the tests' contract. Recommendation inside. | — |
 | decide-nilpy-builtin-vs-pascal-unit-name-resolution | U | 45 | decide | Settled by the governing rule (user, 2026-08-13): the DEFAULT follows the reference implementation per frontend — CPython for .npy, FPC for .pas — deviations behind --strict-*. So shadowing is ALLOWED and PREFERRED, `reserved` needs the bar 'principally unsolvable', and the tier is a compatibility statement rather than a convenience. What is left to decide: the marker's spelling, whether `print` stops being a token, and whether a --strict-python peer is wanted. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-eval-at-runtime | U | 35 | decide | Does NilPy support `eval(s)` / `exec(s)` over a runtime string at all? A compiled dialect either ships a parser in every binary or it does not — this is a design call, not work, and it has sat as a to-do row on a bug ticket for three sessions. | — |
@@ -455,10 +457,12 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 80] [T] task-t-strict-uses-corpus-sweep (unblocks 1)
+- [p 75] [U] decide-merge-variant-c-with-bare-name-collision (unblocks 1)
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [N] bug-nilpy-exception-repr-and-type-name-say-pyexception
+- [p 60] [A] bug-pascal-ansistring-literal-to-variant-param-passes-garbage
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
@@ -470,6 +474,7 @@ _none_
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
+- [p 55] [P] bug-pascal-uses-clause-duplicate-name-resolves-first-not-last
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [T] bug-t-testmgr-pin-escalates-on-a-stale-local-tstate
 - [p 55] [A] chore-makefile-testtmp-parameterize
@@ -663,6 +668,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-n-str-encode-and-bytes-decode-ignore-the-encoding
+- **1** — decide-merge-variant-c-with-bare-name-collision
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal

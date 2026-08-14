@@ -2,9 +2,9 @@
 track: A
 prio: 75
 type: feature
-blocked-by: []
-summary: "SUPERSEDED BY THE SIBLING DESIGN AT THE END — no hook needed. Also FIXES bug-nilpy-exception-repr-and-type-name-say-pyexception by construction. One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work."
-status: working
+blocked-by: [decide-merge-variant-c-with-bare-name-collision]
+summary: "VARIANT C BUILT AND GREEN on wip/exception-sibling-design (gate.sh quick, self-host, both uses orders identical). sysutils and pylib each declare their own class named Exception as SIBLINGS under a shared ExceptionBase in compiler/builtin/exceptions.pas -- no hook, and bug-nilpy-exception-repr-and-type-name-say-pyexception is fixed by construction. The parked blocker (qualified class references resolving flat) is CLEARED: the design was half built -- sysutils had never been re-rooted -- plus two more flat lookups (idx recomputed after ctorCi, and named constructors like CreateFmt taking a path with no qualifier). NOT MERGED: needs a re-pin in the same landing (sysutils now uses a builtin unit the pinned compiler lacks) and one user decision on bare-name collisions."
+status: unfinished
 owner: agent-an
 ---
 
@@ -577,3 +577,123 @@ property site, or the property's own accessor binding.
 index at the `FindUProp` call that resolves `se.Message`, and compare with 86.
 That is the fifth probe, and on this ticket's record the probe will be right
 and the reasoning will not.
+
+### FIFTH session — the blocker is CLEARED. Ready to merge, pending one decision.
+
+Branch `wip/exception-sibling-design`, rebased on master, `gate.sh quick`
+GREEN, self-host converges. Master still untouched.
+
+**The previous entry's conclusion was wrong, and so was its instruction.** It
+said the residue was property/method lookup and told the next session to probe
+`FindUProp`. The caveat below it was right to doubt that. Two things were
+actually missing, and the first one invalidates every cross-binding measurement
+this ticket has recorded.
+
+#### 1. The design was only HALF BUILT
+
+**Work item 3 of this ticket's own Work list — "sysutils: uses exceptions, its
+`Exception` declaration comes out" — had never been done.** `lib/rtl/sysutils.pas`
+still read `Exception = class` with its own `msg`, `FHelpContext`, `Message` and
+`FMessage`. It was one `grep` away and four probes went past it.
+
+So every "qualified reference gives garbage" measurement was reading **two
+unrelated layouts**, not a resolution failure. That is why the garbage moved
+every time a probe did, and why "read `.msg` and it works, read `.Message` and
+it does not" looked like a property-lookup bug: it was two classes with
+different fields at different offsets, and which one you hit depended on the
+shape you wrote.
+
+Fixed: sysutils' `Exception` now descends from `ExceptionBase` and declares
+none of those members. **Control measured FIRST, before touching the parser** —
+`uses sysutils` alone: `msg=[su hi] Message=[su hi] cls=[Exception]` and
+`CreateFmt('[%5d]',[3])` = `[    3]`. The conversion is sound on its own.
+
+#### 2. TWO more flat lookups, both found by probe
+
+With one layout, the remaining wrongness was pure resolution, and both sites
+were flat:
+
+- **`compiler/parser.inc`, the `.Create` fast path.** It resolves `ctorCi`
+  honouring the qualifier — the fix from an earlier session, correct as
+  written — and then **three lines later** does
+  `idx := REC_UCLASS_BASE + FindUClass(name)`, flat, discarding it. `idx` is
+  what every consumer below uses: `RecSize`, the ctor overload match, the
+  emitted class. Two lookups for one question and only one of them had the fix.
+- **A NAMED constructor never reaches that path at all.** It matches only the
+  literal spelling `Create`, so `sysutils.Exception.CreateFmt(...)` fell through
+  to `ParseLValueAST`'s class-member arm, which resolves flat and has no
+  qualifier in scope. Added a qualified ctor arm in `ParseFactorCore` where
+  `qUnit` IS in scope, handing off to `BuildMetaclassNew` — the same builder the
+  unqualified arm uses, so the two shapes differ in the LOOKUP only, never in
+  the construction. Gated on `qUnit >= 0`: with no qualifier this path knows
+  nothing the existing one does not.
+
+Both were found by a two-line `PXXDBG a.qual` probe, not by reading:
+
+```
+STATICM name=Exception mem=CreateFmt qunit=292 flat=26     <- qualifier available, lookup flat
+MEMBER  field=Exception flat=26                            <- the arm that actually built it
+```
+
+#### Result — measured, both uses orders, IDENTICAL
+
+```
+su hi
+caught: "abc" is an invalid integer
+[    3]
+py hi
+Exception Exception
+end
+```
+
+`[    3]` is the load-bearing line: it proves the qualifier reached the right
+class's **method**, not merely the right class. Class resolution and method
+resolution were separate flat lookups, and only fixing both makes it visible.
+
+Also green: `test_nilpy_rtl_exception_surface`,
+`test_nilpy_pyexception_bare_vs_qualified`, `test_nilpy_exception_args`,
+`test_nilpy_exception_non_string_argument`.
+
+`test_uses_order_pylib_exception_a/_b` rewritten to exactly what this ticket
+prescribed — qualify both names, assert each unit's surface works in either
+order — and their outputs are byte-identical to each other.
+
+#### What this hunt cost, recorded because the pattern is the lesson
+
+| attempt | conclusion at the time | actually |
+| --- | --- | --- |
+| ctorCi scoping | "not on the path" | correct |
+| ParseTypeKind scoping | "not on the path" | correct |
+| index-space mismatch | "the spaces disagree" | they agree |
+| probe 4 | "class resolution SOLVED, property lookup is the residue" | class resolution was solved; the residue was **two layouts**, because half the design was unbuilt |
+| this session | — | grep the design's own Work list before probing anything |
+
+Five reasoned conclusions, all wrong. The decisive move was not a fifth probe
+into the parser — it was reading `lib/rtl/sysutils.pas` and noticing the ticket
+had a numbered work item nobody had done. **Check that the thing you are
+debugging was actually built before you debug it.**
+
+#### TWO NEW TICKETS filed from this
+
+- [[bug-pascal-uses-clause-duplicate-name-resolves-first-not-last]] — measured
+  against the FPC oracle: FPC resolves a uses-clause name collision to the
+  **LAST** unit named, pxx to the first. Backwards from the reference
+  implementation, silent, and it applies to every duplicated name, not just
+  classes. This is why the rewritten tests no longer assert the BARE name.
+- [[bug-pascal-ansistring-literal-to-variant-param-passes-garbage]] — an
+  AnsiString LITERAL passed to a `const m: Variant` parameter arrives as the
+  raw handle; through a Variant local it is fine. Independent of this design,
+  found because pylib's ctor takes a Variant.
+
+#### NOT MERGED — two things the user owns
+
+1. **A re-pin is REQUIRED as part of the merge, not after it.** `sysutils` now
+   `uses exceptions`, a `compiler/builtin/` unit the PINNED compiler does not
+   have. Track B builds `lib/**` with `$(PXX_STABLE)`, so the merge commit and
+   `stabilize-fast && pin` must land together or every B build breaks on an
+   unknown unit. `gate.sh quick` cannot see that.
+2. **Bare `Exception` under `uses pylib, sysutils` changes meaning**, and until
+   the last-wins ticket lands it resolves to pylib's class where FPC says
+   sysutils'. Filed as [[decide-merge-variant-c-with-bare-name-collision]].
+
+Everything else is done and measured. Parked on the decision, not on effort.
