@@ -248,15 +248,23 @@ def report(reg, host):
                      % (slug, sub, (", track %s" % track) if track else "", flag))
         L.append("")
         if done:
-            L.append("**Start here, not with the commit above.** This test was "
-                     "written FOR a ticket that is already resolved, so the most "
-                     "likely story is that the fix did not hold. Then the commit "
-                     "in range is the *trigger*, not the cause — routing it to "
-                     "that commit's lane reverts innocent work and leaves the "
-                     "real defect armed. **Re-run the cited ticket's own repro.** "
-                     "If it fails, reopen that ticket in its own lane (%s) rather "
-                     "than filing here."
+            L.append("**Two hypotheses, and this evidence does not rank them for "
+                     "you.** Either that resolved fix did not hold — in which "
+                     "case the commit in range is the *trigger*, and routing it "
+                     "to that commit's lane reverts innocent work while leaving "
+                     "the real defect armed — or the range genuinely broke "
+                     "something new and the citation is incidental. **Cheapest "
+                     "discriminator: re-run the cited ticket's own repro.** If it "
+                     "fails, reopen that ticket in its lane (%s). If it passes, "
+                     "the range is your answer."
                      % (done[0][2] or "see the ticket"))
+            L.append("")
+            L.append("<sub>Both outcomes have happened. 2026-08-13, "
+                     "test_uses_order_pylib_exception_a: the citation was right "
+                     "and the lone `feat(N)` in range was only the trigger. "
+                     "2026-08-14, test_managed_block_meta: the citation was a red "
+                     "herring and the `perf(A)` in range was the cause. Do not "
+                     "let this section talk you out of reading the range.</sub>")
         else:
             L.append("The cited ticket(s) are still open, so this red is likely "
                      "part of that same work rather than a separate regression.")
