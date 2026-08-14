@@ -299,3 +299,4 @@
 2026-08-14T13:17:19Z  v299  af510b54c4c92f8c4cfcda2e4d2dd102bb66ce4b2cb4893b7caba799e92afe92  aca188198514b625a0c503f1718c8c262bb27604  perf(A): append in place for `s := s + x` — Pascal accumulation goes linear
 2026-08-14T14:41:57Z  v300  35ec01e1758e520944290fe5aec4ed17ff150d9830ebb7986a6b19e88f3690b2  d21b19feb87f9524c34e5f3de89d3b44ae688321  fix(A): append maintains the ascii kind flag instead of dropping it
 2026-08-14T17:31:19Z  v301  c8b9dd35fee2715fd1b87fb91c360739cbaf2ec5544d54ff5fa9e9f9bd296571  7e089031c81f9282f36e677f5ecaf26f43d97a0e  feat(A+N): variant C — sibling Exception classes under a shared ExceptionBase
+2026-08-14T18:57:36Z  v302  481fb92f6ea4794fc247e3c02caca581b3059d80959f8cd8aa583735ceb35c4a  3b881c52bf7060ffa3967765cf6bb7c4e1db0d87  fix(N): __name__ read off a CLASS, on both routes
