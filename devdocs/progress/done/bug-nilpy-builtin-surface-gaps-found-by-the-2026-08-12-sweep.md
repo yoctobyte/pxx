@@ -353,4 +353,4 @@ answers the largest KEY, while `for k in d` / `sorted(d)` / `list(d)` all agree
 with CPython. An inconsistency inside NilPy rather than a deliberate divergence.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 09bf3b648.
