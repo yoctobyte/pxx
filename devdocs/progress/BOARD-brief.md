@@ -5,15 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:9 blocked:4 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1763 rejected:35`
+`unfinished:9 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1764 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
-
-## urgent (1) — jump the queue
-
-- `bug-a-threadsafe-segfaults-on-every-nilpy-program` [A]
 
 ## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
@@ -36,7 +32,6 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 203, ranked
 
-- `[p 70] [A]` bug-a-threadsafe-segfaults-on-every-nilpy-program
 - `[p 75] [U]` decide-merge-variant-c-with-bare-name-collision (unblocks 2)
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
@@ -52,6 +47,7 @@ _none — no lane is locked._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [C]` bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` chore-makefile-testtmp-parameterize
 - `[p 55] [U]` decide-reprice-nilpy-ast-typing-module-scope
