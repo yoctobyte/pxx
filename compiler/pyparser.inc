@@ -15356,6 +15356,53 @@ begin
   PyParseFallbackImportTry := body;
 end;
 
+function PyBridgeRootCi: Integer;
+{ sysutils' Pascal `Exception` — the class a bare NilPy `except Exception:`
+  BRIDGES to alongside pylib's PyException — or -1 when sysutils is not in this
+  compilation at all.
+
+  WHY THIS CHECKS ANYTHING. A tuple handler shares ONE binder symbol across its
+  arms, typed as the FIRST listed class (PyParseTry: `the first listed class`).
+  Inside the Python tree that is harmless — every arm descends from PyException,
+  so a common member sits at a common offset by construction. The bridge is the
+  one handler in the language whose arms come from two UNRELATED hierarchies, so
+  on the sysutils arm `e` is typed PyException and points at a sysutils object,
+  and `e.args` / `e.Message` read pylib's offsets against the other class's
+  storage.
+
+  The two classes agreed member-for-member when they were one row deliberately
+  shared (ClassNameIsDeliberatelyShared). They are independent now, which is the
+  whole point of the rename — so nothing keeps them agreeing except this check,
+  and the failure it prevents is the expensive kind: not a crash, a plausible
+  wrong string read from the wrong offset, in an exception handler, where nobody
+  is looking.
+
+  Narrow on purpose: `msg` is the ONLY member the bridge actually depends on
+  (Message/FMessage are properties over it, and `print(e)` reads the field
+  directly through a frontend-synthesised access). Checking the whole surface
+  would refuse divergence that costs nothing.
+  decide-pylib-exception-vs-sysutils-exception, bug-pascal-uses-is-transitive }
+var bridgeCi, pyCi, pf, bf: Integer;
+begin
+  PyBridgeRootCi := -1;
+  bridgeCi := FindUClass('Exception');
+  if bridgeCi < 0 then Exit;
+  pyCi := FindUClass('PyException');
+  if pyCi < 0 then Exit;
+  pf := FindUField(pyCi, 'msg');
+  bf := FindUField(bridgeCi, 'msg');
+  if (pf < 0) or (bf < 0) or (UFldOff_[pf] <> UFldOff_[bf]) or
+     (UFldTk[pf] <> UFldTk[bf]) then
+    Error('Nil Python: a bare `except Exception:` bridges pylib''s PyException '
+      + 'and sysutils'' Exception, and the two no longer share their message '
+      + 'field. The handler binds ONE variable across both arms, so a caught '
+      + 'sysutils exception would be read at pylib''s offsets and hand back a '
+      + 'wrong message instead of failing. Keep `msg` as the first field of '
+      + 'both classes, same type — that is the only member the bridge depends '
+      + 'on (decide-pylib-exception-vs-sysutils-exception)');
+  PyBridgeRootCi := bridgeCi;
+end;
+
 function PyParseTry: Integer;
 var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Integer;
     actionSeq, handlerVar, ci, recId: Integer;
@@ -15423,7 +15470,7 @@ begin
             which is what makes the two distinguishable at all. }
           if CaseEqual(className, 'PyException') then
           begin
-            bridgeCi := FindUClass('Exception');
+            bridgeCi := PyBridgeRootCi;
             if (bridgeCi >= 0) and (nExc <= 15) then
             begin excRecs[nExc] := REC_UCLASS_BASE + bridgeCi; Inc(nExc); end;
           end;
@@ -15463,7 +15510,7 @@ begin
             which is what makes the two distinguishable at all. }
         if CaseEqual(className, 'PyException') then
         begin
-          bridgeCi := FindUClass('Exception');
+          bridgeCi := PyBridgeRootCi;
           if bridgeCi >= 0 then
           begin excRecs[nExc] := REC_UCLASS_BASE + bridgeCi; Inc(nExc); end;
         end;
