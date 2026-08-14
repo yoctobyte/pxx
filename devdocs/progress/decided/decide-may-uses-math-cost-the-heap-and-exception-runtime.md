@@ -4,6 +4,7 @@ prio: 30
 type: decide
 blocked-by: []
 summary: "Making Floor/Ceil raise EInvalidOp like FPC needs `uses sysutils` in math's implementation — measured, that is the ONLY way to raise anything, since Exception is not visible otherwise. That makes every `uses math` program require the heap + exception runtime: test/test_math.pas stops compiling today. Fork: pay it (and fix the prescan in A), saturate silently, or leave the wrong values. Blocks bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises."
+status: decided
 ---
 
 # May `uses math` cost the heap + exception runtime?
@@ -84,3 +85,80 @@ the honest choice.
   where each backend gives a *different* wrong answer.
 - [[bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes]] — fell out
   of that sweep; unrelated to floats.
+
+## DECIDED 2026-08-14 by the user — our way by default, FPC parity behind a flag
+
+> *"We do it our way unless strict-fpc is set."*
+
+**Default: option 2 — saturate** to `High`/`Low` of the return type. No
+sysutils, no exception runtime, nothing stops compiling, and the absurd `0`
+goes away. **FPC's raise moves behind an opt-in strict flag.**
+
+This is the house pattern, not a special case: `EnableStrictFpc`'s own docstring
+says *"All OPT-IN — the PXX dialect stays deliberately lax by default."*
+
+### Three measurements that decided it
+
+**1. The cost is not small.** This ticket's recommendation said *"the runtime
+cost is measured and small"*. Measured 2026-08-14 on the actual program shape:
+
+| program | code | bss | procs |
+|---|---|---|---|
+| bare | 52 KB | 9.5 KB | 108 |
+| `uses math` | 123 KB | 9.5 KB | 295 |
+| `uses math, sysutils` | **251 KB** | **42.7 KB** | 637 |
+
+Pulling sysutils roughly **doubles the code and quadruples bss**. On ESP32,
+where SRAM is a few hundred KB, that is decisive — and an embedded application
+should not abort on a math edge case in the first place.
+
+**2. FPC's raising is a SOFTWARE policy, not hardware.** Same x86-64 machine,
+same program:
+
+| | `1/0` | `0/0` | exit |
+|---|---|---|---|
+| pxx | `Inf` | `Nan` | 0 |
+| FPC | — | — | **Runtime error 208** |
+
+IEEE-754 *flags* rather than traps; FPC deliberately **unmasks** FP exceptions.
+Intel does not trap by default either — nor do ARM, RISC-V or Xtensa. So "FPC
+parity" here means adopting one runtime's choice and paying for it on every
+target, including chips where nothing would ever trap.
+
+**3. It would be an island.** pxx already diverges from FPC on the much larger
+question of whether FP errors trap at all. Making `Floor` alone raise is
+inconsistent with our own established behaviour.
+
+### TWO flags, not one — the costs differ by orders of magnitude
+
+- **`Floor`/`Ceil` raising `EInvalidOp`** — needs sysutils and the exception
+  runtime. That is the +127 KB / +33 KB above.
+- **FP div-by-zero → runtime error 208** — just unmasks the FPU control word.
+  Nearly free, and needs **no exception machinery at all**: a runtime error is
+  not an exception, which is Pascal's own behaviour when exceptions are absent.
+
+Lumping them makes the nearly-free one carry the expensive one's baggage.
+
+### Umbrella enrolment is a SEPARATE call
+
+`--strict-fpc` is documented as *"proven to compile the real FPC corpora — fgl,
+Synapse, fpjson 203/203"*. Adding a member that drags sysutils into `math`
+changes what the umbrella costs for all of them, so enrolment must be decided
+with those corpora re-checked, not automatically. **There is precedent for
+saying no:** `StrictOverload` is deliberately excluded and kept standalone.
+
+That exclusion may itself become unnecessary — see
+[[feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit]], which
+scopes strict flags to external code so our own RTL is never re-judged.
+
+### Consequences
+
+- Unblocks [[bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises]]:
+  saturation is the fix, the raise is the flag.
+- Heap-free `uses math` is kept **deliberately** rather than by accident, which
+  this ticket correctly identified as the real question.
+- `devdocs/dev/math-implemented-twice.md` should record that pxx follows IEEE
+  masked semantics by design, so this stops reading as an oversight.
+
+## Log
+- 2026-08-14 — decided, commit PENDING-COMMIT.
