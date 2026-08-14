@@ -257,6 +257,20 @@ type
     function GetObject(Index: Integer): TObject; virtual; abstract;
     procedure Put(Index: Integer; const S: string); virtual; abstract;
     procedure PutObject(Index: Integer; AObject: TObject); virtual; abstract;
+    { THE one place a string comparison is decided, for every lookup on this
+      class and its descendants — IndexOf, IndexOfName, Values, and (in
+      TStringList) Find, Sort and the sorted Add. Virtual so TStringList can
+      make it follow CaseSensitive; case-INSENSITIVE here, which is FPC's
+      default for a bare TStrings.
+
+      It lives on TStrings and not on TStringList because it was on TStringList,
+      and the lookups that could not reach it grew their own comparisons instead
+      — three mechanisms for one concept, disagreeing in BOTH directions:
+      IndexOf compared with `=` and so stayed case-sensitive when the flag said
+      otherwise, while IndexOfName hardcoded SameText and stayed
+      case-insensitive when the flag said otherwise. Only Find/Sort were right.
+      ([[bug-b-tstringlist-lookups-use-three-different-comparisons]]) }
+    function CompareStrings(const S1, S2: string): Integer; virtual;
   public
     function Add(const S: string): Integer; virtual;
     function AddObject(const S: string; AObject: TObject): Integer; virtual;
@@ -356,11 +370,11 @@ type
     function GetObject(Index: Integer): TObject; override;
     procedure Put(Index: Integer; const S: string); override;
     procedure PutObject(Index: Integer; AObject: TObject); override;
-    { The one place ordering is decided, so Sort, Find, IndexOf and the sorted
-      Add can never disagree about it. FPC compares case-INSENSITIVELY unless
-      CaseSensitive is set, which is why `Sort` on (Banana, apple, Cherry)
-      yields apple, Banana, Cherry and not the ASCII order. }
-    function CompareStrings(const S1, S2: string): Integer; virtual;
+    { Follows CaseSensitive. FPC compares case-INSENSITIVELY unless it is set,
+      which is why `Sort` on (Banana, apple, Cherry) yields apple, Banana,
+      Cherry and not the ASCII order. Overriding TStrings' virtual is what makes
+      the INHERITED lookups (IndexOf, IndexOfName, Values) follow the flag too. }
+    function CompareStrings(const S1, S2: string): Integer; override;
   public
     constructor Create;
     procedure Clear; override;
@@ -805,12 +819,22 @@ begin
   PutObject(Result, AObject);
 end;
 
+{ Through CompareStrings, not `=`: with a plain `=` this ignored TStringList's
+  CaseSensitive entirely and answered -1 for a string that was present under a
+  different case — where FPC, whose default is case-insensitive, finds it. }
 function TStrings.IndexOf(const S: string): Integer;
 var i: Integer;
 begin
   for i := 0 to GetCount - 1 do
-    if Get(i) = S then begin Result := i; Exit; end;
+    if CompareStrings(Get(i), S) = 0 then begin Result := i; Exit; end;
   Result := -1;
+end;
+
+{ TStrings' own comparison: case-insensitive, FPC's default. TStringList
+  overrides this to follow CaseSensitive. }
+function TStrings.CompareStrings(const S1, S2: string): Integer;
+begin
+  Result := CompareText(S1, S2);
 end;
 
 { The separator is the PLATFORM one (LineEnding: LF here, and a
@@ -1044,7 +1068,7 @@ begin
   begin
     s := Get(i);
     p := Pos(NameValueSeparator, s);
-    if (p > 0) and SameText(Copy(s, 1, p - 1), Name) then
+    if (p > 0) and (CompareStrings(Copy(s, 1, p - 1), Name) = 0) then
     begin
       IndexOfName := i;
       Exit;
