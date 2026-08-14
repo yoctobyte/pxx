@@ -85,4 +85,4 @@ this RTL at all; only `StrToTime` does. See
 [[feature-lib-sysutils-strtodate-and-strtodatetime]].
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit e95f54ee7.
