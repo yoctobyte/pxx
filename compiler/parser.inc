@@ -32940,6 +32940,10 @@ begin
     dummyNames[4] := 'isCompare'; dummyTypes[4] := tyNativeInt;
     i := RegisterProc('PXXVarBinOp', True, tyInt64, 5, dummyNames, dummyTypes);
 
+    dummyNames[0] := 'dest';      dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'right';     dummyTypes[1] := tyPointer;
+    i := RegisterProc('PXXVarStrAppend', True, tyInt64, 2, dummyNames, dummyTypes);
+
     dummyNames[0] := 'v';         dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXVarClear', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXVarRetain', False, tyPointer, 1, dummyNames, dummyTypes);

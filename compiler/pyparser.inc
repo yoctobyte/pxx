@@ -28511,6 +28511,9 @@ begin
   dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;
   dummyNames[2] := 'lenB';    dummyTypes[2] := tyNativeInt;
   i := RegisterProc('PXXStrAppend', False, tyPointer, 3, dummyNames, dummyTypes);
+  dummyNames[0] := 'dest';    dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'right';   dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXVarStrAppend', True, tyInt64, 2, dummyNames, dummyTypes);
   dummyNames[0] := 'path';  dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
   CurrentUnitIdx := savedUnitIdx;

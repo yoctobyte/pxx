@@ -917,6 +917,27 @@ begin
     'ret'
   ]);
 
+  { rdi/dest variant slot, rsi/right variant slot -> rax = 1 if appended.
+    Shim → PXXVarStrAppend(dest, right). Answers 0 for anything that is not
+    string-into-string or char-into-string, and the caller then runs the
+    ordinary PXXVarBinOp path — so this adds a fast case and changes no
+    semantics. Locking as for the concat shim. }
+  VarStrAppendAddr := CodeLen;
+  EmitAsmX64([
+    'push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi',
+    'push r8', 'push r9', 'push r10', 'push r11'
+  ]);
+  EmitAcquireHeapLock;
+  pConcatNil := FindProc('PXXVarStrAppend');
+  if pConcatNil < 0 then Error('compiler error: PXXVarStrAppend helper not found in builtin unit');
+  EmitCallProc(pConcatNil);
+  EmitReleaseHeapLock;
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx',
+    'ret'
+  ]);
+
   { Shim → PXXStrLoadFile(path). Caller passes the path data pointer in rdi
     (param 0). Save scratch, take the heap lock for the inner PXXAlloc, call. }
   AnsiStrLoadFileAddr := CodeLen;
@@ -1190,6 +1211,34 @@ begin
   rhsTk := IntToTypeKind(IRTk[IRB[valueNode]]);
   IRIsSelfStrAppend := (rhsTk = tyAnsiString) or (rhsTk = tyString) or
                        (rhsTk = tyChar);
+end;
+
+{ The variant twin of IRIsSelfStrAppend: a store of `v + x` into the very slot
+  `v` names. This is the shape Nil-Python actually produces — a loop-carried
+  `s` infers tyVariant, so `s = s + c` never reaches the tyAnsiString store
+  above and paid a whole-accumulation copy per iteration.
+
+  Both addresses must be a plain IR_LEA of the SAME symbol: that makes them
+  side-effect free, so the fallback may re-emit them, and it is what proves the
+  destination and the left operand are one slot rather than two that happen to
+  hold equal values.
+
+  No ScratchSafeSubtree guard is needed here, unlike the typed case: IR_VAR_BINOP
+  takes two ADDRESSES of already-populated slots, so the general path reads the
+  destination after the right operand has been evaluated too. The append keeps
+  that order rather than changing it. }
+function IRIsSelfVarStrAppend(node: Integer): Boolean;
+var binop: Integer;
+begin
+  IRIsSelfVarStrAppend := False;
+  binop := IRB[node];
+  if binop < 0 then Exit;
+  if IRKind[binop] <> IR_VAR_BINOP then Exit;
+  if IntToTokenKind(IRC[binop]) <> tkPlus then Exit;
+  if IntToTypeKind(IRTk[binop]) <> tyVariant then Exit;
+  if IRKind[IRA[node]] <> IR_LEA then Exit;
+  if IRKind[IRA[binop]] <> IR_LEA then Exit;
+  IRIsSelfVarStrAppend := IRA[IRA[node]] = IRA[IRA[binop]];
 end;
 
 { Emit `s := s + rhs` as an in-place append. Leaves the slot owning whatever
@@ -2420,7 +2469,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx, lastOrd: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
-    pUnsNeg, pUnsDone: Integer;
+    pUnsNeg, pUnsDone, pAppendDone: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
@@ -5814,6 +5863,23 @@ begin
         tk := IntToTypeKind(IRC[node]);
         if tk = tyVariant then
         begin
+          pAppendDone := -1;
+          if IRIsSelfVarStrAppend(node) then
+          begin
+            { `v := v + x` on the same slot: try the in-place append first. It
+              answers 0 for anything that is not a string append, and then the
+              general path below runs exactly as it always did. }
+            IREmitNode(IRB[IRB[node]]);          { rax = right slot addr }
+            EmitB($50);                          { push right }
+            IREmitNode(IRA[node]);               { rax = dest slot addr }
+            EmitB($48); EmitB($89); EmitB($C7);  { mov rdi, rax }
+            EmitB($5E);                          { pop rsi }
+            IREmitCodeCall(VarStrAppendAddr);
+            EmitB($48); EmitB($85); EmitB($C0);  { test rax, rax }
+            { rel32: the skipped block is a call sequence plus retain/clear and
+              comfortably outruns a rel8 displacement. }
+            EmitB($0F); EmitB($85); pAppendDone := CodeLen; EmitI32(0); { jnz done }
+          end;
           { ARC-correct 16-byte variant-to-variant copy. Retain before release
             makes self-assignment safe. }
           IREmitNode(IRB[node]);                 { rax = src addr }
@@ -5825,6 +5891,8 @@ begin
           EmitB($5E);                            { pop rsi }
           EmitB($48); EmitB($C7); EmitB($C1); EmitI32(16); { mov rcx, 16 }
           EmitB($F3); EmitB($A4);                { rep movsb }
+          if pAppendDone >= 0 then
+            Patch32(pAppendDone, CodeLen - (pAppendDone + 4));
         end
         else
         begin

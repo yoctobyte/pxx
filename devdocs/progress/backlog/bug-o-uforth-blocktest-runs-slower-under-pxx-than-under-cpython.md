@@ -351,3 +351,86 @@ It needs the CALLER's intent — an IR-level append when the destination IS the
 left operand — plus spare capacity in the block so the append is amortised O(1).
 That is Track A codegen work sharing ground with the SetLength-no-spare-capacity
 finding, and the two should be sized together.
+
+## 2026-08-14 — CAUSE B FIXED, in two halves. uforth 2.80x -> 2.28x.
+
+The scoping note above said the fix needs "the CALLER's intent — an IR-level
+append when the destination IS the left operand — plus spare capacity in the
+block". That is what landed.
+
+### The runtime: `PXXStrAppend(strSlot, srcB, lenB)`
+
+Takes the destination SLOT, which is precisely what `PXXStrConcat(lenA, srcA,
+srcB, lenB)` cannot have. Sole owner with room to spare writes in place;
+otherwise it allocates `need * 2` and copies. The doubling is the whole point —
+an exact-fit block is full again on the next append, which is the same trap
+[[project_pxx_setlength_no_spare_capacity_append_quadratic]] records.
+
+Capacity comes from the allocator's own size word below the block, so no header
+field moved and `PXX_HDR_SIZE` (and every codegen offset on six backends) is
+untouched. The catch: "the word below the base" only means something for blocks
+this path allocated, and a garbage-large answer passes `cap >= need` and writes
+off the end. So the in-place branch also requires `PXX_FLAG_APPENDABLE`
+($2000), which only the grow path stamps. **rc<=1 alone is not sufficient**, for
+the same reason.
+
+### The codegen: two stores, because there are two shapes
+
+- `IRIsSelfStrAppend` / `EmitAnsiStrAppendToSym` — the tyAnsiString store. This
+  is **Pascal's** shape.
+- `IRIsSelfVarStrAppend` / `PXXVarStrAppend` — the tyVariant store. This is
+  **Nil-Python's** shape, and finding that out was the necessary step: a
+  loop-carried `s` in NilPy infers **tyVariant**, not tyAnsiString (`PXXDBG
+  n.locals` says tk=22). The first half alone left NilPy at exactly its old
+  0.834s. Fixing one arm of a two-shape construct and stopping is the failure
+  [[devdocs/dev/normalise-dont-special-case]] describes; both arms are wired.
+
+The variant helper answers 0 for anything that is not string-into-string or
+char-into-string, and the general `PXXVarBinOp` path then runs unchanged — so
+`+` on variants still has exactly one definition.
+
+Order of evaluation differs between the two, and the guards differ with it. The
+typed store requires `ScratchSafeSubtree` on the right operand: append reads the
+destination AFTER evaluating the right where concat reads it before, so `s := s
++ f()` with an f that assigns to s would change answer. The variant store needs
+no such guard — `IR_VAR_BINOP` takes two ADDRESSES of already-populated slots,
+so the general path already reads the destination last.
+
+x86-64 only. The other five backends keep the concat path, correct and slower.
+
+### Scaling — both curves flat
+
+```
+Pascal  s := s + 'x'      n=20k..320k ladder, whole ladder:  0.016s
+NilPy   s = s + "x"       n=20k..320k ladder:  0.115s  (CPython 0.054s)
+NilPy   s += "x"          n=80000:             0.018s
+```
+
+Against the recorded quadratic (`n=160000: 102.630s`) that is the curve
+flattening, not a constant-factor win.
+
+### uforth: the ticket's own subject
+
+Full ANS/Forth 2012 suite (`tests/runtests.fth`), stdin closed, both engines,
+same tree, output **byte-identical** at 252 lines:
+
+| engine | before (2026-08-14 baseline) | after |
+| --- | --- | --- |
+| CPython 3.12 | 54.66s | 64.97s |
+| pxx-compiled uforth | 153.18s | **148.00s** |
+| **ratio** | **2.80x** | **2.28x** |
+
+The two runs here were concurrent, so both absolute numbers are inflated and
+**only the ratio is comparable** — the same discipline this ticket's original
+table used.
+
+**This is an honest partial result and should be read as one.** A 62.5%
+cost centre going away predicts far more than 2.80x -> 2.28x, so uforth's
+concatenations are largely NOT the self-append shape. Re-profiling rather than
+guessing which is the next entry below.
+
+### Provenance
+
+Compiler at aca188198 + the variant half; pin v299 carries the Pascal half.
+Every number above is from a self-hosted fixedpoint build at that tree, not
+from the watcher's clone.

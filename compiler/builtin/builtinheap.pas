@@ -320,6 +320,7 @@ procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
+function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
@@ -3239,6 +3240,48 @@ begin
       Exit;
     end;
   end;
+end;
+
+{ `v := v + x` on a VARIANT slot, appended in place. Returns 1 when it handled
+  the operation and 0 when the caller must fall back to the general
+  PXXVarBinOp path.
+
+  This is the variant twin of PXXStrAppend, and it is the one that matters for
+  Nil-Python: a loop-carried `s` infers tyVariant, not tyAnsiString, so the
+  typed-store append never sees it and every `s = s + c` went through
+  PXXVarBinOp -> PXXStrConcat, allocating and copying the whole accumulation
+  per iteration (bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-
+  cpython, cause B — 62.5% of uforth's instructions).
+
+  The payload word of a VT_STRING slot IS a managed handle slot, so appending
+  into `dest + 8` is exactly the typed case with a tag word in front of it.
+
+  Only string-into-string and char-into-string are taken; everything else —
+  numbers, objects, an unset dest — answers 0 and keeps the general path, which
+  stays the single definition of what `+` means on variants. }
+function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
+var dTag, rTag: Int64; rp: Pointer; rLen: Int64;
+begin
+  Result := 0;
+  if (dest = nil) or (right = nil) then Exit;
+  dTag := PWord(dest)^;
+  if dTag <> 6 then Exit;                        { VT_STRING }
+  rTag := PWord(right)^;
+  if rTag = 6 then
+  begin
+    rp := Pointer(PWord(Int64(right) + 8)^);
+    if rp = nil then begin Result := 1; Exit; end;   { appending '' }
+    rLen := PWord(Int64(rp) - 8)^;
+  end
+  else if rTag = 5 then                          { VT_CHAR: the byte is the
+                                                   low end of the payload word }
+  begin
+    rp := Pointer(Int64(right) + 8);
+    rLen := 1;
+  end
+  else Exit;
+  PXXStrAppend(Pointer(Int64(dest) + 8), rp, rLen);
+  Result := 1;
 end;
 
 procedure PXXVarClear(v: Pointer);
