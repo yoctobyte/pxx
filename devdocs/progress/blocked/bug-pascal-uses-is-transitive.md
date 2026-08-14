@@ -10,7 +10,7 @@ owner: agent-A
 # Pascal: `uses` is transitive, so every unit's imports leak to its consumers
 
 - **Type:** bug (name resolution / unit visibility) — **Track A**
-- **Status:** working
+- **Status:** blocked
 - **Opened:** 2026-07-28, from [[decide-class-namespace-scoping]]. This is the
   root cause that ticket is a symptom of.
 

@@ -1111,6 +1111,55 @@ pre code{background:none;padding:0}
         # Non-strict still prints a count line, because the hand audit that
         # first caught this (bug-t-resolve-cites-a-sha-the-rebase-then-rewrites)
         # is exactly what should not need doing by hand again.
+        # --- a body Status line that contradicts the folder holding the file --
+        #
+        # The FOLDER is the lock: working/ means an agent is on it right now. The
+        # `- **Status:** X` body line duplicates that, so it drifts the moment
+        # someone moves a ticket and does not edit the prose — and a stale
+        # `Status: working` on a backlog ticket makes a scanning agent skip real
+        # work, the exact opposite of what the ranked queue is for. Measured
+        # 2026-08-07: twenty tickets claimed `working` while working/ was empty,
+        # nine of them in live folders, and `check --strict` said nothing.
+        #
+        # ONLY flagged when the first word is itself a folder name. The line
+        # very often carries prose — "Status: documented, not fixed",
+        # "Status: harness" — and a naive equality check reports every one of
+        # those as a mismatch (measured: 179 hits, of which only 7 were real).
+        #
+        # ARCHIVES ARE EXEMPT. done/, rejected/ and decided/ are historical
+        # records; CLAUDE.md's rule is that rewriting one falsifies what a past
+        # session actually did, so a contradiction there is not a finding.
+        #
+        # Reported, never repaired: `check` is a read-only command, and `claim`
+        # / `resolve` are what move tickets. Auto-editing prose here would make
+        # it mutating, which it is not today.
+        archive = {"done", "rejected", "decided"}
+        # Only LOCK-ish claims. `working` means an agent is on it right now and
+        # `urgent` means act first; those are the two a reader acts on, so those
+        # are the two worth failing over. A ticket in experimental/ whose body
+        # says "Status: backlog" is accurate prose about parked work, not a
+        # contradiction — flagging it added 14 findings nobody would act on, and
+        # burying the 3 real ones under 170 cosmetic ones is precisely how this
+        # drifted in the first place (555 strict findings, none of them this).
+        LOCKISH = {"working", "urgent"}
+        for t in self.tickets:
+            if t.status in archive:
+                continue
+            m = re.search(r"^- \*\*Status:\*\*\s*(\S+)", t.text, re.MULTILINE)
+            if not m:
+                continue
+            claimed = m.group(1).strip().lower().rstrip(".,:*")
+            if claimed == t.status or claimed not in STATUSES:
+                continue
+            if claimed not in LOCKISH and t.status not in LOCKISH:
+                continue
+            problems = 1
+            lines.append(
+                f"STATUS-DRIFT: {t.slug} is in {t.status}/ but its body says "
+                f"'Status: {claimed}' — the folder is the lock; fix the line "
+                f"(check does not rewrite prose)"
+            )
+
         pending, dead = self._audit_citations()
         for slug in pending:
             warning_count += 1

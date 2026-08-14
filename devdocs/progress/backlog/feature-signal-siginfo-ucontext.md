@@ -8,7 +8,7 @@ blocked-by: []
 # Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** working
+- **Status:** backlog
 - **Opened:** 2026-07-16, split out of [[feature-signal-handlers]] once the base
   slice (libc-free `rt_sigaction` handler install + `SetSignalHandler`) shipped
   and pinned on all five hosted targets (x86-64 b336, aarch64 b370,
