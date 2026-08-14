@@ -362,53 +362,50 @@ type
     FindUClass('ValueError') resolve for `except ValueError:` and makes
     `raise ValueError.Create(..)` legal in here, with one hierarchy for both.
 
-    PyEnsureExceptionClass creates `Exception` only when it is MISSING, so it
-    now finds this one and the whole tree shares a root — which is what makes
-    a bare `except Exception:` catch a ValueError. }
-  Exception = class
+    PyEnsureExceptionClass creates the root only when it is MISSING, so it now
+    finds this one and the whole tree shares a root — which is what makes a bare
+    `except Exception:` catch a ValueError.
+
+    NAMED `PyException`, not `Exception`, and that is the point: Python's
+    `Exception` is a LANGUAGE builtin, while sysutils' is one library's design
+    choice in a language that also offers plain runtime errors (user,
+    2026-08-14, decide-pylib-exception-vs-sysutils-exception option 5). Giving
+    the Python builtin a Pascal-namespace name of `Exception` put a
+    language-level concept into a library namespace where it collided with an
+    unrelated library's class — and then the collision had to be papered over
+    with ClassNameIsDeliberatelyShared, which cost pylib the ability to add any
+    member sysutils lacks (it killed `e.args` after that had shipped). NilPy
+    source still SAYS `Exception`: pylexer.inc maps the bare identifier to this
+    name, so a qualified `su.Exception` still reaches the Pascal one. }
+  PyException = class
   public
     msg: AnsiString;
     FHelpContext: Integer;
     constructor Create(const m: AnsiString);
-    { The SYSUTILS surface on the same object. A .npy program pulls pylib before
-      any imported unit, so sysutils' own `Exception` declaration is shadowed by
-      this one and its descendants (EConvertError, …) and method bodies compile
-      against THIS class — which used to have neither CreateFmt nor FMessage, so
-      `import json` (or anything reaching sysutils) died on the first raise
-      (bug-nilpy-rtl-exception-surface-shadowed).
-
-      FMessage and Message are PROPERTIES over `msg`, not fields: one storage,
-      so a Python `raise ValueError("mine")` and a Pascal `raise
-      EConvertError.CreateFmt(...)` write the same place and both read back. Two
-      synchronised fields were tried first and lost the message on the read path
-      — print(e) reads the `msg` FIELD directly (the frontend synthesises that
-      access), so `msg` must stay the field and everything else a view on it.
-      CreateFmt is declared here and IMPLEMENTED BY sysutils, which is the unit
-      that has Format(). }
+    { FMessage and Message are PROPERTIES over `msg`, not fields: one storage,
+      so a Python `raise ValueError("mine")` and a read through `Message` see
+      the same place. Two synchronised fields were tried first and lost the
+      message on the read path — print(e) reads the `msg` FIELD directly (the
+      frontend synthesises that access), so `msg` must stay the field and
+      everything else a view on it. }
     constructor CreateFmt(const m: AnsiString; const args: array of const);
     property FMessage: AnsiString read msg write msg;
     property Message: AnsiString read msg write msg;
     property HelpContext: Integer read FHelpContext write FHelpContext;
-    { `e.args` USED TO LIVE HERE and had to be removed — see
-      decide-pylib-exception-vs-sysutils-exception. sysutils declares a class
-      called `Exception` too and the name is deliberately shared program-wide
-      (ClassNameIsDeliberatelyShared) so a bare `except Exception:` catches
-      either RTL's raise. The cost of that arrangement: under `uses sysutils,
-      pylib`, pylib's OWN classes bind their ancestor to SYSUTILS' Exception,
-      so only members BOTH classes have can be reached — from a descendant's
-      body, from a cast, from anywhere. `argsv`/`GetArgs` were pylib's alone
-      and broke that uses order in three separate places.
-      Do not add a member here without reading that ticket. `Message` is safe
-      because sysutils has one too; that is the whole test. }
+    { `e.args` used to live here and was removed while this class was still
+      called `Exception` and merged with sysutils' — only members BOTH classes
+      had could be reached, so a pylib-only field broke one `uses` order.
+      That constraint is GONE now that the class has its own name: pylib
+      extends freely. bug-nilpy-exception-args-attribute-missing. }
   end;
-  ValueError        = class(Exception) end;
+  ValueError        = class(PyException) end;
   { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
     integer paths fell through to the Pascal runtime's error 200 (which no
     `except` can see) and true division produced garbage
     (bug-nilpy-runtime-raised-errors-bypass-try-except). }
-  ZeroDivisionError = class(Exception) end;
-  TypeError         = class(Exception) end;
-  IndexError        = class(Exception) end;
+  ZeroDivisionError = class(PyException) end;
+  TypeError         = class(PyException) end;
+  IndexError        = class(PyException) end;
   { CPython's KeyError is the one builtin whose str() is the REPR of its
     argument — `str(KeyError('inner'))` is "'inner'", with the quotes, which is
     why every "key not found" line in a real log looks like that. So the repr
@@ -417,7 +414,7 @@ type
     disagree — which they did, the raise path being correct because PyKeyError
     pre-repr'd its message and a user raise not.
     bug-nilpy-exception-str-and-repr-diverge-from-cpython }
-  KeyError          = class(Exception)
+  KeyError          = class(PyException)
     { A VARIANT, not a string: `raise KeyError(42)` is ordinary Python, and an
       integer arriving at a `const m: AnsiString` parameter was read as a string
       handle and SEGFAULTED at the raise — no diagnostic, a dead process
@@ -431,14 +428,14 @@ type
       missing 7. }
     constructor CreateRendered(const shown: AnsiString);
   end;
-  OSError           = class(Exception) end;
-  AttributeError    = class(Exception) end;
-  EOFError          = class(Exception) end;
-  KeyboardInterrupt = class(Exception) end;
-  RuntimeError      = class(Exception) end;
+  OSError           = class(PyException) end;
+  AttributeError    = class(PyException) end;
+  EOFError          = class(PyException) end;
+  KeyboardInterrupt = class(PyException) end;
+  RuntimeError      = class(PyException) end;
   NotImplementedError = class(RuntimeError) end;
-  StopIteration     = class(Exception) end;
-  OverflowError     = class(Exception) end;
+  StopIteration     = class(PyException) end;
+  OverflowError     = class(PyException) end;
   { CPython 3 makes IOError and EnvironmentError aliases of OSError, and
     FileNotFoundError / PermissionError subclasses of it. Real code catches
     them by name — songformatter has `except IOError:` around a file read. }
@@ -450,21 +447,21 @@ type
   IsADirectoryError = class(OSError) end;
   NotADirectoryError = class(OSError) end;
   InterruptedError  = class(OSError) end;
-  ArithmeticError   = class(Exception) end;
+  ArithmeticError   = class(PyException) end;
   FloatingPointError = class(ArithmeticError) end;
-  LookupError       = class(Exception) end;
-  NameError         = class(Exception) end;
+  LookupError       = class(PyException) end;
+  NameError         = class(PyException) end;
   UnboundLocalError = class(NameError) end;
   RecursionError    = class(RuntimeError) end;
   UnicodeError      = class(ValueError) end;
   UnicodeDecodeError = class(UnicodeError) end;
   UnicodeEncodeError = class(UnicodeError) end;
-  MemoryError       = class(Exception) end;
-  BufferError       = class(Exception) end;
-  AssertionError    = class(Exception) end;
-  SystemError       = class(Exception) end;
-  SystemExit        = class(Exception) end;
-  GeneratorExit     = class(Exception) end;
+  MemoryError       = class(PyException) end;
+  BufferError       = class(PyException) end;
+  AssertionError    = class(PyException) end;
+  SystemError       = class(PyException) end;
+  SystemExit        = class(PyException) end;
+  GeneratorExit     = class(PyException) end;
   TimeoutError      = class(OSError) end;
   ConnectionError   = class(OSError) end;
   BrokenPipeError   = class(ConnectionError) end;
@@ -474,13 +471,13 @@ type
   BlockingIOError   = class(OSError) end;
   ChildProcessError = class(OSError) end;
   ProcessLookupError = class(OSError) end;
-  ImportError       = class(Exception) end;
+  ImportError       = class(PyException) end;
   ModuleNotFoundError = class(ImportError) end;
-  IndentationError  = class(Exception) end;
-  SyntaxError       = class(Exception) end;
+  IndentationError  = class(PyException) end;
+  SyntaxError       = class(PyException) end;
   TabError          = class(IndentationError) end;
-  ReferenceError    = class(Exception) end;
-  StopAsyncIteration = class(Exception) end;
+  ReferenceError    = class(PyException) end;
+  StopAsyncIteration = class(PyException) end;
 
   TPyBytes = class
   public
@@ -4861,10 +4858,10 @@ var o: TObject;
 begin
   o := nil;
   if pyvartag(v) = 7 then o := TObject(pyvarobj(v));
-  { `is Exception`, not merely "is an object": a LIST is tag 7 too, and
+  { `is PyException`, not merely "is an object": a LIST is tag 7 too, and
     `raise [1]` must be the TypeError CPython gives, not a raised TPyList that
-    an `except Exception` arm then catches as if it were one. }
-  if (o = nil) or (not (o is Exception)) then
+    an `except Exception:` arm then catches as if it were one. }
+  if (o = nil) or (not (o is PyException)) then
     raise TypeError.Create('exceptions must derive from BaseException');
   Result := v;
 end;
@@ -9445,18 +9442,8 @@ begin
     inherited Create('');
     Exit;
   end;
-  { `inherited Create` and NOTHING ELSE inherited. Under `uses sysutils,
-    pylib` the name `Exception` resolves to SYSUTILS' class even while pylib
-    itself is being compiled (ClassNameIsDeliberatelyShared exempts the name
-    from the own-unit preference, deliberately, so a bare `except Exception:`
-    catches either RTL's raise) — so KeyError's ancestor is that class there,
-    and only members BOTH classes have can be reached. An `argsv` field was
-    pylib's alone: writing it from here, or calling a new ctor that writes it,
-    both failed to compile in that uses order.
-    So `e.args` is parked until the ownership question is settled —
-    decide-pylib-exception-vs-sysutils-exception. What survives is the part
-    that needed no new member: the message is the key's REPR on both
-    construction paths, so str() and repr() are CPython-exact. }
+  { The message is the key's REPR on both construction paths, so str() and
+    repr() are CPython-exact without needing `args`. }
   inherited Create(pyvar_repr(m));
 end;
 
@@ -9465,7 +9452,7 @@ begin
   inherited Create(shown);
 end;
 
-constructor Exception.Create(const m: AnsiString);
+constructor PyException.Create(const m: AnsiString);
 begin
   msg := m;
 end;
@@ -9506,14 +9493,14 @@ begin
   end;
 end;
 
-{ sysutils' CreateFmt on the shadowing class. It cannot simply call Format():
-  pylib is pulled into every .npy and must not depend on sysutils (which is what
-  drags the whole RTL in), so the substitution is done here over the same
+{ A CreateFmt of pylib's own. It cannot simply call Format(): pylib is pulled
+  into every .npy and must not depend on sysutils (which is what drags the whole
+  RTL in), so the substitution is done here over the same
   `array of const` FPC passes. The subset is what the RTL's own raise sites
   actually use — %s, %d and %% — and an unsupported spec is left VERBATIM rather
   than guessed at, so a wrong message is visible as a stray %spec instead of
   silently losing its argument. }
-constructor Exception.CreateFmt(const m: AnsiString; const args: array of const);
+constructor PyException.CreateFmt(const m: AnsiString; const args: array of const);
 var i, ai: Integer; c: Char; outS: AnsiString;
 begin
   outS := '';
@@ -9832,7 +9819,7 @@ end;
 function pyoptional_missing(const what: AnsiString): Variant;
 begin
   pyoptional_missing := pynone;
-  raise Exception.Create('this build has no ' + what
+  raise PyException.Create('this build has no ' + what
     + ': the import it came from could not be resolved, and the code guarding '
     + 'that (the flag its except-branch sets) let this call through anyway');
 end;
@@ -9840,7 +9827,7 @@ end;
 function pyos_startfile(const path: AnsiString): Integer;
 begin
   pyos_startfile := 0;
-  raise Exception.Create('os.startfile is Windows-only and is not implemented; '
+  raise PyException.Create('os.startfile is Windows-only and is not implemented; '
     + 'guard the call with sys.platform or use subprocess');
 end;
 
@@ -11567,7 +11554,7 @@ begin
         Inc(argi);
       end;
       if useIdx >= nArgs then
-        raise Exception.Create('str.format: more placeholders than arguments');
+        raise PyException.Create('str.format: more placeholders than arguments');
       { pyvar_print_of, NOT pystr_of: pystr_of answers '' for a CONTAINER
         payload, so `"{}".format([1, 2])` produced an EMPTY string — silent, and
         the value vanished rather than looking wrong. pyvar_print_of is the same
@@ -14469,7 +14456,7 @@ begin
     str(KeyError) is. A user-CONSTRUCTED `KeyError("k")` still loses the quotes;
     that is the `e.args` gap, and the message is a strict improvement on an
     address either way. }
-  if (mi = nil) and (not wantRepr) and (o is Exception) then
+  if (mi = nil) and (not wantRepr) and (o is PyException) then
   begin
     { KeyError's str() is the REPR of its argument — `str(KeyError('inner'))`
       is "'inner'", with the quotes — and that needs no special arm here: BOTH
@@ -14478,7 +14465,7 @@ begin
       They used to disagree, which is what an args-based arm was written to
       settle; unifying the constructors settled it one level earlier and
       survives the uses-order constraint that sank args. }
-    outS := Exception(o).Message;
+    outS := PyException(o).Message;
     PyUserObjStr := True;
     Exit;
   end;
@@ -14494,16 +14481,16 @@ begin
     string key and `KeyError(7)` for an int one, with no second rendering. }
   if (mi = nil) and wantRepr and (o is KeyError) then
   begin
-    outS := TObject(o).ClassName + '(' + Exception(o).Message + ')';
+    outS := TObject(o).ClassName + '(' + PyException(o).Message + ')';
     PyUserObjStr := True;
     Exit;
   end;
-  if (mi = nil) and wantRepr and (o is Exception) and (not (o is KeyError)) then
+  if (mi = nil) and wantRepr and (o is PyException) and (not (o is KeyError)) then
   begin
-    if Exception(o).Message = '' then
+    if PyException(o).Message = '' then
       outS := TObject(o).ClassName + '()'
     else
-      outS := TObject(o).ClassName + '(' + pyrepr_of(Exception(o).Message) + ')';
+      outS := TObject(o).ClassName + '(' + pyrepr_of(PyException(o).Message) + ')';
     PyUserObjStr := True;
     Exit;
   end;

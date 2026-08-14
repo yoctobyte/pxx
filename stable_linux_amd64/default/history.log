@@ -291,3 +291,4 @@
 2026-08-14T07:55:07Z  v291  63390fe0bc9b9a4e39574ec5e1add663e5578e2d7c17b918e05515defa9f5e19  e093a31675eef2a4d03bf078bfc60670d973b28e  feat(N): max(xs, default=D) and min(xs, default=D)
 2026-08-14T08:49:26Z  v292  1ff3349aa2b5c4cf0a152c2f4194adaa0aef33209e9ba4e18c0a012e6fb23391  c44791fb781d5d29cfef051dba93054fcdfd1e9f  feat(N): a NilPy str counts characters, not bytes
 2026-08-14T09:33:25Z  v293  fe2678b688991307ce2d8766b6933f23ac31d176ed109c9d757435811c7eb167  d6f4669743214baec0357245e206357bd90876aa  tickets(N): resolve the pyeval kwarg binding and the set star-spread dedup
+2026-08-14T10:06:19Z  v294  57c9bfb4883b901d7bbff50504162da43fa39c3d9331e130d849c54e5d769d72  6ed45773f29a9cedf9d1be839964499d6621570b  feat(A+N): pylib's Python root is PyException; delete the shared-name exemption
