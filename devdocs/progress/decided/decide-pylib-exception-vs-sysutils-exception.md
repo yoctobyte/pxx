@@ -4,6 +4,7 @@ prio: 55
 type: decide
 blocked-by: []
 summary: "pylib and sysutils both declare a class named Exception and the name is deliberately shared program-wide, so `except Exception:` catches either RTL's raise. The cost, measured: under `uses sysutils, pylib` pylib's OWN classes bind their ancestor to SYSUTILS' Exception, so pylib can never add a member sysutils lacks — which killed `e.args` after it had shipped. Decide who owns Exception before anything else is built on it."
+status: decided
 ---
 
 # Who owns `Exception` — and how does pylib extend it?
@@ -196,3 +197,65 @@ Open question for whoever builds it: whether the rest of the builtin hierarchy
 root. They descend from pylib's `Exception` and do not collide with sysutils by
 name today — but `EConvertError`-style names could collide tomorrow, and doing
 the root alone leaves the family half-renamed.
+
+## RESOLVED 2026-08-14 — option 5 built
+
+Implemented exactly as the user specified, in the lexer.
+
+- `compiler/builtin/pylib.pas` declares **`PyException`**; all 26 builtin
+  exception classes descend from it. The class is free to grow again — nothing
+  couples it to sysutils any more.
+- `compiler/pylexer.inc` maps the BARE identifier `Exception` to `PyException`,
+  never one preceded by `tkDot`. String literals are untouched by construction
+  (a lexer sees tokens) and `class MyErr(Exception)` maps with no special case.
+- `compiler/pyparser.inc`'s 18 by-name class lookups follow the rename.
+- The **bridge**, which is what the "unverified, and must be before committing"
+  note above was asking about: a NilPy bare `except Exception:` catches
+  `PyException` AND sysutils' `Exception`, reusing the `except (A, B)` tuple
+  machinery already in `PyParseTry`. Python's root catches everything a program
+  can raise, and an RTL raise is still that. A QUALIFIED `su.Exception` is NOT
+  that arm and stays exactly one class — which is what makes the two nameable
+  apart at all.
+- `ClassNameIsDeliberatelyShared` and both its call sites are **deleted**.
+
+### What the two canary tests assert now
+
+The open question above — "under option 5 those tests change meaning rather
+than pass, and what they should assert instead needs deciding" — settled the
+obvious way once only sysutils declares `Exception`:
+`test_uses_order_pylib_exception_a` and `_b` must print **identical** output
+(both sysutils' padded `CreateFmt`, `[    3]`). `_b`'s recorded expectation was
+`[%5d]` — it was RECORDING the order-dependence as correct. The pair's whole
+point is that uses order carries no meaning, and now it doesn't.
+
+New test `test_nilpy_pyexception_bare_vs_qualified.npy` covers the four cases
+the user's shape called for, one line each.
+
+### On the open question at the end of this ticket
+
+*"whether the rest of the builtin hierarchy needs the same treatment or only the
+root"* — only the root was renamed, and that is enough: `ValueError`, `KeyError`
+and friends do not collide with sysutils today, and they are reachable from a
+NilPy program by their Python spelling either way. If an RTL unit ever declares
+an `EValueError`-shaped collision, the fix is a per-name lexer entry beside the
+`Exception` one, not a second scheme.
+
+### Sequencing note
+
+The user's recommended order was "option 5 now,
+[[bug-pascal-uses-is-transitive]] properly after". It turned out to be not
+merely preferable but REQUIRED: that ticket's gate demands
+`ClassNameIsDeliberatelyShared` be deleted, and while two units declared a class
+of the same name, no scoping rule could satisfy it — real scoping gives `uses
+sysutils, pylib` exactly one of the two and the other's raises stop being
+caught.
+
+Commits: 6ed45773f (rename + bridge + exemption deleted), e5e90c342 (pin v294),
+7f1c96a6a (tkinter's TclError, the one lib/** casualty).
+
+**Unblocks** [[bug-nilpy-exception-args-attribute-missing]]: the constraint that
+killed `e.args` — "pylib can never add a member sysutils lacks" — no longer
+exists.
+
+## Log
+- 2026-08-14 — decided, commit PENDING-COMMIT.

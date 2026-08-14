@@ -3,6 +3,7 @@ track: A
 prio: 70
 type: bug
 summary: "The name `Exception` is DELIBERATELY shared between pylib and sysutils (ClassNameIsDeliberatelyShared), which is what makes `except Exception:` catch either runtime — so this is a design tradeoff with a measured cost, not simply an unfixed bug. Under `uses sysutils, pylib` pylib cannot add any member sysutils lacks. Superseded by decide-pylib-exception-vs-sysutils-exception; do not fix this until that is answered."
+status: done
 ---
 
 # `uses sysutils, pylib` fails to compile; `uses pylib, sysutils` is fine
@@ -139,3 +140,22 @@ and wrong about why.
 whether this ticket becomes an A-lane resolution change (its option 4), a B-lane
 RTL change (option 1), or is closed as working-as-designed (option 3). Prio
 stays 70 so it does not drift out of sight while that is open.
+
+## RESOLVED 2026-08-14 — by construction, not by a fix here
+
+`uses sysutils, pylib` compiles, and so does the reverse, because there is no
+longer a name to fight over: pylib's Python root is `PyException`
+([[decide-pylib-exception-vs-sysutils-exception]] option 5, commit 6ed45773f).
+`Exception` means sysutils' class in a Pascal program, full stop, and pylib's
+own constructor bodies resolve `msg` against their own class in every uses
+order.
+
+`test_uses_order_pylib_exception_a` and `_b` now print **identical** output —
+`_b`'s recorded expectation was `[%5d]`, which was the order-dependence this
+ticket describes, written down as if it were correct. Both are `[    3]` now
+(sysutils' padded `CreateFmt`), and that equality is what the pair asserts.
+
+`ClassNameIsDeliberatelyShared`, the mechanism this ticket is about, is deleted.
+The "design tradeoff with a measured cost" in the summary above is no longer a
+tradeoff anyone has to make.
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

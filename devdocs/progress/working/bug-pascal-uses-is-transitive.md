@@ -393,3 +393,78 @@ tier, so `gate.sh quick` will not catch a regression here.
 - 2026-07-31 — measurement step resolved, commit d86bc20ec. **Not the fix.**
 - 2026-08-14 — REOPENED at the user's direction, prio 65 -> 80, moved to urgent.
   Filed by Track T; the work is Track A's.
+
+## 2026-08-14 — the enforcement landed behind `--strict-uses`, and the Exception blocker is gone
+
+Two of the three things this ticket needs are done. What remains is flipping the
+flag, and that is now a bounded, measurable job rather than a blocked one.
+
+### 1. `--strict-uses` — the rule is IMPLEMENTED (commit 6f2ec1803)
+
+`VisibilityAllows` stopped being a warning-only predicate: `DeclVisible`
+(`compiler/symtab.inc`) turns it into a lookup FILTER, wired into
+
+- `FindProc`'s two chain walks,
+- `FindUClass`'s flat fallback (it now scans PAST an invisible row to a visible
+  one of the same name instead of stopping at the first),
+- **`MatchEligBase`** — the one that matters, because per this ticket's own
+  Cause section a direct call site does not resolve through `FindProc`. That
+  closes the "known gap, not yet instrumented" the measurement step left open.
+
+`VisibilityAllows` is memoised per `(curUnit, UsesEdgeCount)`; it was a
+clear-plus-BFS per query, which is fine for an opt-in warning and quadratic
+once it gates every lookup.
+
+`declUnit < 0` is deliberately always-visible: -1 is BOTH a compiler-registered
+intrinsic and a main-program routine, and the rows carry no marker to tell them
+apart — the same artifact `ClassNameIsAmbientIntrinsic` handles by name on the
+class side.
+
+**The headline repro now behaves**: `writeln(IntToStr(9))` in a program that
+only `uses priv` reports `undefined variable (IntToStr)` under the flag, and
+still compiles without it. Off by default, self-host converges at generation 1,
+`gate.sh quick` green.
+
+### 2. `ClassNameIsDeliberatelyShared` is DELETED (commit 6ed45773f)
+
+The gate's hard condition, met — but NOT by scoping the shared name. It was met
+by removing the collision: pylib's Python root is now `PyException`
+([[decide-pylib-exception-vs-sysutils-exception]] option 5, the user's call and
+the user's implementation shape). The lexer maps the bare identifier, a
+qualified `su.Exception` still reaches the Pascal class, and a NilPy bare
+`except Exception:` bridges to both roots as an explicit catch rule.
+
+That ordering was forced, not chosen. This ticket's gate wanted the exemption
+deleted with `test_uses_order_pylib_exception_a`/`_b` green; while two units both
+declared a class called `Exception`, no scoping rule could satisfy both — under
+real scoping `uses sysutils, pylib` gives ONE of them and the other's raises
+stop being caught. The rename is what makes the question disappear. Both tests
+now print IDENTICAL output, which is the property the pair was written to prove.
+
+Uncovered on the way, fixed, and worth knowing about: the `format` intercept in
+the shared parser was gated on `isNilPy` — true for every PASCAL unit inside a
+`.npy` compile — so sysutils' own `Format()` lowered to `pyformat_v`. Fifteen
+more intercepts of that shape are unaudited:
+[[bug-nilpy-builtin-name-intercepts-hijack-pascal-rtl-code]].
+
+### 3. What is LEFT: flip the default
+
+The remaining work is the 35 RTL-internal pairs this ticket already measured —
+each needs either an explicit `uses` or nothing at all — and then `StrictUses`
+becomes the default and the flag retires. Two findings that change the shape of
+that job:
+
+- **The measurement UNDER-counts, because it only ever ran for `CurrentUnitIdx
+  >= 0`.** Every `WarnUsesLeakHit` call site is gated on it, so a leak into the
+  MAIN PROGRAM — which is this ticket's own headline repro — was never counted
+  at all. The 35 pairs are unit-to-unit only. Re-measure with the program scope
+  included before trusting the number as the size of the job.
+- **`lib/pcl/tkinter.pas` is a worked example of the fix per pair.** It uses
+  `tk, pylib, pyeval` and named a base class `Exception` it got only through
+  transitivity; the fix was one word (`PyException`, the root it actually
+  imports), not a new `uses`. Expect more of the 35 to be that shape than to
+  need a real import added.
+
+Suggested next step: run the whole corpus with `--strict-uses` and classify the
+failures, exactly as the warn pass was classified — the flag turns "how much
+breaks" from an estimate into a compile error you can count.

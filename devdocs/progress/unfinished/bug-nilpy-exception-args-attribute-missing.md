@@ -2,8 +2,7 @@
 prio: 30
 track: N
 type: bug
-blocked-by: [decide-pylib-exception-vs-sysutils-exception]
-status: done
+blocked-by: []
 owner: claude-A-N
 ---
 
@@ -145,3 +144,22 @@ that read them, and `test/test_nilpy_exception_args` with its Makefile row.
 Read the decide ticket first; option 3 there (a pointer-keyed side table reached
 through plain functions) is the shape that satisfies the constraint if the two
 classes must stay separate.
+
+## 2026-08-14 — UNBLOCKED: the constraint is gone
+
+pylib's Python root is `PyException` now
+([[decide-pylib-exception-vs-sysutils-exception]] option 5, commit 6ed45773f).
+It is pylib's own class, declared under a name no other unit uses, so **"do not
+add a member to pylib's Exception" no longer applies** — the whole reason it
+applied was that `Exception` resolved to SYSUTILS' class while pylib itself was
+being compiled, and there is no shared name left to resolve.
+
+So re-land the ORIGINAL shape, not option 3's side table: `argsv` field,
+`GetArgs`, `property args`, the two renderer arms, and
+`test/test_nilpy_exception_args` with its Makefile row. The advice at the end of
+the section above is superseded.
+
+**Keep the gate honest:** `test_uses_order_pylib_exception_a`/`_b` are what
+caught this the first time and they run only in the NATIVE tier, so
+`gate.sh quick` still cannot see a regression here. Both must be green, and they
+now assert IDENTICAL output for the two uses orders.

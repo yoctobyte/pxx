@@ -5,20 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:8 blocked:3 backlog:217 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1751 rejected:35`
+`working:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1752 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
-
-## urgent (1) — jump the queue
-
-- `bug-pascal-uses-is-transitive` [A]
+- `bug-pascal-uses-is-transitive` [A] — owner: agent-A
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
-- `bug-nilpy-exception-args-attribute-missing` [N] — blocked-by: decide-pylib-exception-vs-sysutils-exception
+- `bug-nilpy-exception-args-attribute-missing` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
@@ -32,13 +28,12 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 202, ranked
+## Ready — top 30 of 200, ranked
 
-- `[p 80] [A]` bug-pascal-uses-is-transitive
-- `[p 70] [A]` bug-pascal-uses-order-breaks-pylib-exception
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [A]` bug-nilpy-builtin-name-intercepts-hijack-pascal-rtl-code
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -47,7 +42,6 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
-- `[p 55] [U]` decide-pylib-exception-vs-sysutils-exception (unblocks 1)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [C]` bug-c-cast-to-float-in-value-position-does-not-round-to-single
@@ -64,5 +58,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
+- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
-_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
