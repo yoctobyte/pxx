@@ -112,6 +112,17 @@ function PXXStrAsciiCached(p: Pointer): Int64;
 procedure PXXStrSetAscii(p: Pointer; isAscii: Boolean);
 procedure PXXStrForgetAscii(p: Pointer);
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+{ APPEND lenB bytes onto the managed string held in strSlot, in place when it
+  can be. This is the destination-aware form PXXStrConcat cannot be: concat
+  returns a fresh handle and never learns where the result is going, so it must
+  copy the whole accumulation every time and `s += c` in a loop is O(n^2).
+  Given the SLOT, the owner is known, so the bytes can be appended to the
+  existing block when nothing else shares it and the block has room -- which is
+  what makes the loop amortised O(1) per append, as CPython's is.
+  Deciding this from the left operand's refcount ALONE would be a
+  silent-wrong-value bug (`t := s + 'x'` with a refcount-1 s would grow s); the
+  slot is what removes the guess. }
+procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
@@ -179,6 +190,18 @@ const
     is the one place that can, because byte writes go through its COW. }
   PXX_FLAG_ASCII_KNOWN = $1000;
   PXX_FLAG_EXTENDED = $0800;   { a side-table entry exists — the escape hatch }
+  { This block was allocated by PXXStrAppend with DELIBERATE spare capacity, so
+    the allocator's size word below it is a capacity this code put there. Only
+    then may an append write past the current length in place.
+
+    The flag is what makes the append sound, and it is not belt-and-braces: the
+    size word exists under every PXXAlloc block, but "the word below the base"
+    is only meaningful for blocks this runtime allocated through that path. A
+    handle that reached us some other way would answer with whatever bytes
+    precede it, and a garbage-large answer passes `cap >= need` and writes off
+    the end of the block. Trusting rc<=1 alone is not enough for the same
+    reason. See bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython. }
+  PXX_FLAG_APPENDABLE = $2000;
 
   { KindData0, bits 16-23: text encoding. A small enum, NOT a codepage —
     CP_UTF8 (65001) would not fit, and this is the field pxx actually wants. }
@@ -1144,6 +1167,87 @@ begin
   PByte(d + len)^ := 0;         { nul terminator }
   PXXHdrSetMeta(base, PXXStrMeta(orAll));
   Result := Pointer(d);
+end;
+
+{ The bytes PXXAlloc actually handed out for a block, which is where the spare
+  capacity for an in-place append comes from: PXXAlloc stores its (8-rounded)
+  size in a word immediately below the payload it returns, and a string's block
+  base IS that payload. No header change -- adding a capacity field would move
+  PXX_HDR_SIZE and therefore every codegen offset for length and refcount. }
+function PXXStrAllocSize(h: Pointer): Int64;
+begin
+  if h = nil then PXXStrAllocSize := 0
+  else PXXStrAllocSize := PWord(Int64(h) - PXX_HDR_SIZE - 8)^;
+end;
+
+procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
+var
+  h, oldLen, newLen, rc, cap, need, want, base, d, s2, i: Int64;
+  newH: Pointer;
+begin
+  if strSlot = nil then Exit;
+  if lenB <= 0 then Exit;
+  h := PWord(strSlot)^;
+  if h = 0 then
+  begin
+    PWord(strSlot)^ := Int64(PXXStrFromLit(lenB, srcB));
+    Exit;
+  end;
+  oldLen := PWord(h - 8)^;
+  rc := PWord(h - 16)^;
+  newLen := oldLen + lenB;
+  need := PXX_HDR_SIZE + newLen + 1;          { +1 = nul terminator }
+  cap := PXXStrAllocSize(Pointer(h));
+
+  { IN PLACE: sole owner, this code allocated the block's spare capacity (so
+    the size word below it means what we think), and that capacity is enough. }
+  if (rc <= 1) and ((PXXHdrMeta(Pointer(h)) and PXX_FLAG_APPENDABLE) <> 0) and
+     (cap >= need) then
+  begin
+    d := h + oldLen;
+    s2 := Int64(srcB);
+    i := 0;
+    while i < lenB do
+    begin
+      PByte(d + i)^ := PByte(s2 + i)^;
+      i := i + 1;
+    end;
+    PByte(h + newLen)^ := 0;
+    PWord(h - 8)^ := newLen;
+    PXXStrForgetAscii(Pointer(h));           { the bytes changed }
+    Exit;
+  end;
+
+  { GROW: ask for double what is needed, so a loop of appends reallocates a
+    logarithmic number of times instead of every iteration. That doubling is
+    the whole difference between O(n) and O(n^2) for `s += c`; without it an
+    exact-fit block is full again on the very next append. }
+  want := need * 2;
+  base := Int64(PXXAlloc(want, 8));
+  PXXHdrInit(base);
+  { Stamp APPENDABLE: this block, and only a block from here, carries spare
+    capacity the size word describes. The ASCII bits stay clear (unknown). }
+  PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
+  PWord(base + PXX_HDR_RC)^ := 1;
+  PWord(base + PXX_HDR_LEN)^ := newLen;
+  d := base + PXX_HDR_SIZE;
+  i := 0;
+  while i < oldLen do
+  begin
+    PByte(d + i)^ := PByte(h + i)^;
+    i := i + 1;
+  end;
+  s2 := Int64(srcB);
+  i := 0;
+  while i < lenB do
+  begin
+    PByte(d + oldLen + i)^ := PByte(s2 + i)^;
+    i := i + 1;
+  end;
+  PByte(d + newLen)^ := 0;
+  newH := Pointer(d);
+  PWord(strSlot)^ := Int64(newH);
+  PXXStrDecRef(Pointer(h));
 end;
 
 { PChar/PAnsiChar of a managed string: the handle is already the NUL-terminated

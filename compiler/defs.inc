@@ -2617,6 +2617,7 @@ var
   AnsiStrFromLiteralAddr : Integer;
   AnsiStrUniqueAddr : Integer;
   AnsiStrConcatAddr : Integer;
+  AnsiStrAppendAddr : Integer;  { in-place `s := s + x` — see EmitAnsiStrAppend }
   AnsiStrLoadFileAddr : Integer;
   PyZeroedProc  : Integer;  { CompileAST mid-body tyClass zero-init watermark:
                               which proc the watermark belongs to (-2 = none) }

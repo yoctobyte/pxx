@@ -894,6 +894,29 @@ begin
     'ret'
   ]);
 
+  { rdi/slot address, rsi/rhs data, rdx/rhs length -> appended in place.
+    Shim → PXXStrAppend(strSlot, srcB, lenB). The append REPLACES the concat
+    for `s := s + x` where the destination IS the left operand: the runtime
+    grows the block with spare capacity and writes into it, so an accumulation
+    loop is amortised O(1) per append instead of copying the whole
+    accumulation every time. Locking mirrors the concat shim — the inner
+    PXXAlloc needs the heap lock. }
+  AnsiStrAppendAddr := CodeLen;
+  EmitAsmX64([
+    'push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi',
+    'push r8', 'push r9', 'push r10', 'push r11'
+  ]);
+  EmitAcquireHeapLock;
+  pConcatNil := FindProc('PXXStrAppend');
+  if pConcatNil < 0 then Error('compiler error: PXXStrAppend helper not found in builtin unit');
+  EmitCallProc(pConcatNil);
+  EmitReleaseHeapLock;
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx',
+    'ret'
+  ]);
+
   { Shim → PXXStrLoadFile(path). Caller passes the path data pointer in rdi
     (param 0). Save scratch, take the heap lock for the inner PXXAlloc, call. }
   AnsiStrLoadFileAddr := CodeLen;
@@ -1135,6 +1158,76 @@ procedure EmitAnsiStrFromInlineString;
 begin
   EmitAsmX64(['mov rdi, [rax]', 'lea rsi, [rax+8]']);
   IREmitCodeCall(AnsiStrFromLiteralAddr);
+end;
+
+{ Is this store the accumulation shape `s := s + x`, where the destination IS
+  the concat's left operand? Then the result can be appended into s's own block
+  instead of built fresh from both halves — which is the difference between an
+  append loop being O(n) and O(n^2) (bug-o-uforth-blocktest-runs-slower-under-
+  pxx-than-under-cpython). The runtime half is PXXStrAppend.
+
+  The guards, each for a reason:
+  - LEFT must be exactly a load of the SAME symbol. `s := t + x` must not touch
+    t, and `s := (s + a) + b` has a BINOP on the left, not a load.
+  - by-ref params are out: the slot holds the caller's address, not a handle.
+  - the RHS must be ScratchSafeSubtree, i.e. PROVABLY side-effect free. Append
+    evaluates the right operand BEFORE reading the destination, where concat
+    reads the destination first. For `s := s + f()` with an f that assigns to
+    s, those two orders give different answers, so anything that can call
+    stays on the concat path. }
+function IRIsSelfStrAppend(symIdx, valueNode: Integer): Boolean;
+var rhsTk: TTypeKind;
+begin
+  IRIsSelfStrAppend := False;
+  if valueNode < 0 then Exit;
+  if IRKind[valueNode] <> IR_BINOP then Exit;
+  if IntToTokenKind(IRC[valueNode]) <> tkPlus then Exit;
+  if IntToTypeKind(IRTk[valueNode]) <> tyAnsiString then Exit;
+  if IRKind[IRA[valueNode]] <> IR_LOAD_SYM then Exit;
+  if IRA[IRA[valueNode]] <> symIdx then Exit;
+  if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then Exit;
+  if not ScratchSafeSubtree(IRB[valueNode]) then Exit;
+  rhsTk := IntToTypeKind(IRTk[IRB[valueNode]]);
+  IRIsSelfStrAppend := (rhsTk = tyAnsiString) or (rhsTk = tyString) or
+                       (rhsTk = tyChar);
+end;
+
+{ Emit `s := s + rhs` as an in-place append. Leaves the slot owning whatever
+  handle PXXStrAppend published — it grows the block in place when s is the
+  sole owner, and otherwise copies and releases the old handle itself. So the
+  caller must NOT run the usual retain-new / release-old dance around this. }
+procedure EmitAnsiStrAppendToSym(symIdx, rhs: Integer);
+var rhsTk: TTypeKind;
+begin
+  rhsTk := IntToTypeKind(IRTk[rhs]);
+  IREmitNode(rhs);
+  EmitB($50);                                       { push rhs value }
+  if rhsTk = tyAnsiString then
+  begin
+    EmitB($48); EmitB($8B); EmitB($34); EmitB($24); { mov rsi, [rsp] }
+    EmitB($31); EmitB($D2);                         { xor edx, edx }
+    EmitB($48); EmitB($85); EmitB($F6);             { test rsi, rsi }
+    EmitB($74); EmitB($04);                         { jz +4 (nil -> len 0) }
+    EmitB($48); EmitB($8B); EmitB($56); EmitB($F8); { mov rdx, [rsi-8] }
+  end
+  else if rhsTk = tyString then
+  begin
+    EmitB($48); EmitB($8B); EmitB($34); EmitB($24); { mov rsi, [rsp] }
+    EmitB($48); EmitB($8B); EmitB($16);             { mov rdx, [rsi] }
+    EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+  end
+  else
+  begin
+    { a char: its code is the pushed word, so the byte to copy is at [rsp] }
+    EmitB($48); EmitB($8D); EmitB($34); EmitB($24); { lea rsi, [rsp] }
+    EmitB($BA); EmitI32(1);                         { mov edx, 1 }
+  end;
+  if Syms[symIdx].Kind = skGlobal then
+    begin EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+  else
+    begin EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[symIdx].Offset); end;
+  IREmitCodeCall(AnsiStrAppendAddr);
+  EmitB($59);                                       { pop rcx — drop the rhs }
 end;
 
 procedure IREmitLeaveExceptionFrames(count: Integer);
@@ -2888,7 +2981,11 @@ begin
         else if Syms[symIdx].TypeKind = tyAnsiString then
         begin
           valueNode := IRB[node];
-          if (IRKind[valueNode] = IR_CALL) and (IRA[valueNode] = -Ord(tkArgStr)) then
+          if IRIsSelfStrAppend(symIdx, valueNode) then
+            { `s := s + x`: append into s's own block. PXXStrAppend performs the
+              whole slot update, so none of the retain/release paths below run. }
+            EmitAnsiStrAppendToSym(symIdx, IRB[valueNode])
+          else if (IRKind[valueNode] = IR_CALL) and (IRA[valueNode] = -Ord(tkArgStr)) then
           begin
             { managed ParamStr/ArgStr: build a managed string from argv[i] and
               publish into dst. The value-build path below would otherwise emit the

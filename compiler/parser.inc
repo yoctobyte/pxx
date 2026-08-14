@@ -32871,6 +32871,11 @@ begin
   dummyNames[3] := 'lenB';  dummyTypes[3] := tyNativeInt;
   i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
 
+  dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;
+  dummyNames[2] := 'lenB';    dummyTypes[2] := tyNativeInt;
+  i := RegisterProc('PXXStrAppend', False, tyPointer, 3, dummyNames, dummyTypes);
+
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);
   i := RegisterProc('PXXStrDecRef', False, tyPointer, 1, dummyNames, dummyTypes);
