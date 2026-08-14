@@ -20,7 +20,7 @@
 #
 # KNOWN-BENIGN divergences, checked and NOT bugs -- do not re-chase them:
 #   lib_platform_esp  sendto=-9 (x86-64) vs -14 (cross). The test calls
-#     PalSendToIpv4 on fd 0 with a nil buffer, i.e. deliberately invalid, and
+#     PalSendToIpv4 on fd -1 with a nil buffer, i.e. deliberately invalid, and
 #     the kernels differ only in WHICH error they report first (EBADF vs
 #     EFAULT). A real UDP sendto/recvfrom round trip on loopback was verified
 #     byte-identical on x86-64, i386, arm32 and aarch64.

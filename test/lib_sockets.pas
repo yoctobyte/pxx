@@ -8,7 +8,11 @@ begin
   if b then writeln(tag, '=ok') else writeln(tag, '=FAIL');
 end;
 
-const PORT = 28744;
+{ Bind port 0 and read back what the kernel gave us, exactly as
+  test/lib_net_v6only.pas does. A FIXED port made two concurrent runs collide
+  — a gate and a cross-sweep overlapping was enough
+  ([[bug-b-two-lib-tests-are-environment-dependent-by-construction]]). }
+const PORT = 0;
 
 var
   srv, cli, conn: cint;
@@ -33,6 +37,11 @@ begin
   a.sin_addr.s_addr := htonl(INADDR_LOOPBACK);
   SayBool('bind', fpBind(srv, @a, SizeOf(TInetSockAddr)) = 0);
   SayBool('listen', fpListen(srv, 4) = 0);
+
+  { What port did we actually land on? The client below must aim at that, not
+    at the 0 we asked for. Also asserts fpGetSockName, which nothing else did. }
+  alen := SizeOf(TInetSockAddr);
+  SayBool('sockname', (fpGetSockName(srv, @a, @alen) = 0) and (ntohs(a.sin_port) > 0));
 
   { Client connects to our own listener (kernel completes loopback SYN). }
   cli := fpSocket(AF_INET, SOCK_STREAM, 0);

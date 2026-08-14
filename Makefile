@@ -9338,7 +9338,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_strpchar.pas /tmp/lib_strpchar
 	test "$$(/tmp/lib_strpchar)" = "$$(printf 'strlcopy-ret=ok\nstrlcopy-trunc=ok\nstrlcopy-short=ok\nstrlcomp-eq=ok\nstrlcomp-lt=ok\nstrlcomp-gt=ok\nsleep=ok\nmove-fillchar=ok\ninttohex-ff=ok\ninttohex-pad=ok\nstringofchar=ok\nstringofchar-0=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_sockets.pas /tmp/lib_sockets
-	test "$$(/tmp/lib_sockets)" = "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok')"
+	test "$$(/tmp/lib_sockets)" = "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_sha256.pas /tmp/lib_sha256
 	test "$$(/tmp/lib_sha256 | grep -c '=ok')" = "12"
 	test "$$(/tmp/lib_sha256 | grep -c 'FAIL')" = "0"
