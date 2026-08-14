@@ -150,4 +150,4 @@ auto-resolved is a constructed problem. The rules above cost little and cover
 the real cases; nothing here justifies a resolution-order redesign.
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit e0bdf1499.
