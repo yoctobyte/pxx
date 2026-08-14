@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:4 backlog:218 experimental:20 rainy-day:40 done-followup:3 decided:68 done:1767 rejected:35`
+`unfinished:9 blocked:5 backlog:218 experimental:20 rainy-day:40 done-followup:3 decided:68 done:1767 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -23,8 +23,9 @@ _none — no lane is locked._
 - `feature-pascal-corpus-generics` [P]
 - `feature-real-dynlib-loader` [B]
 
-## blocked (4) — has an unmet blocker; do not claim
+## blocked (5) — has an unmet blocker; do not claim
 
+- `bug-b-inttohex-of-a-negative-integer-prints-16-digits` [B] — blocked-by: bug-a-overload-resolution-widens-to-int64-instead-of-picking-the-narrowest-fit
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `bug-pascal-uses-is-transitive` [A] — blocked-by: task-t-strict-uses-corpus-sweep
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path

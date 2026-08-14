@@ -144,8 +144,15 @@ function SysBackTraceStr(Addr: Pointer): string;
 function IntToStr(value: Int64): AnsiString;
 
 { Uppercase hexadecimal of value, left-zero-padded to at least Digits chars
-  (FPC SysUtils.IntToHex). Negative values use their two's-complement bits. }
-function IntToHex(value: Int64; digits: Integer): AnsiString;
+  (FPC SysUtils.IntToHex). Negative values use their two's-complement bits —
+  OF THEIR OWN WIDTH, which is why this is a family and not one Int64 routine:
+  with only the Int64 spelling a 32-bit Integer is sign-extended before the
+  routine sees it, so IntToHex(-1, 8) printed FFFFFFFFFFFFFFFF where FPC prints
+  FFFFFFFF. Digits is a MINIMUM, so the extra F's could not be trimmed back off.
+  ([[bug-b-inttohex-of-a-negative-integer-prints-16-digits]]) }
+function IntToHex(value: Int64; digits: Integer): AnsiString; overload;
+function IntToHex(value: LongInt; digits: Integer): AnsiString; overload;
+function IntToHex(value: LongWord; digits: Integer): AnsiString; overload;
 
 { FPC System.HexStr(Value, Digits): uppercase hex, left-zero-padded to Digits. Same result
   as IntToHex; declared because FPC code calls it by this name (fpjson escapes a character
@@ -726,6 +733,21 @@ begin
   end;
   while Length(s) < digits do s := '0' + s;
   Result := s;
+end;
+
+{ 32-bit signed: mask to its own 32 bits FIRST, so a negative renders eight
+  digits and not sixteen. LongWord() is the mask; the Int64 widening after it
+  is then zero-extension. }
+function IntToHex(value: LongInt; digits: Integer): AnsiString;
+begin
+  Result := IntToHex(Int64(LongWord(value)), digits);
+end;
+
+{ 32-bit unsigned: no sign to extend, but declared so a Cardinal/Word/Byte
+  argument cannot pick up the Int64 spelling by widening. }
+function IntToHex(value: LongWord; digits: Integer): AnsiString;
+begin
+  Result := IntToHex(Int64(value), digits);
 end;
 
 function StringOfChar(ch: Char; count: Integer): AnsiString;
