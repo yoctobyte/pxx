@@ -1,20 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-13T23:24:37Z",
-   "fixed": [
-    "test-arm32#src:examples/net/httpdemo.pas",
-    "test-i386#src:examples/net/httpdemo.pas",
-    "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas"
-   ],
-   "new_red": [
-    "test-nilpy#src:examples/tk/callbacks.npy"
-   ],
-   "sha": "30dc68bc02bb5fe4dfc84187ffe2644f99763f94",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-13T23:30:09Z",
    "fixed": [],
    "new_red": [],
@@ -413,6 +399,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "12f53019552fcdf46557f556b0f46d5992bcb705",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-14T18:00:22Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ea550ddb24557d5553b835d74631e5a72a4f8dc5",
    "tier": "native",
    "verdict": "RED"
   }
@@ -5231,11 +5225,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-14T17:36:55Z",
-  "sha": "12f53019552fcdf46557f556b0f46d5992bcb705",
+  "date": "2026-08-14T18:00:22Z",
+  "sha": "ea550ddb24557d5553b835d74631e5a72a4f8dc5",
   "tier": "native",
   "verdict": "RED",
-  "wall": 1242.3
+  "wall": 1253.9
  },
  "last_bench": {
   "conf_rows": 550,
