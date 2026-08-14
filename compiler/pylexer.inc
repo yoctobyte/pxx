@@ -910,6 +910,23 @@ begin
           Inc(P);
         end;
         k := PyKeyword(s);
+        { Python's `Exception` is a LANGUAGE builtin; sysutils' Pascal class of
+          that name is one library's design choice. They are different concepts
+          that happened to share a spelling, and sharing it cost pylib the
+          ability to give its own class any member sysutils lacks — the whole of
+          decide-pylib-exception-vs-sysutils-exception. So the Python builtin is
+          renamed to pylib's `PyException` HERE, at the token, which is the level
+          the user specified and the cheapest one that gets two properties free:
+          a string literal `"Exception"` is untouched (a lexer sees tokens), and
+          `class MyErr(Exception)` maps with no special case because the base
+          reference is the same bare identifier.
+
+          BARE ONLY — never after a dot. `import sysutils as su` then
+          `su.Exception` still means the Pascal class, which is what makes the
+          bridging case expressible rather than impossible. }
+        if (k = tkIdent) and (s = 'Exception') and
+           ((TokCount = streamBase) or (Tokens[TokCount - 1].Kind <> tkDot)) then
+          s := 'PyException';
         { the FIRST token of the logical line decides whether an inline suite is
           possible at all — `x = {1: 2}` must not be mistaken for a header }
         if (parenDepth = 0) and (not lineSawColon) and

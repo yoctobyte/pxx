@@ -57,17 +57,16 @@ const
 
 type
 
-  { Storage shape MUST match pylib's `Exception` declaration member for member:
-    the field `msg` first, `FHelpContext` second, with FMessage/Message as
-    PROPERTIES over msg. Both units declare `Exception`, the name is shared
-    program-wide (ClassNameIsDeliberatelyShared), and whichever unit registers
-    first owns the single row — so the two declarations have to be
-    interchangeable. They were not: sysutils stored in a FIELD `FMessage`, so
-    any program that pulled sysutils before pylib compiled pylib's own method
-    bodies against this class and died with "undefined variable (msg)". That
-    took out examples/net/httpdemo.pas on every target and any `uses json`.
-    Keep the two declarations in step; the real cure is
-    decide-class-namespace-scoping. }
+  { pylib's Python root is a DIFFERENT class now — `PyException`
+    (decide-pylib-exception-vs-sysutils-exception option 5) — so this
+    declaration is free again: it no longer has to match pylib's member for
+    member, and neither unit blocks the other from growing.
+
+    ONE contract survives, and it is narrow: `msg` stays the FIRST field. A
+    NilPy `except Exception:` bridges to this class as well (Python's root
+    catches everything a program can raise, and an RTL raise is still that), so
+    the binder reads the message through pylib's class layout. First field,
+    same type — that is all the bridge needs, and it is the only coupling left. }
   Exception = class
     msg: string;
     FHelpContext: Integer;

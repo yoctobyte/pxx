@@ -1,0 +1,44 @@
+# decide-pylib-exception-vs-sysutils-exception option 5: Python's `Exception` is
+# a LANGUAGE builtin and pylib implements it as `PyException`; sysutils' class of
+# that name is one Pascal library's design choice. pylexer.inc maps the BARE
+# identifier and nothing else, which is what keeps the two nameable apart.
+#
+#   Exception        -> PyException   (the Python builtin)
+#   su.Exception     -> unchanged     (sysutils' Pascal class)
+#   "Exception"      -> unchanged     (a lexer sees tokens, not text)
+#   class E(Exception) -> maps too, with no special case: the base-class
+#                         reference is the same bare identifier
+import sysutils as su
+
+
+class MyErr(Exception):
+    pass
+
+
+# the bare name is the Python root: it catches a Python raise...
+try:
+    raise MyErr("mine")
+except Exception as e:
+    print("bare caught:", e)
+
+# ...and BRIDGES to the Pascal root as well, because in Python `except
+# Exception:` catches everything the program can raise and an RTL raise is
+# still that. The bridge is an explicit catch rule in pyparser's except arm,
+# not a namespace merge.
+try:
+    x = su.StrToInt("abc")
+except Exception as e:
+    print("bridge caught:", e)
+
+# the QUALIFIED name is the Pascal class, and only it. `e` is a Pascal object
+# here, so its MESSAGE is read through the Pascal property — print(e) on it
+# gives Python's generic object repr, which is honest: CPython has no such
+# class, so nothing about upward compatibility says otherwise.
+try:
+    x = su.StrToInt("nope")
+except su.Exception as e:
+    print("qualified caught:", e.Message)
+
+# a string literal spelling it is untouched
+print("literal:", "Exception")
+print("end")

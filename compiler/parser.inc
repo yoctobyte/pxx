@@ -11403,7 +11403,7 @@ begin
         LastExprTk := tyVariant;
         Exit;
       end
-      else if isNilPy and CaseEqual(name, 'format') and (FindSym(name) < 0) and
+      else if NilPyUserCode and CaseEqual(name, 'format') and (FindSym(name) < 0) and
               (not PyUserShadowsProc(name)) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -11418,7 +11418,15 @@ begin
           arm's: it is the one predicate every name-keyed lowering asks, and it
           also knows Python rebinds the name only from the `def` statement
           onward. An arm that answers it itself is how `open` came to ignore a
-          user def entirely. }
+          user def entirely.
+
+          NilPyUserCode, not isNilPy: isNilPy is true for the WHOLE compilation
+          including every PASCAL unit loaded into it, and `Format` is a name the
+          Pascal RTL genuinely calls — sysutils' own `Format(fmt, args)` inside
+          `Exception.CreateFmt` lowered to pyformat_v(msg, args) in any .npy
+          that reached sysutils, so an RTL raise came back as `unsupported
+          format spec ""` instead of its message. Same fix, same predicate, as
+          the member-resolution hijack at PyClsAttrOvrGet. }
         CurASTNode := PyParseFormatCall;
         LastExprTk := tyAnsiString;
         Exit;
@@ -26465,10 +26473,9 @@ begin
             true about the OTHER class, which is what made it a long detour in a
             4000-line unit (bug-pascal-duplicate-class-name-silently-shadows).
 
-            Scoped to the DECLARING UNIT: the same name in two units is the
-            separate, deliberate arrangement ClassNameIsDeliberatelyShared
-            covers, and the real answer to that is
-            bug-pascal-uses-is-transitive. A FORWARD stub is not a duplicate and
+            Scoped to the DECLARING UNIT: the same name in two units is
+            legitimate and is what --strict-uses scopes properly
+            (bug-pascal-uses-is-transitive). A FORWARD stub is not a duplicate and
             is handled above. TObject and TGuid are pre-registered by the
             compiler before any source is parsed, with whatever CurrentUnitIdx
             holds at the time, so a program declaring its own — which
@@ -26476,7 +26483,6 @@ begin
             read as one. }
           if (ci >= 0) and (UClsUnitIdx[ci] = CurrentUnitIdx) and
              not UClsIsRecord[ci] and
-             not ClassNameIsDeliberatelyShared(LowerCase(tname)) and
              not CaseEqual(tname, 'TObject') and not CaseEqual(tname, 'TGuid') then
             Error('duplicate class name ' + tname
                   + ' — one of that name is already declared in this unit, and'
@@ -28699,11 +28705,11 @@ begin
     end;
       { A `ClassName.MethodName` impl header always implements a class declared
         in THIS unit -- Pascal has no syntax for implementing another unit's
-        method from outside it. So the lookup must prefer a same-unit class
-        even for a name ClassNameIsDeliberatelyShared exempts from the general
-        per-unit preference (bug-pascal-uses-order-breaks-pylib-exception):
-        pylib and sysutils both declare `Exception`, and FindUClass's flat
-        first-match (needed so `except Exception:` keeps working regardless of
+        method from outside it. So the lookup must prefer a same-unit class,
+        which used to be defeated by the `Exception` shared-name exemption
+        (bug-pascal-uses-order-breaks-pylib-exception): pylib and sysutils both
+        declared `Exception`, and FindUClass's flat first-match (needed so
+        `except Exception:` kept working regardless of
         uses order) was also catching this header, so whichever unit registered
         second had its OWN constructor bodies bound to the OTHER unit's class
         -- e.g. pylib's `Exception.Create` resolving fields against sysutils'

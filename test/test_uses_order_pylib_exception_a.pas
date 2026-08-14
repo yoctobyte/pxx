@@ -1,23 +1,20 @@
 program TestUsesOrderPylibExceptionA;
-{ bug-pascal-uses-order-breaks-pylib-exception: sysutils named BEFORE pylib.
-  Both units declare a class literally named `Exception`; the name is
-  deliberately shared program-wide (ClassNameIsDeliberatelyShared) so a bare
-  `except Exception:` catches either RTL's raise. That shared-name bypass was
-  ALSO catching the `ClassName.MethodName` impl-header lookup, so whichever
-  unit's `Exception` registered second had its OWN constructor bodies bound to
-  the OTHER unit's class -- pylib's `Exception.Create` resolving `msg` against
-  sysutils' class and reporting "undefined variable (msg)". Which unit is
-  named first must not change whether either surface compiles or runs.
-  Companion file test_uses_order_pylib_exception_b.pas runs the same checks
-  with the uses clause reversed. }
+{ bug-pascal-uses-order-breaks-pylib-exception / bug-pascal-uses-is-transitive:
+  sysutils named BEFORE pylib. `Exception` is now sysutils' class and ONLY
+  sysutils' — pylib's Python root was renamed PyException
+  (decide-pylib-exception-vs-sysutils-exception option 5), so the name has one
+  meaning here instead of resolving to whichever unit registered first.
+  Which unit is named first must not change what compiles, what runs, or what
+  CreateFmt prints. Companion test_uses_order_pylib_exception_b.pas runs the
+  same checks with the uses clause reversed and must produce the IDENTICAL
+  output — that equality is the whole test. }
 uses sysutils, pylib;
 
 var
   e: Exception;
 
 begin
-  { pylib's own Exception surface: constructs, and Create's body must see its
-    own `msg` field. }
+  { Constructs, and Create's body must see its own `msg` field. }
   e := Exception.Create('pylib hi');
   WriteLn(e.Message);
 
@@ -29,12 +26,10 @@ begin
       WriteLn('caught: ', ex.Message);
   end;
 
-  { The shared `Exception` name flat-resolves to whichever unit registered
-    FIRST -- here sysutils, so bare `Exception.CreateFmt` must run SYSUTILS'
-    own body (FPC Format(), which pads a width spec like %5d) and not have
-    been silently overwritten by pylib's own CreateFmt body (which leaves an
-    unsupported spec like %5d VERBATIM) binding to the wrong class row --
-    the actual corruption this bug caused before the fix. }
+  { `Exception` is sysutils' class, so CreateFmt runs SYSUTILS' body (FPC
+    Format(), which pads a width spec like %5d) -- in EITHER uses order. It
+    used to run whichever unit registered first, so this line printed `[%5d]`
+    or `[    3]` depending on the clause above. }
   e := Exception.CreateFmt('[%5d]', [3]);
   WriteLn(e.Message);
 

@@ -6226,7 +6226,7 @@ begin
     nArgs > 1. }
   if (ctorMi >= 0) and (nArgs = 1) and (Procs[ctorPi].ParamCount - 1 = 1) then
   begin
-    excFoldCi := FindUClass('Exception');
+    excFoldCi := FindUClass('PyException');
     if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
     begin
       excFoldN := ASTRight[ASTLeft[node]];   { the single user arg }
@@ -6253,7 +6253,7 @@ begin
      (Procs[ctorPi].ParamCount - 1 = 1) and
      (Procs[ctorPi].Params[1].TypeKind in [tyString, tyAnsiString, tyVariant]) then
   begin
-    excFoldCi := FindUClass('Exception');
+    excFoldCi := FindUClass('PyException');
     if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
     begin
       { pyvar_repr, NOT pyrepr_of: the latter is OVERLOADED per argument type
@@ -6329,7 +6329,7 @@ begin
   if (ctorMi >= 0) and (nArgs = 0) and (Procs[ctorPi].ParamCount - 1 = 1) and
      (Procs[ctorPi].Params[1].TypeKind = tyVariant) then
   begin
-    excFoldCi := FindUClass('Exception');
+    excFoldCi := FindUClass('PyException');
     if (excFoldCi >= 0) and ((ci = excFoldCi) or IsSubclassOf(ci, excFoldCi)) then
     begin
       argNode := AllocNode(AN_ARG);
@@ -14571,7 +14571,7 @@ begin
                                   node, -1);
     Exit;
   end;
-  excCi := FindUClass('Exception');
+  excCi := FindUClass('PyException');
   if (excCi >= 0) and ((argCi = excCi) or IsSubclassOf(argCi, excCi)) then
   begin
     fieldNode := AllocNode(AN_FIELD);
@@ -15138,12 +15138,12 @@ begin
     is the one construct whose meaning differs between dialects — objfpc reads
     the result, delphi makes a recursive call — so --warn-self-result (on by
     default) flags it. This was the compiler's only occurrence. }
-  Result := FindUClass('Exception');
+  Result := FindUClass('PyException');
   if Result < 0 then
   begin
-    k := PyStoredName('Exception');
+    k := PyStoredName('PyException');
     AddUClass(k, 9);
-    Result := FindUClass('Exception');
+    Result := FindUClass('PyException');
   end;
 end;
 
@@ -15362,6 +15362,7 @@ var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Inte
     elseSeq, elseFlag, elsePair, elseIf: Integer;
     handlerName, className, hidName: AnsiString;
     excRecs: array[0..15] of Integer; nExc, ei: Integer;   { except (A, B, ...) tuple }
+    bridgeCi: Integer;                 { sysutils' Pascal `Exception`, when the arm is the bare root }
     hidLo, hidHi, hidDepth: Integer;   { the handler suite, for the binder rename }
 begin
   Inc(GenTryDepth);
@@ -15405,11 +15406,27 @@ begin
             className := CurTok.SVal;
             Next;
           end;
-          if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
+          if CaseEqual(className, 'PyException') then ci := PyEnsureExceptionClass
           else ci := FindUClass(className);
           if ci < 0 then Error('Nil Python: unknown exception class ' + className);
           if nExc > 15 then Error('Nil Python: too many exception classes in one except');
           excRecs[nExc] := REC_UCLASS_BASE + ci; Inc(nExc);
+          { `except Exception:` in Python catches EVERYTHING the program can
+            raise, and in a NilPy program that includes a raise from a Pascal
+            RTL unit — whose hierarchy roots at sysutils' own `Exception`, a
+            genuinely different class now that pylib's is PyException
+            (decide-pylib-exception-vs-sysutils-exception option 5). This is
+            the explicit BRIDGE that replaces the old namespace merge: the bare
+            root arm catches both roots, using the tuple machinery already
+            here. A QUALIFIED `su.Exception` is not this arm — className is
+            'Exception' there, unmapped by the lexer — and stays one class,
+            which is what makes the two distinguishable at all. }
+          if CaseEqual(className, 'PyException') then
+          begin
+            bridgeCi := FindUClass('Exception');
+            if (bridgeCi >= 0) and (nExc <= 15) then
+            begin excRecs[nExc] := REC_UCLASS_BASE + bridgeCi; Inc(nExc); end;
+          end;
           if not Eat(tkComma) then Break;
         end;
         Expect(tkRParen, ')');
@@ -15429,11 +15446,27 @@ begin
           className := CurTok.SVal;
           Next;
         end;
-        if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
+        if CaseEqual(className, 'PyException') then ci := PyEnsureExceptionClass
         else ci := FindUClass(className);
         if ci < 0 then Error('Nil Python: unknown exception class ' + className);
         recId := REC_UCLASS_BASE + ci;
         excRecs[0] := recId; nExc := 1;
+          { `except Exception:` in Python catches EVERYTHING the program can
+            raise, and in a NilPy program that includes a raise from a Pascal
+            RTL unit — whose hierarchy roots at sysutils' own `Exception`, a
+            genuinely different class now that pylib's is PyException
+            (decide-pylib-exception-vs-sysutils-exception option 5). This is
+            the explicit BRIDGE that replaces the old namespace merge: the bare
+            root arm catches both roots, using the tuple machinery already
+            here. A QUALIFIED `su.Exception` is not this arm — className is
+            'Exception' there, unmapped by the lexer — and stays one class,
+            which is what makes the two distinguishable at all. }
+        if CaseEqual(className, 'PyException') then
+        begin
+          bridgeCi := FindUClass('Exception');
+          if bridgeCi >= 0 then
+          begin excRecs[nExc] := REC_UCLASS_BASE + bridgeCi; Inc(nExc); end;
+        end;
       end;
       if PyIsIdent('as') then
       begin
@@ -20274,9 +20307,9 @@ begin
         static answer. A non-object tag unboxes to nil and pyraise_check turns
         that into the TypeError CPython raises for `raise 5`. }
       if (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) and
-         (FindUClass('Exception') >= 0) then
+         (FindUClass('PyException') >= 0) then
         CurASTNode := PyUnboxVariantToClass(PyRaiseCheckVariant(CurASTNode),
-                                            FindUClass('Exception'));
+                                            FindUClass('PyException'));
       ASTLeft[node] := CurASTNode;
       { `raise X from e` — PEP 3134 exception chaining. The cause is metadata
         (it sets __cause__ for the traceback); the raise itself is unchanged, so
@@ -20626,7 +20659,7 @@ begin
     if CaseEqual(name, '__init__') and (CurSelfClass >= REC_UCLASS_BASE) and
        (CurTok.Kind <> tkRParen) then
     begin
-      ci := FindUClass('Exception');
+      ci := FindUClass('PyException');
       if (ci >= 0) and (CurSelfClass - REC_UCLASS_BASE <> ci) and
          (not IsSubclassOf(CurSelfClass - REC_UCLASS_BASE, ci)) then ci := -1;
       if ci >= 0 then
@@ -26884,11 +26917,11 @@ begin
               the first row of the name may be a same-named RECORD.
               bug-nilpy-text-class-name-binds-the-rtl-file-record. }
             baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
-            if (baseCi < 0) and CaseEqual(GetTokenStr(i + 3), 'Exception') then
+            if (baseCi < 0) and CaseEqual(GetTokenStr(i + 3), 'PyException') then
             begin
-              k := PyStoredName('Exception');
+              k := PyStoredName('PyException');
               AddUClass(k, 9);
-              baseCi := FindUClass('Exception');
+              baseCi := FindUClass('PyException');
             end;
           end;
           if baseCi >= 0 then
@@ -27104,11 +27137,11 @@ begin
       class, so `class H(Text)` inherited a record with no methods.
       bug-nilpy-text-class-name-binds-the-rtl-file-record. }
     baseCi := FindUClassNonRecord(CurTok.SVal);
-    if (baseCi < 0) and CaseEqual(CurTok.SVal, 'Exception') then
+    if (baseCi < 0) and CaseEqual(CurTok.SVal, 'PyException') then
     begin
-      k := PyStoredName('Exception');
+      k := PyStoredName('PyException');
       AddUClass(k, 9);
-      baseCi := FindUClass('Exception');
+      baseCi := FindUClass('PyException');
     end;
     if baseCi < 0 then
       Error('Nil Python: unknown base class ' + CurTok.SVal);
