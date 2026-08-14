@@ -1,0 +1,35 @@
+# `{*xs}` deduplicates, because a set display deduplicates however its elements
+# arrive. Its ordinary elements went through TPyList.add (which dedups) while
+# its STAR arm called TPyList.extend (which appends), so `len({*[1,1,2]})` was 3
+# — one arm of one procedure carrying the fix that
+# bug-nilpy-set-literal-does-not-deduplicate had landed on the other.
+# bug-nilpy-set-star-spread-does-not-dedup
+#
+# The fix picks setupdate vs extend from the same `dedup` flag that already
+# picks add vs append_self, so ONE thing still decides whether a display
+# deduplicates. setupdate already existed; nothing was added to pylib.
+#
+# The list rows are not padding: they are what says the change did not turn
+# `[*xs]` into a set. That is the failure a "make it dedup" fix invites.
+
+print(len({*[1, 1, 2]}), len({1, 1, 2}))
+print(len({*"aab"}), len({*"abc"}))
+print(sorted({*[3, 1, 3, 2]}))
+print(sorted({*"ba", *"ab"}))
+print(sorted({0, *[1, 1], 2}))
+print(sorted({*(1, 1, 3)}))
+print(sorted({*[1, 1], *[1, 2]}))
+print(len({*[]}), len({*""}))
+
+# a LIST display must still keep its duplicates
+print(sorted([*[1, 1, 2]]))
+print(sorted([*"aab"]))
+print([*[1, 1], 1])
+print(len([*[1, 1, 2]]))
+
+# the sibling paths that were already right, so they stay right
+xs = [1, 1, 2, 2, 3]
+print(sorted({x for x in xs}), len({x for x in xs}))
+print(sorted({x % 2 for x in xs}))
+print({k: 1 for k in "aab"}, len({k: 1 for k in "aab"}))
+print(sorted(set(xs)), len(set("aab")))

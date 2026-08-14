@@ -13829,9 +13829,18 @@ begin
         `{*s}` were a SIGSEGV with no diagnostic on every pin before this one.
         Third and last of the star sites this normalisation was missing
         (bug-nilpy-join-of-a-str-segfaults). }
-      starExt := PyCallMeth1(ci, 'extend', PyMakeIdent(tmpSym),
-                             PyIterArgAsList(CurASTNode));
-      if starExt < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+      { `extend` APPENDS, so a set display's star arm skipped the very
+        deduplication its ordinary elements go through (`add`, chosen above) —
+        `{*[1,1,2]}` had three elements. setupdate is the dedup-aware bulk add
+        and already existed, so `dedup` picks the bulk operation exactly the way
+        it already picks the per-element one, and there is still one mechanism
+        deciding whether a display deduplicates
+        (bug-nilpy-set-star-spread-does-not-dedup). }
+      if dedup then starExt := PyCallMeth1(ci, 'setupdate', PyMakeIdent(tmpSym),
+                                           PyIterArgAsList(CurASTNode))
+      else starExt := PyCallMeth1(ci, 'extend', PyMakeIdent(tmpSym),
+                                  PyIterArgAsList(CurASTNode));
+      if starExt < 0 then Error('Nil Python: pylib TPyList.extend/setupdate not loaded');
       PyHoistStmt(starExt);
       if not Eat(tkComma) then break;
       Continue;
