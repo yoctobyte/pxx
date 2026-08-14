@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:5 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1786 rejected:37`
+`unfinished:9 blocked:5 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1787 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,12 +31,11 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 206, ranked
+## Ready — top 30 of 205, ranked
 
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [A]` bug-a-a-single-in-array-of-const-is-boxed-4-bytes-and-read-as-8
 - `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -63,5 +62,6 @@ _none — no lane is locked._
 - `[p 50] [N]` bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry
 - `[p 50] [A]` bug-no-qualified-syntax-for-a-cross-language-import
 - `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
+- `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 
-_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

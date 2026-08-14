@@ -33,8 +33,14 @@ begin
   end;
 end;
 
-var b: Boolean; c: Char; n: Int64; d: Double; s: AnsiString;
+var b: Boolean; c: Char; n: Int64; d: Double; g: Single; s: AnsiString;
 begin
-  b := True; c := 'Q'; n := 5000000000; d := 3.5; s := 'hi';
-  show([42, b, c, n, d, s]);
+  b := True; c := 'Q'; n := 5000000000; d := 3.5; g := 0.25; s := 'hi';
+  { A Single tags vtExtended like every other float -- FPC has no vtSingle --
+    so its BOX has to be 8 bytes wide, or this PD(...)^ deref reads four bytes
+    of the Single plus four of whatever is next to it. It used to: Format('%g',
+    [aSingle]) printed 5.122630465115234E-315 for 0.1, exactly Single(0.1)'s
+    bits as the low half of a double.
+    bug-a-a-single-in-array-of-const-is-boxed-4-bytes-and-read-as-8 }
+  show([42, b, c, n, d, g, s]);
 end.

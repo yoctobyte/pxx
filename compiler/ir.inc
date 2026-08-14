@@ -4852,7 +4852,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     rcSubLo, rcSubHi: Int64;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
-    vrElemTk: TTypeKind;
+    vrElemTk, vrBoxTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
     dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
     dcRetData, dcSrcAst: Integer;
@@ -5085,10 +5085,26 @@ begin
             `['b %', LabelPositions[i] - CodeLen]`) dereference boxed Int64 holes,
             so this stays correct for both user `array of const` and internal asm.
             The local is unmanaged and written before any read — no nil-init. }
-          vrBoxSym := AllocVar('', vrElemTk);
+          { The box is as wide as the TAG promises, not as wide as the element.
+            `vtExtended` is the only float tag there is — FPC has no vtSingle,
+            every float goes in as VExtended — so every consumer dereferences
+            `PDoubleRec(v.VExtended)^`, an 8-byte read. A tySingle box is 4
+            bytes, so the reader took the Single's bits plus whatever sat next
+            to them: `Format('%g', [aSingle])` printed 5.122630465115234E-315
+            for 0.1, which is exactly Single(0.1)'s 0x3DCCCCCD read as the low
+            half of a double. Silent garbage, and it cannot be repaired at the
+            reader — no tag distinguishes the two widths.
+
+            Widening HERE keeps the tag honest and changes no consumer. The
+            store's DEST type does the conversion, the same mechanism the
+            32-bit C vararg promotion above relies on.
+            bug-a-a-single-in-array-of-const-is-boxed-4-bytes-and-read-as-8 }
+          vrBoxTk := vrElemTk;
+          if vrBoxTk = tySingle then vrBoxTk := tyDouble;
+          vrBoxSym := AllocVar('', vrBoxTk);
           IRAppend(IR_STORE_MEM,
             IRAppend(IR_SLOTADDR, vrBoxSym, -1, -1, 0, Ord(tyPointer)),
-            IRLowerAST(ASTLeft[item]), -1, 0, Ord(vrElemTk));
+            IRLowerAST(ASTLeft[item]), -1, 0, Ord(vrBoxTk));
           value := IRAppend(IR_SLOTADDR, vrBoxSym, -1, -1, 0, Ord(tyPointer));
         end
         else

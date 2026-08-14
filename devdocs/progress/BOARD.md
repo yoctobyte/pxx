@@ -36,11 +36,10 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (222)
+## backlog (221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-single-in-array-of-const-is-boxed-4-bytes-and-read-as-8 | A | 60 | bug | Format('%g', [aSingle]) returns 5.122630465115234E-315 where FPC gives 0.10000000149011612, and '%.4f' gives 0.0000 instead of 0.1000. compiler/ir.inc boxes an array-of-const element in a local of the ELEMENT's type, so a Single gets a 4-byte box, but it tags it vtExtended and every consumer dereferences 8 bytes. Confirmed arithmetically: the printed value is exactly Single(0.1)'s bit pattern read as the low half of a double. Silent garbage from any Format of a Single. | — |
 | bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes | A | 45 | bug | On aarch64 ONLY, WriteLn(Low(Int64)) prints -'..--).0-*(+,))+(0( instead of -9223372036854775808. Every one of the 19 digit bytes is Ord('0') - d where it should be Ord('0') + d, so the value is right and the rendering is wrong. Low(Int64)+1 prints correctly, and x86-64 / i386 / arm32 all print correctly. Silent output corruption in the integer writer, reachable from any program that prints Low(Int64). | — |
 | bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set | A | 40 | bug | `f(fmt, ['a'])` stops compiling when the routine is in a CROSS-UNIT overload set and its unit is used LAST: the literal is typed (ShortString, set) against an `array of const` parameter reported as `record`. Same-unit overload sets are fine, single cross-unit routines are fine, and reversing the uses order fixes it — so the array-of-const conversion is lost on one path through the cross-unit merge. | — |
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
@@ -420,9 +419,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1786)
+## done (1787)
 
-1786 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1787 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -471,7 +470,6 @@ _none_
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [A] bug-a-a-single-in-array-of-const-is-boxed-4-bytes-and-read-as-8
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
