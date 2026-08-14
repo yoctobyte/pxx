@@ -4,6 +4,7 @@ prio: 60
 type: decide
 blocked-by: []
 summary: "Own-language-first was decided with explicit import as its safety valve — 'nothing becomes unreachable, it just has to be asked for by name'. Measured: in Pascal there IS no distinct name to ask with, because Pascal is case-insensitive, so `uses './math.c'` does not ADD `exp` alongside `Exp`, it REPLACES it. The rule cannot be both a hard precedence and overridable by explicit import. Pick which gives."
+status: decided
 ---
 
 # Own-language-first vs explicit import, when the language is case-insensitive
@@ -89,3 +90,64 @@ independent of whatever is decided here —
 NilPy is untested for this and should be checked before A is built: `.npy`
 imports resolve `.py` first, but the same "cannot spell the difference" question
 may or may not arise there.
+
+## DECIDED 2026-08-14 by the user — a RULE SET, not one rule
+
+> *"It's a set of rules, and tbh it may change in the future. But for now I
+> think we are good. Compiler warnings, own-language prio, case matching — this
+> should solve most already. Plus, if a programmer insists on including both
+> math.pas and math.c, he/she/it should face the consequences."*
+
+Three mechanisms, layered, each cheap:
+
+1. **Own-language-first** stays the principle (user, 2026-08-10). A C call to
+   `exp` binds C's; a Pascal call to `Exp` binds Pascal's.
+2. **Case must agree** for a cross-language match. This is the mechanism, and it
+   closes the *entire known collision class* on its own — every Pascal spelling
+   is capitalised, every C name lowercase.
+3. **Warn** where a genuine ambiguity survives, naming what was picked.
+   Qualification is the escape and already works (§2.4 of
+   `devdocs/dev/name-resolution.md`: a qualified reference bypasses hiding).
+
+### The fork this ticket raised is dissolved, not answered
+
+The ticket's problem was that explicit import cannot be the safety valve in a
+case-insensitive language — `uses './math.c'` REPLACES `Exp` rather than adding
+`exp`, so there is no distinct name to ask with. **Rule 2 removes the need for
+the valve**: if a cross-language match requires matching case, `exp` and `Exp`
+never compete in the first place.
+
+`name-resolution.md` calls case-agreement a *"safety net, not the goal"* because
+it does not by itself express "the native language wins". Taken as the rule
+anyway, deliberately: it is simple, it closes the known class, and it is easy to
+change later — this decides which name wins in which case, not how the compiler
+is built.
+
+### Where the responsibility stops
+
+A programmer who deliberately pulls in both `math.pas` and `math.c` and then
+writes an ambiguous bare call **owns that outcome**. The compiler's obligation
+is to *warn*, not to guess correctly. That line is what keeps this from growing
+into a precedence engine.
+
+### What this unblocks, and how it is measured
+
+`feature-a-own-language-first-symbol-resolution` (Track A, `unfinished/`) was
+blocked on this fork and is now unblocked.
+
+The acceptance test is already written down and is concrete: **ten functions in
+`lib/crtl/src/math.c` are deliberately misnamed** — `__crtl_exp`, `__crtl_log2`,
+`__crtl_log10`, `__crtl_sin`, `__crtl_cos`, `__crtl_tan`, `__crtl_sinh`,
+`__crtl_cosh`, `__crtl_tanh`, `__crtl_hypot` — reached through `#define`s in
+crtl's `math.h`, purely to dodge Pascal case-insensitively. Those ten going back
+to their real names with the `#define`s deleted is how you know the rule landed.
+
+### Not a synthetic-case redesign
+
+Same judgement as [[decide-merge-variant-c-with-bare-name-collision]]: including
+`math.c` and `math.pas` together and then complaining that a bare name cannot be
+auto-resolved is a constructed problem. The rules above cost little and cover
+the real cases; nothing here justifies a resolution-order redesign.
+
+## Log
+- 2026-08-14 — decided, commit PENDING-COMMIT.

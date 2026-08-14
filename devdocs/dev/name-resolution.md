@@ -67,8 +67,28 @@ failed — is `math-implemented-twice.md`. Read it first if the rule looks like
 needless duplication: `Round(2.5)` is 2 in Pascal and 3 in C, both correct, and
 no single implementation can serve both.
 
-**Status: `feature-a-own-language-first-symbol-resolution` (Track A, unfinished,
-blocked on a design fork — see `decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language`).**
+**Status: `feature-a-own-language-first-symbol-resolution` (Track A, unfinished)
+— NO LONGER BLOCKED.** The design fork was decided 2026-08-14 (user) as a RULE
+SET rather than one rule:
+
+1. **own-language-first** is the principle (above);
+2. **a cross-language name match must agree on CASE** — this is the mechanism,
+   and it closes the entire known collision class by itself, since every Pascal
+   spelling is capitalised and every C name lowercase;
+3. **warn** where a genuine ambiguity survives, naming what was picked;
+   qualification (§2.4) is the escape.
+
+The fork was "explicit import cannot be the safety valve in a case-insensitive
+language, because `uses './math.c'` REPLACES `Exp` instead of adding `exp`".
+Rule 2 removes the need for the valve: `exp` and `Exp` never compete.
+
+Case-agreement is called a safety net below, and is taken as the rule anyway —
+deliberately. It is simple, it closes the known class, and it decides *which
+name wins in which case* rather than how the compiler is built, so it is cheap
+to revisit. And a programmer who pulls in both `math.pas` and `math.c` and then
+writes an ambiguous bare call owns that outcome: the compiler's obligation is to
+warn, not to guess right. See
+`decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language`.
 The acute cause is gone — `pxxcio.pas` no longer does `uses math`, so the Pascal
 RTL is no longer in scope for every C program by default. What remains is a
 standing workaround: ten functions in `lib/crtl/src/math.c` are deliberately
