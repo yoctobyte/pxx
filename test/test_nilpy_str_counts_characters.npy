@@ -1,0 +1,78 @@
+# A NilPy `str` counts CHARACTERS, not bytes. The substrate is still UTF-8
+# bytes and a Pascal AnsiString still counts bytes -- two kinds of one
+# representation, which is why every NilPy-visible offset (len, s[i], find,
+# slice, reverse) had to move to character coordinates TOGETHER. Moving one and
+# not another is worse than moving neither: `s[s.find(x)]` composes two of them,
+# so a half-converted surface breaks code that works today.
+#
+# feature-nilpy-text-string-kind
+#
+# Two rows of the original defect table put MALFORMED UTF-8 on stdout -- s[1]
+# and s[::-1] handed back a lone lead byte and a byte-reversed string. Those are
+# worse than any end state, which is why they are asserted first.
+
+s = "héllo"
+t = "日本語"
+
+# --- length -----------------------------------------------------------------
+print(len(s), len(t), len("abc"), len(""))
+print(len(s) == 5, len(t) == 3)
+
+# --- indexing: a whole character, and a str, not a char ---------------------
+print(s[1], t[0], t[1], t[2], t[-1])
+print(len(s[1]), s[1] == "é", type(s[1]).__name__)
+print(s[0], s[-1], t[-2])
+
+# out of range is measured in CHARACTERS too: t has 3, not 9
+try:
+    print(t[3])
+except IndexError:
+    print("caught: index out of range")
+
+# --- searching --------------------------------------------------------------
+print(s.find("l"), s.find("h"), s.find("o"), s.find("z"))
+print(t.find("本"), t.find("語"), t.rfind("語"))
+print(s.index("l"), s.rfind("l"))
+print(s.find("l", 3), s.find("l", 4))
+
+# find and indexing COMPOSE -- the whole reason they moved together
+print(s[s.find("l")], t[t.find("語")])
+
+# --- slicing ----------------------------------------------------------------
+print(s[0:2], s[1:3], s[:2], s[2:], s[-2:])
+print(t[0:1], t[1:2], t[:2], t[1:])
+print(s[::-1], t[::-1])
+print(s[::2], t[::2])
+print(s[1:4].find("l"))
+
+# --- iteration: one element per character, on every path --------------------
+print(list(s), list(t))
+print([c for c in t])
+print(len(list(s)), len([c for c in s]))
+print("".join(list(t)))
+print(sorted(list(s)))
+print({c: 1 for c in t})
+n = 0
+for ch in t:
+    n = n + 1
+print(n)
+
+# --- counting and the range-taking predicates -------------------------------
+print(s.count("l"), t.count("本"), s.count("l", 0, 4))
+print(s.startswith("h", 0), s.endswith("o", 0))
+
+# --- widths are in characters, so a padded string LINES UP visually ---------
+print(s.ljust(8, "."), s.rjust(8, "."), s.center(9, "."))
+print(len(s.ljust(8, ".")), len(t.center(7, "-")))
+print("é".zfill(4))
+
+# --- ord/chr span the whole Unicode range and round-trip --------------------
+print(ord("€"), ord("é"), ord("日"))
+print(chr(8364), chr(0x65E5))
+print(ord(s[1]), chr(ord(s[1])))
+print([ord(c) for c in t])
+print("".join([chr(c) for c in [72, 233, 0x65E5]]))
+
+# --- pure ASCII is bit-identical to what it always was ----------------------
+print("abc"[::-1], "abc".ljust(5, "-"), "abc".center(7, "-"), "42".zfill(5))
+print("hello".find("l"), "hello"[1], len("hello"), list("abc"))

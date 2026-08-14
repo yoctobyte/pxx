@@ -1192,9 +1192,10 @@ test-nilpy: $(COMPILER)
 	@# enumerate/zip/items/most_common pairs print with parens, like real tuples
 	./$(COMPILER) test/test_nilpy_builtin_pairs_are_tuples.npy /tmp/test_nilpy_pairtuples26
 	test "$$(/tmp/test_nilpy_pairtuples26)" = "$$(printf '%b' "[(0, 'a'), (1, 'b')]\n[(1, 'a'), (2, 'b')]\n[('a', 1), ('b', 2)]\n[('a', 3), ('b', 1), ('c', 1)]")"
-	@# chr() refuses an out-of-byte-range argument instead of silently truncating
+	@# chr() encodes UTF-8 across the whole Unicode range; only a value outside
+	@# range(0x110000) raises. It used to truncate mod 256, then to refuse >255.
 	./$(COMPILER) test/test_nilpy_chr_range_check.npy /tmp/test_nilpy_chrrange26
-	test "$$(/tmp/test_nilpy_chrrange26)" = "$$(printf '%b' 'A\n233\ncaught: chr out of range\ncaught: chr negative')"
+	test "$$(/tmp/test_nilpy_chrrange26)" = "$$(printf '%b' 'A\n233\n€ 8364\n日 1\n128512 1\ncaught: chr out of range\ncaught: chr negative')"
 	@# min()/max() over a bare string (any iterable), not just a list or two scalars
 	./$(COMPILER) test/test_nilpy_minmax_over_string.npy /tmp/test_nilpy_minmax26
 	test "$$(/tmp/test_nilpy_minmax26)" = "$$(printf '%b' 'c\na\n3\n1\n7\n2.1')"
@@ -1369,6 +1370,11 @@ test-nilpy: $(COMPILER)
 	# siblings which are False.
 	./$(COMPILER) test/test_nilpy_str_isascii.npy /tmp/test_nilpy_isascii26
 	/tmp/test_nilpy_isascii26 | diff -u test/test_nilpy_str_isascii.expected -
+	# a NilPy str counts CHARACTERS: len, s[i], find, slice, reverse, iteration,
+	# ord/chr. They convert as ONE surface because they compose -- `s[s.find(x)]`
+	# is broken by any half-conversion. ASCII stays byte-identical.
+	./$(COMPILER) test/test_nilpy_str_counts_characters.npy /tmp/test_nilpy_strchars26
+	/tmp/test_nilpy_strchars26 | diff -u test/test_nilpy_str_counts_characters.expected -
 	# bytes.hex() -- zero-padded to two digits per byte, lowercase.
 	./$(COMPILER) test/test_nilpy_bytes_hex.npy /tmp/test_nilpy_byteshex26
 	/tmp/test_nilpy_byteshex26 | diff -u test/test_nilpy_bytes_hex.expected -

@@ -4045,7 +4045,7 @@ begin
             scalar-loaded on `return` yields its TAG, not the value). }
           lo := LowerCase(name);
           if (lo = 'length') or (lo = 'ord') or (lo = 'pos') then tk := tyInteger
-          else if lo = 'chr' then tk := tyChar
+          else if lo = 'chr' then tk := tyAnsiString   { chr() is a 1-character str }
           else if lo = 'copy' then tk := tyString
           { The NilPy BUILTINS the shared parser lowers as intrinsics: they are
             not Procs either, so `return str(x)` in an unannotated def inferred
@@ -6685,8 +6685,11 @@ begin
   procIdx := PyIndexNotIntKind('string', idxNode);
   if procIdx >= 0 then idxNode := procIdx
   else idxNode := PyIndexCoerce(idxNode);
-  procIdx := FindProc('pystr_at');
-  if procIdx < 0 then Error('Nil Python: pylib (pystr_at) not loaded');
+  { pystr_charat, NOT pystr_at: Python's s[i] is a one-CHARACTER str, and a
+    tyChar result could only ever carry the lead byte of a multi-byte character
+    — which is what put malformed UTF-8 on stdout. feature-nilpy-text-string-kind }
+  procIdx := FindProc('pystr_charat');
+  if procIdx < 0 then Error('Nil Python: pylib (pystr_charat) not loaded');
   a0 := AllocNode(AN_ARG);
   ASTLeft[a0] := baseNode;
   a1 := AllocNode(AN_ARG);
@@ -6694,7 +6697,7 @@ begin
   ASTRight[a0] := a1;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := procIdx;
-  ASTTk[callNode] := Ord(tyChar);
+  ASTTk[callNode] := Ord(tyAnsiString);
   ASTLeft[callNode] := a0;
   Result := callNode;
 end;
@@ -16864,16 +16867,10 @@ begin
 
   if isStr then
   begin
+    { PyMakeStrIndex already yields a 1-character str (pystr_charat), so the
+      pystr_ofchar promotion that used to sit here is gone with the tyChar it
+      existed to repair. }
     elemNode := PyMakeStrIndex(PyMakeIdent(cSym), PyMakeIdent(iSym));
-    { pystr_at yields a Char; the loop variable is a 1-character str }
-    node := AllocNode(AN_CALL);
-    ASTIVal[node] := FindProc('pystr_ofchar');
-    if ASTIVal[node] < 0 then Error('Nil Python: pylib (pystr_ofchar) not loaded');
-    ASTTk[node] := Ord(tyAnsiString);
-    cmpNode := AllocNode(AN_ARG);
-    ASTLeft[cmpNode] := elemNode;
-    ASTLeft[node] := cmpNode;
-    elemNode := node;
   end
   else if isIter then
     { the value the CONDITION already prefetched — take() hands it over and

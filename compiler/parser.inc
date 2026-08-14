@@ -5477,9 +5477,15 @@ begin
         tk := tyChar;
         { NilPy: Python subscripts are 0-based and allow negatives, Pascal's are
           1-based with neither, so route the whole thing through pylib rather
-          than emitting a raw AN_INDEX (bug-nilpy-str-index-off-by-one). }
+          than emitting a raw AN_INDEX (bug-nilpy-str-index-off-by-one). And the
+          RESULT is a 1-character str, not a Char — Python has no char type, and
+          a Char cannot hold a multi-byte character
+          (feature-nilpy-text-string-kind). Pascal's own `s[i]` stays tyChar. }
         if PyExprMode then
+        begin
           indexNode := PyMakeStrIndex(ASTLeft[indexNode], ASTRight[indexNode]);
+          tk := tyAnsiString;
+        end;
       end
       else if (tk = tyPointer) and (ASTKind[node] = AN_IDENT) then
       begin
@@ -8348,7 +8354,7 @@ begin
       PyParseBoolExpr;
       node := PyMakeStrIndex(node, CurASTNode);
       Expect(tkRBrack, ']');
-      tk := tyChar;
+      tk := tyAnsiString;   { a 1-character str — see PyMakeStrIndex }
     end;
   end
   else if (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) then
@@ -13266,12 +13272,19 @@ begin
           (bug-nilpy-non-ascii-string-surface-measured). }
         if (op = Ord(tkChr)) and PyExprMode then
         begin
-          idx := FindProc('PyChrRangeCheck');
-          if idx < 0 then Error('Nil Python: pylib (PyChrRangeCheck) not loaded');
+          { Python's chr() answers a one-CHARACTER str across the whole Unicode
+            range, not a byte. The raw tkChr intrinsic can only produce a Char,
+            so it first TRUNCATED (chr(8364) gave byte 172) and was then made to
+            refuse anything over 255 — loud, but still not chr(). pychr_s
+            encodes UTF-8, and its result is a str exactly like every other
+            NilPy character. feature-nilpy-text-string-kind }
+          idx := FindProc('pychr_s');
+          if idx < 0 then Error('Nil Python: pylib (pychr_s) not loaded');
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
           node := AllocNode(AN_CALL); ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyInt64); ASTLeft[node] := argSeq;
-          CurASTNode := node;
+          ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := argSeq;
+          CurASTNode := node; LastExprTk := tyAnsiString;
+          Exit;
         end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);

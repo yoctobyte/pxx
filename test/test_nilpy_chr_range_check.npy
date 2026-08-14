@@ -1,15 +1,26 @@
-# chr() used to silently TRUNCATE an out-of-byte-range argument via the raw
-# Chr intrinsic's mod-256 cast (chr(8364) gave the wrong byte 172, no error)
-# instead of raising -- NilPy strings are byte strings, so chr()'s honest
-# range is 0..255, matching what ord() already accepts.
-# bug-nilpy-non-ascii-string-surface-measured
-# ord(chr(n)) round-trips within range; out-of-range raises loudly.
+# chr()'s range, in three eras. The raw Chr intrinsic TRUNCATED mod 256, so
+# chr(8364) gave the wrong byte 172 with no error. That was then made to REFUSE
+# anything over 255 -- loud instead of silently wrong, but still not chr(),
+# because it treated "a NilPy str is bytes" as permanent. It is not: a str
+# counts CHARACTERS now, so chr() encodes UTF-8 across the whole Unicode range
+# and only a value outside range(0x110000) raises.
+# feature-nilpy-text-string-kind (was bug-nilpy-non-ascii-string-surface-measured)
+#
+# The ord(chr(n)) round-trip is the assertion that matters: it fails for BOTH
+# older behaviours -- truncation returns the wrong code point, refusal raises --
+# and it is the property a program actually depends on.
 
 print(chr(65))
 print(ord(chr(233)))
+print(chr(8364), ord(chr(8364)))
+print(chr(0x65E5), len(chr(0x65E5)))
 
+# a 4-byte code point, the widest UTF-8 form
+print(ord(chr(0x1F600)), len(chr(0x1F600)))
+
+# the ends of the range still raise, and they are the only things that do
 try:
-    chr(8364)
+    chr(0x110000)
 except ValueError:
     print("caught: chr out of range")
 

@@ -4,7 +4,8 @@ prio: 55
 type: feature
 blocked-by: []   # was feature-a-managed-block-kind-word — landed, see Log 2026-08-10
 summary: "Phase 2 of multi-type strings: stamp TextString/ByteString kinds and make NilPy str count CHARACTERS — len, indexing, slicing, find and reverse — over the shared byte substrate, with the ASCII flag keeping the common case O(1)"
-status: backlog
+status: working
+owner: claude-AN
 ---
 
 # NilPy `str` counts characters, not bytes (phase 2)
@@ -458,3 +459,108 @@ once. `unfinished/` is already outside the ranked queue (`ready`/`next` never
 list it), so nobody saw the ticket; and had it been re-filed to `backlog/`, the
 stale blocker would have kept it out of `ready` anyway. Prio-55 work with a
 satisfied blocker was parked twice over.
+
+## 2026-08-14 — LANDED: str counts characters (the whole defect table)
+
+Every row of the defect table above now matches CPython **byte for byte**, and
+so does `test/test_nilpy_str_counts_characters.npy` (generated from CPython, ~70
+assertions). The uforth corpus — 4357 lines of real Python with 123 string
+subscript sites — recompiles and runs the full ANS Forth suite with **Total
+errors 0** and stdout **identical to CPython's**, which is the regression
+evidence that mattered most for a change this broad.
+
+### The re-pricing: it was ~10 functions, not ~79
+
+The plan above priced this as "~79 `pystr_*` functions must carry a kind word".
+Measured instead of assumed, that is wrong twice over:
+
+1. **`pystr_*` is already the NilPy-only surface.** Pascal uses
+   `Length`/`Copy`/`Pos`; it never calls these. The two coordinate systems are
+   therefore separated **by function**, not by a kind word on the value — so no
+   kind word is needed for the semantics at all. (The kind word still has its
+   own uses; it is simply not load-bearing here.)
+2. **The surface composes.** `strip`, `split`, `partition`, `count(a,b)`,
+   `startswith(a,b)`, `index`, `rindex`, and the find/rfind windows are all
+   written in terms of `pystr_slice` / `pystr_find` / `PyWindowStart`. Convert
+   those and the rest convert with them, untouched.
+
+What actually changed: three helpers (`PyStrCharLen`, `PyStrByteOfChar`,
+`PyStrCharOfByte` — the ONLY place the two coordinate systems meet), then
+`pystr_len`, `len(AnsiString)`, `pystr_at`, `pystr_slice`, `pystr_slice_step`,
+`pystr_reverse`, `pystr_find`, `pystr_find_from`, `pystr_rfind`, `pystr_count`,
+`pystr_charlist`, the four justify/zfill widths, and `pyord_s`.
+
+### `s[i]` is a one-character `str`, not a `tyUCS4Char`
+
+The plan said to widen the subscript to `tyUCS4Char`. It is now `tyAnsiString`
+via a new `pystr_charat`, which is **closer to the language being implemented**:
+Python has no char type, `s[i]` IS a `str`, and `type(s[1]).__name__` must
+answer `'str'`. It is also far less invasive — `tyUCS4Char` has conversion arms
+only in the shared IR's binary-operator path, so widening to it would have meant
+auditing every context a subscript can reach (print, comparison, dict key, call
+argument, assignment) and adding a `__pxxUCS4ToUTF8` wrap to each. A string
+needs none of that: strings are the well-trodden path.
+
+`tyUCS4Char` keeps its place for `UCS4Char(x)` in Pascal. `pystr_at` (a lead
+BYTE) survives for callers that genuinely want a byte.
+
+### Three sites for one concept, again
+
+`list(s)`, `pystr_charlist` (the zip/enumerate path) and the `for ch in s`
+desugar each exploded a string into characters **their own way** — so `list(s)`
+and `zip(s, s)` could disagree about how many elements a string has, and the
+loop desugar reached its element through `pystr_ofchar(pystr_at(...))`, a
+promotion that existed only to repair the `tyChar` that is now gone. All three
+route through `pystr_charat`/`pystr_charlist` now. The recurring NilPy shape
+(`project_nilpy_class_attribute_lowering_matrix` and its siblings) held here too:
+the concept had N independent lowerings and fixing one would have left the rest
+wrong.
+
+Length had the same duplication one level down: `len(s)` resolves to pylib's
+`len(AnsiString)` overload and **never reaches `pystr_len`** — a probe that
+converted only `pystr_len` still answered 6 for `len("héllo")`. Both moved.
+
+### `chr` and `ord` moved with them, and had to
+
+`ord` and `chr` are inverses, so converting one alone converts a loud error into
+a silent wrong value — the worst available direction. `ord("€")` was a
+TypeError ("string of length 3"); `chr(8364)` first truncated mod 256, then was
+made to refuse anything over 255. Both now span the whole Unicode range:
+`pyord_s` decodes UTF-8, a new `pychr_s` encodes it and returns a `str`, and
+`PyChrRangeCheck` is **deleted** rather than left beside its replacement.
+
+`test/test_nilpy_chr_range_check.npy` asserted the refusal, so implementing the
+feature inverted its own test — the third time on this board
+(`project_implementing_a_feature_breaks_its_own_fail_test`). Rewritten to assert
+the round-trip `ord(chr(n))`, which is the property that fails for BOTH older
+behaviours and is what programs actually depend on.
+
+### Deliberately NOT in this commit
+
+- **The `PXX_FLAG_ASCII` fast path.** `pystr_isascii` scans, O(n). The flag is
+  already stamped by `PXXStrFromLit`/`PXXStrConcat` and would make it O(1), but
+  reading the meta word of a block that may never have carried a header is a
+  claim that has to be MEASURED — and a false positive there is a silent wrong
+  answer on exactly the strings this ticket is about. Filed separately.
+  Consequence today: a **stepped** slice over a non-ASCII string is O(n*k).
+  ASCII is unaffected — it takes the byte-identical fast path everywhere.
+- **`--no-unicode`** and the literal optimisation from the original plan.
+- **Unicode case mapping.** `"héllo".upper()` still answers `HéLLO`; that needs
+  case tables, not offsets, and is
+  `bug-nilpy-case-mapping-cannot-change-code-point-count`.
+- **`sep.join(str)`.** `"-".join("hello")` **segfaults on the pinned compiler**
+  — `pystr_join` is reached by name and takes a `TPyList`, so a string handle
+  was dereferenced as an object pointer. This change turns it into a loud
+  TypeError; the real fix (explode the str, as `PyIterArgAsList` already does
+  for zip/enumerate) is filed separately.
+
+### The scoping trap worth remembering
+
+The ticket's "must be done as one commit" was right, but its *reason* was wrong,
+and acting on the stated reason would have priced the job out of a session. The
+constraint is not "79 functions share a kind word" — it is that **`len`, `s[i]`,
+`find` and slicing COMPOSE**: `s[s.find(x)]` mixes two of them, so any half
+conversion breaks code that works today. That is a much smaller and much
+sharper constraint, and it is what decided the split actually taken: coordinates
++ the character accessor together (this commit), the ASCII fast path separately
+(pure optimisation, composes with nothing).
