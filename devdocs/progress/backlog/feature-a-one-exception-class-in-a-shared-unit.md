@@ -3,7 +3,7 @@ track: A
 prio: 75
 type: feature
 blocked-by: []
-summary: "Also FIXES bug-nilpy-exception-repr-and-type-name-say-pyexception by construction. One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work."
+summary: "SUPERSEDED BY THE SIBLING DESIGN AT THE END — no hook needed. Also FIXES bug-nilpy-exception-repr-and-type-name-say-pyexception by construction. One Exception class in a shared builtin unit, re-exported by BOTH sysutils and pylib under their own names (`type Exception = exceptions.Exception`). Retires the catch bridge, the layout guard and the shared-name history in one move. Every mechanism verified 2026-08-14; the only member that does not merge cleanly is CreateFmt, and the hook that solves it is measured to work."
 ---
 
 # One `Exception`, declared once, re-exported by both units
@@ -145,3 +145,67 @@ procedural type taking `array of const` is not expressible).
 
 Both variants were worth trying — the hook is a real cost and A would have
 avoided it. It just cannot hold the name.
+
+## 2026-08-14 — VARIANT C (user): BOTH units declare their own `Exception` under a shared base. This is the design.
+
+```pascal
+unit exceptions;                     { compiler/builtin/ }
+type ExceptionBase = class  msg: AnsiString;  argsv: TObject;  ... end;
+
+unit sysutils;                       unit pylib;
+uses exceptions;                     uses exceptions;
+type                                 type
+  Exception = class(ExceptionBase)     Exception = class(ExceptionBase) end;
+    constructor CreateFmt(...);        ValueError = class(Exception) end;
+  end;
+  EConvertError = class(Exception)
+```
+
+Two classes named `Exception`, siblings under one root. Measured, all of it:
+
+| claim | result |
+| --- | --- |
+| a handler on `ExceptionBase` catches an RTL raise | yes — `cls=EConvertError` |
+| ...and a pylib raise | yes — `cls=ValueError` |
+| `ClassName` of pylib's root | **`Exception`** — fixes [[bug-nilpy-exception-repr-and-type-name-say-pyexception]] |
+| `ClassName` of sysutils' root | `Exception` |
+| sysutils keeps its own `CreateFmt` with the real `Format` body | yes |
+
+**The hook is not needed.** `CreateFmt` lives on sysutils' own descendant, where
+`Format` is already in scope — so the `Format` split, the pointer+count
+callback and the `initialization` ordering all come out of the plan. That was
+the entire cost of the previous variant.
+
+**What replaces the catch bridge:** a NilPy bare `except Exception:` binds
+**`ExceptionBase`**, the common ancestor, instead of listing two classes.
+One class in the arm, so the shared-binder hazard cannot arise — `e.msg` /
+`e.args` resolve on the root by INHERITANCE, at one offset, for every
+descendant. `PyBridgeRootCi` and its layout contract still come out, and now
+they are replaced by a type relation rather than by another check.
+
+Note the asymmetry, which is deliberate: in `.npy` source `Exception` means
+pylib's class in a CONSTRUCTOR position (`raise Exception(...)`,
+`class E(Exception)`) so `repr` is right, and the common root in an `except`
+ARM so it catches everything. That is what "catches all exceptions" honestly
+means once the RTL has its own tree.
+
+### The one residual, measured
+
+For PASCAL code that names BOTH units, the unqualified `Exception` is
+uses-order dependent:
+
+| order | bare `Exception` | `Exception.CreateFmt` |
+| --- | --- | --- |
+| `uses sysutils, pylib` | sysutils' | works |
+| `uses pylib, sysutils` | pylib's | **compile error: class method not found** |
+
+That is ordinary Pascal name-collision behaviour — two units exporting one name,
+resolved by scope — and `--strict-uses` makes it well defined per unit. It is
+NOT the original bug: that one had pylib's OWN method bodies binding to
+sysutils' row and losing `msg`, which cannot happen now because each unit's
+`Exception` is its own class and `msg` is inherited. The failure mode moved from
+a silent wrong body to a compile error.
+
+`test_uses_order_pylib_exception_a`/`_b` change meaning again: they should
+qualify (`sysutils.Exception` / `pylib.Exception`) and assert that each unit's
+surface works in either order, which is the property that actually matters.
