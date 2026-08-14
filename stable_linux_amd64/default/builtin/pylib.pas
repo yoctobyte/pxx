@@ -388,7 +388,21 @@ type
   public
     msg: AnsiString;
     FHelpContext: Integer;
-    constructor Create(const m: AnsiString);
+    { A VARIANT, not an AnsiString. Every exception below this one used to take
+      a string message, so the frontend rendered a non-string argument through
+      pyexc_msgstr at the construction site and its TYPE was gone —
+      `ValueError(42).args` was ('42',) where CPython says (42,), so
+      `e.args[0] == 42` was False and `e.args[0] + 1` raised. KeyError already
+      escaped that by declaring its own Variant ctor; this widens the base so
+      every exception does. The frontend needs NO change: it already branches on
+      the ctor's declared parameter type and boxes the argument when it is a
+      Variant (pyparser.inc, the single-argument arm).
+      This was blocked while pylib's root SHADOWED sysutils' Exception — every
+      RTL `raise EConvertError.Create('..')` would have recompiled against the
+      new signature. PyException shares its name with nothing, so the blast
+      radius is pylib's own tree.
+      bug-nilpy-non-keyerror-exception-args-loses-the-argument-type }
+    constructor Create(const m: Variant);
     { FMessage and Message are PROPERTIES over `msg`, not fields: one storage,
       so a Python `raise ValueError("mine")` and a read through `Message` see
       the same place. Two synchronised fields were tried first and lost the
@@ -9462,12 +9476,25 @@ begin
     this is the same call already made for `ValueError('')`. }
   if pyvartag(m) = 0 then
   begin
-    inherited Create('');
+    { pass `m` ITSELF, not '': the base now stores args, and an empty STRING is
+      a real one-element tuple ('',) while an empty TAG is the no-argument form
+      whose args CPython gives as (). Handing down a literal '' turned
+      `KeyError()` into `('',)`. }
+    inherited Create(m);
     Exit;
   end;
+  { The base stores the REPR'D text it was handed; KeyError's args must be the
+    RAW key (CPython's KeyError is the one builtin whose str() is the repr of
+    its argument). Reuse the tuple the base just built instead of allocating a
+    second one over it. }
   inherited Create(pyvar_repr(m));
-  argsv := TPyList.Create;
-  argsv.FKind := PYSEQ_TUPLE;
+  if argsv = nil then
+  begin
+    argsv := TPyList.Create;
+    argsv.FKind := PYSEQ_TUPLE;
+  end
+  else
+    argsv.clear;
   argsv.append(m);
 end;
 
@@ -9488,9 +9515,17 @@ begin
   if Length(msg) > 0 then Result.append(msg);
 end;
 
-constructor PyException.Create(const m: AnsiString);
+constructor PyException.Create(const m: Variant);
 begin
-  msg := m;
+  { An EMPTY tag is the no-argument form — the frontend fills an unsupplied
+    variant slot with None, which is the only addressable "not supplied" this
+    dialect has. Leave msg '' and argsv nil, and GetArgs derives `()`; the same
+    call KeyError.Create already makes. }
+  if pyvartag(m) = 0 then Exit;
+  msg := pyexc_msgstr(m);
+  argsv := TPyList.Create;
+  argsv.FKind := PYSEQ_TUPLE;
+  argsv.append(m);
 end;
 
 { One `array of const` element as a string / as an integer's decimal text. The
