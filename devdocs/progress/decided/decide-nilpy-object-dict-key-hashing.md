@@ -127,4 +127,4 @@ supported Python. The refusal keys on `__eq__` being present, so it cannot reach
 this path. Written into the new ticket's gate so a fix cannot quietly break it.
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit dac16f6d0.
