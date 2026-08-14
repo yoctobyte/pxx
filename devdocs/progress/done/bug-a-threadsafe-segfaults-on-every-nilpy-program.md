@@ -217,4 +217,4 @@ The ticket's own warning — "the two failure modes differ… worth not assuming
 fix covers both" — was correct.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit b95e348ef.
