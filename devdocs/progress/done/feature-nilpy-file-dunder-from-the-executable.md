@@ -4,7 +4,7 @@ prio: 50
 type: feature
 blocked-by: []
 summary: "Implement the decided __file__ rule: derive it from the RESOLVED executable path at run time (/proc/self/exe, not raw argv[0]) — main module = the executable itself, imported module = <exe_dir>/<basename>.py — and add sys.executable. Decision and reasoning in decide-nilpy-dunder-file-for-a-compiled-program."
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -64,3 +64,6 @@ decision ticket's note on why this took until 2026-08-13 to surface). Plus
 
 Worth checking in the same pass: any other place the frontend answers a
 "where am I" question from an unresolved `argv[0]`.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
