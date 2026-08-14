@@ -3,6 +3,8 @@ track: N
 prio: 40
 type: bug
 summary: "A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them"
+status: done
+owner: agent-AN
 ---
 
 # an object key with `__eq__` but no `__hash__` is stored and then never found
@@ -98,3 +100,33 @@ already dispatches `__eq__`, which is why the same objects behave correctly in
 a list — and rules out "just document it": the current behaviour is not
 laxness, it loses data silently.
 
+
+## Resolution — DUPLICATE, already fixed
+
+Same defect as [[bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry]],
+filed independently on 2026-08-14 while re-filing
+[[decide-nilpy-object-dict-key-hashing]]. Two tickets, one bug — this one opened
+2026-08-10 from the `in`-over-objects gate list, the other four days later from
+the decision.
+
+Fixed 2026-08-15. This ticket's exact repro now matches CPython:
+
+```
+$ ./compiler/pascal26 dup.npy dup && ./dup
+Unhandled exception: TypeError: unhashable type: 'V'
+$ python3 dup.npy
+TypeError: unhashable type: 'V'
+```
+
+Refused in `PyVarHashKey` — the one place a key becomes a bucket — so the store
+and every lookup form refuse alike, as CPython does. The probe keys on `__eq__`
+being PRESENT, so a class with no `__eq__` stays identity-hashable, which is the
+imported-object-by-pointer case. Full write-up, including why a synthesised
+content hash was rejected, is on the other ticket.
+
+Closed here rather than merged so the cross-reference survives: anyone arriving
+from the `in`-over-objects gate list finds the answer instead of an open ticket.
+No code or test change belongs to this one.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

@@ -753,6 +753,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-not-on-object-always-true | N | 80 | bug | `not <object>` was TRUE for every live object — silently wrong answers | — |
 | bug-nilpy-not-on-string-always-true | N | 60 | bug | NilPy: `not s` on a string was ALWAYS True (silent wrong branch) | — |
 | bug-nilpy-numeric-builtin-gaps-min-max-sum-float-inf | N | 50 | bug | Numeric builtin gaps: `float("inf")`, variadic `min`/`max`, `sum(x, start)` | — |
+| bug-nilpy-object-dict-key-with-eq-but-no-hash-is-accepted-then-misses | N | 40 | bug | A class defining __eq__ without __hash__ is UNHASHABLE in CPython — `d[V(1)] = x` raises TypeError. pxx accepts the store and then never finds the key again, so the dict silently swallows entries instead of refusing them | — |
 | bug-nilpy-object-reclamation-disabled-inside-py-modules | N | 65 | bug | NilPy object reclamation is switched off inside an imported `.py` module | — |
 | bug-nilpy-omitted-variant-default-segfaults | N | 65 | bug | nilpy: reading a DEFAULTED variant parameter segfaults (by-ref seen as by-value) | — |
 | bug-nilpy-one-line-class-body-restraint-is-no-longer-enforced | N | 35 | bug | PyParseClass's `only pass is supported as a one-line class body` branch is unreachable — the lexer now normalises every one-line suite, so `class C: x = 1` compiles and matches CPython. The behaviour is BETTER than documented; the comments describing the restraint and calling the def half open are false, and they are what produced a stale five-site patch plan. | — |
