@@ -94,7 +94,7 @@ what it cannot run and saying so, and still exercises the full set on a Haswell
 or later box. Then the tstate red clears on the next native tier.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit e000b3ea5.
 
 ## Resolution
 
