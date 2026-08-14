@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-a-shadowing-ctor-call-target-and-argument-marshalling-disagree | A | 70 | bug | When a derived class declares a constructor that shadows an inherited one with a DIFFERENT signature, `TDer.Create(arg)` calls the BASE body while marshalling the argument for the DERIVED signature — a Variant record is passed where an AnsiString handle is expected, so the ctor receives garbage. Silent wrong value, no diagnostic, reproduces on master with no pylib involved. FPC runs the DERIVED ctor (measured). | — |
 
 ## unfinished (8)
 
@@ -34,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,7 +78,6 @@ _none_
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
-| bug-pascal-ansistring-literal-to-variant-param-passes-garbage | A | 60 | bug | Passing an AnsiString LITERAL to a `const m: Variant` parameter passes the raw string handle where a Variant record is expected, so the callee reads garbage. Assigning the literal to a Variant local first works. Silent wrong value, no diagnostic. Found calling pylib's `Exception.Create(const m: Variant)` from Pascal. | — |
 | bug-pascal-uses-clause-duplicate-name-resolves-first-not-last | P | 55 | bug | When two used units export the same identifier, pxx resolves it to the FIRST unit named; FPC resolves it to the LAST. Measured against the FPC oracle 2026-08-14. Backwards from the reference implementation, silent, and it applies to every duplicated name — types, classes, routines, constants — not just the exception case that exposed it. | — |
 | bug-pyeval-three-param-host-method-unsupported | N | 35 | bug | pyeval refuses a host method with three user parameters — `pyeval: int-return arity 3 unsupported for put` — with all-positional args, so ordinary reflected calls of arity 3 cannot be made from inside exec() | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
@@ -462,7 +463,6 @@ _none_
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [N] bug-nilpy-exception-repr-and-type-name-say-pyexception
-- [p 60] [A] bug-pascal-ansistring-literal-to-variant-param-passes-garbage
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
