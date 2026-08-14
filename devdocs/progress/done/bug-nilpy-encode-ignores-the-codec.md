@@ -53,4 +53,4 @@ the implementation and the codec-subset note in
 `devdocs/dev/nilpy-semantics-divergences.md`.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit d2fa5a744.
