@@ -113,3 +113,52 @@ was just closed to remove, so it would be a poor trade. **Add `"lib-test"` to
 Still blocked as this ticket originally described: it prints FAIL without
 exiting nonzero, so it needs a gating mode or output parsing — and that is a
 Makefile change, which is not Track T's ground.
+
+## 2026-08-14 — ENROLLED. `lib-test` is in `TIERS["full"]`
+
+The Track B blocker landed: `bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14`
+is in `done/`, `test/cstring_batch.c` now defines `_GNU_SOURCE`, and — the part
+that actually mattered for this tier — the recipe **checks gcc's exit status**
+and prints `SKIP: cstring_batch (gcc cannot build the oracle: ...)` instead of
+diffing against a binary that was never built and blaming pxx for the
+difference. So the permanent-red risk this ticket held on is gone in both
+directions: the oracle builds, and if it ever stops building again the job says
+so about *gcc* rather than manufacturing a pxx red.
+
+Measured before flipping the line, on plexus and against the current pin
+(`pin=304 sha256=44ca47c950df2ae6`):
+
+```
+164/164 pass, 2 skip (corpus absent)
+est_mem peak/est MB: corpus 49/400  qemu 26/256  unit 525/550
+```
+
+The 2 skips are the `external/synapse` jobs, correctly self-skipped and loudly
+announced by `corpus_warning` rather than counted as green.
+
+**Job identity: nothing moved.** Verified the way
+[[bug-t-optdiff-positional-sharding-migrates-job-identity]] demands — every job
+in every tier listed with the old and the new testmgr, compared by
+tier+name+class:
+
+| | jobs |
+| --- | --- |
+| before | 5528 |
+| after | 5700 |
+| removed or reclassified | **0** |
+| added | 172 (166 lib-test + 6 pascal-conformance, all in `full`) |
+
+So no red migrates and no phantom NEW-RED/FIXED pair is produced on the next
+publish. `full` goes 2388 -> 2560 jobs.
+
+The tier comment now also carries the pin-lag caveat this ticket opened with —
+a lib-test red is EITHER a Track B regression OR a stale pin, and those route to
+different tracks — because that is the one thing a triaging agent needs and the
+one thing the job name cannot tell them.
+
+### `demos` is still NOT enrolled, and that half stays open
+
+Unchanged from the analysis above: `make demos` prints FAIL without exiting
+nonzero, so it needs a gating mode or output parsing, and that is a **Makefile**
+change — not Track T's ground. Filing it into Track B is the right move; this
+ticket stays in backlog until that happens, since its title covers both.

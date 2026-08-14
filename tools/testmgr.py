@@ -123,24 +123,28 @@ TIERS = {
     # ordinary ticket, while a tier-1 red is what the tracks are building on.
     "full": [
         "test-smoke",
-        # Track B's ENTIRE gate is still invisible to tstate: 166 jobs of RTL
-        # smoke, PAL-cross under qemu and ESP object emission that run only when
-        # a B agent types `make lib-test` (task-t-enroll-libtest-demos-watcher).
+        # Track B's ENTIRE gate: 166 jobs of RTL smoke, PAL-cross under qemu and
+        # ESP object emission that used to run only when a B agent typed
+        # `make lib-test` (task-t-enroll-libtest-demos-watcher, ENROLLED
+        # 2026-08-14). COMPILE_RE knows the pinned compiler so this splits into
+        # 166 attributed jobs instead of one opaque blob, CORPUS_ROOTS skips the
+        # two that need an unfetched external/synapse, and
+        # report_pin_identity() prints which pin they built with.
         #
-        # Everything needed to enrol it is DONE and tested -- COMPILE_RE knows
-        # the pinned compiler so it splits into 166 attributed jobs instead of
-        # one opaque blob, CORPUS_ROOTS skips the two that need an unfetched
-        # external/synapse, and report_pin_identity() prints which pin they
-        # built with (a lib-test red means EITHER a Track B regression OR a
-        # stale pin, and those route to different tracks).
+        # READ A lib-test RED TWICE. These build with $(PXX_STABLE) -- the
+        # PINNED binary -- not HEAD, so unlike every other target here a red has
+        # two causes: (a) a lib/examples change broke it, an ordinary Track B
+        # regression, or (b) the pin is stale relative to lib/'s expectations,
+        # which is a Track A "re-pin needed" signal and not a Track B bug at
+        # all. That is the esptimer case that filed the ticket. The pin identity
+        # on the banner is what tells them apart; a red that appears with no
+        # lib/ commit near it is (b).
         #
-        # It is held out of the tier by exactly one thing:
-        # bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14. That job's
-        # gcc oracle stopped compiling at gcc 14, and its recipe reports the
-        # broken oracle as "differs from gcc" -- so enrolling today would make
-        # this tier permanently RED for something that is not a pxx defect,
-        # which is the failure mode the flaky-test work just finished removing.
-        # Add "lib-test" here the day that lands; 163/166 already pass.
+        # Held out of the tier until 2026-08-14 by exactly one thing:
+        # bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14 (now fixed --
+        # the recipe checks gcc's exit status and SKIPs a broken oracle instead
+        # of blaming pxx for "differs from gcc").
+        "lib-test",
         "test-core", "test-threads", "test-asm", "test-debug-g",
         "test-nilpy", "test-uforth",
         "lib-fpc-clean",
@@ -299,6 +303,29 @@ FPC_CANARY_TIERS = ("native", "limited", "full")
 # Not "quick": that is the inner loop, and this is a bootstrap chain. It is NOT
 # advisory — byte-identical self-host is the gate the stable binary rests on.
 SELFHOST_GATE_TIERS = ("native", "limited", "full")
+# Tiers carrying the FPC-testsuite Pascal conformance battery
+# (task-t-enroll-pascal-conformance-tier). `full` only: ~550 programs is
+# breadth, not an inner-loop cost, and it is the Pascal analog of
+# test-c-conformance which already sits in limited+full.
+#
+# x86-64 NATIVE ONLY, and that is a decision, not an omission. The user, 2026-08-14:
+# "Our compliance test just goes to PC platforms, and preferably only 64-bit. We
+# are not going into historic compliance — that just doesn't make sense." FPC
+# supports the ESP32 family, so its suite carries a truckload of target
+# {$ifdef}s; chasing those would mean conforming to FPC's EMBEDDED decisions
+# rather than to Pascal. So do NOT add -i386/-aarch64/-arm32/-riscv32 shards the
+# way test-c-conformance has them — that mirroring would look like consistency
+# and would be the wrong call. The suite tests the frontend; the backends are
+# covered by the cross targets already in this tier.
+PASCAL_CONFORMANCE_TIERS = ("full",)
+PASCAL_CONFORMANCE_TARGET = "test-pascal-conformance"
+# The suite dir is named EXPLICITLY in the job line rather than left to the
+# script's default, so CORPUS_RE sees `library_candidates/fpc-testsuite` and the
+# job self-skips (loudly, via corpus_warning) on a box that has not fetched it.
+# The script would otherwise print its own SKIP and exit 0 — a silent green for
+# 550 programs that never ran, which is exactly the c-testsuite failure mode
+# CORPUS_ROOTS exists to prevent.
+PASCAL_CONFORMANCE_SUITE = "library_candidates/fpc-testsuite/tests/test"
 # The job whose red aborts the tier and publishes immediately (see Manager.run).
 SELFHOST_GATE_TARGET = "selfhost-fixedpoint"
 FPC_CANARY_TARGET = "fpc-bootstrap"
@@ -678,8 +705,37 @@ def snapshot_compiler():
     if not os.path.exists(src):
         return None, None
     try:
-        os.makedirs(RUN_TMP, exist_ok=True)
+        os.makedirs(os.path.dirname(RUN_COMPILER), exist_ok=True)
         shutil.copy2(src, RUN_COMPILER)     # copy, deliberately: see RUN_COMPILER
+        # ...and give it the LAYOUT it resolves units from. The compiler anchors
+        # its search on ExeDir — its OWN directory, from ParamStr(0) — needing
+        # ExeDir/builtin/ for the builtin units (builtinheap and friends) and
+        # ExeDir/../lib/rtl for the RTL. Both are required; each alone still
+        # fails, the builtin-only case with a *warning* and then "undefined
+        # variable (IntToStr)" rather than anything naming a search path.
+        #
+        # A flat <scratch>/pascal26 has neither, and only ever worked through
+        # parser.inc's CWD-relative fallback — every job's script starts
+        # `cd REPO`, so the repo root carried it. That contract holds exactly as
+        # long as a job KEEPS the repo root as its CWD. A job whose script cds
+        # elsewhere — tools/run_pascal_conformance.sh compiles from inside the
+        # suite dir, as conformance runners generally do — loses the fallback
+        # and cannot resolve `uses sysutils` at all. Measured: 25 of 92 shard-0
+        # programs FAIL with "unit source not found: builtinheap", which reads
+        # exactly like a frontend regression and is entirely the harness.
+        #
+        # So mirror the repo's shape instead of depending on CWD: the binary in
+        # <scratch>/compiler/ with builtin/ beside it and lib/ one level up,
+        # both symlinked to the real trees. The symlinks pin no sources — the
+        # snapshot never did, and jobs already compile against the live tree;
+        # it pins the compiler BYTES against a concurrent rebuild, unchanged.
+        # (Teardown is shutil.rmtree in every path — drop_run_tmp, the orphan
+        # sweep, reap_stale — which unlinks a symlink instead of recursing
+        # through it, so the real lib/ is not reachable from cleanup.)
+        for rel in ("lib", "compiler/builtin"):
+            ln = os.path.join(RUN_TMP, rel)
+            if not os.path.lexists(ln):
+                os.symlink(os.path.join(REPO, rel), ln)
     except OSError as e:
         print("testmgr: could not snapshot the compiler (%s) — running against "
               "the repo path; a concurrent rebuild can still corrupt this run" % e,
@@ -1002,7 +1058,10 @@ RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
 # in place — inode 270865 before and after a real rebuild. A hardlink would
 # therefore have tracked the rebuild instead of pinning the old bytes, and a
 # reader can transiently see a half-written binary.
-RUN_COMPILER = os.path.join(RUN_TMP, "pascal26")
+# In a `compiler/` subdir, not flat in RUN_TMP: the compiler anchors its unit
+# search at ExeDir/../lib/rtl, so the snapshot has to reproduce the repo's
+# shape to be usable from a job that changes directory. See snapshot_compiler().
+RUN_COMPILER = os.path.join(RUN_TMP, "compiler", "pascal26")
 # `./compiler/pascal26` but never `./compiler/pascal26-managed` / `-debug`.
 COMPILER_PATH_RE = re.compile(r"\./compiler/pascal26(?![-\w])")
 # How long a finished run's per-job log dir survives for post-mortem. Reports
@@ -1261,7 +1320,13 @@ def classify(lines):
         return "opt"
     if "compiler.pas" in text or "compiler/compiler.pas" in text:
         return "selfhost"
-    if "run_c_conformance" in text:
+    # Any run_<lang>_conformance.sh, not just C's: the Pascal battery
+    # (run_pascal_conformance.sh) is the same shape — one script, hundreds of
+    # programs, a skip-list — and classing it `unit` would hand a 550-program
+    # sweep a 90s timeout and publish the kill as a RED. Matching the FAMILY
+    # rather than the one name is the normalise-don't-special-case call: the
+    # next frontend's battery is classed right before anyone notices.
+    if re.search(r"run_[a-z0-9]+_conformance", text):
         return "conformance"
     if ("library_candidates" in text or "lua_runner" in text
             or "sqlite" in text or "zlib" in text or "/lua/" in text
@@ -1533,6 +1598,21 @@ def generate(tier):
             j = Job("optdiff", i,
                     ["tools/optdiff.sh --shard %d/%d" % (i, OPT_SHARDS)])
             j.name = "optdiff#shard%d/%d" % (i, OPT_SHARDS)
+            jobs.append(j)
+    if tier in PASCAL_CONFORMANCE_TIERS:
+        # Constructed here rather than behind a Makefile target, like optdiff
+        # above: the recipe would be one line invoking a script that already
+        # exists, and the Makefile is not Track T's ground (the same reason
+        # task-t-enroll-libtest-demos-watcher left `demos` alone). Sharded with
+        # CONFORMANCE_SHARDS so it matches the C battery's fan-out and its
+        # cross-host-stable shard names.
+        for i in range(CONFORMANCE_SHARDS):
+            j = Job(PASCAL_CONFORMANCE_TARGET, i,
+                    ["tools/run_pascal_conformance.sh ./%s %s --shard %d/%d"
+                     % (COMPILER, PASCAL_CONFORMANCE_SUITE, i,
+                        CONFORMANCE_SHARDS)])
+            j.name = "%s#shard%d/%d" % (PASCAL_CONFORMANCE_TARGET, i,
+                                        CONFORMANCE_SHARDS)
             jobs.append(j)
     if tier in FPC_CANARY_TIERS:
         jobs.append(fpc_canary_job())
