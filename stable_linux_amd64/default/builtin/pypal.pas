@@ -66,6 +66,12 @@ function PyPalAccessOk(path: Pointer): Boolean;
   and ppoll exists everywhere here, so one number per target covers the set.
   timeoutMs < 0 blocks (nil timespec), exactly like poll(2). }
 function PyPalPoll(fd: Int64; events: Int64; timeoutMs: Int64): Int64;
+{ readlink(2) via readlinkat, for resolving /proc/self/exe — how a program finds
+  its OWN path. argv[0] is not that: it is whatever the exec caller passed, a
+  PATH lookup or a relative path. Returns the byte count, or negative.
+  NOT null-terminated by the kernel; the caller sets the length from the
+  result. }
+function PyPalReadlink(path: Pointer; buf: Pointer; bufsz: Int64): Int64;
 
 implementation
 
@@ -92,6 +98,7 @@ const
   NR_ACCESS    = 21;    { access }
   NR_FACCESSAT = -1;     { not needed: plain access exists }
   NR_PPOLL     = 271;
+  NR_READLINKAT= 267;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPUAARCH64}
@@ -108,6 +115,7 @@ const
   NR_ACCESS    = -1;     { no plain access }
   NR_FACCESSAT = 48;
   NR_PPOLL     = 73;
+  NR_READLINKAT= 78;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_I386}
@@ -124,6 +132,7 @@ const
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
   NR_PPOLL     = 309;
+  NR_READLINKAT= 305;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_ARM32}
@@ -140,6 +149,7 @@ const
   NR_ACCESS    = 33;
   NR_FACCESSAT = -1;
   NR_PPOLL     = 336;
+  NR_READLINKAT= 332;
   PYPAL_HAVE   = True;
 {$endif}
 { no table for this target — every entry point fails softly }
@@ -157,6 +167,7 @@ const
   NR_ACCESS    = -1;
   NR_FACCESSAT = -1;
   NR_PPOLL     = -1;
+  NR_READLINKAT= -1;
   PYPAL_HAVE   = False;
 {$endif}{$endif}{$endif}{$endif}{$endif}
 
@@ -174,6 +185,7 @@ const
   NR_ACCESS    = -1;
   NR_FACCESSAT = 48;
   NR_PPOLL     = 73;
+  NR_READLINKAT= 78;
   PYPAL_HAVE   = True;
 {$endif}
 
@@ -274,6 +286,14 @@ begin
   if NR_RENAMEAT < 0 then Exit;
   PyPalRename := __pxxrawsyscall(NR_RENAMEAT, PYPAL_AT_FDCWD, Int64(src),
                                  PYPAL_AT_FDCWD, Int64(dst), 0, 0);
+end;
+
+function PyPalReadlink(path: Pointer; buf: Pointer; bufsz: Int64): Int64;
+begin
+  PyPalReadlink := -1;
+  if NR_READLINKAT < 0 then Exit;
+  PyPalReadlink := __pxxrawsyscall(NR_READLINKAT, PYPAL_AT_FDCWD, Int64(path),
+                                   Int64(buf), bufsz, 0, 0);
 end;
 
 function PyPalGetcwd(buf: Pointer; n: Int64): Int64;

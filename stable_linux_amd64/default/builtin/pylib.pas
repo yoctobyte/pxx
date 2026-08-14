@@ -1175,7 +1175,20 @@ function pyinput_p(const prompt: AnsiString): AnsiString;
 function pyinput: AnsiString;
 { sys.argv: the command line as a TPyList of strings, argv[0] = program name. }
 function pysys_argv: TPyList;
-function pysys_file: AnsiString;   { the __file__ dunder }
+{ The RESOLVED path of the running executable — /proc/self/exe, not argv[0].
+  argv[0] is whatever the exec caller passed: a PATH lookup ('myapp'), a
+  relative path, or an outright lie. This is what `sys.executable` is, what
+  `__file__` is for the main module, and what every imported module's virtual
+  __file__ hangs off. Falls back to argv[0] where /proc is absent. }
+function pysys_executable: AnsiString;
+function pysys_file: AnsiString;   { the __file__ dunder — the executable }
+{ __file__ for an IMPORTED module: <exe_dir>/<basename>, a VIRTUAL path — no
+  file is there. Deterministic, leaks no build environment, and makes
+  os.path.dirname(os.path.abspath(__file__)) — the only form real code uses —
+  the executable's directory for every module, which is the freezer convention
+  (PyInstaller/cx_Freeze) this dialect follows.
+  decide-nilpy-dunder-file-for-a-compiled-program }
+function pysys_module_file(const modBase: AnsiString): AnsiString;
 { select.select(r, w, x, timeout): the ready-sets triple. The shim returns three
   empty lists (nothing ready), which is the safe answer for the non-tty default
   and all uforth asks of it. }
@@ -10794,11 +10807,42 @@ begin
   Result := r;
 end;
 
+function pysys_executable: AnsiString;
+var buf: array[0..4095] of Char; n: Int64; i: Integer; p: AnsiString;
+begin
+  { /proc/self/exe is the kernel's own answer and needs no guessing. readlink
+    does NOT null-terminate, so the length comes from the return value —
+    reading to a NUL here would append whatever was on the stack. }
+  p := '/proc/self/exe';
+  n := PyPalReadlink(@p[1], @buf[0], 4096);
+  if n > 0 then
+  begin
+    Result := '';
+    for i := 0 to Integer(n) - 1 do Result := Result + buf[i];
+    Exit;
+  end;
+  { no /proc (a bare target, or a chroot without it): argv[0] is all there is,
+    and saying so plainly beats inventing a path. }
+  Result := ParamStr(0);
+end;
+
 function pysys_file: AnsiString;
 begin
-  { __file__ — the running program's path, the closest analogue for a compiled
-    binary (uforth uses it to find STD.UFO beside the script). }
-  Result := ParamStr(0);
+  { __file__ for the MAIN module IS the executable, so os.path.exists(__file__)
+    is True — which is the property that makes the freezer convention usable.
+    It used to be raw ParamStr(0). }
+  Result := pysys_executable;
+end;
+
+function pysys_module_file(const modBase: AnsiString): AnsiString;
+var exe: AnsiString; i, cut: Integer;
+begin
+  exe := pysys_executable;
+  cut := 0;
+  for i := 1 to Length(exe) do
+    if exe[i] = '/' then cut := i;
+  if cut > 0 then Result := Copy(exe, 1, cut) + modBase
+  else Result := modBase;
 end;
 
 function PySelectReady(const lst: Variant; events: Int64; timeoutMs: Int64): TPyList;

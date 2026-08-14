@@ -283,3 +283,4 @@
 2026-08-13T23:00:42Z  v283  5ad437d0c415947949890b2ddd24a189c8dcb366786a0112d6ddb446735fe914  b68597066a2cafa1a2dafc4bf41f839953d64921  revert(N): e.args -- pylib's Exception cannot carry a member sysutils lacks
 2026-08-13T23:06:29Z  v284  5ad437d0c415947949890b2ddd24a189c8dcb366786a0112d6ddb446735fe914  1813527de1a8b1d1c53b35f899003c0fd6b75dcd  fix(N): min/max with key=None
 2026-08-14T05:31:25Z  v285  595a1732b4d2f41150663bdfa4ddfe42a853860853c79276b0e2009b65e7a96b  3043a91490fb6083a1819bdb9e631acecc240438  fix(N): repr() escapes non-printables; mimic_string so `import string` resolves
+2026-08-14T05:40:02Z  v286  be37c7239166f346e7f811b77dee721a8fda77952d3262a94fecfbae094744bc  056066cc8d6ae46e0a03ba4ca78fa94f69fa0803  feat(N): __file__ and sys.executable from the resolved executable
