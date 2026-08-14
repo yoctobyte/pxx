@@ -10719,7 +10719,40 @@ begin
       end;
       if isNilPy and (name = '__file__') then
       begin
+        { __file__ — derived from the RESOLVED executable at run time, never
+          from the source path the compiler happened to see, which would leak
+          the build environment into every shipped binary.
+          decide-nilpy-dunder-file-for-a-compiled-program
+
+          MAIN module: the executable itself, so os.path.exists(__file__) is
+          True. IMPORTED module: <exe_dir>/<module>.py, a VIRTUAL path — no
+          file is there, but os.path.dirname(os.path.abspath(__file__)), the
+          only form real code uses, is the executable's directory for every
+          module. Both are the freezer convention (PyInstaller/cx_Freeze).
+
+          CurrentUnitIdx is the seam: >= 0 means "parsing an imported unit",
+          which is the same test every other main-module-only NilPy rule uses. }
         Next;
+        if CurrentUnitIdx >= 0 then
+        begin
+          idx := FindProc('pysys_module_file');
+          if idx < 0 then
+            Error('Nil Python: pylib (pysys_module_file) not loaded');
+          valNode := AllocNode(AN_STR_LIT);
+          ASTSOffset[valNode] :=
+            PyStoredName(LowerCase(Strs[CurrentUnitIdx].Text) + '.py');
+          ASTSLen[valNode] := Length(Strs[CurrentUnitIdx].Text) + 3;
+          ASTTk[valNode] := Ord(tyString);
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := valNode;
+          ASTRight[argSeq] := -1;
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := idx;
+          ASTTk[node] := Ord(tyAnsiString);
+          ASTLeft[node] := argSeq;
+          CurASTNode := node; LastExprTk := tyAnsiString;
+          Exit;
+        end;
         node := AllocNode(AN_CALL);
         idx := FindProc('pysys_file');
         if idx < 0 then Error('Nil Python: pylib (pysys_file) not loaded');

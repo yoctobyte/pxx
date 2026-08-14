@@ -1,0 +1,6 @@
+main is exe: True
+main is absolute: True
+main exists: True
+module basename: test_nilpy_file_dunder_helper.py
+module dir is exe dir: True
+module file exists: False

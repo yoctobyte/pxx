@@ -1,0 +1,22 @@
+# __file__ and sys.executable derive from the RESOLVED executable at run time
+# (/proc/self/exe, never argv[0], never the compile-time source path — that
+# would leak the build environment into every shipped binary).
+# decide-nilpy-dunder-file-for-a-compiled-program
+#
+# DELIBERATELY DIVERGES from CPython, which reports source paths; this asserts
+# the freezer convention (PyInstaller/cx_Freeze) the dialect chose. Only
+# booleans and basenames are printed, so the expectation holds anywhere.
+import sys
+import os
+
+import test_nilpy_file_dunder_helper as fd_helper
+
+print("main is exe:", __file__ == sys.executable)
+print("main is absolute:", __file__.startswith("/"))
+print("main exists:", os.path.exists(__file__))
+
+h = fd_helper.where()
+print("module basename:", os.path.basename(h))
+print("module dir is exe dir:", os.path.dirname(h) == os.path.dirname(sys.executable))
+# the documented divergence: an imported module's __file__ is VIRTUAL
+print("module file exists:", os.path.exists(h))

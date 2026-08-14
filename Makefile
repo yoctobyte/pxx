@@ -1514,6 +1514,10 @@ test-nilpy: $(COMPILER)
 	/tmp/test_nilpy_mathlog26 | diff -u test/test_nilpy_math_log.expected -
 	./$(COMPILER) test/test_nilpy_callable_builtin.npy /tmp/test_nilpy_callable26
 	/tmp/test_nilpy_callable26 | diff -u test/test_nilpy_callable_builtin.expected -
+	# __file__ / sys.executable from the RESOLVED executable (freezer
+	# convention) -- deliberately not CPython's source paths.
+	./$(COMPILER) test/test_nilpy_file_dunder.npy /tmp/test_nilpy_filedunder26
+	/tmp/test_nilpy_filedunder26 | diff -u test/test_nilpy_file_dunder.expected -
 	# repr() escapes non-printables as \xNN, like CPython
 	./$(COMPILER) test/test_nilpy_repr_escapes_non_printables.npy /tmp/test_nilpy_represcape26
 	/tmp/test_nilpy_represcape26 | diff -u test/test_nilpy_repr_escapes_non_printables.expected -

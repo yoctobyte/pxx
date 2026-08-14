@@ -1,0 +1,4 @@
+# helper module for test_nilpy_file_dunder: its __file__ must be the VIRTUAL
+# <exe_dir>/<module>.py, not a source path.
+def where():
+    return __file__

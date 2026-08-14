@@ -4,6 +4,8 @@ prio: 50
 type: feature
 blocked-by: []
 summary: "Implement the decided __file__ rule: derive it from the RESOLVED executable path at run time (/proc/self/exe, not raw argv[0]) — main module = the executable itself, imported module = <exe_dir>/<basename>.py — and add sys.executable. Decision and reasoning in decide-nilpy-dunder-file-for-a-compiled-program."
+status: working
+owner: claude-A-N
 ---
 
 # `__file__` and `sys.executable` from the resolved executable path

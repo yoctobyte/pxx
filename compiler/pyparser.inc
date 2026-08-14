@@ -9156,6 +9156,21 @@ begin
     LastExprTk := tyString;
     Exit;
   end;
+  if nm = 'executable' then
+  begin
+    { sys.executable — the resolved path of the running binary. Same helper
+      __file__ uses, so the two can never disagree, and it takes "where am I
+      installed" off __file__ for good.
+      feature-nilpy-file-dunder-from-the-executable }
+    procIdx := FindProc('pysys_executable');
+    if procIdx < 0 then Error('Nil Python: pylib (pysys_executable) not loaded');
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := procIdx;
+    ASTTk[Result] := Ord(tyAnsiString);
+    ASTLeft[Result] := -1;
+    LastExprTk := tyAnsiString;
+    Exit;
+  end;
   if nm = 'argv' then
   begin
     { sys.argv as a VALUE — the command line as a TPyList of strings. }
