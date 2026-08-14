@@ -4768,6 +4768,21 @@ function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
   above. False when the class defines no usable __hash__, leaving the caller's
   identity hash. }
 function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
+{ Is this object UNHASHABLE the way CPython means it — its class defines
+  __eq__ and does NOT define __hash__? Defining __eq__ says "compare these by
+  content, not identity"; using the same class as a dict key asks for identity.
+  The two requests contradict, and CPython refuses rather than resolve the
+  contradiction silently (it sets __hash__ to None on purpose).
+
+  NilPy honoured NEITHER: it stored under the identity hash, so a
+  content-equal lookup missed — the entry went in and never came out, with no
+  diagnostic. This is the probe that turns that into CPython's TypeError.
+
+  Keys on __eq__ being PRESENT, so it cannot reach a class with no __eq__ at
+  all: those are identity-hashable in both implementations, and are the real
+  use case (an imported Pascal/C object held by pointer as a key).
+  bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry }
+function PyUserObjUnhashable(o: TObject): Boolean; forward;
 { `a > b` for two user objects, via __gt__ or the reflected __lt__ — what
   .sort()/sorted() need. False when neither exists, leaving pyvar_gt's existing
   numeric path (and its TypeError) alone.
@@ -5319,6 +5334,22 @@ begin
                              Integer(PInt64(NativeInt(p^.Payload) - 8)^));
   end
   else if (p^.VType = 7) and (p^.Payload <> 0) and
+          PyUserObjUnhashable(TObject(Pointer(NativeInt(p^.Payload)))) then
+    { A class with __eq__ and no __hash__ is UNHASHABLE. Refused HERE, at the
+      one place a key is turned into a bucket, so the store and every lookup
+      form (`d[k]`, `.get`, `in`, `.pop`) refuse alike — which is what CPython
+      does. Hashing it by IDENTITY instead, as this used to, put the entry in a
+      bucket no content-equal lookup would ever probe: data in, nothing out, no
+      diagnostic.
+
+      NOT repaired by synthesising a content hash. That reintroduces the same
+      class of bug in a subtler form — mutate the object after insertion and
+      its hash changes, so the entry silently vanishes from the dict. It is the
+      trap CPython itself backed away from.
+      bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry }
+    raise TypeError.Create('unhashable type: ''' +
+      TObject(Pointer(NativeInt(p^.Payload))).ClassName + '''')
+  else if (p^.VType = 7) and (p^.Payload <> 0) and
           PyUserObjHash(TObject(Pointer(NativeInt(p^.Payload))), h) then
   begin
     { a USER class's own __hash__. Required for consistency the moment PyVarEq
@@ -5445,12 +5476,20 @@ function TPyDict.indexof(const k: Variant): Integer;
 var
   i: Integer;
   q: PPyVarRec;
-  mask, pos: NativeUInt;
+  mask, pos, hk: NativeUInt;
   idx: Integer;
 begin
   Result := -1;
-  if FLen = 0 then Exit;
   q := PPyVarRec(@k);
+  { Hash BEFORE the empty short-circuit. An unhashable key (a class with
+    __eq__ and no __hash__) must be refused whatever the dict holds — CPython
+    raises for `V(1) in {}` too — and returning "absent" for an empty dict was
+    a right answer reached by a route that skipped the question, so the
+    diagnostic appeared or not depending on FLen. One hash on an empty lookup
+    is not a cost worth an inconsistency.
+    bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry }
+  hk := PyVarHashKey(q);
+  if FLen = 0 then Exit;
   if FHashCap = 0 then
   begin
     { defensive linear fallback — store() always builds the index, so this only
@@ -5461,7 +5500,7 @@ begin
     Exit;
   end;
   mask := NativeUInt(FHashCap) - 1;
-  pos := PyVarHashKey(q) and mask;
+  pos := hk and mask;
   while True do
   begin
     idx := PInteger(NativeInt(FHash) + NativeInt(pos) * 4)^;
@@ -14564,6 +14603,21 @@ begin
   fn := TPyHashFn(mi^.Code);
   h := NativeUInt(fn(Pointer(o)));
   PyUserObjHash := True;
+end;
+
+function PyUserObjUnhashable(o: TObject): Boolean;
+var cls: PClassRTTI;
+begin
+  PyUserObjUnhashable := False;
+  if o = nil then Exit;
+  { the pylib containers are not user classes; a TPyList doubles as the tuple
+    key type and hashes by its elements }
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  if PyFindDunder(cls, '__eq__') = nil then Exit;      { identity-hashable }
+  if PyFindDunder(cls, '__hash__') <> nil then Exit;   { both halves supplied }
+  PyUserObjUnhashable := True;
 end;
 
 function PyUserObjStr(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;

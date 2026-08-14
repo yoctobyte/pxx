@@ -1120,6 +1120,8 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_variant_subscript26)" = "$$(printf '%b' '1\n2\n20\n99')"
 	./$(COMPILER) test/test_nilpy_dyncall.npy $(TESTTMP)/test_nilpy_dyncall26
 	test "$$($(TESTTMP)/test_nilpy_dyncall26)" = "42"
+	./$(COMPILER) test/test_nilpy_unhashable_eq_without_hash.npy $(TESTTMP)/test_nilpy_unhashable26
+	test "$$($(TESTTMP)/test_nilpy_unhashable26)" = "$$(printf 'handle: 2 from a from b\nwith hash: 1 x\nstore: unhashable type: %s\nget: unhashable type: %s\nin: unhashable type: %s\nplain: 1 two tuple' "'V'" "'V'" "'V'")"
 	./$(COMPILER) test/test_nilpy_exec_stub.npy $(TESTTMP)/test_nilpy_exec_stub26
 	test "$$($(TESTTMP)/test_nilpy_exec_stub26)" = "$$(printf '5 1\n10 30\n4 8\n42\n3 7\n15')"
 	./$(COMPILER) test/test_nilpy_genexpr.npy $(TESTTMP)/test_nilpy_genexpr26

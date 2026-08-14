@@ -1,0 +1,81 @@
+# A class defining __eq__ and NOT __hash__ is UNHASHABLE in CPython: __hash__
+# is set to None on purpose. Defining __eq__ says "compare these by content";
+# using the class as a dict key asks for identity. The two requests contradict,
+# and CPython refuses rather than resolve the contradiction silently.
+#
+# NilPy honoured neither -- it hashed by IDENTITY, so the entry landed in a
+# bucket no content-equal lookup would ever probe: `e[V(1)] = "x"` then
+# `e.get(V(1))` gave MISS. Data in, nothing out, no diagnostic.
+# bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry
+#
+# NOT repaired by synthesising a content hash: mutate the object after
+# insertion and its hash changes, so the entry silently vanishes -- the same
+# class of bug in a subtler form, and the trap CPython itself backed away from.
+
+
+class V:
+    def __init__(self, n):
+        self.n = n
+
+    def __eq__(self, o):
+        return self.n == o.n
+
+
+# no __eq__ at all: identity-hashable in BOTH implementations, and the real use
+# case -- an imported Pascal or C object held by pointer as a dict key. The
+# refusal keys on __eq__ being PRESENT precisely so it cannot reach this path.
+# This is the regression that matters most.
+class Handle:
+    def __init__(self, n):
+        self.n = n
+
+
+# both halves supplied: the programmer resolved the contradiction, so it is a
+# content key and works
+class W:
+    def __init__(self, n):
+        self.n = n
+
+    def __eq__(self, o):
+        return self.n == o.n
+
+    def __hash__(self):
+        return self.n
+
+
+a = Handle(1)
+b = Handle(1)
+d = {}
+d[a] = "from a"
+d[b] = "from b"
+print("handle:", len(d), d[a], d[b])
+
+w = {}
+w[W(1)] = "x"
+print("with hash:", len(w), w.get(W(1), "MISS"))
+
+# the refusal, at the STORE
+try:
+    e = {}
+    e[V(1)] = "x"
+    print("store: NOT REFUSED")
+except TypeError as ex:
+    print("store:", ex)
+
+# ...and at every lookup form, because the refusal sits where a key becomes a
+# bucket rather than in one caller
+try:
+    {}.get(V(1), "MISS")
+    print("get: NOT REFUSED")
+except TypeError as ex:
+    print("get:", ex)
+
+try:
+    V(1) in {}
+    print("in: NOT REFUSED")
+except TypeError as ex:
+    print("in:", ex)
+
+# unchanged key kinds
+k = {"s": 1, 2: "two", (3, 4): "tuple"}
+print("plain:", k["s"], k[2], k[(3, 4)])
