@@ -2,6 +2,8 @@
 track: N
 prio: 55
 type: feature
+status: working
+owner: claude-A-N
 ---
 
 # NilPy corpus: uforth — a real Python Forth system as Track N's forcing target
@@ -668,3 +670,53 @@ FOUND` and every driver then dies on `THROW -13`, where CPython is fine.
 [[decide-nilpy-dunder-file-for-a-compiled-program]] (recommendation: bake the
 source path at compile time). Until it is decided, run the drivers from the
 directory that holds `STD.UFO`, or put the binary beside it.
+
+## 2026-08-14 (claude-A-N) — the whole file COMPILES, with no warnings. Both recorded walls are gone.
+
+Measured against the compiler at **09bf3b648** (a self-hosted fixedpoint build,
+not rebuilt during the run):
+
+```
+compiler/pascal26 /home/rene/projects/uforth/uforth.py uforth
+ok: uforth  [code=4600545B data=64276B bss=9708B procs=1787]
+```
+
+**All 4357 lines.** The 2026-07-31 recheck names line 3887
+(`expected newline after statement`, near `res_addr res_addr length`) as "the
+next actionable item for whoever picks this up next" — it is gone, and so is
+everything behind it.
+
+**And the compile is now warning-CLEAN.** That same recheck recorded two
+`NIL PYTHON` warnings about `w_traverse_wordlist` and `w_name_to_string`
+capturing more than 12 enclosing values and so being unable to travel as a
+value. Zero warnings today. Neither was attributed to a commit then and neither
+can be attributed now — the closure-capture work landed elsewhere — which is
+exactly the pattern this ticket's log keeps showing: a corpus wall falls to work
+done for another reason, so the corpus is worth RE-MEASURING before it is worth
+debugging.
+
+### It also RUNS, and matches CPython
+
+`1 2 + . CR BYE` → `3`, byte-identical to CPython's.
+
+**The ANS Forth PRELIMINARY suite passes identically**: `tests/prelimtest.fth`,
+39 lines of output, `0 tests failed out of 57 additional tests`, and the
+pxx-built binary's stdout is byte-for-byte CPython's.
+
+### One environment trap worth recording for the next session
+
+Run the compiled binary from anywhere but uforth's own directory and it prints
+**`STD LIB NOT FOUND`**. That is not a bug: `load_stdlib_if_any` falls back to
+`os.path.dirname(os.path.abspath(__file__))`, and for a compiled binary
+`__file__` is the BINARY — which is what pin v286 deliberately made it. So the
+stdlib has to sit beside the executable, and a differential run that forgets
+this compares a stdlib-less pxx against a stdlib-loaded CPython and reports
+nonsense. The fix is to copy the tree and put the binary in it; the first
+attempt here did not, and its "differences" were entirely that.
+
+### Next
+
+The full `runtests.fth` driver under both engines is the real oracle and is the
+next measurement. Note that CPython itself needs more than 600s for it, which is
+its own data point for
+[[bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython]].

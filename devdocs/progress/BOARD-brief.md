@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:8 blocked:3 backlog:217 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1742 rejected:35`
+`urgent:1 working:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1742 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-nilpy-corpus-uforth` [N] — owner: claude-A-N
 
 ## urgent (1) — jump the queue
 
@@ -32,7 +32,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 202, ranked
+## Ready — top 30 of 201, ranked
 
 - `[p 80] [A]` bug-pascal-uses-is-transitive
 - `[p 70] [A]` bug-pascal-uses-order-breaks-pylib-exception
@@ -57,12 +57,12 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-n-nilpy-ast-typing-module-scope
-- `[p 55] [N]` feature-nilpy-corpus-uforth
 - `[p 55] [N]` feature-nilpy-text-string-kind
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
-_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_171 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
