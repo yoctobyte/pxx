@@ -77,3 +77,4 @@
 2026-08-13T20:31:20Z	plexus	be7f80936b0c0c95afadcb4d093ae8ba95ecea1c	would NOT pin be7f80936b0c — 4 red(s) not in the allowlist: test-arm32#src:examples/net/httpdemo.pas, test-core#src:test/test_uses_order_pylib_exception_a.pas, test-i386#src:examples/net/httpdemo.pas, test-nilpy#src:test/test_uses_order_pylib_exception_a.pas
 2026-08-13T23:24:37Z	plexus	30dc68bc02bb5fe4dfc84187ffe2644f99763f94	would NOT pin 30dc68bc02bb — 2 red(s) not in the allowlist: test-core#src:examples/tk/callbacks.npy, test-nilpy#src:examples/tk/callbacks.npy
 2026-08-14T05:58:09Z	plexus	be5520236571f866a54ab32d01a11a7fd37eb858	would-pin PENDING be5520236571 — qualifies, streak 1/2
+2026-08-14T06:30:41Z	plexus	3c096175d5d7f5e6dbac4287e2cf7f880690ee79	WOULD PIN 3c096175d5d7 — 0 red(s), all allowlisted, self-host clean, streak 2/2
