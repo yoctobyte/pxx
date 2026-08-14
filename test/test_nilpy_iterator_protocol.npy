@@ -1,0 +1,85 @@
+# The user iterator protocol — bug-nilpy-iterator-protocol-on-a-user-class.
+# `__iter__` once, then `__next__` per step, terminating on StopIteration.
+# Every line is diffed against CPython.
+
+# the self-iterator: `__iter__` returns self, so the object is consumed once
+class Countdown:
+    def __init__(self, n):
+        self.n = n
+    def __iter__(self):
+        return self
+    def __next__(self):
+        if self.n <= 0:
+            raise StopIteration()
+        self.n -= 1
+        return self.n
+
+for x in Countdown(3):
+    print(x)
+
+# a SEPARATE iterator object, so the container is re-iterable
+class Bag:
+    def __init__(self, items):
+        self.items = items
+    def __iter__(self):
+        return BagIter(self.items)
+
+class BagIter:
+    def __init__(self, items):
+        self.items = items
+        self.i = 0
+    def __next__(self):
+        if self.i >= len(self.items):
+            raise StopIteration()
+        v = self.items[self.i]
+        self.i += 1
+        return v
+
+b = Bag([1, 2, 3])
+for v in b:
+    print(v)
+for v in b:
+    print(v * 10)
+
+# break leaves the rest unconsumed, and continue still advances
+for v in Bag([1, 2, 3, 4]):
+    if v == 2:
+        continue
+    if v == 4:
+        break
+    print("body", v)
+
+# a raise from __next__ that is NOT StopIteration escapes the loop
+class Angry:
+    def __iter__(self):
+        return self
+    def __next__(self):
+        raise ValueError("boom")
+
+try:
+    for x in Angry():
+        print(x)
+except ValueError as e:
+    print("ValueError:", e)
+
+# __iter__ whose result has no __next__ is CPython's TypeError, word for word
+class NoNext:
+    def __iter__(self):
+        return self
+
+try:
+    for x in NoNext():
+        print(x)
+except TypeError as e:
+    print("TypeError:", e)
+
+# control: the built-in iterables are unchanged
+for c in "ab":
+    print(c)
+for n in [7, 8]:
+    print(n)
+d = {"k": 1, "j": 2}
+for k in d:
+    print(k, d[k])
+for i, v in enumerate(Bag([5, 6])):
+    print(i, v)

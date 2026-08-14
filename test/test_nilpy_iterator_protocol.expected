@@ -1,0 +1,21 @@
+2
+1
+0
+1
+2
+3
+10
+20
+30
+body 1
+body 3
+ValueError: boom
+TypeError: iter() returned non-iterator of type 'NoNext'
+a
+b
+7
+8
+k 1
+j 2
+0 5
+1 6

@@ -98,6 +98,11 @@ const
     FStep the stride and FPos the number of values left, which is why a
     range of a billion costs the same as a range of three. }
   PYITER_RANGE  = 8;
+  { a USER object implementing the iterator protocol — `__iter__` once, then
+    `__next__` per step, terminating on StopIteration. FObj holds the object
+    `__iter__` answered (which for the ordinary `return self` IS the source).
+    bug-nilpy-iterator-protocol-on-a-user-class }
+  PYITER_USEROBJ = 9;
 
 type
   TPyVarRec = record
@@ -663,6 +668,7 @@ type
     FPos: Integer;           { leaf position / ENUM counter / RANGE values left }
     FStart: Int64;           { enumerate(xs, START) / RANGE next value }
     FStep: Int64;            { RANGE stride }
+    FObj: TObject;           { the user iterator object (USEROBJ) }
     FBox: TPyList;           { the one-slot prefetch }
     FHas: Boolean;           { FBox holds a prefetched value }
     FEnd: Boolean;           { the source is exhausted — never restarts }
@@ -4790,6 +4796,13 @@ function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
   above. False when the class defines no usable __hash__, leaving the caller's
   identity hash. }
 function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
+{ The NO-ARGUMENT dunder call — `__next__`, `__iter__`. Defined beside the other
+  runtime dunder dispatchers (PyUserObjBoolDunder and friends); forward-declared
+  here because the cursor machinery above calls it.
+  bug-nilpy-iterator-protocol-on-a-user-class }
+function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
+                              var res: Variant): Boolean; forward;
+function PyUserObjHasDunder(o: TObject; const dunder: AnsiString): Boolean; forward;
 { Is this object UNHASHABLE the way CPython means it — its class defines
   __eq__ and does NOT define __hash__? Defining __eq__ says "compare these by
   content, not identity"; using the same class as a dict key asks for identity.
@@ -10717,6 +10730,15 @@ begin
     { a RANGE hands back a FRESH cursor every time — that is what re-iterable
       means, and it is why range is not itself a cursor }
     if o is TPyRange then begin Result := pyiter_of_range(TPyRange(o)); Exit; end;
+    { a USER class implementing the iterator protocol. Here rather than only in
+      the `for` lowering, so iter(), list(), sorted(), sum(), `in` and a
+      tuple-unpack all reach it too — one site, every consumer.
+      bug-nilpy-iterator-protocol-on-a-user-class }
+    if PyUserObjHasDunder(o, '__iter__') then
+    begin
+      Result := pyiter_of_userobj(o);
+      Exit;
+    end;
   end;
   PyTypeError(pyvartag(v), 'an iterable');
   Result := pyiter_of_list(TPyList.Create);
@@ -10957,6 +10979,32 @@ begin
     Result := True;
     Exit;
   end;
+  if it.FKind = PYITER_USEROBJ then
+  begin
+    { the user iterator protocol: `__next__` per step, terminating on
+      StopIteration. The exception is caught HERE and never reaches the loop —
+      which is exactly what CPython's `for` does with it, and why the signal
+      cannot simply propagate. Any OTHER exception is the user's and propagates
+      untouched, so a raise inside `__next__` still escapes the loop.
+      bug-nilpy-iterator-protocol-on-a-user-class }
+    try
+      if not PyUserObjNoArgDunder(it.FObj, '__next__', pv) then
+      begin
+        it.FEnd := True;
+        Exit;
+      end;
+    except
+      on E: StopIteration do
+      begin
+        it.FEnd := True;
+        Exit;
+      end;
+    end;
+    it.FBox.put(0, pv);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
   if it.FKind = PYITER_RANGE then
   begin
     if it.FPos <= 0 then begin it.FEnd := True; Exit; end;
@@ -11182,6 +11230,33 @@ begin
   Result := Result + ')';
 end;
 
+{ `for x in obj` over a USER class that implements the iterator protocol.
+  CPython calls `__iter__` once and then `__next__` per step; so does this. The
+  object `__iter__` answers is what gets stepped — the ordinary `return self`
+  makes that the source itself, and a class returning a separate iterator object
+  works for free.
+
+  A class with `__iter__` whose result has no `__next__` is CPython's TypeError,
+  raised here with CPython's own wording rather than answered as an empty
+  sequence. bug-nilpy-iterator-protocol-on-a-user-class }
+function pyiter_of_userobj(o: TObject): TPyIter;
+var itv: Variant; ito: TObject;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_USEROBJ;
+  if o = nil then begin Result.FEnd := True; Exit; end;
+  ito := o;
+  if PyUserObjNoArgDunder(o, '__iter__', itv) then
+  begin
+    if pyvartag(itv) = 7 then ito := TObject(pyvarobj(itv));
+  end;
+  if not PyUserObjHasDunder(ito, '__next__') then
+    raise TypeError.Create('iter() returned non-iterator of type ''' +
+                           TObject(ito).ClassName + '''');
+  Result.FObj := ito;
+  PXXObjRetain(Pointer(ito));
+end;
+
 function pyiter_of_range(r: TPyRange): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -11393,8 +11468,10 @@ begin
     PXXObjRelease(Pointer(it.FUp3));
     PXXObjRelease(Pointer(it.FUp4));
     PXXObjRelease(Pointer(it.FBox));
+    PXXObjRelease(Pointer(it.FObj));
     PXXObjRelease(it.FKey);
     it.FSrc := nil; it.FUp := nil; it.FUp2 := nil; it.FBox := nil; it.FKey := nil;
+    it.FObj := nil;
     it.FUp3 := nil; it.FUp4 := nil;
     it.FStr := '';
     Exit;
@@ -13548,6 +13625,14 @@ begin
       cursor loop in PyParseForIn, which never reaches this. }
     if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
     if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
+    { a USER class implementing the iterator protocol — drained the same way a
+      cursor is, since `list(obj)`, `sorted(obj)` and `x in obj` all want a
+      materialised sequence. bug-nilpy-iterator-protocol-on-a-user-class }
+    if PyUserObjHasDunder(o, '__iter__') then
+    begin
+      Result := pyiter_drain(pyiter_of_userobj(o));
+      Exit;
+    end;
   end;
   PyTypeError(pyvartag(v), 'a str, a list or a dict');
   Result := TPyList.Create;
@@ -14762,6 +14847,96 @@ begin
     PyUserObjBoolDunder := True;
     Exit;
   end;
+end;
+
+{ `o.<dunder>()` with no arguments, answering the result as a Variant. The
+  return SHAPE is read from the RTTI rather than assumed, exactly as the binary
+  dunders do: an unannotated `def __next__(self)` is RetKind 22 (Variant), which
+  is how the dunder is ordinarily written, but `-> int` and `-> str` are both
+  ordinary too and each has its own ABI. Anything else is declined (False)
+  rather than called through a pointer whose shape has not been checked.
+
+  A procedure (RetKind 0) is declined as well: `__next__` that returns nothing
+  is not the protocol, and calling it as a function would read a garbage
+  register. }
+type
+  { the shapes a no-argument dunder can have — declared at unit level beside the
+    binary-dunder shapes above, not inside the routine }
+  TNoArgV = function(self: Pointer): Variant;
+  TNoArgO = function(self: Pointer): Pointer;
+  TNoArgI = function(self: Pointer): Int64;
+  TNoArgS = function(self: Pointer): AnsiString;
+  TNoArgB = function(self: Pointer): Boolean;
+  TNoArgD = function(self: Pointer): Double;
+
+function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
+                              var res: Variant): Boolean;
+var cls: PClassRTTI; mi: PMethInfo;
+    fv: TNoArgV; fo: TNoArgO; fi: TNoArgI; fs: TNoArgS; fb: TNoArgB; fd: TNoArgD;
+begin
+  PyUserObjNoArgDunder := False;
+  if o = nil then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, dunder);
+  if mi = nil then Exit;
+  if mi^.Arity <> 1 then Exit;             { `self` only }
+  if mi^.RetKind = 22 then
+  begin
+    fv := TNoArgV(mi^.Code);
+    res := fv(Pointer(o));
+    PyUserObjNoArgDunder := True;
+    Exit;
+  end;
+  if mi^.RetKind = 6 then
+  begin
+    fo := TNoArgO(mi^.Code);
+    res := TObject(fo(Pointer(o)));
+    PyUserObjNoArgDunder := True;
+    Exit;
+  end;
+  if (mi^.RetKind = 13) or (mi^.RetKind = 1) or (mi^.RetKind = 15) or
+     (mi^.RetKind = 11) then
+  begin
+    fi := TNoArgI(mi^.Code);
+    res := fi(Pointer(o));
+    PyUserObjNoArgDunder := True;
+    Exit;
+  end;
+  if mi^.RetKind = 23 then
+  begin
+    fs := TNoArgS(mi^.Code);
+    res := fs(Pointer(o));
+    PyUserObjNoArgDunder := True;
+    Exit;
+  end;
+  if mi^.RetKind = 2 then
+  begin
+    fb := TNoArgB(mi^.Code);
+    res := fb(Pointer(o));
+    PyUserObjNoArgDunder := True;
+    Exit;
+  end;
+  if mi^.RetKind = 19 then
+  begin
+    fd := TNoArgD(mi^.Code);
+    res := fd(Pointer(o));
+    PyUserObjNoArgDunder := True;
+    Exit;
+  end;
+end;
+
+{ Does this object's class declare the dunder at all? The presence question,
+  separate from the call: `iter()` has to tell "no `__next__`" (a TypeError)
+  from "`__next__` in a shape we decline", and the two need different words. }
+function PyUserObjHasDunder(o: TObject; const dunder: AnsiString): Boolean;
+var cls: PClassRTTI;
+begin
+  PyUserObjHasDunder := False;
+  if o = nil then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  PyUserObjHasDunder := PyFindDunder(cls, dunder) <> nil;
 end;
 
 { The object-RETURNING sibling of PyUserObjBoolDunder, for a dunder whose result

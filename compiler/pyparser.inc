@@ -17330,6 +17330,24 @@ begin
       if contNode < 0 then Error('Nil Python: pylib (TPyFile.readlines) not loaded');
       ci := listCi;
     end;
+    { A USER class implementing the ITERATOR PROTOCOL — `__iter__` once, then
+      `__next__` per step, terminating on StopIteration. Wrapped into a cursor,
+      so the desugar below reuses the has/take walk a map() cursor already gets
+      and nothing about `continue`, `break`, enumerate or the pair unpack has to
+      learn a third shape. Everything that makes the protocol work (calling the
+      dunders through the RTTI, catching StopIteration) is in pylib's
+      PYITER_USEROBJ arm, reached from pyiter_v as well — so iter(), list(),
+      sorted() and `in` over the same object work by the same route.
+      bug-nilpy-iterator-protocol-on-a-user-class }
+    if (not isIter) and (ci >= 0) and (iterCi >= 0) and
+       (FindUMeth(ci, '__iter__') >= 0) then
+    begin
+      contNode := PyCallProc1('pyiter_of_userobj', contNode);
+      if contNode < 0 then
+        Error('Nil Python: pylib (pyiter_of_userobj) not loaded');
+      ci := iterCi;
+      isIter := True;
+    end;
     if (PyForExtraCount > 0) and (dictCi >= 0) and (ci = dictCi) then
       Error('Nil Python: a dict for-target takes two names');
     if (dictCi >= 0) and (ci = dictCi) then
