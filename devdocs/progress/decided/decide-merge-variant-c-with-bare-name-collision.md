@@ -138,4 +138,4 @@ therefore narrower than it reads: it is about applying FPC's rule in Pascal, not
 about collisions in general.
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit 953a902d6.
