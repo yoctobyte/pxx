@@ -8,3 +8,12 @@ nested  ('x', [1, 2])
 strs    ('x', 'y')
 builtin ('v', 9)
 var     ('dyn', 5)
+args    ('no such user', 404) 2
+index   no such user 404
+istuple True
+args3   ('a', 1, 2.5) 3
+sides   ('x', 7) ['x', 7]
+args1   ('solo',) 1
+args0   () 0
+argsbi  ('v', 2) 2
+argskey ('nope',) 1 'nope'

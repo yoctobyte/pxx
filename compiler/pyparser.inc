@@ -461,6 +461,7 @@ function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { compreh
   arm there calls it too, and FPC rejects a second forward. }
 function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
 function PyUserNameShadowsHere(const nm: AnsiString): Boolean; forward; { does this module define the name itself? — the `cast` intercept asks }
+function PyMakeTupleFromArgs(firstArg: Integer): Integer; forward; { a PYSEQ_TUPLE from an already-parsed AN_ARG chain — the multi-arg exception fold asks, and is defined above it }
 function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in parser.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
@@ -5998,13 +5999,14 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     kwAny: Boolean; kwSlot: array[0..PY_MAX_DC_KW - 1] of Integer;
     attrAny: Boolean; attrSym, attrAsgn, attrFld, attrFi, attrGSym: Integer;
     attrD, attrCur: Integer;   { the ancestor-chain walk, root first }
-    excFoldCi, excFoldPi, excFoldStr, excFoldN, excFoldI: Integer;
+    excFoldCi, excFoldPi, excFoldStr, excFoldN, excFoldI, excArgsTup: Integer;
     excFoldA, excFoldC: Integer;   { the multi-arg Exception fold }
     szArgNode, starHead: Integer;  { *args packing (see below) }
     kwExtraHead, kwExtraLast, kwKeyNode: Integer;   { keywords bound for **kwargs }
 begin
   name := CurTok.SVal;
   ci := -1;
+  excArgsTup := -1;
   if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
   { skip a same-named RECORD (the RTL's `Text` file type against tkinter's Text
     widget): a construction always means the class }
@@ -6418,27 +6420,33 @@ begin
         the old one — the fix reproducing the symptom it was fixing. pyvar_repr
         has ONE signature and takes a Variant, so each argument is boxed and
         the type is decided at run time. }
-      excFoldPi := FindProc('pyvar_repr');
-      if excFoldPi < 0 then Error('Nil Python: pylib (pyvar_repr) not loaded');
-      excFoldStr := -1;
-      excFoldN := ASTRight[ASTLeft[node]];   { first user arg (slot 0 is size) }
-      excFoldI := 0;
-      while excFoldN >= 0 do
-      begin
-        { repr(arg) }
-        excFoldA := AllocNode(AN_ARG);
-        ASTLeft[excFoldA] := PyForceVariant(ASTLeft[excFoldN]);
-        ASTRight[excFoldA] := -1;
-        excFoldC := AllocNode(AN_CALL);
-        ASTIVal[excFoldC] := excFoldPi;
-        ASTTk[excFoldC] := Ord(tyAnsiString);
-        ASTLeft[excFoldC] := excFoldA;
-        if excFoldI = 0 then excFoldStr := PyExcFoldCat(PyExcFoldLit('('), excFoldC)
-        else excFoldStr := PyExcFoldCat(PyExcFoldCat(excFoldStr, PyExcFoldLit(', ')), excFoldC);
-        Inc(excFoldI);
-        excFoldN := ASTRight[excFoldN];
-      end;
-      excFoldStr := PyExcFoldCat(excFoldStr, PyExcFoldLit(')'));
+      { The arguments go into a TUPLE, once, and the rendered message is derived
+        FROM that tuple at run time. It used to be the other way round — each
+        argument repr'd into a concatenation right here, and the resulting ONE
+        string handed to the one-parameter ctor — so `e.args` came back as a
+        1-tuple of the rendered text: `("('no such user', 404)",)` where CPython
+        gives `('no such user', 404)`, and `len(e.args)` was 1 for every
+        multi-argument exception in the language. `code = e.args[1]`, the exact
+        idiom args exists for, read the wrong thing.
+
+        Deriving the message from the tuple is what keeps each argument
+        evaluated EXACTLY ONCE. Building both here would need the argument nodes
+        twice, and an argument with a side effect would then run it twice —
+        which is the obstacle recorded when args first shipped, and the reason
+        this waited.
+        bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text }
+      excArgsTup := PyMakeTupleFromArgs(ASTRight[ASTLeft[node]]);
+      excFoldPi := FindProc('pyexc_tuplemsg');
+      if excFoldPi < 0 then Error('Nil Python: pylib (pyexc_tuplemsg) not loaded');
+      excFoldA := AllocNode(AN_ARG);
+      ASTLeft[excFoldA] := excArgsTup;
+      ASTRight[excFoldA] := -1;
+      excFoldStr := AllocNode(AN_CALL);
+      ASTIVal[excFoldStr] := excFoldPi;
+      ASTTk[excFoldStr] := Ord(tyAnsiString);
+      ASTLeft[excFoldStr] := excFoldA;
+      if Procs[ctorPi].Params[1].TypeKind = tyVariant then
+        excFoldStr := PyForceVariant(excFoldStr);
       { one argument in place of the whole surplus chain }
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := excFoldStr;
@@ -6510,6 +6518,28 @@ begin
       Inc(nArgs);
     end;
   Result := node;
+  { ...and the multi-argument exception fold's tuple is stashed into argsv by
+    WRAPPING the construction, because there is no statement position between
+    building the exception object and raising it. pyexc_setargs returns the
+    exception, so the whole thing stays one expression.
+    bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text }
+  if excArgsTup >= 0 then
+  begin
+    excFoldPi := FindProc('pyexc_setargs');
+    if excFoldPi < 0 then Error('Nil Python: pylib (pyexc_setargs) not loaded');
+    excFoldA := AllocNode(AN_ARG);
+    ASTLeft[excFoldA] := excArgsTup;
+    ASTRight[excFoldA] := -1;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := Result;
+    ASTRight[argNode] := excFoldA;
+    excFoldC := AllocNode(AN_CALL);
+    ASTIVal[excFoldC] := excFoldPi;
+    ASTTk[excFoldC] := Ord(tyClass);
+    ASTRight[excFoldC] := ASTRight[Result];    { keep the record identity }
+    ASTLeft[excFoldC] := argNode;
+    Result := excFoldC;
+  end;
   { PXXDBG=n.ctorargs — every construction's slot kinds and types. This is the
     probe that disproved the recorded root cause of
     bug-nilpy-slice-of-variant-local-returned-is-unusable (the argument was
@@ -13270,6 +13300,75 @@ end;
 
   Mutability and hashability are the documented differences from CPython; see the
   tuple annotation note in PyAnnTypeTermAt. }
+function PyMakeTupleFromArgs(firstArg: Integer): Integer;
+{ A PYSEQ_TUPLE TPyList built from an already-parsed AN_ARG chain, returning the
+  hidden temp's ident. The twin of PyMakeTupleFrom, which builds one from the
+  CURSOR — this one cannot, because its elements have already been parsed into
+  nodes by the caller.
+
+  Each element node is used ONCE, in the append that goes into the tuple, which
+  is the whole point: the multi-argument exception fold needs both a rendered
+  message and the real argument tuple, and evaluating the arguments twice to get
+  them would run any side effect twice. The message is derived from the tuple at
+  run time instead.
+  bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text }
+var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi,
+    tmpSym, asgn, elemArg, kindSym: Integer;
+begin
+  ci := FindUClass('TPyList');
+  if ci < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  tmpSym := AllocVar(PyHiddenName('exctup'), tyClass);
+  Syms[tmpSym].RecName := recId;
+  SymSyncTypeRef(tmpSym);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(tmpSym);
+  ASTRight[asgn] := node;
+  PyHoistStmt(asgn);
+  { mark it a TUPLE, not a list — `args` is a tuple in CPython, and isinstance
+    and repr both read FKind. pylist_mark_tuple is a free function, not a
+    method, so this is an ordinary call with the list as its one argument. }
+  kindSym := FindProc('pylist_mark_tuple');
+  if kindSym < 0 then Error('Nil Python: pylib (pylist_mark_tuple) not loaded');
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+  ASTRight[selfArg] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := kindSym;
+  ASTTk[callNode] := Ord(tyClass);
+  ASTLeft[callNode] := selfArg;
+  PyHoistStmt(callNode);
+  mmi := FindUMeth(ci, 'append_self');
+  if mmi < 0 then Error('Nil Python: TPyList.append_self not found');
+  mpi := UMthProc_[mmi];
+  elemArg := firstArg;
+  while elemArg >= 0 do
+  begin
+    valArg := AllocNode(AN_ARG);
+    ASTLeft[valArg] := PyForceVariant(ASTLeft[elemArg]);
+    selfArg := AllocNode(AN_ARG);
+    ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+    ASTRight[selfArg] := valArg;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := mpi;
+    ASTTk[callNode] := Ord(tyClass);
+    ASTLeft[callNode] := selfArg;
+    PyHoistStmt(callNode);
+    elemArg := ASTRight[elemArg];
+  end;
+  Result := PyMakeIdent(tmpSym);
+end;
+
 function PyMakeTupleFrom(firstNode: Integer): Integer;
 var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi,
     tmpSym, asgn, elemNode: Integer;

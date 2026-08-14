@@ -800,6 +800,20 @@ function pyvar_repr(const v: Variant): AnsiString;
   (project_findproc_by_name_ignores_overloads), so calling pystr_of from the
   frontend would hand the integer to the AnsiString arm — the same crash, one
   frame further in. }
+{ The MULTI-ARGUMENT exception pair. `raise MyErr("no such user", 404)` has to
+  end up with BOTH the rendered message CPython prints and the real argument
+  tuple, and the arguments must be evaluated exactly ONCE — anything with a
+  side effect would otherwise run twice.
+
+  So the tuple is the only thing built at the construction site: the message is
+  derived FROM it at run time (pyexc_tuplemsg), and the tuple is stashed into
+  argsv afterwards (pyexc_setargs). The fold used to render the arguments into
+  one string at the call site and hand THAT to the one-parameter ctor, so
+  `e.args` came back as a 1-tuple of the rendered text and `len(e.args)` was 1
+  for every multi-argument exception in the language.
+  bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text }
+function pyexc_tuplemsg(t: TPyList): AnsiString;
+function pyexc_setargs(e: TObject; t: TPyList): TObject;
 function pyexc_msgstr(const v: Variant): AnsiString;
 { print()'s string form of a VARIANT: a container payload (list/dict) shows its
   Python repr (`[1, 2]`), every scalar its plain str() (no quotes). Used by the
@@ -9979,6 +9993,26 @@ end;
 constructor KeyError.CreateRendered(const shown: AnsiString);
 begin
   inherited Create(shown);
+end;
+
+function pyexc_tuplemsg(t: TPyList): AnsiString;
+begin
+  { CPython's str(e) for a multi-argument exception IS repr(args) — `('no such
+    user', 404)` — which is exactly what a PYSEQ_TUPLE list reprs as, so this
+    reuses the one renderer rather than growing a second one that can drift. }
+  Result := pylist_repr(t);
+end;
+
+function pyexc_setargs(e: TObject; t: TPyList): TObject;
+begin
+  { argsv is the untyped root slot (see exceptions.pas): pylib is the only code
+    that stores into it, and this is one of the two places that does. Returns
+    the exception so the frontend can WRAP the construction in it and keep the
+    whole thing one expression — there is no statement position between
+    building the object and raising it. }
+  Result := e;
+  if e = nil then Exit;
+  ExceptionBase(e).argsv := t;
 end;
 
 function Exception.GetArgs: TPyList;

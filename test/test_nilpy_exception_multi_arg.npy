@@ -57,3 +57,65 @@ print("strs   ", str(MyErr("x", "y")))
 print("builtin", str(ValueError("v", 9)))
 v = 5
 print("var    ", str(MyErr("dyn", v)))
+
+
+# ---- ...and `args` is the real TUPLE, not the rendered text ----------------
+#
+# bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text
+#
+# The fold above renders the arguments into the one message CPython prints,
+# which made str(e) right and `args` wrong: it came back as
+# ("('no such user', 404)",) -- ONE element, the rendered text -- where CPython
+# gives ('no such user', 404). So `code = e.args[1]`, the exact idiom args
+# exists for, read the wrong thing, and len(e.args) was 1 for every
+# multi-argument exception in the language.
+#
+# Fixed by inverting the order: the arguments go into a TUPLE once, and the
+# message is derived FROM that tuple at run time. That is also what keeps each
+# argument evaluated EXACTLY ONCE -- building both from the argument nodes would
+# have run any side effect twice, which is the obstacle recorded when args
+# first shipped and the reason this waited.
+
+calls = []
+
+
+def side(v):
+    calls.append(v)
+    return v
+
+
+try:
+    raise MyErr("no such user", 404)
+except MyErr as e:
+    print("args   ", e.args, len(e.args))
+    print("index  ", e.args[0], e.args[1])
+    print("istuple", isinstance(e.args, tuple))
+
+try:
+    raise MyErr("a", 1, 2.5)
+except MyErr as e:
+    print("args3  ", e.args, len(e.args))
+
+# each argument evaluated exactly once -- `calls` is the witness
+try:
+    raise MyErr(side("x"), side(7))
+except MyErr as e:
+    print("sides  ", e.args, calls)
+
+# the arities the fold does NOT touch keep their own args shapes
+try:
+    raise MyErr("solo")
+except MyErr as e:
+    print("args1  ", e.args, len(e.args))
+try:
+    raise MyErr()
+except MyErr as e:
+    print("args0  ", e.args, len(e.args))
+try:
+    raise ValueError("v", 2)
+except ValueError as e:
+    print("argsbi ", e.args, len(e.args))
+try:
+    {}["nope"]
+except KeyError as e:
+    print("argskey", e.args, len(e.args), str(e))
