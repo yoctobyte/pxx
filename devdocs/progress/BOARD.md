@@ -34,7 +34,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (220)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -81,7 +81,6 @@ _none_
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-check-does-not-notice-a-status-line-that-contradicts-the-folder | T | 40 | bug | A ticket's `- **Status:** working` body line drifts from the folder that actually holds it, and `progress.sh check --strict` says nothing. Twenty tickets had claimed `working` while working/ was empty — nine of them in backlog/unfinished, where it falsely signals a live lock. | — |
-| bug-t-testmgr-pin-escalates-on-a-stale-local-tstate | T | 55 | bug | `testmgr --pin` picks its gate tier from watcher_is_down(), which reads the LOCAL tstate/ — so without a git fetch it reports your own checkout's staleness as Track T being down, escalates to --tier limited, and runs for minutes with the repo lock held while Track T is actually UP | — |
 | chore-makefile-testtmp-parameterize | A | 55 | chore | Route the Makefile's 6755 fixed /tmp paths through $(TESTTMP) so two concurrent raw `make test*` runs on one box stop clobbering each other. Mechanically verified by Track T: the sweep is byte-identical in `make -n` across all 90 targets, and `make test-smoke TESTTMP=<scratch>` passes end to end. Script + proof below — this is a 20-minute job, not a careful pass. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -409,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1759)
+## done (1760)
 
-1759 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1760 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (35)
 
@@ -473,7 +472,6 @@ _none_
 - [p 55] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 55] [P] bug-pascal-uses-clause-duplicate-name-resolves-first-not-last
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
-- [p 55] [T] bug-t-testmgr-pin-escalates-on-a-stale-local-tstate
 - [p 55] [A] chore-makefile-testtmp-parameterize
 - [p 55] [U] decide-reprice-nilpy-ast-typing-module-scope
 - [p 55] [A] feature-a-declaration-phase

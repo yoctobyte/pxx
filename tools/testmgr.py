@@ -2972,7 +2972,32 @@ def watcher_is_down():
     commands are what answer it, so this asks rather than guesses. Any error
     reaching it counts as NOT down: a pin should not silently escalate to a
     long gate because a subprocess failed to launch.
+
+    FETCH FIRST. `--status` reads the LOCAL tstate/, which CLAUDE.md already
+    warns "reports your own checkout's staleness" without a fetch — and a dev
+    checkout is stale most of the time. So the rare-exception escalation fired
+    on the COMMON path: measured 2026-08-14, a pin ran >10 minutes on --tier
+    limited (into the uforth differential, 900s timeout) with the repo lock
+    held, while Track T was UP the whole time. It was killed as a hang, twice.
+
+    The fetch is read-only, touches no working tree, and is bounded — and if it
+    cannot run (offline, no remote, slow link) the answer is NOT-down, so the
+    failure direction stays the cheap one: being wrong that way costs a matrix
+    sweep Track T does anyway, being wrong the other way costs every lane
+    minutes. bug-t-testmgr-pin-escalates-on-a-stale-local-tstate.
     """
+    fetched = False
+    try:
+        fetched = subprocess.run(
+            ["git", "fetch", "--quiet", "origin", "master"], cwd=REPO,
+            capture_output=True, timeout=45).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        pass
+    if not fetched:
+        print("testmgr: could not fetch origin — treating Track T as UP "
+              "(not escalating the pin gate; a stale local tstate/ cannot "
+              "prove the watcher is down)", file=sys.stderr, flush=True)
+        return False
     try:
         return subprocess.run([sys.executable,
                                os.path.join(REPO, "tools/twatch.py"),
@@ -3055,11 +3080,20 @@ def run_pin(args):
         # Say what is about to happen and roughly how long. Silence for minutes
         # is what got the old default killed twice as a hang — a UX defect
         # independent of which tier is correct.
-        print("testmgr --pin: gate — tier %s at %s (%s)%s"
-              % (tier, sha[:12], PIN_TIER_COST.get(tier, "duration unknown"),
-                 "; Track T is DOWN, so nothing else is sweeping the matrix "
-                 "— pass --tier quick to override" if down else ""),
-              flush=True)
+        announce = ("testmgr --pin: gate — tier %s at %s (%s)%s"
+                    % (tier, sha[:12],
+                       PIN_TIER_COST.get(tier, "duration unknown"),
+                       "; Track T is DOWN, so nothing else is sweeping the "
+                       "matrix — pass --tier quick to override" if down else ""))
+        print(announce, flush=True)
+        # ...and to stderr as well. This line already flushed, but stdout is a
+        # PIPE under every caller that matters (a gate script, an agent's
+        # subprocess) and the reader typically only shows it at exit — so the
+        # one message that would have explained a ten-minute wait arrived after
+        # the wait, or not at all when the run was killed as a hang. stderr is
+        # the channel that reaches a watching human mid-run.
+        if tier != "quick":
+            print(announce, file=sys.stderr, flush=True)
         # A child, so the gate keeps the process-group teardown twatch.kill_child
         # relies on. It INHERITS this process's lock rather than taking one:
         # --force here used to mean "the lock is mine, proceed" and was executed
