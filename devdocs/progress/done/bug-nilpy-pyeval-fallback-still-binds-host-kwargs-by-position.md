@@ -2,7 +2,7 @@
 track: N
 prio: 45
 type: bug
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -193,3 +193,6 @@ by case, so there is nothing to be ambiguous about. It also lands on the right
 side of NilPy's own rule — accepting something CPython rejects is a language
 feature, not a defect; the direction that must hold is that working CPython code
 works here (`devdocs/dev/nilpy-semantics-divergences.md`).
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

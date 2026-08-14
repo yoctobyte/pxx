@@ -4,7 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`{*xs}` does not deduplicate — the set literal's star-spread arm calls TPyList.extend, bypassing the TPyList.add the non-star elements go through, so `len({*[1,1,2]})` is 3 where CPython says 2"
-status: working
+status: done
 owner: claude-AN
 ---
 
@@ -94,3 +94,6 @@ Only the display's star arm was wrong.
 carries the LIST rows deliberately — `[*[1,1,2]]` must still be `[1, 1, 2]`,
 which is the failure a "make it dedup" fix invites. `make compiler/pascal26`
 fixedpoint + `tools/gate.sh quick`.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.

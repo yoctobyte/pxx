@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:8 blocked:3 backlog:217 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1749 rejected:35`
+`urgent:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1751 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 202, ranked
+## Ready — top 30 of 201, ranked
 
 - `[p 80] [A]` bug-pascal-uses-is-transitive
 - `[p 70] [A]` bug-pascal-uses-order-breaks-pylib-exception
@@ -65,4 +65,4 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 
-_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_171 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
