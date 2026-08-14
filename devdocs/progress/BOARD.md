@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep | N | 40 | bug | A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=)) | — |
 
 ## unfinished (8)
 
@@ -49,7 +51,6 @@ _none_
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
 | bug-nilpy-a-one-name-tuple-loop-target-is-refused | N | 25 | bug | `for (x,) in pairs:` — a one-name PARENTHESISED loop target with a trailing comma — is refused. Python unpacks the 1-tuple; a single-name target here would bind the whole element, so this needs an unpack, not just comma tolerance. | — |
-| bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep | N | 40 | bug | A sweep of the builtin surface against CPython: `sorted(xs, key=None)` RAISES where CPython treats None as no key, a three-way `zip(a, b, c)` does not parse, and thirteen builtins are absent (frozenset, issubclass, callable, iter/next, slice, complex, format, ascii, eval, id, dir, vars, memoryview, max(default=)) | — |
 | bug-nilpy-case-mapping-cannot-change-code-point-count | N | 30 | bug | `'ß'.upper()` answers 'ß' where CPython answers 'SS', and `'İ'.lower()` answers 'İ' where CPython answers 'i̇'. pystr_upper/pystr_lower map byte by byte, so a case mapping that changes the code-point COUNT cannot be expressed at all. ASCII and Latin-1 are correct. | — |
 | bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising | N | 25 | bug | `min(3, None)` answers None where CPython raises TypeError — pyvar_gt orders None against a number instead of refusing. Low priority: comparing None is a bug in the calling program, and every shape CPython accepts is unaffected. But it is the wrong DIRECTION of laxity: we answer a question CPython refuses to answer, silently. | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
@@ -93,6 +94,7 @@ _none_
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | decide-nilpy-builtin-vs-pascal-unit-name-resolution | U | 45 | decide | Settled by the governing rule (user, 2026-08-13): the DEFAULT follows the reference implementation per frontend — CPython for .npy, FPC for .pas — deviations behind --strict-*. So shadowing is ALLOWED and PREFERRED, `reserved` needs the bar 'principally unsolvable', and the tier is a compatibility statement rather than a convenience. What is left to decide: the marker's spelling, whether `print` stops being a token, and whether a --strict-python peer is wanted. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
+| decide-nilpy-eval-at-runtime | U | 35 | decide | Does NilPy support `eval(s)` / `exec(s)` over a runtime string at all? A compiled dialect either ships a parser in every binary or it does not — this is a design call, not work, and it has sat as a to-do row on a bug ticket for three sessions. | — |
 | decide-nilpy-object-dict-key-hashing | U | 40 | decide | A class with __eq__ and no __hash__ is unhashable in CPython, so `d[V(1)] = x` raises. NilPy stores it and then never finds it again — data in, nothing out, silently. Refuse the store (faithful), make content lookup work (friendlier, needs a __hash__ story), or document the divergence. The ticket that found it says explicitly to decide rather than guess. | — |
 | decide-pin-the-bench-box-clock | U | 40 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
 | decide-pylib-exception-vs-sysutils-exception | U | 55 | decide | pylib and sysutils both declare a class named Exception and the name is deliberately shared program-wide, so `except Exception:` catches either RTL's raise. The cost, measured: under `uses sysutils, pylib` pylib's OWN classes bind their ancestor to SYSUTILS' Exception, so pylib can never add a member sysutils lacks — which killed `e.args` after it had shipped. Decide who owns Exception before anything else is built on it. | — |
@@ -540,7 +542,6 @@ _none_
 - [p 40] [A] bug-a-array-of-const-literal-does-not-match-in-a-cross-unit-overload-set
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
 - [p 40] [N] bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
-- [p 40] [N] bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep
 - [p 40] [N] bug-nilpy-dict-update-keyword-args-segfault-on-two-keywords
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [N] bug-nilpy-multiple-inheritance-does-not-parse
@@ -577,6 +578,7 @@ _none_
 - [p 35] [N] bug-nilpy-non-ascii-string-surface-measured
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
+- [p 35] [U] decide-nilpy-eval-at-runtime
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 35] [S] feature-c-esp-conformance-coverage
 - [p 35] [S] feature-dns-esp-backend

@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1742 rejected:35`
+`working:1 unfinished:8 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:66 done:1742 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep` [N] — owner: claude-A-N
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 

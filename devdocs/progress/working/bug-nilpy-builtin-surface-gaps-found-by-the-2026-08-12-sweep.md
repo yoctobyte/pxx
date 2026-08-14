@@ -268,3 +268,49 @@ rather than the chosen member (bug-nilpy-keyword-arg-vs-overload-set), so it is
 filed there rather than bodged here.
 
 Test `test/test_nilpy_min_max_key_none.{npy,expected}`, wired into `test-nilpy`.
+
+## RE-MEASURED 2026-08-14 — most of this ticket is now stale. What is left is six names.
+
+Re-ran every open row against the compiler at HEAD rather than reading the list,
+because five of the sessions above each closed part of it and the remaining-items
+lines were written before the last two landed.
+
+| row | status at 2026-08-14 |
+| --- | --- |
+| 1. `sorted(key=None)` | **done** (2026-08-13) |
+| 1b. `min`/`max` with `key=None` | **still open** — see below |
+| 2. three-way `zip` | **done** (2026-08-13) |
+| 3. computed precision `f"{7.5:.{n}f}"` | **DONE** — answers `7.500`, matching CPython. Landed since, unrecorded here |
+| `callable` | **done** (2026-08-13) |
+| `issubclass` | **done** |
+| `format` | **done** (2026-08-13) |
+| `frozenset` | **DONE** — `frozenset([1,2])` compiles and runs |
+| `iter` / `next` | **DONE** — and this was the html5lib ladder's cheapest wall, 5 files |
+| `type(x) == int` | **DONE 2026-08-14** — bug-n-a-type-name-is-not-a-first-class-value |
+| `id(x)` | **DONE 2026-08-14**, here |
+| `ascii(x)` | **DONE 2026-08-14**, here |
+| `max(xs, default=0)` | **still open** — `max has no parameter named 'default'` |
+| `slice(1, 3)` | still open — `undefined variable (slice)` |
+| `complex(1, 2)` | still open — no complex type at all |
+| `dir(x)` / `vars()` / `memoryview(b)` | still open |
+| `eval(s)` | still open, and still the question the ticket asks: deliberate or not? |
+
+So the honest remaining list is **six names** — `max(default=)`, `slice`,
+`complex`, `dir`, `vars`, `memoryview` — plus `min`/`max` with `key=None` and the
+`eval` question. Everything else this ticket opened is closed.
+
+### `callable(print)` is a different gap and it is now HALF closed
+
+The 2026-08-13 note recorded that `callable(print)` and `callable(len)` do not
+parse — a BUILTIN taken as a value — and guessed it belonged with the str-method
+work. Partly right: builtin TYPES (`str`, `int`, `list`, ...) are values now, so
+`callable(str)` parses. Builtin FUNCTIONS (`print`, `len`) still do not: they are
+not types and have no value representation. Worth its own item if it recurs.
+
+### `eval` is a Track U question, not a gap
+
+The ticket asks "deliberately absent? if so it belongs in the divergences page".
+Nobody has answered it in three sessions, and it is a design call rather than
+work — a compiled dialect either carries a parser at run time or it does not.
+Filed as [[decide-nilpy-eval-at-runtime]] rather than left as a table row that
+reads like a to-do.
