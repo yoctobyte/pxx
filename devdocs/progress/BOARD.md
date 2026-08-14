@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-n-typevar-call-is-an-undefined-variable | N | 55 | bug | `MessageT = TypeVar(\"MessageT\")` at module scope dies with `undefined variable (TypeVar)`: `typing` is a consumed-and-ignored import, so the names it exports that have a RUN-TIME call form — TypeVar, Generic, NewType, cast — are bound to nothing. The largest remaining language gap in the neuzelaar census once unreadable annotations stopped refusing modules. | — |
+_none_
 
 ## unfinished (9)
 
@@ -38,7 +36,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (221)
+## backlog (222)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -57,6 +55,7 @@ _none_
 | bug-n-exec-builtin-is-a-silent-no-op-and-eval-is-absent | N | 55 | bug | `exec(s, d, d)` compiles, runs, and does NOTHING — the target dict is left empty where CPython has the bound name. A program using it runs and is silently wrong. `eval(s)` is absent entirely (loud, so much less dangerous). Both should map onto the already-shipped feature-lib-pyexec, which does the real work today. | — |
 | bug-n-math-pow-domain-error-raises-the-wrong-exception | N | 25 | bug | Every math domain error in NilPy raises `ZeroDivisionError: division by zero` where CPython raises `ValueError: math domain error` — sqrt(-1), log(-1), log(0) and pow(-8, 0.5) all of them, and the same call compiled as PASCAL returns Nan without raising at all. Three behaviours for one operation; a CPython program's `except ValueError:` catches none of ours. | — |
 | bug-n-object-dict-key-with-eq-and-no-hash-silently-loses-the-entry | N | 50 | bug | A class defining `__eq__` without `__hash__` is unhashable in CPython — `d[V(1)] = x` raises TypeError. NilPy stores it and a content-equal lookup then misses, so the entry goes in and never comes out, silently. Refuse the store with CPython's message. Must NOT touch classes with no `__eq__`, which are identity-hashable in both and are the imported-object-pointer use case. | — |
+| bug-n-overload-decorator-is-refused | N | 45 | bug | `@overload` from typing is refused with `unsupported decorator (only @dataclass)`. The last of the typing names that has a RUN-TIME form; TypeVar/NewType/cast/Generic/Protocol all landed under bug-n-typevar-call-is-an-undefined-variable. Its answer is a different shape from theirs — the decorated def is a STUB CPython throws away, so this is about skipping a definition, not about producing a value. | — |
 | bug-n-str-encode-and-bytes-decode-ignore-the-encoding | N | 25→40 | bug | str.encode(enc) and bytes.decode(enc) IGNORE their encoding argument and always use UTF-8 — 'hé'.encode('latin-1') returns 3 UTF-8 bytes where CPython gives 2, encode('ascii') silently succeeds where CPython raises, and decode never raises UnicodeDecodeError. Silent wrong bytes, and it blocks an honest codecs shim | — |
 | bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage | N | 40 | bug | `self.k = G` where G is a module global holding an instance: typing the field from the global (either tyClass or tyVariant) compiles and then reads GARBAGE — 5887615 / 7 where CPython says 9. Today it is still the loud 'cannot infer' diagnostic, because typing it was measured and rejected; the value path is what has to be fixed before the inference can be extended | — |
 | bug-nilpy-a-one-name-tuple-loop-target-is-refused | N | 25 | bug | `for (x,) in pairs:` — a one-name PARENTHESISED loop target with a trailing comma — is refused. Python unpacks the 1-tuple; a single-name target here would bind the whole element, so this needs an unpack, not just comma tolerance. | — |
@@ -421,9 +420,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1785)
+## done (1786)
 
-1785 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1786 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -513,6 +512,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes
 - [p 45] [A] bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers
+- [p 45] [N] bug-n-overload-decorator-is-refused
 - [p 45] [P] bug-p-class-name-collision-across-units-resolves-first-not-last
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths

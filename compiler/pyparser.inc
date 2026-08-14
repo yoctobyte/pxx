@@ -460,6 +460,7 @@ function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { compreh
 { PyMakeTruthy is forward-declared in parser.inc (included FIRST): the bool()
   arm there calls it too, and FPC rejects a second forward. }
 function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
+function PyUserNameShadowsHere(const nm: AnsiString): Boolean; forward; { does this module define the name itself? — the `cast` intercept asks }
 function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in parser.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
@@ -2205,7 +2206,7 @@ end;
 
 { Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
 procedure PyParseBitOperand;
-var node: Integer;
+var node, castDepth: Integer;
 begin
   if PyIsIdent('isinstance') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
@@ -2241,6 +2242,40 @@ begin
     Next;                        { the name — metadata, dropped }
     Expect(tkComma, ',');
     PyParseBoolExpr;             { the SUPERTYPE, and the value of the call }
+    Expect(tkRParen, ')');
+    Exit;
+  end;
+  { `cast(T, x)` — the third typing name that is CALLED rather than read out of
+    an annotation, and the only one carrying real semantics: CPython's cast
+    returns its SECOND argument unchanged, having done nothing with the first.
+    So the value is just the expression, and the type is dropped.
+
+    The type is SKIPPED AS TOKENS, not parsed. It is written in annotation
+    language, where `cast(List[int], x)` and `cast("Node", x)` are ordinary —
+    and `List` is one of the typing names the consumed-only import drops, so
+    handing the first argument to the expression parser reintroduces the very
+    `undefined variable` this arm exists to remove. Nothing there can be
+    evaluated and nothing needs to be. bug-n-typevar-call-is-an-undefined-variable }
+  if PyIsIdent('cast') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) and not PyUserNameShadowsHere('cast') then
+  begin
+    Next;                        { cast }
+    Expect(tkLParen, '(');
+    castDepth := 0;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CurTok.Kind in [tkLParen, tkLBrack] then Inc(castDepth)
+      else if CurTok.Kind in [tkRParen, tkRBrack] then
+      begin
+        if castDepth = 0 then
+          Error('Nil Python: cast takes two arguments, a type and a value');
+        Dec(castDepth);
+      end
+      else if (CurTok.Kind = tkComma) and (castDepth = 0) then Break;
+      Next;
+    end;
+    Expect(tkComma, ',');
+    PyParseBoolExpr;             { the VALUE, and the value of the call }
     Expect(tkRParen, ')');
     Exit;
   end;
@@ -27520,8 +27555,29 @@ begin
   PyDefaultEvalMode := savedEval;
 end;
 
+{ Is the base at the cursor one of typing's ERASED bases — `Generic[T]`,
+  `Protocol[T]`? NilPy erases generics, and after
+  bug-n-an-uninterpretable-annotation-refuses-the-program the type parameter is
+  only ever read in annotations, which degrade to Any. So the base contributes
+  nothing to the layout, the method table or `super()`, and the honest
+  registration is the one `class C:` gets — the same call `object` already gets
+  one line below, for the same reason.
+
+  A user class of that name WINS: these are erased because nothing here can be
+  pointed at, so if something can be, point at it. That also means this only
+  ever fires where the alternative was `unknown base class Generic`.
+  bug-n-typevar-call-is-an-undefined-variable }
+function PyBaseIsErasedTyping: Boolean;
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  if (CurTok.SVal <> 'Generic') and (CurTok.SVal <> 'Protocol') then Exit;
+  Result := FindUClassNonRecord(CurTok.SVal) < 0;
+end;
+
 procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
+    realBases, baseDepth: Integer;
     propName: AnsiString;
 begin
   Expect(tkClass, 'class');
@@ -27531,6 +27587,15 @@ begin
     { base class: class Name(Base): — Exception is auto-registered as an
       empty shell (the try/except semantics rung is its own ticket) }
     Next;
+    { A base LIST, not a single base. `class Bus(Service, Generic[T])` is
+      ordinary in typed code, and the erasable entries — `object`, `Generic[T]`,
+      `Protocol[T]` — must not count toward the multiple-inheritance refusal
+      below: erasing them is what makes such a header single-inheritance, which
+      it genuinely is. Before this the header was one base plus a hard error on
+      the comma, so a `Generic[T]` in second position refused a class that names
+      exactly one real parent. bug-n-typevar-call-is-an-undefined-variable }
+    realBases := 0;
+    repeat
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected a base class name');
     { A DOTTED base — `class Cfg(configparser.ConfigParser)` — names the module
       it came from. Unit scope is flat here (an `import X` is a `uses X`, and its
@@ -27552,9 +27617,21 @@ begin
       because there is no `object` class to point at and inventing one would put
       a real base in the chain that `super()` and the method tables would then
       have to explain. }
-    if CurTok.SVal = 'object' then
+    if (CurTok.SVal = 'object') or PyBaseIsErasedTyping then
     begin
       Next;
+      { `Generic[T]` / `Protocol[T]` carry a SUBSCRIPT that is part of the base,
+        not a separate construct — step over it, balanced, so the comma or `)`
+        the loop below reads is the real one. }
+      if CurTok.Kind = tkLBrack then
+      begin
+        baseDepth := 0;
+        repeat
+          if CurTok.Kind = tkLBrack then Inc(baseDepth)
+          else if CurTok.Kind = tkRBrack then Dec(baseDepth);
+          Next;
+        until (baseDepth = 0) or (CurTok.Kind = tkEOF);
+      end;
       { fall through to the closing paren / multiple-inheritance handling below
         with no parent set }
       baseCi := -1;
@@ -27572,9 +27649,11 @@ begin
       baseCi := FindUClassNonRecord(CurTok.SVal);
     if baseCi < 0 then
       Error('Nil Python: unknown base class ' + CurTok.SVal);
-    UClsParent[ci] := baseCi;
+    Inc(realBases);
+    if realBases = 1 then UClsParent[ci] := baseCi;
     Next;
     end;
+    until (not Eat(tkComma)) or (realBases > 1);
     { MULTIPLE INHERITANCE — `class D(B, C):`. Refused BY NAME rather than
       accepted-and-ignored: Python resolves attributes by C3 linearisation, so
       `D().who()` must give B's, and with a diamond the order is D, B, C, A.
@@ -27588,7 +27667,7 @@ begin
 
       The message replaces a bare "unexpected token" pointing at the comma,
       which read like a parser bug rather than a missing feature. }
-    if CurTok.Kind = tkComma then
+    if realBases > 1 then
       Error('Nil Python: multiple inheritance is not supported — `class ' +
             PyRawName(UClsNOff[ci], UClsNLen[ci]) +
             '` names more than one base. Python resolves these by C3 ' +

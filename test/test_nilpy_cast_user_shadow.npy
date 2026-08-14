@@ -1,0 +1,14 @@
+# `cast` is intercepted in the parser (typing's cast returns its second
+# argument unchanged), and the intercept must only fire where the alternative
+# was `undefined variable (cast)`. A module that defines its own `cast` gets
+# its own -- the name is ordinary, and it is a common enough word that
+# hijacking it would be an upward-compatibility break rather than a fix.
+# bug-n-typevar-call-is-an-undefined-variable
+
+
+def cast(a, b):
+    return a + b
+
+
+print(cast(1, 2))
+print(cast("a", "b"))

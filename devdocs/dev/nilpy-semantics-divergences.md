@@ -280,6 +280,28 @@ reaches the fallback AND runs from somewhere else.
 
 ---
 
+## A `Protocol` subclass can be instantiated (2026-08-14)
+
+`typing.Protocol` and `typing.Generic` are ERASED where they appear in a base
+list — NilPy erases generics, so the base contributes nothing to the layout, the
+method table or `super()`, and the class is registered exactly as `class C:` is
+(the same call `object` in a base list already gets). A side effect:
+
+| | CPython | pxx |
+| --- | --- | --- |
+| `class R(Protocol): ...` then `R()` | `TypeError: Protocols cannot be instantiated` | succeeds |
+| an explicit subclass `class F(R)`, then `F()` | succeeds | succeeds |
+
+**Not a bug, by the upward-compatibility rule**: a program CPython *accepts and
+runs* cannot observe it, because in CPython that program never instantiates the
+Protocol. The divergence is a refusal we do not make, which is the same shape as
+the mutable tuple above.
+
+Erasure is also what makes `class Bus(Service, Generic[T])` legal here at all:
+the header names exactly one REAL base, so it is single inheritance, and the
+multiple-inheritance refusal correctly does not fire. It still fires for
+`class C(A, B)` where both are real. bug-n-typevar-call-is-an-undefined-variable
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython

@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:9 blocked:5 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1785 rejected:37`
+`unfinished:9 blocked:5 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1786 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-n-typevar-call-is-an-undefined-variable` [N] — owner: agent-AN
+_none — no lane is locked._
 
 ## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
@@ -31,7 +31,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 205, ranked
+## Ready — top 30 of 206, ranked
 
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
@@ -64,4 +64,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [A]` bug-no-qualified-syntax-for-a-cross-language-import
 - `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 
-_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

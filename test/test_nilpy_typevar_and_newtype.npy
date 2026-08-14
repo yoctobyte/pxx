@@ -55,3 +55,64 @@ print(Count(4) + 1)
 
 # the TypeVar value prints as CPython prints it
 print(MessageT)
+
+
+# ---- cast, and Generic/Protocol as bases -----------------------------------
+#
+# `cast(T, x)` is the third typing name that is CALLED, and the only one with
+# real semantics -- CPython returns the SECOND argument unchanged, having done
+# nothing with the first. So the type is skipped as TOKENS rather than parsed:
+# it is written in annotation language, where `cast(List[int], x)` is ordinary
+# and `List` is itself one of the names the consumed-only import drops.
+#
+# `Generic[T]` / `Protocol[T]` in a base list are ERASED, like `object`: NilPy
+# erases generics, so the base contributes nothing to the layout, the method
+# table or super(). Erasing them is also what keeps `class Bus(Service,
+# Generic[T])` SINGLE inheritance -- it names exactly one real parent, and
+# before this the comma refused it.
+
+from typing import cast, List, Generic, Protocol
+
+print(cast(int, 7), cast(List[int], [1, 2]), cast("Node", "s"))
+
+
+class Service:
+    def who(self):
+        return "service"
+
+
+class Chan(Service, Generic[MessageT]):
+    def go(self):
+        return self.who() + "/bus"
+
+
+# ...and in either order
+class Front(Generic[MessageT], Service):
+    def go(self):
+        return self.who() + "/front"
+
+
+class Reader(Protocol):
+    def read(self):
+        return "r"
+
+
+# an EXPLICIT subclass of a Protocol is an ordinary class in CPython too, which
+# is what keeps this file diffable against it: CPython refuses to instantiate
+# the Protocol itself, NilPy does not, and that laxness is a divergence rather
+# than a bug (nilpy-semantics-divergences.md) -- so it is not asserted here.
+class FileReader(Reader):
+    def read(self):
+        return "r"
+
+
+class Boom(Exception, Generic[MessageT]):
+    pass
+
+
+print(Chan().go(), Front().go(), FileReader().read())
+
+try:
+    raise Boom("boom")
+except Boom as e:
+    print("caught", e)
