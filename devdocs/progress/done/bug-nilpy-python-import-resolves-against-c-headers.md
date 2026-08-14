@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A NilPy `import X` is satisfied by a C HEADER from lib/crtl/include: `import string` pulls string.h (and warns about host features.h), `import stdio` compiles clean. So a module that does not exist appears to import, and the failure surfaces later as `undefined variable (ascii_lowercase)` — pointing at the wrong thing entirely."
-status: working
+status: done
 owner: claude-A-N
 ---
 
@@ -132,3 +132,32 @@ Worth adding while there: a diagnostic when a `.npy` import resolves to a host
 2. **Read the tests that name the thing you are "fixing" before you fix it.**
    `ls test | grep import` would have shown `test_nilpy_import_sqlite.npy`,
    whose first comment is the design statement this ticket contradicted.
+
+## Log
+- 2026-08-14 — resolved, commit PENDING-COMMIT.
+
+## RESOLVED 2026-08-14 — the shim was the missing half
+
+The resolver ordering (a `mimic_` shim is tried BEFORE a host header for a
+`.npy` import) landed 2026-08-13 and was **inert**, because no `mimic_string`
+existed to win. Writing it completes the fix:
+
+- `import string` → `note: string -> mimic_string (shim, subset)`, no
+  `features.h` warning, every constant byte-identical to CPython's.
+- `import sqlite3` / `import stdlib` still reach their C headers — the designed
+  NilPy↔C route, which the first attempt at this ticket wrongly amputated.
+- `capwords` is included because it is the one part of the module that is not
+  data, and it is NOT `s.title()`: `capwords("don't")` is `Don't`,
+  `"don't".title()` is `Don'T`.
+
+**It also found a real bug one layer down.** `string.whitespace` is six
+characters and `repr()` rendered four — the VALUE was right, the renderer was
+not: repr emitted control bytes raw where CPython escapes them `\xNN`. Fixed in
+the same commit and tested separately
+(`test/test_nilpy_repr_escapes_non_printables`), because a repr containing a
+raw NUL truncates whatever consumes it downstream.
+
+Tests `test/test_nilpy_import_string_module` and
+`test/test_nilpy_repr_escapes_non_printables`, both wired into `test-nilpy`.
+The two `test_uses_order_pylib_exception_*` canaries and the NilPy↔C interop
+tests (`import_sqlite`, `c_pointer`) re-run by name and unchanged.
