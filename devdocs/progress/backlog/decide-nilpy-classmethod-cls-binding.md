@@ -76,3 +76,45 @@ class held as a value — has its own gap
 binds correctly but cannot be called is a classmethod that only works for
 `cls.CONSTANT` and `cls.other_static()`, which may still be worth shipping, and
 that is part of the same call.
+
+## Material 2026-08-14 (Track T) — the Pascal side already does the right thing
+
+Not the measurement this ticket asks for, and does not settle it. But it removes
+one worry: **the runtime machinery exists and is proven**, so if the NilPy
+measurement comes back "compile-time class", that is a wiring problem rather than
+a missing capability.
+
+`cls` is precisely a Pascal **class reference** (`class of TBase`), and a
+`class function` receives one implicitly as `Self`. Measured in pxx:
+
+```pascal
+type TBaseClass = class of TBase;
+c := TDerived;
+c.Who     -> TDerived     { virtual class-method dispatch through a class ref }
+o := c.Create;
+o.ClassName -> TDerived   { polymorphic construction }
+```
+
+and for the inherited case, without any class reference at all:
+
+```
+TBase.Who    -> TBase
+TDerived.Who -> TDerived   { inherited class function, called on the descendant }
+d.Me         -> TDerived   { instance method, Self is the instance }
+```
+
+**Both reference implementations already agree**: a Pascal `class function` and a
+Python `@classmethod` bind to the class the call was made ON, not the class the
+method was declared IN. So there is no semantic fork to decide — only the
+question of what our NilPy dispatch actually passes.
+
+That makes **option 1 look like a compromise nobody needs**: refusing the
+instance-reached shape would be paying a diagnostic to avoid a problem the
+underlying machinery does not have. Still contingent on the measurement.
+
+### Also worth noting for whoever picks it up
+
+Pascal overloads `Self` — the instance in a method, the class in a `class
+function` — where Python splits it into `self` and `cls`. So the lowering target
+for `cls` is the class-function `Self`, not the instance one, and the two are
+distinguished by the kind of method rather than by the identifier.
