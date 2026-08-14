@@ -147,4 +147,4 @@ never reaches programs built with `$(PXX_STABLE)`. Frozen builtin set unchanged
 at 8 files (`pylib.pas` modified), checked against `git status`.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 5264ee1df.
