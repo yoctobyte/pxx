@@ -5263,12 +5263,18 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-13T09:45:27Z",
-  "red": [],
-  "sha": "f746633b5f2a78f4b9a54b2d7d772383a63833d6",
+  "date": "2026-08-14T12:45:12Z",
+  "red": [
+   "test-core#1073",
+   "test-nilpy#75",
+   "test-nilpy#76",
+   "test-nilpy#595",
+   "test-nilpy#599"
+  ],
+  "sha": "e3d0870c63dfe4234925ce6d0ef4dab4af84096a",
   "tier": "full",
-  "ver": "v269",
-  "verdict": "GREEN"
+  "ver": "v297",
+  "verdict": "RED"
  },
  "renamed_from": [
   "xeon"
