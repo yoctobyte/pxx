@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:3 backlog:216 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1752 rejected:35`
+`unfinished:8 blocked:4 backlog:217 experimental:20 rainy-day:40 done-followup:3 decided:67 done:1752 rejected:35`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-pascal-uses-is-transitive` [A] — owner: agent-A
+_none — no lane is locked._
 
 ## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
@@ -22,14 +22,16 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-generics` [P]
 - `feature-real-dynlib-loader` [B]
 
-## blocked (3) — has an unmet blocker; do not claim
+## blocked (4) — has an unmet blocker; do not claim
 
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
+- `bug-pascal-uses-is-transitive` [A] — blocked-by: task-t-strict-uses-corpus-sweep
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 200, ranked
+## Ready — top 30 of 201, ranked
 
+- `[p 80] [T]` task-t-strict-uses-corpus-sweep (unblocks 1)
 - `[p 70] [P]` regression-test-core-test-conformance-1
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
@@ -59,6 +61,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
-- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
-_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_171 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

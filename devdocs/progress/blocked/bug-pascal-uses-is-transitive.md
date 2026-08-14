@@ -3,6 +3,7 @@ summary: "REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix
 type: bug
 track: A
 prio: 80
+blocked-by: [task-t-strict-uses-corpus-sweep]
 owner: agent-A
 ---
 
@@ -541,3 +542,18 @@ Track T's kind of run, not a dev-loop one. Sequence: sweep `test/**` under
 `--strict-uses`, classify by the three shapes above (ambient injection missed /
 filters not composing / genuine missing `uses`), fix, then flip the default and
 retire the flag.
+
+## PARKED 2026-08-14 — blocked on the corpus sweep
+
+Everything this session could settle is settled and pushed green. The one input
+left is the `test/**` sweep under `--strict-uses`, which is a full-corpus run
+and therefore Track T's: [[task-t-strict-uses-corpus-sweep]], filed at prio 80
+with the run, the three classification shapes, and the warning not to size it
+with `--warn-uses-leak`.
+
+**NEXT, when that report lands:** fix whatever shape-1 (ambient injection) and
+shape-2 (filters not composing) failures it names — both are compiler one-liners
+— add the `uses` clauses for shape 3, then flip `StrictUses` to default-on and
+retire the flag. Nothing here is half-applied: the enforcement is off by
+default, self-host converges at generation 1, and gate.sh quick is green at
+every commit.
