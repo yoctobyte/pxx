@@ -22404,6 +22404,54 @@ begin
   end;
 end;
 
+function PyModuleGlobalCtorClass(const name: AnsiString): Integer;
+{ `G = K()` at MODULE level — the class index of K, or -1.
+
+  The twin of PyModuleGlobalLiteralType, and separate from it because the
+  answer is not a TTypeKind: a class field needs its class IDENTITY as well as
+  its kind, and that is the whole reason recognising this shape "was easy and
+  the result was WRONG" the first time. Reporting bare `tyClass` left `fldRec`
+  at REC_NONE, so `self.k = G` then `C().k.z` read at the wrong layout and
+  printed 5887615 where CPython says 9. The store was never the problem — an
+  explicitly annotated `self.k: K = G` has always worked, which is the control
+  that isolates it — the field simply did not know WHICH class it held.
+
+  So this returns the ci, and the call site sets fldRec from it exactly as the
+  PyInferExprType arm above already does for a construction written inline.
+  bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage }
+var k, d: Integer;
+    atStart: Boolean;
+begin
+  Result := -1;
+  d := 0;
+  k := PyScanLo;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(d)
+    else if Tokens[k].Kind = tkDedent then Dec(d)
+    else if d = 0 then
+    begin
+      atStart := (k = PyScanLo) or
+                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
+      if atStart and (Tokens[k].Kind = tkIdent) and
+         (k + 3 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkAssign) and
+         (GetTokenStr(k) = name) and (Tokens[k + 2].Kind = tkIdent) and
+         (Tokens[k + 3].Kind = tkLParen) then
+      begin
+        { the WHOLE right-hand side must be the construction — `G = K().wrap()`
+          holds whatever wrap returns, which is the lesson the literal shapes
+          next door record. A CALL needs PyBlkRhsEndsAfterCall, not
+          PyBlkRhsEndsAt: the latter asks whether ONE token ends the statement,
+          which `K()` never does, so it silently declined every instance. }
+        if PyBlkRhsEndsAfterCall(k + 3) then
+          Result := FindUClassNonRecord(GetTokenStr(k + 2));
+        Exit;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
 { What type does the module-level LITERAL global `name` hold — `NEW = "NEW"`,
   `LIMIT = 7`? Answers tyUnknown for anything it cannot read straight off the
@@ -22426,12 +22474,13 @@ function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
   other scanners could not type at all, which is rare; the linear scan is not
   on any hot path.
 
-  Deliberately NOT a constructor call, `G = K()`: recognising it here is easy
-  (PyRegisterClassShells has run) and the result is WRONG. Typed tyClass,
-  `self.k = G` then `C().k.z` printed 5887615 where CPython says 9; typed
-  tyVariant it printed 7. Measured, both. Whatever the field ends up holding is
-  not the instance, so the honest behaviour is the loud "cannot infer"
-  diagnostic rather than a plausible number —
+  Deliberately NOT a constructor call, `G = K()` — that shape has its own
+  routine, PyModuleGlobalCtorClass, because its answer is a class INDEX and not
+  a TTypeKind. Returning bare `tyClass` from here is what made the first attempt
+  print 5887615 for `C().k.z` where CPython says 9: the kind was right and the
+  field had no idea WHICH class it held, so it read at the wrong layout. Fixed
+  by carrying the identity, not by changing the store — an annotated
+  `self.k: K = G` always worked, which is the control that proves it.
   bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage. }
 var k, d, rhs: Integer;
     atStart: Boolean;
@@ -26598,7 +26647,20 @@ begin
                (not PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) then
             begin
               tk := PyModuleGlobalLiteralType(GetTokenStr(j + 4));
-              if tk <> tyUnknown then fldRec := REC_NONE;
+              if tk <> tyUnknown then fldRec := REC_NONE
+              else
+              begin
+                { ...and the same global holding a class INSTANCE, `G = K()`,
+                  which needs the class identity as well as the kind — see
+                  PyModuleGlobalCtorClass for why reporting only the kind
+                  produced a plausible wrong number. }
+                k2 := PyModuleGlobalCtorClass(GetTokenStr(j + 4));
+                if k2 >= 0 then
+                begin
+                  tk := tyClass;
+                  fldRec := REC_UCLASS_BASE + k2;
+                end;
+              end;
             end;
             if tk = tyUnknown then
             begin

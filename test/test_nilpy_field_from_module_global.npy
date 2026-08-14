@@ -55,3 +55,59 @@ class Passthrough:
 
 
 print(Passthrough(3).v, Passthrough("x").v)
+
+
+# ---- ...and a global holding a class INSTANCE ------------------------------
+#
+# `G = K()` then `self.k = G`. This one needs the class IDENTITY as well as the
+# kind, and that is what the first attempt at it missed: typed bare tyClass the
+# field had no idea WHICH class it held, so `C().k.z` read at the wrong layout
+# and printed 5887615 where CPython says 9 (typed tyVariant, 7). Two plausible
+# numbers, neither the field -- which is why the recognition was withdrawn and
+# the loud "cannot infer" diagnostic kept instead.
+#
+# The store was never implicated: an explicitly annotated `self.k: K = G` has
+# always worked, and that is the control that isolates it.
+# bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage
+
+
+class Inst:
+    def __init__(self, n):
+        self.z = n
+
+    def doubled(self):
+        return self.z * 2
+
+    def bump(self):
+        self.z = self.z + 1
+
+
+GA = Inst(9)
+GB = Inst(100)
+
+# the bind-to-a-local control, which worked all along
+la = GA
+print("ctor-local:", la.z, la.doubled())
+
+
+class HoldsInstance:
+    def __init__(self):
+        self.a = GA
+        self.b = GB
+
+    def via(self):
+        return self.a.doubled()
+
+
+hi = HoldsInstance()
+print("ctor-field:", hi.a.z, hi.b.z)
+print("ctor-method:", hi.a.doubled(), hi.via())
+
+# IDENTITY, not a copy: mutating through the field is visible on the global
+hi.a.bump()
+print("ctor-shared:", GA.z, hi.a.z, la.z)
+
+# a global whose right-hand side is not WHOLLY a construction must not be typed
+# as one -- the lesson `wrapped = "a-b".split("-")` recorded for the literals
+NOTCTOR = Inst(1).doubled()
+print("ctor-notctor:", NOTCTOR)
