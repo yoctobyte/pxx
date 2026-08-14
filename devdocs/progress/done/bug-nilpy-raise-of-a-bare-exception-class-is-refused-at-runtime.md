@@ -106,4 +106,4 @@ The FPC seed caught `PyEnsureExceptionClass` used ~12000 lines above its
 definition — the fourth instance of that shape this session; forward added.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 213c385ea.
