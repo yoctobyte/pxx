@@ -135,4 +135,4 @@ With this, every typing name that has a run-time form works:
 ([[bug-n-typevar-call-is-an-undefined-variable]]) and now `@overload`.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 3f64a1a8d.
