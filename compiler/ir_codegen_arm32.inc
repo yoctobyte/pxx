@@ -3729,7 +3729,26 @@ begin
           else if Is64BitArm32(tk) then
           begin
             EmitNode64Arm32(valNode);   { r0:r1 = value }
-            if tk = tyUInt64 then EmitwriteUInt64Arm32
+            if wid > 0 then
+            begin
+              { A FIELD WIDTH on a 64-bit value. The inline writers below take
+                no width, so `WriteLn(anInt64:12)` simply dropped it and
+                printed unpadded — while a 32-bit Integer with the same width
+                padded correctly in the same statement, on this same target.
+                Routed through builtinheap's PXXWriteDecW, which already
+                computes `padding = width - digits - sign` and is INT_MIN-safe,
+                and which riscv32 — the third 32-bit target — has used for
+                every width write all along. r0:r1 = value, r2 = unsigned?,
+                r3 = width.
+                bug-a-32bit-targets-ignore-the-field-width-writing-an-int64 }
+              if tk = tyUInt64 then EmitLoadImmArm32(2, 1)
+              else EmitLoadImmArm32(2, 0);
+              EmitLoadImmArm32(3, wid);
+              procIdx := FindProc('PXXWriteDecW');
+              if procIdx < 0 then Error('compiler error: PXXWriteDecW not found');
+              EmitCallProc(procIdx);
+            end
+            else if tk = tyUInt64 then EmitwriteUInt64Arm32
             else EmitwriteInt64Arm32;
           end
           else if TypeIsOrdinal(tk) or (tk = tyUnknown) then

@@ -11,6 +11,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-32bit-truthiness-high-half | A | 70 | bug | `if (v)` on a 64-bit value tested only the LOW half on every 32-bit target | — |
 | bug-64bit-named-const-truncated-32bit-targets | A | 80 | bug | 64-bit named constants are truncated to 32 bits on the 32-bit targets | — |
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-a-32bit-targets-ignore-the-field-width-writing-an-int64 | A | 45 | bug | On i386 and arm32 ONLY, `WriteLn(anInt64:12)` prints the digits with NO padding, where x86-64, aarch64 and FPC all pad to 12. A 32-bit Integer with the same width pads correctly on the same targets, so it is the 64-bit write path specifically. Silent formatting corruption — columns simply do not line up, on two targets. | — |
 | bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument | A | 45 | bug | A fixed-array call result is refused as a `const`/by-ref argument | — |
 | bug-a-a-frozen-string-field-in-a-variant-part-is-8-bytes-and-untyped | A | 55 | bug | A `string[N]` field in a record's VARIANT part is 8 bytes and reads as an address | — |
 | bug-a-a-metaclass-returned-from-a-function-is-not-a-receiver | A | 40 | bug | A metaclass returned from a FUNCTION is not a receiver | — |

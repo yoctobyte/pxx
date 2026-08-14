@@ -81,4 +81,18 @@ begin
   writeln('lolow=', b);
   writeln('lohigh=', High(Int64));
   writeln('lowp1=', Low(Int64) + 1);
+
+  { ...and the same values through a FIELD WIDTH. The 32-bit backends' 64-bit
+    write arm called writers that take no width, so `a:12` printed unpadded
+    while a 32-bit Integer with the same width padded correctly in the same
+    statement. Routed through builtinheap's PXXWriteDecW, which riscv32 had
+    been using for every width write all along.
+    bug-a-32bit-targets-ignore-the-field-width-writing-an-int64 }
+  writeln('w_low=[',  Low(Int64):25,  ']');
+  writeln('w_high=[', High(Int64):25, ']');
+  a := 12345;
+  writeln('w_pos=[',  a:14, ']');
+  a := -12345;
+  writeln('w_neg=[',  a:14, ']');
+  writeln('w_narrow=[', Low(Int64):3, ']');   { width < digits: no truncation }
 end.

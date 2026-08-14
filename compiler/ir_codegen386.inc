@@ -4177,7 +4177,27 @@ begin
               which is what the call-argument paths already do.
               bug-a-i386-int64-arg-high-half-uninitialized }
             EmitNode64_386(valNode);                 { value -> edx:eax }
-            if tk = tyUInt64 then EmitwriteUInt64_386
+            if wid > 0 then
+            begin
+              { A FIELD WIDTH on a 64-bit value — see the arm32 twin. The
+                inline writers take no width, so it was silently dropped and
+                `WriteLn(anInt64:12)` printed unpadded, while a 32-bit Integer
+                with the same width padded correctly in the same statement.
+                builtinheap's PXXWriteDecW does the padding and is INT_MIN-safe;
+                riscv32 has routed every width write through it all along.
+                Args push left-to-right, a 64-bit one as hi then lo.
+                bug-a-32bit-targets-ignore-the-field-width-writing-an-int64 }
+              EmitB($52);                            { push edx (hi) }
+              EmitB($50);                            { push eax (lo) }
+              if tk = tyUInt64 then begin EmitB($68); EmitI32(1); end
+              else begin EmitB($68); EmitI32(0); end;   { push uns }
+              EmitB($68); EmitI32(wid);              { push width }
+              procIdx := FindProc('PXXWriteDecW');
+              if procIdx < 0 then Error('compiler error: PXXWriteDecW not found');
+              EmitCallProc(procIdx);
+              EmitB($81); EmitB($C4); EmitI32(16);   { add esp, 16 }
+            end
+            else if tk = tyUInt64 then EmitwriteUInt64_386
             else EmitwriteInt64_386;
           end
           else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
