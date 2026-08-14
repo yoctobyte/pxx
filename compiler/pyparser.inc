@@ -28469,8 +28469,8 @@ begin
     like the Pascal and C paths. }
   RegisterBuiltinTGuid;
   RegisterBuiltinTObject;
-  ParseUsesUnit('builtinheap');
-  if needsBuiltin then ParseUsesUnit('builtin');
+  ParseUsesUnitAmbient('builtinheap');
+  if needsBuiltin then ParseUsesUnitAmbient('builtin');
   { Resolve TVarRec now that builtinheap declared it, exactly as ParseProgram
     does. Without this TVarRecId stayed REC_NONE for .npy programs, so ANY unit
     an import pulls in that takes an `array of const` parameter was rejected with
@@ -28479,8 +28479,8 @@ begin
     most of them, and is what `import json` actually died on. A .npy program has
     no uses clause of its own, so it could not work around it. }
   FixupTVarRecLayout;
-  ParseUsesUnit('pylib');
-  ParseUsesUnit('pyeval');
+  ParseUsesUnitAmbient('pylib');
+  ParseUsesUnitAmbient('pyeval');
   { Only NOW: the units above are ORDINARY PASCAL and their own div/mod must
     keep truncating semantics. Setting this at entry rewrote pylib's own
     `a div b` into a call to the helper being defined. }

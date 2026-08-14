@@ -465,12 +465,31 @@ function UnitIsAmbient(unitIdx: Integer): Boolean;
   reachable from anywhere — without this, every unit in the tree reports a leak
   to them and the raw hit counts drown out the real ones. Ambient by design, not
   a leak. }
-var lo: AnsiString;
+var lo: AnsiString; i: Integer;
 begin
   UnitIsAmbient := False;
   if unitIdx < 0 then Exit;
   lo := Strs[unitIdx].Text;
-  UnitIsAmbient := (lo = 'builtin') or (lo = 'builtinheap');
+  if (lo = 'builtin') or (lo = 'builtinheap') then
+  begin UnitIsAmbient := True; Exit; end;
+  { ...and every other unit the COMPILER injected. Measured under --strict-uses:
+    the tk widgetset's `//` lowers to pylib's pyfloormod_i, and tk uses only
+    `strings` — nothing in that program's source could have declared the
+    dependency, because nothing in the source asked for the helper. Same for
+    textfile/math/promocore/softfloat/pxxcio and the mimic_* shims. }
+  for i := 0 to AmbientUnitCount - 1 do
+    if AmbientUnitIdx[i] = unitIdx then begin UnitIsAmbient := True; Exit; end;
+end;
+
+procedure MarkUnitAmbient(unitIdx: Integer);
+var i: Integer;
+begin
+  if unitIdx < 0 then Exit;
+  for i := 0 to AmbientUnitCount - 1 do
+    if AmbientUnitIdx[i] = unitIdx then Exit;
+  if AmbientUnitCount > 31 then Exit;
+  AmbientUnitIdx[AmbientUnitCount] := unitIdx;
+  Inc(AmbientUnitCount);
 end;
 
 function ClassNameIsAmbientIntrinsic(const lo: AnsiString): Boolean;
@@ -651,7 +670,12 @@ begin
   begin
     if UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
     begin
-      if WarnUsesLeak and (CurrentUnitIdx >= 0) and (UClsUnitIdx[i] <> CurrentUnitIdx) and
+      { NOT gated on CurrentUnitIdx >= 0 any more: every warn site was, so a
+        leak into the MAIN PROGRAM — this ticket's own headline repro — was
+        never counted, and the "35 pairs" figure is unit-to-unit only.
+        UClsUnitIdx = -1 still passes the <> CurrentUnitIdx test at program
+        scope, so a compiler-minted class is not reported as a leak to itself. }
+      if WarnUsesLeak and (UClsUnitIdx[i] <> CurrentUnitIdx) and
          not ClassNameIsAmbientIntrinsic(lo) and
          not VisibilityAllows(CurrentUnitIdx, UClsUnitIdx[i]) then
         WarnUsesLeakHit('class', name, CurrentUnitIdx, UClsUnitIdx[i]);
@@ -4635,7 +4659,7 @@ begin
   if own >= 0 then last := own;
   if last >= 0 then
   begin
-    if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[last] <> CurrentUnitIdx) and
+    if WarnUsesLeak and (ProcUnitIdx[last] >= 0) and (ProcUnitIdx[last] <> CurrentUnitIdx) and
        not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[last]) then
       WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[last]);
     Result := last; Exit;
@@ -4662,7 +4686,7 @@ begin
   if own >= 0 then last := own;
   if last >= 0 then
   begin
-    if WarnUsesLeak and (CurrentUnitIdx >= 0) and (ProcUnitIdx[last] <> CurrentUnitIdx) and
+    if WarnUsesLeak and (ProcUnitIdx[last] >= 0) and (ProcUnitIdx[last] <> CurrentUnitIdx) and
        not VisibilityAllows(CurrentUnitIdx, ProcUnitIdx[last]) then
       WarnUsesLeakHit('routine', name, CurrentUnitIdx, ProcUnitIdx[last]);
     Result := last; Exit;
@@ -5370,7 +5394,16 @@ begin
   { ...and, under --strict-uses, a routine declared in a unit this scope cannot
     legitimately see is not a candidate at all — the non-transitive `uses` rule
     applied where CALLS actually resolve. bug-pascal-uses-is-transitive. }
-  if Result and not DeclVisible(ProcUnitIdx[idx]) then Result := False;
+  if Result and not DeclVisible(ProcUnitIdx[idx]) then
+  begin
+    { The warn instrument's blind spot, closed: FindProc is NOT the lookup a
+      direct call site resolves through, so --warn-uses-leak never saw the
+      ticket's own headline repro. Reported as `cand` because this fires per
+      REJECTED CANDIDATE, not per resolved name — noisier than the FindProc
+      hits and a different unit of count. }
+    if WarnUsesLeak then WarnUsesLeakHit('cand', name, CurrentUnitIdx, ProcUnitIdx[idx]);
+    Result := False;
+  end;
   { ...and, in a NilPy program that declares this name itself, ONLY that
     declaration is a candidate — see PyUserShadowsProc. }
   if Result and userOnly and (ProcUnitIdx[idx] <> -1) then Result := False;
@@ -5644,7 +5677,14 @@ begin
     i := ProcChainHead(name);
     while i >= 0 do
     begin
-      if ProcNameMatches(i, name) and (ProcUnitIdx[i] <> bIdx) then
+      { ...and only a VISIBLE one demotes. Under --strict-uses the two filters
+        have to compose: an out-of-scope candidate is not an alternative, so
+        counting it here demoted the builtin and then dropped the out-of-scope
+        one too, leaving NO candidate at all. Measured: pylib's `{x:g}` spec
+        calls FloatToStr, builtin declares it, and sysutils' copy — which pylib
+        cannot see — was silently doing the demoting. }
+      if ProcNameMatches(i, name) and (ProcUnitIdx[i] <> bIdx) and
+         DeclVisible(ProcUnitIdx[i]) then
       begin demote := True; Break; end;
       i := ProcHashNext[i];
     end;

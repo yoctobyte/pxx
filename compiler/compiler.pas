@@ -182,6 +182,8 @@ begin
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
   StrictUses := False;
+  AmbientUnitCount := 0;
+  UsesInjected := False;
   VisCacheUnit := -2;
   VisCacheEdges := -1;
   WarnIgnoredDirectives := False;

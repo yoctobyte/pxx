@@ -8591,7 +8591,7 @@ begin
         a 64-bit cast of a large double (e.g. sqlite %f's double->u64) routes to
         the soft-float __pxx_d2i64 kernel, so pull the unit here too. The other
         kernels are unused dead code on arm32. }
-      ParseUsesUnit('softfloat');
+      ParseUsesUnitAmbient('softfloat');
     { builtinheap BEFORE pxxcio, mirroring the Pascal ParseProgram epilogue.
       pxxcio's own uses clause is `platform, builtinheap` — platform
       first — and platform has record-returning functions (PalIn6Any etc.).
@@ -8599,8 +8599,8 @@ begin
       FindProc, so builtinheap's headers must be registered before any unit
       with a record-returning function compiles, or the C compile dies with
       "PXXMemMove not found". Idempotent if already loaded. }
-    ParseUsesUnit('builtinheap');
-    ParseUsesUnit('pxxcio');
+    ParseUsesUnitAmbient('builtinheap');
+    ParseUsesUnitAmbient('pxxcio');
     { --threadsafe C: pull the libc-free pthread bridge (palpthread over the
       palthread/palsync PAL) so a `<pthread.h>` shim's extern __pxx_pmutex_*/
       __pxx_pthread_* resolve to bodied procs. Gated on ThreadSafeMode because
@@ -8608,7 +8608,7 @@ begin
       without the thread-safe runtime — the same gate pthread.c needs anyway.
       Dead (DCE'd) if the program includes no <pthread.h>. }
     if ThreadSafeMode then
-      ParseUsesUnit('palpthread');
+      ParseUsesUnitAmbient('palpthread');
   end;
 
   { setjmp/longjmp primitives (lua's error model). After the entry stub, before

@@ -31006,6 +31006,8 @@ begin
 end;
 
 
+procedure ParseUsesUnitAmbient(const name: AnsiString); forward;
+
 procedure ParseUsesUnit(const name: AnsiString);
 var savedProc, savedFrame, savedSelf, vsym: Integer;
 begin
@@ -31038,6 +31040,21 @@ begin
         + 'build a compiler that compiles clean and then crashes. Reseed: '
         + '`make seed-from-stable` (or build from FPC) and retry');
   end;
+end;
+
+procedure ParseUsesUnitAmbient(const name: AnsiString);
+{ Load a unit the COMPILER decided it needs — never one a source clause named.
+  The unit is marked System-ambient, so --strict-uses does not report a name
+  resolved through it as a leak: the program did not ask for the unit, so it
+  cannot be leaking through it, which is the same argument that made
+  builtin/builtinheap ambient. Nested loads are NOT ambient — a unit this one
+  pulls in through its own `uses` is an ordinary edge. }
+var saved: Boolean;
+begin
+  saved := UsesInjected;
+  UsesInjected := True;
+  ParseUsesUnit(name);
+  UsesInjected := saved;
 end;
 
 procedure ParseUsesUnitBody(const name: AnsiString);
@@ -31118,6 +31135,14 @@ begin
     bug-pascal-uses-is-transitive wants every clause, not just first-loads,
     since visibility is per-importer, not per-load. }
   RecordUsesEdge(CurrentUnitIdx, strIdx, InInterface);
+  if UsesInjected then
+  begin
+    MarkUnitAmbient(strIdx);
+    { one level only: what THIS unit then pulls in through its own clauses is an
+      ordinary edge, not something the compiler injected. The wrapper restores
+      the flag when the whole load returns. }
+    UsesInjected := False;
+  end;
   isCompiled := False;
   for i := 0 to CompiledUnitCount - 1 do
   begin
@@ -31880,8 +31905,8 @@ begin
     if unitNeedsText and (not NoDefaultRtl) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
     begin
-      ParseUsesUnit('builtin');
-      ParseUsesUnit('textfile');
+      ParseUsesUnitAmbient('builtin');
+      ParseUsesUnitAmbient('textfile');
     end;
 
     { Point parser to first token of the unit }
@@ -33298,7 +33323,7 @@ begin
     (mirrors the C-frontend pull in cparser), so arm32 pulls softfloat too. }
   if ((((TargetArch = TARGET_RISCV32) and (not EspBareBoot))) or (TargetArch = TARGET_ARM32)) and
      (needHeapUnit or needsBuiltin) then
-    ParseUsesUnit('softfloat');
+    ParseUsesUnitAmbient('softfloat');
   { The promotable-int runtime is written in ordinary Pascal over managed
     strings and bignum, so it needs the heap allocator and the Str/Val
     conversions regardless of what the user program itself uses. }
@@ -33307,17 +33332,17 @@ begin
     needHeapUnit := True;
     needsBuiltin := True;
   end;
-  if needHeapUnit then ParseUsesUnit('builtinheap');
-  if needsBuiltin then ParseUsesUnit('builtin');
+  if needHeapUnit then ParseUsesUnitAmbient('builtinheap');
+  if needsBuiltin then ParseUsesUnitAmbient('builtin');
   { the TYPE is spelled PromoInt; the UNIT implementing it is promocore — see
     the note at the top of compiler/builtin/promocore.pas for why they differ }
-  if needsPromoInt then ParseUsesUnit('promocore');
+  if needsPromoInt then ParseUsesUnitAmbient('promocore');
   { Implicit text-file unit (classic `Text`/Assign/Reset/... surface), loaded
     like an explicit `uses textfile` would be — before user declarations, so the
     Text record + its procedures resolve and proc-local `var f: Text` gets normal
     managed-field zero-init. }
-  if needsTextfile then ParseUsesUnit('textfile');
-  if needsMath then ParseUsesUnit('math');
+  if needsTextfile then ParseUsesUnitAmbient('textfile');
+  if needsMath then ParseUsesUnitAmbient('math');
   FixupTVarRecLayout;
   DbgGlobalScopeBase := SymCount;  { -g: program globals are declared past here }
 

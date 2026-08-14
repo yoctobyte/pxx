@@ -2127,6 +2127,17 @@ var
     per (curUnit, UsesEdgeCount) — the edge count is part of the key because
     clauses are appended AS parsing proceeds, so a row computed earlier in the
     same unit can be stale. }
+  { Units the COMPILER injected rather than any source clause naming them —
+    builtin/builtinheap for Pascal, pylib/pyeval for every .npy, and the
+    conditional helpers (textfile, math, promocore, softfloat, pxxcio,
+    palpthread, mimic_*). They hold the runtime helpers codegen emits calls to,
+    so they are System-ambient by exactly the argument builtin already was: the
+    program never asked for them and therefore cannot be leaking THROUGH them.
+    Marked at the injection call site, because the same ParseUsesUnit serves
+    real `uses`/`import` clauses too. }
+  AmbientUnitIdx   : array[0..31] of Integer;
+  AmbientUnitCount : Integer;
+  UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;
   VisCacheEdges : Integer;
   VisCacheVis   : array[0..MAX_STRS] of Boolean;
