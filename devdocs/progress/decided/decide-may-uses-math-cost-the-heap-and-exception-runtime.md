@@ -161,4 +161,4 @@ scopes strict flags to external code so our own RTL is never re-judged.
   masked semantics by design, so this stops reading as an oversight.
 
 ## Log
-- 2026-08-14 — decided, commit PENDING-COMMIT.
+- 2026-08-14 — decided, commit 87ecef258.
