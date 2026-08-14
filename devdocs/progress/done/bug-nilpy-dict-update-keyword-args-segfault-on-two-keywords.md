@@ -175,4 +175,4 @@ two segfault)". That has been false since the sibling landed, and a stale note
 in a test is how a fixed thing gets re-investigated.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit 9a8bece91.
