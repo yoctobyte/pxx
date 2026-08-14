@@ -379,6 +379,42 @@ a codec when a real target needs it — each is a table, and the one place that
 decides what an encoding NAME means is `PyEncCode`, so a future `codecs.lookup`
 delegates there rather than becoming a second mechanism.
 
+## Multiple inheritance is FLATTENED, and three shapes are refused (2026-08-15)
+
+`class D(B, C):` compiles. The first base is a real parent; every further base
+is **flattened** — its body span is replayed against the derived class, so its
+methods compile with `self` = the derived object, which is exactly what a mixin
+means in Python. Conflicts resolve C3 left-to-right: the derived class wins,
+then the first base and its ancestors, then each further base in order.
+
+What is the SAME as CPython: mixin methods, a mixin method reading an attribute
+the derived class supplies, class attributes carried over from a flattened base,
+and every conflict resolution above. `test/test_nilpy_multiple_inheritance.npy`
+diffs all of it.
+
+Three things differ, all of them loud:
+
+| shape | CPython | here |
+| --- | --- | --- |
+| `isinstance(d, C)` for a flattened base `C` | True | **False** — `C` is not in the object model's parent chain |
+| a class used BOTH standalone and as a second base | works | compile error at the standalone call (`C has no method m`) |
+| a diamond, or `super()` inside a flattened body | works | refused by name, with its own message |
+
+The first is the known v1 cost and is fixed later by synthesising an interface
+per flattened base (the RTTI interface table already carries what that needs).
+
+The second follows from the first: a class that is flattened somewhere is
+flattened *everywhere*, and its body is not compiled standalone at all — the
+canonical mixin reads members it does not declare, which only resolves against a
+host. It is not a silent wrong answer, and it is new ground: a program with a
+second base did not compile at all before.
+
+The third is deliberate. A diamond gives the shared ancestor one copy under C3
+and two under flattening, after which the two copies' state diverges silently.
+`super()` in a flattened body would reach the derived class's own parent instead
+of the next class in the MRO. Both are refused with a message naming the shared
+ancestor / the calling base, rather than answered wrongly.
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython

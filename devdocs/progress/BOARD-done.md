@@ -736,6 +736,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-multi-arg-exception-constructor-segfaults | N | 55 | bug | A multi-argument exception constructor SEGFAULTED | — |
 | bug-nilpy-multi-name-for-target-reuses-a-module-name-and-reads-garbage | N | 55 | bug | A MULTI-NAME for target at module scope reuses an existing name's slot | — |
 | bug-nilpy-multi-parameter-lambdas-are-still-interpreted | N | 45 | bug | A lambda with 2+ parameters still lowers to a pyeval SOURCE closure and is re-walked per call — the lift is gated on nParams <= 1 because the bound-fn bridge passes one argument. Correct answers, ~7x the per-call cost. | — |
+| bug-nilpy-multiple-inheritance-does-not-parse | N | 40 | bug | class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable | — |
 | bug-nilpy-name-assigned-from-a-call-then-reused-as-a-loop-target-segfaults | N | 50 | bug | A name assigned from a CALL, then reused as a for-loop target, SEGFAULTS | — |
 | bug-nilpy-name-bound-by-a-method-call-in-a-block-is-undefined-later | N | 50 | bug | A name bound in a block by a METHOD CALL is "undefined" in a later assignment | — |
 | bug-nilpy-ne-dunder-ignored-always-negates-eq | N | 50 | bug | NilPy: a user-defined __ne__ is never consulted — `!=` always negates __eq__, silently returning the wrong value when they differ | — |

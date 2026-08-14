@@ -3,6 +3,8 @@ track: N
 prio: 40
 type: bug
 summary: "class D(B, C): does not parse — a second base is an 'unexpected token' at the comma, so multiple inheritance and every mixin idiom is unavailable"
+status: done
+owner: agent-AN
 ---
 
 # `class D(B, C):` does not parse
@@ -153,3 +155,57 @@ would fail), left-to-right conflict resolution where both bases define the same
 method, class attributes carried from a flattened base — plus `{%FAIL}`-style
 checks that the diamond and a `super()` chain across a flattened base are
 refused with their own messages.
+
+## Resolution (2026-08-15) — v1 FLATTEN, as decided
+
+`class D(B, C):` compiles. Built exactly as the 2026-08-08 re-scope specifies.
+
+**Nothing is copied.** A class's body token span is recorded (`PyClsBodyS/E`)
+and a flattened base's span is *replayed* with `ci` = the derived class, in both
+passes: the member registration walks the own body then each base's span, and
+the body parse rewinds the cursor into each base's span after its own dedent.
+So a mixin's methods compile with `self` = the derived object, which is what
+Python means by a mixin — and the derived class's fields are in scope, which is
+precisely the case a delegate object cannot serve.
+
+The pieces:
+
+- **Conflict order is C3 left-to-right.** `PyMixBuildSkip` builds the losing set
+  before each base's span is replayed: the derived class's own definitions, then
+  everything the real parent chain supplies, then everything an earlier base
+  supplied. Both passes call the same builder and the same `PyDefMemberKeyAt`,
+  because a disagreement compiles a proc for a member that was never registered.
+  The parent-chain half was not obvious and was measured, not reasoned: without
+  it a flattened base's `who` was registered as an *override* of the parent's
+  slot and silently WON, where CPython gives the parent's.
+- **A flattened class is flattened everywhere.** A class named as a second base
+  anywhere in the program is marked `PyClsUsedAsMixin` by a pre-scan, and is
+  then flattened even in *first* position, and its body is never compiled
+  standalone. This is forced: the canonical mixin reads members it does not
+  declare (`self.name`, `self.hello()`), which resolves only against a host.
+  `class E(M1, M2)` was the case that proved it — with M1 left as a real parent
+  it inherited a class whose method bodies had never been compiled.
+- **The diamond is refused**, naming the shared ancestor: C3 gives it one copy,
+  flattening gives two, and the two copies' state then diverges silently.
+- **`super()` in a flattened body is refused**, naming the base: CPython routes
+  it along the derived class's MRO, and a flattened body can only reach the
+  derived class's own single parent. Verified against CPython, which raises
+  `AttributeError: 'super' object has no attribute 'go'` for the same program —
+  i.e. the answer we would have given was wrong, not merely different.
+
+`isinstance(d, C)` against a flattened base answers False. That is the v1 cost
+the re-scope names, it is loud, and it is fixed later by synthesising an
+interface per flattened base. All three divergences are written up in
+`devdocs/dev/nilpy-semantics-divergences.md`.
+
+**Gate:** `test/test_nilpy_multiple_inheritance.npy` (+`.expected`, wired into
+the Makefile) covers a three-base class, a mixin method reading a derived-class
+attribute, parent-wins and derived-wins conflict resolution, left-to-right
+between two mixins, and class attributes carried from a flattened base — all
+byte-identical to CPython. The two refusals were checked by hand against the
+CPython programs they refuse. `tools/gate.sh quick` GREEN, self-host
+byte-identical, and the four class/attribute-layout nilpy tests re-diffed
+unchanged.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

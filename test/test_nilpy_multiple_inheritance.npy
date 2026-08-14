@@ -1,0 +1,65 @@
+# Multiple inheritance by FLATTENING — bug-nilpy-multiple-inheritance-does-not-parse.
+# The first base is a real parent; every further base's body is replayed against
+# the derived class, so `self` IS the derived object (which is what a mixin
+# means in Python). Conflicts go C3 left-to-right.
+# Every line below is diffed against CPython.
+
+class A:
+    def who(self):
+        return "A"
+    def only_a(self):
+        return "onlyA"
+
+class Named:
+    kind = "named"
+    def label(self):
+        return self.kind + ":" + self.name
+    def who(self):
+        return "Named"
+
+class Cmp:
+    def bigger(self, other):
+        return self.size > other.size
+    def who(self):
+        return "Cmp"
+
+# three bases: A stays the parent, Named and Cmp are flattened
+class Item(A, Named, Cmp):
+    kind = "item"
+    def __init__(self, name, size):
+        self.name = name
+        self.size = size
+
+a = Item("a", 3)
+b = Item("b", 9)
+
+# the parent wins the conflicting name — C3 puts A ahead of both mixins
+print(a.who())
+# a mixin method reading an attribute of the DERIVED class (the case a
+# delegate-object implementation cannot do)
+print(a.label(), b.label())
+print(a.bigger(b), b.bigger(a))
+print(a.only_a())
+# the DERIVED class's attribute wins over the flattened base's
+print(Item.kind, a.kind)
+
+# no real parent at all: both bases flattened, derived's own def wins
+class Pair(Named, Cmp):
+    def __init__(self, name, size):
+        self.name = name
+        self.size = size
+    def who(self):
+        return "Pair"
+
+p = Pair("p", 1)
+q = Pair("q", 2)
+print(p.who(), p.label(), p.bigger(q))
+
+# left-to-right between two mixins: Named.who would win if the derived class
+# did not define it, so check that with a class that defines neither
+class Both(Named, Cmp):
+    def __init__(self):
+        self.name = "both"
+        self.size = 0
+
+print(Both().who(), Both().label())

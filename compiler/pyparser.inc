@@ -269,6 +269,44 @@ var
     (bug-nilpy-method-result-copied-to-var-undefined). }
   PyMembersHoisted: array[0..MAX_UCLASS-1] of Boolean;
 
+  { The token span of a class's BODY, recorded by whichever pass registered the
+    class first (the member pre-pass or PyParseClass). Multiple inheritance is
+    implemented by FLATTENING — a second base's members are registered into,
+    and its method bodies re-parsed against, the DERIVED class — and re-parsing
+    needs the base's tokens, which are still sitting in the stream where they
+    were lexed. So nothing is copied: the span is replayed with `ci` = the
+    derived class, which is exactly the semantics Python gives a mixin (`self`
+    IS the derived object). bug-nilpy-multiple-inheritance-does-not-parse }
+  PyClsBodyS: array[0..MAX_UCLASS-1] of Integer;
+  PyClsBodyE: array[0..MAX_UCLASS-1] of Integer;
+  { The extra (2nd..Nth) bases of the class currently being registered/parsed,
+    in C3 left-to-right order. Set by PyResolveBaseList immediately before the
+    registration or body parse that consumes it, and cleared by the consumer —
+    a handshake rather than a parameter because both consumers are reached
+    through call chains that would otherwise thread it through unrelated code. }
+  PyMixN: Integer;
+  PyMixCi: array[0..5] of Integer;
+  { Method/attribute names the DERIVED class defines itself, or an earlier base
+    already supplied. A later base's definition of the same name loses (C3
+    left-to-right, first base wins) and is skipped in BOTH passes — registration
+    and body parse — which must agree exactly or a proc is compiled for a member
+    that was never registered. }
+  PyMixSkipN: Integer;
+  PyMixSkip: array[0..255] of AnsiString;
+  { True while a flattened base's body is being REPLAYED against the derived
+    class, so the member sites can tell a losing definition from a real one. }
+  PyMixReplay: Boolean;
+  { This class is named as a SECOND (or later) base somewhere in the program,
+    so it exists to be flattened. Its body is therefore NOT compiled standalone:
+    the canonical mixin reads members it does not declare (`self.name`,
+    `self.hello()` — supplied by whatever class flattens it), which is duck
+    typing CPython resolves at attribute-lookup time and a static class layout
+    cannot. Compiled against the DERIVED class those references resolve exactly.
+    The cost is that such a class cannot ALSO be used standalone; that is loud
+    (a `has no method` at the call) rather than silent, and it is new ground —
+    a program with a second base did not compile at all before. }
+  PyClsUsedAsMixin: array[0..MAX_UCLASS-1] of Boolean;
+
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
   upward-compatibility rule for a construct that carries no run-time meaning;
@@ -25772,6 +25810,137 @@ begin
   end;
 end;
 
+{ ---- multiple inheritance by FLATTENING ----------------------------------
+  bug-nilpy-multiple-inheritance-does-not-parse, re-scoped by
+  decide-nilpy-multiple-inheritance-c3-or-delegate.
+
+  The first base stays a REAL parent (single-inheritance object model); every
+  further base is flattened — its body span is replayed against the derived
+  class, so its methods compile with `self` = the derived object, which is what
+  Python means by a mixin. Conflicts go C3 left-to-right: the derived class
+  wins, then the first base, then each further base in order. }
+
+{ is `x` `a` or one of its ancestors? }
+function PyClsHasAncestor(a, x: Integer): Boolean;
+var g: Integer;
+begin
+  Result := False;
+  g := a;
+  while g >= 0 do
+  begin
+    if g = x then begin Result := True; Exit; end;
+    g := UClsParent[g];
+  end;
+end;
+
+{ The ancestor `a` and `b` share, or -1. A shared ancestor is the DIAMOND: C3
+  gives one copy of it and naive flattening would give two, after which the two
+  copies' state diverges silently. Refused rather than guessed. }
+function PySharedAncestor(a, b: Integer): Integer;
+var g: Integer;
+begin
+  Result := -1;
+  g := a;
+  while g >= 0 do
+  begin
+    if PyClsHasAncestor(b, g) then begin Result := g; Exit; end;
+    g := UClsParent[g];
+  end;
+end;
+
+{ The member name a `def` at token `i` registers under. ONE function, because
+  the registration pass and the body pass must agree exactly about which
+  definitions a later base loses — a disagreement compiles a proc for a member
+  that was never registered, or registers one nothing ever compiles. The
+  property-accessor prefix is part of the key: `@property def base` and
+  `@base.setter def base` are two members with one source name. }
+function PyDefMemberKeyAt(i: Integer): AnsiString;
+begin
+  Result := PyMethodName(GetTokenStr(i + 1));
+  if PyPropAccessorPrefixAt(i) <> '' then
+    Result := PyPropAccessorPrefixAt(i) + GetTokenStr(i + 1);
+end;
+
+procedure PyMixSkipAdd(const nm: AnsiString);
+begin
+  if PyMixSkipN > High(PyMixSkip) then Exit;
+  PyMixSkip[PyMixSkipN] := nm;
+  Inc(PyMixSkipN);
+end;
+
+function PyMixSkipHas(const nm: AnsiString): Boolean;
+var k: Integer;
+begin
+  Result := True;
+  for k := 0 to PyMixSkipN - 1 do
+    if PyMixSkip[k] = nm then Exit;
+  Result := False;
+end;
+
+{ Every member name a body span defines at its own indentation — the def keys
+  and the class-attribute names. Called on the derived class's own span and on
+  each EARLIER base's span to build the losing set before a later base's span
+  is replayed, so both passes derive it the same way instead of one of them
+  accumulating state the other has to reproduce. }
+procedure PyMixCollectKeys(bs, be: Integer);
+var i, depth: Integer;
+begin
+  depth := 0;
+  i := bs;
+  while i < be do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) then
+      PyMixSkipAdd(PyDefMemberKeyAt(i))
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            ((i = bs) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            (Tokens[i + 1].Kind in [tkAssign, tkColon]) then
+      PyMixSkipAdd(GetTokenStr(i));
+    Inc(i);
+  end;
+end;
+
+{ Does this class's body call `super()` anywhere? A flattened body cannot: see
+  the refusal in PyParseClass's base list. }
+function PyMixBodyUsesSuper(bci: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if (PyClsBodyS[bci] < 0) or (PyClsBodyE[bci] < 0) then Exit;
+  for i := PyClsBodyS[bci] to PyClsBodyE[bci] - 1 do
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'super') and
+       (Tokens[i + 1].Kind = tkLParen) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+{ Rebuild the losing set for base number `upTo` of the class whose own body is
+  ownBS..ownBE: everything the derived class itself defines, plus everything an
+  EARLIER base already supplied. }
+procedure PyMixBuildSkip(ci, ownBS, ownBE, upTo: Integer);
+var k, g, mi: Integer;
+begin
+  PyMixSkipN := 0;
+  PyMixCollectKeys(ownBS, ownBE);
+  { Everything the REAL parent chain already supplies. C3 puts the first base
+    (and its ancestors) ahead of every flattened one, so a later base's
+    definition of an inherited name loses — and without this it silently WON,
+    by being registered as an override of the parent's slot. }
+  g := UClsParent[ci];
+  while g >= 0 do
+  begin
+    for mi := UClsMBase[g] to UClsMBase[g] + UClsMCount[g] - 1 do
+      PyMixSkipAdd(PyRawName(UMthNOff[mi], UMthNLen[mi]));
+    g := UClsParent[g];
+  end;
+  for k := 0 to upTo - 1 do
+    if PyMixCi[k] >= 0 then
+      PyMixCollectKeys(PyClsBodyS[PyMixCi[k]], PyClsBodyE[PyMixCi[k]]);
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
@@ -25779,6 +25948,8 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
+    ownBS, ownBE, mixIx: Integer;  { the span loop — own body, then each flattened base }
+    inMixin: Boolean;
     caVal: Integer;   { class-attribute initialiser token, past any annotation }
     caClassW, caInstW: Boolean;   { how this attribute is written module-wide }
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
@@ -25810,12 +25981,37 @@ begin
     UClsVirtCount[ci] := UClsVirtCount[UClsParent[ci]];
   end;
   align := 8;
+  ownBS := bodyStart; ownBE := bodyEnd;
+  mixIx := 0; inMixin := False;
+  { The span loop: the class's OWN body first, then each flattened base's body
+    replayed against this ci. Layout simply continues — a flattened base's
+    fields take fresh offsets and its methods fresh virtual slots, because they
+    ARE members of this class now, not of a parent it shares nothing with. }
+  while True do
+  begin
   depth := 0;
   i := bodyStart;
   while i < bodyEnd do
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and inMixin and (Tokens[i].Kind = tkFunction) and
+            PyMixSkipHas(PyDefMemberKeyAt(i)) then
+    begin
+      { this base loses the name to the derived class or to an earlier base }
+      i := PySkipNestedSuite(i);
+      if i < 0 then Break;
+      Continue;
+    end
+    else if (depth = 0) and inMixin and (Tokens[i].Kind = tkIdent) and
+            ((i = bodyStart) or
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            (Tokens[i + 1].Kind in [tkAssign, tkColon]) and
+            PyMixSkipHas(GetTokenStr(i)) then
+    begin
+      { same, for a class ATTRIBUTE the derived class redefines }
+      while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+    end
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
             ((i = bodyStart) or
              (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
@@ -26842,6 +27038,15 @@ begin
     end;
     Inc(i);
   end;
+    { next flattened base, or done }
+    if mixIx >= PyMixN then Break;
+    inMixin := True;
+    PyMixBuildSkip(ci, ownBS, ownBE, mixIx);
+    bodyStart := PyClsBodyS[PyMixCi[mixIx]];
+    bodyEnd := PyClsBodyE[PyMixCi[mixIx]];
+    Inc(mixIx);
+  end;
+  bodyStart := ownBS; bodyEnd := ownBE;
   if isDC and not fieldsOnly then
   begin
     { Synthesize the create ctor: self + one param per field, in order. }
@@ -26969,6 +27174,18 @@ var savedHoist: Integer; clsAttrSeq: Integer;
     pbInit, pbAsgn: Integer;
     pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
 begin
+  { REPLAY of a flattened base's body: a definition the derived class or an
+    earlier base already supplied was skipped by the registration pass, so
+    there is no member to compile it into. Checked here rather than at the two
+    call sites, because a decorated method (@property, @staticmethod) reaches
+    this one with its decorator already consumed.
+    bug-nilpy-multiple-inheritance-does-not-parse }
+  if PyMixReplay and (CurTok.Kind = tkFunction) and
+     PyMixSkipHas(PyDefMemberKeyAt(TokPos - 1)) then
+  begin
+    PySkipOverloadStubDef;
+    Exit;
+  end;
   savedHoist := PyHoistHead;
   { PARK the queue on a fresh chain rather than merely remembering its head.
     `PyHoistHead := savedHoist` at the end cannot UNLINK anything: PySeqAppend
@@ -27625,6 +27842,41 @@ procedure PyRegisterClassFieldsPrepass;
 var i, j, k, ci, bs, be, depth, baseCi: Integer;
     isDC, hoist: Boolean;
 begin
+  { FIRST: which classes are named as a SECOND base anywhere? They are flattened
+    into their host and not compiled standalone (see PyClsUsedAsMixin), and both
+    this pass and PyParseClass have to know it before they register anything. }
+  i := PyScanLo;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
+       (Tokens[i + 2].Kind = tkLParen) then
+    begin
+      j := i + 2; depth := 0;
+      while j < MainProgramTokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end
+        else if (depth = 1) and (Tokens[j].Kind = tkComma) and
+                (Tokens[j + 1].Kind = tkIdent) then
+        begin
+          k := j + 1;
+          { a DOTTED base names the module it came from; the class is the last
+            segment, exactly as the header parse takes it }
+          while (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkDot) and
+                (Tokens[k + 2].Kind = tkIdent) do k := k + 2;
+          baseCi := FindUClassNonRecord(GetTokenStr(k));
+          if baseCi >= 0 then PyClsUsedAsMixin[baseCi] := True;
+        end
+        else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
+        Inc(j);
+      end;
+    end;
+    Inc(i);
+  end;
   i := PyScanLo;
   while i < MainProgramTokCount - 2 do
   begin
@@ -27667,6 +27919,9 @@ begin
           be resolved yet, fall back to fields-only and let PyParseClass do
           the full run as before. }
         hoist := True;
+        { a class that exists to be flattened registers FIELDS only — its
+          methods are compiled into each host, never into itself }
+        if PyClsUsedAsMixin[ci] then hoist := False;
         if Tokens[i + 2].Kind = tkLParen then
         begin
           baseCi := -1;
@@ -27684,10 +27939,34 @@ begin
             else
               baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
           end;
-          if baseCi >= 0 then
+          if (baseCi >= 0) and not PyClsUsedAsMixin[baseCi] then
             UClsParent[ci] := baseCi
           else
             hoist := False;
+          { MULTIPLE BASES — a comma at the header's own paren depth. The extra
+            bases are FLATTENED, which needs each one's recorded body span, and
+            spans are recorded in source order by PyParseClass. So the full
+            registration is deferred to there (fields-only here), exactly as an
+            unresolvable base already defers it — rather than resolving a base
+            list a second way in this pass and risking the two passes
+            disagreeing. bug-nilpy-multiple-inheritance-does-not-parse }
+          j := i + 2; depth := 0;
+          while j < MainProgramTokCount do
+          begin
+            if Tokens[j].Kind = tkLParen then Inc(depth)
+            else if Tokens[j].Kind = tkRParen then
+            begin
+              Dec(depth);
+              if depth = 0 then Break;
+            end
+            else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+            begin
+              hoist := False;
+              Break;
+            end
+            else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
+            Inc(j);
+          end;
         end;
         { Skip the header to the COLON that ends it, honouring a parenthesised
           base list — then decide from what FOLLOWS the colon whether there is
@@ -27874,9 +28153,15 @@ end;
 procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
     realBases, baseDepth: Integer;
+    mixK, sharedCi, myMixN, savedTokPos: Integer;
+    myMixCi: array[0..5] of Integer;
     propName: AnsiString;
 begin
   Expect(tkClass, 'class');
+  { the flattened-base handshake is per class statement, and a class NESTED in
+    this body reaches PyParseClass again — so the header fills the globals, and
+    the two consumers below re-publish from this frame's own copy }
+  PyMixN := 0;
   ci := FindUClass(CurTok.SVal); Next;
   if CurTok.Kind = tkLParen then
   begin
@@ -27946,10 +28231,44 @@ begin
     if baseCi < 0 then
       Error('Nil Python: unknown base class ' + CurTok.SVal);
     Inc(realBases);
-    if realBases = 1 then UClsParent[ci] := baseCi;
+    { The FIRST base is a real parent — unless it is a class that is flattened
+      somewhere else in the program, in which case it is flattened HERE too.
+      A class is one thing or the other program-wide: its body is compiled into
+      its hosts, so a host that made it a parent instead would inherit a class
+      with no method bodies. bug-nilpy-multiple-inheritance-does-not-parse }
+    if (realBases = 1) and not PyClsUsedAsMixin[baseCi] then
+      UClsParent[ci] := baseCi
+    else
+    begin
+      { A SECOND (third, ...) base — flattened into this class rather than made
+        a parent. See PyClsHasAncestor's block comment. }
+      if PyMixN > High(PyMixCi) then
+        Error('Nil Python: too many base classes');
+      if (PyClsBodyS[baseCi] < 0) or (PyClsBodyE[baseCi] < 0) then
+        Error('Nil Python: cannot flatten base class ' + CurTok.SVal +
+              ' — its body was not seen. A second base must be a class ' +
+              'defined earlier in this file; an imported or built-in one ' +
+              'cannot be flattened');
+      { `super()` inside a body that is going to be FLATTENED cannot be
+        honoured. CPython routes it along the MRO — from a mixin it reaches the
+        NEXT class in the derived class's linearisation, which is often not the
+        mixin's own parent at all — and a flattened body's `super()` can only
+        mean the derived class's single parent. Silence here is a wrong call at
+        run time, so it is refused. }
+      if PyMixBodyUsesSuper(baseCi) then
+        Error('Nil Python: base class ' + CurTok.SVal + ' calls `super()` and ' +
+              'is flattened into `class ' +
+              PyRawName(UClsNOff[ci], UClsNLen[ci]) +
+              '`. Python resolves that call along the derived class''s MRO, ' +
+              'which a flattened body cannot see — it would silently reach ' +
+              'this class''s own parent instead. Name the intended class''s ' +
+              'method explicitly, or restructure to single inheritance');
+      PyMixCi[PyMixN] := baseCi;
+      Inc(PyMixN);
+    end;
     Next;
     end;
-    until (not Eat(tkComma)) or (realBases > 1);
+    until not Eat(tkComma);
     { MULTIPLE INHERITANCE — `class D(B, C):`. Refused BY NAME rather than
       accepted-and-ignored: Python resolves attributes by C3 linearisation, so
       `D().who()` must give B's, and with a diamond the order is D, B, C, A.
@@ -27963,14 +28282,27 @@ begin
 
       The message replaces a bare "unexpected token" pointing at the comma,
       which read like a parser bug rather than a missing feature. }
-    if realBases > 1 then
-      Error('Nil Python: multiple inheritance is not supported — `class ' +
-            PyRawName(UClsNOff[ci], UClsNLen[ci]) +
-            '` names more than one base. Python resolves these by C3 ' +
-            'linearisation and the object model here is single-inheritance, ' +
-            'so a second base cannot be honoured; it is refused rather than ' +
-            'silently ignored. Use single inheritance, or compose: hold the ' +
-            'would-be second base as a field and forward to it');
+    { THE DIAMOND is refused. Two bases sharing an ancestor get ONE copy of it
+      under C3 and TWO under flattening, after which the two copies' state
+      diverges — a silently wrong answer, which is the one outcome worse than
+      not supporting the shape. Named explicitly so the reader can see which
+      ancestor is shared. }
+    for mixK := 0 to PyMixN - 1 do
+    begin
+      sharedCi := PySharedAncestor(UClsParent[ci], PyMixCi[mixK]);
+      for k := 0 to mixK - 1 do
+        if sharedCi < 0 then
+          sharedCi := PySharedAncestor(PyMixCi[k], PyMixCi[mixK]);
+      if sharedCi >= 0 then
+        Error('Nil Python: `class ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) +
+              '` is a DIAMOND — two of its bases share the ancestor `' +
+              PyRawName(UClsNOff[sharedCi], UClsNLen[sharedCi]) +
+              '`. Multiple inheritance here flattens the extra bases into the ' +
+              'derived class, which would give that ancestor two copies where ' +
+              'Python''s C3 order gives one, and the two copies'' state would ' +
+              'then diverge. Refused rather than answered wrongly: give the ' +
+              'bases disjoint ancestries, or compose');
+    end;
     Expect(tkRParen, ')');
   end;
   Expect(tkColon, ':');
@@ -28025,6 +28357,25 @@ begin
   end;
   Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
+  { Record the span so a LATER class naming this one as a second base can
+    replay it — nothing is copied, the tokens stay where they were lexed. }
+  PyClsBodyS[ci] := bodyStart; PyClsBodyE[ci] := bodyEnd;
+  myMixN := PyMixN;
+  for k := 0 to PyMixN - 1 do myMixCi[k] := PyMixCi[k];
+  { A class that exists to be FLATTENED is not compiled here: its methods are
+    compiled once per host, against the host's layout, which is the only place
+    the members it reads but does not declare exist. Fields are registered so
+    the class is sized and named; the body tokens are stepped over. }
+  if PyClsUsedAsMixin[ci] then
+  begin
+    PyClsEvalCi := -1;
+    if not PyMembersHoisted[ci] then
+      PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC, True);
+    TokPos := bodyEnd; Next;
+    Expect(tkDedent, 'dedent');
+    PySkipNewlines;
+    Exit;
+  end;
   { hand the span to the statement loop, which evaluates this class's METHOD
     parameter defaults once we return — see PyEvalMethodDefaults }
   PyClsEvalCi := ci; PyClsEvalLo := bodyStart; PyClsEvalHi := bodyEnd;
@@ -28036,8 +28387,26 @@ begin
     PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC, False);
   if isDC and (ci < PY_MAX_DC_FIELDS) then PyDcClassIsDc[ci] := True;
   PySkipNewlines;
+  { The body loop, run once for this class's own body and then once per
+    flattened base — replaying the base's tokens with ci = THIS class, so every
+    method compiles with `self` = the derived object. bug-nilpy-multiple-
+    inheritance-does-not-parse }
+  mixK := 0;
+  while True do
+  begin
   while CurTok.Kind <> tkDedent do
   begin
+    if PyMixReplay and (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind in [tkAssign, tkColon]) and
+       PyMixSkipHas(CurTok.SVal) then
+    begin
+      { a class ATTRIBUTE this base loses to the derived class or an earlier
+        base — the registration pass skipped it, so evaluating its initialiser
+        here would write a slot that does not exist }
+      while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+      PySkipNewlines;
+      Continue;
+    end;
     if CurTok.Kind = tkString then
     begin
       { class docstring }
@@ -28173,6 +28542,18 @@ begin
     end;
   end;
   Expect(tkDedent, 'dedent');
+    if mixK >= myMixN then Break;
+    if mixK = 0 then savedTokPos := TokPos;
+    PyMixN := myMixN;
+    for k := 0 to myMixN - 1 do PyMixCi[k] := myMixCi[k];
+    PyMixBuildSkip(ci, bodyStart, bodyEnd, mixK);
+    PyMixReplay := True;
+    TokPos := PyClsBodyS[myMixCi[mixK]];
+    Next;                { CurTok := the base body's first token }
+    Inc(mixK);
+    PySkipNewlines;
+  end;
+  if myMixN > 0 then begin PyMixReplay := False; TokPos := savedTokPos - 1; Next; end;
   if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); end;
   { AFTER the body: the attribute slots' types are only final once every
     initialiser has been parsed (PyEmitClassAttrExpr retypes them), and the bind
@@ -29255,6 +29636,13 @@ begin
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   for i := 0 to MAX_UCLASS - 1 do PyMembersHoisted[i] := False;
+  for i := 0 to MAX_UCLASS - 1 do
+  begin
+    PyClsBodyS[i] := -1;
+    PyClsBodyE[i] := -1;
+    PyClsUsedAsMixin[i] := False;
+  end;
+  PyMixN := 0; PyMixSkipN := 0; PyMixReplay := False;
   PyRegisterClassShells;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);

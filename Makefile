@@ -904,6 +904,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_inhclsattr26 | diff -u test/test_nilpy_inherited_class_attribute.expected -
 	./$(COMPILER) test/test_nilpy_class_attr_shared_slot_via_call_result.npy $(TESTTMP)/test_nilpy_clsattr_callres26
 	$(TESTTMP)/test_nilpy_clsattr_callres26 | diff -u test/test_nilpy_class_attr_shared_slot_via_call_result.expected -
+	./$(COMPILER) test/test_nilpy_multiple_inheritance.npy $(TESTTMP)/test_nilpy_multi_inherit26
+	$(TESTTMP)/test_nilpy_multi_inherit26 | diff -u test/test_nilpy_multiple_inheritance.expected -
 	./$(COMPILER) test/test_nilpy_overridden_class_attribute.npy $(TESTTMP)/test_nilpy_ovrclsattr26
 	$(TESTTMP)/test_nilpy_ovrclsattr26 | diff -u test/test_nilpy_overridden_class_attribute.expected -
 	./$(COMPILER) test/test_nilpy_closure_lifetime.npy $(TESTTMP)/test_nilpy_closure_lifetime26
