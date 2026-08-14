@@ -129,4 +129,4 @@ from the `in`-over-objects gate list finds the answer instead of an open ticket.
 No code or test change belongs to this one.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 983bcfb5c.
