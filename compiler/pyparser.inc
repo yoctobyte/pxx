@@ -1871,6 +1871,24 @@ begin
       bug-nilpy-bytearray-and-bytes-are-the-same-type }
     else if nm = 'bytes' then term := BytesKindEq(0)
     else if nm = 'bytearray' then term := BytesKindEq(1)
+    { `isinstance(X, type)` — "is X a class?". Unlike every arm above it, that
+      is not a question about the value's scalar tag or a pylib class's kind,
+      so it goes to the same runtime test a type held in a NAME already uses,
+      with `type` itself as the second argument. six line 43,
+      `class_types = type,`. bug-n-a-type-name-is-not-a-first-class-value }
+    else if nm = 'type' then
+    begin
+      rtArg := AllocNode(AN_ARG);
+      ASTLeft[rtArg] := PyForceVariant(xNode);
+      rtArg2 := AllocNode(AN_ARG);
+      ASTLeft[rtArg2] := PyMakeBuiltinTypeValue(12);   { PYBT_TYPE }
+      ASTRight[rtArg] := rtArg2;
+      term := AllocNode(AN_CALL);
+      ASTIVal[term] := FindProc('pyisinstance_v');
+      if ASTIVal[term] < 0 then Error('Nil Python: pylib (pyisinstance_v) not loaded');
+      ASTTk[term] := Ord(tyBoolean);
+      ASTLeft[term] := rtArg;
+    end
     else
     begin
       { Python's container type NAMES map to the pylib classes that back them;
@@ -3557,6 +3575,9 @@ begin
   else if lo = 'tuple' then Result := 9
   else if lo = 'bytearray' then Result := 10
   else if lo = 'frozenset' then Result := 11
+  { `type` only as a bare VALUE — `type(x)` keeps its own intercept, which the
+    caller's `not followed by '('` guard leaves alone. }
+  else if lo = 'type' then Result := 12
   else Result := 0;
 end;
 

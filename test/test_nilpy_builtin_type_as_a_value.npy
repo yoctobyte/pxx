@@ -67,6 +67,18 @@ print(type("a").__name__, type(1).__name__)
 # --- bool is a SUBCLASS of int in Python; the only such pair among these ----
 print(isinstance(True, bool), isinstance(True, int), isinstance(1, bool))
 
+# --- `type` itself is a type too: six line 43, `class_types = type,` --------
+class A:
+    pass
+
+a = A()
+print(isinstance(A, type), isinstance(str, type), isinstance(a, type))
+print(isinstance(5, type), isinstance("s", type))
+class_types = (type,)
+print(isinstance(A, class_types), isinstance(a, class_types))
+print(type)
+print(type(5).__name__)
+
 # --- a user name SHADOWS the builtin, as it does in CPython -----------------
 def list_shadow_check():
     dict = 7

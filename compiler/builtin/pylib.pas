@@ -66,7 +66,12 @@ const
   PYBT_TUPLE     = 9;
   PYBT_BYTEARRAY = 10;
   PYBT_FROZENSET = 11;
-  PYBT_LAST      = 11;
+  { `type` itself — `class_types = (type,)` (six's line 43) and
+    `isinstance(X, type)`, Python's "is this a class?". Its instances are the
+    other TYPE objects, so it is the one code whose isinstance arm asks about
+    the tag rather than about the value's Python type name. }
+  PYBT_TYPE      = 12;
+  PYBT_LAST      = 12;
 
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
@@ -13588,6 +13593,7 @@ begin
     PYBT_TUPLE:     Result := 'tuple';
     PYBT_BYTEARRAY: Result := 'bytearray';
     PYBT_FROZENSET: Result := 'frozenset';
+    PYBT_TYPE:      Result := 'type';
   else
     Result := '?';
   end;
@@ -13711,6 +13717,16 @@ begin
     `isinstance(s, text_type)`, which is six's whole idiom. }
   if pyvartag(t) = 13 then                        { VT_BTYPE }
   begin
+    { `isinstance(X, type)` — X is a class if it is a class OBJECT (tag 11) or
+      a builtin type object (tag 13). Asked of the TAG, not of
+      pybtype_of_value: `type`'s instances are the type objects themselves, and
+      pytype_name_v already answers 'type' for both tags, so routing it through
+      the name table would be the same test spelled indirectly. }
+    if pybtype_code(t) = PYBT_TYPE then
+    begin
+      Result := (pyvartag(x) = 11) or (pyvartag(x) = 13);
+      Exit;
+    end;
     Result := pybtype_of_value(x) = pybtype_code(t);
     { `bool` is a SUBCLASS of `int` in Python, so isinstance(True, int) is True
       while type(True) is bool. The only subclass relation among the builtins

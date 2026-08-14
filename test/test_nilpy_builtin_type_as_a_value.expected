@@ -20,4 +20,9 @@ True 12
 True False
 str int
 True True False
+True True False
+False False
+True False
+<class 'type'>
+int
 8
