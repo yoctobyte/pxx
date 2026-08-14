@@ -1744,6 +1744,34 @@ function pymath_trunc(x: Double): Int64;
   answered atan2's result). The sign is read from the BIT PATTERN, not from
   `y < 0`, so copysign(3, -0.0) is -3.0 as CPython has it. }
 function pymath_copysign(x, y: Double): Double;
+{ The remaining math names that need a CONTAINER or an exact algorithm, so they
+  cannot be a plain intercept onto an RTL routine the way asin/acos/atan/log do.
+  None of them needs a transcendental, which is what keeps them buildable inside
+  a BUILTIN unit (see the note on math.log above for why that matters).
+  bug-nilpy-math-surface-remaining-gaps-and-degrees-association }
+function pymath_modf(x: Double): TPyList;
+function pymath_prod(l: TPyList): Variant;
+function pymath_fsum(l: TPyList): Double;
+function pymath_perm(n, k: Int64): Int64;
+{ ---- random ------------------------------------------------------------
+  `import random` had nothing behind it at all — `random.random()` was
+  `undefined variable`, and it is one of the first imports a script reaches
+  for. A SplitMix64 generator: 64 bits of state, one multiply-xor step, and
+  good enough for the shuffling and sampling a script does.
+
+  The SEQUENCE is deliberately not CPython's. CPython uses Mersenne Twister and
+  its exact stream is an implementation detail even there; what a program can
+  legitimately depend on is the CONTRACT — random() in [0, 1), randint(a, b)
+  inclusive at both ends, choice() an element of the sequence, shuffle() a
+  permutation — and that a given seed repeats. Those are what the test asserts.
+  bug-nilpy-math-surface-remaining-gaps-and-degrees-association }
+procedure pyrandom_seed(n: Int64);
+function pyrandom_random: Double;
+function pyrandom_randint(a, b: Int64): Int64;
+function pyrandom_randrange(n: Int64): Int64;
+function pyrandom_uniform(a, b: Double): Double;
+function pyrandom_choice(l: TPyList): Variant;
+procedure pyrandom_shuffle(l: TPyList);
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
@@ -5960,6 +5988,155 @@ begin
   { Pascal's Trunc already rounds toward zero AND yields an integer type, so
     the whole fix is that this returns Int64 rather than Double. }
   Result := Trunc(x);
+end;
+
+{ math.modf(x) -> (fractional, integral), BOTH floats and both carrying x's
+  sign, which is CPython's contract — modf(-2.5) is (-0.5, -2.0), not
+  (0.5, -2.0). A tuple, so it belongs here rather than in the RTL. }
+function pymath_modf(x: Double): TPyList;
+var ip: Double; pb: PInt64;
+begin
+  ip := Int(x);          { truncate toward zero — Int, not Floor }
+  { ...and the integral part keeps x's sign even when it is ZERO: CPython's
+    modf(-0.25) is (-0.25, -0.0), and Int() hands back a positive zero. Read
+    from the SIGN BIT, not from `x < 0`, for the same reason copysign does. }
+  pb := PInt64(@x);
+  if (pb^ < 0) and (ip = 0.0) then ip := -0.0;
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(x - ip);
+  Result.append(ip);
+end;
+
+{ math.prod — the product, and an INT when every element is an int (CPython
+  keeps the type: prod([2, 3]) is 6, not 6.0). The variant arithmetic already
+  carries that rule, so this is a plain fold over it. }
+function pymath_prod(l: TPyList): Variant;
+var i: Integer; acc: Variant;
+begin
+  acc := 1;
+  if l <> nil then
+    for i := 0 to l.count - 1 do acc := acc * l.at(i);
+  Result := acc;
+end;
+
+{ math.fsum — Neumaier compensated summation, which is what makes
+  fsum([0.1] * 10) exactly 1.0 where a naive sum gives 0.9999999999999999.
+  Same algorithm bug-nilpy-sum-of-floats-has-no-compensated-summation wants for
+  sum(); when that lands the two should share THIS routine rather than grow a
+  second copy of it. }
+function pymath_fsum(l: TPyList): Double;
+var i: Integer; sum, c, t, v: Double;
+begin
+  sum := 0.0;
+  c := 0.0;
+  if l <> nil then
+    for i := 0 to l.count - 1 do
+    begin
+      v := pyvar_to_float(l.at(i));
+      t := sum + v;
+      { the compensation term is the part of the smaller operand the addition
+        dropped, so which side is smaller decides where to read it from }
+      if Abs(sum) >= Abs(v) then c := c + ((sum - t) + v)
+      else c := c + ((v - t) + sum);
+      sum := t;
+    end;
+  Result := sum + c;
+end;
+
+{ math.perm(n, k) — ordered arrangements, n!/(n-k)!, computed as the falling
+  factorial so no intermediate n! overflows on its way to a small answer. }
+function pymath_perm(n, k: Int64): Int64;
+var i, r: Int64;
+begin
+  if (n < 0) or (k < 0) then
+    raise ValueError.Create('perm() not defined for negative values');
+  if k > n then begin Result := 0; Exit; end;
+  r := 1;
+  for i := 0 to k - 1 do r := r * (n - i);
+  Result := r;
+end;
+
+{ SplitMix64 — see the block comment on the declarations. The state starts at a
+  fixed value rather than a clock reading: a program that never calls seed()
+  then reproduces exactly, which is what makes a failure reportable. CPython
+  seeds from entropy instead, and a program that DEPENDS on the difference is
+  depending on the stream, which neither implementation promises. }
+var
+  PyRandState: Int64 = Int64($9E3779B97F4A7C15);
+
+function PyRandNext: Int64;
+var z: Int64;
+begin
+  PyRandState := PyRandState + Int64($9E3779B97F4A7C15);
+  z := PyRandState;
+  z := (z xor (z shr 30)) * Int64($BF58476D1CE4E5B9);
+  z := (z xor (z shr 27)) * Int64($94D049BB133111EB);
+  Result := z xor (z shr 31);
+end;
+
+{ the top 53 bits, scaled — the same construction CPython uses to land in
+  [0, 1) with every representable double of that precision reachable }
+function pyrandom_random: Double;
+var u: Int64;
+begin
+  u := PyRandNext;
+  u := (u shr 11) and Int64($1FFFFFFFFFFFFF);     { 53 bits, non-negative }
+  Result := u / 9007199254740992.0;               { / 2^53 }
+end;
+
+procedure pyrandom_seed(n: Int64);
+begin
+  PyRandState := n;
+end;
+
+{ CPython's randint is inclusive at BOTH ends, unlike randrange. Reduced with a
+  modulo over the width, which is fine for the widths a script uses. }
+function pyrandom_randint(a, b: Int64): Int64;
+var w, r: Int64;
+begin
+  if b < a then
+    raise ValueError.Create('empty range for randint()');
+  w := b - a + 1;
+  if w <= 0 then begin Result := a; Exit; end;
+  r := PyRandNext;
+  if r < 0 then r := -r;
+  if r < 0 then r := 0;              { the one value -(-2^63) cannot negate }
+  Result := a + (r mod w);
+end;
+
+function pyrandom_randrange(n: Int64): Int64;
+begin
+  if n <= 0 then
+    raise ValueError.Create('empty range for randrange()');
+  Result := pyrandom_randint(0, n - 1);
+end;
+
+function pyrandom_uniform(a, b: Double): Double;
+begin
+  Result := a + (b - a) * pyrandom_random;
+end;
+
+function pyrandom_choice(l: TPyList): Variant;
+begin
+  if (l = nil) or (l.count = 0) then
+    raise IndexError.Create('Cannot choose from an empty sequence');
+  Result := l.at(Integer(pyrandom_randint(0, l.count - 1)));
+end;
+
+{ Fisher-Yates, in place — `random.shuffle(xs)` returns None and mutates, which
+  is the half of the contract a caller most often gets wrong. }
+procedure pyrandom_shuffle(l: TPyList);
+var i, j: Integer; tmp: Variant;
+begin
+  if l = nil then Exit;
+  for i := l.count - 1 downto 1 do
+  begin
+    j := Integer(pyrandom_randint(0, i));
+    tmp := l.at(i);
+    l.put(i, l.at(j));
+    l.put(j, tmp);
+  end;
 end;
 
 function pymath_copysign(x, y: Double): Double;
