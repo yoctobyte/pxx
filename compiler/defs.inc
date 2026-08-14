@@ -2373,13 +2373,19 @@ var
     oversized-stack-frame warning at ~8MB (MAX_CODE) -- a global sidesteps
     it entirely (BSS, not stack), matching the warning's own suggestion. }
   AsmDisProcAtPos: array[0..MAX_CODE] of Integer;
-  { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
-  AsmOpKind : array[0..1] of Integer;   { AOP_* }
-  AsmOpReg  : array[0..1] of Integer;   { register number 0..15; AOP_MEMR base reg }
-  AsmOpSize : array[0..1] of Integer;   { 1, 2, 4, 8 (bytes) }
-  AsmOpVal  : array[0..1] of Int64;     { immediate value, or mem disp for AOP_MEM/AOP_MEMR }
-  AsmOpIndex: array[0..1] of Integer;   { AOP_MEMR index reg, -1 = none }
-  AsmOpScale: array[0..1] of Integer;   { AOP_MEMR scale: 1/2/4/8 }
+  { Inline-asm operand scratch (slot 0 = dest, slot 1 = src, slot 2 = imm8).
+    THREE slots, not two: the packed-SSE compare and shuffle forms take a
+    trailing imm8 selector (`cmppd xmm0, xmm1, 2` = CMPLEPD, `shufpd x, y, 1`),
+    and with two slots they are not merely unencodable, they are unsayable —
+    the parser refuses a third operand before any encoder sees it. Widening
+    here rather than special-casing the imm in the SSE arm keeps one operand
+    model (feature-inline-asm-xmm-operands phase 3). }
+  AsmOpKind : array[0..2] of Integer;   { AOP_* }
+  AsmOpReg  : array[0..2] of Integer;   { register number 0..15; AOP_MEMR base reg }
+  AsmOpSize : array[0..2] of Integer;   { 1, 2, 4, 8 (bytes), 16 for xmm }
+  AsmOpVal  : array[0..2] of Int64;     { immediate value, or mem disp for AOP_MEM/AOP_MEMR }
+  AsmOpIndex: array[0..2] of Integer;   { AOP_MEMR index reg, -1 = none }
+  AsmOpScale: array[0..2] of Integer;   { AOP_MEMR scale: 1/2/4/8 }
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

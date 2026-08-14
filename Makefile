@@ -2851,6 +2851,11 @@ test-asm: $(COMPILER)
 	# every AMD box, which is worse than not testing.
 	./$(COMPILER) test/test_asm_cpuid.pas /tmp/test_asm_cpuid26
 	test "$$(/tmp/test_asm_cpuid26)" = "asm cpuid ok"
+	# packed SSE2 from inline asm (phase 3). Vectors are built from SCALARS via
+	# unpcklpd, not loaded from an array: movapd faults on a misaligned address,
+	# and relying on a Pascal array being 16-byte aligned is a coin flip.
+	./$(COMPILER) test/test_asm_sse_packed.pas /tmp/test_asm_sse_packed26
+	test "$$(/tmp/test_asm_sse_packed26)" = "asm sse packed ok"
 	./$(COMPILER) test/test_asm_hello.asm /tmp/test_asm_hello26
 	test "$$(/tmp/test_asm_hello26)" = "Hello, asm world!"
 	./$(COMPILER) test/test_asm_entry_global.asm /tmp/test_asm_entry_global26

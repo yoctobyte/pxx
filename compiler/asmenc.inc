@@ -565,7 +565,39 @@ begin
   else if CaseEqual(mn,'xorpd')    then begin pfx := $66; op := $57; end
   else if CaseEqual(mn,'xorps')    then begin pfx := 0;   op := $57; end
   else if CaseEqual(mn,'andpd')    then begin pfx := $66; op := $54; end
+  else if CaseEqual(mn,'andnpd')   then begin pfx := $66; op := $55; end
+  else if CaseEqual(mn,'orpd')     then begin pfx := $66; op := $56; end
   else if CaseEqual(mn,'pxor')     then begin pfx := $66; op := $EF; end
+  { PACKED doubles (phase 3). Same encoders as the scalar forms with the $66
+    prefix -- that is the whole difference, which is why these are parameter
+    values here rather than a second dispatch. movapd/movupd differ from each
+    other only in alignment requirement, not encoding shape: both have a
+    distinct STORE opcode one above the load ($29 / $11). }
+  else if CaseEqual(mn,'addpd')    then begin pfx := $66; op := $58; end
+  else if CaseEqual(mn,'subpd')    then begin pfx := $66; op := $5C; end
+  else if CaseEqual(mn,'mulpd')    then begin pfx := $66; op := $59; end
+  else if CaseEqual(mn,'divpd')    then begin pfx := $66; op := $5E; end
+  else if CaseEqual(mn,'sqrtpd')   then begin pfx := $66; op := $51; end
+  else if CaseEqual(mn,'maxpd')    then begin pfx := $66; op := $5F; end
+  else if CaseEqual(mn,'minpd')    then begin pfx := $66; op := $5D; end
+  else if CaseEqual(mn,'unpcklpd') then begin pfx := $66; op := $14; end
+  else if CaseEqual(mn,'unpckhpd') then begin pfx := $66; op := $15; end
+  else if CaseEqual(mn,'movapd')   then begin pfx := $66; op := $28; end
+  else if CaseEqual(mn,'movupd')   then begin pfx := $66; op := $10; end
+  else begin op := 0; Result := False; end;
+end;
+
+{ The MOVES are the only SSE forms with a store direction, and each has its own
+  store opcode rather than reusing the load one with swapped operands. Returning
+  False for everything else is what makes `addpd mem, xmm` an error instead of a
+  silently wrong encoding. }
+function AsmSseStoreOp(const mn: AnsiString; var op: Integer): Boolean;
+begin
+  Result := True;
+  if      CaseEqual(mn,'movsd')  then op := $11
+  else if CaseEqual(mn,'movss')  then op := $11
+  else if CaseEqual(mn,'movupd') then op := $11
+  else if CaseEqual(mn,'movapd') then op := $29
   else begin op := 0; Result := False; end;
 end;
 
@@ -595,7 +627,7 @@ end;
 { Encode a single instruction whose mnemonic is in mn and whose operands have
   already been parsed into AsmOp[0..nops-1]. Returns False if mnemonic unknown. }
 function AsmDispatch(const mn: AnsiString; nops: Integer): Boolean;
-var opSize, rf, rh, ext, cc: Integer; ssePfx, sseOp: Integer; tail: AnsiString;
+var opSize, rf, rh, ext, cc: Integer; ssePfx, sseOp, sseSt: Integer; tail: AnsiString;
 begin
   Result := True;
 
@@ -630,13 +662,72 @@ begin
     if (AsmOpKind[0] = AOP_REG) and (AsmOpSize[0] = 16) then
       { xmm <- xmm/mem, the load-or-arithmetic direction }
       AsmSseEmit(ssePfx, sseOp, AsmOpReg[0], 1, 4)
-    else if (CaseEqual(mn,'movsd') or CaseEqual(mn,'movss')) and
+    else if AsmSseStoreOp(mn, sseSt) and
             (AsmOpKind[1] = AOP_REG) and (AsmOpSize[1] = 16) then
       { mem <- xmm. Only the MOVES have a store direction, and it is a
-        different opcode ($11), not the same one with operands swapped. }
-      AsmSseEmit(ssePfx, $11, AsmOpReg[1], 0, 4)
+        DIFFERENT OPCODE, not the same one with the operands swapped: $11 for
+        movsd/movss/movupd, $29 for movapd. Getting this wrong encodes a load
+        into the memory operand, which assembles clean and corrupts. }
+      AsmSseEmit(ssePfx, sseSt, AsmOpReg[1], 0, 4)
     else
       Error('asm: unsupported ' + mn + ' operand form');
+    Exit;
+  end;
+
+  { Packed forms whose OPERAND SHAPE differs from the plain reg,rm pair.
+    Grouped here rather than in the table above because the table encodes
+    "prefix + opcode"; these need an extra byte or a different register file,
+    and folding them in would make the table lie about what it covers. }
+
+  { cmppd/cmpsd take a trailing imm8 PREDICATE (0=eq 1=lt 2=le 3=unord 4=neq
+    5=nlt 6=nle 7=ord) — this is why the operand model has three slots. }
+  if CaseEqual(mn,'cmppd') or CaseEqual(mn,'cmpsd') then
+  begin
+    if nops <> 3 then Error('asm: ' + mn + ' needs three operands (dest, src, imm8 predicate)');
+    if AsmOpKind[2] <> AOP_IMM then Error('asm: ' + mn + ' predicate must be an immediate');
+    if (AsmOpVal[2] < 0) or (AsmOpVal[2] > 7) then
+      Error('asm: ' + mn + ' predicate must be 0..7');
+    if CaseEqual(mn,'cmppd') then ssePfx := $66 else ssePfx := $F2;
+    AsmSseEmit(ssePfx, $C2, AsmOpReg[0], 1, 4);
+    AsmB(Integer(AsmOpVal[2] and $FF));
+    Exit;
+  end;
+
+  { shufpd's imm8 selects one source half per destination lane. }
+  if CaseEqual(mn,'shufpd') then
+  begin
+    if nops <> 3 then Error('asm: shufpd needs three operands (dest, src, imm8)');
+    if AsmOpKind[2] <> AOP_IMM then Error('asm: shufpd selector must be an immediate');
+    AsmSseEmit($66, $C6, AsmOpReg[0], 1, 4);
+    AsmB(Integer(AsmOpVal[2] and $FF));
+    Exit;
+  end;
+
+  { movmskpd: dest is a GENERAL-PURPOSE register, source an xmm. The reg field
+    is therefore the GP number and the r/m the xmm — the opposite assignment
+    from every other form here, which is exactly the mistake that would encode
+    clean and read the wrong register file. }
+  if CaseEqual(mn,'movmskpd') then
+  begin
+    if nops <> 2 then Error('asm: movmskpd needs two operands');
+    if AsmOpKind[1] <> AOP_REG then Error('asm: movmskpd source must be an xmm register');
+    AsmSseEmit($66, $50, AsmOpReg[0], 1, 4);
+    Exit;
+  end;
+
+  { movq between an xmm and a GP register / 64-bit memory — the bridge for
+    getting a Double into or out of the vector file without a memory round
+    trip. Both directions are REX.W $66 forms and they are DIFFERENT opcodes
+    ($6E in, $7E out), not one form with the operands reversed. }
+  if CaseEqual(mn,'movq') then
+  begin
+    if nops <> 2 then Error('asm: movq needs two operands');
+    if (AsmOpKind[0] = AOP_REG) and (AsmOpSize[0] = 16) then
+      AsmSseEmit($66, $6E, AsmOpReg[0], 1, 8)        { xmm <- r/m64 }
+    else if (AsmOpKind[1] = AOP_REG) and (AsmOpSize[1] = 16) then
+      AsmSseEmit($66, $7E, AsmOpReg[1], 0, 8)        { r/m64 <- xmm }
+    else
+      Error('asm: movq needs one xmm operand');
     Exit;
   end;
 
@@ -895,7 +986,7 @@ begin
   { Operands continue while still on the mnemonic's source line. }
   while (CurTok.Kind <> tkEnd) and (CurTok.Line = mnLine) and (CurTok.Kind <> tkEOF) do
   begin
-    if nops >= 2 then Error('asm: more than 2 operands not supported: ' + mn);
+    if nops >= 3 then Error('asm: more than 3 operands not supported: ' + mn);
     AsmParseOperand(nops);
     Inc(nops);
     if (CurTok.Kind = tkComma) and (CurTok.Line = mnLine) then Next

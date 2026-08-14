@@ -251,3 +251,92 @@ Packed SSE2 (`$66` over the existing scalar dispatch), then the VEX emitter and
 AVX/FMA. Both encoders each time. `movq` (xmm↔GP) is still missing from
 `asmenc.inc` and should ride along with phase 3 — it is the natural bridge for
 moving a double between the register files.
+
+## 2026-08-14 — PHASE 3 DONE: packed SSE2, plus the forms with a different operand SHAPE
+
+### The operand model needed a third slot first
+
+`AsmOpKind`/`AsmOpReg`/… were `array[0..1]` and the parse loop errored on a
+third operand. So `cmppd xmm0, xmm1, 2` was not merely unencodable — it was
+**unsayable**, rejected before any encoder saw it. Widened to `[0..2]` in
+`defs.inc` (standalone arrays, not a record field, so no bootstrap hazard) and
+the loop cap raised to 3. Doing it here rather than special-casing an immediate
+inside the SSE arm keeps ONE operand model, which is the thing this ticket keeps
+finding was split.
+
+### Landed
+
+**Plain `reg, rm` packed forms** — the same encoders as the scalar ones with the
+`$66` prefix, so they are parameter values in the existing table rather than a
+second dispatch: `addpd subpd mulpd divpd sqrtpd maxpd minpd andpd andnpd orpd
+xorpd unpcklpd unpckhpd movapd movupd`.
+
+**Forms whose operand SHAPE differs**, grouped separately because the table
+above encodes "prefix + opcode" and these need an extra byte or a different
+register file — folding them in would make the table lie about what it covers:
+
+- `cmppd` / `cmpsd` — trailing imm8 predicate (0..7), validated rather than
+  truncated;
+- `shufpd` — imm8 lane selector;
+- `movmskpd` — destination is a **GP** register and the source an xmm, i.e. the
+  opposite reg/rm assignment from every other form here. That is precisely the
+  mistake that encodes clean and reads the wrong register file;
+- `movq` xmm↔GP/m64 — the bridge for getting a Double in and out of the vector
+  file without a memory round trip. Both directions are `$66` REX.W forms and
+  they are DIFFERENT opcodes ($6E in, $7E out), not one form with the operands
+  reversed. This was flagged as missing at the end of phase 1 and is now in.
+
+`AsmSseStoreOp` replaced the hardcoded `movsd`/`movss` store check: each move
+has its OWN store opcode ($11, but $29 for `movapd`), and returning False for
+everything else is what makes `addpd mem, xmm` an error instead of a silently
+wrong encoding.
+
+### Verified against gas — 22 instructions, 96 bytes, byte-identical
+
+Covering every added form, both REX-extended operand roles (`mulpd xmm0,xmm9`
+and `divpd xmm10,xmm1` put the extension on different halves), the trailing
+imm8, the GP-destination form, and `movq` in both directions including
+`movq xmm9, r11` which needs REX.R **and** REX.B. Compared programmatically.
+
+Note gas normalises `movmskpd rcx, xmm11` to the `ecx` form — movmskpd always
+writes 32 bits — and pxx agrees, because the encoder passes opSize=4 and so
+emits no REX.W either.
+
+### Test
+
+`test/test_asm_sse_packed.pas`. Vectors are built from SCALAR variables through
+`unpcklpd` rather than loaded from an array, deliberately: **`movapd` faults on a
+misaligned address**, and a test that depended on a Pascal array happening to be
+16-byte aligned would be a coin flip dressed as a regression test. Register-to-
+register forms have no alignment question.
+
+Both lanes are checked on every packed op — a packed instruction that only got
+the low lane right would pass a low-lane-only test and be exactly as broken as
+one that got neither. `maxpd`/`minpd` are set up so the answer comes from a
+DIFFERENT source vector in each lane, or the check proves nothing. The
+`cmppd` + `movmskpd` pair is tested together because that is how a real vector
+kernel writes its escape test.
+
+### NOT mirrored into asmtext.inc — and this is the "say why not"
+
+Phase 1 ended on the rule *a mnemonic lands in BOTH encoders or the reason is
+written down*. This is the reason.
+
+`asmtext.inc` drives compiler-EMITTED asm. It has the scalar SSE because codegen
+uses it; **nothing in the compiler emits packed SSE**, so mirroring 15 mnemonics
+there would add an untested encoder path to the compiler's own emitter — a
+liability, not an asset, and exactly the sort of unexercised code that is wrong
+when someone finally reaches for it.
+
+So: not mirrored, on purpose. If a codegen consumer appears (an `-O3` vectoriser
+is the obvious one), mirror then, and the verified opcode table above is the
+data to mirror — it is already byte-checked against gas.
+
+### Remaining: phase 4
+
+VEX prefix emitter, then AVX/AVX2 (`v*pd`, `vbroadcastsd`) and FMA. That is the
+real chunk, and it carries the design decision this ticket named at the start:
+2-byte vs 3-byte VEX selection, and a third SOURCE operand for the
+non-destructive `v` forms. Note the operand model now has three slots, but the
+third is used as an IMMEDIATE here; a `vaddpd dst, src1, src2` needs it to be a
+REGISTER, so phase 4 should check that assumption rather than inherit it.
