@@ -440,4 +440,4 @@ skipping — otherwise "ok" would prove nothing.
 Nothing in the compiler emits AVX. Mirroring would add an unexercised encoder
 path to the compiler's own emitter. The byte-checked opcode table above is the
 data to mirror if an `-O3` vectoriser ever wants it.
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit ab0506cee.
