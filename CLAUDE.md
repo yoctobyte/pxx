@@ -590,11 +590,24 @@ fix the doc, not the loop.
   takes 2-3x longer — slow, not stuck). Full note, including why an expected
   output must never contain an absolute `/tmp` path (testmgr rewrites it):
   **`devdocs/dev/gating-and-waiting.md`**.
-- **Pinning: `tools/testmgr.py --pin`** (gate + `stabilize-fast` + an atomic
-  pin + `git add` of the stable tree, all in one interruptible command). SIGINT
-  leaves either a completed pin or an untouched tree, so it is safe to stop.
-  An operator command on a dev box — the watcher never pins, it writes only
-  `tstate/`. `make pin` by hand still works and is still four non-atomic steps.
+- **Pinning: `make stabilize-fast && make pin` (~35s). That is the default.**
+  Nothing else belongs in a pin: the one property a bad pin could poison for
+  everyone — a compiler that cannot reproduce itself — is exactly what
+  `stabilize-fast`'s self→next→fixedpoint chain proves, and Track T sweeps the
+  matrix against the pushed sha anyway. A pin holds the repo lock, so every
+  other lane and the human wait for however long it takes.
+
+  **`tools/testmgr.py --pin` is now refused without `--tier quick`**
+  (`.claude/hooks/no-full-suite.sh`). It bundles gate + `stabilize-fast` +
+  an atomic pin + `git add`, and is interruptible — genuinely nicer — but it
+  picks its gate tier from `watcher_is_down()`, which reads the **local**
+  `tstate/`. Without a `git fetch` first that reports your own checkout's
+  staleness rather than Track T's health, so it escalates and runs for minutes,
+  silently, with the lock held. Measured 2026-08-14: it escalated while Track T
+  was UP the whole time and the operator killed it as a hang. `--pin --tier
+  quick` cannot escalate and stays allowed.
+
+  The watcher never pins — it writes only `tstate/`.
 - **Don't idle on a gate — snapshot and proceed, but verify against a KNOWN
   sha.** The gate/pin/matrix runs in the background; you keep bughunting the
   next thing. Fire the background job (`tools/gate.sh` — background *that*, never
