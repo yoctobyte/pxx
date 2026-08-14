@@ -488,3 +488,39 @@ class flat. One rebuild answers it, exactly as the last two did.
 
 Running score of this hunt, kept deliberately: three conclusions reached by
 reading the parser, all three wrong; two probes, both decisive.
+
+### Third probe: BOTH fixes work. The residue is METHOD resolution, not class resolution.
+
+Probe at the `ctorCi` site, last two lines of the repro:
+
+```
+CTOR name=Exception qunit=46  inunit=26 flat=26 -> ctorCi=26   (pylib.Exception)
+CTOR name=Exception qunit=292 inunit=86 flat=26 -> ctorCi=86   (sysutils.Exception)
+```
+
+`flat` answers 26 for both — the bug. `inunit` answers 26 and 86 — correct. And
+`ctorCi` now follows `inunit`, so **the constructor fix on the branch works**,
+exactly as the type-position one does.
+
+So qualified CLASS resolution is solved, in both positions, and the two branch
+commits are correct. What is still wrong is narrower than this ticket has
+assumed throughout: `sysutils.Exception.CreateFmt('[%5d]',[3])` still prints
+`[%5d]`, i.e. pylib's minimal formatter, even though the class resolved to 86.
+**Method resolution on an already-resolved class is a separate lookup and is
+still flat.**
+
+That is the next probe, and it is the same shape: instrument wherever
+`CreateFmt` is matched against `ctorCi`, print the class index it searched.
+
+Corrected picture of the whole hunt:
+
+| attempt | conclusion at the time | actually |
+| --- | --- | --- |
+| ctorCi scoping | "not on the path" | correct, unobservable alone |
+| ParseTypeKind scoping | "not on the path" | correct |
+| index-space mismatch | "the spaces disagree" | they agree |
+| — | — | class resolution SOLVED; method lookup is the residue |
+
+Three reasoned conclusions, all wrong; three probes, all decisive. The two
+fixes were right the first time and the measurements that said otherwise were
+each reading a different downstream failure.
