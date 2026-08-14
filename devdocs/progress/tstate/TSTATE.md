@@ -8,4 +8,4 @@
 
 ## Open regressions
 - **test-core#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `410b7a40b516`, last good `73e38bb6bed0`, 1 commit(s) in range
-- **test-nilpy#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `3758489b1746`, last good `73e38bb6bed0`, 2 commit(s) in range
+- **test-nilpy#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `410b7a40b516`, last good `73e38bb6bed0`, 1 commit(s) in range
