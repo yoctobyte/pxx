@@ -225,4 +225,4 @@ fixedpoint + `tools/gate.sh quick` GREEN. This touches `compiler/builtin/**`, so
 it needs a pin before other lanes see it.
 
 ## Log
-- 2026-08-14 — resolved, commit PENDING-COMMIT.
+- 2026-08-14 — resolved, commit a3a92f017.
