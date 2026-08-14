@@ -49,8 +49,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-inline-asm-xmm-operands (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [B]` bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises
-- `[p 55] [C]` bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` chore-makefile-testtmp-parameterize
 - `[p 55] [U]` decide-reprice-nilpy-ast-typing-module-scope
@@ -62,5 +60,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
+- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
 _173 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

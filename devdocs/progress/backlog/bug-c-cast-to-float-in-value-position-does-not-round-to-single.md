@@ -1,6 +1,6 @@
 ---
 track: C
-prio: 55
+prio: 25
 type: bug
 summary: "`(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it."
 ---
@@ -87,3 +87,15 @@ C tests green + self-host byte-identical + cross, and
 `tools/gcc_diff_probe.sh` back to `0 NEW divergence(s)` on x86-64 (it is at 1
 today, this one). Re-run `--target i386` and `--target arm32` too: both are at
 0 new / 0 known as of 2026-08-13, so any change there is this fix's doing.
+
+
+## Priority — float handling is parked low (user, 2026-08-14)
+
+> *"bugs related to float handling have low prio atm. they are mechanical, and do
+> not impact the compiler, and are for track B"*
+
+Re-rated from 55 to 25 on that call. The defect itself is unchanged and the write-up
+below stands — this is a ranking decision, not a downgrade of the finding. Same
+judgement the user already applied to float PERFORMANCE work in
+`feature-opt-float-register-temporaries` (prio 20, 2026-07-19), now extended from
+speed to accuracy.

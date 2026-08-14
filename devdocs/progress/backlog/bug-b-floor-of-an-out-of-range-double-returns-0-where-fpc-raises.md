@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 55
+prio: 20
 type: bug
 blocked-by: []
 summary: "Floor(1e30) returns 0 and Floor64(1e30) returns Int64 MIN, silently. FPC raises EInvalidOp. A silent wrong VALUE where the reference implementation refuses — found while documenting the C-vs-Pascal math split, 2026-08-14."
@@ -84,3 +84,15 @@ Check each against FPC.
 
 The table above matches FPC (or the chosen alternative is documented in
 `math-implemented-twice.md`), the sweep agrees, `make lib-test` green.
+
+
+## Priority — float handling is parked low (user, 2026-08-14)
+
+> *"bugs related to float handling have low prio atm. they are mechanical, and do
+> not impact the compiler, and are for track B"*
+
+Re-rated from 55 to 20 on that call. The defect itself is unchanged and the write-up
+below stands — this is a ranking decision, not a downgrade of the finding. Same
+judgement the user already applied to float PERFORMANCE work in
+`feature-opt-float-register-temporaries` (prio 20, 2026-07-19), now extended from
+speed to accuracy.

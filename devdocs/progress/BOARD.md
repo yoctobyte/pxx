@@ -43,11 +43,11 @@ _none_
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-cstring-batch-gcc-oracle-does-not-build-on-gcc-14 | B | 50 | bug | test/cstring_batch.c calls memrchr without _GNU_SOURCE, so its gcc ORACLE fails to compile on gcc >= 14 (implicit-function-declaration is an error there). The recipe discards gcc's stderr AND its exit status, then diffs against a missing or stale binary and reports 'cstring_batch differs from gcc' — so a broken oracle is indistinguishable from a real pxx defect. Blocks enrolling lib-test in the watcher. | — |
-| bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises | B | 55 | bug | Floor(1e30) returns 0 and Floor64(1e30) returns Int64 MIN, silently. FPC raises EInvalidOp. A silent wrong VALUE where the reference implementation refuses — found while documenting the C-vs-Pascal math split, 2026-08-14. | — |
+| bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises | B | 20 | bug | Floor(1e30) returns 0 and Floor64(1e30) returns Int64 MIN, silently. FPC raises EInvalidOp. A silent wrong VALUE where the reference implementation refuses — found while documenting the C-vs-Pascal math split, 2026-08-14. | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-b-two-lib-tests-are-environment-dependent-by-construction | B | 45 | bug | lib_platform_esp calls every Pal* entry point with fd 0 — literally stdin — so its output changes with how the run was launched, and PalSocketClose(0) closes stdin mid-test; with stdin closed its own PalSocket() is handed fd 0 and half the results change meaning. lib_sockets binds a fixed port 28744, so two concurrent runs collide. Both diagnosed with repros by Track T; the harness half is already fixed. | — |
-| bug-c-cast-to-float-in-value-position-does-not-round-to-single | C | 55 | bug | `(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it. | — |
+| bug-c-cast-to-float-in-value-position-does-not-round-to-single | C | 25 | bug | `(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-n-math-trunc-and-log-need-frontend-intercepts | N | 35 | bug | math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program | — |
@@ -63,7 +63,7 @@ _none_
 | bug-nilpy-encode-ignores-the-codec | N | 30 | bug | NilPy: str.encode / bytes.decode ignore the codec argument | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-exception-repr-and-type-name-say-pyexception | N | 60 | bug | `repr(Exception('x'))` prints `PyException('x')` and `type(e).__name__` is `PyException`, where CPython says `Exception`. Introduced 2026-08-14 by the option-5 rename: ClassName reports the DECLARED class name and the declared name is now PyException. Ordinary Python branches on type(e).__name__, so this is an upward-compatibility break, not a cosmetic one. | decide-merge-variant-c-with-bare-name-collision |
-| bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 35 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
+| bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
 | bug-nilpy-iterator-protocol-on-a-user-class | N | 35 | bug | `for x in <user object>` does not use `__iter__`/`__next__` | — |
@@ -474,8 +474,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-inline-asm-xmm-operands (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [B] bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises
-- [p 55] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] chore-makefile-testtmp-parameterize
 - [p 55] [U] decide-reprice-nilpy-ast-typing-module-scope
@@ -578,7 +576,6 @@ _none_
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [N] bug-n-math-trunc-and-log-need-frontend-intercepts
 - [p 35] [N] bug-nilpy-dict-update-mixed-positional-and-keyword-args
-- [p 35] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 35] [N] bug-nilpy-iterator-protocol-on-a-user-class
 - [p 35] [N] bug-nilpy-math-surface-remaining-gaps-and-degrees-association
 - [p 35] [N] bug-nilpy-multi-arg-exception-args-is-a-1-tuple-of-rendered-text
@@ -627,6 +624,7 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 30] [D] task-d-document-warn-ignored-directives
+- [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [N] bug-nilpy-a-one-name-tuple-loop-target-is-refused
 - [p 25] [N] bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
@@ -642,7 +640,9 @@ _none_
 - [p 25] [W] feature-promo-launch-plan
 - [p 25] [M] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 20] [B] bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
+- [p 20] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins
 - [p 20] [N] bug-nilpy-matmul-operator-does-not-parse
 - [p 20] [P] compat-pascal-method-impl-without-declaration

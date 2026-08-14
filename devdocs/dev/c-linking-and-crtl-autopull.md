@@ -16,10 +16,17 @@ from. Two sources:
 - `lib/crtl/include/<name>.h` — **declarations** (`extern double fabs(double);`).
   Auto-registered on the default `<>` search path (`AddDefaultCIncludeDirs`), so
   `#include <math.h>` resolves here, not `/usr/include`.
-- `lib/crtl/src/<name>.c` — the **implementation**, libc-free. Either a real
-  body, or a thin bridge to the Pascal RTL (e.g. `math.c`'s `sqrt`/`sin`/`pow`
-  bind case-insensitively to `lib/rtl/math.pas`'s `Sqrt`/`Sin`; `fabs`/`frexp`
-  are inline).
+- `lib/crtl/src/<name>.c` — the **implementation**, libc-free. A REAL C body.
+
+  > **Corrected 2026-08-14.** This line used to say the impls were "either a real
+  > body, or a thin bridge to the Pascal RTL (e.g. `math.c`'s `sqrt`/`sin`/`pow`
+  > bind case-insensitively to `lib/rtl/math.pas`'s `Sqrt`/`Sin`)". That has not
+  > been true since the 2026-08-10 split: `math.c` has its own correctly-rounded
+  > double-double bodies (`sqrt` at `math.c:959`, `pow`, `log`, `floor`, `ceil`,
+  > `fmod`, …). The bridging was REMOVED because it silently broke C programs —
+  > a Pascal-side `Pow` made C's `pow(2,10)` return 1, and a correct Track B
+  > change to `Floor` broke a C test months later. See
+  > `devdocs/dev/math-implemented-twice.md`.
 
 **The mechanism (cpreproc.inc):** when a crtl `<header>` resolves, the
 preprocessor *also* pulls its sibling `src/<name>.c` — `CPAutoPullCrtlImpl`,

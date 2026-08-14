@@ -1,5 +1,5 @@
 ---
-prio: 35
+prio: 20
 track: N
 type: bug
 blocked-by: []
@@ -72,3 +72,15 @@ anything else built on them, so an improvement there is shared.
 `.npy` diffed against CPython: `x ** 0.5` vs `math.sqrt(x)` for a range of x
 (equality, not just printing), `2 ** 1.5`, `x ** (1/3)`, and a loop that squares
 a root back and checks it stays on CPython's side of the true value.
+
+
+## Priority — float handling is parked low (user, 2026-08-14)
+
+> *"bugs related to float handling have low prio atm. they are mechanical, and do
+> not impact the compiler, and are for track B"*
+
+Re-rated from 35 to 20 on that call. The defect itself is unchanged and the write-up
+below stands — this is a ranking decision, not a downgrade of the finding. Same
+judgement the user already applied to float PERFORMANCE work in
+`feature-opt-float-register-temporaries` (prio 20, 2026-07-19), now extended from
+speed to accuracy.
