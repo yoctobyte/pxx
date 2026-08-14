@@ -3,6 +3,8 @@ track: A
 prio: 55
 type: feature
 blocked-by: []
+status: working
+owner: agent-an
 ---
 
 # Own-language-first symbol resolution: the native language wins
@@ -125,3 +127,111 @@ C programs binding crtl's math with the ten names de-prefixed; a Pascal program
 using `math` unaffected; a mixed program (C code plus a Pascal `uses math`) with
 each side binding its own; the `__pxx_*` PAL entries still resolving; C tests
 green + `make test` + self-host byte-identical.
+
+---
+
+## 2026-08-14 — MEASURED FIRST. The direction everyone assumed is closed; the opposite one is broken.
+
+No code changed yet. Measuring before building, because this ticket's whole
+framing — and its acceptance test — turn out to describe a direction that no
+longer collides, while the direction nobody tested is silently wrong.
+
+### C -> Pascal: CLOSED. The ten `__crtl_*` workarounds look VESTIGIAL.
+
+The Pascal RTL is **not in scope for an ordinary C program at all** any more,
+because `pxxcio.pas` no longer does `uses math` (verified: it is
+`uses platform, builtinheap`). Two probes:
+
+```c
+extern double Power(double b, double e);   /* lives ONLY in lib/rtl/math.pas */
+extern double Exp(double x);
+```
+```
+pascal26: warning: crtl does not define Power — this C program will import them
+          from the system C library at run time
+```
+
+Neither resolves to the Pascal routine. So there is nothing for a C name to
+collide WITH.
+
+And directly: a C body named `exp`, with no `<math.h>` macro in the way — i.e.
+exactly what un-prefixing `__crtl_exp` produces — binds itself. **All ten
+spellings do**, measured one program each:
+
+| `exp` | `log2` | `log10` | `sin` | `cos` | `tan` | `sinh` | `cosh` | `tanh` | `hypot` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 42.0 | 42.0 | 42.0 | 42.0 | 42.0 | 42.0 | 42.0 | 42.0 | 42.0 | 42.0 |
+
+(each defined as `double NAME(double x) { return 42.0; }` and called; 42.0 = the
+C body won.)
+
+**So this ticket's acceptance test may cost no compiler change at all.** That is
+worth its own cheap experiment BEFORE the resolution work: de-prefix the ten in
+`lib/crtl/src/math.c`, delete the `#define`s in crtl's `math.h`, run the C
+corpus. If it is green, the workaround was already dead and can be deleted
+independently of the rule. (Track C file-ownership — `lib/crtl` — so that half is
+a C ticket, not this one.)
+
+Note the doc `devdocs/dev/c-linking-and-crtl-autopull.md` still says math.c's
+`sqrt`/`sin`/`pow` are "a thin bridge to the Pascal RTL". **Stale** — they have
+real double-double C bodies now (`math.c:959` etc.). Fix that line when this
+lands.
+
+### Pascal -> C: BROKEN, order-independent, in the DOCUMENTED override path
+
+This is the direction the ticket calls the safe escape hatch — *"programmers, if
+they insist, can do it anyway... there is no conflict"*. There is a conflict, and
+Pascal loses its own name:
+
+```pascal
+{ cm.c:  double exp(double x) { return 42.0; } }
+program pm; uses math, './cm.c';
+begin WriteLn('Exp(1.0) = ', Exp(1.0):0:4); end.
+```
+
+| program | result | correct? |
+| --- | --- | --- |
+| `uses math` alone | `2.7183` | yes — control |
+| `uses './cm.c'` alone, calling `exp` | `42.0` | yes — the override works |
+| `uses math, './cm.c'` | **`42.0`** | **NO** — wants `2.7183` |
+| `uses './cm.c', math` | **`42.0`** | **NO** — same |
+
+Pascal's `Exp` is silently hijacked by an imported C `exp`, case-insensitively.
+Exactly the original `bug-c-pascal-math-names-hijack-libc-through-pxxcio`
+mirrored — and this time it fires through the mechanism this ticket nominates as
+the *solution's* safety valve.
+
+**Order-independent, so this is NOT the scope-hiding rule.** Hiding makes the
+last unit named win; both orders give C. The likely mechanism is that `Exp` is a
+BUILTIN and builtins are deliberately demoted below any used unit (`demote` in
+`MatchElig`), so a real C unit outranks it whatever the clause order. Verify that
+before fixing — it means own-language-first has to outrank the builtin demotion
+too, not just import order, which is a wider claim than the ticket makes.
+
+### What this changes about the work
+
+1. The **payoff moves.** De-prefixing the ten names is (probably) already
+   available and is not what the rule buys. What the rule buys is that a mixed
+   Pascal+C program keeps its own `Exp`.
+2. The **rule must outrank builtin demotion**, not merely import order.
+3. **No language tag exists to implement it with.** `ProcCdecl` is used as a
+   proxy for "is a C proc" in `cparser.inc` — but it is documented as a CALLING
+   CONVENTION flag, and a Pascal routine may be declared `cdecl`, so it is the
+   wrong instrument (see the standing rule that convention decorators are
+   decoration). This needs a real parallel array — `ProcLang` — set at proc
+   registration from the frontend that is parsing, NOT derived from `ProcCdecl`.
+   Parallel array, not a `Procs` field: a new field in the proc/symbol record
+   breaks the self-host bootstrap.
+4. `MatchElig` is still the right hook — it is where the hiding rule already does
+   candidate removal, and own-language-first is the same shape (remove
+   cross-language candidates when an own-language one exists). Third instance of
+   one mechanism, after `demote` and `userOnly`.
+
+### Gate note
+
+Per `bug-p-uses-order-does-not-decide-which-unit-wins`, resolution changes have
+twice passed `gate.sh quick` while broken — `make test-core` caught one and the
+NilPy suite the other. This repo's standing rule is quick + self-host and let
+Track T sweep, so land in small pushed steps and **watch `tools/twatch.py
+--follow`** rather than widening locally; the C corpus and NilPy are exactly what
+T's limited/full tiers cover.
