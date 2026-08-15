@@ -77,4 +77,4 @@ Byte-identical to CPython. The four existing `test_nilpy_min_max_*` tests
 re-diffed unchanged. `tools/gate.sh quick` GREEN, self-host byte-identical.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit de6899bc6.
