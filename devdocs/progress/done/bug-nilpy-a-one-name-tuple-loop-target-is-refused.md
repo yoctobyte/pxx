@@ -81,4 +81,4 @@ whole element). Byte-identical to CPython; `.expected` refreshed.
 `tools/gate.sh quick` GREEN, self-host byte-identical.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 310f02341.
