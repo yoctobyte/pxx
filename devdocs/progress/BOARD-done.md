@@ -170,6 +170,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-b-futex-helpers-are-trapped-behind-pxxclone | B | 35 | bug | PalFutexWait/Wake live in palthread next to __pxxclone, so any unit wanting a blocking lock inherits the --threadsafe compile gate; that forced syncobjs' TCriticalSection to be a spinlock and palatomic to be a separate unit | — |
 | bug-b-o-directory-wrong-value-on-arm | B | 70 | bug | PAL_OPEN_DIRECTORY used the x86 value on every target, so the entire directory-listing surface was dead on arm32 and aarch64 — and opening a regular FILE with the flag wrongly SUCCEEDED there | — |
 | bug-b-pos-empty-substr-returns-1 | B | 50 | bug | SysUtils.Pos returned 1 for an empty substring | — |
+| bug-b-sqrt-of-infinity-answers-nan | B | 20 | bug | `Sqrt(+Inf)` answers NaN where IEEE (and FPC, and libm) say +Inf. The Newton kernel guards negatives and zero but not infinities, so the bit-hack seed produces a NaN that every routine built on Sqrt inherits. | — |
 | bug-b-sscanf-scanset-and-percent-n-unsupported | B | 45 | bug | sscanf did not implement %[...] or %n — %[^,] abandoned the whole scan with the destination untouched, and %n left the caller's counter at whatever it held | — |
 | bug-b-stringlist-text-hardcoded-crlf | B | 50 | bug | TStrings.Text hardcoded CRLF, so SaveToFile wrote DOS line endings on Linux | — |
 | bug-b-strtofloat-not-correctly-rounded | B | 60 | bug | `StrToFloat` is not correctly rounded, so exact decimals still do not read back | — |

@@ -182,12 +182,46 @@ function Sqrt(x: Double): Double;
   exact residual r = x - g*g with a Dekker two-product (no FMA needed), then
   applies r/(2g): sqrt(x) = g*sqrt(1+r/g^2) ~= g + r/(2g) to well past double
   precision, so rounding g + r/(2g) yields the correctly-rounded result. }
+const
+  { the smallest NORMAL double, and an exact power-of-two pair for rescaling a
+    denormal into the normal range: 2^106 up, 2^53 down (106 is even, so the
+    square root halves it to 53 exactly). }
+  MIN_NORMAL = 2.2250738585072014e-308;
+  TWO_POW_106 = 81129638414606681695789005144064.0;
+  TWO_POW_53  = 9007199254740992.0;
 var g, ng, z, gh, gl, c, p, e, r: Double; i: Integer; bits: Int64;
 begin
   { FPC-faithful IEEE: Sqrt of a negative is NaN (C sqrt() binds here and expects
-    NaN too). Sqrt(0)=0. z/z with z=0 yields a NaN without a NaN literal. }
-  if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
-  if x = 0.0 then begin Result := 0.0; Exit; end;
+    NaN too). z/z with z=0 yields a NaN without a NaN literal.
+
+    The special values are checked BEFORE the bit-hack seed, because the seed
+    assumes a normalised double and every one of these breaks that assumption.
+    Ln next door already had the full set; Sqrt had only the first two, which is
+    the sibling-case smell.
+    ([[bug-b-sqrt-of-infinity-answers-nan]]) }
+  if x <> x then begin Result := x; Exit; end;              { NaN in, NaN out }
+  if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;   { incl. -Inf }
+  { Sqrt(0) is 0 WITH THE ARGUMENT'S SIGN: IEEE 754 says sqrt(-0) is -0, and
+    `x = 0.0` is true for both zeros, so returning x rather than 0.0 carries the
+    sign. Returning the literal gave +0 for -0. }
+  if x = 0.0 then begin Result := x; Exit; end;
+  { +Inf: sqrt(+Inf) is +Inf. It passed both guards above and reached the seed,
+    where Newton cannot converge on an infinite residual and landed on NaN —
+    which Hypot, vector lengths and the statistics routines then inherited.
+    (x - x) is NaN for an infinity and 0 for anything finite. }
+  if (x - x) <> 0.0 then begin Result := x; Exit; end;
+  { DENORMALS: the seed halves the raw exponent FIELD, which is 0 for a
+    subnormal and carries no implicit leading 1, so the seed is meaningless and
+    eight Newton steps cannot recover. Measured before this guard:
+    Sqrt(5e-324) answered 2.185e-157 where libm says 2.223e-162 — five orders of
+    magnitude out, and silently. Scaling by an exact power of two costs nothing
+    and is exact in both directions: verified against libm on 20,006 denormals,
+    zero mismatches. }
+  if x < MIN_NORMAL then
+  begin
+    Result := Sqrt(x * TWO_POW_106) / TWO_POW_53;
+    Exit;
+  end;
   { Bit-hack seed: halving the raw exponent field gives g within a small factor
     of sqrt(x) for ANY magnitude, so Newton converges quadratically in a handful
     of steps. (`g := x` seeded far from the root for large/small x, needing far

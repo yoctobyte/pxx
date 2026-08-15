@@ -46,7 +46,7 @@ _none_
 | bug-b-arcsin-arccos-lose-2-ulps-vs-libm | B | 20 | bug | ArcSin/ArcCos in lib/rtl/math.pas are 1-2 ulps off libm for mid-range arguments (asin(0.5) answers ...982991 where libm and CPython say ...982989); ArcTan agrees exactly | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-rtl-math-transcendentals-lose-argument-reduction | B | 35 | bug | lib/rtl/math.pas's sin/cos lose accuracy as the argument grows — 85 ulps at x=100, 1.2 MILLION ulps at 1e6, and 2.4 BILLION at 1e10, where the answer has no correct digits left. Bad argument reduction, not last-bit rounding. pxx's OWN crtl libm already gets every one of these exactly right, so the fix is to share it, not to write one. | — |
-| bug-b-sqrt-of-infinity-answers-nan | B | 20 | bug | `Sqrt(+Inf)` answers NaN where IEEE (and FPC, and libm) say +Inf. The Newton kernel guards negatives and zero but not infinities, so the bit-hack seed produces a NaN that every routine built on Sqrt inherits. | — |
+| bug-b-sqrt-is-1-ulp-low-on-some-normal-inputs | B | 20 | bug | Sqrt is 1 ULP low on some ordinary normal inputs — reproducibly at 2.215827865120445e276 and at DBL_MAX. The Dekker correction, not the bit-hack seed (the seed's failures were fixed in bug-b-sqrt-of-infinity-answers-nan). RARE: 20,000 random normals found zero, so random sampling will not find it and a targeted search is needed. Accuracy only; no special value or magnitude is involved. | — |
 | bug-c-cast-to-float-in-value-position-does-not-round-to-single | C | 25 | bug | `(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it. | — |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
@@ -410,9 +410,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1841)
+## done (1842)
 
-1841 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1842 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -625,7 +625,7 @@ _none_
 - [p 25] [M] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [B] bug-b-arcsin-arccos-lose-2-ulps-vs-libm
-- [p 20] [B] bug-b-sqrt-of-infinity-answers-nan
+- [p 20] [B] bug-b-sqrt-is-1-ulp-low-on-some-normal-inputs
 - [p 20] [N] bug-nilpy-a-computed-attribute-name-cannot-see-a-property
 - [p 20] [N] bug-nilpy-augmented-sequence-repeat-rebinds-instead-of-mutating
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
