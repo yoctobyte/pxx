@@ -76,4 +76,4 @@ starred operand; and the first-position form as a control. `gate.sh quick`
 GREEN. The first-position lowering stays owned by `test_nilpy_star_forward.npy`.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 4ce56f1a9.
