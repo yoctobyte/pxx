@@ -110,4 +110,4 @@ one, `type(...).__name__`, and the variant-arm shapes (a range and a map cursor
 through a parameter). Re-checked the fourteen comprehension/genexpr tests.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit ba6022847.
