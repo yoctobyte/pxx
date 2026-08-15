@@ -45,4 +45,4 @@ declares the same name. `abs`/`min`/`max`/`round` are exactly that set;
 `TkInit`, `Tk_` and `Trim` collide with nothing and still resolve. All ten
 `examples/tk/*.npy` compile again, and the abs/min/max oracles stay green.
 Pinned by a new section of `test/test_nilpy_import_does_not_publish_names.npy`.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit a8a1cb9c1.

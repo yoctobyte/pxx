@@ -20,4 +20,4 @@ does not run. Check `git status` for untracked test files the patch's Makefile
 hunks name.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit a8a1cb9c1.
