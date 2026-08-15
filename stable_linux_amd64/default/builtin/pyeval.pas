@@ -5071,7 +5071,7 @@ begin
   for i := 1 to l.count - 1 do
   begin
     if key = nil then k := l.at(i) else k := PyCallKey1(key, l.at(i));
-    if pyvar_gt(bestK, k) then
+    if pyvar_lt(k, bestK) then
     begin
       bestK := k;
       Result := l.at(i);
@@ -5156,7 +5156,7 @@ begin
     while (j > 0) and swapped do
     begin
       if reverse then swapped := pyvar_gt(keys.at(j), keys.at(j - 1))
-      else swapped := pyvar_gt(keys.at(j - 1), keys.at(j));
+      else swapped := pyvar_lt(keys.at(j), keys.at(j - 1));
       if swapped then
       begin
         ev := r.at(j); r.put(j, r.at(j - 1)); r.put(j - 1, ev);
