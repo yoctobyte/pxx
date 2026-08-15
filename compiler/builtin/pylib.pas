@@ -572,6 +572,62 @@ type
     function decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
     { bytes.endswith(suffix) — the READ-LINE CR/LF trim }
     function endswith(sfx: TPyBytes): Boolean;
+    { ---- the rest of the ASCII-shaped `bytes` contract ----------------------
+
+      Added as a SET, not one at a time. This class grew a method whenever
+      something needed one, which is how it ended up carrying `endswith` and
+      not `startswith` — and a bytes method CPython defines and pxx omits is a
+      hard compile error, so every missing one is a wall in front of an
+      ordinary Python library (`webencodings`'s label normaliser is
+      `s.encode('utf8').lower().decode('utf8')`, and `_detect_bom` needs
+      `startswith` on the next line).
+      bug-a-bytes-has-almost-none-of-its-python-methods
+
+      ASCII-only where CPython is ASCII-only: `b'\xc3\xa9'.lower()` is
+      unchanged in CPython too, because a bytes object has no encoding to case
+      map through. That is the whole of what could have been subtle here.
+
+      Every method that BUILDS a buffer carries FIsByteArray across, or the
+      bytes/bytearray tag is lost at the first transformation — the same rule
+      pybytes_slice already states. }
+    function startswith(pfx: TPyBytes): Boolean;
+    function lower: TPyBytes;
+    function upper: TPyBytes;
+    function title: TPyBytes;
+    function capitalize: TPyBytes;
+    function swapcase: TPyBytes;
+    { .strip() with no argument strips ASCII WHITESPACE; with a bytes argument
+      it strips any byte in that SET (not a prefix), exactly as CPython does. }
+    function strip: TPyBytes; overload;
+    function strip(chars: TPyBytes): TPyBytes; overload;
+    function lstrip: TPyBytes; overload;
+    function lstrip(chars: TPyBytes): TPyBytes; overload;
+    function rstrip: TPyBytes; overload;
+    function rstrip(chars: TPyBytes): TPyBytes; overload;
+    function replace(old_, new_: TPyBytes): TPyBytes;
+    { .index is .find that RAISES instead of answering -1 — CPython's own
+      distinction, and the reason both exist. }
+    function index(sub: TPyBytes): Integer;
+    function rfind(sub: TPyBytes): Integer;
+    function rindex(sub: TPyBytes): Integer;
+    { .split() with no argument splits on RUNS of whitespace and drops empty
+      fields; with a separator it keeps them. Same split as str's, which is why
+      the two rules are described the same way in pystr_split_ws/_sep. }
+    function split: TPyList; overload;
+    function split(sep: TPyBytes): TPyList; overload;
+    function rsplit: TPyList; overload;
+    function splitlines: TPyList;
+    { b'-'.join([b'a', b'b']) — Self is the SEPARATOR, as for str. }
+    function join(parts: TPyList): TPyBytes;
+    { .translate(table): table is 256 bytes mapping each byte value. A table of
+      any other length is a ValueError in CPython. }
+    function translate(table: TPyBytes): TPyBytes;
+    function isdigit: Boolean;
+    function isalpha: Boolean;
+    function isalnum: Boolean;
+    function isspace: Boolean;
+    function isupper: Boolean;
+    function islower: Boolean;
     property Items[i: Integer]: Integer read at write put; default;
   end;
 
@@ -15495,6 +15551,468 @@ begin
   for i := 0 to m - 1 do
     if at(n - m + i) <> sfx.at(i) then Exit;
   Result := True;
+end;
+
+{ ---- the rest of the ASCII-shaped `bytes` contract ------------------------
+  See the block comment on the class declaration for why these land as a SET.
+  All of them are byte-wise loops; the only rule worth stating twice is that a
+  method BUILDING a buffer copies FIsByteArray, or `bytearray(...).lower()`
+  silently becomes a `bytes`. }
+
+{ A new buffer OF THE SAME PYTHON TYPE as `src` — the tag-carrying Create every
+  transformation below goes through, so the rule lives in one place instead of
+  in fifteen. }
+function PyBytesLike(src: TPyBytes; n: Integer): TPyBytes;
+begin
+  Result := TPyBytes.Create(n);
+  if src <> nil then Result.FIsByteArray := src.FIsByteArray;
+end;
+
+procedure PyBytesPut(b: TPyBytes; i: Integer; v: Integer);
+var p: PByte;
+begin
+  p := PByte(NativeInt(b.FData) + i);
+  p^ := v;
+end;
+
+{ CPython's bytes whitespace set: space, tab, newline, CR, vertical tab, form
+  feed. NOT locale-dependent and NOT the Unicode set — a bytes object has no
+  encoding to consult. }
+function PyByteIsSpace(v: Integer): Boolean;
+begin
+  PyByteIsSpace := (v = 32) or (v = 9) or (v = 10) or (v = 13) or (v = 11) or (v = 12);
+end;
+
+function PyByteLower(v: Integer): Integer;
+begin
+  PyByteLower := v;
+  if (v >= 65) and (v <= 90) then PyByteLower := v + 32;
+end;
+
+function PyByteUpper(v: Integer): Integer;
+begin
+  PyByteUpper := v;
+  if (v >= 97) and (v <= 122) then PyByteUpper := v - 32;
+end;
+
+function PyByteIsAlpha(v: Integer): Boolean;
+begin
+  PyByteIsAlpha := ((v >= 65) and (v <= 90)) or ((v >= 97) and (v <= 122));
+end;
+
+function PyByteIsDigit(v: Integer): Boolean;
+begin
+  PyByteIsDigit := (v >= 48) and (v <= 57);
+end;
+
+function TPyBytes.startswith(pfx: TPyBytes): Boolean;
+var i, m: Integer;
+begin
+  Result := False;
+  if pfx = nil then begin Result := True; Exit; end;
+  m := pfx.count;
+  if m > count then Exit;
+  for i := 0 to m - 1 do
+    if at(i) <> pfx.at(i) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.lower: TPyBytes;
+var i: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do PyBytesPut(Result, i, PyByteLower(at(i)));
+end;
+
+function TPyBytes.upper: TPyBytes;
+var i: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do PyBytesPut(Result, i, PyByteUpper(at(i)));
+end;
+
+{ CPython's title(): every RUN of letters gets an upper-case first byte and
+  lower-case rest, and a non-letter (including a digit or an apostrophe) ends
+  the run — b"they're".title() is b"They'Re". }
+function TPyBytes.title: TPyBytes;
+var i, v: Integer; inWord: Boolean;
+begin
+  Result := PyBytesLike(Self, FLen);
+  inWord := False;
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if PyByteIsAlpha(v) then
+    begin
+      if inWord then v := PyByteLower(v) else v := PyByteUpper(v);
+      inWord := True;
+    end
+    else
+      inWord := False;
+    PyBytesPut(Result, i, v);
+  end;
+end;
+
+{ CPython's capitalize(): first byte upper, EVERY other byte lower — not
+  title()'s per-word rule. }
+function TPyBytes.capitalize: TPyBytes;
+var i, v: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if i = 0 then v := PyByteUpper(v) else v := PyByteLower(v);
+    PyBytesPut(Result, i, v);
+  end;
+end;
+
+function TPyBytes.swapcase: TPyBytes;
+var i, v: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if (v >= 65) and (v <= 90) then v := v + 32
+    else if (v >= 97) and (v <= 122) then v := v - 32;
+    PyBytesPut(Result, i, v);
+  end;
+end;
+
+{ Is byte value v in the strip SET? `chars = nil` means the no-argument form,
+  i.e. whitespace. CPython's strip argument is a SET of bytes, not a prefix —
+  b"xyxhixy".strip(b"xy") is b"hi". }
+function PyBytesInSet(chars: TPyBytes; v: Integer): Boolean;
+var k: Integer;
+begin
+  if chars = nil then begin PyBytesInSet := PyByteIsSpace(v); Exit; end;
+  PyBytesInSet := False;
+  for k := 0 to chars.FLen - 1 do
+    if chars.at(k) = v then begin PyBytesInSet := True; Exit; end;
+end;
+
+function PyBytesStrip(b: TPyBytes; chars: TPyBytes; doL, doR: Boolean): TPyBytes;
+var lo, hi, i: Integer;
+begin
+  lo := 0;
+  hi := b.FLen;
+  if doL then
+    while (lo < hi) and PyBytesInSet(chars, b.at(lo)) do Inc(lo);
+  if doR then
+    while (hi > lo) and PyBytesInSet(chars, b.at(hi - 1)) do Dec(hi);
+  Result := PyBytesLike(b, hi - lo);
+  for i := 0 to (hi - lo) - 1 do PyBytesPut(Result, i, b.at(lo + i));
+end;
+
+{ The no-argument forms want a NIL `chars`, which a bare `nil` literal cannot
+  carry into a class-typed parameter through overload resolution — so the nil
+  is named once here rather than cast at six call sites. }
+function PyBytesStripWS(b: TPyBytes; doL, doR: Boolean): TPyBytes;
+var none: TPyBytes;
+begin
+  none := nil;
+  Result := PyBytesStrip(b, none, doL, doR);
+end;
+
+function TPyBytes.strip: TPyBytes; overload;
+begin
+  Result := PyBytesStripWS(Self, True, True);
+end;
+
+function TPyBytes.strip(chars: TPyBytes): TPyBytes; overload;
+begin
+  Result := PyBytesStrip(Self, chars, True, True);
+end;
+
+function TPyBytes.lstrip: TPyBytes; overload;
+begin
+  Result := PyBytesStripWS(Self, True, False);
+end;
+
+function TPyBytes.lstrip(chars: TPyBytes): TPyBytes; overload;
+begin
+  Result := PyBytesStrip(Self, chars, True, False);
+end;
+
+function TPyBytes.rstrip: TPyBytes; overload;
+begin
+  Result := PyBytesStripWS(Self, False, True);
+end;
+
+function TPyBytes.rstrip(chars: TPyBytes): TPyBytes; overload;
+begin
+  Result := PyBytesStrip(Self, chars, False, True);
+end;
+
+{ CPython replaces EVERY occurrence, left to right, and never rescans what the
+  replacement produced: b"aaa".replace(b"aa", b"a") is b"aa", not b"a". }
+function TPyBytes.replace(old_, new_: TPyBytes): TPyBytes;
+var i, k, n, hits, outLen, w: Integer;
+begin
+  if (old_ = nil) or (old_.FLen = 0) then begin Result := PyBytesLike(Self, FLen);
+    for i := 0 to FLen - 1 do PyBytesPut(Result, i, at(i)); Exit; end;
+  n := old_.FLen;
+  hits := 0;
+  i := 0;
+  while i + n <= FLen do
+    if pybytes_find(Self, old_, i) = i then begin Inc(hits); i := i + n; end
+    else Inc(i);
+  if hits = 0 then
+  begin
+    Result := PyBytesLike(Self, FLen);
+    for i := 0 to FLen - 1 do PyBytesPut(Result, i, at(i));
+    Exit;
+  end;
+  outLen := FLen - hits * n;
+  if new_ <> nil then outLen := outLen + hits * new_.FLen;
+  Result := PyBytesLike(Self, outLen);
+  i := 0;
+  w := 0;
+  while i < FLen do
+  begin
+    if (i + n <= FLen) and (pybytes_find(Self, old_, i) = i) then
+    begin
+      if new_ <> nil then
+        for k := 0 to new_.FLen - 1 do begin PyBytesPut(Result, w, new_.at(k)); Inc(w); end;
+      i := i + n;
+    end
+    else
+    begin
+      PyBytesPut(Result, w, at(i));
+      Inc(w);
+      Inc(i);
+    end;
+  end;
+end;
+
+function TPyBytes.index(sub: TPyBytes): Integer;
+begin
+  Result := pybytes_find(Self, sub, 0);
+  if Result < 0 then raise ValueError.Create('subsection not found');
+end;
+
+function TPyBytes.rfind(sub: TPyBytes): Integer;
+var i, j, m: Integer; hit: Boolean;
+begin
+  Result := -1;
+  if sub = nil then Exit;
+  m := sub.FLen;
+  if m = 0 then begin Result := FLen; Exit; end;
+  i := FLen - m;
+  while i >= 0 do
+  begin
+    hit := True;
+    for j := 0 to m - 1 do
+      if at(i + j) <> sub.at(j) then begin hit := False; Break; end;
+    if hit then begin Result := i; Exit; end;
+    Dec(i);
+  end;
+end;
+
+function TPyBytes.rindex(sub: TPyBytes): Integer;
+begin
+  Result := rfind(sub);
+  if Result < 0 then raise ValueError.Create('subsection not found');
+end;
+
+function PyBytesSlice(b: TPyBytes; lo, hi: Integer): TPyBytes;
+var i: Integer;
+begin
+  if hi < lo then hi := lo;
+  Result := PyBytesLike(b, hi - lo);
+  for i := 0 to (hi - lo) - 1 do PyBytesPut(Result, i, b.at(lo + i));
+end;
+
+{ .split() with no separator: split on RUNS of whitespace and DROP the empty
+  fields, so b"  a  b ".split() is [b"a", b"b"] and b"".split() is []. }
+function PyBytesSplitWS(b: TPyBytes): TPyList;
+var i, st: Integer;
+begin
+  Result := TPyList.Create;
+  i := 0;
+  while i < b.FLen do
+  begin
+    while (i < b.FLen) and PyByteIsSpace(b.at(i)) do Inc(i);
+    if i >= b.FLen then Break;
+    st := i;
+    while (i < b.FLen) and not PyByteIsSpace(b.at(i)) do Inc(i);
+    Result.append(PyBytesSlice(b, st, i));
+  end;
+end;
+
+function TPyBytes.split: TPyList; overload;
+begin
+  Result := PyBytesSplitWS(Self);
+end;
+
+{ .split(sep): an EXACT separator, KEEPING empty fields — b"a,,b".split(b",")
+  is [b"a", b"", b"b"] and b"".split(b",") is [b""]. Contrast the no-argument
+  form above. An empty separator is a ValueError in CPython. }
+function TPyBytes.split(sep: TPyBytes): TPyList; overload;
+var i, st, hit: Integer;
+begin
+  if (sep = nil) or (sep.FLen = 0) then
+    raise ValueError.Create('empty separator');
+  Result := TPyList.Create;
+  st := 0;
+  i := 0;
+  while i + sep.FLen <= FLen do
+  begin
+    hit := pybytes_find(Self, sep, i);
+    if (hit < 0) then Break;
+    Result.append(PyBytesSlice(Self, st, hit));
+    i := hit + sep.FLen;
+    st := i;
+  end;
+  Result.append(PyBytesSlice(Self, st, FLen));
+end;
+
+{ rsplit() with no argument is split() with no argument: whitespace runs, empty
+  fields dropped, and the result is the same list read either way. The
+  separator and maxsplit forms are where the two differ, and neither is
+  implemented here rather than answered wrongly. }
+function TPyBytes.rsplit: TPyList;
+begin
+  Result := PyBytesSplitWS(Self);
+end;
+
+{ .splitlines(): breaks on \n, \r and \r\n, DROPS the terminator, and does NOT
+  produce a trailing empty field for a final newline — the three ways it
+  differs from split(b'\n'). }
+function TPyBytes.splitlines: TPyList;
+var i, st, v: Integer;
+begin
+  Result := TPyList.Create;
+  i := 0;
+  st := 0;
+  while i < FLen do
+  begin
+    v := at(i);
+    if (v = 10) or (v = 13) then
+    begin
+      Result.append(PyBytesSlice(Self, st, i));
+      if (v = 13) and (i + 1 < FLen) and (at(i + 1) = 10) then Inc(i);
+      Inc(i);
+      st := i;
+    end
+    else
+      Inc(i);
+  end;
+  if st < FLen then Result.append(PyBytesSlice(Self, st, FLen));
+end;
+
+{ b'-'.join(parts) — Self is the SEPARATOR, as for str.join. }
+function TPyBytes.join(parts: TPyList): TPyBytes;
+var i, k, w, total: Integer; part: TPyBytes; o: TObject;
+begin
+  if (parts = nil) or (parts.count = 0) then begin Result := PyBytesLike(Self, 0); Exit; end;
+  total := 0;
+  for i := 0 to parts.count - 1 do
+  begin
+    o := TObject(pyvarobj(parts.at(i)));
+    if not (o is TPyBytes) then
+      raise TypeError.Create('sequence item: expected a bytes-like object');
+    total := total + TPyBytes(o).FLen;
+  end;
+  total := total + FLen * (parts.count - 1);
+  Result := PyBytesLike(Self, total);
+  w := 0;
+  for i := 0 to parts.count - 1 do
+  begin
+    if i > 0 then
+      for k := 0 to FLen - 1 do begin PyBytesPut(Result, w, at(k)); Inc(w); end;
+    part := TPyBytes(TObject(pyvarobj(parts.at(i))));
+    for k := 0 to part.FLen - 1 do begin PyBytesPut(Result, w, part.at(k)); Inc(w); end;
+  end;
+end;
+
+function TPyBytes.translate(table: TPyBytes): TPyBytes;
+var i: Integer;
+begin
+  { CPython accepts None for "no mapping" (the delete-only form); a table of
+    any length other than 256 is a ValueError. }
+  if table = nil then
+  begin
+    Result := PyBytesLike(Self, FLen);
+    for i := 0 to FLen - 1 do PyBytesPut(Result, i, at(i));
+    Exit;
+  end;
+  if table.FLen <> 256 then
+    raise ValueError.Create('translation table must be 256 characters long');
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do PyBytesPut(Result, i, table.at(at(i)));
+end;
+
+{ The is* predicates are all FALSE on an empty bytes in CPython — "at least one
+  byte, and every byte qualifies". isupper/islower additionally need at least
+  one CASED byte, so b"123".isupper() is False while b"A1".isupper() is True. }
+function TPyBytes.isdigit: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not PyByteIsDigit(at(i)) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isalpha: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not PyByteIsAlpha(at(i)) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isalnum: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not (PyByteIsAlpha(at(i)) or PyByteIsDigit(at(i))) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isspace: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not PyByteIsSpace(at(i)) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isupper: Boolean;
+var i, v: Integer; cased: Boolean;
+begin
+  Result := False;
+  cased := False;
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if (v >= 97) and (v <= 122) then Exit;
+    if (v >= 65) and (v <= 90) then cased := True;
+  end;
+  Result := cased;
+end;
+
+function TPyBytes.islower: Boolean;
+var i, v: Integer; cased: Boolean;
+begin
+  Result := False;
+  cased := False;
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if (v >= 65) and (v <= 90) then Exit;
+    if (v >= 97) and (v <= 122) then cased := True;
+  end;
+  Result := cased;
 end;
 
 { ---- TPyFile: raw-syscall file handles (x86-64) ---- }

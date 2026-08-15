@@ -1,0 +1,16 @@
+b'hello world' b'HELLO WORLD' b'Hello World' b'Hello world' b'hELLO wORLD'
+b"They'Re"
+b'\xc3\xa9' b'\xc3\xa9'
+True False True False
+b'a  b' b'hi' b'a ' b'  a'
+b'' b''
+b'aa' b'a--b' b'abc'
+1 4 3
+[b'a', b'', b'b'] [b'a', b'b'] [b''] []
+[b'a', b'b', b'c'] [b'a', b'b']
+b'a-b-c' b'ab' b''
+True False True True True
+True False True False
+utf-8
+bytearray bytearray(b'abc') bytes
+b'Xbc' b'abc'

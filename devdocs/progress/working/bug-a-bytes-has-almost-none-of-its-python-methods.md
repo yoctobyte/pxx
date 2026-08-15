@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`bytes` carries decode/find/endswith/hex/count and essentially nothing else; `float` carries NONE of its methods at all — no lower, upper, startswith, split, strip, replace, join, translate, index. `b.lower()` is what stops webencodings, and every one of these is reachable from ordinary CPython code that has no reason to expect a gap."
+status: working
+owner: claude-A-N-nightly
 ---
 
 # `bytes` is missing almost all of its Python methods

@@ -1,0 +1,57 @@
+# The ASCII-shaped `bytes` contract, added as a SET rather than one method at a
+# time. TPyBytes grew a method whenever something needed one, which is how it
+# ended up with `endswith` and no `startswith` — and a bytes method CPython
+# defines and pxx omits is a hard COMPILE error, so each missing one is a wall
+# in front of an ordinary library. webencodings' label normaliser is literally
+# `s.encode('utf8').lower().decode('utf8')`, and its `_detect_bom` needs
+# `startswith` on the next line.
+# bug-a-bytes-has-almost-none-of-its-python-methods
+#
+# Every expected value here is CPython 3's on this same source, diffed, not
+# reasoned about — including the cases where CPython is surprising:
+#   b"they're".title()      -> b"They'Re"   (an apostrophe ends the word)
+#   b"aaa".replace(b"aa", b"a") -> b"aa"    (no rescan of the replacement)
+#   b"".split(b",")         -> [b'']        (but b"".split() is [])
+#   b"123".isupper()        -> False        (needs at least one CASED byte)
+#   b"\xc3\xa9".upper()     -> unchanged    (bytes have no encoding to case-map)
+
+b = b"Hello World"
+print(b.lower(), b.upper(), b.title(), b.capitalize(), b.swapcase())
+print(b"they're".title())
+print(b"\xc3\xa9".upper(), b"\xc3\xa9".lower())
+
+print(b.startswith(b"Hell"), b.startswith(b"x"), b.endswith(b"rld"), b.endswith(b"x"))
+
+print(b"  a  b ".strip(), b"xyxhixy".strip(b"xy"), b"  a ".lstrip(), b"  a ".rstrip())
+print(b"".strip(), b"   ".strip())
+
+print(b"aaa".replace(b"aa", b"a"), b"a,b".replace(b",", b"--"), b"abc".replace(b"z", b"y"))
+
+print(b"abcabc".index(b"bc"), b"abcabc".rfind(b"bc"), b"abcabc".rindex(b"a"))
+
+print(b"a,,b".split(b","), b"  a  b ".split(), b"".split(b","), b"".split())
+print(b"a\nb\r\nc\n".splitlines(), b"a\nb".splitlines())
+
+print(b"-".join([b"a", b"b", b"c"]), b"".join([b"a", b"b"]), b"-".join([]))
+
+print(b"123".isdigit(), b"".isdigit(), b"abc".isalpha(), b"a1".isalnum(), b" \t".isspace())
+print(b"A1".isupper(), b"123".isupper(), b"a1".islower(), b"".islower())
+
+# the library shape this ticket was found in
+def ascii_lower(s):
+    return s.encode('utf8').lower().decode('utf8')
+
+
+print(ascii_lower("UTF-8"))
+
+# a bytearray stays a BYTEARRAY across a transformation — the tag has to travel
+# with every method that builds a new buffer, or it is lost at the first one
+ba = bytearray(b"AbC")
+print(type(ba.lower()).__name__, ba.lower(), type(b"AbC".lower()).__name__)
+
+# translate: a 256-byte table, and None for "no mapping"
+tbl = bytearray(256)
+for i in range(256):
+    tbl[i] = i
+tbl[97] = 88
+print(b"abc".translate(bytes(tbl)), b"abc".translate(None))

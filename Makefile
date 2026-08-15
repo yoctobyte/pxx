@@ -421,6 +421,11 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# The ASCII-shaped `bytes` contract, added as a SET: this class used to carry
+	# endswith and no startswith, and a bytes method CPython defines and pxx omits
+	# is a hard compile error. Expected output is CPython 3's on the same source.
+	./$(COMPILER) test/test_nilpy_bytes_methods.npy $(TESTTMP)/test_nilpy_bytesm26
+	$(TESTTMP)/test_nilpy_bytesm26 | diff -u test/test_nilpy_bytes_methods.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body
@@ -6201,6 +6206,11 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# The ASCII-shaped `bytes` contract, added as a SET: this class used to carry
+	# endswith and no startswith, and a bytes method CPython defines and pxx omits
+	# is a hard compile error. Expected output is CPython 3's on the same source.
+	./$(COMPILER) test/test_nilpy_bytes_methods.npy $(TESTTMP)/test_nilpy_bytesm26
+	$(TESTTMP)/test_nilpy_bytesm26 | diff -u test/test_nilpy_bytes_methods.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body
