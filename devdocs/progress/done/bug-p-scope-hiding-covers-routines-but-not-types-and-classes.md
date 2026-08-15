@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "The scope-hiding rule shipped 2026-08-10 (bug-p-uses-order-does-not-decide-which-unit-wins) covers ROUTINES only. Types and classes still resolve flat first-match through FindUClass, so `uses a, b` binds b's Who but a's Thing — in the SAME program. This is the sibling arm of an already-fixed rule, and it is what makes a duplicated `Exception` class order-dependent."
+status: done
+owner: agent-an-night
 ---
 
 # Scope hiding covers routines but not types/classes
@@ -89,3 +91,78 @@ matching FPC, with the routine half still correct in the same program. Then, per
 the prior art above, **`--tier limited` at minimum** — the quick tier passed two
 previously-broken versions of the routine fix, and `make test-core` is what
 caught its qualified-call regression.
+
+## Fixed 2026-08-15 — and it was FIVE tables, not one
+
+Reproduced first, both orders, with FPC 3.2.2 as the oracle. Then measured the
+Scope section's open question ("are aliases, records, enums, constants the
+same?") before writing any code, and the answer was mixed — which is why the
+fix is wider than `FindUClass`:
+
+| name | before | FPC |
+| --- | --- | --- |
+| routine | B ✓ | B |
+| **class / record** (`FindUClass`) | **A ✗** | B |
+| **plain alias** (`FindTypeAlias`) | **A ✗** | B |
+| **enum type** (`FindEnumType`) | **A ✗** | B |
+| **named array type** (`FindArrayType`) | **A ✗** | B |
+| constant / variable (`FindSym`) | B ✓ | B |
+
+Constants were already right for an unrelated reason: `FindSym` walks a
+NEWEST-first hash chain, so the later registration already won. Records were
+already right too — they share `FindUClass` with classes, which is the same
+defect seen from the other side.
+
+### The fix
+
+`UsesRankOf(curUnit, declUnit)` = the index of the LAST `uses` edge from
+`curUnit` to `declUnit` (edges are appended as clauses parse, so the index IS
+the clause order); `2147483647` for the scope's own unit; `-1` for a unit it
+never named, so ambient/compiler-minted rows cannot outrank one the source
+asked for. Each of the four lookups now keeps the best-ranked of the rows
+`DeclVisible` already accepted, instead of the first. **A tie keeps the FIRST
+row**, so a lone declaration, two rows from one unit, and two ambient rows all
+behave exactly as before — which is what leaves pylib's and sysutils'
+`Exception` merged.
+
+### Why ranking inside the lookup is safe HERE
+
+The ticket warns not to rank inside the lookup, from the routine half's
+experience. That constraint is about `FindProc` returning an overload-set
+REPRESENTATIVE the parser reads signatures off — ranking there changes which
+signature comes back. A type table has no overload set: the row IS the answer,
+`DeclVisible` already filters it, and the rank only orders what survived that
+filter. So no separate binding query was needed, and none of the 243
+`FindUClass` call sites had to move.
+
+### Verified
+
+- Both clause orders, seven names, **byte-identical to FPC 3.2.2** — the new
+  `test/test_scope_hiding_types.pas` / `_rev.pas` over twin units
+  `test/shd_unit_a.pas` / `_b.pas`, wired into `test-core`.
+- The prior art's two failure modes explicitly re-checked and still correct:
+  `test_nilpy_rtl_exception_surface`, `test_nilpy_pyexception_bare_vs_qualified`,
+  `test_uses_order_pylib_exception_a`/`_b` (the qualified-name invariant in both
+  orders), `test_nilpy_qualified_ctor`, `test_pascal_duplicate_class_fail`, and a
+  program importing tkinter AND reportlab — the `Canvas` collision that got the
+  first attempt reverted — which builds a PDF correctly.
+- Self-host fixedpoint byte-identical; `gate.sh quick` GREEN **including the FPC
+  seed canary**, which is what caught the one real slip: `UsesRankOf` is defined
+  beside `VisibilityAllows` but called from the type tables above it, and FPC has
+  none of pxx's declare-anywhere laxness. Forward declaration added
+  (bug-a-fpc-seed-drift-emitasmx64-forward, same shape).
+
+Per the CLAUDE.md gate rule the `--tier limited` line above is superseded:
+quick + self-host is the gate, and Track T sweeps the matrix against the pushed
+sha. Flagging it anyway because this ticket's own argument for limited (quick
+passed two broken versions of the ROUTINE fix) is a good one — the T report for
+this sha is worth reading rather than assuming.
+
+Also closes the duplicate
+[[bug-p-class-name-collision-across-units-resolves-first-not-last]] (same
+divergence, filed separately by Track T on 2026-08-14), and updates
+`devdocs/dev/name-resolution.md` §2.2, which said the rule was "MISSING for
+types/classes".
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

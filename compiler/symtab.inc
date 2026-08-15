@@ -50,6 +50,11 @@ begin
 end;
 
 function DeclVisible(declUnit: Integer): Boolean; forward;
+{ Defined beside VisibilityAllows, but the type-name tables above it call it, and
+  the FPC SEED build has none of pxx's declare-anywhere laxness — it is the
+  canary that catches this, not `make compiler/pascal26`
+  (bug-a-fpc-seed-drift-emitasmx64-forward). }
+function UsesRankOf(curUnit, declUnit: Integer): Integer; forward;
 procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
 procedure EmitVariantClear; forward;
@@ -142,9 +147,10 @@ begin
 end;
 
 function FindTypeAlias(const name: AnsiString): Integer;
-var i: Integer; lo, name2, s: AnsiString; j: Integer;
+var i, bestRank, r: Integer; lo, name2, s: AnsiString; j: Integer;
 begin
   Result := -1;
+  bestRank := -2;
   name2 := name;
   lo := ULower(name2);
   i := 0;
@@ -156,10 +162,19 @@ begin
       resolved globally while a record type declared beside it did not, which
       read as one rule with holes and was really two tables
       (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+    { …and among the visible ones the LATEST-NAMED unit wins, exactly as for
+      classes: `uses a, b` binds b's `TAlias` and b's enum type. Ties keep the
+      FIRST row, so a single declaration and two rows from one unit are
+      unaffected. bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
     if UNameMatch(AliasNOff[i], AliasNLen[i], lo) and
-       DeclVisible(AliasUnitIdx[i]) then begin Result := i; Exit; end;
+       DeclVisible(AliasUnitIdx[i]) then
+    begin
+      r := UsesRankOf(CurrentUnitIdx, AliasUnitIdx[i]);
+      if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
+    end;
     Inc(i);
   end;
+  if Result >= 0 then Exit;
   if lo = 'puint8' then
   begin
     writeln('FindTypeAlias failed to find puint8! AliasCount=', AliasCount);
@@ -268,12 +283,18 @@ begin
 end;
 
 function FindArrayType(const name: AnsiString): Integer;
-var i: Integer;
+{ Latest-named unit wins among the visible rows — see FindUClass.
+  bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
+var i, bestRank, r: Integer;
 begin
   Result := -1;
+  bestRank := -2;
   for i := 0 to ArrTypeCount - 1 do
     if CaseEqual(ArrTypeName[i], name) and DeclVisible(ArrTypeUnitIdx[i]) then
-      begin Result := i; Exit; end;
+    begin
+      r := UsesRankOf(CurrentUnitIdx, ArrTypeUnitIdx[i]);
+      if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
+    end;
 end;
 
 function FindStrConst(const name: AnsiString): Integer;
@@ -357,16 +378,23 @@ begin
 end;
 
 function FindEnumType(const name: AnsiString): Integer;
-var i: Integer; lo, name2: AnsiString;
+{ Latest-named unit wins among the visible rows — see FindUClass.
+  bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
+var i, bestRank, r: Integer; lo, name2: AnsiString;
 begin
   Result := -1;
+  bestRank := -2;
   name2 := name;
   lo := ULower(name2);
   i := 0;
   while i < EnumTypeCount do
   begin
     if UNameMatch(EnumTypeNOff[i], EnumTypeNLen[i], lo) and
-       DeclVisible(EnumTypeUnitIdx[i]) then begin Result := i; Exit; end;
+       DeclVisible(EnumTypeUnitIdx[i]) then
+    begin
+      r := UsesRankOf(CurrentUnitIdx, EnumTypeUnitIdx[i]);
+      if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
+    end;
     Inc(i);
   end;
 end;
@@ -679,10 +707,30 @@ begin
   end;
 end;
 
+function UsesRankOf(curUnit, declUnit: Integer): Integer;
+{ How LATE `declUnit` is in curUnit's own uses clause — the LAST edge naming it,
+  because `uses a, b` must let b hide a (FPC, and the routine half of
+  bug-p-uses-order-does-not-decide-which-unit-wins). -1 for a unit curUnit never
+  named: ambient/compiler-minted rows exist for everybody and must not outrank a
+  unit the source actually asked for. Edges are appended as clauses are parsed,
+  so the edge INDEX is the clause order.
+  bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
+var i: Integer;
+begin
+  UsesRankOf := -1;
+  { The scope's OWN declaration outranks everything it imported — that half of
+    the rule already worked and must survive the ranking. }
+  if declUnit = curUnit then begin UsesRankOf := 2147483647; Exit; end;
+  for i := 0 to UsesEdgeCount - 1 do
+    if (UsesEdgeFrom[i] = curUnit) and (UsesEdgeTo[i] = declUnit) then
+      UsesRankOf := i;
+end;
+
 function FindUClass(const name: AnsiString): Integer;
-var i: Integer; lo, name2: AnsiString;
+var i, bestRank, r: Integer; lo, name2: AnsiString;
 begin
   Result := -1;
+  bestRank := -2;
   name2 := name;
   lo := ULower(name2);
   { A class declared in the unit being parsed wins over a same-named one
@@ -722,11 +770,28 @@ begin
         (they are System's, stamped with the program's index). }
       if ClassNameIsAmbientIntrinsic(lo) or DeclVisible(UClsUnitIdx[i]) then
       begin
-        Result := i; Exit;
+        { …and among the visible ones the LATEST-NAMED unit wins, rather than
+          whichever registered first. `uses a, b` binds b's `Thing` exactly as
+          it already binds b's routines: scope hiding shipped for procedures on
+          2026-08-10 and reached types not at all, so one program answered
+          ROUTINE-B and CLASS-A. FPC says B for both.
+          A tie keeps the FIRST row, so nothing moves for the ordinary case of
+          one declaration, for two rows from the same unit, or for two ambient
+          rows (rank -1 each) — which is what leaves pylib's and sysutils'
+          `Exception` merged the way bug-pascal-duplicate-class-name-silently-
+          shadows needs. Ranking is over the CLAUSE ORDER, not registration
+          order, and only among rows DeclVisible already accepted.
+          bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
+        r := UsesRankOf(CurrentUnitIdx, UClsUnitIdx[i]);
+        if (Result < 0) or (r > bestRank) then
+        begin
+          Result := i; bestRank := r;
+        end;
       end;
     end;
     Inc(i);
   end;
+  if Result >= 0 then Exit;
   { class-name alias (`TOptionList = TList;`) — resolve to the target row }
   for i := 0 to UClsAliasCount - 1 do
     if UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then

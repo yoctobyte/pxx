@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:211 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1886 rejected:37`
+`unfinished:11 blocked:4 backlog:209 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1888 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,11 +32,10 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 195, ranked
+## Ready — top 30 of 193, ranked
 
 - `[p 60] [B]` feature-b-tkhtmlview-in-nilpy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
-- `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -64,5 +63,6 @@ _none — no lane is locked._
 - `[p 50] [B]` feature-b-mimic-codecs-for-nilpy
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
+- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
-_165 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

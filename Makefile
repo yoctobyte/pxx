@@ -5138,6 +5138,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_sow_strict26)" = "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt longint\nCardinal int64\nByte     longint\nliteral  longint\nMyInt    longint\nuByte    word\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_trsat26
 	test "$$($(TESTTMP)/test_trsat26 | head -5)" = "$$(printf 't+1e30=9223372036854775807 r=9223372036854775807\nt-1e30=-9223372036854775808 r=-9223372036854775808\nt+inf =9223372036854775807 r=9223372036854775807\nt-inf =-9223372036854775808 r=-9223372036854775808\ntnan  =0 r=0')"
+	# scope hiding -- the LAST unit a `uses` clause names wins -- in EVERY name
+	# table, not only for routines. Two twin units declare the same six names;
+	# both orders are asserted, and every expected value is what FPC 3.2.2
+	# prints for the same source. The routine row alone used to be right.
+	# bug-p-scope-hiding-covers-routines-but-not-types-and-classes
+	./$(COMPILER) -Futest test/test_scope_hiding_types.pas $(TESTTMP)/test_shd_types26
+	test "$$($(TESTTMP)/test_shd_types26)" = "$$(printf 'routine ROUTINE-B\nclass CLASS-B\nconst CONST-B\nalias 1\nrec 12\narr 8\nenum 2')"
+	./$(COMPILER) -Futest test/test_scope_hiding_types_rev.pas $(TESTTMP)/test_shd_types_rev26
+	test "$$($(TESTTMP)/test_shd_types_rev26)" = "$$(printf 'routine ROUTINE-A\nclass CLASS-A\nconst CONST-A\nalias 4\nrec 8\narr 4\nenum 1')"
 	./$(COMPILER) -Futest test/test_array_of_const_cross_unit_overload.pas $(TESTTMP)/test_aoc_xunit26
 	test "$$($(TESTTMP)/test_aoc_xunit26)" = "$$(printf 'g-aoc:one n=1\ng-aoc:two n=2\ng-aoc:none n=0\ng-var:x\nk-set: dTue')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26

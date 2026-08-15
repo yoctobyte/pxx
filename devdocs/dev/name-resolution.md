@@ -113,32 +113,43 @@ cross-language name match to **agree on case** closes the entire known collision
 class (every Pascal spelling is capitalised, every C name lowercase). Safety
 net, not the goal — it does not express "the native language wins".
 
-### 2.2 Scope hiding — BUILT for routines, **MISSING for types/classes**
+### 2.2 Scope hiding — built, for routines **and** types
 
 > A declaration hides a same-named one from an earlier or outer scope, unless
 > marked `overload`.
 
 This is FPC's rule and it is what makes `uses a, b` bind **b**'s routine (last
 unit named wins) and a program's own `IntToStr` beat sysutils'. Decided in
-`decide-scope-hiding-vs-flat-overload-set`, implemented 2026-08-10 (`ea0e20254`).
+`decide-scope-hiding-vs-flat-overload-set`, implemented 2026-08-10 (`ea0e20254`)
+for routines, and extended to every other name table on 2026-08-15
+(`bug-p-scope-hiding-covers-routines-but-not-types-and-classes`).
 
 Before it, pxx behaved as if everything were `overload` — one flat set across
 scopes with registration order as the tiebreak, i.e. the **first** unit won where
-FPC takes the last.
+FPC takes the last. For four months that stayed true of TYPES after routines were
+fixed, so one program answered `ROUTINE-B` and `CLASS-A` — invisible until two
+units export one type name, which is why it surfaced the moment `pylib` and
+`sysutils` both declared `Exception`.
 
-**The gap:** it reached routines and not types. In one program today:
+**How it works now.** Every name table that already filtered candidates through
+`DeclVisible` — classes and records (`FindUClass`), plain and pointer aliases
+(`FindTypeAlias`), enum types (`FindEnumType`), named array types
+(`FindArrayType`) — ranks the *visible* candidates by `UsesRankOf`, the index of
+the LAST `uses` edge from the resolving scope to the declaring unit. Higher wins;
+the scope's own declaration outranks everything it imported; a unit never named
+(ambient, compiler-minted) ranks below every named one; a tie keeps the first
+row, so a lone declaration, two rows from one unit and two ambient rows all
+behave exactly as before.
 
-```pascal
-program ru_m; uses ru_a, ru_b;
-  WriteLn(Who);              { ROUTINE-B — correct }
-  t := Thing.Create;         { CLASS-A   — wrong, FPC says B }
-```
+Constants and variables were already correct for a different reason: `FindSym`
+walks a NEWEST-first hash chain, so the later registration already won.
 
-Classes and types resolve through `FindUClass`, a flat first-match that knows
-nothing about scopes. Tracked as
-`bug-p-scope-hiding-covers-routines-but-not-types-and-classes`. It is invisible
-until two units export one type name, which is why it survived four months
-unnoticed and then surfaced the moment two units both declared `Exception`.
+**Ranking happens in the lookup here, and that is safe for these tables in a way
+it was not for `FindProc`.** `FindProc` returns an overload-set REPRESENTATIVE
+that the parser reads signatures off; ranking inside it broke the self-compile
+and the NilPy stdlib, which is why the routine half needed a separate
+`FindProcBound` query. A type table has no overload set — the row IS the answer —
+so the rank belongs where the visibility filter already is.
 
 ### 2.3 Overload matching — within the winning scope
 

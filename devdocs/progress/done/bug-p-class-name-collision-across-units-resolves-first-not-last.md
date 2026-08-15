@@ -3,6 +3,8 @@ track: P
 prio: 45
 type: bug
 summary: "Two units exporting the same CLASS name: pxx binds the first unit named, FPC binds the last. The routine half of this was fixed and gated (bug-p-uses-order-does-not-decide-which-unit-wins, done); classes were never done — name-resolution.md §2.2 says scope hiding is 'BUILT for routines, MISSING for types/classes'. Filed because two tickets already cite this slug and no such ticket existed."
+status: done
+owner: agent-an-night
 ---
 
 # Class-name collisions across units resolve first-not-last
@@ -70,3 +72,20 @@ inconsistency that costs an afternoon later, not because anything is broken now.
 Mirror the routine tests: two units exporting a class of the same name, both
 clause orders, asserting FPC's answer — verified against the FPC oracle, not
 against our own output. Then `name-resolution.md` §2.2 stops saying MISSING.
+
+## Closed 2026-08-15 as a DUPLICATE — fixed by the ticket it was filed beside
+
+Same divergence, fixed under
+[[bug-p-scope-hiding-covers-routines-but-not-types-and-classes]]: the visible
+candidates in `FindUClass` (and `FindTypeAlias` / `FindEnumType` /
+`FindArrayType`, which had the same gap) are now ranked by how late the
+declaring unit appears in the resolving scope's own `uses` clause, so the LAST
+unit named wins as FPC does. Gated by `test/test_scope_hiding_types.pas` and
+`_rev.pas` in `test-core`, both clause orders, byte-identical to FPC 3.2.2.
+
+Filing it was still the right call: the argument in
+[[decide-merge-variant-c-with-bare-name-collision]] rested on this being
+tracked, and it now is — with a fix rather than a link.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
