@@ -7696,6 +7696,8 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     lamCallee, k: Integer; cn2: AnsiString;
     lamOwn, ownPi: Integer;   { how many leading slots are the lambda's OWN params }
     defPi, varMask, argD: Integer;   { pyboundfn_setdefaults for defaulted params }
+    defValN, defAsgn: Integer;       { a non-name default, materialised at definition time }
+    defTk: TTypeKind;
     lamNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
     lamTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     lamSyms: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -7719,14 +7721,46 @@ begin
         if dcCount > High(dcNames) then Error('Nil Python: too many lambda default captures');
         dcNames[dcCount] := CurTok.SVal;
         Next; Next;                    { the name and the '=' }
-        if CurTok.Kind <> tkIdent then
-          Error('Nil Python: a lambda default capture must be a plain name (key=key)');
-        symIdx := PyProgSym(CurTok.SVal);
-        if symIdx < 0 then
-          Error('Nil Python: lambda default capture ' + dcNames[dcCount] + ' names nothing');
+        begin
+          { ANY default expression — `lambda a, b=2:`, `n=len(xs)`,
+            `s=x+1`. There is no such thing as a "capture" in Python: `key=key`
+            is just a default whose value is evaluated at DEFINITION time, and
+            reading it as a capture idiom is what made the ordinary literal
+            default a parse error ("a lambda default capture must be a plain
+            name") on a form CPython accepts everywhere
+            (bug-nilpy-lambda-with-a-literal-default-argument-does-not-parse).
+
+            Materialised into a hidden local HERE, which is exactly the
+            definition-time evaluation Python specifies — so the rest of this
+            routine keeps seeing "a plain name" and the binding, arity and
+            override machinery are untouched. `f(3)` uses the default and
+            `f(3, 4)` overrides it.
+
+            ONE path, not two: the bare-name `key=key` form goes through here as
+            well. Keeping it as its own arm bound the enclosing symbol DIRECTLY,
+            which was fine for an Int64 and wrong for anything else — a str
+            default died with "expected a number, got str" the moment a caller
+            overrode it, because the non-variant bind was chosen off the
+            symbol's type. }
+          PyParseBoolExpr;
+          defValN := CurASTNode;
+          { The temp is a VARIANT whatever the value's static type is. The bind
+            below reads ONE MACHINE WORD out of this slot, and an arithmetic
+            default is a PROMOTABLE int (`b=k+1` typed tk=28, two words), so a
+            natively-typed temp handed the bridge half a promo and bound
+            -6384382 — while the identical `b=2` was fine, a literal already
+            being Int64. A variant is what the lambda's own parameters are, it
+            carries every value kind, and it routes the bind through
+            pyboundfn_bind_var, which is the path written for exactly this. }
+          defTk := tyVariant;
+          symIdx := AllocVar(PyHiddenName('lamdef'), defTk);
+          defAsgn := AllocNode(AN_ASSIGN);
+          ASTLeft[defAsgn] := PyMakeIdent(symIdx);
+          ASTRight[defAsgn] := defValN;
+          PyHoistStmt(defAsgn);
+        end;
         dcSyms[dcCount] := symIdx;
         Inc(dcCount);
-        Next;                          { the value name }
         Continue;
       end;
       if nParams > High(pNames) then Error('Nil Python: too many lambda parameters');

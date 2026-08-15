@@ -1,0 +1,29 @@
+# lambda DEFAULT ARGUMENTS in every shape, with the override for each.
+# bug-nilpy-lambda-with-a-literal-default-argument-does-not-parse: only a
+# bare NAME was accepted (`key=key`, read as a "capture"), so the ordinary
+# `lambda a, b=2:` was a parse error; an arithmetic default then bound half a
+# promotable int, and a str default died on override. Diffed against CPython.
+
+k = 7
+xs = [1, 2, 3]
+print((lambda a, b=2: a - b)(10), (lambda a, b=2: a - b)(10, 3))
+print((lambda a, b=1+1: a - b)(10), (lambda a, b=1+1: a - b)(10, 3))
+print((lambda a, b=k+1: a - b)(10), (lambda a, b=k+1: a - b)(10, 3))
+print((lambda a, b=len(xs): a - b)(10), (lambda a, b=len(xs): a - b)(10, 3))
+print((lambda a, b=-2: a - b)(10), (lambda a, b=abs(-2): a - b)(10))
+print((lambda a, b=3.5: a - b)(10), (lambda a, b=3.5: a - b)(10, 3))
+print((lambda a, b=xs[0]: a - b)(10), (lambda a, b=xs[-1] * 2: a - b)(10))
+print((lambda a, b=k: a - b)(10), (lambda a, b=k: a - b)(10, 3))
+print((lambda p, q=[1, 2]: len(q))(0), (lambda p, q=[1, 2]: len(q))(0, [9]))
+print((lambda p, q={}: len(q))(0))
+print((lambda a, b=2, c=3: a + b + c)(1), (lambda a, b=2, c=3: a + b + c)(1, 20),
+      (lambda a, b=2, c=3: a + b + c)(1, 20, 30))
+print((lambda x=5: x + 1)(), (lambda x=5: x + 1)(1))
+print((lambda a, b=True: a and b)(True), (lambda a, b=None: b)(1))
+# the capture idiom keeps working: each lambda pins its OWN loop value
+fs = []
+for i in [1, 2, 3]:
+    fs.append(lambda x, i=i: x * i)
+print([fn(10) for fn in fs])
+# a default that reads an earlier default's name is evaluated left to right
+print((lambda a, b=k, c=k+1: (a, b, c))(0))
