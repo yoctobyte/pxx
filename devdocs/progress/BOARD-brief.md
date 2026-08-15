@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1873 rejected:37`
+`unfinished:11 blocked:3 backlog:218 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1873 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,15 +31,18 @@ _none — no lane is locked._
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 199, ranked
+## Ready — top 30 of 202, ranked
 
 - `[p 70] [T]` regression-cascade-63d1d0de90d3
+- `[p 70] [T]` regression-test-nilpy-test-cpyext-errformat
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
+- `[p 70] [T]` regression-test-nilpy-test-nilpy-import-c-header-still-works
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
 - `[p 60] [B]` feature-b-tkhtmlview-in-nilpy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-int-of-a-large-double-is-int64-min-on-x86-64
 - `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
+- `[p 60] [A]` bug-pascal-uses-non-transitivity-only-covers-routines-and-types
 - `[p 60] [B]` feature-b-rtl-fast-ln-exp-path
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -60,8 +63,5 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [U]` decide-cross-language-qualifier-syntax (unblocks 1)
-- `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
-- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
 
-_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_172 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

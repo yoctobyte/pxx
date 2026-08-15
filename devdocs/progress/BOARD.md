@@ -36,7 +36,7 @@ _none_
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (215)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,6 +63,7 @@ _none_
 | bug-p-class-name-collision-across-units-resolves-first-not-last | P | 45 | bug | Two units exporting the same CLASS name: pxx binds the first unit named, FPC binds the last. The routine half of this was fixed and gated (bug-p-uses-order-does-not-decide-which-unit-wins, done); classes were never done — name-resolution.md §2.2 says scope hiding is 'BUILT for routines, MISSING for types/classes'. Filed because two tickets already cite this slug and no such ticket existed. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
 | bug-p-scope-hiding-covers-routines-but-not-types-and-classes | P | 60 | bug | The scope-hiding rule shipped 2026-08-10 (bug-p-uses-order-does-not-decide-which-unit-wins) covers ROUTINES only. Types and classes still resolve flat first-match through FindUClass, so `uses a, b` binds b's Who but a's Thing — in the SAME program. This is the sibling arm of an already-fixed rule, and it is what makes a duplicated `Exception` class order-dependent. | — |
+| bug-pascal-uses-non-transitivity-only-covers-routines-and-types | A | 60 | bug | `uses` went non-transitive by default (56a540143) but the rule reaches only ROUTINES and named TYPES, and only for an IMPLEMENTATION-section uses. Constants, variables and enum members still leak through, and an INTERFACE-section uses still re-exports everything including routines. Two independent axes; FPC rejects all of it. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -245,7 +246,9 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-cpyext-errformat | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_errformat.npy red at 36d1bffda39d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-builtin-over-variant-receiver | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-import-c-header-still-works | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy red at 36d1bffda39d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-lambda-in-range-comprehension | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-c-retire-the-crtl-name-dodge-prefixes | C | 50 | task | Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change. | — |
@@ -463,12 +466,15 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-cascade-63d1d0de90d3
+- [p 70] [T] regression-test-nilpy-test-cpyext-errformat
 - [p 70] [T] regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
+- [p 70] [T] regression-test-nilpy-test-nilpy-import-c-header-still-works
 - [p 70] [T] regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
 - [p 60] [B] feature-b-tkhtmlview-in-nilpy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [A] bug-a-int-of-a-large-double-is-int64-min-on-x86-64
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
+- [p 60] [A] bug-pascal-uses-non-transitivity-only-covers-routines-and-types
 - [p 60] [B] feature-b-rtl-fast-ln-exp-path
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
