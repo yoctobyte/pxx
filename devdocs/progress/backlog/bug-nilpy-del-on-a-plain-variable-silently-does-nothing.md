@@ -144,3 +144,28 @@ One measurement worth keeping: today's behaviour is a silent no-op, so any
 partial implementation that raises where it should not is strictly WORSE than
 the current bug. That asymmetry is what makes option 2 the safe one and option
 1 the one that needs completeness before it is safe at all.
+
+## 2026-08-15 — correction to the parked design: option 2 needs a NEW variant tag
+
+Re-opened it long enough to check the one thing the design above assumed
+without measuring: that a sentinel could be spelled with an existing tag.
+It cannot.
+
+**`VT_EMPTY` (tag 0) is Python's `None`**, not "unbound" — `defs.inc` calls it
+"unassigned slot", which is what misled the earlier note, but every NilPy path
+reads it as None: `pynone()` yields it, `x is None` is a VT_EMPTY tag test, a
+nil class pointer boxes to it in two codegen sites, a variant global is born
+VT_EMPTY *because* that already means None, and `pystr_of` renders it `'None'`.
+So storing VT_EMPTY on `del x` would make `del x; print(x)` print `None` — a
+different wrong answer, not a fix.
+
+Option 2 therefore costs a **new tag** (`VT_UNBOUND`), which is a bigger change
+than "a sentinel value in the slot" sounded: the tag has to be inert in every
+consumer that switches on `pyvartag` — see
+`project_variant_object_tag_list_lives_in_four_places` for how that list has
+already been missed once. It stays the better shape (the rebind clears it for
+free) but it is no longer the cheap half of the fork.
+
+Still parked, still prio 30, and the asymmetry from the note above is unchanged
+and decisive: today's bug is a silent no-op, so any partial version that raises
+where it should not is strictly worse.
