@@ -1243,7 +1243,14 @@ begin
             Error('unmatched closing brace');
           end;
         end;
-        '@': PyEmitToken(tkAt, 0, SrcLine, '');
+        { `@` is BOTH the decorator prefix and the infix matrix-multiply
+          operator; they are told apart by position (statement start), not by
+          the token. `@=` must be one token though — see tkAtEq. }
+        '@': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkAtEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkAt, 0, SrcLine, '');
+        end;
         ':':
         begin
           PyEmitToken(tkColon, 0, SrcLine, '');

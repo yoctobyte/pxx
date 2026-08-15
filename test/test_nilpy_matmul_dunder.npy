@@ -1,0 +1,67 @@
+# `@` / `@=` — the matrix-multiply operator and its dunders. CPython-diffed.
+# bug-nilpy-matmul-operator-does-not-parse: `M(2) @ M(5)` was a PARSE error.
+# The decorator rows are the control: `@` at statement start still opens a
+# decorator, which is the ambiguity the whole ticket is about.
+
+class M:
+    def __init__(self, v):
+        self.v = v
+    def __matmul__(self, o):
+        return ("matmul", self.v, o.v)
+    def __imatmul__(self, o):
+        return M(self.v * 100 + o.v)
+    def __repr__(self):
+        return "M(" + str(self.v) + ")"
+
+class R:
+    def __init__(self, v):
+        self.v = v
+    def __rmatmul__(self, o):
+        return ("rmatmul", o, self.v)
+
+class P:
+    def __init__(self, v):
+        self.v = v
+    def __matmul__(self, o):
+        return P(self.v + o.v)
+    def __repr__(self):
+        return "P(" + str(self.v) + ")"
+
+print(M(2) @ M(5))
+print(3 @ R(9))
+
+a = M(1)
+a @= M(7)
+print(a.v)
+
+p = P(1)
+p @= P(2)
+print(p)
+
+class Holder:
+    def __init__(self):
+        self.x = P(4)
+
+h = Holder()
+h.x @= P(5)
+print(h.x)
+
+class Deco:
+    def __init__(self, v):
+        self._v = v
+
+    @property
+    def v(self):
+        return self._v
+
+    @staticmethod
+    def make():
+        return Deco(11)
+
+
+print(Deco.make().v)
+
+try:
+    print(1 @ 2)
+except TypeError as e:
+    print("TypeError")

@@ -1025,7 +1025,13 @@ type
       parser recognises, but the augmented spelling has to lex as ONE token or
       `p **= 3` reads as `p * (*= 3)` and dies on "expected expression"
       (bug-nilpy-chained-assign-power-assign-and-semicolon-statements). }
-    tkPowEq
+    tkPowEq,
+    { Python `@=` (in-place matrix multiply). Appended at the tail like tkPowEq
+      and for the same reason. Infix `@` itself needs NO new token — tkAt
+      already exists and pylexer already emits it; only the augmented spelling
+      has to lex as one token, or `a @= b` reads as `a @ (= b)`
+      (bug-nilpy-matmul-operator-does-not-parse). }
+    tkAtEq
   );
 
   TToken = record

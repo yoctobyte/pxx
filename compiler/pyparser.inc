@@ -5072,7 +5072,8 @@ begin
             (j + 1 < MainProgramTokCount) and
             (Tokens[j + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq,
                                     tkSlashEq, tkModEq, tkTrueDivEq, tkAmpEq,
-                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq]) and
+                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
+                                    tkAtEq]) and
             (GetTokenStr(j) = attrName) then
     begin
       if (j >= 2) and (Tokens[j - 2].Kind = tkIdent) and
@@ -7552,6 +7553,8 @@ begin
     tkAmpEq:   Result := '&=';
     tkPipeEq:  Result := '|=';
     tkXorEq:   Result := '^=';
+    tkAtEq:    Result := '@=';
+    tkAt:      Result := '@';
   else
     Error('Nil Python: this token is not supported in a lambda/closure body yet');
     Result := '';
@@ -19304,6 +19307,7 @@ begin
     tkXorEq:   Result := tkXor;
     tkShlEq:   Result := tkShl;
     tkShrEq:   Result := tkShr;
+    tkAtEq:    Result := tkAt;    { @= — in-place matrix multiply }
     else Result := tkEOF;
   end;
 end;
@@ -19328,6 +19332,7 @@ begin
     tkXor:   if inPlace then Result := '__ixor__'      else Result := '__xor__';
     tkShl:   if inPlace then Result := '__ilshift__'   else Result := '__lshift__';
     tkShr:   if inPlace then Result := '__irshift__'   else Result := '__rshift__';
+    tkAt:    if inPlace then Result := '__imatmul__'   else Result := '__matmul__';
     { `**` has no binary token in this frontend — it lowers through PyMakePow,
       not AN_BINOP — so the ASSIGNMENT token is what keys this one. Everything
       else here is keyed on the binary token PyAugBinTok produced, and there is
@@ -19768,7 +19773,8 @@ begin
     else if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
             (Tokens[i + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq,
                                     tkSlashEq, tkModEq, tkTrueDivEq, tkAmpEq,
-                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq]) and
+                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
+                                    tkAtEq]) and
             (GetTokenStr(i) = nm) then
     begin
       Result := True;
@@ -21679,6 +21685,12 @@ begin
         Result := node;
         Exit;
       end;
+      { see the twin bare-name site: `@=` off a user class is a TypeError }
+      if augTk = tkAt then
+      begin
+        Result := PyMakeUnsupportedOperand;
+        Exit;
+      end;
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
       ASTLeft[node] := lhsNode; ASTRight[node] := CurASTNode;
       { `l += y` where l's STATIC type is a variant (an unannotated parameter,
@@ -21898,6 +21910,15 @@ begin
     if node >= 0 then
     begin
       Result := node;
+      Exit;
+    end;
+    { `x @= y` on anything that is not a user class declaring the dunder: a
+      runtime TypeError, never the AN_BINOP below. No builtin type implements
+      `@`, so there is nothing for the arithmetic path to mean
+      (bug-nilpy-matmul-operator-does-not-parse). }
+    if augTk = tkAt then
+    begin
+      Result := PyMakeUnsupportedOperand;
       Exit;
     end;
     { `n = 7; n /= 2` -- unlike a plain rebind (`n = n / 2`), an augmented

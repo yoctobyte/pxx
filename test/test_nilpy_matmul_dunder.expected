@@ -1,0 +1,7 @@
+('matmul', 2, 5)
+('rmatmul', 3, 9)
+107
+P(3)
+P(9)
+11
+TypeError

@@ -9354,6 +9354,7 @@ begin
     tkSlash: PyReflName := '__rtruediv__';
     tkDiv:   PyReflName := '__rfloordiv__';
     tkMod:   PyReflName := '__rmod__';
+    tkAt:    PyReflName := '__rmatmul__';
     else     PyReflName := '';
   end;
 end;
@@ -16402,9 +16403,15 @@ var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
     ixTry: Integer;   { a repeat count coerced through __index__ }
 begin
   ParseFactor;
-  while ((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
+  while (((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr'))) and
-        not (PyExprMode and (CurTok.Kind in [tkAnd, tkShl])) do
+        not (PyExprMode and (CurTok.Kind in [tkAnd, tkShl]))) or
+        { Python's `@` (matrix multiply) binds at THIS precedence. Only in
+          NilPy: `@` is Pascal's address-of prefix, which ParseFactor owns.
+          Decorator-`@` never reaches here — it is consumed at statement
+          start, before any expression is parsed
+          (bug-nilpy-matmul-operator-does-not-parse). }
+        (PyExprMode and (CurTok.Kind = tkAt)) do
   begin
     opSOffset := Tokens[TokPos - 1].SOffset;
     opSLen := Tokens[TokPos - 1].SLen;
@@ -16416,6 +16423,25 @@ begin
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
     { {$Q+} region: * is overflow-checked (feature-pascal-overflow-checks-q-plus) }
     if (op = tkStar) and TokQChecks[TokPos - 1] then ASTQChk[node] := True;
+    { `a @ b` — `__matmul__`, then the reflected `__rmatmul__`, then TypeError.
+      Never an AN_BINOP: `@` has NO arithmetic meaning in Python at all (no
+      builtin type implements it), so falling through to the numeric typing
+      would compute on the class handle exactly as the other dunders did before
+      they were dispatched. The node allocated above is discarded, like the
+      list-repeat and bytes-repeat arms below. }
+    if PyExprMode and (op = tkAt) then
+    begin
+      node := -1;
+      if (IntToTypeKind(ASTTk[left]) = tyClass) and
+         (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+         (not PyRecIsPylibOwnClass(ResolveNodeRec(left))) then
+        node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__matmul__',
+                            left, right);
+      if node < 0 then node := PyReflectedDunder(PyReflName(op), left, right);
+      if node < 0 then node := PyMakeUnsupportedOperand;
+      CurASTNode := node;
+      continue;
+    end;
     { A sequence REPEAT COUNT may be an object with `__index__` — `[0] * C(3)`,
       `"ab" * C(2)`. The repeat tests below only recognise an ordinal, so the
       object fell past them into the arithmetic/dunder path and raised
