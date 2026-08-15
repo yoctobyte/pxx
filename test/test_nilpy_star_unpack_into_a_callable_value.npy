@@ -1,0 +1,86 @@
+# `fn(*args)` where `fn` is a callable VALUE — a parameter, a dict entry, a
+# captured name. Every other star arm keys on the CALLEE'S signature (expand
+# into its slots, splice into its packing, dispatch by its arity), and a value
+# has none at the call site, so the argument loop reached the `*` and reported
+# "expected expression".
+#
+# The count is a run-time fact, so every positional argument (written and
+# starred alike) goes into one list and the arity is decided when the call runs.
+# This is the last piece of the plain decorator idiom.
+
+def add(a, b):
+    return a + b
+
+def call(fn, args):
+    return fn(*args)
+
+print(call(add, [2, 3]))
+
+# arity 0..4 through a value
+def n0():
+    return "zero"
+
+def n1(a):
+    return "one:" + str(a)
+
+def n3(a, b, c):
+    return a + b + c
+
+def n4(a, b, c, d):
+    return a + b + c + d
+
+print(call(n0, []))
+print(call(n1, [9]))
+print(call(n3, [1, 2, 3]))
+print(call(n4, [1, 2, 3, 4]))
+
+# written arguments MIXED with a starred operand, in source order
+def show4(a, b, c, d):
+    return str((a, b, c, d))
+
+def mixed(fn, xs):
+    return fn(1, *xs, 4)
+
+print(mixed(show4, [2, 3]))
+
+# a str LITERAL operand spreads its characters, like every other star path.
+# (A variant HOLDING a str is a separate, pre-existing hole in the shared
+# normalisation — bug-nilpy-a-star-operand-in-a-variant-is-cast-not-converted.)
+def two(a, b):
+    return a + b
+
+def twochars(fn):
+    return fn(*"xy")
+
+print(twochars(two))
+
+# the callee reached out of a container
+tbl = {"add": add, "n1": n1}
+def viatbl(k, xs):
+    return tbl[k](*xs)
+
+print(viatbl("add", [10, 20]))
+print(viatbl("n1", [5]))
+
+# a COLLECTING callee reached through a value: the packing happens at the
+# callee, the arity dispatch at the call
+def collect(*a):
+    return a
+
+print(call(collect, [1, 2, 3]))
+
+# the decorator itself
+def deco(fn):
+    def wrapper(*args):
+        return "wrapped(" + str(fn(*args)) + ")"
+    return wrapper
+
+f = deco(add)
+print(f(2, 3))
+
+g = deco(n3)
+print(g(1, 2, 3))
+
+# and a lambda as the value
+sq = lambda a: a * a
+print(call(sq, [7]))

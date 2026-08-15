@@ -926,6 +926,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_lamstar26 | diff -u test/test_nilpy_lambda_star_args.expected -
 	./$(COMPILER) test/test_nilpy_star_unpack_into_a_collecting_callee.npy $(TESTTMP)/test_nilpy_starsplice26
 	$(TESTTMP)/test_nilpy_starsplice26 | diff -u test/test_nilpy_star_unpack_into_a_collecting_callee.expected -
+	./$(COMPILER) test/test_nilpy_star_unpack_into_a_callable_value.npy $(TESTTMP)/test_nilpy_stardyn26
+	$(TESTTMP)/test_nilpy_stardyn26 | diff -u test/test_nilpy_star_unpack_into_a_callable_value.expected -
 	./$(COMPILER) test/test_nilpy_zip_star_and_n_way.npy $(TESTTMP)/test_nilpy_zipstarn26
 	$(TESTTMP)/test_nilpy_zipstarn26 | diff -u test/test_nilpy_zip_star_and_n_way.expected -
 	./$(COMPILER) test/test_nilpy_divmod_dunder.npy $(TESTTMP)/test_nilpy_divmoddunder26

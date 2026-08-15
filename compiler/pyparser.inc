@@ -8341,6 +8341,7 @@ var defTok, i, j, k, depth: Integer;
     pNames: array[0..15] of AnsiString;
     pDefS, pDefE: array[0..15] of Integer;
     nP, nDef, nOwn, bindIdx, savedTok, ownPi: Integer;
+    starPi: Integer;
     node, argA, argB, argC, argD, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
     objBindPi, cellBindPi, defPi, varMask: Integer;
     nm: AnsiString;
@@ -8454,8 +8455,18 @@ begin
       if depth = 0 then Break;
     end
     else if (depth = 1) and (Tokens[i].Kind = tkIdent) and
-            ((Tokens[i - 1].Kind = tkLParen) or (Tokens[i - 1].Kind = tkComma)) then
+            ((Tokens[i - 1].Kind = tkLParen) or (Tokens[i - 1].Kind = tkComma) or
+             ((Tokens[i - 1].Kind = tkStar) and (i >= 2) and
+              ((Tokens[i - 2].Kind = tkLParen) or (Tokens[i - 2].Kind = tkComma)))) then
     begin
+      { `*args` is a PARAMETER — one TPyList slot the bridge packs into. The
+        scan matched only an ident after `(` or `,`, so a collecting nested def
+        counted ZERO own parameters and pyboundfn_setown published 0: the
+        bridge then placed the captures one slot too far left and the body read
+        its own `args` out of a capture word (len(args) = 1275068416, and the
+        capture itself came back empty). `**kw` is a tkStar preceded by another
+        tkStar and is deliberately still not counted — that shape does not
+        compile at all yet. }
       if nP > High(pNames) then Exit;
       pNames[nP] := GetTokenStr(i);
       pDefS[nP] := -1; pDefE[nP] := -1;
@@ -8597,6 +8608,28 @@ begin
     ASTRight[argA] := argB;
     node := AllocNode(AN_CALL);
     ASTIVal[node] := ownPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  end;
+
+  { ...and which own slot COLLECTS. `def wrapper(*args)` capturing an enclosing
+    name — the decorator's own shape — is a nested def with captures, so it
+    comes through HERE rather than through PyMakeFuncValueFor's pair, and
+    without this the bridge handed the body loose arguments where its signature
+    declares one TPyList. Exactly the call the LAMBDA lifter makes; only that
+    lifter made it, which is the same "sibling construct left wrong" shape the
+    defaults note below records. }
+  starPi := FindProc('pyboundfn_setstar');
+  if (starPi >= 0) and (procIdx >= 0) and (procIdx < ProcCount) and
+     (ProcPyStarIdx[procIdx] >= 0) then
+  begin
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_INT_LIT);
+    ASTIVal[vNode] := ProcPyStarIdx[procIdx]; ASTTk[vNode] := Ord(tyInt64);
+    ASTLeft[argB] := vNode;
+    ASTRight[argA] := argB;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := starPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
   end;
 
   { ...and which of the bound slots are DEFAULTED PARAMETERS, so a caller that
@@ -11055,8 +11088,128 @@ end;
   `exec()` stored in a namespace dict, called as `ns["__body__"]()`. Unbox the
   variant to its payload (the code pointer) and emit an indirect call with a
   synthetic all-variant signature. CurTok is the '('. }
+{ `fn(*args)` where `fn` is a callable VALUE — a parameter, a dict entry, a
+  name bound to a def. Every other star arm keys on the CALLEE'S signature
+  (expand into its slots, splice into its packing, dispatch by its arity), and
+  a value has none at the call site, so the argument loop reached the `*` and
+  reported "expected expression". This is the last piece of the plain decorator
+  idiom: `def wrapper(*args): return fn(*args)`.
+
+  The count is a RUN-TIME fact, so the lowering is the same shape
+  PyStarForwardCall builds for a named callee — every slot read once into a
+  hidden variant local, then one `pyvar_callv<n>` arm per arity folded into a
+  ternary chain. listSym holds EVERY positional argument, written and spliced
+  alike, which is what makes `fn(1, *xs)` and `fn(*xs, 9)` fall out for free.
+
+  Four is the ceiling because that is where the dynamic bridge itself stops
+  (pyvar_callv0..4); past it pystar_check_arity raises rather than picking an
+  arm that would call the body with the wrong shape. }
+function PyStarDynCall(baseNode, listSym: Integer): Integer;
+var listCi, k, n, chkArg, a2, a3, callNode, argNode, elemNode, lastArg: Integer;
+    slotSyms: array[0..3] of Integer;
+    baseSym, asgn, lenNode, cntNode, condNode, pairNode, ternNode, dispPi: Integer;
+begin
+  Result := -1;
+  listCi := FindUClass('TPyList');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  { the callee is read ONCE: it appears in all five arms, and unlike the plain
+    dynamic call its base here may be an arbitrary expression }
+  baseSym := AllocVar(PyHiddenName('dynfn'), tyVariant);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(baseSym);
+  ASTRight[asgn] := baseNode;
+  PyHoistStmt(asgn);
+
+  chkArg := AllocNode(AN_ARG);
+  ASTLeft[chkArg] := PyMakeIdent(listSym);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a2]] := 0; ASTTk[ASTLeft[a2]] := Ord(tyInteger);
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a3]] := 4; ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+  ASTRight[a3] := -1;
+  ASTRight[chkArg] := a2; ASTRight[a2] := a3;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := FindProc('pystar_check_arity');
+  if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_check_arity) not loaded');
+  ASTTk[callNode] := Ord(tyInteger);
+  ASTLeft[callNode] := chkArg;
+  PyHoistStmt(callNode);
+
+  { pystar_arg yields None past the end, so every slot is safe to read whatever
+    the actual count is — a ternary arm cannot carry hoisted setup, which is
+    why the reads happen here and not inside the arms }
+  for k := 0 to 3 do
+  begin
+    slotSyms[k] := AllocVar(PyHiddenName('dyna'), tyVariant);
+    elemNode := AllocNode(AN_ARG);
+    ASTLeft[elemNode] := PyMakeIdent(listSym);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTLeft[argNode]] := k; ASTTk[ASTLeft[argNode]] := Ord(tyInteger);
+    ASTRight[argNode] := -1;
+    ASTRight[elemNode] := argNode;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := FindProc('pystar_arg');
+    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_arg) not loaded');
+    ASTTk[callNode] := Ord(tyVariant);
+    ASTLeft[callNode] := elemNode;
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(slotSyms[k]);
+    ASTRight[asgn] := callNode;
+    PyHoistStmt(asgn);
+  end;
+
+  for n := 0 to 4 do
+  begin
+    dispPi := FindProc('pyvar_callv' + AIntToStr(n));
+    if dispPi < 0 then Break;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := dispPi;
+    ASTTk[callNode] := Ord(tyVariant);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := PyMakeIdent(baseSym);
+    ASTRight[argNode] := -1;
+    ASTLeft[callNode] := argNode;
+    lastArg := argNode;
+    for k := 0 to n - 1 do
+    begin
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := PyMakeIdent(slotSyms[k]);
+      ASTRight[argNode] := -1;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    end;
+    { the LOWEST arity is the final else, which the guard above has made safe }
+    if n = 0 then
+    begin
+      Result := callNode;
+      Continue;
+    end;
+    lenNode := PyCallMeth1(listCi, 'count', PyMakeIdent(listSym), -1);
+    if lenNode < 0 then Error('Nil Python: pylib (TPyList.count) not loaded');
+    cntNode := AllocNode(AN_INT_LIT);
+    ASTIVal[cntNode] := n; ASTTk[cntNode] := Ord(tyInteger);
+    condNode := AllocNode(AN_BINOP);
+    ASTIVal[condNode] := Ord(tkEq);
+    ASTLeft[condNode] := lenNode;
+    ASTRight[condNode] := cntNode;
+    ASTTk[condNode] := Ord(tyBoolean);
+    pairNode := AllocNode(AN_PAIR);
+    ASTLeft[pairNode] := callNode;
+    ASTRight[pairNode] := Result;
+    ternNode := AllocNode(AN_TERNARY);
+    ASTLeft[ternNode] := condNode;
+    ASTRight[ternNode] := pairNode;
+    ASTTk[ternNode] := Ord(tyVariant);
+    Result := ternNode;
+  end;
+end;
+
 function PyMakeDynCall(baseNode: Integer): Integer;
 var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
+    starSym, starN: Integer;
     nmArg, nmLit, dispPi, dispArg: Integer; calleeNm: AnsiString;
 begin
   { the callee code address = the variant's payload as a pointer }
@@ -11097,9 +11250,44 @@ begin
 
   Expect(tkLParen, '(');
   argsHead := -1; lastArg := -1; n := 0;
+  starSym := -1;
   while CurTok.Kind <> tkRParen do
   begin
+    { `fn(*xs)` through a callable VALUE. There is no signature here to expand
+      into or pack for, so EVERY positional argument goes into one list and the
+      arity is decided when the call runs (PyStarDynCall). The first star is
+      what switches the loop over; arguments already parsed move into the list
+      in order, so `fn(1, *xs, 9)` needs no separate handling. }
+    if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) then
+    begin
+      Next;                              { the '*' }
+      PyParseBoolExpr;
+      if starSym < 0 then
+      begin
+        starSym := PyNewContainerTemp('TPyList', 'dynargs');
+        starN := argsHead;
+        while starN >= 0 do
+        begin
+          PyContainerCall1(starSym, 'TPyList', 'append', ASTLeft[starN], -1);
+          starN := ASTRight[starN];
+        end;
+        argsHead := -1; lastArg := -1;
+      end;
+      PyContainerCall1(starSym, 'TPyList', 'extend',
+                       PyStarOperandAsList(CurASTNode, FindUClass('TPyList')), -1);
+      Inc(n);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
     PyParseBoolExpr;
+    if starSym >= 0 then
+    begin
+      PyContainerCall1(starSym, 'TPyList', 'append', CurASTNode, -1);
+      Inc(n);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
     ASTRight[argNode] := -1;
@@ -11109,6 +11297,11 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
+  if starSym >= 0 then
+  begin
+    Result := PyStarDynCall(baseNode, starSym);
+    Exit;
+  end;
 
   { ONE runtime dispatcher when pyeval offers it — and for a .npy program it
     always does. pyvar_callv<n>(callee, args...) tells the four callable shapes
