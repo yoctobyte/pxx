@@ -3,8 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `17c01ba0a0a0` | 2026-08-15T04:04:30Z | GREEN (native) | 231.3s | `0e72359074a6` GREEN |
+| plexus | `dbf783346025` | 2026-08-15T04:12:38Z | RED (native) | 201.9s | `0e72359074a6` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- none
+- **test-core#src:test/test_nilpy_forward_module_global.npy** — test/test_nilpy_forward_module_global.npy (plexus): bad `dbf783346025`, last good `17c01ba0a0a0`, 3 commit(s) in range
