@@ -141,4 +141,4 @@ ticket, is what to read before filing or "fixing" a float-accuracy issue.
   [[feature-b-rtl-fast-ln-exp-path]].
 
 ## Log
-- 2026-08-15 — decided, commit PENDING-COMMIT.
+- 2026-08-15 — decided, commit 4df34a186.
