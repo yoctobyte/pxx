@@ -1182,6 +1182,15 @@ function pyiter_next_or(it: TPyIter; const dflt: Variant): Variant;
   and a tuple-unpack target do with one. Leaves the cursor exhausted, which is
   the CPython-visible half of single consumption. }
 function pyiter_drain(it: TPyIter): TPyList;
+{ A star OPERAND as a real list. `f(*xs)` where xs is a VARIANT — an
+  unannotated parameter, a dict entry, a container element — cannot be decided
+  at compile time, and the frontend used to hard-CAST the variant to TPyList:
+  a str handle read as a list object, i.e. a segfault on the commonest spelling
+  of the construct. The conversion is pyiter_v's, so a str spreads its
+  characters, a dict its keys, a range and a user __iter__ their elements, and
+  anything non-iterable raises — one normalisation, every star path.
+  bug-nilpy-a-star-operand-in-a-variant-is-cast-not-converted }
+function pystar_as_list(const v: Variant): TPyList;
 { True when the variant holds a cursor — the run-time half of the static
   `is TPyIter` test, for the consumption sites that take a Variant. }
 function pyiter_is(const v: Variant): Boolean;
@@ -11855,6 +11864,19 @@ begin
   if it = nil then Exit;
   while pyiter_has(it) do
     Result.append(pyiter_take(it));
+end;
+
+function pystar_as_list(const v: Variant): TPyList;
+var o: TObject;
+begin
+  { a list (or a tuple, which is the same object) is handed straight back —
+    the packing only READS it, so a copy would be pure cost }
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then begin pystar_as_list := TPyList(o); Exit; end;
+  end;
+  pystar_as_list := pyiter_drain(pyiter_v(v));
 end;
 
 constructor TPyRange.Create;

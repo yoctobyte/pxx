@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (207)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +55,6 @@ _none_
 | bug-nilpy-a-computed-attribute-name-cannot-see-a-property | N | 20 | bug | `getattr(o, nm)` / `hasattr(o, nm)` with a COMPUTED name answers False (and misses the value) for a PROPERTY: the runtime dynamic-attribute predicate is RTTI-based and the RTTI blob carries methods and fields, not properties. | — |
 | bug-nilpy-a-generator-expression-is-not-consumed-once | N | 30 | bug | `g = (x for x in [1,2]); next(g); list(g)` answers [1, 2] where CPython answers [2] — a genexpr bound to a name is materialised eagerly, so it is re-iterable and `next()` does not advance what a later consumer sees. | — |
 | bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc | N | 25 | bug | Proc lookup is case-INSENSITIVE (Pascal heritage) while Python is case-sensitive, so a NilPy name resolves against a builtin that differs only in case: `print(Counter)` prints 4727019 (a code address) where CPython raises NameError. It also made a nested-def helper claim every read of a global named `counter`. | — |
-| bug-nilpy-a-star-operand-in-a-variant-is-cast-not-converted | N | 40 | bug | `f(*args)` where `args` is a VARIANT holding a str SEGFAULTS: PyStarOperandAsList hard-casts a variant to TPyList (pyvarobj + class cast) instead of converting, so a string handle is read as a list. The static-typed spellings are all fine, which is what hid it. | — |
 | bug-nilpy-augmented-sequence-repeat-rebinds-instead-of-mutating | N | 20 | bug | `xs *= 2` on a list REBINDS where CPython mutates in place, so an alias taken beforehand keeps the old contents. Only observable through an alias; the value bound to the name itself is correct. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 15 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
@@ -408,9 +407,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1850)
+## done (1851)
 
-1850 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1851 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -533,7 +532,6 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload (unblocks 1)
 - [p 40] [U] decide-nilpy-none-str-sentinel-vs-textstr-kind (unblocks 1)
-- [p 40] [N] bug-nilpy-a-star-operand-in-a-variant-is-cast-not-converted
 - [p 40] [P] bug-p-bare-all-defaulted-routine-refused-in-argument-position
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc

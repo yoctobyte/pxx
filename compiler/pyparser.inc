@@ -12667,17 +12667,25 @@ begin
     PyStarOperandAsList := node;
     Exit;
   end;
+  { A VARIANT operand cannot be decided here — an unannotated parameter, a dict
+    entry and a container element are all variants, and what they HOLD is a
+    run-time fact. This used to be an unconditional pyvarobj + hard CAST to
+    TPyList, so a variant holding a str handed the packing a string handle:
+    `def fwd(args): return two(*args)` called with "xy" SEGFAULTED, while every
+    statically-typed spelling was fine — which is exactly why no test saw it.
+    pystar_as_list converts instead (pyiter_v's rules: a str spreads its
+    characters, a dict its keys, a user __iter__ its elements, a non-iterable
+    raises). bug-nilpy-a-star-operand-in-a-variant-is-cast-not-converted }
   unboxArg := AllocNode(AN_ARG);
   ASTLeft[unboxArg] := node;
   ASTRight[unboxArg] := -1;
   unboxCall := AllocNode(AN_CALL);
-  ASTIVal[unboxCall] := FindProc('pyvarobj');
-  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
-  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTIVal[unboxCall] := FindProc('pystar_as_list');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pystar_as_list) not loaded');
+  ASTTk[unboxCall] := Ord(tyClass);
+  ASTRight[unboxCall] := REC_UCLASS_BASE + listCi;
   ASTLeft[unboxCall] := unboxArg;
-  PyStarOperandAsList := AllocNode(AN_CLASS_CAST);
-  ASTLeft[PyStarOperandAsList] := unboxCall;
-  ASTIVal[PyStarOperandAsList] := listCi;
+  PyStarOperandAsList := unboxCall;
   ASTTk[PyStarOperandAsList] := Ord(tyClass);
 end;
 
@@ -14483,7 +14491,11 @@ begin
     PyStarOperandAsList covers the other — and a str reaching the arity
     dispatch below is read as a list by pystar_argc, which answered 56 for a
     3-character string (bug-nilpy-join-of-a-str-segfaults). }
-  listNode := PyIterArgAsList(listNode);
+  { through the shared normalisation, not PyIterArgAsList alone: a VARIANT
+    operand needs the RUN-TIME conversion too, and this path assigns straight
+    into a TPyList-typed temp below — the same hard-cast hazard by another
+    spelling. }
+  listNode := PyStarOperandAsList(listNode, listCi);
   { bind both containers to temps: each arm reads the list again, and the
     expression must not be rebuilt per arm }
   listSym := AllocVar(PyHiddenName('fwd'), tyClass);

@@ -1,0 +1,62 @@
+# A star operand held in a VARIANT — an unannotated parameter, a dict entry, a
+# container element. What it HOLDS is a run-time fact, and the frontend used to
+# resolve it with an unconditional hard CAST to TPyList: a str handle read as a
+# list object, i.e. a segfault on the commonest spelling of the construct.
+# Every statically-typed spelling was fine, which is why no test saw it.
+#
+# pystar_as_list converts instead, on pyiter_v's rules — the same ones `for`,
+# list() and sorted() already follow.
+
+def two(a, b):
+    return a + b
+
+def three(a, b, c):
+    return str((a, b, c))
+
+def collect(*a):
+    return a
+
+# through the NAMED-callee forwarding path
+def fwd2(args):
+    return two(*args)
+
+print(fwd2("xy"))
+print(fwd2([1, 2]))
+print(fwd2((3, 4)))
+
+def fwd3(args):
+    return three(*args)
+
+print(fwd3("abc"))
+print(fwd3({"k": 1, "j": 2, "i": 3}))     # a dict spreads its KEYS
+print(fwd3(range(3)))
+
+# through the COLLECTING-callee splice
+def spl(args):
+    return collect(*args)
+
+print(spl("xy"))
+print(spl([1, 2, 3]))
+print(spl(range(2)))
+
+# through the callable-VALUE dispatch
+def dyn(fn, args):
+    return fn(*args)
+
+print(dyn(two, "xy"))
+print(dyn(collect, (1, 2)))
+
+# a user class implementing the iterator protocol
+class Countdown:
+    def __init__(self, n):
+        self.n = n
+
+    def __iter__(self):
+        return iter([self.n, self.n - 1])
+
+print(fwd2(Countdown(9)))
+print(spl(Countdown(4)))
+
+# the operand out of a container element, which is a variant too
+box = {"pair": [5, 6], "text": "pq"}
+print(fwd2(box["pair"]), fwd2(box["text"]))

@@ -4,6 +4,8 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "`f(*args)` where `args` is a VARIANT holding a str SEGFAULTS: PyStarOperandAsList hard-casts a variant to TPyList (pyvarobj + class cast) instead of converting, so a string handle is read as a list. The static-typed spellings are all fine, which is what hid it."
+status: done
+owner: claude-AN
 ---
 
 # A star operand inside a variant is cast, not converted
@@ -60,3 +62,36 @@ static types.
 tuple, a dict (spreads KEYS), a set, a range, a generator and a user iterable;
 a non-iterable raising TypeError with CPython's wording; through the named
 callee path, the collecting-callee splice and the callable-value dispatch.
+
+## Resolution (2026-08-15)
+
+`pystar_as_list(v: Variant): TPyList` in pylib, exactly the helper the sketch
+above called for — and it is three lines, because `pyiter_v` already IS the
+universal normalisation (`for`, `list()`, `sorted()` and `in` all go through
+it). A list or tuple is handed straight back (the packing only reads it, so a
+copy would be pure cost); everything else drains through `pyiter_v`, which
+gives a str's characters, a dict's keys, a range's and a user `__iter__`'s
+elements, and raises for a non-iterable.
+
+`PyStarOperandAsList`'s variant arm calls it instead of casting — and
+`PyStarForwardCall` now goes through `PyStarOperandAsList` rather than
+`PyIterArgAsList` alone, because it assigns the operand straight into a
+TPyList-typed temp: the same hard-cast hazard wearing a different spelling.
+That is what makes the fix cover all four star paths from one place, which was
+the point of the "normalise, don't special-case" reading.
+
+`PyIterArgAsList` itself is deliberately UNCHANGED: its other five callers
+(join, zip, the comprehension sites) pass variants they expect to stay
+variants, and widening it would have moved overload selection under them.
+
+## Gate
+
+`make compiler/pascal26` + `tools/gate.sh quick` GREEN; pinned v334.
+`test/test_nilpy_star_operand_in_a_variant.npy`, byte-identical to CPython: a
+variant holding a str, a list, a tuple, a dict (keys), a range and a user
+`__iter__` class, through the named-callee forwarding, the collecting-callee
+splice and the callable-value dispatch, plus the operand read out of a dict
+entry. Re-checked twelve neighbouring star tests.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
