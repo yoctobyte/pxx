@@ -84,4 +84,4 @@ together; the mutable-container accumulator; and a default reading the enclosing
 def's PARAMETER. `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit c582d219c.
