@@ -26,7 +26,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
-| feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
+| feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | — |
 
 ## blocked (6)
 
@@ -39,10 +39,11 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (206)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-dwarf-emission-recurses-forever-on-mutually-referencing-classes | A | 45 | bug | `-g` on two classes that reference each other through a forward declaration (`TB = class;` … `TA` holds a `TB`, `TB` holds a `TA`) exhausts the stack and SIGSEGVs the COMPILER. Eleven lines, no library. Without `-g` the same source compiles fine. Blocks debugging any program touching Synapse's blcksock, where TTCPBlockSocket <-> TCustomSSL are exactly this shape. | — |
 | bug-b-arcsin-arccos-lose-2-ulps-vs-libm | B | 20 | bug | ArcSin/ArcCos in lib/rtl/math.pas are 1-2 ulps off libm for mid-range arguments (asin(0.5) answers ...982991 where libm and CPython say ...982989); ArcTan agrees exactly | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-rtl-math-transcendentals-lose-argument-reduction | B | 35 | bug | lib/rtl/math.pas's sin/cos lose accuracy as the argument grows — 85 ulps at x=100, 1.2 MILLION ulps at 1e6, and 2.4 BILLION at 1e10, where the answer has no correct digits left. Bad argument reduction, not last-bit rounding. pxx's OWN crtl libm already gets every one of these exactly right, so the fix is to share it, not to write one. | — |
@@ -492,6 +493,7 @@ _none_
 - [p 50] [C] task-c-retire-the-crtl-name-dodge-prefixes
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-dwarf-emission-recurses-forever-on-mutually-referencing-classes
 - [p 45] [P] bug-p-class-name-collision-across-units-resolves-first-not-last
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths

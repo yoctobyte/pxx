@@ -1,5 +1,9 @@
 ---
+track: B
 prio: 45  # auto
+type: feature
+blocked-by: []
+summary: "Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect."
 ---
 
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
@@ -273,3 +277,41 @@ exactly `dlopen`/`dlsym`/`dlclose`, all three names in the string table.
 on a box with those sysroots (or a container). Neither is a decision — both are
 work.
 
+
+## 2026-08-15 (Track B) — item (d) moves: the wall was OUR errno, not the loader
+
+Re-measured rather than trusted, and the 2026-07-31 note's second wall turns
+out to have had a plainer cause than "marshalling or symbol resolution".
+
+**The wall was `lib/rtl/sockets.pas`.** Every `fp*` wrapper returned the PAL's
+raw negative errno where FPC returns `-1`, and `fpGetErrno` was a hardcoded
+`5 { EIO }`. Synapse's `SockCheck` compares against `SOCKET_ERROR` (-1), so a
+failed call read as a success, and `TTCPBlockSocket.Connect` with
+`ConnectionTimeout > 0` — the non-blocking path every real client sets —
+reported `LastError=5` against a loopback `openssl s_server` that was up and
+accepting. Without the timeout the same connect worked, because that path never
+consults errno, which is exactly why this hid for so long. Fixed and gated:
+[[bug-b-sockets-fp-wrappers-return-raw-negative-errno-and-fpgeterrno-is-a-constant]].
+
+**With that fixed, Synapse connects (`connect=0`)** and reaches the TLS
+handshake, where it segfaults with the program counter pointing INTO THE STACK
+(`0x7fffffffd7a8`, `add %al,(%rax)`) — i.e. a transfer of control to data, not
+a null dereference inside libssl. So item (d) is past the wall it sat on since
+2026-07-31 and is now stopped one step later, in `SSLDoConnect`.
+
+**The debugger is unavailable for that step**, and that is its own bug: `-g` on
+any program with a `TTCPBlockSocket` variable **crashes the compiler**, because
+DWARF emission recurses forever on the `TTCPBlockSocket` <-> `TCustomSSL` cycle
+that `blcksock.pas`'s forward declaration sets up. Reduced to 11 lines with no
+library and filed as
+[[bug-a-dwarf-emission-recurses-forever-on-mutually-referencing-classes]]
+(Track A). Item (d) should wait for it rather than be investigated blind — the
+last time this ticket guessed at a cause instead of measuring one, the guess
+was wrong.
+
+**Item (b) unchanged and still host-limited.** Re-checked today:
+`/usr/arm-linux-gnueabi` and `/usr/aarch64-linux-gnu` still hold `bin` only —
+no `ld-linux*`, no libc — so arm32/aarch64 still cannot RUN a dynamically
+linked binary here. Compile, interpreter string and `NEEDED libc.so.6` remain
+asserted for all four targets; only the run is missing, and it needs a
+different box or a container.
