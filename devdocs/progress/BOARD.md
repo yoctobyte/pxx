@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (204)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,6 +53,8 @@ _none_
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
 | bug-nilpy-a-computed-attribute-name-cannot-see-a-property | N | 20 | bug | `getattr(o, nm)` / `hasattr(o, nm)` with a COMPUTED name answers False (and misses the value) for a PROPERTY: the runtime dynamic-attribute predicate is RTTI-based and the RTTI blob carries methods and fields, not properties. | — |
+| bug-nilpy-a-nested-def-shadowed-by-an-outer-name-binds-to-None | N | 35 | bug | Assigning a nested def's value to an OUTER name of the same spelling — `g = make(); def g(...)` inside make — binds None: the call raises \"object is not callable — the name is None\". Renaming either one fixes it. | — |
+| bug-nilpy-a-nested-defs-default-is-evaluated-at-value-time-not-def-time | N | 30 | bug | A nested def's default expression is re-evaluated where the def VALUE is built, not at the `def` statement — so reassigning the enclosing name in between changes the default. CPython evaluates it once, at def time. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219 | N | 25 | bug | divmod(obj, n) on a class declaring __divmod__ dies with 'Runtime error 219' (invalid typecast) instead of returning the pair. The dispatcher demands RetKind=6 (a class) and a NilPy def returning a tuple does not declare that, so the dunder is never called and the fallback casts something that is not a TPyList. | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
@@ -405,9 +407,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1827)
+## done (1828)
 
-1827 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1828 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -558,6 +560,7 @@ _none_
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [B] bug-b-rtl-math-transcendentals-lose-argument-reduction
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
+- [p 35] [N] bug-nilpy-a-nested-def-shadowed-by-an-outer-name-binds-to-None
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
@@ -576,6 +579,7 @@ _none_
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
+- [p 30] [N] bug-nilpy-a-nested-defs-default-is-evaluated-at-value-time-not-def-time
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [N] bug-nilpy-star-unpack-into-a-builtin-or-a-bound-method-is-refused
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags

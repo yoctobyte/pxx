@@ -1,0 +1,64 @@
+# A NESTED def with a DEFAULT parameter must yield to a caller-supplied value.
+# bug-nilpy-a-nested-defs-default-parameter-ignores-the-callers-value: inc(2)
+# answered as if it were inc() — the bridge clipped every argument past the
+# non-defaulted count, because only the LAMBDA lifter declared which bound
+# slots are defaults. Diffed against CPython.
+
+# a NESTED def's DEFAULT parameter must yield to a caller-supplied value
+def make():
+    n = 0
+    def inc(by=1):
+        nonlocal n
+        n += by
+        return n
+    return inc
+f = make()
+print(f(), f(2), f(10), f())
+
+def make2():
+    def h(a, b=7):
+        return (a, b)
+    return h
+k = make2()
+print(k(1), k(1, 2), k(0, 0))
+
+def make3(base):
+    def g(x, off=base, scale=2):
+        return (x + off) * scale
+    return g
+gg = make3(10)
+print(gg(1), gg(1, 0), gg(1, 0, 3), gg(1, 100))
+
+# NOT asserted: the default is evaluated at DEF time in CPython (this would
+# print 5), while pxx re-evaluates it where the def VALUE is built and prints
+# 99 — bug-nilpy-a-nested-defs-default-is-evaluated-at-value-time-not-def-time.
+# The OVERRIDE half is asserted, since that is what this ticket fixed.
+def make4():
+    seed = 5
+    def h(v=seed):
+        return v
+    return h
+print(make4()(1))
+
+# captures and defaults together
+def make5():
+    total = 100
+    def add(x, w=3):
+        return total + x * w
+    return add
+a5 = make5()
+print(a5(1), a5(1, 10))
+
+# a nested def with NO default is unaffected
+def make6():
+    def p(a, b):
+        return a - b
+    return p
+print(make6()(5, 2))
+
+# called directly, not as a value
+def direct():
+    def inner(a, b=4):
+        return a * b
+    return (inner(2), inner(2, 5))
+print(direct())

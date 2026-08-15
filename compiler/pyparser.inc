@@ -8292,8 +8292,8 @@ var defTok, i, j, k, depth: Integer;
     pNames: array[0..15] of AnsiString;
     pDefS, pDefE: array[0..15] of Integer;
     nP, nDef, nOwn, bindIdx, savedTok, ownPi: Integer;
-    node, argA, argB, argC, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
-    objBindPi, cellBindPi: Integer;
+    node, argA, argB, argC, argD, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
+    objBindPi, cellBindPi, defPi, varMask: Integer;
     nm: AnsiString;
     anyBind: Boolean;
 
@@ -8548,6 +8548,42 @@ begin
     ASTRight[argA] := argB;
     node := AllocNode(AN_CALL);
     ASTIVal[node] := ownPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  end;
+
+  { ...and which of the bound slots are DEFAULTED PARAMETERS, so a caller that
+    supplies one WINS. Without this the bridge clipped every argument past
+    nOwn and the default was used regardless: `def inc(by=1)` inside a function
+    answered inc(2) as if it were inc() — silently, on ordinary Python
+    (bug-nilpy-a-nested-defs-default-parameter-ignores-the-callers-value).
+    The defaults occupy bound slots 0..nDef-1 (they are bound first, below), and
+    the caller counts their positions from nOwn. Exactly the call the LAMBDA
+    lifter already makes; only that lifter made it, which is why the sibling
+    construct was wrong. }
+  defPi := FindProc('pyboundfn_setdefaults');
+  if (defPi >= 0) and (nDef > 0) then
+  begin
+    varMask := 0;
+    for j := 0 to nDef - 1 do
+      if BoundParamIsVariant(j) then varMask := varMask or (1 shl j);
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_INT_LIT);
+    ASTIVal[vNode] := nOwn; ASTTk[vNode] := Ord(tyInt64);
+    ASTLeft[argB] := vNode;
+    ASTRight[argA] := argB;
+    argC := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_INT_LIT);
+    ASTIVal[vNode] := nDef; ASTTk[vNode] := Ord(tyInt64);
+    ASTLeft[argC] := vNode;
+    ASTRight[argB] := argC;
+    argD := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_INT_LIT);
+    ASTIVal[vNode] := varMask; ASTTk[vNode] := Ord(tyInt64);
+    ASTLeft[argD] := vNode;
+    ASTRight[argC] := argD;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := defPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
   end;
   bindIdx := 0;
 
