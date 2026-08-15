@@ -1021,8 +1021,26 @@ procedure ParseArgExpr;
 
   Same delegation PyParseListLiteral / PyParseStrMethod already use: the shared
   parser knows WHERE an expression is legal, pyparser.inc decides what it
-  MEANS. }
+  MEANS.
+
+  A BARE generator expression — `f(x*2 for x in xs)` — is diverted HERE, which
+  is the one place every call argument passes through. It must happen before
+  the element expression is parsed, because that expression names the loop
+  variable, which is not in scope until the `for`. The diversion used to sit at
+  the ordinary-call argument loop and at the str-method path, so the same
+  argument parsed one way for `sum(x for x in xs)` and failed with "undefined
+  variable (x)" for `obj.take(x for x in xs)` and `f.writelines(s for s in xs)`
+  — one construct, N argument loops, which is the shape
+  devdocs/dev/normalise-dont-special-case.md is about
+  (bug-nilpy-bare-genexpr-as-a-method-argument-does-not-parse). The ordinary
+  site's own check is now redundant and harmless: it fires first and does the
+  same thing. }
 begin
+  if PyExprMode and PyBareGenExprAhead then
+  begin
+    CurASTNode := PyParseCompExprValue(False);
+    Exit;
+  end;
   if PyExprMode then PyParseBoolExpr else ParseExpr;
 end;
 

@@ -1,0 +1,40 @@
+# A BARE generator expression in every argument position.
+# bug-nilpy-bare-genexpr-as-a-method-argument-does-not-parse: the diversion
+# that parses one lived at the ordinary-call loop and the str-method path, so
+# obj.take(x for x in xs) died with "undefined variable (x)" while the
+# identical sum(x for x in xs) worked. It now lives in ParseArgExpr, the ONE
+# routine every call argument passes through. Diffed against CPython.
+
+# a BARE generator expression in every argument position
+xs = [1, 2, 3]
+
+class C:
+    def take(self, s):
+        return list(s)
+    def two(self, a, s):
+        return a + sum(s)
+
+class Holder:
+    def __init__(self):
+        self.c = C()
+
+print(sum(x for x in xs), max(x * 2 for x in xs), min(x for x in xs))
+print("".join(str(x) for x in xs), ", ".join(str(x) for x in xs if x > 1))
+print(list(x for x in xs), sorted(x for x in xs), any(x > 2 for x in xs), all(x > 0 for x in xs))
+print(C().take(x for x in xs))
+print(C().two(10, (x for x in xs)))
+h = Holder()
+print(h.c.take(x * 3 for x in xs))
+print(dict((x, x * x) for x in xs))
+print(tuple(x for x in xs), sorted(set(x % 2 for x in xs)))
+def f(s):
+    return sum(s)
+print(f(x for x in xs))
+print(len(list(x for x in xs)))
+import os
+p = "/tmp/pxx_gx_probe.txt"
+with open(p, "w") as fh:
+    fh.writelines(str(x) + "\n" for x in xs)
+with open(p) as fh:
+    print(fh.readlines())
+os.remove(p)
