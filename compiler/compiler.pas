@@ -583,6 +583,16 @@ begin
       StrictOverload := True;
       Inc(i);
     end
+    else if option = '--strict-overload-width' then
+    begin
+      { FPC-parity NARROWEST-THAT-FITS choice among integer overloads. Standalone
+        like --strict-overload, and for the same reason: it changes which body a
+        call in the RTL and the corpora binds to, so enrolling it in the
+        --strict-fpc umbrella is a separate, measured call.
+        compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload }
+      StrictOverloadWidth := True;
+      Inc(i);
+    end
     else if option = '--strict-operator' then
     begin
       { FPC-parity operator-overload rejections (= / <> on class operands).

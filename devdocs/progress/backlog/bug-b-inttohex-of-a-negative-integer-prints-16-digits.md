@@ -2,10 +2,8 @@
 track: B
 prio: 40
 type: bug
-blocked-by: [compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload]
+blocked-by: []   # the compiler half landed 2026-08-15 as --strict-overload-width
 summary: "`IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used"
-status: working
-owner: track-b-bughunt
 ---
 
 # `IntToHex` of a negative Integer prints 16 digits, not 8
@@ -133,3 +131,28 @@ The library half stands as landed and needs nothing further: the FPC family
 `Integer` arguments to. **No further `lib/rtl` change is expected here** — this
 ticket is now a tracking placeholder for the strict-fpc row and could reasonably
 be closed into the compat ticket instead.
+
+
+## 2026-08-15 — UNBLOCKED: the compiler half landed (Track A)
+
+`--strict-overload-width` implements FPC's narrowest-that-fits rule
+(`compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload`). The RTL
+side needed nothing further — the `Int64`/`LongInt`/`LongWord` family this
+ticket already declared is the platonic one, and the `LongInt` body's mask is
+what makes the answer right once that body is the one selected.
+
+**This ticket's own 14-row FPC diff now passes verbatim under the flag** —
+`Integer` −1/−255/MinInt/positive, `digits` 2 and 16, `Int64`, `Byte`, `Word`,
+`Cardinal`, and the three literal rows — checked against FPC 3.2.2 under
+`{$mode objfpc}`, byte-identical.
+
+Without the flag `IntToHex(i, 8)` still prints `FFFFFFFFFFFFFFFF` for an
+`Integer`, and that is **correct and intended**: the default dialect widens to
+the widest overload by decision (user, 2026-08-14), so there is nothing left to
+fix there. Verified unchanged against `pinned`.
+
+What remains for Track B is a judgement call, not compiler work: whether to add
+the ticket's 14-row `.pas` as a checked test, and if so which mode it asserts.
+The Track A side ships its own two-way assertion already
+(`test/test_strict_overload_width.pas`, run flagged and unflagged), whose last
+row is exactly this `IntToHex` case.

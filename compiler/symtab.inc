@@ -5690,6 +5690,30 @@ begin
             (TypeSize(pType) < TypeSize(aType));
 end;
 
+function IntParamHoldsEveryValue(pType, aType: TTypeKind): Boolean;
+{ Can EVERY value of integer type aType be represented in pType? The "fits"
+  half of FPC's narrowest-that-fits overload rule, and deliberately NOT
+  ArgNarrowsInt: that one compares `TypeSize(pType) < TypeSize(aType)` and is
+  signedness-blind, so it says a LongInt parameter does not narrow a Cardinal
+  argument. It does — same width, but half the range is unreachable — and
+  Cardinal is exactly the row that shows FPC ranks by RANGE and not by declared
+  width (measured: FPC binds Int64 there and LongInt everywhere else).
+
+  ArgNarrowsInt is left alone on purpose: it ranks candidates on the DEFAULT
+  path too, and the default dialect's widening is intended behaviour, not a bug
+  to fix here. Used only under StrictOverloadWidth.
+  compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload }
+begin
+  if TypeSigned(pType) = TypeSigned(aType) then
+    Result := TypeSize(pType) >= TypeSize(aType)
+  else if TypeSigned(pType) then
+    { signed parameter, unsigned argument: it needs a spare bit for the sign }
+    Result := TypeSize(pType) > TypeSize(aType)
+  else
+    { unsigned parameter, signed argument: a negative value has nowhere to go }
+    Result := False;
+end;
+
 function LiteralIntKind(v: Int64): TTypeKind;
 { FPC's type for an untyped integer CONSTANT: the smallest type that holds it,
   signed candidate before unsigned at each width. pxx types every literal as
@@ -5719,6 +5743,8 @@ end;
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
     userOnly: Boolean; ownM, anyM: Integer; pass: Integer;
+    bestW, bestI, w: Integer;   { --strict-overload-width ranking }
+    fits: Boolean;
     variantArg: Boolean;    { some argument is a Variant -- see Phase 1c1 }
     dropLateDef: Boolean;   { NilPy: a def below this call site is not bound yet }
 begin
@@ -5953,6 +5979,20 @@ begin
     bug-a-an-integer-binop-argument-binds-a-double-overload }
   for pass := 0 to 1 do
   begin
+    { --strict-overload-width: FPC picks the NARROWEST parameter that FITS,
+      where pxx's default takes the first qualifying candidate in chain order
+      and so lands on the widest. Both are "correct" — the widening is the
+      dialect (user, 2026-08-14) — so the ranking is only collected under the
+      flag and the unflagged walk below is byte-for-byte the old one.
+
+      "Fits" is already decided by ArgNarrowsInt, which this phase's pass 0
+      excludes: that is what makes `Cardinal` keep binding Int64 (LongInt
+      cannot hold every Cardinal, so it narrows and is not a candidate at all),
+      which is the row that proves FPC's rule is narrowest-that-FITS rather
+      than narrowest-declared.
+      compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload }
+    bestW := -1;
+    bestI := -1;
     i := ProcChainHead(name);
     while i >= 0 do
     begin
@@ -5986,11 +6026,41 @@ begin
         end;
         if match then
         begin
-          Result := i;
-          Exit;
+          if not StrictOverloadWidth then
+          begin
+            Result := i;
+            Exit;
+          end;
+          { rank by total declared width of the INTEGER parameters, narrowest
+            first; chain order breaks a tie, so a single candidate and an
+            all-equal set both behave exactly as before. A candidate that
+            cannot hold every value of its argument is not ranked at all — it
+            is still reachable through the ordinary phases below, which is what
+            keeps a narrowing candidate winning when it is the only one. }
+          w := 0;
+          fits := True;
+          for j := 0 to nArgs-1 do
+            if (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) and
+               TypeIsMachineInt(Procs[i].Params[j].TypeKind) then
+            begin
+              if TypeIsMachineInt(argTypes[j]) and
+                 not IntParamHoldsEveryValue(Procs[i].Params[j].TypeKind, argTypes[j]) then
+                fits := False;
+              Inc(w, TypeSize(Procs[i].Params[j].TypeKind));
+            end;
+          if fits and ((bestI < 0) or (w < bestW)) then
+          begin
+            bestW := w;
+            bestI := i;
+          end;
         end;
       end;
       i := ProcHashNext[i];
+    end;
+    if bestI >= 0 then
+    begin
+      Result := bestI;
+      Exit;
     end;
   end;
 

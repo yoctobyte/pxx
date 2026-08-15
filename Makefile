@@ -5127,6 +5127,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_varrec_alloc_after26)" = "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
 	./$(COMPILER) test/test_format_single_arg.pas $(TESTTMP)/test_fmt_single26
 	test "$$($(TESTTMP)/test_fmt_single26)" = "$$(printf '0.10000000149011612\n0.1000\n1.0000000149011612E-001\n2.5000\n3.7500 -0.5000\n0.2000\n0.1000 42 7.5000 x\n0.1000 2.5000\n1.2500')"
+	# --strict-overload-width: FPC's narrowest-that-FITS integer overload choice,
+	# and the DEFAULT dialect's widening beside it. Both asserted from one source:
+	# the flag exists precisely because the two answers differ, and the unflagged
+	# row is the guarantee that the default did not move.
+	# compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload
+	./$(COMPILER) test/test_strict_overload_width.pas $(TESTTMP)/test_sow_default26
+	test "$$($(TESTTMP)/test_sow_default26)" = "$$(printf 'Integer  int64\nLongInt  longint\nSmallInt int64\nCardinal int64\nByte     int64\nliteral  int64\nMyInt    int64\nuByte    qword\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFFFFFFFFFF')"
+	./$(COMPILER) --strict-overload-width test/test_strict_overload_width.pas $(TESTTMP)/test_sow_strict26
+	test "$$($(TESTTMP)/test_sow_strict26)" = "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt longint\nCardinal int64\nByte     longint\nliteral  longint\nMyInt    longint\nuByte    word\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_trsat26
 	test "$$($(TESTTMP)/test_trsat26 | head -5)" = "$$(printf 't+1e30=9223372036854775807 r=9223372036854775807\nt-1e30=-9223372036854775808 r=-9223372036854775808\nt+inf =9223372036854775807 r=9223372036854775807\nt-inf =-9223372036854775808 r=-9223372036854775808\ntnan  =0 r=0')"
 	./$(COMPILER) -Futest test/test_array_of_const_cross_unit_overload.pas $(TESTTMP)/test_aoc_xunit26

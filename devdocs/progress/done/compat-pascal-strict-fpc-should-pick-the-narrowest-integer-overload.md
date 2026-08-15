@@ -4,6 +4,8 @@ prio: 30
 type: compat
 blocked-by: []
 summary: "Given overloads on Int64 and LongInt, pxx selects Int64 for Integer / SmallInt / Byte / an untyped literal; only an exact type-NAME match picks LongInt. FPC picks the narrowest that FITS. The widening is NOT a bug — it is the dialect (user, 2026-08-14) — but --strict-fpc must reproduce FPC's rule, because a width-sensitive routine like IntToHex answers differently under it. Compat work behind the flag, not a default-behaviour change."
+status: done
+owner: claude-A-N
 ---
 
 # `--strict-fpc` should pick the narrowest integer overload
@@ -110,3 +112,89 @@ Under `--strict-fpc` the table above matches FPC on every row and
 `bug-b-inttohex-…`'s 14-row FPC diff goes green; **without** the flag every row
 is unchanged from today. `make test` + self-host fixedpoint, and the corpora
 `--strict-fpc` already compiles stay green.
+
+## RESOLVED — landed as the standalone `--strict-overload-width`
+
+Every row of the ticket's table now matches FPC 3.2.2 under the flag, and the
+default dialect is byte-identical to `pinned` without it.
+
+| argument | default (unchanged) | `--strict-overload-width` | FPC |
+| --- | --- | --- | --- |
+| `Integer` | int64 | **longint** | longint |
+| `LongInt` | longint | longint | longint |
+| `SmallInt` | int64 | **longint** | longint |
+| `Cardinal` | int64 | int64 | int64 |
+| `Byte` | int64 | **longint** | longint |
+| literal `-1` | int64 | **longint** | longint |
+
+### The `Cardinal` row is the whole design, and it needed a new predicate
+
+Ranking the qualifying candidates by declared width got five rows right and
+broke `Cardinal` — it started answering `longint` where FPC says `int64`. The
+existing `ArgNarrowsInt` compares `TypeSize(pType) < TypeSize(aType)` and is
+**signedness-blind**, so it reports that a `LongInt` parameter does not narrow a
+`Cardinal` argument. It does: same width, half the range unreachable.
+
+So the flag needs its own fits test, `IntParamHoldsEveryValue` — same width when
+the signedness agrees, one width wider for a signed parameter taking an unsigned
+argument, never for an unsigned parameter taking a signed one.
+**`ArgNarrowsInt` was deliberately left alone**: it ranks candidates on the
+DEFAULT path too, and the default's widening is intended behaviour, so
+"fixing" it there would have been a dialect change smuggled in under a compat
+ticket.
+
+### Shape of the change
+
+The ranking is collected inside Phase 1c2's existing walk and only when the flag
+is set; the unflagged path still returns the first qualifying candidate and exits,
+byte for byte as before. A candidate that cannot hold every value of its argument
+is not ranked at all but stays reachable through the ordinary phases below —
+which is what keeps *"a narrowing candidate still wins when it is the only one"*
+true (asserted: an `N(SmallInt)`-only set still binds for an `Integer` argument,
+flag or not).
+
+### Sweep (the ticket's own list), all against FPC
+
+- **unsigned family** `QWord`/`LongWord`/`Word`: `Byte`→word, `Word`→word,
+  `Cardinal`→longword, `QWord`→qword. Matches.
+- **float sets** `Double`/`Single`: unchanged by the flag, and already agreed.
+  (`Extended` is not a separate candidate here — pxx maps it onto the same
+  8-byte kind as `Double` on this target, so declaring both is a duplicate
+  definition rather than an overload set.)
+- **user alias** `type MyInt = Integer`: resolves like `Integer` → longint.
+  Matches — the name-vs-type question one level out comes out right for free,
+  because the ranking reads the type kind and never the spelling.
+
+### Umbrella: NOT enrolled, per this ticket's own Scope
+
+Standalone, like `StrictOverload` and for the same reason — it changes which
+BODY a call binds to, so enrolling it changes what the corpora `--strict-fpc` is
+*"proven to compile"* resolve to. That call needs those corpora re-measured and
+is deliberately not made here. **A consequence worth stating: `--strict-fpc`
+alone does not yet reproduce FPC's overload widths**, so this ticket's Gate line
+("under `--strict-fpc` the table matches") is satisfied by
+`--strict-overload-width` instead, which is what its Scope section asked for.
+
+### Downstream: Track B is unblocked
+
+[[bug-b-inttohex-of-a-negative-integer-prints-16-digits]]'s **14-row FPC diff
+passes verbatim under the flag** — `Integer` −1/−255/MinInt/positive, `digits` 2
+and 16, `Int64`, `Byte`, `Word`, `Cardinal` and the three literal rows,
+byte-identical to FPC. Its RTL side needed nothing: the `Int64`/`LongInt`/
+`LongWord` family it already declares is the platonic one, and the `LongInt`
+body's mask is what makes the answer right once that body is selected. Its
+`blocked-by` is cleared and it is out of `blocked/`.
+
+### Verified
+
+`test/test_strict_overload_width.pas` asserts BOTH modes from one source (the
+flag exists precisely because the answers differ, so the unflagged row is the
+guarantee the default did not move); both assertions are wired into the
+Makefile. Flagged output byte-identical to FPC; unflagged output byte-identical
+to `pinned`. `tools/gate.sh quick` GREEN.
+
+Docs row filed as [[task-d-document-the-strict-overload-width-flag]] —
+`docs/**` is Track D's lane, not Track A's.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

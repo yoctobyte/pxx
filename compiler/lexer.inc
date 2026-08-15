@@ -637,6 +637,7 @@ begin
   PasDefineCount := 0;
   PasCondCount := 0;
   StrictOverload := False;
+  StrictOverloadWidth := False;
   StrictOperator := False;
   StrictCase := False;
   StrictPython := False;
