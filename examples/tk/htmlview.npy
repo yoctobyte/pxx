@@ -1,0 +1,50 @@
+# lib/pcl/tkhtmlview rendered headlessly: build the widget, feed it a document,
+# and read the Text widget back. The assertions are on the RENDERED TEXT rather
+# than on pixels, which is the part a renderer can get wrong silently.
+#
+# Two of them exist because the port found the bug the hard way:
+#   - the list bullet is "• ", a multi-byte character, and `_emit` measured it
+#     with len() on a parameter -- bytes, not characters
+#     (bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters);
+#   - the space in `<em>a</em> <strong>b</strong>` is the leading character of
+#     its own text run, and collapsing whitespace per-run rather than
+#     per-document swallowed it, so the words ran together as `ab`.
+import tkinter as tk
+from tkhtmlview import HTMLScrolledText, HTMLLabel
+
+DOC = """<h1>Title &amp; more</h1>
+<p>Some <strong>bold</strong> and <em>italic</em> and <code>x = 1</code>.</p>
+<ul><li>first</li><li>second &lt;esc&gt;</li></ul>
+<pre><code>def f():
+    return 1
+</code></pre>
+<blockquote>quoted</blockquote>
+<p>a <a href="http://x">link</a> here</p>
+"""
+
+root = tk.Tk()
+view = HTMLScrolledText(root, html=DOC, width=60, height=20)
+view.pack(fill="both", expand=True)
+view.fit_height()
+
+body = view.text.get("1.0", "end")
+print("title", "Title & more" in body)
+print("inline", "Some bold and italic and x = 1." in body)
+print("bullet", "• first" in body)
+print("entity", "second <esc>" in body)
+print("pre", "    return 1" in body)
+print("quote", "quoted" in body)
+print("link", "a link here" in body)
+
+# set_html REPLACES the document, and the style stack does not leak across calls
+view.set_html("<p><em>x</em></p>")
+print("replaced", view.text.get("1.0", "end").strip())
+
+# the non-scrolling variant is the same renderer
+label = HTMLLabel(root, html="<p>plain &amp; small</p>")
+label.pack()
+print("label", label.text.get("1.0", "end").strip())
+
+root.update()
+root.destroy()
+print("ok: tkhtmlview rendered")

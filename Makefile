@@ -9360,10 +9360,23 @@ lib-test: pxx-stable-check
 	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" = "get HELLOafter-delete LOvar bkwargs ok" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
 	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" = "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
+	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" = "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
 	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \
 	fi
+	# lib/pcl/tkhtmlview is a NilPy library, so CPython is an oracle for it the
+	# way it is for nilsh above: the SAME source, on real tkinter, must render
+	# the same document. This is what would catch a renderer that is merely
+	# self-consistent. (feature-b-tkhtmlview-in-nilpy)
+	@if command -v xvfb-run >/dev/null 2>&1 && python3 -c "import tkinter" 2>/dev/null; then \
+	  xvfb-run -a env PYTHONPATH=lib/pcl python3 examples/tk/htmlview.npy > $(TESTTMP)/lib_tkhtml_cpy.txt 2>&1; \
+	  xvfb-run -a $(TESTTMP)/lib_tk_htmlview > $(TESTTMP)/lib_tkhtml_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/lib_tkhtml_cpy.txt $(TESTTMP)/lib_tkhtml_pxx.txt >/dev/null \
+	    && echo "  lib-test: tkhtmlview renders identically under CPython" \
+	    || { echo "FAIL: tkhtmlview diverges from CPython"; diff $(TESTTMP)/lib_tkhtml_cpy.txt $(TESTTMP)/lib_tkhtml_pxx.txt | head -10; exit 1; }; \
+	else echo "  lib-test: no xvfb-run or no CPython tkinter, skipping the tkhtmlview oracle diff"; fi
 	# MulHiU64: intrinsic on CPU64, Pascal fallback elsewhere. The sweep
 	# fingerprint is identical on every target iff the two agree bit for bit.
 	$(PXX_STABLE) test/lib_wideint.pas $(TESTTMP)/lib_wideint

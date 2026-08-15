@@ -46,12 +46,10 @@ EXTRA_UNIT_DIRS = ["lib/rtl/platform/esp"]
 # Units known to be broken, deliberately, with the ticket that owns them. This
 # list must only ever shrink. An entry here is a promise that someone decided
 # to leave it broken -- not a place to park a failure you did not want to fix.
-KNOWN_BROKEN = {
-    # Written as though Pascal had keyword arguments; never compiled. The repo
-    # owner chose to REPLACE it with a NilPy port rather than repair it, and to
-    # leave the file broken meanwhile as the record of the question.
-    "tkhtmlview": "feature-b-tkhtmlview-in-nilpy",
-}
+# (tkhtmlview was the only entry this list ever held: written as though Pascal
+# had keyword arguments, so it never compiled. It is now lib/pcl/tkhtmlview.py
+# and the .pas is deleted -- feature-b-tkhtmlview-in-nilpy.)
+KNOWN_BROKEN = {}
 
 
 def compile_one(pxx, unit, tmpdir):

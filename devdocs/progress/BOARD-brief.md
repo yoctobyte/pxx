@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:209 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1888 rejected:37`
+`unfinished:11 blocked:4 backlog:211 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1889 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,10 +32,11 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 193, ranked
+## Ready — top 30 of 195, ranked
 
-- `[p 60] [B]` feature-b-tkhtmlview-in-nilpy (unblocks 1)
+- `[p 65] [N]` bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
+- `[p 60] [A]` bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -46,6 +47,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [C]` bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
+- `[p 55] [N]` bug-nilpy-field-class-lost-after-an-if-in-the-same-method
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -62,7 +64,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [B]` feature-b-mimic-codecs-for-nilpy
 - `[p 50] [C]` feature-c-vla-via-alloca
-- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
-- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
-_163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_165 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

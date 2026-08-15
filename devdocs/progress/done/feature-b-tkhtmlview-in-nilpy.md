@@ -4,7 +4,7 @@ prio: 50
 type: feature
 blocked-by: []   # both landed; cleared 2026-08-15
 summary: "Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect"
-status: working
+status: done
 owner: claude-B
 ---
 
@@ -139,3 +139,88 @@ scroll wrongly, which is the silent-failure trade this repo keeps refusing.
 - The renderer itself (the 398 lines of entity/whitespace/tag handling) is a
   straight transliteration and hit **no** gaps — the blockers are all in the
   three lines that build and wire the widget.
+
+## 2026-08-15 (Track B) — PORTED. `lib/pcl/tkhtmlview.py`, the `.pas` deleted
+
+Both blockers this ticket had waited on were re-verified by probe before
+anything was written, not read off the board: `class Panel(tk.Frame)` with
+`self.text.configure(yscrollcommand=self.bar.set)` + `self.bar.config(command=
+self.text.yview)` — the exact three lines both candidate designs died on last
+time — compiles and runs on `pinned` v339 / f11e0ed9816edc1d57ef8ee6e6ab0e5b9885db6c.
+
+Shape: **Frame containing a Text + Scrollbar**, which is the old `.pas`'s
+design and what the header prose already documents ("packed inside a frame of
+its own... geometry calls go to the FRAME"). Real tkhtmlview subclasses
+`ScrolledText`, whose trick is copying the Frame's geometry methods onto the
+Text; that is not reproducible through this façade and buys nothing here. The
+header paragraph survives verbatim, as the ticket asked.
+
+`lib/pcl/tkhtmlview.pas` is deleted, and `tools/lib_units_compile.py`'s
+`KNOWN_BROKEN` is now **empty** — tkhtmlview was the only entry it ever held,
+and that list was written with "must only ever shrink" on it.
+
+### Verified — with CPython as the oracle, not just against itself
+
+`examples/tk/htmlview.npy` builds the widget, feeds it a document and reads the
+Text widget back, asserting the RENDERED TEXT (headings, inline runs, the
+bullet, entities, `<pre>` indentation, the link, `set_html` replacing rather
+than appending). It runs **unchanged under CPython on real tkinter**, and the
+two outputs are byte-identical. That is the nilsh pattern, and it is the check
+that a self-consistent-but-wrong renderer cannot pass.
+
+Wired into `make lib-test` inside the existing guarded xvfb block (`tk-nilpy`),
+plus the CPython diff as its own guarded step. **`make lib-test` GREEN** on
+stable v339, with both new lines present in the log:
+`tk-nilpy: ok` and `lib-test: tkhtmlview renders identically under CPython`.
+
+### Two NilPy bugs found, as this ticket predicted, and both are quiet ones
+
+- [[bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters]] (prio 65).
+  `len(s)` on an **unannotated** `str` parameter answers in BYTES while `s[i]`
+  is bounds-checked in CHARACTERS. `s: str` is right, a local is right; only the
+  bare parameter is wrong, and only on non-ASCII, which is why it survived. The
+  port's `_emit` crashed on its own list bullet `"• "` the first time a `<li>`
+  rendered. Slicing, iteration, `find`, `startswith`, `in` and `.lower()` are
+  all correct on the same value — so `len` and `[i]` disagree with the rest of
+  the string API *and with each other*.
+- [[bug-nilpy-field-class-lost-after-an-if-in-the-same-method]] (prio 55). A
+  `self.f = Cls(...)` that comes **after** an `if`/`for` in the same method is
+  never recorded as a class field, so the field silently falls back to dynamic.
+  Moving the `if` one line down fixes it. Same tell as the `Text` collision:
+  a direct call on the field still works, only a bound method taken as a VALUE
+  fails — i.e. exactly the scrollbar wiring, again.
+
+Per the platonic-code rule neither was worked around by reshaping the library.
+The scanners are written with `find`/slicing/iteration rather than
+`while i < len(s): s[i]`, which is the more Pythonic spelling on its own merits
+and is what CPython parity is measured against; and every widget construction
+precedes every conditional, which is the natural order anyway. Both tickets
+record that the port happens not to trip them, so neither is marked as blocking.
+
+### A renderer bug fixed on the way, that the .pas would have shipped
+
+Whitespace was collapsed **per text run** instead of per document. The space in
+`<strong>bold</strong> and <em>italic</em>` is the *leading* character of its own
+run, so it was dropped and the words ran together as `boldand italic`. The `.pas`
+had the identical logic and nobody ever saw it, because the file never compiled.
+`_collapse` now takes `keep_leading`, which is false only at the start of a line
+— where HTML drops it too. Asserted in the example.
+
+### And a Track A regression found by checking the real consumer
+
+`~/songformatter/SongFormatter.py` now gets **past** its
+`from tkhtmlview import HTMLScrolledText` — the port works — and dies further in,
+inside `lib/rtl/configparser.pas`, on a name that has nothing to do with either:
+[[bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units]].
+Five lines of pure Pascal reproduce it (`uses tkinter, configparser;`), so it is
+not a NilPy issue and it is not this ticket's to fix. This ticket's own gate line
+about SongFormatter is therefore satisfied as far as it reaches: tkhtmlview is no
+longer what stops it.
+
+`lib/pcl/tkinter.pas`'s `TkTextWidget` / `NewText` pair stays — nothing uses it
+now, but the flat-namespace problem it works around is still there for the next
+Pascal caller, and the A ticket above is the same disease. Its comment was
+updated to say so rather than to keep naming a file that is now Python.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

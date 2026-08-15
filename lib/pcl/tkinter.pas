@@ -584,9 +584,13 @@ type
   TkTextWidget = Text;
 
 { A Text widget built from ANOTHER unit. `Text` is also the RTL's file record,
-  and an unqualified lookup outside this unit finds that one — so a sibling unit
-  (lib/pcl/tkhtmlview) cannot write `Text.Create(...)` at all. Inside this unit
-  the name resolves to the class, so the construction lives here.
+  and an unqualified lookup outside this unit finds that one — so a sibling
+  PASCAL unit cannot write `Text.Create(...)` at all. Inside this unit the name
+  resolves to the class, so the construction lives here. (The unit this was
+  written for, lib/pcl/tkhtmlview, is now NilPy and reaches `tk.Text` directly —
+  qualified lookup was fixed under
+  [[bug-nilpy-text-class-name-binds-the-rtl-file-record]]. The pair stays for
+  the next Pascal caller, which still has the problem.)
   See [[decide-class-namespace-scoping]] / [[bug-pascal-uses-is-transitive]]:
   this is a workaround for the flat namespace, and it goes away when that does. }
 function NewText(master: Widget; const wrap: AnsiString = '';
