@@ -142,4 +142,4 @@ Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN.
 earlier the same day).
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 276a02d53.
