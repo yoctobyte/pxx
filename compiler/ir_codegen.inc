@@ -3132,6 +3132,15 @@ begin
 
     IR_LOAD_SYM:
       begin
+        { -O3 store->reload elimination: the statement immediately before this
+          one stored this very symbol and nothing at all was emitted in
+          between, so rax still holds the value — only the width fixup is left.
+          Set by IRMarkRedundantReloads; always False below -O3. }
+        if IRLoadRedundant[node] then
+        begin
+          EmitReExtendRax(IRA[node]);
+          Exit;
+        end;
         EmitLoadVar(IRA[node]);
         { EmitLoadVar leaves floats in xmm0, but the IR value model carries
           floats as double bits in rax. Bridge xmm0 -> rax. }
@@ -6693,6 +6702,176 @@ begin
   CmpFusible := True;
 end;
 
+{ ===== -O3 store->reload elimination (feature-opt-accumulator-value-tracker) =====
+
+  The win is ordinary:
+
+      x := a + b;    { mov [rbp+xoff], rax }
+      y := x * 2;    { mov rax, [rbp+xoff]  <- rax already holds it }
+
+  The reason it could not be taken before is that a "rax currently holds symbol
+  S" fact has to be invalidated the instant ANYTHING writes rax, and rax is
+  written from hundreds of scattered raw EmitB sites across this file with no
+  choke point. Routing every one of them through an accumulator primitive was
+  ruled out: it is the exact EmitB-rewrite campaign standing policy forbids
+  (every converted block shifts the emitted bytes — pure reseed risk for no
+  behavioural gain), and doing it INCOMPLETELY is a silent miscompile.
+
+  So the decision is made HERE, at the IR level, before codegen, and the
+  emitter is handed a single bit. The invariant is deliberately stronger than
+  the optimisation needs:
+
+    A LOAD MAY BE MARKED REDUNDANT ONLY WHEN NOTHING AT ALL IS EMITTED BETWEEN
+    THE STORE AND IT.
+
+  Not "nothing that writes rax" — nothing. That is checkable by reading one
+  basic block instead of by trusting every emitter site.
+
+  Conservative by construction: anything IRFirstEvaluated is unsure about is
+  simply not marked, which costs a missed optimisation and nothing else. }
+
+{ Is node k a TOP-LEVEL statement — i.e. does IREmitMachineCode's own case
+  statement act on it? Everything else at top level is a subexpression node the
+  loop walks past without emitting a byte, which is what makes the "nothing in
+  between" test a scan over indices rather than over emitted code. Mirrors that
+  case's label list exactly; the three call kinds carry their own
+  statement-position flag (a call whose value is CONSUMED is emitted through its
+  parent, not here). }
+function IRTopLevelStmt(k: Integer): Boolean;
+begin
+  IRTopLevelStmt := False;
+  case IRKind[k] of
+    IR_LABEL, IR_JUMP, IR_JUMP_IF_FALSE,
+    IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT,
+    IR_STORE_SYM, IR_STORE_MEM, IR_STORE_DYN, IR_WRITE, IR_WRITELN,
+    IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED,
+    IR_SET_COPY, IR_VAR_STORE,
+    IR_SETLEN_DYN, IR_SETLEN_STR, IR_DEFAULT_MEM, IR_ZERO_SYM,
+    IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
+    IR_COSWITCH, IR_YIELD, IR_SET_SIGNAL, IR_IO_LOCK, IR_IO_UNLOCK,
+    IR_ASM:
+      IRTopLevelStmt := True;
+    IR_CALL:
+      IRTopLevelStmt := IRIVal[k] = 1;
+    IR_VIRTUAL_CALL, IR_CALL_IND:
+      IRTopLevelStmt := IRStmtRoot[k];
+  end;
+end;
+
+{ Which sym slots may participate at all: a plain scalar whose store is the
+  generic `IREmitNode(value); EmitStoreVar(sym)` arm and whose load is the
+  generic size/sign-extending one. The first four tests are LeafSymRcxLoadable's
+  (no float, no string, no array, no by-ref param) — the -O1 operand loader
+  draws the same line for the same reason — restated over a SYM INDEX because
+  this predicate is asked about a store destination as well as about a load.
+  On top of them:
+    * ordinal or pointer ONLY — a record / set / class / variant destination
+      takes one of IR_STORE_SYM's earlier arms, which do not end with rax
+      holding the stored value;
+    * NOT register-resident — EmitStoreVar's resident dual-write goes through
+      RegcallRefreshResident, which reloads via EmitLoadVar and so clobbers rax.
+      (A resident load is a reg-reg move already; there is nothing to win.) }
+function ReloadElimSym(idx: Integer): Boolean;
+var tk: TTypeKind;
+begin
+  ReloadElimSym := False;
+  if Syms[idx].IsArray then Exit;
+  tk := Syms[idx].TypeKind;
+  if TypeIsFloat(tk) then Exit;
+  if (tk = tyString) or (tk = tyAnsiString) then Exit;
+  if TypeIsFrozenString(tk) then Exit;
+  if not (TypeIsOrdinal(tk) or (tk = tyPointer)) then Exit;
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then Exit;
+  if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam) or
+          (Syms[idx].Kind = skGlobal)) then Exit;
+  if ResidentRegOf(idx) <> 0 then Exit;
+  ReloadElimSym := True;
+end;
+
+{ The node IREmitNode would emit FIRST for this value tree, or -1 for "cannot
+  say". A MIRROR of IREmitNode's recursion order, and the whole correctness
+  question lives here — `y := 5 * x` after `x := a + b` must NOT skip the
+  reload, because at -O0/-O1 the const left leaf is evaluated first and
+  MovRaxImm(5) has already clobbered rax by the time IR_LOAD_SYM(x) runs.
+
+  IREmitNode's IR_BINOP arm picks its operand order from a guard CHAIN, so this
+  mirrors the chain rather than guessing:
+    * -O3 in-tree XMM fusion  -> unknown (EmitFloatTree owns the order);
+    * -O1 imm-fold / const-right / leaf-sym-right -> LEFT first;
+    * -O2 W1 mirror (leaf LEFT, complex right) -> RIGHT first, but only when
+      `not InLValueWrite`, which is a RUNTIME flag this pass cannot see, so the
+      honest answer is unknown;
+    * every remaining arm (-O3 scratch, -O3 callee-saved scratch, push/pop)
+      -> LEFT first.
+
+  MUST MOVE TOGETHER WITH IREmitNode's IR_BINOP ARM. If they ever disagree the
+  cost is a missed mark in one direction and a WRONG VALUE in the other, so the
+  negative test (test_opt_reload_const_left.pas) is in the suite permanently. }
+function IRFirstEvaluated(node: Integer): Integer;
+var left, right: Integer;
+begin
+  IRFirstEvaluated := -1;
+  if node < 0 then Exit;
+  case IRKind[node] of
+    IR_LOAD_SYM, IR_CONST_INT, IR_CONST_STR, IR_CONST_DATA:
+      IRFirstEvaluated := node;
+    IR_BINOP:
+      begin
+        left := IRA[node];
+        right := IRB[node];
+        if (OptLevel >= 3) and FloatTreeFits(node) then Exit;
+        if (OptLevel >= 1) and (IRKind[right] = IR_CONST_INT) then
+          IRFirstEvaluated := IRFirstEvaluated(left)
+        else if (OptLevel >= 1) and LeafSymRcxLoadable(right) then
+          IRFirstEvaluated := IRFirstEvaluated(left)
+        else if (OptLevel >= 2) and
+                ((IRKind[left] = IR_CONST_INT) or
+                 (LeafSymRcxLoadable(left) and ScratchSafeSubtree(right))) then
+          Exit   { the W1 mirror MAY reorder to right-first — cannot say }
+        else
+          IRFirstEvaluated := IRFirstEvaluated(left);
+      end;
+  end;
+end;
+
+{ Per body: mark every reload that the statement immediately before it already
+  left in rax. x86-64 only and -O3 only (a new pass lands on the free tier and
+  promotes per-pass after the full gate); -g forces -O0, so the DWARF line
+  table never sees a statement whose first instruction vanished. }
+procedure IRMarkRedundantReloads;
+var i, j, f, sym: Integer;
+begin
+  if OptLevel < 3 then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  { PXXDBG=a.reload:* — what this pass actually marked, per body. A
+    differential that passes because the pass never RAN asserts nothing, so
+    the firing count is what the suite checks rather than assembly text. }
+  for i := 0 to IRCount - 1 do
+  begin
+    if IRKind[i] <> IR_STORE_SYM then Continue;
+    if not IRTopLevelStmt(i) then Continue;
+    { the store's own destination must be one whose generic arm ends with the
+      stored value in rax }
+    sym := IRA[i];
+    if not ReloadElimSym(sym) then Continue;
+    { the next thing the top-level loop ACTS on. Anything but a plain scalar
+      store — a label, a jump, a call, a write, an exception boundary — ends
+      the run, because then something IS emitted in between. }
+    j := i + 1;
+    while (j < IRCount) and not IRTopLevelStmt(j) do Inc(j);
+    if j >= IRCount then Continue;
+    if IRKind[j] <> IR_STORE_SYM then Continue;
+    if not ReloadElimSym(IRA[j]) then Continue;
+    f := IRFirstEvaluated(IRB[j]);
+    if f < 0 then Continue;
+    if IRKind[f] <> IR_LOAD_SYM then Continue;
+    if IRA[f] <> sym then Continue;
+    IRLoadRedundant[f] := True;
+    if PxxDbgWants('a.reload', '*') then
+      WriteLn('PXXDBG a.reload marked node ', f, ' sym ', sym, ' ', Syms[sym].Name);
+  end;
+end;
+
 procedure IREmitMachineCode;
 var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
     LabelFixupCount: Integer;
@@ -7644,6 +7823,10 @@ begin
   FloatPoolBoundaryAssign;
   FloatPoolBoundaryAssignA64;
   CalleeScratchAssign;
+  { Last, because it MIRRORS the emitter's operand order and the residency
+    passes above are what decide part of it: a resident sym is excluded, and
+    CsScratchOn/ScratchDepth pick BINOP arms the mirror has to agree with. }
+  IRMarkRedundantReloads;
   { PXXDBG=a.ir:<proc> — the IR of ONE routine, no rebuild and no wading through
     every body in the program. IRDump already runs per body with CurProc in
     scope, so this is a condition rather than a refactor. `a.ir:*` is --dump-ir. }

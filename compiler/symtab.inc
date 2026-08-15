@@ -3677,6 +3677,47 @@ begin
   end;
 end;
 
+{ -O3 store->reload elimination: rax already holds the value that was just
+  stored into `idx`, so the reload's only remaining job is the WIDTH fixup.
+  EmitStoreVar wrote exactly the low TypeSize(tk) bytes of rax to the slot, and
+  EmitLoadVar's extension is a pure function of (size, signedness) of those same
+  bytes — so re-extending rax in place gives the identical value without
+  touching memory. 8-byte slots need nothing at all.
+
+  MUST MOVE TOGETHER WITH EmitLoadVar's scalar else-branch: the two extension
+  choices are the same table, and a load that started extending differently
+  would leave this one behind. Only reached for syms ReloadElimSym admits
+  (ordinal/pointer, non-resident, non-managed), which is exactly that branch. }
+procedure EmitReExtendRax(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean;
+begin
+  tk := Syms[idx].TypeKind;
+  sz := TypeSize(tk);
+  sgn := TypeSigned(tk);
+  if sz >= 8 then Exit;
+  if sz = 1 then
+  begin
+    if sgn then
+      begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C0); end   { movsx rax, al }
+    else
+      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); end;  { movzx rax, al }
+  end
+  else if sz = 2 then
+  begin
+    if sgn then
+      begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C0); end   { movsx rax, ax }
+    else
+      begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C0); end;  { movzx rax, ax }
+  end
+  else
+  begin
+    if sgn then
+      begin EmitB($48); EmitB($63); EmitB($C0); end               { movsxd rax, eax }
+    else
+      begin EmitB($89); EmitB($C0); end;                          { mov eax, eax (zero-extends) }
+  end;
+end;
+
 { -O1 pass 2 (leaf-sym operand direct load): load a plain scalar local/param/
   global straight into RCX, so a BINOP right operand that is a side-effect-free
   IR_LOAD_SYM skips the push-left / eval-right-into-rax / mov rcx,rax / pop-rax

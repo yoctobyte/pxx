@@ -36,6 +36,7 @@ begin
   SetLength(IRC, n);            SetLength(IRIVal, n);      SetLength(IRTk, n);
   SetLength(IRCallDest, n);     SetLength(IRCtorProc, n);  SetLength(IRSetLenBaseRec, n);
   SetLength(IRStmtRoot, n);     SetLength(IRLine, n);      SetLength(IRFile, n);
+  SetLength(IRLoadRedundant, n);
   IRCapacity := n;
 end;
 
@@ -49,6 +50,7 @@ begin
   IRIVal[IRCount] := ival;
   IRTk[IRCount] := tk;
   IRStmtRoot[IRCount] := False;
+  IRLoadRedundant[IRCount] := False;
   IRLine[IRCount] := CurLowerLine;
   IRFile[IRCount] := CurLowerFile;
   IRCallDest[IRCount] := -1;

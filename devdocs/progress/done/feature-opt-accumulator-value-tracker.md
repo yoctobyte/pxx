@@ -3,6 +3,8 @@ track: A
 prio: 58
 type: feature
 summary: "The register-value scaffold two -O passes are blocked on: a single choke point for every write to the accumulator, so a 'rax currently holds symbol S' fact can be maintained without a silent-miscompile risk. Today rax is written from hundreds of scattered raw EmitB sites."
+status: done
+owner: claude-A-N-nightly
 ---
 
 # An accumulator value tracker — the scaffold `-O` passes keep waiting for
@@ -120,3 +122,76 @@ before the second. Nothing here changes the IR, so no other backend is touched.
 - A deliberate NEGATIVE test: `y := 5 * x` after `x := a + b`, which must still
   reload x. That case is the whole reason the ticket exists and it belongs in
   the suite, not in a comment.
+
+## Resolution (2026-08-15) — Shape B, landed WITH its first consumer
+
+Built as specified: the decision is made at the IR level and the emitter gets a
+single bit, so no raw `EmitB` site moved and the ruled-out Shape A campaign was
+never started.
+
+Landed together with the consumer it exists for, behind `-O3`, because a
+scaffold nothing reads cannot be tested and the negative case the ticket is
+built around only becomes assertable once a mark can be wrong.
+
+**The pieces**
+
+- `IRLoadRedundant` (defs.inc, grown in lockstep with the other node-indexed
+  arrays in `EnsureIRCapacity`, cleared per node in `IRAppend`).
+- `IRTopLevelStmt` — mirrors `IREmitMachineCode`'s own case label list, so
+  "nothing at all was emitted in between" is a scan over node indices: anything
+  NOT in that list emits no byte at top level. The three call kinds carry their
+  own statement-position flag.
+- `ReloadElimSym` — which slots may play: LeafSymRcxLoadable's four tests
+  (no float / string / array / by-ref param) restated over a sym index, plus
+  ordinal-or-pointer only (a record/set/class/variant destination takes one of
+  IR_STORE_SYM's earlier arms, which do not end with rax holding the value) and
+  NOT register-resident (`EmitStoreVar`'s resident dual-write reloads through
+  `EmitLoadVar` and clobbers rax).
+- `IRFirstEvaluated` — the mirror. Mirrors IR_BINOP's *guard chain*, not a
+  guess: -O3 XMM fusion → unknown; the -O1 const-right / leaf-sym-right arms →
+  LEFT first; the -O2 W1 mirror → unknown, because its `not InLValueWrite`
+  guard is a RUNTIME flag this pass cannot see; every remaining arm → LEFT.
+  Unknown is always safe: it costs a missed mark and nothing else.
+- `IRMarkRedundantReloads` — runs last in the per-body pipeline, after
+  IROptimize AND the residency passes, since those decide part of what the
+  mirror has to agree with.
+- `EmitReExtendRax` (symtab.inc, beside EmitLoadVar) — the consumer. Note the
+  refinement over "skip the load": the store wrote only the low `TypeSize`
+  bytes, so the reload's remaining job is the WIDTH fixup, and re-extending rax
+  in place reproduces `EmitLoadVar`'s extension exactly without touching memory.
+  That is what lets 1/2/4-byte slots participate instead of 8-byte ones only —
+  `movsxd rax, eax` (3 bytes, no memory) in place of `mov rax, [rbp+off]`.
+
+**Two comment pairs are marked MUST MOVE TOGETHER**: IRFirstEvaluated with
+IREmitNode's IR_BINOP arm, and EmitReExtendRax with EmitLoadVar's scalar
+else-branch.
+
+**Measured, not assumed.** `PXXDBG=a.reload:*` prints every mark (node, sym,
+name) — documented in `devdocs/dev/debug-switches.md`. The suite asserts the
+FIRING COUNT as well as the values, because an -O0-vs-O3 differential that
+passes because the pass never ran asserts nothing. Six marks fire in the test's
+main body; the const-left and call-in-between cases are correctly not marked.
+
+**Gate**
+
+- `make compiler/pascal26` self-host fixedpoint + `tools/gate.sh quick` GREEN.
+- `-O3` self-host fixedpoint: three-round self-compile converged byte-identical.
+- The strongest oracle available here: an -O0-built and an -O3-built compiler
+  emit BYTE-IDENTICAL output for the whole compiler source.
+- `test/test_opt_store_reload.pas` — all four widths + pointer + Int64, the
+  `y := 5 * x` negative case, and a call between store and use. Every value
+  matches FPC 3.2.2 on the same source, and -O0/-O1/-O2/-O3 agree. Wired into
+  `test-opt`, `test-core` and `test-nilpy`'s shared assertion block.
+
+Stays at `-O3` (the free tier) per standing policy; promotion to `-O2` is a
+separate call after the full gate has swept it.
+
+## Unblocked
+
+[[feature-opt-store-reload-elimination]] — its named reload is what this landed,
+so that ticket is now about WIDENING the shape (more statement kinds than a
+plain scalar store, and runs longer than two statements), not about the missing
+scaffold.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

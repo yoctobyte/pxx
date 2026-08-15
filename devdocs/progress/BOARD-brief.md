@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:206 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1900 rejected:37`
+`unfinished:11 blocked:4 backlog:205 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1901 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,9 +32,8 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 190, ranked
+## Ready — top 30 of 189, ranked
 
-- `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -64,5 +63,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
+- `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 
-_160 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_159 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

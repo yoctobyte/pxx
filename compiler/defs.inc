@@ -2867,6 +2867,17 @@ var
     via their parent. Needed for IR_VIRTUAL_CALL, whose IRIVal holds the VMT
     slot and so cannot double as the IR_CALL=1 statement flag. }
   IRStmtRoot : array of Boolean;
+  { -O3 store→reload elimination (feature-opt-accumulator-value-tracker): set on
+    an IR_LOAD_SYM node whose value is PROVEN to be in rax already, because the
+    immediately preceding top-level statement stored that very symbol and
+    NOTHING AT ALL was emitted in between. Stronger than "nothing wrote rax" on
+    purpose: it is checkable by reading one basic block instead of by trusting
+    every emitter site, and rax is written from hundreds of scattered raw EmitB
+    sites. Computed per body by IRMarkRedundantReloads (after IROptimize and the
+    residency passes, so it sees the final IR); read only by IREmitNode's
+    IR_LOAD_SYM arm, which re-extends rax to the symbol's width instead of
+    loading. Always False below -O3 and on every non-x86-64 backend. }
+  IRLoadRedundant : array of Boolean;
   IRLine  : array of Integer; { source line of this IR instr (from CurLowerLine), 0 if unknown — DWARF -g }
   IRFile  : array of Integer; { .debug_line file index of that line (from CurLowerFile) }
   IRCount : Integer;
