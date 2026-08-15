@@ -97,11 +97,40 @@ bug, and then it set a bar every later function had to clear.
 
 Worth stating, because the folklore is wrong in two specific ways:
 
-- **There is no hardware trig on the targets that matter.** x87 has `fsin`,
-  `fcos`, `fptan`, `fpatan`, but they are slow, they are *less* accurate than a
-  good polynomial (their argument reduction uses a 66-bit pi), and x86-64's SSE
-  has no equivalent — glibc does not use them. aarch64 has none. The one real
-  hardware win is `sqrtsd` / `fsqrt`, which IS exact and IS used here.
+- **There is no *usable* hardware trig on the targets that matter.** x87 has
+  `fsin`, `fcos`, `fptan`, `fpatan` and every x86-64 CPU still has them, but
+  x86-64's SSE has no equivalent, aarch64 and riscv have none, and the x87 ones
+  fail on accuracy. **Measured on this box, 1M calls** (`gcc -O2`, `fsin` via
+  inline asm):
+
+  | | time | `sin(1e10)` |
+  | --- | --- | --- |
+  | x87 `fsin` | 34 ms | **~202,000 ulp wrong** |
+  | glibc `sin` | **7 ms** | correct |
+  | pxx `Sin` (fast path) | 117 ms | correct |
+
+  `fsin`'s argument reduction uses a **66-bit pi**, so it degrades exactly where
+  ours used to: error grows with the argument. Past 2^63 it does not even try —
+  `fsin(1e22)` returns `1e22`, the input, with C2 set. Intel's manual claimed
+  ~1 ulp for two decades and was corrected in 2014 to admit errors up to ~1.3
+  quintillion ulp near multiples of pi. Adopting it would reintroduce the class
+  of bug this file exists to keep fixed.
+
+  Note the honest half: `fsin` is currently **3x faster than our own fast
+  path**, so "it is slow" is only true relative to a *good* polynomial — glibc's
+  is good and beats it 5x. Ours is not there yet (see the headroom note below).
+  The reason to refuse `fsin` is accuracy and portability, not speed.
+
+  The one real hardware win is `sqrtsd` / `fsqrt`, which IS exact and IS used here.
+
+- **We are still 17x off glibc on `Sin`**, 117 ms vs 7 ms per 1M. The kernels are
+  the same shape, so the gap is call overhead and instruction selection, not the
+  polynomial: no inlining of float-returning leaves
+  ([[feature-opt-inline-float-and-record-returning-leaves]], measured 3.8x on the
+  dd kernels) and no **FMA** — a Horner loop is the textbook FMA case, halving
+  the op count and removing a rounding per term. x86-64 has had FMA3 since
+  Haswell (2013) and aarch64's `FMADD` is baseline. That is optimization
+  headroom, not an accuracy question.
 - **80-bit extended is not the trick either.** It buys 11 bits; double-double
   buys 53, and costs the same order of magnitude. It is also unavailable in the
   x86-64 ABI's SSE registers and absent on ARM.
