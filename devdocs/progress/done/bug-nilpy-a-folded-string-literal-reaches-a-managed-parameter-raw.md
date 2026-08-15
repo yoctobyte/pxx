@@ -2,7 +2,7 @@
 track: A
 prio: 40
 type: bug
-commit: PENDING-COMMIT
+commit: 4e344d078
 blocked-by: []
 summary: "`int(\"1\" + \"2\")` raised ValueError on garbage text and `str(\"a\" + \"b\")` printed empty: two literals are folded to one interned literal at IR time, but the expression they replace was typed tyAnsiString, so the call path passed the raw literal pointer where a managed handle was promised and its length was read out of the bytes before the text."
 ---
