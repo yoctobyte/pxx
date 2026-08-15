@@ -1014,7 +1014,7 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     vaK, vaPIdx, vaGpBytes, vaRegSz: Integer;
     genCtrl, genCtrlCG, genSel, genDefault, genVal, genAssocCG: Integer;
     vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec: Integer;
-    vaRecId, ptrNode: Integer;
+    vaRecId, ptrNode, diagIdx: Integer;
     vt: TTypeKind;
     name: AnsiString;
     argUndecl: array[0..31] of Boolean;
@@ -1456,10 +1456,25 @@ begin
           the caller then reads uninitialised memory). Refuse it and name the
           collision — the fix is always to declare the function.
           bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity. }
-        if CCrossNamespaceArityMismatch(procIdx, CProcArgCount(argHead)) then
+        { The Pascal routine usually is not VISIBLE from a C translation unit
+          -- a .c has no uses clause, so sysutils' `Time` is out of scope by
+          the ordinary rule and FindProc rightly missed it. The call is refused
+          either way; what was lost is the part that says WHY, and the generic
+          'undeclared function: time' sends the reader looking for a missing
+          header they already have. So the collision is probed with visibility
+          off. Diagnostic only -- nothing here resolves, and the refusal below
+          does not depend on the probe succeeding. }
+        diagIdx := procIdx;
+        if diagIdx < 0 then
+        begin
+          DeclVisibilityProbe := True;
+          diagIdx := FindProc(name);
+          DeclVisibilityProbe := False;
+        end;
+        if CCrossNamespaceArityMismatch(diagIdx, CProcArgCount(argHead)) then
           Error('call to undeclared function ''' + name +
-                ''' would bind to the Pascal routine ''' + Procs[procIdx].Name +
-                ''', which takes ' + AIntToStr(Procs[procIdx].ParamCount) +
+                ''' would bind to the Pascal routine ''' + Procs[diagIdx].Name +
+                ''', which takes ' + AIntToStr(Procs[diagIdx].ParamCount) +
                 ' parameter(s), not ' + AIntToStr(CProcArgCount(argHead)) +
                 ' — declare it (include its header) so the C function is used');
         if procIdx >= 0 then

@@ -612,6 +612,7 @@ function DeclVisible(declUnit: Integer): Boolean;
   Same artifact ClassNameIsAmbientIntrinsic handles by name on the class side. }
 begin
   DeclVisible := True;
+  if DeclVisibilityProbe then Exit;
   if declUnit < 0 then Exit;
   if declUnit = CurrentUnitIdx then Exit;
   DeclVisible := VisibilityAllows(CurrentUnitIdx, declUnit);

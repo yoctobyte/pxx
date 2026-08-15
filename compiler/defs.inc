@@ -2151,6 +2151,7 @@ var
     real `uses`/`import` clauses too. }
   AmbientUnitIdx   : array[0..255] of Integer;   { was 32: ambience became transitive over the compiler-injected runtime graph, which is deeper than the handful of roots }
   AmbientUnitCount : Integer;
+  DeclVisibilityProbe : Boolean;   { while True, DeclVisible answers True for everything. For DIAGNOSTICS ONLY -- asking "does a confusable name exist ANYWHERE" is a different question from "may this scope use it", and a compiler that refuses a call should still be able to say WHY. Never set around anything that RESOLVES. }
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;
   VisCacheEdges : Integer;

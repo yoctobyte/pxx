@@ -1,5 +1,8 @@
 program TestMathUnit;
-uses math;
+{ math_ext is the C header holding the libc entry points (labs). math.pas
+  names it in its own interface, but that is math.pas's namespace -- a program
+  calling labs directly names it directly. }
+uses math, math_ext;
 var
   a, b, val: Integer;
 begin

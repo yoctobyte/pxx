@@ -700,6 +700,18 @@ begin
     (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
   EmitIoLockStubsForTarget;
 
+  { System intrinsics, exactly like the Pascal, C and NilPy drivers do — BASIC
+    was the one frontend that never minted them. It got away with it while
+    nothing on this path pulled builtinheap, whose TInterfacedObject/IInterface
+    signatures NAME TGuid and TObject; the moment a `USES <c file>` started
+    pulling the C runtime bridge, builtinheap arrived and its own declarations
+    failed to resolve with `unknown type: TGuid` — an error in a compiler
+    builtin, reported against a BASIC program that mentions neither. Idempotent
+    (both Register* routines return early if the row exists).
+    bug-pascal-uses-non-transitivity-only-covers-routines-and-types }
+  RegisterBuiltinTGuid;
+  RegisterBuiltinTObject;
+
   { GOTO/GOSUB: reset the shared label table (C resets it per function; the
     BASIC main program is one scope), prescan for jump targets, and allocate
     the gosub shift-register stack (globals — BSS-zeroed, so the empty-stack
