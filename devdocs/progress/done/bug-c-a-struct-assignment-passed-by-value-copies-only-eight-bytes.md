@@ -75,4 +75,4 @@ deref destination, named destination, a 24-byte struct too large for any
 register pair, and two such arguments in one call.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 353adf897.
