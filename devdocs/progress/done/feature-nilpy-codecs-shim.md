@@ -3,6 +3,7 @@ track: B
 prio: 40
 type: feature
 blocked-by: []   # bug-n-str-encode-and-bytes-decode-ignore-the-encoding landed; cleared 2026-08-15
+status: done
 ---
 
 # `import codecs` — the next wall for the compile-real-libraries campaign
@@ -155,3 +156,22 @@ what they cannot do), then `lookup()` is a thin delegation and this ticket is
 small again. The scope proposed above — which encodings to do correctly and
 which to refuse by name — applies to the BUILTINS now; it moved down a layer.
 
+
+## 2026-08-15 — done, as [[feature-b-mimic-codecs-for-nilpy]]
+
+Same unit, asked for from the other direction: this ticket found the wall while
+compiling webencodings, and the B one scoped the surface against the same
+package's actual usage. `lib/rtl/mimic_codecs.pas` exists, `import codecs`
+resolves to it, and `test/lib_codecs.npy` is diffed against CPython in
+`make lib-test`.
+
+The scoping note this ticket asked for ("worth scoping against the real usage in
+`webencodings/__init__.py` and `x_user_defined.py` before writing anything") was
+followed and was the right call: the whole module would have been weeks, and the
+measured surface was an afternoon.
+
+Closed as a duplicate rather than resolved separately, so the write-up lives in
+one place.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

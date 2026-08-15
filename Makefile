@@ -9390,6 +9390,19 @@ lib-test: pxx-stable-check
 	else \
 	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \
 	fi
+	# mimic_codecs — `import codecs` resolves to lib/rtl/mimic_codecs. Same
+	# CPython-as-oracle deal as nilsh: the SAME source must print the same
+	# session under python3, which is the only way to know a charmap codec is
+	# right rather than merely self-consistent. (feature-b-mimic-codecs-for-nilpy)
+	$(PXX_STABLE) test/lib_codecs.npy $(TESTTMP)/lib_codecs
+	test "$$($(TESTTMP)/lib_codecs | tail -n 1)" = "codecs ok"
+	@if command -v python3 >/dev/null 2>&1; then \
+	  python3 test/lib_codecs.npy > $(TESTTMP)/lib_codecs_cpy.txt 2>&1; \
+	  $(TESTTMP)/lib_codecs > $(TESTTMP)/lib_codecs_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/lib_codecs_cpy.txt $(TESTTMP)/lib_codecs_pxx.txt >/dev/null \
+	    && echo "  lib-test: mimic_codecs matches CPython" \
+	    || { echo "FAIL: mimic_codecs diverges from CPython"; diff $(TESTTMP)/lib_codecs_cpy.txt $(TESTTMP)/lib_codecs_pxx.txt | head -10; exit 1; }; \
+	else echo "  lib-test: python3 absent, skipping the codecs oracle diff"; fi
 	# lib/pcl/tkhtmlview is a NilPy library, so CPython is an oracle for it the
 	# way it is for nilsh above: the SAME source, on real tkinter, must render
 	# the same document. This is what would catch a renderer that is merely

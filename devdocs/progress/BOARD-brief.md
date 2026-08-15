@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:209 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1891 rejected:37`
+`unfinished:11 blocked:4 backlog:210 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1893 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,8 +32,9 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 193, ranked
+## Ready — top 30 of 194, ranked
 
+- `[p 70] [N]` bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
@@ -44,8 +45,10 @@ _none — no lane is locked._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [A]` bug-a-bytes-has-almost-none-of-its-python-methods
 - `[p 55] [C]` bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
 - `[p 55] [N]` bug-nilpy-field-class-lost-after-an-if-in-the-same-method
+- `[p 55] [N]` bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -60,9 +63,6 @@ _none — no lane is locked._
 - `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
 - `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
-- `[p 50] [B]` feature-b-mimic-codecs-for-nilpy
 - `[p 50] [C]` feature-c-vla-via-alloca
-- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
-- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
-_163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_164 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

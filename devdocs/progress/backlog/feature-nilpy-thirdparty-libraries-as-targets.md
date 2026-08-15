@@ -573,3 +573,32 @@ waiting on Track N. It is waiting on the class-4 stdlib surface this ticket's
 own table predicted would be "the real recurring cost", and that prediction has
 now been measured twice. A Track N agent taking `next --track N` will keep
 landing language work that this ladder does not need; the ladder needs shims.
+
+## 2026-08-15 (Track B) — the codecs rung is BUILT, and webencodings still does not compile
+
+`lib/rtl/mimic_codecs.pas` landed ([[feature-b-mimic-codecs-for-nilpy]]):
+`import codecs` resolves, the charmap trio round-trips **byte-identically to
+CPython** on webencodings' own x-user-defined table, and the registry answers
+`lookup`/`register`/`CodecInfo`. That was the class-4 gap this ticket predicted
+would be the recurring cost, and building it took a few hours.
+
+Then the two webencodings files were compiled again, and the prediction above
+needs one correction: **the ladder was not only waiting on shims.** With the
+shim in place, each file stops on a distinct NilPy *language* gap:
+
+| file | now stops at |
+| --- | --- |
+| `labels.py` | nothing — compiles (unchanged) |
+| `x_user_defined.py` | [[bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler]] — `class Codec(codecs.Codec)` makes the compiler LOOP FOREVER, then [[bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused]] |
+| `__init__.py` | [[bug-a-bytes-has-almost-none-of-its-python-methods]] — `b.lower()`, and `b.startswith()` on the next line |
+
+None of the three is a missing module. Two are Track N language bugs and one is
+Track A (`TPyBytes` in `compiler/builtin/pylib.pas`), and all three are the kind
+that every stdlib-shaped Python module hits, not webencodings quirks — `class
+X(mod.X)` is how all ~100 of CPython's own `encodings/*.py` are written.
+
+So the corrected reading: the scan measured *the first* wall per file, and a
+shim only reveals the next one. "50 of 58 files stop at a missing module" stays
+true and stays the biggest single lever; it is just not the whole distance.
+Worth re-running the scan after each shim lands rather than treating the
+original table as the remaining work.

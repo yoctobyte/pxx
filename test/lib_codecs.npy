@@ -1,0 +1,46 @@
+# mimic_codecs, checked against CPython rather than against itself: this file
+# runs unchanged under python3, and lib-test diffs the two outputs.
+#
+# The table below is webencodings' x-user-defined encoding, built the way
+# webencodings/x_user_defined.py builds it -- the forcing case the shim was
+# scoped from. It is the interesting one because it maps the high half of the
+# byte range onto U+F780..U+F7FF, so a round trip that "looks right" while
+# treating characters as bytes would come back wrong.
+import codecs
+
+decoding_table = "".join([chr(c) for c in range(0x80)]) + "".join(
+    [chr(0xF780 + c) for c in range(0x80)])
+encoding_table = codecs.charmap_build(decoding_table)
+
+raw = bytes([0x41, 0x42, 0x00, 0x7F, 0x80, 0xC0, 0xFF])
+dec = codecs.charmap_decode(raw, "strict", decoding_table)
+print("decode consumed", dec[1])
+enc = codecs.charmap_encode(dec[0], "strict", encoding_table)
+print("encode consumed", enc[1])
+print("roundtrip", list(enc[0]) == list(raw))
+print("bytes", list(enc[0]))
+
+# the error policies a charmap codec can implement. `ascii` leaves the high
+# half of the table undefined, which is what makes it REFUSE byte 128 rather
+# than quietly decode it as latin-1.
+ascii_table = "".join([chr(c) for c in range(0x80)]) + "".join(
+    [chr(0xFFFE) for c in range(0x80)])
+print("replace", codecs.charmap_decode(bytes([0x41, 0x80]), "replace", ascii_table)[1])
+print("ignore ", codecs.charmap_decode(bytes([0x41, 0x80]), "ignore", ascii_table)[1])
+try:
+    codecs.charmap_decode(bytes([0x80]), "strict", ascii_table)
+    print("strict decode: NO RAISE")
+except UnicodeDecodeError:
+    print("strict decode: UnicodeDecodeError")
+
+# the registry: normalisation folds case, underscores and hyphens together
+print("lookup utf8  ", codecs.lookup("UTF_8").name)
+print("lookup latin1", codecs.lookup("latin-1").name)
+print("lookup ascii ", codecs.lookup("US-ASCII").name)
+try:
+    codecs.lookup("no-such-encoding")
+    print("lookup unknown: NO RAISE")
+except LookupError:
+    print("lookup unknown: LookupError")
+
+print("codecs ok")
