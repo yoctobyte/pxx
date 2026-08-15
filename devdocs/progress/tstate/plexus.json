@@ -5387,14 +5387,11 @@
  "open_regressions": [
   {
    "bad": "89dae725b972d7019a20e6df61cbc18c6c9862c6",
-   "good": "0b7d9abdee386a9c1c236aeeea48cfa8414ab665",
+   "good": "166a4c136c0e02c2f0287589a9ccddfa4c29d766",
    "job": "test-core#src:test/test_nilpy_star_methods_and_targets.npy",
    "name": "test-core#1107",
    "opened": "2026-08-15T10:08:47Z",
    "range": [
-    "3005526961b1a3ba08b37ca49d6c9ee82f88cfbc",
-    "f336b50743bfb7b21472f16eade9f4981107feae",
-    "166a4c136c0e02c2f0287589a9ccddfa4c29d766",
     "e0e6a0759c03dbbdfcc45cc8b0c19e3c4e9278bd",
     "dc60b64fb81b36d339c60ef363f612f41e15095e",
     "89dae725b972d7019a20e6df61cbc18c6c9862c6"
