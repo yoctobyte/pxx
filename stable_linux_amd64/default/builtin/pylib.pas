@@ -6456,66 +6456,52 @@ end;
 function max(const s: AnsiString): AnsiString;
 var i: Integer; best: Char;
 begin
-  if Length(s) = 0 then raise ValueError.Create('max() arg is an empty sequence');
+  if Length(s) = 0 then raise ValueError.Create('max() iterable argument is empty');
   best := s[1];
   for i := 2 to Length(s) do
     if s[i] > best then best := s[i];
   Result := best;
 end;
+{ max()/min() over ANY iterable. The element walk is the whole of these; what
+  counts as iterable is `pylist_v`'s question, not theirs.
+
+  These used to carry their own o-is-TPyRange / o-is-TPyIter chain and refuse
+  everything else, which is why `max(d)` over a DICT raised while `for k in d`,
+  `list(d)` and `sorted(d)` all answered its keys — an inconsistency inside
+  NilPy rather than a divergence from CPython. Routing through the one
+  normaliser fixes the dict, bytes and USER-iterable rows at once and cannot
+  drift from the other consumers again.
+  bug-nilpy-max-and-min-do-not-iterate-a-dict }
 function max(const v: Variant): Variant; overload;
-var o: TObject; i: Integer; e: Variant; n: Integer;
+var l: TPyList; i: Integer; e: Variant; n: Integer;
 begin
-  if pyvartag(v) = 6 then
-  begin
-    { a str iterates its CHARACTERS, as the AnsiString overload above does.
-      VariantToStr rather than PyVarText: PyVarText is defined ~1000 lines
-      BELOW here, and a forward use in this unit links to a plausible wrong
-      address rather than failing to compile. }
-    Result := max(VariantToStr(v));
-    Exit;
-  end;
-  if pyvartag(v) <> 7 then
+  if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('max() argument is not iterable');
-  o := TObject(pyvarobj(v));
-  { a RANGE and a CURSOR are both iterable — materialise once and fall through
-    to the list walk below rather than growing a second copy of it }
-  if (o <> nil) and (o is TPyRange) then o := TObject(list(TPyRange(o)));
-  if (o <> nil) and (o is TPyIter) then o := TObject(pyiter_drain(TPyIter(o)));
-  if (o = nil) or (not (o is TPyList)) then
-    raise TypeError.Create('max() argument is not iterable');
-  n := TPyList(o).count;
-  if n = 0 then raise ValueError.Create('max() arg is an empty sequence');
-  Result := TPyList(o).at(0);
+  l := pylist_v(v);
+  n := 0;
+  if l <> nil then n := l.count;
+  if n = 0 then raise ValueError.Create('max() iterable argument is empty');
+  Result := l.at(0);
   for i := 1 to n - 1 do
   begin
-    e := TPyList(o).at(i);
+    e := l.at(i);
     if pyvar_gt(e, Result) then Result := e;
   end;
 end;
 
 function min(const v: Variant): Variant; overload;
-var o: TObject; i: Integer; e: Variant; n: Integer;
+var l: TPyList; i: Integer; e: Variant; n: Integer;
 begin
-  if pyvartag(v) = 6 then
-  begin
-    Result := min(VariantToStr(v));   { see max's note on PyVarText }
-    Exit;
-  end;
-  if pyvartag(v) <> 7 then
+  if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('min() argument is not iterable');
-  o := TObject(pyvarobj(v));
-  { a RANGE and a CURSOR are both iterable — materialise once and fall through
-    to the list walk below rather than growing a second copy of it }
-  if (o <> nil) and (o is TPyRange) then o := TObject(list(TPyRange(o)));
-  if (o <> nil) and (o is TPyIter) then o := TObject(pyiter_drain(TPyIter(o)));
-  if (o = nil) or (not (o is TPyList)) then
-    raise TypeError.Create('min() argument is not iterable');
-  n := TPyList(o).count;
-  if n = 0 then raise ValueError.Create('min() arg is an empty sequence');
-  Result := TPyList(o).at(0);
+  l := pylist_v(v);
+  n := 0;
+  if l <> nil then n := l.count;
+  if n = 0 then raise ValueError.Create('min() iterable argument is empty');
+  Result := l.at(0);
   for i := 1 to n - 1 do
   begin
-    e := TPyList(o).at(i);
+    e := l.at(i);
     if pyvar_gt(Result, e) then Result := e;
   end;
 end;
@@ -6524,7 +6510,7 @@ end;
 function min(const s: AnsiString): AnsiString;
 var i: Integer; best: Char;
 begin
-  if Length(s) = 0 then raise ValueError.Create('min() arg is an empty sequence');
+  if Length(s) = 0 then raise ValueError.Create('min() iterable argument is empty');
   best := s[1];
   for i := 2 to Length(s) do
     if s[i] < best then best := s[i];
@@ -8435,16 +8421,27 @@ function PyMinMaxByKey(const c: Variant; const key: Variant;
   only ever have meant the key form, and this is the one place both receiver
   shapes (a static list boxed into a variant, and a variant container) arrive
   at. bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload }
-var i, n: Integer; cur, curK, bestK: Variant; better: Boolean;
+var i, n: Integer; cur, curK, bestK: Variant; better: Boolean; l: TPyList;
 begin
-  n := Integer(pylen_v(c));
+  { through pylist_v, not pyvar_getitem on the container: a DICT indexed by 0
+    is a KEY LOOKUP, so `max(d, key=len)` raised KeyError: 0 where CPython
+    walks the keys. Same one normaliser the plain max/min arms use.
+    bug-nilpy-max-and-min-do-not-iterate-a-dict }
+  l := pylist_v(c);
+  n := 0;
+  if l <> nil then n := l.count;
   if n = 0 then
-    raise ValueError.Create('min() arg is an empty sequence');
-  Result := pyvar_getitem(c, pyvar_of_int(0));
+  begin
+    { the message names the builtin the caller wrote — this arm serves both, and
+      answering `min()` for a `max(xs, key=f)` was a small lie in a diagnostic }
+    if wantMax then raise ValueError.Create('max() iterable argument is empty')
+    else raise ValueError.Create('min() iterable argument is empty');
+  end;
+  Result := l.at(0);
   bestK := PyCallKeyVar(key, Result);
   for i := 1 to n - 1 do
   begin
-    cur := pyvar_getitem(c, pyvar_of_int(i));
+    cur := l.at(i);
     curK := PyCallKeyVar(key, cur);
     if wantMax then better := pyvar_gt(curK, bestK)
     else better := pyvar_gt(bestK, curK);
@@ -8502,7 +8499,10 @@ begin
   if pyvartag(a) <> 7 then Exit;
   if PPyVarRec(@a)^.Payload = 0 then Exit;
   o := TObject(Pointer(NativeInt(PPyVarRec(@a)^.Payload)));
-  PyMinMaxNoneKey := (o is TPyList) or (o is TPyIter) or (o is TPyRange);
+  { the same set pylist_v accepts — a DICT and a BYTES are containers too, and
+    `min(d, key=None)` is ordinary Python }
+  PyMinMaxNoneKey := (o is TPyList) or (o is TPyIter) or (o is TPyRange) or
+                     (o is TPyDict) or (o is TPyBytes);
 end;
 
 function min(const a: Variant; const b: Variant): Variant; overload;
