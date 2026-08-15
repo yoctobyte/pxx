@@ -1,0 +1,39 @@
+# `import math` must not change what the Python builtin `abs` MEANS.
+#
+# It did. The import pulls lib/rtl/math, whose Abs(Integer) is declared first,
+# and the NilPy intrinsic was gated on `abs` not resolving at all — so once the
+# unit was linked the whole intercept was skipped and overload resolution
+# answered instead:
+#
+#   abs(-0.0)       -> -0.0    (math's Abs is `if x < 0 then -x`, and -0.0 < 0
+#                               is False; CPython clears the sign bit)
+#   abs([-0.0][0])  -> 6626872 (a variant read as an integer — a pointer
+#                               printed as a number, with no diagnostic)
+#
+# Own language first, and it overrules import order.
+# bug-nilpy-uses-math-breaks-abs-on-a-float
+import math
+
+# the two that were wrong, plus the shapes around them
+print(abs(-1.5), abs(-0.0), abs(0.0), abs(-3), abs(3))
+print(abs([-0.0][0]), abs([-1.5][0]), abs([-3][0]))
+
+# a variant from a loop, which is how a real program meets it
+for v in [-1.5, -0.0, -3, 2.5]:
+    print(abs(v))
+
+# an unannotated parameter is a variant too
+def f(x):
+    return abs(x)
+
+print(f(-1.5), f(-0.0), f(-3))
+
+# Sqr shares the intercept and the same gate, so it is pinned here too.
+print(abs(-2 ** 40), math.sqrt(2.0), math.floor(-1.5), math.ceil(-1.5))
+
+# The user's OWN def must still shadow: the rule excludes a routine declared in
+# the user's own unit, which is exactly what a `def` is.
+def sqr(x):
+    return "mine"
+
+print(sqr(3))

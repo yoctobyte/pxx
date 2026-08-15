@@ -1989,6 +1989,11 @@ test-nilpy: $(COMPILER)
 	@# compensated summation — sum([1e16, 1.0, -1e16]) dropped the 1.0 entirely
 	./$(COMPILER) test/test_nilpy_abs_minmax_sum_oracle.npy $(TESTTMP)/test_nilpy_amsum26
 	$(TESTTMP)/test_nilpy_amsum26 | diff -u test/test_nilpy_abs_minmax_sum_oracle.expected -
+	# ...and the same builtins with lib/rtl/math LINKED, which is what an
+	# `import math` does. abs(-0.0) answered -0.0 and abs([-0.0][0]) answered a
+	# pointer, because the intrinsic was gated on the name not resolving at all.
+	./$(COMPILER) test/test_nilpy_abs_under_import_math.npy $(TESTTMP)/test_nilpy_absim26
+	$(TESTTMP)/test_nilpy_absim26 | diff -u test/test_nilpy_abs_under_import_math.expected -
 	@# float formatting rounds ties to EVEN: "%.0f" % 7.5 is 8, not 7 — it used
 	@# to round the FRACTION alone, which loses the parity half-even needs
 	./$(COMPILER) test/test_nilpy_format_half_even.npy $(TESTTMP)/test_nilpy_halfeven26

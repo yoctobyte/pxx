@@ -14212,8 +14212,27 @@ begin
       { Abs(e)/Sqr(e): System intrinsics lowered to builtin helpers (eval-once;
         int and float variants by the argument type). No `uses`; user routine of
         the same name shadows. ESP (no builtin unit) errors with a clear message. }
+      { …and in NilPy USER code the intrinsic also wins over a routine of the
+        same name that came from a PASCAL RTL UNIT. `abs` is a Python builtin
+        there, and what a pulled unit happens to declare must not change what it
+        means: `import math` links lib/rtl/math, whose Abs(Integer) is declared
+        first, and the whole block below was skipped because `abs` now RESOLVED
+        — so `abs(-0.0)` answered -0.0 (math's Abs is `if x < 0 then -x`, and
+        -0.0 < 0 is False) and `abs([-0.0][0])` answered 6626872, a variant read
+        as an integer. Own language first, and it overrules import order:
+        the same rule that says a Python name means the Python thing.
+
+        A NilPy `def abs(x)` of the user's OWN still shadows — that proc is
+        declared in the user's unit (or the main program, unit index -1), which
+        is exactly what the unit test excludes. Pascal parsing is untouched:
+        NilPyUserCode is false there, so the gate stays `procIdx < 0`.
+        bug-nilpy-uses-math-breaks-abs-on-a-float }
       if (CaseEqual(name, 'Abs') or CaseEqual(name, 'Sqr')) and
-         (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+         ((procIdx < 0) or
+          (NilPyUserCode and (procIdx < ProcCount) and
+           (ProcUnitIdx[procIdx] <> CurrentUnitIdx) and
+           (ProcUnitIdx[procIdx] >= 0))) and
+         (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr; node := CurASTNode;
