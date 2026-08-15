@@ -27,6 +27,14 @@ function Lcm(a, b: Integer): Integer;
 function Pi: Double;
 function Abs(x: Double): Double;
 function Sqrt(x: Double): Double;
+{ The PORTABLE square root — Newton plus an exact-residual correction plus a
+  neighbour decision. On x86-64 `Sqrt` is one `sqrtsd` instruction instead
+  (IEEE requires that to be correctly rounded, and it is ~2x faster than the
+  software path this file used to run there), so this name exists to keep the
+  portable path COMPILED and CALLABLE on the machine the gate runs on: without
+  it, the code every other target executes would only ever be exercised by the
+  cross sweep. lib_math_correctly_rounded asserts the two agree. }
+function SqrtSoft(x: Double): Double;
 function Exp(x: Double): Double;
 function Ln(x: Double): Double;
 function Sin(x: Double): Double;
@@ -244,7 +252,22 @@ begin
   if x < 0.0 then Result := -x else Result := x;
 end;
 
-function Sqrt(x: Double): Double;
+{ The EXACT residual x - g*g, by a Dekker split of g into gh+gl (hi 26 bits +
+  lo) so that gh*gh, gh*gl and gl*gl are each exact; then g*g is p (rounded)
+  plus e (its exact error), and the residual is (x - p) - e. 134217729 = 2^27+1.
+  Caller must ensure g*g does not overflow. }
+function SqrtResid(x, g: Double): Double;
+var c, gh, gl, p, e: Double;
+begin
+  p  := g * g;
+  c  := g * 134217729.0;
+  gh := c - (c - g);
+  gl := g - gh;
+  e  := ((gh * gh - p) + 2.0 * gh * gl) + gl * gl;
+  Result := (x - p) - e;
+end;
+
+function SqrtSoft(x: Double): Double;
 { Newton-Raphson to ~1 ULP, then ONE correctly-rounded correction step using an
   exact residual. Plain Newton has an FP fixed point that can sit 1 ULP below the
   correctly-rounded root (sqrt(2) landed at ...bcc vs the IEEE ...bcd), and every
@@ -259,7 +282,13 @@ const
   MIN_NORMAL = 2.2250738585072014e-308;
   TWO_POW_106 = 81129638414606681695789005144064.0;
   TWO_POW_53  = 9007199254740992.0;
-var g, ng, z, gh, gl, c, p, e, r: Double; i: Integer; bits: Int64;
+  { exact decimal expansions of 2^-32 and 2^-64, so the value does not depend on
+    how the literal parser rounds }
+  TWO_POW_M32 = 2.3283064365386962890625e-10;
+  TWO_POW_M64 = 5.42101086242752217003726400434970855712890625e-20;
+  TWO_POW_32  = 4294967296.0;
+  TWO_POW_64  = 18446744073709551616.0;
+var g, ng, z, r, res, nb, r2, r3, sx, sc, gs: Double; i: Integer; bits: Int64;
 begin
   { FPC-faithful IEEE: Sqrt of a negative is NaN (C sqrt() binds here and expects
     NaN too). z/z with z=0 yields a NaN without a NaN literal.
@@ -309,22 +338,91 @@ begin
   { Dekker split of g into gh+gl (hi 26 bits + lo), so gh*gh, gh*gl, gl*gl are
     each exact; then g*g = p (rounded) + e (exact error), and the exact residual
     is (x - p) - e. 134217729 = 2^27 + 1. }
-  p := g * g;
-  { Near DBL_MAX, g*g overflows to +Inf and the residual would be NaN; the
-    Newton result is already ~1 ULP there, so skip the correction. (p - p = 0
-    for a finite p, NaN for Inf.) }
-  if (p - p) <> 0.0 then
+  { ONE exact power-of-two scaling covers the whole correction. It is needed
+    lower than it looks: the guard here used to be "g*g overflowed, skip the
+    correction", but the Dekker split squares gh, which is g rounded UP to 26
+    bits, so gh*gh reaches +Inf while g*g is still finite. The residual then
+    came back -Inf and Sqrt answered -Inf for the doubles just below DBL_MAX.
+    Scaling x by 2^-64 and the root by 2^-32 is exact — both are powers of two
+    and x is enormous on this path, so nothing rounds and nothing underflows —
+    and it removes the special case instead of adding a second one. }
+  if g > 1.0e150 then
   begin
-    Result := g;
-    Exit;
+    sx := x * TWO_POW_M64;
+    sc := TWO_POW_M32;
+  end
+  else if g < 1.0e-150 then
+  begin
+    { and UP at the other end, for the mirror-image reason: there the split's
+      SMALLEST term, gl*gl, falls below the subnormal threshold and flushes to
+      zero, so the residual is no longer exact and the neighbour decision is
+      made on a wrong number. Four values in a 65,000-value sweep, all with
+      x ~ 1e-307 — the same defect at the opposite end of the range. }
+    sx := x * TWO_POW_64;
+    sc := TWO_POW_32;
+  end
+  else
+  begin
+    sx := x;
+    sc := 1.0;
   end;
-  c  := g * 134217729.0;
-  gh := c - (c - g);
-  gl := g - gh;
-  e  := ((gh * gh - p) + 2.0 * gh * gl) + gl * gl;
-  r  := (x - p) - e;
-  Result := g + r / (2.0 * g);
+  gs := g * sc;
+  { residual and correction in the scaled domain: with r = xs - gs^2 = sc^2*(x -
+    g^2), the true r/(2g) is r/(2*gs*sc). }
+  r := SqrtResid(sx, gs);
+  res := g + r / (2.0 * gs * sc);
+
+  { The correction alone is NOT always correctly rounded — it was 1 ulp low on
+    ordinary normals such as 2.215827865120445e276 and on DBL_MAX itself, with
+    no special value or overflow edge involved
+    ([[bug-b-sqrt-is-1-ulp-low-on-some-normal-inputs]]). `r/(2g)` is a rounded
+    quotient added to a rounded g, so the sum can land on the wrong side of the
+    halfway point.
+
+    So DECIDE it instead of trusting it: take the residual of the answer, and
+    if it is not zero compare it against the residual of the NEIGHBOURING
+    double in the direction the residual points. Whichever root has the smaller
+    |x - root^2| is the nearer one, and that IS the correctly-rounded result —
+    a measurement rather than an estimate. res > 0 here, so the bit pattern is
+    monotone in the value and +-1 on the bits is exactly the neighbour. The
+    same scaling carries through: it multiplies both residuals by 2^-64, which
+    cannot change which magnitude is smaller. }
+  r2 := SqrtResid(sx, res * sc);
+  if r2 = 0.0 then begin Result := res; Exit; end;         { x is a perfect square }
+  bits := PSqrtInt64(@res)^;
+  if r2 > 0.0 then bits := bits + 1 else bits := bits - 1;
+  nb := PSqrtDouble(@bits)^;
+  r3 := SqrtResid(sx, nb * sc);
+  if Abs(r3) < Abs(r2) then Result := nb else Result := res;
 end;
+
+{ x86-64: `sqrtsd` IS the correctly-rounded square root — IEEE 754 requires
+  sqrt to be exact, and unlike the transcendentals the hardware really does
+  deliver it, including for subnormals, +-0, +Inf and the NaN for a negative.
+  So the whole of SqrtSoft above collapses to one instruction here, and it
+  measured 2x faster than the software path on a 3M-call loop (269 ms -> 575 ms
+  was the cost of making the software path correctly rounded; this takes it
+  back and then some).
+
+  Every other target keeps SqrtSoft, which is why that function stays exported
+  and tested rather than becoming dead code on the machine we gate on. }
+{$ifdef CPUX86_64}
+function Sqrt(x: Double): Double;
+var r: Double;
+begin
+  asm
+    movsd  xmm0, x
+    sqrtsd xmm0, xmm0
+    movsd  r, xmm0
+  end;
+  Result := r;
+end;
+{$else}
+function Sqrt(x: Double): Double;
+begin
+  Result := SqrtSoft(x);
+end;
+{$endif}
 
 { ================= double-double kernel =================
 
@@ -432,6 +530,71 @@ begin
   q3 := e.Hi / b.Hi;
   q := DdFast2Sum(q1, q2);
   Result := DdAddD(q, q3);
+end;
+
+{ Square root of a dd: one Newton correction on top of the double sqrt, which
+  is enough because the residual a - y0^2 is computed exactly. }
+function DdSqrt(a: TDd): TDd;
+var y0: Double; y, e: TDd;
+begin
+  if a.Hi = 0.0 then begin Result := a; Exit; end;
+  y0 := Sqrt(a.Hi);
+  y.Hi := y0; y.Lo := 0.0;
+  e := DdAdd(a, DdMulD(DdMul(y, y), -1.0));      { a - y0^2 }
+  y.Lo := e.Hi / (2.0 * y0);
+  Result := DdFast2Sum(y.Hi, y.Lo);
+end;
+
+{ pi and pi/2 as dds, from bits (see the kernel header on why not decimals). }
+function DdPio2: TDd;
+begin
+  Result.Hi := DdBits($3FF921FB54442D18);
+  Result.Lo := DdBits($3C91A62633145C07);
+end;
+
+function DdPi: TDd;
+begin
+  Result.Hi := DdBits($400921FB54442D18);
+  Result.Lo := DdBits($3CA1A62633145C07);
+end;
+
+{ atan of a NON-NEGATIVE dd. t > 1 inverts around pi/2; then the half-angle
+  t := t/(1+sqrt(1+t^2)) until t < 2^-4 (h doublings to undo), then a 13-term
+  alternating odd series, then the doublings back — which are exact, being
+  multiplications by 2.
+
+  This replaces the plain-double reduce-and-Taylor ArcTan that used to live
+  here. Measured before the port: 2065 of 3005 random arguments disagreed with
+  libm, up to 4 ulp — so the claim in
+  [[bug-b-arcsin-arccos-lose-2-ulps-vs-libm]] that "ArcTan agrees exactly" was
+  a sample of one (atan(2.0), which happens to be right). }
+function DdAtan(t: TDd): TDd;
+var u, s, one: TDd; h, k: Integer; invert: Boolean;
+begin
+  one.Hi := 1.0; one.Lo := 0.0;
+  h := 0; invert := False;
+  if t.Hi > 1.0 then
+  begin
+    invert := True;
+    t := DdDiv(one, t);
+  end;
+  while (t.Hi >= 0.0625) and (h < 6) do
+  begin
+    u := DdSqrt(DdAddD(DdMul(t, t), 1.0));
+    t := DdDiv(t, DdAddD(u, 1.0));
+    h := h + 1;
+  end;
+  u := DdMul(t, t);                      { <= 2^-8 }
+  s := DdDivD(one, 27.0);
+  for k := 12 downto 0 do
+  begin
+    s := DdMul(u, s);
+    s := DdAdd(DdDivD(one, Double(2 * k + 1)), DdMulD(s, -1.0));
+  end;
+  s := DdMul(t, s);
+  while h > 0 do begin s := DdMulD(s, 2.0); h := h - 1; end;
+  if invert then s := DdAdd(DdPio2, DdMulD(s, -1.0));
+  Result := s;
 end;
 
 { ln2 as a double-double: 0x1.62e42fefa39efp-1 and its tail. }
@@ -664,40 +827,84 @@ begin
 end;
 
 function ArcTan(x: Double): Double;
-{ atan(r)=2*atan(r/(1+sqrt(1+r^2))) reduction until |r| small, then Taylor,
-  then undo by doubling. Scaling in a LOCAL (never Result in a loop). }
-var r, term, sum, p: Double; i, nred: Integer;
+{ Over the double-double kernel, like Ln/Exp: the plain-double reduce-and-Taylor
+  this replaces disagreed with libm on 2065 of 3005 random arguments (up to
+  4 ulp). Sign is handled here so DdAtan only ever sees a non-negative
+  argument. }
+var ax: Double; t, w: TDd;
 begin
-  r := x;
-  nred := 0;
-  while (r > 0.3) or (r < -0.3) do
+  if x <> x then begin Result := x; Exit; end;              { NaN }
+  ax := Abs(x);
+  if ax > 1.7976931348623157e308 then                       { +-Inf -> +-pi/2 }
   begin
-    r := r / (1.0 + Sqrt(1.0 + r * r));
-    nred := nred + 1;
+    w := DdPio2;
+    Result := w.Hi + w.Lo;
+    if x < 0.0 then Result := -Result;
+    Exit;
   end;
-  p := r * r;
-  term := r; sum := r; i := 3;
-  while i <= 59 do
-  begin
-    term := -term * p;
-    sum := sum + term / i;
-    i := i + 2;
-  end;
-  i := nred;
-  while i > 0 do begin sum := sum * 2.0; i := i - 1; end;
-  Result := sum;
+  if ax = 0.0 then begin Result := x; Exit; end;            { keeps -0 }
+  t.Hi := ax; t.Lo := 0.0;
+  w := DdAtan(t);
+  Result := w.Hi + w.Lo;
+  if x < 0.0 then Result := -Result;
 end;
 
+{ asin/acos through the SAME identity as before — asin(x) = atan(x/sqrt(1-x^2))
+  — but evaluated in double-double, which is the whole difference. The old
+  plain-double form lost bits twice, in `1 - x*x` and again in the division,
+  and measured 1977 of 3009 arguments wrong (up to 8 ulp).
+
+  Two details carry most of the accuracy:
+
+  - `1 - x^2` is formed as the EXACT product (1-x)(1+x) for |x| > 0.5. Near the
+    endpoints `1 - x*x` cancels catastrophically; the factored form does not,
+    because 1-x and 1+x are each exact there (Sterbenz).
+  - acos is NOT `pi/2 - asin(x)`. That subtraction cancels for x near 1, where
+    the answer is near zero: it measured up to **1099 ulp** out. acos gets its
+    own atan(sqrt(1-x^2)/x) instead, so a small result is computed small rather
+    than as the difference of two large ones. }
 function ArcSin(x: Double): Double;
+var ax: Double; p, sq, t, w: TDd;
 begin
-  if x >= 1.0 then begin Result := 1.57079632679489661923; Exit; end;
-  if x <= -1.0 then begin Result := -1.57079632679489661923; Exit; end;
-  Result := ArcTan(x / Sqrt(1.0 - x * x));
+  if x <> x then begin Result := x; Exit; end;
+  ax := Abs(x);
+  if ax > 1.0 then begin Result := (x - x) / (x - x); Exit; end;   { NaN }
+  if ax = 1.0 then
+  begin
+    w := DdPio2;
+    Result := w.Hi + w.Lo;
+    if x < 0.0 then Result := -Result;
+    Exit;
+  end;
+  if x = 0.0 then begin Result := x; Exit; end;                    { keeps -0 }
+  if ax <= 0.5 then
+    p := DdAddD(DdMulD(Dd2Prod(ax, ax), -1.0), 1.0)                { 1 - x^2 }
+  else
+    p := DdMul(Dd2Sum(1.0, -ax), Dd2Sum(1.0, ax));                 { (1-x)(1+x) }
+  sq := DdSqrt(p);
+  t.Hi := ax; t.Lo := 0.0;
+  w := DdAtan(DdDiv(t, sq));
+  Result := w.Hi + w.Lo;
+  if x < 0.0 then Result := -Result;
 end;
 
 function ArcCos(x: Double): Double;
+var ax: Double; p, sq, w: TDd;
 begin
-  Result := 1.57079632679489661923 - ArcSin(x);
+  if x <> x then begin Result := x; Exit; end;
+  ax := Abs(x);
+  if ax > 1.0 then begin Result := (x - x) / (x - x); Exit; end;   { NaN }
+  if x = 1.0 then begin Result := 0.0; Exit; end;
+  if x = -1.0 then begin w := DdPi; Result := w.Hi + w.Lo; Exit; end;
+  if x = 0.0 then begin w := DdPio2; Result := w.Hi + w.Lo; Exit; end;
+  if ax <= 0.5 then
+    p := DdAddD(DdMulD(Dd2Prod(ax, ax), -1.0), 1.0)
+  else
+    p := DdMul(Dd2Sum(1.0, -ax), Dd2Sum(1.0, ax));
+  sq := DdSqrt(p);
+  w := DdAtan(DdDiv(sq, Dd2Sum(ax, 0.0)));
+  if x < 0.0 then w := DdAdd(DdPi, DdMulD(w, -1.0));
+  Result := w.Hi + w.Lo;
 end;
 
 function ArcTan2(y, x: Double): Double;

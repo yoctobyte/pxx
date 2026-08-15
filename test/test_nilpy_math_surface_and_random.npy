@@ -15,6 +15,13 @@ print(math.degrees(0.0), math.degrees(-1.0))
 print(math.asin(0), math.acos(1), math.atan(1))
 print(math.asin(-1) == -math.pi / 2, math.atan(0))
 
+# MID-RANGE, which is what the endpoints above could not see: these were 1-2 ulp
+# off CPython until lib/rtl/math's inverse trig moved onto the double-double
+# kernel (bug-b-arcsin-arccos-lose-2-ulps-vs-libm). acos(0.9999) is the one that
+# mattered most — computed as pi/2 - asin(x) it was over a thousand ulp out.
+print(math.asin(0.5), math.acos(0.5), math.atan(2.0))
+print(math.acos(0.9999))
+
 # modf keeps the SIGN on both halves
 print(math.modf(2.5), math.modf(-2.5), math.modf(0.0), math.modf(-0.25))
 
