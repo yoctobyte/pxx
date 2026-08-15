@@ -3,6 +3,8 @@ track: N
 prio: 30
 type: bug
 summary: "list(obj)/sorted(obj)/`x in obj` over a user class with __iter__ answer [] or raise, because the STATICALLY typed call site picks a TPyList overload instead of iterating — the runtime arms are already there"
+status: working
+owner: agent-AN
 ---
 
 # `list(obj)` over a user iterable answers `[]`
@@ -62,3 +64,39 @@ broken.
 `tuple`, `set`, `sorted`, `sum`, `min`, `max`, `any`, `all`, `in`,
 `", ".join(...)`, and a tuple-unpack `a, b, c = obj`. Plus a control that the
 same builtins over a list/dict/str/cursor are unchanged.
+
+## Progress 2026-08-15 — the two CONVERSION POINTS are done; the overload-
+## resolved builtins are not, and now have a measured boundary
+
+Both of NilPy's "make this argument iterable" helpers grew a user-object arm,
+which is the one-rule half of this ticket:
+
+- `PyIterArgAsList` (the argument must be a LIST) now drains a user iterable,
+  beside the str arm it already had — same reason, same place: the callee is
+  reached by a FIXED `FindProc` index, so overload resolution never runs and
+  the object was read as a TPyList header.
+- `PyMakeIterOf` (the argument must be a CURSOR) now wraps one, instead of
+  falling into the `pyiter_of_list` arm below it. That arm is what made
+  `zip(bag, "xyz")` pair EMPTY values with the string's characters.
+
+**Fixed and pinned by a test:** `for`, comprehensions (plain and filtered),
+`enumerate`, `zip` on either side, and re-iteration through a fresh `__iter__`.
+`test/test_nilpy_user_iterable_in_builtins.npy` (+`.expected`, in the Makefile),
+byte-identical to CPython.
+
+**Still broken, and this is the useful measurement:** `list(b)`, `sorted(b)`,
+`tuple(b)`, `set(b)` answer empty, and `sum(b)`/`min(b)`/`max(b)`/`any(b)`/
+`all(b)`/`x in b` refuse or raise. Those do NOT route through either helper —
+they are ordinary OVERLOADED pylib calls, and the shared matcher picks the
+`TPyList` overload for a user-class argument. So the remaining fix is a
+per-argument coercion in the overload matcher: when the argument's class is a
+user class with `__iter__` and the parameter wants `TPyList`/`TPyIter`, wrap it
+(`pyiter_drain(pyiter_of_userobj(x))` / `pyiter_of_userobj(x)`).
+
+That lands in `MatchProcCall*`'s side channel in `parser.inc` — Track A's
+shared ground, gated on `PyExprMode` — which is why it is parked here rather
+than half-applied: the two helper arms above are complete and green on their
+own, and the matcher change wants a session that is not also holding six other
+landed fixes. See
+[[project_overload_resolution_single_side_channel_entry]] for where the hook
+belongs (`MatchArgRec`, not `argTypes`).

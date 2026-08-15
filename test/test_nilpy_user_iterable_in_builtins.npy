@@ -1,0 +1,39 @@
+# A user class with __iter__ passed to the builtins that CONSUME an iterable.
+# bug-nilpy-builtins-over-a-user-iterable-answer-empty — the conversion-point
+# half. Diffed against CPython.
+
+class Bag:
+    def __init__(self, items):
+        self.items = items
+    def __iter__(self):
+        return BagIter(self.items)
+
+class BagIter:
+    def __init__(self, items):
+        self.items = items
+        self.i = 0
+    def __next__(self):
+        if self.i >= len(self.items):
+            raise StopIteration
+        v = self.items[self.i]
+        self.i += 1
+        return v
+
+b = Bag([3, 1, 2])
+
+# the for-loop protocol itself
+for v in b:
+    print(v)
+
+# a comprehension over it
+print([x * 2 for x in b])
+print([x for x in b if x > 1])
+
+# the two cursor-taking builtins
+for i, v in enumerate(b):
+    print(i, v)
+print(list(zip(b, "xyz")))
+print(list(zip("ab", b)))
+
+# ...and a fresh iterator each time, so it is re-iterable
+print([x for x in b], [x for x in b])

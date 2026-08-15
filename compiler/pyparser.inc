@@ -8724,10 +8724,24 @@ end;
   (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle).
   A non-str node is returned untouched, so nothing else changes. }
 function PyIterArgAsList(n: Integer): Integer;
-var procIdx, argNode: Integer;
+var procIdx, argNode, uci: Integer;
 begin
   Result := n;
   if n < 0 then Exit;
+  { A USER class implementing the iterator protocol, drained here for the same
+    reason a str is exploded here: the callee takes a TPyList through a FIXED
+    FindProc index, so overload resolution never runs and the object would be
+    read as a list — which answered [] rather than crashing, the quieter half
+    of the same failure. bug-nilpy-builtins-over-a-user-iterable-answer-empty }
+  if IntToTypeKind(ASTTk[n]) = tyClass then
+  begin
+    uci := ResolveNodeRec(n) - REC_UCLASS_BASE;
+    if (uci >= 0) and (FindUMeth(uci, '__iter__') >= 0) then
+    begin
+      Result := PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', n));
+      Exit;
+    end;
+  end;
   if not PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then Exit;
   procIdx := FindProc('pystr_charlist');
   if procIdx < 0 then Error('Nil Python: pylib (pystr_charlist) not loaded');
@@ -8761,6 +8775,14 @@ begin
     { a RANGE is a sequence, not a list — `zip(range(3), xs)` must not try to
       read its three Int64 fields as a TPyList header }
     Result := PyCallProc1('pyiter_of_range', node)
+  else if (tk = tyClass) and (ResolveNodeRec(node) >= REC_UCLASS_BASE) and
+          (FindUMeth(ResolveNodeRec(node) - REC_UCLASS_BASE, '__iter__') >= 0) then
+    { a USER class implementing the iterator protocol. Before this it fell into
+      the pyiter_of_list arm below and its object was read as a TPyList header,
+      so `zip(bag, "xyz")` paired EMPTY values with the string's characters —
+      the quiet failure, not a crash.
+      bug-nilpy-builtins-over-a-user-iterable-answer-empty }
+    Result := PyCallProc1('pyiter_of_userobj', node)
   else if tk = tyClass then
     Result := PyCallProc1('pyiter_of_list', node)
   else

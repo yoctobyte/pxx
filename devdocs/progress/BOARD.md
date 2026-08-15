@@ -12,11 +12,12 @@ _none_
 
 _none_
 
-## unfinished (9)
+## unfinished (10)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
+| bug-nilpy-builtins-over-a-user-iterable-answer-empty | N | 30 | bug | list(obj)/sorted(obj)/`x in obj` over a user class with __iter__ answer [] or raise, because the STATICALLY typed call site picks a TPyList overload instead of iterating — the runtime arms are already there | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language |
@@ -36,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (211)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -51,7 +52,6 @@ _none_
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
 | bug-n-math-pow-domain-error-raises-the-wrong-exception | N | 25 | bug | Every math domain error in NilPy raises `ZeroDivisionError: division by zero` where CPython raises `ValueError: math domain error` — sqrt(-1), log(-1), log(0) and pow(-8, 0.5) all of them, and the same call compiled as PASCAL returns Nan without raising at all. Three behaviours for one operation; a CPython program's `except ValueError:` catches none of ours. | — |
 | bug-nilpy-a-one-name-tuple-loop-target-is-refused | N | 25 | bug | `for (x,) in pairs:` — a one-name PARENTHESISED loop target with a trailing comma — is refused. Python unpacks the 1-tuple; a single-name target here would bind the whole element, so this needs an unpack, not just comma tolerance. | — |
-| bug-nilpy-builtins-over-a-user-iterable-answer-empty | N | 30 | bug | list(obj)/sorted(obj)/`x in obj` over a user class with __iter__ answer [] or raise, because the STATICALLY typed call site picks a TPyList overload instead of iterating — the runtime arms are already there | — |
 | bug-nilpy-case-mapping-cannot-change-code-point-count | N | 30 | bug | `'ß'.upper()` answers 'ß' where CPython answers 'SS', and `'İ'.lower()` answers 'İ' where CPython answers 'i̇'. pystr_upper/pystr_lower map byte by byte, so a case mapping that changes the code-point COUNT cannot be expressed at all. ASCII and Latin-1 are correct. | — |
 | bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising | N | 25 | bug | `min(3, None)` answers None where CPython raises TypeError — pyvar_gt orders None against a number instead of refusing. Low priority: comparing None is a bug in the calling program, and every shape CPython accepts is unaffected. But it is the wrong DIRECTION of laxity: we answer a question CPython refuses to answer, silently. | — |
 | bug-nilpy-dataclass-keyword-arguments-do-not-parse | N | 30 | bug | `@dataclass(order=True)` does not parse — the decorator takes no arguments | — |
@@ -586,7 +586,6 @@ _none_
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption
-- [p 30] [N] bug-nilpy-builtins-over-a-user-iterable-answer-empty
 - [p 30] [N] bug-nilpy-case-mapping-cannot-change-code-point-count
 - [p 30] [N] bug-nilpy-dataclass-keyword-arguments-do-not-parse
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
