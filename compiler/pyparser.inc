@@ -12309,7 +12309,20 @@ begin
   mn := PyMethNameFor(ci, mname);
   mmi := FindUMeth(ci, mn);
   if mmi < 0 then
+  begin
+    { …unless the class declares __getattr__, in which case `obj.name(args)` is
+      Python's two steps written as one: fetch the attribute, then CALL what
+      came back. Spelled exactly that way — the existing dynamic-attribute
+      getter feeding the existing variant-callable call — so a proxy class gets
+      the same dispatch as `g = obj.name; g()`, which already worked.
+      bug-nilpy-getattr-dunder-not-supported }
+    if isNilPy and (FindUMeth(ci, '__getattr__') >= 0) then
+    begin
+      Result := PyMakeDynCall(PyMakeDynAttrGet(baseNode, mname));
+      Exit;
+    end;
     Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
+  end;
   mmi := PyPromoteOverloadByKw(ci, mmi, mn);
   selfArg := AllocNode(AN_ARG);
   ASTLeft[selfArg] := baseNode;
@@ -30757,6 +30770,30 @@ begin
           outTk := tk;
           Continue;
         end;
+      end;
+      { In NilPy an unresolved member is a RUNTIME question, not a compile-time
+        refusal — the attribute may have been set dynamically, and a class that
+        declares __getattr__ answers for names its layout does not have at all.
+        Route the miss to the runtime getter, which resolves the instance store
+        and the declared members first and reaches the dunder last, exactly as
+        CPython orders them.
+
+        A BARE-identifier receiver already did this through the lvalue path and
+        raised AttributeError at run time; only this chained-selector arm
+        (`D().missing`, `mk(3).missing`) refused at COMPILE time, so the two
+        spellings of one access disagreed — the receiver-shape split again
+        (member access has two parsers). Matching them here is what lets
+        `try: obj.maybe / except AttributeError:` compile for every receiver.
+        bug-nilpy-getattr-dunder-not-supported }
+      if isNilPy and (recId >= REC_UCLASS_BASE) and
+         (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
+      begin
+        Next;                          { consume the field name }
+        node := PyMakeDynAttrGet(node, fieldName);
+        tk := tyVariant;
+        recId := REC_NONE;
+        outTk := tk;
+        Continue;
       end;
       RequireRecMember(recId, fieldName);
       sub := AllocNode(AN_FIELD);

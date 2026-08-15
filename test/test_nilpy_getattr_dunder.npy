@@ -1,0 +1,102 @@
+# `__getattr__` — the LAST step of attribute lookup, reached only after the
+# instance dict and the declared members have both missed.
+# bug-nilpy-getattr-dunder-not-supported. Diffed against CPython.
+
+
+class C:
+    def __init__(self):
+        self.real = 1
+
+    def known(self):
+        return "known"
+
+    def __getattr__(self, name):
+        return "GA-" + name
+
+
+c = C()
+
+# the declared members win; only a MISS reaches the dunder
+print(c.real, c.known(), c.missing)
+c.dyn = 7
+print(c.dyn, c.other)
+
+# ...through a VARIANT receiver as well — one concept, two receivers
+def idf(x):
+    return x
+
+
+print(idf(c).real, idf(c).missing)
+for e in [c]:
+    print(e.missing, e.real)
+
+# inherited from a base
+class D(C):
+    pass
+
+
+print(D().real, D().missing)
+
+# hasattr is "getattr does not raise", so a class that answers for anything
+# HAS everything; getattr's default must not win over what the dunder produces
+print(hasattr(c, "real"), hasattr(c, "known"), hasattr(c, "nope"))
+print(getattr(c, "real"), getattr(c, "nope"), getattr(c, "nope", "dflt"))
+print(getattr(c, "no" + "pe"), hasattr(c, "no" + "pe"))
+
+
+# a dunder that REFUSES some names — the ordinary way to write one
+class R:
+    def __getattr__(self, name: str) -> str:
+        if name == "boom":
+            raise AttributeError("no " + name)
+        return "R-" + name
+
+
+r = R()
+print(r.ok, hasattr(r, "ok"), hasattr(r, "boom"))
+try:
+    print(r.boom)
+except AttributeError as e:
+    print("AttributeError:", e)
+print(getattr(r, "boom", "fallback"))
+
+
+# a dunder returning a CALLABLE, then calling it
+class F:
+    def __getattr__(self, name):
+        return lambda: "called-" + name
+
+
+print(F().whatever())
+
+
+# the dunder is not consulted when the name resolves...
+class S:
+    def __init__(self):
+        self.v = 5
+
+    def __getattr__(self, name):
+        return "SHOULD-NOT-SEE"
+
+
+print(S().v)
+
+
+# ...and a class WITHOUT the dunder still raises, with the message it had
+class Plain:
+    def __init__(self):
+        self.a = 1
+
+
+try:
+    print(Plain().b)
+except AttributeError as e:
+    print("AttributeError:", e)
+print(hasattr(Plain(), "a"), hasattr(Plain(), "b"))
+
+# the builtin containers resolve their own attributes and must not be diverted
+# into any of this. NOT asserted here: hasattr on a builtin container or a str
+# still answers False for a method it plainly has —
+# bug-nilpy-hasattr-on-a-builtin-container-or-str-answers-false, pre-existing
+# and unrelated to the dunder.
+print([1, 2].count(1), {"k": 1}.get("k"), "s".upper())

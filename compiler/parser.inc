@@ -11309,11 +11309,15 @@ begin
               attributes in the bind registry, and the unwrapped-pointer form
               would key the question on the RTTI blob's address and answer False
               (bug-nilpy-class-attribute-through-a-class-reference-reads-garbage) }
+            { the WIDE predicates, not the store-only ones: hasattr must answer
+              True for a method and for a name the class's __getattr__ answers
+              for, which is CPython's definition of it (getattr does not raise).
+              bug-nilpy-getattr-dunder-not-supported }
             if IntToTypeKind(ASTTk[atRecv]) = tyVariant then
-              idx := FindProc('pydynattr_has_v')
+              idx := FindProc('pydynattr_has_any_v')
             else
-              idx := FindProc('pydynattr_has');
-            if idx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
+              idx := FindProc('pydynattr_hasattr');
+            if idx < 0 then Error('Nil Python: pylib (pydynattr_hasattr) not loaded');
             argSeq := AllocNode(AN_ARG);
             if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
             else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
@@ -11356,11 +11360,13 @@ begin
            (IntToTypeKind(ASTTk[atRecv]) in [tyVariant, tyClass]) then
         begin
           { same tag-preserving choice as the hasattr branch above }
+          { the wide predicates, same reason as the hasattr arm above — a
+            default must not win over a value __getattr__ would have produced }
           if IntToTypeKind(ASTTk[atRecv]) = tyVariant then
-            idx := FindProc('pydynattr_has_v')
+            idx := FindProc('pydynattr_has_any_v')
           else
-            idx := FindProc('pydynattr_has');
-          if idx < 0 then Error('Nil Python: pylib (pydynattr_has) not loaded');
+            idx := FindProc('pydynattr_hasattr');
+          if idx < 0 then Error('Nil Python: pylib (pydynattr_hasattr) not loaded');
           argSeq := AllocNode(AN_ARG);
           if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
           else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);

@@ -1985,9 +1985,23 @@ procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant
   the object's address and the attribute name, so no per-class field is needed.
   uforth uses this for lazy state (`if not hasattr(vm, '_trans_ptr'): vm._trans_ptr = ...`). }
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
+{ `__getattr__` — the LAST step of CPython's attribute lookup, after the
+  instance dict and the declared members have both missed. Declared here rather
+  than forward-declared in the implementation because all three attribute-miss
+  sites sit above its body. bug-nilpy-getattr-dunder-not-supported }
+function PyUserObjGetattr(o: TObject; const name: AnsiString;
+                          var res: Variant): Boolean;
+{ ...and the same call with an AttributeError refusal turned into False, which
+  is what a PRESENCE question (hasattr, getattr-with-a-default) needs. }
+function PyUserObjGetattrTry(o: TObject; const name: AnsiString;
+                             var res: Variant): Boolean;
 function pydynattr_has_any_v(const v: Variant; const name: AnsiString): Boolean;   { hasattr for a COMPUTED name: the dynamic store PLUS declared fields and methods, matching what pydynattr_get_v resolves }
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
+{ hasattr's wider question for a class-typed receiver — store, declared members,
+  methods, then __getattr__. pydynattr_has above is the STORE only, because
+  pydynattr_get uses it to decide whether to fetch. }
+function pydynattr_hasattr(obj: Pointer; const name: AnsiString): Boolean;
 { `v[lo:hi]` where v is a VARIANT — slice the str/list/bytes it holds, at run
   time. Returns a variant of the same kind. }
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
@@ -3689,8 +3703,34 @@ end;
 
 function pydynattr_has(obj: Pointer; const name: AnsiString): Boolean;
 begin
+  { STORE ONLY, deliberately: pydynattr_get asks this to decide whether to
+    FETCH from the store, so a wider answer here sends it to fetch a key that
+    is not there. hasattr's wider question is pydynattr_hasattr below — the two
+    look like one predicate and are not. }
   Result := (PyDynAttrStore <> nil) and
             (PyDynAttrStore.indexof(PyDynAttrKey(obj, name)) >= 0);
+end;
+
+{ hasattr(o, "name") for a statically CLASS-typed receiver: the dynamic store,
+  then the declared members, then __getattr__ — the same four the getter
+  resolves, in the getter's own order. The object twin of
+  pydynattr_has_any_v, and the reason it exists is the same: asking the store
+  alone reported False for something the very next read returns.
+  bug-nilpy-getattr-dunder-not-supported }
+function pydynattr_hasattr(obj: Pointer; const name: AnsiString): Boolean;
+var declFound: Boolean; dummy: Variant;
+begin
+  Result := pydynattr_has(obj, name);
+  if Result then Exit;
+  if obj = nil then Exit;
+  dummy := PyDeclaredAttrGet(obj, name, declFound);
+  if declFound then begin Result := True; Exit; end;
+  if PyFindMethByName(GetInstanceRTTI(obj), name) <> nil then
+  begin
+    Result := True;
+    Exit;
+  end;
+  Result := PyUserObjGetattrTry(TObject(obj), name, dummy);
 end;
 
 type
@@ -3941,8 +3981,13 @@ begin
   if obj = nil then Exit;
   a := PyClsAttrSlotOf(Pointer(GetInstanceRTTI(obj)), name, k);
   if a = nil then
+  begin
+    { __getattr__ answers here too — a class-attribute read is an attribute
+      read. bug-nilpy-getattr-dunder-not-supported }
+    if PyUserObjGetattr(TObject(obj), name, Result) then Exit;
     raise AttributeError.Create('''' + TObject(obj).ClassName +
       ''' object has no attribute ''' + name + '''');
+  end;
   Result := PyBoxByKind(a, k, found);
   if not found then
     raise AttributeError.Create('class attribute ''' + name +
@@ -3976,7 +4021,7 @@ begin
 end;
 
 function pydynattr_get(obj: Pointer; const name: AnsiString): Variant;
-var declFound: Boolean;
+var declFound: Boolean; gaRes: Variant;
 begin
   { Reached with a receiver STATICALLY known to be a real class instance (or
     nil, a class-typed field/local defaulting to None) — never an int/str/etc
@@ -3999,6 +4044,14 @@ begin
       bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
     Result := PyDeclaredAttrGet(obj, name, declFound);
     if declFound then Exit;
+    { ...and LAST, the class's own __getattr__, which is defined precisely to
+      answer for names that are not there. CPython's order is instance dict,
+      class, then this. bug-nilpy-getattr-dunder-not-supported }
+    if PyUserObjGetattr(TObject(obj), name, gaRes) then
+    begin
+      Result := gaRes;
+      Exit;
+    end;
     raise AttributeError.Create('''' + TObject(obj).ClassName +
       ''' object has no attribute ''' + name + '''');
   end;
@@ -4008,6 +4061,7 @@ function PyVarTypeName(t: Int64): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
 var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
+    gaRes: Variant;
 begin
   { Reached with a receiver that is a VARIANT — a for-loop element, `d.get(k)`,
     a plain unannotated parameter — whose runtime tag is NOT known at compile
@@ -4068,6 +4122,14 @@ begin
         Exit;
       end;
     end;
+    { LAST, as above: the class's own __getattr__. Both getters need the arm —
+      one concept, two receivers, and a fix on one of them only is the shape
+      this repo keeps meeting. bug-nilpy-getattr-dunder-not-supported }
+    if PyUserObjGetattr(TObject(obj), name, gaRes) then
+    begin
+      Result := gaRes;
+      Exit;
+    end;
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
@@ -4100,6 +4162,11 @@ begin
   dummy := PyDeclaredAttrGet(obj, name, declFound);
   if declFound then begin Result := True; Exit; end;
   Result := PyFindMethByName(GetInstanceRTTI(obj), name) <> nil;
+  if Result then Exit;
+  { __getattr__ last, in the getter's own order — this predicate's whole
+    contract is to answer what pydynattr_get_v resolves.
+    bug-nilpy-getattr-dunder-not-supported }
+  Result := PyUserObjGetattrTry(TObject(obj), name, dummy);
 end;
 
 function pydynattr_has_v(const v: Variant; const name: AnsiString): Boolean;
@@ -15289,6 +15356,92 @@ type
   TNoArgS = function(self: Pointer): AnsiString;
   TNoArgB = function(self: Pointer): Boolean;
   TNoArgD = function(self: Pointer): Double;
+  { ...and the one-STRING-argument / one-VARIANT-argument shapes, for
+    __getattr__. Same return fan: the dunder is usually unannotated (Variant),
+    but `-> str` is just as ordinary a way to write it. }
+  TStrArgV = function(self: Pointer; const a: AnsiString): Variant;
+  TStrArgO = function(self: Pointer; const a: AnsiString): Pointer;
+  TStrArgI = function(self: Pointer; const a: AnsiString): Int64;
+  TStrArgS = function(self: Pointer; const a: AnsiString): AnsiString;
+  TStrArgB = function(self: Pointer; const a: AnsiString): Boolean;
+  TStrArgD = function(self: Pointer; const a: AnsiString): Double;
+  TVarArgV = function(self: Pointer; const a: Variant): Variant;
+  TVarArgO = function(self: Pointer; const a: Variant): Pointer;
+  TVarArgI = function(self: Pointer; const a: Variant): Int64;
+  TVarArgS = function(self: Pointer; const a: Variant): AnsiString;
+  TVarArgB = function(self: Pointer; const a: Variant): Boolean;
+  TVarArgD = function(self: Pointer; const a: Variant): Double;
+
+{ `o.__getattr__(name)` — the LAST step of CPython's attribute lookup, reached
+  only after the instance dict and the declared members have both missed. The
+  name argument is a str, but an unannotated `def __getattr__(self, name)` types
+  it as a Variant, which is how the dunder is ordinarily written, so both
+  parameter shapes are dispatched; the return shape comes from the RTTI exactly
+  as PyUserObjNoArgDunder reads it. bug-nilpy-getattr-dunder-not-supported }
+function PyUserObjGetattr(o: TObject; const name: AnsiString;
+                          var res: Variant): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; nv: Variant;
+    gv: TStrArgV; go: TStrArgO; gi: TStrArgI; gs: TStrArgS;
+    gb: TStrArgB; gd: TStrArgD;
+    vv: TVarArgV; vo: TVarArgO; vi: TVarArgI; vs: TVarArgS;
+    vb: TVarArgB; vd: TVarArgD;
+    pkind: Int64;
+begin
+  PyUserObjGetattr := False;
+  if o = nil then Exit;
+  { this unit's own containers resolve their attributes themselves }
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(o));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, '__getattr__');
+  if mi = nil then Exit;
+  if mi^.Arity <> 2 then Exit;               { self + name }
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  pkind := pk[1];
+  if pkind = 22 then
+  begin
+    nv := name;               { VT_STRING by ordinary variant assignment }
+    if mi^.RetKind = 22 then begin vv := TVarArgV(mi^.Code); res := vv(Pointer(o), nv); end
+    else if mi^.RetKind = 6 then begin vo := TVarArgO(mi^.Code); res := TObject(vo(Pointer(o), nv)); end
+    else if (mi^.RetKind = 13) or (mi^.RetKind = 1) or (mi^.RetKind = 15) or
+            (mi^.RetKind = 11) then begin vi := TVarArgI(mi^.Code); res := vi(Pointer(o), nv); end
+    else if mi^.RetKind = 23 then begin vs := TVarArgS(mi^.Code); res := vs(Pointer(o), nv); end
+    else if mi^.RetKind = 2 then begin vb := TVarArgB(mi^.Code); res := vb(Pointer(o), nv); end
+    else if mi^.RetKind = 19 then begin vd := TVarArgD(mi^.Code); res := vd(Pointer(o), nv); end
+    else Exit;
+    PyUserObjGetattr := True;
+    Exit;
+  end;
+  if pkind = 23 then
+  begin
+    if mi^.RetKind = 22 then begin gv := TStrArgV(mi^.Code); res := gv(Pointer(o), name); end
+    else if mi^.RetKind = 6 then begin go := TStrArgO(mi^.Code); res := TObject(go(Pointer(o), name)); end
+    else if (mi^.RetKind = 13) or (mi^.RetKind = 1) or (mi^.RetKind = 15) or
+            (mi^.RetKind = 11) then begin gi := TStrArgI(mi^.Code); res := gi(Pointer(o), name); end
+    else if mi^.RetKind = 23 then begin gs := TStrArgS(mi^.Code); res := gs(Pointer(o), name); end
+    else if mi^.RetKind = 2 then begin gb := TStrArgB(mi^.Code); res := gb(Pointer(o), name); end
+    else if mi^.RetKind = 19 then begin gd := TStrArgD(mi^.Code); res := gd(Pointer(o), name); end
+    else Exit;
+    PyUserObjGetattr := True;
+    Exit;
+  end;
+end;
+
+{ The PRESENCE question for __getattr__, which CPython answers by CALLING it
+  and catching AttributeError — `hasattr` is defined as "getattr does not
+  raise", and a __getattr__ that refuses some names (the ordinary way to write
+  one) must therefore be run to find out. bug-nilpy-getattr-dunder-not-supported }
+function PyUserObjGetattrTry(o: TObject; const name: AnsiString;
+                             var res: Variant): Boolean;
+begin
+  PyUserObjGetattrTry := False;
+  try
+    PyUserObjGetattrTry := PyUserObjGetattr(o, name, res);
+  except
+    on AttributeError do PyUserObjGetattrTry := False;
+  end;
+end;
 
 function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
                               var res: Variant): Boolean;

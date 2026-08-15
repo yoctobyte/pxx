@@ -1,0 +1,16 @@
+1 known GA-missing
+7 GA-other
+1 GA-missing
+GA-missing 1
+1 GA-missing
+True True True
+1 GA-nope GA-nope
+GA-nope True
+R-ok True False
+AttributeError: no boom
+fallback
+called-whatever
+5
+AttributeError: 'Plain' object has no attribute 'b'
+True False
+1 1 S
