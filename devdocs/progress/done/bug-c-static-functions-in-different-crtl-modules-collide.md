@@ -4,12 +4,13 @@ prio: 50
 type: bug
 summary: "`static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error"
 
+owner: agent-an-night
 ---
 
 # `static` functions in different crtl modules are treated as one unit
 
 - **Type:** bug — Track C (C frontend, translation-unit identity)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** Track A, scanning the tree before promoting
   `bug-a-duplicate-definition-silently-accepted`'s warning to an error.
@@ -166,3 +167,65 @@ Deliberately NOT suppressed for statics: no internal-linkage flag exists (see
 the 2026-08-05 investigation), and suppressing wholesale would trade a false
 positive for the lost true positive of two same-named statics in one real file
 — the case reproduced above.
+
+## Fixed 2026-08-15 — the structural fix the 2026-08-05 investigation called for
+
+That investigation ruled out the cheap fixes and named the answer: *"give each C
+source module its own unit identity"*. Done, minimally — not a new unit index
+per module (which would ripple through resolution), but the one fact the
+duplicate check was missing: **which `.c` MODULE a body's text came from**.
+
+`CModRange*` (defs.inc) records, per token index, the innermost enclosing `.c`
+on the include stack; `CMarkTokModule` / `CModuleOfTok` (parser.inc) fill and
+read it; `ProcCModule[procIdx]` stamps it at body-compile time; the warning
+grows a fourth term, `ProcCModule[procIdx] = CModuleOfTok(...)`.
+
+Attributing a header's static to the module that INCLUDED it is the point —
+that is the translation unit it would belong to in a real build, so
+`lib/crtl/src/fcntl.c` and `unistd.c` each own their own `sysret`.
+
+Two supporting changes the measurement forced:
+
+- **The `# <line> "<path>"` markers are now emitted without `-g`.** They are the
+  only record of file provenance, and everything DWARF does with them stays
+  gated at the consuming end. One short line per file transition.
+- **The crtl prototype pull is its own module.** `CPullCrtlForPrototypes`
+  preprocesses its synthetic `#include` block SEPARATELY, so a guarded header
+  the main file already expanded is expanded again there — which is why
+  stdarg.h's six `__pxx_va_*_impl` statics still collided after the first cut,
+  with both copies attributed to the main module. In C those are two
+  translation units. Real `.c` markers inside the block refine it further.
+
+### Verified — both halves, because the ticket was right to insist on both
+
+| | before | after |
+| --- | --- | --- |
+| `test/cisatty.c`, `cposix_io.c`, `crtl_lfs64_aliases_b234.c`, `crtl_posix_io_leaf_b238.c` (`sysret`) | warned | **0 warnings**, run unchanged |
+| `test/cvariadic_struct_b208.c` (six `__pxx_va_*`) | warned 6× | **0 warnings**, runs, exit 42 |
+| two same-named statics in ONE `.c` (gcc: *"redefinition of 'helper'"*) | warned | **still warns exactly once**, still prints `2 11` |
+
+The true positive surviving is the whole reason this is not "skip statics":
+that would have traded a false positive for a lost real diagnostic, exactly as
+the 2026-08-05 note warned.
+
+New `test/cstatic_two_modules.c` (must warn 0× and run) and
+`test/cstatic_same_module_dup.c` (must warn exactly 1× and print `2 11`),
+wired into `test-core` as a pair so neither half can be lost.
+
+The warning text also drops its "warns here spuriously" caveat, which was only
+ever describing this bug.
+
+`gate.sh quick` + self-host fixedpoint GREEN, **FPC seed canary included** —
+which caught the one real slip: `InternStr` lives in `emit.inc`, included AFTER
+`clexer.inc`, so the interning moved inside `CMarkTokModule`
+(bug-a-fpc-seed-drift-emitasmx64-forward again).
+
+### Unblocks
+
+[[bug-a-duplicate-definition-silently-accepted]] — its suggested gate is to
+promote this warning to a hard error in both frontends. The C side was blocked
+on these five files warning on legal code; the tree is now clean, so that
+promotion is a decision rather than a blocked one.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

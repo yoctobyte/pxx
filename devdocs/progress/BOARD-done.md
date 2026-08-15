@@ -328,6 +328,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-sqlite-suite-runtime-segfault | A | 60 | bug | C sqlite feature suite (test/csqlite_suite.c) SIGSEGVs at runtime on master HEAD | — |
 | bug-c-sqlite-undefined-symbol-memsetdefault | C | 50 | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
 | bug-c-sqlite-unsupported-ternary-ir | C | 50 | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
+| bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-static-local-initializer-reruns-every-call | A+C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
 | bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |

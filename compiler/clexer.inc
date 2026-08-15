@@ -436,6 +436,14 @@ begin
   if SrcPos <= Length(Source) then Inc(SrcPos);
   if not ok then Exit;
   SrcLine := n;
+  { The enclosing C MODULE, tracked whether or not -g is on: the innermost `.c`
+    the include stack is inside. A `.h` leaves it alone, so a file-scope static
+    defined in a header is attributed to the module that included it — which is
+    the translation unit it would belong to in a real build. That is what lets
+    the duplicate-definition check tell crtl's fcntl.c and unistd.c apart
+    instead of reading two legal statics as a redefinition.
+    bug-c-static-functions-in-different-crtl-modules-collide }
+  if CPathIsCModule(path) then CMarkTokModule(TokCount, path);
   { tokens from here belong to `path`. The main translation unit keeps file 1;
     a header interns its own id, so its code lands in the line table as itself
     rather than as a wrong line of the .c file. }

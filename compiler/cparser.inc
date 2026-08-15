@@ -8313,6 +8313,15 @@ begin
   if Length(synth) = 0 then Exit;
   CPreprocess(synth, SourceFileDir);
   Result := CLexAppend(synth);
+  { This appended block is its own C MODULE for duplicate-definition purposes.
+    It is preprocessed SEPARATELY from the main source, so a guarded header the
+    main file already included is expanded a second time here — and a file-scope
+    `static` in such a header (stdarg.h's six `__pxx_va_*_impl`) then read as a
+    redefinition of the copy in the main text. In C those are two translation
+    units and both copies are legal. Real `.c` markers inside the block refine
+    this further, per crtl module.
+    bug-c-static-functions-in-different-crtl-modules-collide }
+  CMarkTokModule(Result, '<crtl-prototype-pull>');
 end;
 
 { A C program that asked for NO system libraries must not quietly acquire one.
@@ -9176,15 +9185,27 @@ begin
     compiler/builtin/*.pas AND lib/crtl/src/*.c — without this term it fired 88
     times per C program); the unit test keeps it to THIS unit. Mirrors the Pascal
     side (bug-a-duplicate-definition-silently-accepted). }
+  { …and a FOURTH term: both bodies must come from the SAME C module. The
+    preprocessor inlines every include into one buffer and crtl's modules are
+    pulled into that same buffer, so `fcntl.c` and `unistd.c` are one
+    translation unit here — but C gives a file-scope `static` INTERNAL linkage,
+    so the same name in two modules is two distinct functions and gcc compiles
+    it. This warning fired on five files in the tree, every one of them legal
+    (`sysret` in fcntl.c AND unistd.c; six `__pxx_va_*_impl` in stdarg.h,
+    attributed to whichever module included it). Comparing modules keeps the
+    TRUE positive the ticket was careful about — two same-named statics in ONE
+    real .c still warn, because they share a module.
+    bug-c-static-functions-in-different-crtl-modules-collide }
   if (Procs[procIdx].BodyAddr >= 0) and CProcHasLocalDef[procIdx]
-     and (ProcUnitIdx[procIdx] = CurrentUnitIdx) then
+     and (ProcUnitIdx[procIdx] = CurrentUnitIdx)
+     and (ProcCModule[procIdx] = CModuleOfTok(TokPos - 1)) then
     Warn('duplicate definition of ''' + Procs[procIdx].Name
       + ''' in the same translation unit; the later body wins for calls '
       + 'written after it, calls written between the two bind to the '
-      + 'earlier one (a file-scope ''static'' defined in two separate '
-      + 'crtl modules is legal C and warns here spuriously)');
+      + 'earlier one');
   ProcExternal[procIdx] := False;
   CProcHasLocalDef[procIdx] := True;
+  ProcCModule[procIdx] := CModuleOfTok(TokPos - 1);
   Procs[procIdx].BodyAddr := CodeLen;
   
   { Save scope }

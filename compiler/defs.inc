@@ -1742,6 +1742,7 @@ var
   BlockCount: Integer;
   CurBlockId: Integer;
   ProcExternal : array[0..MAX_PROCS-1] of Boolean;
+  ProcCModule : array[0..MAX_PROCS-1] of Integer;   { the C .c MODULE whose text defined this proc's body (Strs[] index, -1 = the main source / not C). Two definitions from different modules are not a same-TU duplicate -- see CModRange* below. bug-c-static-functions-in-different-crtl-modules-collide }
   ProcCaseSensitive : array[0..MAX_PROCS-1] of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
   ProcExtName  : array[0..MAX_PROCS-1] of Integer; { Strs[] link symbol from `external 'lib' name 'sym'`; -1 = use the Pascal routine name }
@@ -2162,6 +2163,22 @@ var
     bug-c-sibling-translation-units-cannot-see-each-other }
   CTUnitIdx        : array[0..255] of Integer;
   CTUnitCount      : Integer;
+  { C TRANSLATION-UNIT PROVENANCE. The preprocessor inlines every #include into
+    ONE buffer and crtl's modules are pulled into the SAME buffer, so by parse
+    time `fcntl.c` and `unistd.c` are one translation unit as far as pxx is
+    concerned. C says otherwise about a file-scope `static`: it has INTERNAL
+    linkage, so the same name in two modules is two distinct functions, and the
+    duplicate-definition warning fired on legal code
+    (bug-c-static-functions-in-different-crtl-modules-collide).
+
+    CModRange* records, per token index, which top-level `.c` MODULE the tokens
+    came from — the innermost enclosing `.c` on the include stack, so a static
+    defined in a header is attributed to the module that included it, which is
+    exactly the TU it would belong to in a real build. Filled from the
+    preprocessor's `# <line> "<path>"` markers by the C lexer. }
+  CModRangeStart : array[0..MAX_DBG_RANGES-1] of Integer;
+  CModRangeId    : array[0..MAX_DBG_RANGES-1] of Integer;   { Strs[] index of the .c path }
+  CModRangeCount : Integer;
   DeclVisibilityProbe : Boolean;   { while True, DeclVisible answers True for everything. For DIAGNOSTICS ONLY -- asking "does a confusable name exist ANYWHERE" is a different question from "may this scope use it", and a compiler that refuses a call should still be able to say WHY. Never set around anything that RESOLVES. }
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;

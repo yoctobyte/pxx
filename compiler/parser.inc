@@ -75,6 +75,53 @@ end;
   in ascending token order (both callers lex forward). A mark identical to the
   current one is dropped, so a run of boundaries that do not actually change
   file costs nothing. }
+function CPathIsCModule(const path: AnsiString): Boolean;
+{ A top-level C SOURCE, i.e. `.c` — not a header. See CModRange* in defs.inc. }
+var n: Integer;
+begin
+  n := Length(path);
+  CPathIsCModule := (n >= 2) and (path[n] = 'c') and (path[n - 1] = '.');
+end;
+
+procedure CMarkTokModule(startTok: Integer; const path: AnsiString);
+{ Tokens from `startTok` on belong to the C module `path`. Same collapse rules as
+  DbgMarkTokFile: a repeat of the current module is a no-op, and a second mark
+  at the same token index overwrites rather than stacks. NOT gated on
+  DebugInfo — the duplicate-definition check needs this in every build.
+  bug-c-static-functions-in-different-crtl-modules-collide }
+var modId: Integer;
+begin
+  if CModRangeCount >= MAX_DBG_RANGES then Exit;
+  { interned HERE, not at the call site: clexer.inc is included before emit.inc,
+    where InternStr lives, and the FPC seed build has no declare-anywhere
+    laxness (bug-a-fpc-seed-drift-emitasmx64-forward) }
+  modId := InternStr(path);
+  if (CModRangeCount > 0) and (CModRangeId[CModRangeCount - 1] = modId) then Exit;
+  if (CModRangeCount > 0) and (CModRangeStart[CModRangeCount - 1] = startTok) then
+  begin
+    CModRangeId[CModRangeCount - 1] := modId;
+    Exit;
+  end;
+  CModRangeStart[CModRangeCount] := startTok;
+  CModRangeId[CModRangeCount] := modId;
+  Inc(CModRangeCount);
+end;
+
+function CModuleOfTok(t: Integer): Integer;
+{ The C module a token belongs to: the last range starting at or before it, or
+  -1 (the main source) when none does. Backward scan, like DbgFileOfTok — the
+  token asked about is nearly always in the most recent range. }
+var i: Integer;
+begin
+  CModuleOfTok := -1;
+  for i := CModRangeCount - 1 downto 0 do
+    if t >= CModRangeStart[i] then
+    begin
+      CModuleOfTok := CModRangeId[i];
+      Exit;
+    end;
+end;
+
 procedure DbgMarkTokFile(startTok, fileId: Integer);
 begin
   if not DebugInfo then Exit;

@@ -359,7 +359,13 @@ end;
   needed exactly when that disagrees with where we really are. }
 procedure CPSyncLine;
 begin
-  if not DebugInfo then Exit;
+  { Emitted even WITHOUT -g now. The marker is the only record of which source
+    file the following text came from, and the C lexer needs that to attribute a
+    file-scope `static` to its own MODULE — without it, crtl's fcntl.c and
+    unistd.c are indistinguishable and two legal statics read as a redefinition
+    (bug-c-static-functions-in-different-crtl-modules-collide). One short line
+    per file transition; the lexer already skips markers, and everything DWARF
+    does with them stays gated on DebugInfo at the consuming end. }
   if (CPCurFileId = CPMarkFile) and
      (CPStmtLine = CPMarkLine + (CPOutLine - CPMarkOutLine)) then Exit;
   CPrepOutAppendStr('# ' + CPSmallIntStr(CPStmtLine) + ' "' + CPCurPath + '"');

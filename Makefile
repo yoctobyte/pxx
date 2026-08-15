@@ -4686,6 +4686,20 @@ test-core: $(COMPILER)
 	out="$$($(TESTTMP)/cvararg_many_args_b13526)"; status="$$?"; test "$$out" = "$$(printf '300 78 110\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18')"; test "$$status" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvariadic_struct_b208.c $(TESTTMP)/cvariadic_struct_b20826
 	$(TESTTMP)/cvariadic_struct_b20826; test "$$?" = "42"
+	# a file-scope `static` in two different crtl MODULES is legal C (internal
+	# linkage), and must NOT warn -- crtl's fcntl.c and unistd.c both define
+	# `static sysret`, and stdarg.h's six statics get re-expanded by the crtl
+	# prototype pull. Both halves are asserted: this file must warn ZERO times
+	# and run, and its sibling (two statics in ONE .c, which gcc rejects
+	# outright) must still warn EXACTLY once -- suppressing statics wholesale
+	# would trade the false positive for that lost true positive.
+	# bug-c-static-functions-in-different-crtl-modules-collide
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstatic_two_modules.c $(TESTTMP)/cstatic_two_modules26 > $(TESTTMP)/cstatic_two_modules.log 2>&1
+	test "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_two_modules.log)" = "0"
+	test "$$($(TESTTMP)/cstatic_two_modules26)" = "$$(printf 'va=42\nopen=1\ndup=1\nclose=1\nclose2=1')"
+	./$(COMPILER) test/cstatic_same_module_dup.c $(TESTTMP)/cstatic_same_module26 > $(TESTTMP)/cstatic_same_module.log 2>&1
+	test "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_same_module.log)" = "1"
+	test "$$($(TESTTMP)/cstatic_same_module26)" = "2 11"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c $(TESTTMP)/cgeneric_selection_b20926
 	$(TESTTMP)/cgeneric_selection_b20926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/crange_designator_b210.c $(TESTTMP)/crange_designator_b21026
