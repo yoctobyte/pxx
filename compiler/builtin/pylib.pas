@@ -1596,6 +1596,7 @@ function bool(i: Int64): Boolean; overload;
 function bool(d: Double): Boolean; overload;
 function bool(const s: AnsiString): Boolean; overload;
 function bool(l: TPyList): Boolean; overload;
+function pylist_repeat_inplace(l: TPyList; n: Int64): TPyList;
 function pylist_repeat(l: TPyList; n: Int64): TPyList;
 function pybytes_repeat(b: TPyBytes; n: Int64): TPyBytes;
 function pybytes_concat(a, b: TPyBytes): TPyBytes;
@@ -15147,6 +15148,44 @@ begin
   { copy back into l so the original handle stays valid }
   l.FLen := 0;
   for i := 0 to keep.count - 1 do l.append(keep.at(i));
+end;
+
+function pylist_repeat_inplace(l: TPyList; n: Int64): TPyList;
+{ `xs *= 2` — Python MUTATES the list and rebinds the same object, so an alias
+  taken beforehand sees the new contents. Building a fresh list (pylist_repeat)
+  and assigning it back gives the right value under the name and the OLD one
+  through every alias — silent, and it made `*=` disagree with `+=`, which has
+  always mutated (TPyList.extend). This is `+=`'s missing twin.
+
+  The original elements are snapshotted first: appending to the list being read
+  would feed on its own output. n <= 0 clears it, which is CPython's answer for
+  `xs *= 0`. }
+var i, k, n0: Integer; snap: TPyList;
+begin
+  Result := l;
+  if l = nil then Exit;
+  { A TUPLE (and a frozenset) is IMMUTABLE — `t *= 2` rebinds a fresh one there,
+    which is the semantics, and mutating in place would make an alias see a
+    change Python guarantees it cannot. The two share this class, so the
+    question is asked once here rather than at the call site, which cannot know
+    the run-time kind. }
+  if l.FKind <> PYSEQ_LIST then
+  begin
+    Result := pylist_repeat(l, n);
+    Exit;
+  end;
+  n0 := l.count;
+  if n <= 0 then
+  begin
+    l.clear;
+    Exit;
+  end;
+  if (n = 1) or (n0 = 0) then Exit;
+  snap := TPyList.Create;
+  for i := 0 to n0 - 1 do snap.append(l.at(i));
+  for k := 2 to n do
+    for i := 0 to n0 - 1 do l.append(snap.at(i));
+  PXXObjRelease(Pointer(snap));
 end;
 
 function pylist_repeat(l: TPyList; n: Int64): TPyList;

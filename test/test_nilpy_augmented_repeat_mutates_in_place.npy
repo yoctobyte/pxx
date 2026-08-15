@@ -1,0 +1,71 @@
+# `xs *= 2` MUTATES the list and rebinds the same object, so an alias taken
+# beforehand sees the new contents. It used to build a fresh list and assign
+# that back: the right value under the name, the OLD one through every alias —
+# silent, and it made `*=` disagree with `+=`, which has always mutated
+# (TPyList.extend). This is that missing twin.
+
+a = [1, 2]
+alias = a
+a *= 2
+print(a, alias)
+
+# an alias held INSIDE a container
+b = [1]
+holder = [b]
+b *= 3
+print(b, holder[0])
+
+# ...and in a dict value
+c = [7]
+d = {"k": c}
+c *= 2
+print(c, d["k"])
+
+# the degenerate counts
+z = [1, 2]
+za = z
+z *= 0
+print(z, za)
+
+o = [1, 2]
+oa = o
+o *= 1
+print(o, oa)
+
+# a str keeps REBINDING — Python strings are immutable, so that IS the semantics
+s = "ab"
+sa = s
+s *= 2
+print(s, sa)
+
+# `+=`, the operator this one now agrees with
+e = [1, 2]
+ea = e
+e += [3]
+print(e, ea)
+
+# a tuple stays a tuple, and rebinds (it is immutable too)
+t = (1, 2)
+ta = t
+t *= 2
+print(t, ta)
+
+# a FIELD and a SUBSCRIPT target mutate too, and their aliases see it
+class H:
+    def __init__(self):
+        self.xs = [1, 2]
+
+h = H()
+hz = h.xs
+h.xs *= 2
+print(h.xs, hz)
+
+dd = {"k": [3]}
+dd["k"] *= 3
+print(dd["k"])
+
+# NOT covered here: `xs *= 2` where the target reads as a VARIANT — an
+# unannotated parameter, a dict VALUE — still rebinds, so an alias of THAT
+# keeps the old contents. The in-place arm keys on the operand's STATIC type,
+# and a subscript read is a variant. Filed as
+# bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds.

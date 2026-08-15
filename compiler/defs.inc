@@ -1948,6 +1948,12 @@ var
     parents may each define a `helper` without the first one winning every
     lookup — FindProc's hash chain is registration-ordered. }
   PyNestPrefix: AnsiString;                 { qualifier for defs nested in the body being parsed }
+  { PyAugMulNode built an IN-PLACE repeat (`xs *= 2` mutates the list), so the
+    augmented sites must NOT wrap it in an assignment: storing the same handle
+    back through a FIELD target released the list before the append ran and
+    `h.xs *= 2` came out EMPTY. Set on every call to PyAugMulNode, read
+    immediately after — never live across one. }
+  PyAugMulInPlace: Boolean;
   PyPendNestTok: array[0..PY_MAX_NESTED-1] of Integer;   { token index of each queued nested def }
   PyPendNestPfx: array[0..PY_MAX_NESTED-1] of AnsiString;{ the qualifier it must register under }
   { CurSelfClass in force where the nested def was WRITTEN. Its body is compiled

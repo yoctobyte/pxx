@@ -17731,9 +17731,18 @@ begin
       node := PyAugMulNode(left, right);
       if node >= 0 then
       begin
-        caRhs := AllocNode(AN_ASSIGN);
-        ASTLeft[caRhs] := left;
-        ASTRight[caRhs] := node;
+        { …unless the repeat was built IN PLACE, in which case the mutation IS
+          the statement: storing the same handle back through this target
+          released the list before the append ran and `h.xs *= 2` came out
+          EMPTY, while the identical local was right. }
+        if PyAugMulInPlace then
+          caRhs := node
+        else
+        begin
+          caRhs := AllocNode(AN_ASSIGN);
+          ASTLeft[caRhs] := left;
+          ASTRight[caRhs] := node;
+        end;
       end;
     end;
     if (caRhs < 0) and NilPyUserCode then

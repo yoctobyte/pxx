@@ -20317,12 +20317,37 @@ end;
   of-mutating. An empty list was the strictly worse answer.
   bug-nilpy-augmented-multiply-on-a-sequence-yields-empty }
 function PyAugMulNode(left, right: Integer): Integer;
-var node: Integer;
+var node, ipPi, ipA, ipB: Integer;
 begin
   Result := -1;
+  PyAugMulInPlace := False;
   if (left < 0) or (right < 0) then Exit;
   if PyListRepeatPair(left, right) then
   begin
+    { IN PLACE — this is the augmented form, and Python mutates the list rather
+      than binding a fresh one, so an alias taken beforehand sees the new
+      contents. `+=` has always mutated (TPyList.extend); building a fresh list
+      here made the two augmented sequence operators disagree, silently and
+      only through an alias.
+      bug-nilpy-augmented-sequence-repeat-rebinds-instead-of-mutating }
+    ipPi := FindProc('pylist_repeat_inplace');
+    if PyNodeIsPyList(left) and (ipPi >= 0) then
+    begin
+      ipA := AllocNode(AN_ARG); ASTLeft[ipA] := left;
+      ipB := AllocNode(AN_ARG); ASTLeft[ipB] := right; ASTRight[ipB] := -1;
+      ASTRight[ipA] := ipB;
+      Result := AllocNode(AN_CALL);
+      ASTIVal[Result] := ipPi;
+      ASTTk[Result] := Ord(tyClass);
+      ASTLeft[Result] := ipA;
+      { the caller must NOT wrap this in an assignment: the call mutates the
+        object the target already holds, and storing the same handle back
+        through a FIELD target released the list before the append ran —
+        `h.xs *= 2` came out EMPTY while the identical local did not. The
+        mutation IS the statement. }
+      PyAugMulInPlace := True;
+      Exit;
+    end;
     Result := PyMakeListRepeat(left, right);
     Exit;
   end;
@@ -22807,6 +22832,11 @@ begin
         node := PyAugMulNode(lhsNode, CurASTNode);
         if node >= 0 then
         begin
+          if PyAugMulInPlace then
+          begin
+            Result := node;                 { the mutation IS the statement }
+            Exit;
+          end;
           Result := AllocNode(AN_ASSIGN);
           ASTLeft[Result] := CloneAST(lhsNode);
           ASTRight[Result] := node;
