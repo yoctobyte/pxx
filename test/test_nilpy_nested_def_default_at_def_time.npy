@@ -1,0 +1,111 @@
+# Python evaluates a default ONCE, at the `def` statement, in the scope where
+# the def stands. pxx bound it where the def was taken as a VALUE instead, so
+# reassigning the name in between changed the default.
+# bug-nilpy-a-nested-defs-default-is-evaluated-at-value-time-not-def-time
+#
+# The sibling half: the def-time value lives in a hidden global, and the trial
+# parse's copy of that symbol was rolled back, so a call whose result was
+# ASSIGNED read whatever inherited the index.
+# bug-nilpy-a-nested-defs-default-parameter-is-read-from-a-rolled-back-symbol
+
+def make():
+    seed = 5
+    def h(v=seed):
+        return v
+    seed = 99
+    return h
+
+print("deftime", make()())
+
+# the value taken TWICE from one enclosing call: same default both times
+def make2():
+    seed = 1
+    def h(v=seed):
+        return v
+    a = h
+    seed = 2
+    b = h
+    return a(), b()
+
+print("twice", make2())
+
+# a FRESH enclosing invocation re-evaluates it (uforth's DOES> shape)
+def factory(n):
+    def h(v=n * 10):
+        return v
+    return h
+
+print("fresh", factory(1)(), factory(2)(), factory(3)())
+
+# called directly inside its own scope, before and after the reassignment
+def make3():
+    seed = 1
+    def h(v=seed):
+        return v
+    r1 = h()
+    seed = 2
+    r2 = h()
+    return r1, r2
+
+print("inner", make3())
+
+# the result ASSIGNED to a local rather than returned: the rolled-back symbol
+def make4():
+    s = 7
+    def h(v=s):
+        return v
+    r = h()
+    return r
+
+print("assigned", make4())
+
+# an enclosing local declared AFTER the def is what shifted the symbol index
+def make5():
+    s = 3
+    def h(v=s):
+        return v
+    later = 11
+    r = h()
+    return r, later
+
+print("shifted", make5())
+
+# a caller-supplied argument still wins over the def-time default
+def make6():
+    s = 4
+    def h(v=s):
+        return v
+    return h(1), h(), h(2)
+
+print("override", make6())
+
+# two defaults, one constant and one captured, both reassigned after the def
+def make7():
+    a = 1
+    def h(x=2, y=a):
+        return (x, y)
+    a = 50
+    return h
+
+print("mixed", make7()(), make7()(9), make7()(9, 8))
+
+# a container default is evaluated once, so it accumulates (the idiom that
+# makes def-time evaluation observable at all)
+def make8():
+    def h(v, bucket=[]):
+        bucket.append(v)
+        return len(bucket)
+    return h
+
+acc = make8()
+print("accum", acc(1), acc(2), acc(3))
+
+# a default reading a PARAMETER of the enclosing def, reassigned after
+def make9(p):
+    def h(v=p):
+        return v
+    p = 100
+    return h
+
+print("param", make9(6)())
+print("TEST-OK")

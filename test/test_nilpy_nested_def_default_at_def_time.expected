@@ -1,0 +1,11 @@
+deftime 5
+twice (1, 1)
+fresh 10 20 30
+inner (1, 1)
+assigned 7
+shifted (3, 11)
+override (1, 4, 2)
+mixed (2, 1) (9, 1) (9, 8)
+accum 1 2 3
+param 6
+TEST-OK

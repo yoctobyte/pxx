@@ -8587,11 +8587,42 @@ begin
   end;
   bindIdx := 0;
 
-  { bind each DEFAULTED param: its default expression re-parsed HERE, in the
-    scope where the def statement stands — Python's default-at-def-time rule }
+  { bind each DEFAULTED param — from the hidden `$pdef.<def>.<param>` global the
+    DEF STATEMENT stored, when there is one.
+
+    This used to re-parse the expression HERE, and the comment claimed that was
+    "the scope where the def statement stands — Python's default-at-def-time
+    rule". It has the SCOPE right and the TIME wrong: here is where the def is
+    taken as a VALUE, which can be many statements later, so
+
+        def make():
+            seed = 5
+            def h(v=seed): return v
+            seed = 99
+            return h                     # <- re-parsed `seed` HERE
+
+    bound 99 where CPython binds 5 (bug-nilpy-a-nested-defs-default-is-
+    evaluated-at-value-time-not-def-time). The def-time value already exists:
+    PyEvalParamDefault evaluates every non-constant default into that global at
+    the `def` statement, which is what makes the shared-mutable-default idiom
+    accumulate, and the direct-call path has read it all along. Two mechanisms
+    for one concept, disagreeing — devdocs/dev/normalise-dont-special-case.md.
+
+    uforth's DOES>/DEFER, which the re-parse was written for, is unaffected: the
+    store is IN the enclosing body, so each enclosing invocation still evaluates
+    its own defaults before this value is built.
+
+    A CONSTANT default has no global (a literal cannot observe the difference)
+    and still re-parses. }
   for j := 0 to nP - 1 do
     if pDefS[j] >= 0 then
     begin
+      k := -1;
+      if (j < MAX_PROC_PARAMS) and
+         (ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + j] >= 0) then
+        k := PyMakeIdent(ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + j]);
+      if k < 0 then
+      begin
       savedTok := TokPos - 1;
       TokPos := pDefS[j];
       Next;
@@ -8599,6 +8630,7 @@ begin
       k := CurASTNode;
       TokPos := savedTok;
       Next;
+      end;
       { pass mode follows the CALLEE PARAM's type: a variant param reads an
         ADDRESS (bind_var heap-boxes the value), a concrete one a raw word }
       ChainBind(k, BoundParamIsVariant(bindIdx), False,
@@ -20591,6 +20623,26 @@ begin
         ProcParamCapRef[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
       end;
     end;
+  { The def-time default globals, re-recorded on EVERY pass for the same reason
+    the cells above are: the trial parse registered this Proc, so the branch
+    that carries a signature onto it does not run again — and the `$pdef.<def>.
+    <param>` symbol the trial allocated was ROLLED BACK with the rest of the
+    trial's scope. The real parse allocates it afresh, at whatever index is free
+    NOW, and the two disagree exactly when the enclosing body declared a local
+    in between: the call then read the OTHER symbol that inherited the index.
+    `r = h()` answered None while the identical `return h()` was right, because
+    with no `r` there was no index to lose. Recycled index, plausible wrong
+    value — project_tsymbol_field_landmine's neighbour.
+    PyParseDef carries the same loop for the top-level shape.
+    bug-nilpy-a-nested-defs-default-parameter-is-read-from-a-rolled-back-symbol }
+  if not PyTypingPass then
+    for j := 0 to PyHdrNParams - 1 do
+      if (j < MAX_PROC_PARAMS) and PyHdrDefHas[j] and (PyHdrDefSym[j] >= 0) then
+      begin
+        ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + j] := PyHdrDefSym[j];
+        ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + j] := True;
+        ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + j] := False;
+      end;
   { record the def's token position: a nested def taken AS A VALUE re-lowers
     from this span as a value-binding closure (see PyNestedDefClosureValue) }
   PyDefTokOf[procIdx] := defTok + 1;
