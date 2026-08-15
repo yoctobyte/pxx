@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:202 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1818 rejected:37`
+`working:1 unfinished:11 blocked:6 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1818 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: agent-AN
 
 ## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
@@ -34,9 +34,8 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 186, ranked
+## Ready — top 30 of 185, ranked
 
-- `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 50] [B]` feature-b-mimic-codecs-for-nilpy
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
+- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
-_156 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_155 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

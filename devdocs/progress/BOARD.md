@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 
 ## unfinished (11)
 
@@ -39,7 +41,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (202)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +62,6 @@ _none_
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-statically-clashing-operands-refuse-without-naming-the-types | N | 15 | bug | `\"a\" < 3` with two LITERALS raises `unsupported operand type(s) for this operator` where CPython names both types. The dynamic shape already matches CPython exactly; only the statically-proven clash — where the compiler knows MORE — reports less. | — |
 | bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
-| bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-class-name-collision-across-units-resolves-first-not-last | P | 45 | bug | Two units exporting the same CLASS name: pxx binds the first unit named, FPC binds the last. The routine half of this was fixed and gated (bug-p-uses-order-does-not-decide-which-unit-wins, done); classes were never done — name-resolution.md §2.2 says scope hiding is 'BUILT for routines, MISSING for types/classes'. Filed because two tickets already cite this slug and no such ticket existed. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
@@ -451,7 +452,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - [p 60] [C] feature-c-csmith-differential-fuzzing

@@ -3,8 +3,9 @@ summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython
 type: bug
 track: O
 prio: 65
-status: open
+status: working
 
+owner: agent-AN
 ---
 
 # pxx-compiled uforth is 2.1x slower than CPython on `blocktest`
@@ -483,3 +484,58 @@ banked is the honest state; closing it on the concat fix would misreport it.
 
 `SLOW_SHARDS` should NOT be dismantled yet — that was conditioned on blocktest
 becoming ordinary, and a 2.28x ratio is not that.
+
+## Follow-up 2 DONE 2026-08-15 — the byte-at-a-time copy loops are now word-at-a-time
+
+The second of the two follow-ups above. Every block copy in the runtime moved
+ONE BYTE per iteration; `PXXBlockCopy` (builtinheap.pas) moves a machine word
+per iteration with a byte tail, and `PXXStrConcat`, `PXXStrAppend` (both arms),
+`PXXMemMove` and `PXXMemZero` all route through it.
+
+**Alignment is the whole design constraint, not a detail.** ARM32 faults on an
+unaligned word access, so the word loop runs only when BOTH ends are
+machine-word aligned and the byte loop is both the tail and the fallback. In
+practice the aligned case is the common one — string data sits at
+`base + PXX_HDR_SIZE` with `PXX_HDR_SIZE = 24` and `base` 8-aligned, so
+string-to-string copies qualify. `d + lenA` in a two-segment concat does NOT
+unless `lenA` is a multiple of the word size, which is why each segment asks for
+itself rather than the routine asking once. The step is `SizeOf(NativeInt)`,
+never a literal 8 — a hardcoded step copied every other word on 32-bit once
+already.
+
+The ASCII scan folded in with it: the byte loops OR'd every byte and
+`PXXStrMeta` reads only `orAll and $80`, so the word loop ORs whole words and
+collapses through the all-bytes high-bit mask. Same answer, one operation per
+word instead of per byte. `test_nilpy_non_ascii_case_and_explode` and
+`test_nilpy_case_mapping_expands` are what check that, and both are green.
+
+### Measured — A/B on one box, same tool, same corpus
+
+`tools/uforth_bench.py`, HEAD (self-hosted fixedpoint) against
+`stable_linux_amd64/default/pinned` (v321), run back to back:
+
+| bench | pinned v321 | HEAD | gain |
+| --- | --- | --- | --- |
+| microbench-doloop | 14835.3 ms | 14199.2 ms | 1.04x |
+| prelim | 720.6 ms | 617.8 ms | **1.17x** |
+| core | 2006.5 ms | 1822.8 ms | **1.10x** |
+
+And on a copy-DOMINATED workload — 20k `s = s + "abcdefgh"` plus 20k
+`parts.append("xy" + str(i))` then `"".join` — 9.63 s -> 5.73 s, **1.68x**,
+output byte-identical to CPython.
+
+**Read that gap honestly:** 1.68x where copying dominates, 1.04-1.17x on uforth,
+because uforth's remaining cost is ALLOCATION, exactly as the profile above
+says. This is the smaller of the two follow-ups landing first because it is the
+safer one; it does not close the ticket.
+
+Cross-compiles clean for aarch64 / arm32 / i386 / riscv32. The alignment guard
+is what makes that safe rather than lucky, and Track T's matrix is what will
+prove it on hardware.
+
+### Still open — follow-up 1, and it is the bigger one
+
+`PXXStrFromLit` at 9.28% of the profile: every string literal materialises a
+fresh heap block on every evaluation. `PXX_FLAG_STATIC` is defined and unused.
+That, plus `PXXAlloc`/`PXXFree` around it, is the 28.5% this ticket is now
+actually about. Not started.

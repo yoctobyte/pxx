@@ -123,6 +123,10 @@ function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: Nativ
   silent-wrong-value bug (`t := s + 'x'` with a refcount-1 s would grow s); the
   slot is what removes the guess. }
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
+{ Word-at-a-time forward block copy; answers $80 if any byte copied had its high
+  bit set (the one bit PXXStrMeta reads), else 0. Word loop only when both ends
+  are machine-word aligned — ARM32 faults otherwise. }
+function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 { NilPy object reclamation (devdocs/dev/nilpy-object-reclamation.md): class
@@ -1195,6 +1199,74 @@ end;
     "unknown" (both bits clear). Unknown must stay unknown: inventing ASCII for
     a block nobody scanned is the wrong-and-fast error test_managed_block_meta
     pins. }
+{ ---- word-at-a-time block copy ------------------------------------------
+  Every copy loop in this runtime moved ONE BYTE per iteration. Measured on
+  uforth's core.fr suite (callgrind, 12.1e9 Ir): PXXAlloc + PXXStrFromLit +
+  PXXFree = 28.5% and the pure copy routines another ~13%, on a workload whose
+  remaining 2.28x-vs-CPython the ticket had already established is allocation
+  and copy churn rather than any one pole.
+  bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+
+  ALIGNMENT IS NOT OPTIONAL HERE. ARM32 faults on an unaligned word access and
+  the 32-bit targets generally may; so the word loop runs only when BOTH ends
+  are machine-word aligned, and the byte loop is the tail and the fallback. In
+  practice the aligned case is the common one: a string's data sits at
+  base + PXX_HDR_SIZE with PXX_HDR_SIZE = 24 and base 8-aligned, so string-to-
+  string copies qualify — but `d + lenA` in a two-segment concat does not
+  unless lenA happens to be a multiple of the word size, which is exactly why
+  each segment asks for itself rather than the routine asking once.
+  Steps by SizeOf(NativeInt), never a literal 8: a hardcoded step copied every
+  other word on 32-bit once already. }
+function PXXWordStep: Int64;
+begin
+  PXXWordStep := SizeOf(NativeInt);
+end;
+
+{ Are both ends word-aligned, and is there enough to be worth the setup? }
+function PXXWordCopyOk(d: Int64; s: Int64; n: Int64): Boolean;
+begin
+  PXXWordCopyOk := (n >= SizeOf(NativeInt)) and
+                   (((d or s) and (SizeOf(NativeInt) - 1)) = 0);
+end;
+
+{ The high bit of every byte in a machine word — the word-wise form of the
+  `orAll and $80` test PXXStrMeta does, so an ASCII scan folded into a word
+  copy answers exactly what the byte loop answered. }
+function PXXHighBits: Int64;
+var i, m: Int64;
+begin
+  m := 0;
+  for i := 0 to SizeOf(NativeInt) - 1 do
+    m := (m shl 8) or $80;
+  PXXHighBits := m;
+end;
+
+{ Copy n bytes forward, words first. Returns the OR of every byte COLLAPSED to
+  the one bit PXXStrMeta looks at: $80 when any byte had its high bit set, else
+  0. Callers that do not want the scan simply ignore the result. }
+function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
+var i, w, acc: Int64;
+begin
+  acc := 0;
+  i := 0;
+  w := SizeOf(NativeInt);
+  if PXXWordCopyOk(d, s, n) then
+    while i + w <= n do
+    begin
+      PWord(d + i)^ := PWord(s + i)^;
+      acc := acc or PWord(s + i)^;
+      i := i + w;
+    end;
+  if (acc and PXXHighBits) <> 0 then acc := $80 else acc := 0;
+  while i < n do
+  begin
+    PByte(d + i)^ := PByte(s + i)^;
+    acc := acc or PByte(s + i)^;
+    i := i + 1;
+  end;
+  if (acc and $80) <> 0 then PXXBlockCopy := $80 else PXXBlockCopy := 0;
+end;
+
 function PXXStrAppendAsciiBits(oldMeta: Int64; orAll: Int64): Int64;
 begin
   if (orAll and $80) <> 0 then
@@ -1231,14 +1303,7 @@ begin
      (cap >= need) then
   begin
     d := h + oldLen;
-    s2 := Int64(srcB);
-    i := 0;
-    while i < lenB do
-    begin
-      orAll := orAll or PByte(s2 + i)^;      { free: this loop touches them all }
-      PByte(d + i)^ := PByte(s2 + i)^;
-      i := i + 1;
-    end;
+    orAll := PXXBlockCopy(d, Int64(srcB), lenB);
     PByte(h + newLen)^ := 0;
     PWord(h - 8)^ := newLen;
     { The bytes changed, but not unknowably: carry the answer forward rather
@@ -1264,20 +1329,10 @@ begin
   PWord(base + PXX_HDR_RC)^ := 1;
   PWord(base + PXX_HDR_LEN)^ := newLen;
   d := base + PXX_HDR_SIZE;
-  i := 0;
-  while i < oldLen do
-  begin
-    PByte(d + i)^ := PByte(h + i)^;
-    i := i + 1;
-  end;
-  s2 := Int64(srcB);
-  i := 0;
-  while i < lenB do
-  begin
-    orAll := orAll or PByte(s2 + i)^;
-    PByte(d + oldLen + i)^ := PByte(s2 + i)^;
-    i := i + 1;
-  end;
+  { the old half's ASCII answer comes from oldMeta, so its copy discards the
+    scan; only the appended half's bytes are new information }
+  PXXBlockCopy(d, h, oldLen);
+  orAll := PXXBlockCopy(d + oldLen, Int64(srcB), lenB);
   PByte(d + newLen)^ := 0;
   PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE or
                                  PXXStrAppendAsciiBits(oldMeta, orAll);
@@ -1317,25 +1372,12 @@ begin
   PWord(base + PXX_HDR_RC)^ := 1;        { refcount }
   PWord(base + PXX_HDR_LEN)^ := total;   { length }
   d := base + PXX_HDR_SIZE;
-  orAll := 0;
-  s := Int64(srcA);
-  i := 0;
-  while i < lenA do
-  begin
-    b := PByte(s + i)^;
-    PByte(d + i)^ := b;
-    orAll := orAll or b;
-    i := i + 1;
-  end;
-  s := Int64(srcB);
-  i := 0;
-  while i < lenB do
-  begin
-    b := PByte(s + i)^;
-    PByte(d + lenA + i)^ := b;
-    orAll := orAll or b;
-    i := i + 1;
-  end;
+  { one word per iteration where the ends allow it, byte tail otherwise, and
+    the ASCII scan folded in — see PXXBlockCopy. Each segment asks for itself:
+    `d + lenA` is only word-aligned when lenA happens to be a multiple of the
+    word size. }
+  orAll := PXXBlockCopy(d, Int64(srcA), lenA);
+  orAll := orAll or PXXBlockCopy(d + lenA, Int64(srcB), lenB);
   PByte(d + total)^ := 0;       { nul terminator }
   PXXHdrSetMeta(base, PXXStrMeta(orAll));
   Result := Pointer(d);
@@ -2682,24 +2724,24 @@ end;
 { Forward byte copy (non-overlapping or dst < src). Used by cross backends that
   lack a single-instruction block move (e.g. ARM32) for whole-record copies. }
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
-var d, s, i: Int64;
 begin
-  d := Int64(dst);
-  s := Int64(src);
-  i := 0;
-  while i < n do
-  begin
-    PByte(d + i)^ := PByte(s + i)^;
-    i := i + 1;
-  end;
+  PXXBlockCopy(Int64(dst), Int64(src), n);   { the ASCII answer is not wanted here }
 end;
 
 { Zero n bytes at dst. }
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
-var d, i: Int64;
+var d, i, w: Int64;
 begin
   d := Int64(dst);
   i := 0;
+  w := SizeOf(NativeInt);
+  { same alignment rule as PXXBlockCopy, with no source to agree with }
+  if (n >= w) and ((d and (w - 1)) = 0) then
+    while i + w <= n do
+    begin
+      PWord(d + i)^ := 0;
+      i := i + w;
+    end;
   while i < n do
   begin
     PByte(d + i)^ := 0;
