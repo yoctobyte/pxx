@@ -148,4 +148,4 @@ rows added to `test/test_i386_float_params.pas`, which the Makefile already
 runs as an i386-vs-x86-64 differential. `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 733bf275a.
