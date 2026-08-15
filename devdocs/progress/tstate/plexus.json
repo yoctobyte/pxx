@@ -5397,7 +5397,7 @@
    "src": "test/test_nilpy_star_methods_and_targets.npy"
   },
   {
-   "bad": "9c5adbed5933720b035fa4fd6545c822c9ae1014",
+   "bad": "dc60b64fb81b36d339c60ef363f612f41e15095e",
    "good": "3005526961b1a3ba08b37ca49d6c9ee82f88cfbc",
    "job": "test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy",
    "name": "test-nilpy#103",
@@ -5406,11 +5406,7 @@
     "f336b50743bfb7b21472f16eade9f4981107feae",
     "166a4c136c0e02c2f0287589a9ccddfa4c29d766",
     "e0e6a0759c03dbbdfcc45cc8b0c19e3c4e9278bd",
-    "dc60b64fb81b36d339c60ef363f612f41e15095e",
-    "89dae725b972d7019a20e6df61cbc18c6c9862c6",
-    "eaffab76865819bed472b3f9eab178ef139d21c1",
-    "063ca43878c01291a765215dff5538b8c4367302",
-    "9c5adbed5933720b035fa4fd6545c822c9ae1014"
+    "dc60b64fb81b36d339c60ef363f612f41e15095e"
    ],
    "src": "test/test_nilpy_star_methods_and_targets.npy"
   }

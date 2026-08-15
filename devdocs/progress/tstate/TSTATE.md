@@ -8,4 +8,4 @@
 
 ## Open regressions
 - **test-core#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `dc60b64fb81b`, last good `e0e6a0759c03`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `9c5adbed5933`, last good `3005526961b1`, 8 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `dc60b64fb81b`, last good `3005526961b1`, 4 commit(s) in range
