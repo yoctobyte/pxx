@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (217)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,6 +64,7 @@ _none_
 | bug-p-class-name-collision-across-units-resolves-first-not-last | P | 45 | bug | Two units exporting the same CLASS name: pxx binds the first unit named, FPC binds the last. The routine half of this was fixed and gated (bug-p-uses-order-does-not-decide-which-unit-wins, done); classes were never done — name-resolution.md §2.2 says scope hiding is 'BUILT for routines, MISSING for types/classes'. Filed because two tickets already cite this slug and no such ticket existed. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
 | bug-p-scope-hiding-covers-routines-but-not-types-and-classes | P | 60 | bug | The scope-hiding rule shipped 2026-08-10 (bug-p-uses-order-does-not-decide-which-unit-wins) covers ROUTINES only. Types and classes still resolve flat first-match through FindUClass, so `uses a, b` binds b's Who but a's Thing — in the SAME program. This is the sibling arm of an already-fixed rule, and it is what makes a duplicated `Exception` class order-dependent. | — |
+| bug-pascal-ord-of-a-one-char-string-const-is-its-address | P | 45 | bug | `const C = 'z'; Ord(C)` answers a pointer-looking number (4287626) instead of 122. A one-character untyped const lands in the STRING const table, and Ord() on it takes the value's address rather than its code point. FPC gives 122. Pre-existing — reproduces on `pinned`. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -512,6 +513,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [P] bug-p-class-name-collision-across-units-resolves-first-not-last
+- [p 45] [P] bug-pascal-ord-of-a-one-char-string-const-is-its-address
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative

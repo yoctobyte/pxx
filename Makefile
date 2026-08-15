@@ -8797,6 +8797,17 @@ test-quick: $(COMPILER)
 	# qc_* names deliberately avoid the smoke_* namespace these recipes share.
 	./$(COMPILER) test/quick_canary_nilpy.npy $(TESTTMP)/qc_nilpy26
 	test "$$($(TESTTMP)/qc_nilpy26 | tail -1)" = "total ok 23 / 23"
+	# NAMESPACE SCOPE, both directions. Deep on purpose where the rest of this
+	# tier is broad: when `uses` went non-transitive, quick stayed green while
+	# five corpus sources went red, because nothing here imported deeply enough
+	# to leak -- Track T's native sweep found them hours later. udeep1/2/3 is a
+	# three-unit chain covering all six name tables and both uses sections.
+	./$(COMPILER) -Futest/usesdepth test/quick_canary_uses.pas $(TESTTMP)/qc_uses26
+	test "$$($(TESTTMP)/qc_uses26)" = "uses depth ok 180"   # FPC 3.2.2 agrees
+	# ...and the leak itself must NOT compile. A regression that re-opens it
+	# keeps the file above green; only this half catches it.
+	! ./$(COMPILER) -Futest/usesdepth test/quick_canary_uses_fail.pas $(TESTTMP)/qc_usesf26 > $(TESTTMP)/qc_usesf.log 2>&1
+	grep -q "undefined variable (DeepInt)" $(TESTTMP)/qc_usesf.log
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/quick_canary_c.c $(TESTTMP)/qc_c26
 	test "$$($(TESTTMP)/qc_c26 | tail -1)" = "total ok 22 / 22"
 	./$(COMPILER) test/test_dynarray_torture.pas $(TESTTMP)/smoke_dyntorture26
