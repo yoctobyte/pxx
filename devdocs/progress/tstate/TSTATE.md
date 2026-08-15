@@ -42,7 +42,7 @@
   </details>
 - **test-nilpy#src:test/test_cpyext_args_errors.npy** — test/test_cpyext_args_errors.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
 - **test-nilpy#src:test/test_cpyext_containers.npy** — test/test_cpyext_containers.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
-- **test-nilpy#src:test/test_cpyext_cython.npy** — test/test_cpyext_cython.npy (plexus): bad `36d1bffda39d`, last good `63d1d0de90d3`, 7 commit(s) in range
+- **test-nilpy#src:test/test_cpyext_cython.npy** — test/test_cpyext_cython.npy (plexus): bad `36d1bffda39d`, last good `ae1ef2b1ff27`, 4 commit(s) in range
 - **test-nilpy#src:test/test_cpyext_errformat.npy** — test/test_cpyext_errformat.npy (plexus): bad `36d1bffda39d`, last good `0d8e7393a09c`, 14 commit(s) in range
 - **test-nilpy#src:test/test_cpyext_hello.npy** — test/test_cpyext_hello.npy (plexus): bad `36d1bffda39d`, last good `0d8e7393a09c`, 14 commit(s) in range
 - **test-nilpy#src:test/test_cpyext_markupsafe.npy** — test/test_cpyext_markupsafe.npy test/nilpy_units/vendor/cyadd.pyx (plexus): bad `36d1bffda39d`, last good `0d8e7393a09c`, 14 commit(s) in range
