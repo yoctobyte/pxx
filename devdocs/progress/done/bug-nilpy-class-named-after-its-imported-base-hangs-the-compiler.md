@@ -114,4 +114,4 @@ Gate: `make compiler/pascal26` (fixedpoint) + repro + `tools/gate.sh quick`
 GREEN, FPC seed canary included.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 5fd842e6a.
