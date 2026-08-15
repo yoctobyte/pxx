@@ -181,4 +181,4 @@ this change, and the fix is the missing `uses` clause in the source
 (`examples/life` was exactly that), not a revert.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit f6eeb4560.
