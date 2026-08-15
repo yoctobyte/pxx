@@ -121,4 +121,4 @@ quick` GREEN. `test/test_nilpy_static_method_kwargs.npy` pins all seven
 spellings plus the instance shape that shares the reorder helper.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit ba3ee88bf.
