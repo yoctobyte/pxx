@@ -147,4 +147,4 @@ now correct on every target, so that workaround can be reverted per its
 revert-when-fixed lifecycle.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 5b6e1728d.
