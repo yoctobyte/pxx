@@ -1767,6 +1767,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-c-define-const | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_define_const.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-dataclass-dict-factory | T | 70 | regression | regression: test-core#src:test/test_nilpy_dataclass_dict_factory.npy red at 2fbb5a270acc (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-forward-module-global | T | 70 | regression | regression: test-core#src:test/test_nilpy_forward_module_global.npy red at dbf783346025 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-html-tempfile | T | 70 | regression | regression: test-core#src:test/test_nilpy_html_tempfile.npy red at 106a63cabbca (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-min-max-variadic | T | 70 | regression | regression: test-core#src:test/test_nilpy_min_max_variadic.npy red at 9305672dbcd5 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-module-first-import | T | 70 | regression | regression: test-core#src:test/test_nilpy_module_first_import.npy red at b9e334fbd649 (auto-filed by twatch) | — |

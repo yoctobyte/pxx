@@ -20249,6 +20249,14 @@ begin
   si := FindSym(name);
   if si < 0 then Exit;                  { the caller's own gate already passes }
   if Syms[si].Kind <> skGlobal then Exit;
+  { PyQualifyNested answers the BARE name when nothing qualified exists, so
+    FindProc on its result asks "is there ANY proc called this?" — and proc
+    lookup is case-INSENSITIVE, so a module global named `counter` matched
+    pylib's `Counter` and every read of it became a function value
+    (`n=4727019`, a code address). The question here is only ever "does a
+    NESTED def of this name outrank the global", so the qualification must
+    actually have happened. }
+  if PyQualifyNested(name) = name then Exit;
   Result := FindProc(PyQualifyNested(name)) >= 0;
 end;
 

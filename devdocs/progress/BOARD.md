@@ -54,6 +54,7 @@ _none_
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
 | bug-nilpy-a-computed-attribute-name-cannot-see-a-property | N | 20 | bug | `getattr(o, nm)` / `hasattr(o, nm)` with a COMPUTED name answers False (and misses the value) for a PROPERTY: the runtime dynamic-attribute predicate is RTTI-based and the RTTI blob carries methods and fields, not properties. | — |
 | bug-nilpy-a-generator-expression-is-not-consumed-once | N | 30 | bug | `g = (x for x in [1,2]); next(g); list(g)` answers [1, 2] where CPython answers [2] — a genexpr bound to a name is materialised eagerly, so it is re-iterable and `next()` does not advance what a later consumer sees. | — |
+| bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc | N | 25 | bug | Proc lookup is case-INSENSITIVE (Pascal heritage) while Python is case-sensitive, so a NilPy name resolves against a builtin that differs only in case: `print(Counter)` prints 4727019 (a code address) where CPython raises NameError. It also made a nested-def helper claim every read of a global named `counter`. | — |
 | bug-nilpy-augmented-sequence-repeat-rebinds-instead-of-mutating | N | 20 | bug | `xs *= 2` on a list REBINDS where CPython mutates in place, so an alias taken beforehand keeps the old contents. Only observable through an alias; the value bound to the name itself is correct. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 15 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
@@ -242,7 +243,6 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-test-core-test-nilpy-forward-module-global | T | 70 | regression | regression: test-core#src:test/test_nilpy_forward_module_global.npy red at dbf783346025 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-c-retire-the-crtl-name-dodge-prefixes | C | 50 | task | Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -408,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1848)
+## done (1849)
 
-1848 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1849 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -456,7 +456,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-core-test-nilpy-forward-module-global
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -604,6 +603,7 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
+- [p 25] [N] bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc
 - [p 25] [N] bug-nilpy-str-format-refuses-keyword-fields
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
