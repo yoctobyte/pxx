@@ -4860,7 +4860,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     lstNode, varNode: Integer;   { NilPy list-vs-variant equality }
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
-    foldOff, foldK: Integer;
+    foldOff, foldK, foldSym: Integer;
     bLastNode: Integer;
     writeFd: Integer;
     foldStr: AnsiString;
@@ -6739,6 +6739,31 @@ begin
           (regressed test_concat_intrinsic). As tyString it behaves exactly like
           any other string literal and is coerced to managed on use. }
         Result := IRAppend(IR_CONST_STR, foldOff, Length(foldStr), -1, 0, Ord(tyString));
+        { ...but when the EXPRESSION this replaces was typed tyAnsiString, the
+          consumers downstream have already been told they will get a MANAGED
+          handle: IRLowerCallArg tests `ASTTk[argAST]` and, seeing tyAnsiString,
+          passes the value through untouched. A raw literal pointer then arrived
+          where a handle was expected and its length was read out of the bytes
+          BEFORE the text — `int("1" + "2")` raised
+          `ValueError: invalid literal for int(): '1212ab\xdc...'` and
+          `str("a" + "b")` printed an empty string, while the identical
+          `x = "a" + "b"; str(x)` was correct.
+
+          Materialised through a hidden OWNING local, exactly as
+          IRPromoInitFromLiteral does for the same reason: the store carries the
+          literal->managed conversion, the load hands over a real handle, and
+          the local's scope exit releases it. The IR_CONST_STR itself stays
+          tyString — see the note above on why tagging it tyAnsiString is not
+          the fix.
+          bug-nilpy-a-folded-string-literal-reaches-a-managed-parameter-raw }
+        if IntToTypeKind(ASTTk[node]) = tyAnsiString then
+        begin
+          foldSym := AllocVar('', tyAnsiString);
+          SymIsHiddenArgTemp[foldSym] := True;
+          IRMarkStatementNode(IRAppend(IR_STORE_SYM, foldSym, Result, -1, 0,
+                                       Ord(tyAnsiString)));
+          Result := IRAppend(IR_LOAD_SYM, foldSym, -1, -1, 0, Ord(tyAnsiString));
+        end;
         Exit;
       end;
 

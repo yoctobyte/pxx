@@ -1,0 +1,39 @@
+# Two adjacent string literals are folded to one interned literal at IR time,
+# but the EXPRESSION they replace was typed tyAnsiString -- so a consumer that
+# had been promised a managed handle got a raw literal pointer and read its
+# length out of the bytes before the text.
+#   int("1" + "2")   ValueError: invalid literal for int(): '1212ab\xdc...'
+#   str("a" + "b")   printed an empty string
+# while the identical `x = "a" + "b"; str(x)` was correct.
+# bug-nilpy-a-folded-string-literal-reaches-a-managed-parameter-raw
+
+print("int", int("1" + "2"), int("-" + "5"))
+print("str", str("a" + "b"), str("a" + "b" + "c"))
+print("float", float("1" + ".5"))
+
+# the implicit spelling Python also has -- the lexer turns it into the same `+`
+print("adjacent", int("1" "2"), str("a" "b"))
+
+# via a name, which is the spelling that always worked
+x = "1" + "2"
+y = "a" + "b"
+print("via-name", int(x), str(y))
+
+# consumers that were already right must stay right
+print("others", len("a" + "b"), ("a" + "b").upper(), "a" + "b" == "ab")
+print("more", list("a" + "b"), ("a" + "b").encode(), ("a" + "b") + "c")
+
+# a folded literal as an ordinary argument, in a container, and as a key
+def take(s):
+    return s + "!"
+
+
+print("arg", take("a" + "b"))
+print("container", ["a" + "b"], {"k": "a" + "b"})
+d = {"a" + "b": 1}
+print("key", d, d["ab"])
+
+# one folded literal used twice, and a char + str fold
+print("twice", int("1" + "2") + int("1" + "2"))
+print("char", str("a" + "b"), len("x" + "yz"))
+print("TEST-OK")
