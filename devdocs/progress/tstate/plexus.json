@@ -5277,17 +5277,13 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-14T12:45:12Z",
+  "date": "2026-08-15T02:47:40Z",
   "red": [
-   "test-core#1073",
-   "test-nilpy#75",
-   "test-nilpy#76",
-   "test-nilpy#595",
-   "test-nilpy#599"
+   "test-nilpy#621"
   ],
-  "sha": "e3d0870c63dfe4234925ce6d0ef4dab4af84096a",
+  "sha": "7e7266d27e8154144034bf5c083ccce9960510b3",
   "tier": "full",
-  "ver": "v297",
+  "ver": "v323",
   "verdict": "RED"
  },
  "renamed_from": [
