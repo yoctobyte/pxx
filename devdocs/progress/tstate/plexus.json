@@ -5524,14 +5524,13 @@
    "src": "test/test_cpyext_hello.npy"
   },
   {
-   "bad": "d615f8f69bc1c91fbd97330781239beeacb7164b",
+   "bad": "56a54014384b8b866c5433989abb7275f9a71db8",
    "good": "ae1ef2b1ff270fbe3e6036e271e15e0210bc950f",
    "job": "test-nilpy#src:test/test_cpyext_markupsafe.npy",
    "name": "test-nilpy#644",
    "opened": "2026-08-15T15:21:20Z",
    "range": [
-    "56a54014384b8b866c5433989abb7275f9a71db8",
-    "d615f8f69bc1c91fbd97330781239beeacb7164b"
+    "56a54014384b8b866c5433989abb7275f9a71db8"
    ],
    "src": "test/test_cpyext_markupsafe.npy test/nilpy_units/vendor/cyadd.pyx"
   },
