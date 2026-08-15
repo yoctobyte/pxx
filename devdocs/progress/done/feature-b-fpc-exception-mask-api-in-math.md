@@ -109,4 +109,4 @@ The default is untouched — `default-all-masked` pins that, and FPC's differing
 default (invalid/zero-divide/overflow unmasked there) is left alone on purpose.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 250e6c781.
