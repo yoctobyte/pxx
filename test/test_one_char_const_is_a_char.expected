@@ -1,0 +1,20 @@
+ord      122
+assign   z
+chr      z
+setin    TRUE
+succ     123
+pred     121
+lenconst 1
+lenvar   1
+lenlit   1
+cmp      TRUE
+case     yes
+tostr    /
+concat   /home/
+concat2  a/
+strparam /
+chrparam /
+pos      1
+empty    0
+multi    2 ab
+joined   /x 2

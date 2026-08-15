@@ -13843,7 +13843,21 @@ begin
           if lenFieldRec >= REC_UCLASS_BASE then
             lenFieldIdx := FindUField(lenFieldRec - REC_UCLASS_BASE, GetASTIdentName(valNode));
         end;
-        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+        if IntToTypeKind(ASTTk[valNode]) = tyChar then
+        begin
+          { `Length(c)` where c is a CHAR is 1 — FPC's answer, and the same one
+            `Length('y')` on a character LITERAL already gave. A Char VARIABLE
+            fell through to the runtime -tkLength path, which read the value as
+            a string handle and returned the CODE POINT: `c := 'x'; Length(c)`
+            answered 120. Latent for as long as chars have existed; surfaced by
+            bug-pascal-ord-of-a-one-char-string-const-is-its-address, which makes
+            `const Sep = '/'` a Char, at which point `Length(Sep)` SEGFAULTED
+            instead of merely lying. Folded here so every target gets it. }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := 1; ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+        end
+        else if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
            Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen >= 0) and
            (Syms[ASTIVal[valNode]].Kind <> skParam) and (SymArrNDims[ASTIVal[valNode]] <= 1) then
         begin
@@ -25781,7 +25795,9 @@ begin
         SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; Inc(SetConstCount);
       end
       else if (CurTok.Kind = tkString) or
-              ((CurTok.Kind = tkIdent) and (FindStrConst(CurTok.SVal) >= 0)) then
+              ((CurTok.Kind = tkIdent) and (FindStrConst(CurTok.SVal) >= 0)) or
+              ((CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkPlus) and
+               (CharConstSymOf(CurTok.SVal) >= 0)) then
       begin
         if (CurTok.Kind = tkIdent) or (Tokens[TokPos].Kind = tkPlus) then
         begin
@@ -25813,6 +25829,18 @@ begin
                 TokChars[TokCharLen] := TokChars[si]; Inc(TokCharLen); Inc(scLen);
               end;
             end
+            else if (CurTok.Kind = tkIdent) and (CharConstSymOf(CurTok.SVal) >= 0) then
+            begin
+              { a named CHAR const as an operand — `const Sep = '/'; P = Sep + 'x'`.
+                One-character untyped consts are typed Char now
+                (bug-pascal-ord-of-a-one-char-string-const-is-its-address), so
+                blcksock's `CRLF = CR + LF` shape reaches this arm instead of the
+                string-const one above; without it the whole concatenation fell
+                through to the integer ConstEval path and produced garbage. }
+              if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+              TokChars[TokCharLen] := Chr(Syms[CharConstSymOf(CurTok.SVal)].ConstVal and $FF);
+              Inc(TokCharLen); Inc(scLen);
+            end
             else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'LineEnding') then
             begin
               { System.LineEnding — FPC has it with no `uses`, and fcl-fpcunit builds its
@@ -25834,6 +25862,31 @@ begin
           StrConstSOff[StrConstCount] := scOff;
           StrConstSLen[StrConstCount] := scLen;
           StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+        end
+        else if Tokens[TokPos-1].SLen = 1 then
+        begin
+          { A ONE-CHARACTER untyped constant is a CHAR, which is what FPC types
+            it as — not a string of length one. Registered as a char const here,
+            at the point of CLASSIFICATION, rather than teaching each consumer
+            to recognise a one-character AN_STR_LIT: measured against FPC 3.2.2,
+            SIX consumers were wrong for `const C = 'z'`, not one —
+
+              Ord(C)            gave the string's ADDRESS (4288109) not 122
+              c := C            gave a byte of the address, not 'z'
+              Chr(Ord(C))       likewise
+              C in ['a','z']    FALSE
+              Ord(Succ(C))      an address again
+              (case C of / C = 'z' were the only two that worked)
+
+            so a fix at any one consumer would have left the other five, which
+            is the two-mechanisms-for-one-concept smell
+            devdocs/dev/normalise-dont-special-case.md names.
+            String contexts keep working because a Char already converts into
+            them: `C + 'x'`, assigning to an AnsiString, and passing to a
+            string parameter all go through the existing char->string paths.
+            bug-pascal-ord-of-a-one-char-string-const-is-its-address }
+          AddConst(name, tyChar, Ord(TokChars[Tokens[TokPos-1].SOffset]));
+          Next;
         end
         else
         begin

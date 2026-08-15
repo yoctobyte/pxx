@@ -3426,6 +3426,22 @@ end;
 function AllocTemp: Integer;
 begin Result := AllocVar('', tyInteger); end;
 
+function CharConstSymOf(const name: AnsiString): Integer;
+{ The symbol index of a CHAR constant of this name, or -1. A one-character
+  untyped const is typed Char rather than a one-character string
+  (bug-pascal-ord-of-a-one-char-string-const-is-its-address), so the const-
+  expression concatenator has to recognise one as an operand the way it already
+  recognises a named string const. Deliberately narrow: skConst AND tyChar, so
+  a same-named variable or a char PARAMETER cannot be mistaken for one. }
+var i: Integer;
+begin
+  CharConstSymOf := -1;
+  i := FindSym(name);
+  if i < 0 then Exit;
+  if (Syms[i].Kind = skConst) and (Syms[i].TypeKind = tyChar) then
+    CharConstSymOf := i;
+end;
+
 function AddConst(const name: AnsiString; tk: TTypeKind; v: Int64): Integer;
 begin
   EnsureSymCapacity(SymCount + 1);

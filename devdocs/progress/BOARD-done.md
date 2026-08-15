@@ -1039,6 +1039,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-pascal-open-array-param-in-record-method | P | 40 | bug | Open-array parameter in a record method (rejected for now — it SEGFAULTED) | — |
 | bug-pascal-openarray-of-array-param-marshal | A | 55 | bug | open-array parameter whose ELEMENT is a static array is marshalled wrong: Length(a) is huge, a[i] yields addresses/garbage — silent | — |
 | bug-pascal-operator-on-record-call-result | P | 40 | bug | Operator overload not found when a record operand is a CALL RESULT | — |
+| bug-pascal-ord-of-a-one-char-string-const-is-its-address | P | 45 | bug | `const C = 'z'; Ord(C)` answers a pointer-looking number (4287626) instead of 122. A one-character untyped const lands in the STRING const table, and Ord() on it takes the value's address rather than its code point. FPC gives 122. Pre-existing — reproduces on `pinned`. | — |
 | bug-pascal-overload-impl-decl-signature-match | P | 50 | bug | bug: an overloaded method's IMPLEMENTATION does not always match back to its DECLARATION | — |
 | bug-pascal-paren-expr-loses-class-id | P | 50 | bug | A parenthesised expression loses its class id: `(b as T)[i]` and `(b as T).ClassName` | — |
 | bug-pascal-procvar-in-value-context-takes-address-instead-of-calling | P | 80 | bug | A procedural variable in a value context takes its ADDRESS instead of calling it | — |

@@ -10,12 +10,13 @@ var r: TDeepRec; e: TDeepEnum; a: TDeepArr; x: TDeepAlias;
 function Middle: Integer;
 begin
   r.a := DeepInt; e := deB; a[0] := DeepVar; x := 1;
-  Middle := r.a + Ord(e) + a[0] + Integer(x) + DeepFunc + Length(DeepStr);
-  { DeepChar is COMPARED rather than Ord()'d. It has to be named to prove the
-    char-const table honours the rule, but Ord() on a one-character untyped
-    const answers its ADDRESS instead of its code point in pxx (pre-existing,
-    reproduces on `pinned` too — bug-pascal-ord-of-a-one-char-string-const-is-its-address).
-    This canary is about namespace scope; it must not go red for that. }
-  if DeepChar = 'z' then Middle := Middle + 122;
+  { Ord(DeepChar) restored 2026-08-15: a one-character untyped const is now
+    typed as a Char, as FPC types it, so Ord() answers its code point instead
+    of the string value's ADDRESS
+    (bug-pascal-ord-of-a-one-char-string-const-is-its-address). The total is
+    unchanged — the comparison form it replaces added the same 122 — so this
+    canary's expected value does not move. }
+  Middle := r.a + Ord(e) + a[0] + Integer(x) + DeepFunc + Length(DeepStr)
+            + Ord(DeepChar);
 end;
 end.

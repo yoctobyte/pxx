@@ -3531,6 +3531,16 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_string_ordering26)" = "$$(printf '101001\n10\n011010\n101\n110')"
 	./$(COMPILER) test/test_set_of_char_const.pas $(TESTTMP)/test_set_of_char_const26
 	test "$$($(TESTTMP)/test_set_of_char_const26)" = "$$(printf '65\n1\n0\n1\n0\n120')"
+	@# a ONE-CHARACTER untyped const is a CHAR, as FPC types it -- not a string of
+	@# length one. It landed in the STRING const table, so SIX char contexts read
+	@# the value's ADDRESS: Ord, assignment, Chr round-trip, `in` a set of Char,
+	@# Succ/Pred, and Length (which answered the CODE POINT for a Char variable
+	@# long before this, independently). The string rows prove the reclassification
+	@# did not cost the contexts a Char converts into, incl. `P = Sep + 'x'`.
+	@# Every value is FPC 3.2.2's on the same source.
+	@# bug-pascal-ord-of-a-one-char-string-const-is-its-address
+	./$(COMPILER) test/test_one_char_const_is_a_char.pas $(TESTTMP)/test_one_char_const26
+	$(TESTTMP)/test_one_char_const26 | diff -u test/test_one_char_const_is_a_char.expected -
 	./$(COMPILER) test/test_indexed_property.pas $(TESTTMP)/test_indexed_property26
 	test "$$($(TESTTMP)/test_indexed_property26)" = "$$(printf '99\n7\n42\n10\n30\n55\n88')"
 	./$(COMPILER) test/test_many_properties.pas $(TESTTMP)/test_many_properties26

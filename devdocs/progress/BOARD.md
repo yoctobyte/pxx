@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (209)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,7 +64,6 @@ _none_
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
-| bug-pascal-ord-of-a-one-char-string-const-is-its-address | P | 45 | bug | `const C = 'z'; Ord(C)` answers a pointer-looking number (4287626) instead of 122. A one-character untyped const lands in the STRING const table, and Ord() on it takes the value's address rather than its code point. FPC gives 122. Pre-existing — reproduces on `pinned`. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -409,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1897)
+## done (1898)
 
-1897 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1898 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -495,7 +494,6 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
-- [p 45] [P] bug-pascal-ord-of-a-one-char-string-const-is-its-address
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
