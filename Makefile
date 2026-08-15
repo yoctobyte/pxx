@@ -4408,6 +4408,11 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cptr_diff_b4226; test "$$?" = "42"
 	./$(COMPILER) test/cassign_value_b43.c $(TESTTMP)/cassign_value_b4326
 	$(TESTTMP)/cassign_value_b4326; test "$$?" = "42"
+	# The AGGREGATE half of the same rule: a STRUCT assignment used as a value
+	# must run its RHS exactly once. It ran twice (1 + one per chained assign) --
+	# values right, side effects doubled, which is why only a csmith checksum saw it.
+	./$(COMPILER) test/cstruct_assign_value_side_effects.c $(TESTTMP)/cstruct_assign_value26
+	test "$$($(TESTTMP)/cstruct_assign_value26)" = "ok"
 	./$(COMPILER) test/cnested_union_b44.c $(TESTTMP)/cnested_union_b4426
 	$(TESTTMP)/cnested_union_b4426; test "$$?" = "42"
 	./$(COMPILER) test/canon_agg_global_b45.c $(TESTTMP)/canon_agg_global_b4526

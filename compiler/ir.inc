@@ -8436,6 +8436,28 @@ begin
         end;
       end;
       end;
+
+      { The AGGREGATE half of the same C rule the scalar paths above state: an
+        assignment is an EXPRESSION yielding the stored value, so the node's
+        result must be a re-read of the destination and not the store itself.
+        A record's "value" in this IR is carried by ADDRESS, so the re-read is
+        the destination's address.
+
+        Leaving the IR_COPY_REC as the result did not just answer the wrong
+        thing — it made the whole RHS RUN TWICE. `y = (x = f())` lowers to
+        copy_rec(x, call) and copy_rec(y, <that copy_rec node>); the inner node
+        is a statement in the IR list AND an operand of the outer one, so the
+        emitter walked it once at top level and again as the outer's source,
+        calling f() twice. Values still came out right, which is why it took a
+        csmith checksum to see it: only the SIDE EFFECTS doubled
+        (bug-c-a-struct-assignment-used-as-a-value-runs-its-rhs-twice).
+
+        C-mode only, so Pascal keeps the store node as its result and the
+        self-host build stays byte-identical — same reasoning as the scalar
+        arms. }
+      if CProgramMode and (Result >= 0) and
+         ((IRKind[Result] = IR_COPY_REC) or (IRKind[Result] = IR_COPY_REC_MANAGED)) then
+        Result := IRLowerAddress(ASTLeft[node]);
     end;
 
     AN_HALT, AN_EXIT:

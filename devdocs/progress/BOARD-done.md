@@ -198,6 +198,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-builtin-val-miscompiles | A | 50 | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | 50 | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-byvalue-record-managed-field-aliases-caller | A | 50 | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
+| bug-c-a-struct-assignment-used-as-a-value-runs-its-rhs-twice | A | 60 | bug | `y = (x = f())` with a struct-typed f called f() TWICE. Every VALUE came out right — only the side effects doubled — so the whole real-world C corpus missed it and a csmith checksum found it. The count grew with the chain: 1 + one call per chained assignment. | — |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | C | 50 | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-addr-of-unsupported-ir | A | 50 | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
