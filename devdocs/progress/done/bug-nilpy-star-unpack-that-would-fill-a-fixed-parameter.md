@@ -101,4 +101,4 @@ helpers are now `rb1`..`rb4`; the underlying defect is a real silent wrong value
 and has its own ticket at prio 35.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 101a3465f.
