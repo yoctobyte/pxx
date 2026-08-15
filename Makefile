@@ -5829,6 +5829,13 @@ test-core: $(COMPILER)
 	xvfb-run -a $(TESTTMP)/test_c_gtk_window26
 	./$(COMPILER) test/test_c_header_case_sensitive_import.pas $(TESTTMP)/test_c_header_case_sensitive_import26
 	test "$$($(TESTTMP)/test_c_header_case_sensitive_import26)" = "77"
+	# A C translation unit reached ONLY through a Pascal unit's uses clause: the
+	# malloc bridge has to be pulled in on this path too (the C-PROGRAM path was
+	# the only one that did), and the C source has to survive that pull -- the
+	# first cut clobbered the global holding it, so every declaration in the .c
+	# vanished and read as an undefined variable in the Pascal caller.
+	./$(COMPILER) -Futest test/test_c_unit_pulled_via_pascal_unit.pas $(TESTTMP)/test_c_unit_pulled_via_pascal_unit26
+	test "$$($(TESTTMP)/test_c_unit_pulled_via_pascal_unit26)" = "42"
 	./$(COMPILER) test/test_type_runtime.pas $(TESTTMP)/test_type_runtime26
 	test "$$($(TESTTMP)/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas $(TESTTMP)/test_float26

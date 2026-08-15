@@ -36,7 +36,7 @@ _none_
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (219)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -250,6 +250,7 @@ _none_
 | regression-test-nilpy-test-nilpy-builtin-over-variant-receiver | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy red at 36d1bffda39d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-lambda-in-range-comprehension | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
+| regression-test-opt-c-inline-strlit-arg | T | 70 | regression | regression: test-opt#src:test/c_inline_strlit_arg.c red at 36d1bffda39d (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-c-retire-the-crtl-name-dodge-prefixes | C | 50 | task | Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -470,6 +471,7 @@ _none_
 - [p 70] [T] regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
 - [p 70] [T] regression-test-nilpy-test-nilpy-import-c-header-still-works
 - [p 70] [T] regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
+- [p 70] [T] regression-test-opt-c-inline-strlit-arg
 - [p 60] [B] feature-b-tkhtmlview-in-nilpy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [A] bug-a-int-of-a-large-double-is-int64-min-on-x86-64

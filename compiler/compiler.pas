@@ -181,7 +181,6 @@ begin
   CrtlSrcPulledCount := 0;
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
-  StrictUses := True;   { bug-pascal-uses-is-transitive: DEFAULT-ON 2026-08-15 }
   AmbientUnitCount := 0;
   UsesInjected := False;
   VisCacheUnit := -2;
@@ -557,25 +556,15 @@ begin
       WarnUsesLeak := True;
       Inc(i);
     end
-    else if option = '--strict-uses' then
+    else if (option = '--strict-uses') or (option = '--no-strict-uses') then
     begin
-      { bug-pascal-uses-is-transitive, the ENFORCEMENT step: a declaration in a
-        unit the resolving scope cannot legitimately reach stops being a lookup
-        candidate, so `uses` is finally non-transitive. DEFAULT-ON since
-        2026-08-15, so this flag is now a no-op kept for the scripts and ticket
-        write-ups that pass it. }
-      StrictUses := True;
-      Inc(i);
-    end
-    else if option = '--no-strict-uses' then
-    begin
-      { the escape hatch that replaces "retire the flag". The rule is correct
-        and the corpus is clean under it (1660 sources, 0 failures), but a
-        transitive lookup that USED to resolve now reports an undefined name,
-        and that fallout can only surface in the native tier — which is Track
-        T's asynchronous sweep, not the pusher's gate. So the way back for
-        someone blocked by it is one flag, not a compiler rebuild. }
-      StrictUses := False;
+      { Accepted and IGNORED. The rule is unconditional as of 2026-08-15 and
+        there is no switch for it, because a switch never made sense: a `uses`
+        clause is in the namespace of the unit that wrote it, in every language
+        that has the construct, and "should my imports leak into my importers"
+        is not a dialect question (user). Kept only so an in-flight script or a
+        ticket write-up that passes the old flag does not fail to compile;
+        delete once those are gone. bug-pascal-uses-is-transitive. }
       Inc(i);
     end
     else if option = '--warn-ignored-directives' then

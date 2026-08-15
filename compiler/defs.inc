@@ -2136,13 +2136,6 @@ var
                             global namespace today; this counts what a real
                             non-transitive rule would break, without changing
                             resolution. Opt-in: an ordinary build is unaffected. }
-  StrictUses : Boolean;   { --strict-uses: ENFORCE the rule --warn-uses-leak only
-                            counts. A declaration in a unit the resolving scope
-                            cannot legitimately see is skipped during lookup, so
-                            the name resolves elsewhere or is simply undefined —
-                            exactly as it would in FPC. bug-pascal-uses-is-transitive.
-                            Staged behind a flag while the RTL's own accidental
-                            leaks are closed; the endpoint is default-on. }
   { Memoized visibility row for VisibilityAllows. The BFS is over the whole edge
     table and lookups are hot once StrictUses enforces, so the answer is cached
     per (curUnit, UsesEdgeCount) — the edge count is part of the key because
@@ -2156,7 +2149,7 @@ var
     program never asked for them and therefore cannot be leaking THROUGH them.
     Marked at the injection call site, because the same ParseUsesUnit serves
     real `uses`/`import` clauses too. }
-  AmbientUnitIdx   : array[0..31] of Integer;
+  AmbientUnitIdx   : array[0..255] of Integer;   { was 32: ambience became transitive over the compiler-injected runtime graph, which is deeper than the handful of roots }
   AmbientUnitCount : Integer;
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;
@@ -3050,6 +3043,7 @@ var
   { Named enum types (ordinal<->name). Enum vars stay integer-sized; this table
     only records identity + value names for RTTI/streaming. }
   EnumTypeNOff    : array[0..MAX_ENUMTYPE-1] of Integer;  { type name in TokChars }
+  EnumTypeUnitIdx : array[0..MAX_ENUMTYPE-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
   EnumTypeNLen    : array[0..MAX_ENUMTYPE-1] of Integer;
   EnumTypeValBase : array[0..MAX_ENUMTYPE-1] of Integer;  { into EnumVal* arrays }
   EnumTypeValCount: array[0..MAX_ENUMTYPE-1] of Integer;
@@ -3117,12 +3111,14 @@ var
   AliasSubHi : array[0..MAX_TYPEALIAS-1] of Int64;
   AliasTargetNOff : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;
+  AliasUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = main program / compiler-registered. What lets FindTypeAlias apply the non-transitive uses rule the routine and class tables already apply — without it an enum or scalar type alias stayed globally visible while a record type beside it was correctly hidden (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
   AliasCount   : Integer;
 
   { Named fixed-array types: `type TA = array[lo..hi (, lo2..hi2)] of T`.
     Resolved when a var/field/param uses the name. Flattened bounds in Lo/Hi
     (0..span1*span2-1 for 2-D); 2-D dims in the Arr2* fields. }
   ArrTypeName   : array[0..MAX_TYPEALIAS-1] of AnsiString;
+  ArrTypeUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
   ArrTypeLo     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeHi     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
@@ -3153,6 +3149,7 @@ var
   { Untyped string constants `const Name = 'literal'`. Stored as the literal's
     source span; a use of the name builds an AN_STR_LIT over that span. }
   StrConstName : array[0..MAX_TYPEALIAS-1] of AnsiString;
+  StrConstUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
   StrConstSOff : array[0..MAX_TYPEALIAS-1] of Integer;
   StrConstSLen : array[0..MAX_TYPEALIAS-1] of Integer;
   { The routine that declared it (CurProc at registration; -1 = unit/global level). The
@@ -3167,6 +3164,7 @@ var
     bitmask is baked into Data[] at decl time; a use resolves to AN_SET_CONST_REF
     carrying the data offset (lowered via IR_SET_LIT, like a literal). }
   SetConstName : array[0..MAX_TYPEALIAS-1] of AnsiString;
+  SetConstUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
   SetConstOff  : array[0..MAX_TYPEALIAS-1] of Integer;   { Data[] offset of the mask }
   SetConstEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { element enum type id, or -1 }
   SetConstCount: Integer;

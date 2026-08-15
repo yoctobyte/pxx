@@ -3474,7 +3474,7 @@ begin
   TokChars[TokCharLen] := #10;
   Inc(TokCharLen);
   Result := StrConstCount;
-  Inc(StrConstCount);
+  StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
 end;
 
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
@@ -25476,7 +25476,7 @@ begin
           SetConstName[SetConstCount]   := name;
           SetConstEnumId[SetConstCount] := LastTypeSetEnumId;
           SetConstOff[SetConstCount]    := BakeSetConst;
-          Inc(SetConstCount);
+          SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; Inc(SetConstCount);
         end
         else if cTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
         begin
@@ -25516,7 +25516,7 @@ begin
             StrConstOwner[StrConstCount] := CurProc;
             StrConstSOff[StrConstCount] := scOff;
             StrConstSLen[StrConstCount] := scLen;
-            Inc(StrConstCount);
+            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
           end
           else
           begin
@@ -25525,7 +25525,7 @@ begin
             StrConstOwner[StrConstCount] := CurProc;
             StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
             StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
-            Inc(StrConstCount);
+            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
             Next;
           end;
         end
@@ -25702,7 +25702,7 @@ begin
         SetConstName[SetConstCount]   := name;
         SetConstEnumId[SetConstCount] := -1;
         SetConstOff[SetConstCount]    := BakeSetConst;
-        Inc(SetConstCount);
+        SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; Inc(SetConstCount);
       end
       else if (CurTok.Kind = tkString) or
               ((CurTok.Kind = tkIdent) and (FindStrConst(CurTok.SVal) >= 0)) then
@@ -25757,7 +25757,7 @@ begin
           StrConstOwner[StrConstCount] := CurProc;
           StrConstSOff[StrConstCount] := scOff;
           StrConstSLen[StrConstCount] := scLen;
-          Inc(StrConstCount);
+          StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
         end
         else
         begin
@@ -25768,7 +25768,7 @@ begin
           StrConstOwner[StrConstCount] := CurProc;
           StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
           StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
-          Inc(StrConstCount);
+          StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
           Next;
         end;
       end
@@ -28212,7 +28212,7 @@ begin
             ArrTypeElemStrCap[ArrTypeCount] := aElemStrCap
           else
             ArrTypeElemStrCap[ArrTypeCount] := 0;
-          Inc(ArrTypeCount);
+          ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
         end
         else
         begin
@@ -28263,7 +28263,7 @@ begin
           ArrTypeNDims[ArrTypeCount] := 0;
           ArrTypeIsDyn[ArrTypeCount] := True;
           ArrTypeDynDepth[ArrTypeCount] := tdCnt;
-          Inc(ArrTypeCount);
+          ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
         end;
       end
       else if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
@@ -31750,6 +31750,7 @@ var
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
   savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
+  savedUnitContent: AnsiString;
   cdir, bdir, rtldir, lcldir, asmdir, probeContent, probePath, probeFile: AnsiString;
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
@@ -31838,11 +31839,22 @@ begin
   if UsesInjected then
   begin
     MarkUnitAmbient(strIdx);
-    { one level only: what THIS unit then pulls in through its own clauses is an
-      ordinary edge, not something the compiler injected. The wrapper restores
-      the flag when the whole load returns. }
+    { one level only for the FLAG: what this unit pulls in is an ordinary edge
+      as far as the source is concerned. The wrapper restores it when the whole
+      load returns. }
     UsesInjected := False;
-  end;
+  end
+  else if UnitIsAmbient(CurrentUnitIdx) then
+    { ...but ambience itself IS transitive, because the compiler's runtime is
+      one namespace it injected and the user never asked for any of it. pylib
+      `uses promocore`, and codegen emits calls to PXXPromoFromInt directly —
+      no source in a NilPy program could have declared that dependency, which
+      is exactly the argument that made pylib ambient in the first place. It
+      only worked before because an interface-section `uses` re-exported
+      everything; with that leak closed, the runtime graph has to say so
+      itself. Roots stay compiler-injected, so no user unit can acquire
+      ambience through this (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+    MarkUnitAmbient(strIdx);
   isCompiled := False;
   for i := 0 to CompiledUnitCount - 1 do
   begin
@@ -32537,8 +32549,18 @@ begin
     if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
        ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
     begin
+      { UnitContent is a GLOBAL holding the C source we are about to
+        preprocess, and a nested unit load overwrites it with ITS source. The
+        first cut of this pull left that unsaved, so from here on the compiler
+        preprocessed pxxcio.pas as if it were the C file: every declaration in
+        the real header vanished and `uses <someheader>` reported the header's
+        own functions as undefined variables, with no diagnostic pointing
+        anywhere near the cause (regression from 63d1d0de9, caught by
+        examples/life's GTK binding). }
+      savedUnitContent := UnitContent;
       ParseUsesUnitAmbient('builtinheap');
       ParseUsesUnitAmbient('pxxcio');
+      UnitContent := savedUnitContent;
     end;
     CPreprocess(UnitContent, GetFilePath(path));
 

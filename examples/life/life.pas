@@ -3,7 +3,10 @@ program life;
 
 {$define PXX_MANAGED_STRING}
 
-uses gtk3, controls, stdctrls, forms, extctrls, graphics, bitset, sysutils;
+{ gtk3_c is the C header binding gtk3 is built on. This program calls into it
+  directly (gtk_main_quit), so it names it directly: gtk3's own `uses gtk3_c`
+  is in gtk3's namespace, not in ours. }
+uses gtk3, gtk3_c, controls, stdctrls, forms, extctrls, graphics, bitset, sysutils;
 
 type
   TLifeHandler = class

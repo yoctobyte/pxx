@@ -49,6 +49,7 @@ begin
   DeclCaseSensitive := CaseSensitiveMode or NilPyUserCode;
 end;
 
+function DeclVisible(declUnit: Integer): Boolean; forward;
 procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
 procedure EmitVariantClear; forward;
@@ -149,7 +150,14 @@ begin
   i := 0;
   while i < AliasCount do
   begin
-    if UNameMatch(AliasNOff[i], AliasNLen[i], lo) then begin Result := i; Exit; end;
+    { A type alias declared in a unit this scope cannot legitimately reach is
+      not a candidate — the same non-transitive uses rule the routine and class
+      tables apply. Without it `type TE = (a, b, c)` in a unit two hops away
+      resolved globally while a record type declared beside it did not, which
+      read as one rule with holes and was really two tables
+      (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+    if UNameMatch(AliasNOff[i], AliasNLen[i], lo) and
+       DeclVisible(AliasUnitIdx[i]) then begin Result := i; Exit; end;
     Inc(i);
   end;
   if lo = 'puint8' then
@@ -179,6 +187,7 @@ begin
   AliasTargetNOff[AliasCount] := targetNOff;
   AliasTargetNLen[AliasCount] := targetNLen;
   AliasProcSig[AliasCount] := -1;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
   Inc(AliasCount);
 end;
 
@@ -211,6 +220,7 @@ begin
     AliasStrCap[AliasCount] := LastTypeStrCap
   else
     AliasStrCap[AliasCount] := 0;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
   Inc(AliasCount);
 end;
 
@@ -231,6 +241,7 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
   Inc(AliasCount);
 end;
 
@@ -252,6 +263,7 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
   Inc(AliasCount);
 end;
 
@@ -260,7 +272,8 @@ var i: Integer;
 begin
   Result := -1;
   for i := 0 to ArrTypeCount - 1 do
-    if CaseEqual(ArrTypeName[i], name) then begin Result := i; Exit; end;
+    if CaseEqual(ArrTypeName[i], name) and DeclVisible(ArrTypeUnitIdx[i]) then
+      begin Result := i; Exit; end;
 end;
 
 function FindStrConst(const name: AnsiString): Integer;
@@ -275,10 +288,12 @@ var i: Integer;
 begin
   Result := -1;
   for i := StrConstCount - 1 downto 0 do          { the current routine's own }
-    if (StrConstOwner[i] = CurProc) and CaseEqual(StrConstName[i], name) then
+    if (StrConstOwner[i] = CurProc) and CaseEqual(StrConstName[i], name) and
+       DeclVisible(StrConstUnitIdx[i]) then
       begin Result := i; Exit; end;
   for i := StrConstCount - 1 downto 0 do          { else a unit/global-level one }
-    if (StrConstOwner[i] = -1) and CaseEqual(StrConstName[i], name) then
+    if (StrConstOwner[i] = -1) and CaseEqual(StrConstName[i], name) and
+       DeclVisible(StrConstUnitIdx[i]) then
       begin Result := i; Exit; end;
 end;
 
@@ -287,7 +302,8 @@ var i: Integer;
 begin
   Result := -1;
   for i := 0 to SetConstCount - 1 do
-    if CaseEqual(SetConstName[i], name) then begin Result := i; Exit; end;
+    if CaseEqual(SetConstName[i], name) and DeclVisible(SetConstUnitIdx[i]) then
+      begin Result := i; Exit; end;
 end;
 
 procedure RegisterSetAlias(noff, nlen, elemEnumId: Integer);
@@ -306,6 +322,7 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
   Inc(AliasCount);
 end;
 
@@ -335,6 +352,7 @@ begin
   AliasPtrBaseTk[AliasCount] := Ord(tyClass);
   AliasPtrBaseRec[AliasCount] := classRec;
   AliasProcSig[AliasCount] := -1;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
   Inc(AliasCount);
 end;
 
@@ -347,7 +365,8 @@ begin
   i := 0;
   while i < EnumTypeCount do
   begin
-    if UNameMatch(EnumTypeNOff[i], EnumTypeNLen[i], lo) then begin Result := i; Exit; end;
+    if UNameMatch(EnumTypeNOff[i], EnumTypeNLen[i], lo) and
+       DeclVisible(EnumTypeUnitIdx[i]) then begin Result := i; Exit; end;
     Inc(i);
   end;
 end;
@@ -365,6 +384,7 @@ begin
   EnumTypeScoped[Result] := False;
   EnumTypeValCount[Result] := 0;
   EnumTypeRTTIOff[Result] := -1;
+  EnumTypeUnitIdx[Result] := CurrentUnitIdx;
   Inc(EnumTypeCount);
 end;
 
@@ -487,7 +507,7 @@ begin
   if unitIdx < 0 then Exit;
   for i := 0 to AmbientUnitCount - 1 do
     if AmbientUnitIdx[i] = unitIdx then Exit;
-  if AmbientUnitCount > 31 then Exit;
+  if AmbientUnitCount > 255 then Exit;
   AmbientUnitIdx[AmbientUnitCount] := unitIdx;
   Inc(AmbientUnitCount);
 end;
@@ -532,19 +552,16 @@ begin
 end;
 
 function VisibilityAllows(curUnit, declUnit: Integer): Boolean;
-{ True iff `declUnit` is visible from `curUnit` under the REAL (non-transitive)
-  Pascal uses rule: declUnit = curUnit, or declUnit is reachable from curUnit by
-  one `uses` edge of EITHER section, followed by INTERFACE-section edges only,
-  transitively (an implementation-section `uses` is private to the unit that
-  wrote it — it is not re-exported to that unit's own importers).
+{ True iff `declUnit` is visible from `curUnit` under the REAL Pascal uses rule:
+  declUnit = curUnit, or curUnit's OWN uses clause names it. One hop. Neither
+  section re-exports, so there is no closure and no transitivity of any kind.
   Strs[] indices offset by 1 so curUnit = -1 (the main program) indexes slot 0.
-  Memoized per (curUnit, UsesEdgeCount) in VisCacheVis: under --strict-uses this
-  is called from every routine and class lookup, and a clear-plus-BFS per query
+  Memoized per (curUnit, UsesEdgeCount) in VisCacheVis: this is called from
+  every routine, class, type and symbol lookup, and a clear-plus-scan per query
   would be quadratic in the edge table. The edge count is part of the key
   because clauses are appended as parsing proceeds. }
 var
-  queue: array[0..MAX_USES_EDGES-1] of Integer;
-  qHead, qTail, i, u, v: Integer;
+  i, v: Integer;
 begin
   if declUnit = curUnit then begin VisibilityAllows := True; Exit; end;
   if UnitIsAmbient(declUnit) then begin VisibilityAllows := True; Exit; end;
@@ -557,34 +574,25 @@ begin
   VisCacheEdges := UsesEdgeCount;
   for i := 0 to MAX_STRS do VisCacheVis[i] := False;
   VisCacheVis[curUnit + 1] := True;
-  qHead := 0; qTail := 0;
-  { direct edges out of curUnit: either section is visible to curUnit itself }
+  { the whole rule: the units curUnit itself named, either section }
   for i := 0 to UsesEdgeCount - 1 do
     if UsesEdgeFrom[i] = curUnit then
     begin
       v := UsesEdgeTo[i];
-      if not VisCacheVis[v + 1] then
-      begin
-        VisCacheVis[v + 1] := True;
-        if qTail < MAX_USES_EDGES then begin queue[qTail] := v; Inc(qTail); end;
-      end;
+      VisCacheVis[v + 1] := True;
     end;
-  { closure: from every unit already visible, only ITS OWN interface-section
-    uses re-export further — an implementation-section uses stays private. }
-  while qHead < qTail do
-  begin
-    u := queue[qHead]; Inc(qHead);
-    for i := 0 to UsesEdgeCount - 1 do
-      if (UsesEdgeFrom[i] = u) and UsesEdgeIface[i] then
-      begin
-        v := UsesEdgeTo[i];
-        if not VisCacheVis[v + 1] then
-        begin
-          VisCacheVis[v + 1] := True;
-          if qTail < MAX_USES_EDGES then begin queue[qTail] := v; Inc(qTail); end;
-        end;
-      end;
-  end;
+  { NO closure. There is deliberately nothing here. A `uses` clause names units
+    in the namespace of the unit that WROTE it and in no other — including a
+    clause written in the INTERFACE section, which is not a re-export.
+    (user, 2026-08-15: "includes should never leak — they are in the namespace
+    of the unit that included them, and never in any parent that happened to
+    include that unit. no language i know automatically has global scope just
+    because some unit included something.")
+    This function used to walk interface edges transitively from every visible
+    unit, which meant a program `uses`ing one unit could name everything that
+    unit's interface reached, arbitrarily deep. FPC rejects all of it.
+    Laxness INSIDE a unit (declare-before-use, forward references) is a
+    separate and deliberate choice, and is unaffected. }
   VisibilityAllows := VisCacheVis[declUnit + 1];
 end;
 
@@ -604,7 +612,6 @@ function DeclVisible(declUnit: Integer): Boolean;
   Same artifact ClassNameIsAmbientIntrinsic handles by name on the class side. }
 begin
   DeclVisible := True;
-  if not StrictUses then Exit;
   if declUnit < 0 then Exit;
   if declUnit = CurrentUnitIdx then Exit;
   DeclVisible := VisibilityAllows(CurrentUnitIdx, declUnit);
@@ -2697,6 +2704,7 @@ begin
   while i >= 0 do
   begin
     if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId)
+       and DeclVisible(SymUnitIdx[i])
        and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
@@ -2712,6 +2720,7 @@ begin
   begin
     if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) and
        IsBlockVisible(SymBlockId[i], CurBlockId)
+       and DeclVisible(SymUnitIdx[i])
        and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i, ' (ci)');
