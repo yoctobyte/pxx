@@ -93,4 +93,4 @@ pin at the same time. Byte-identical to CPython.
 `tools/gate.sh quick` GREEN, self-host byte-identical.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit af9e56651.
