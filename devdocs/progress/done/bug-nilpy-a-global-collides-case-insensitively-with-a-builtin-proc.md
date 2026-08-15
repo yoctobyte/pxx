@@ -4,6 +4,8 @@ prio: 25
 type: bug
 blocked-by: []
 summary: "Proc lookup is case-INSENSITIVE (Pascal heritage) while Python is case-sensitive, so a NilPy name resolves against a builtin that differs only in case: `print(Counter)` prints 4727019 (a code address) where CPython raises NameError. It also made a nested-def helper claim every read of a global named `counter`."
+status: done
+owner: claude-AN
 ---
 
 # A NilPy name resolves case-insensitively against a builtin
@@ -99,3 +101,54 @@ surfaces minutes later as "nested routine token buffer overflow" naming a
 routine hundreds of lines away.
 
 Back to the backlog with the diagnosis, per root-cause-over-microfix.
+
+## 2026-08-15 — the CALL path landed too; closing
+
+The parked note said the remaining route needed either "threading the dialect
+through the shared lookup" or "registering pylib's procs case-sensitively", and
+rejected the second because `ProcCaseSensitive` is read by the Pascal side.
+Neither was needed. The predicate the frontend already has is `NilPyUserCode`
+(symtab.inc), the same one `DeclCaseSensitive` keys on — so the split is drawn
+once, at the one bare-name resolution site, without touching registration:
+
+```pascal
+if NilPyUserCode then procIdx := FindProcNilPyBound(name)
+else procIdx := FindProcBound(name);
+```
+
+`FindProcNilPyBound` is `FindProcBound` minus the case-insensitive fallback
+**where it reaches Python's own namespace** — a non-exact hit whose
+`ProcUnitIdx` names `pylib` or `pyeval` answers -1. Scoped that way on purpose:
+the lax rule is what keeps a Pascal RTL routine reachable from NilPy under
+whatever case it is spelled with, which `DeclCaseSensitive`'s own comment calls
+out as deliberate, and only pylib rows are Python's builtins.
+
+Measured, HEAD vs pinned (the control), `print(<name>)`:
+
+| source | pinned | now | CPython |
+| --- | --- | --- | --- |
+| `cOUNTER` | `{}` — it CALLED Counter() | refused | NameError |
+| `Counter` | code address | code address | NameError |
+| `counter = 3; counter` | 3 | 3 | 3 |
+| `len` / `print` / `str` | unchanged | unchanged | — |
+
+Swept the mangled-case call forms: `SORTED`, `SUM`, `Len`, `Max`, `REVERSED`,
+`Range`, `Zip`, `Enumerate` all refused now.
+
+**Two residues, both deliberately left.** `Counter` bare still answers pylib's
+`Counter` because pxx puts `collections.Counter` in the builtin namespace where
+CPython requires an import — accepting what CPython rejects, which the
+upward-compatibility rule calls a feature, not a defect. And `ABS(-2)` /
+`Round(1.5)` / `Chr(65)` / `ORD('a')` still work: those are Pascal SYSTEM
+intrinsics, not pylib rows, and they answer the *correspondingly named*
+function — a lax spelling of a right answer, never the wrong-value collision
+this ticket is about.
+
+Test: `test/test_nilpy_case_sensitive.npy` extended with a global `counter`
+read bare, from a def, from a nested def and from a comprehension, `counter` as
+a parameter name, and a user def named `counter_fn` — byte-identical to
+CPython. Gate: `gate.sh quick` GREEN + self-host fixedpoint; no pin (nothing
+under `compiler/builtin/**`).
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

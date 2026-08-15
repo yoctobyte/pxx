@@ -4628,6 +4628,7 @@ function FindProcBound(const name: AnsiString): Integer; forward;
   cannot drift from the visibility/forward/unit rules the real lookup applies.
   bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc }
 function FindProcExactCase(const name: AnsiString): Integer; forward;
+function FindProcNilPyBound(const name: AnsiString): Integer; forward;
 
 function FindProc(const name: AnsiString): Integer;
 var i, own, last: Integer; lo: AnsiString;
@@ -4904,6 +4905,27 @@ begin
     i := ProcHashNext[i];
   end;
   if not anyOverload then FindProcBound := best;
+end;
+
+{ Bare-name proc lookup for NilPy USER code — FindProcBound, minus the
+  case-insensitive fallback WHERE IT REACHES PYTHON'S OWN NAMESPACE.
+
+  Python is case-sensitive and its builtins live in pylib, so `print(Counter)`
+  answered a code address and `print(cOUNTER)` CALLED Counter() where CPython
+  raises NameError. Scoped to pylib/pyeval rather than applied to every row
+  because the lax rule is what keeps a Pascal RTL routine reachable from NilPy
+  under whatever case it is spelled with — the same split DeclCaseSensitive
+  draws for symbols, said once here instead of at every lookup.
+  bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc }
+function FindProcNilPyBound(const name: AnsiString): Integer;
+var u: Integer;
+begin
+  Result := FindProcBound(name);
+  if Result < 0 then Exit;
+  if Procs[Result].Name = name then Exit;      { exact — nothing to decide }
+  u := ProcUnitIdx[Result];
+  if u < 0 then Exit;
+  if (Strs[u].Text = 'pylib') or (Strs[u].Text = 'pyeval') then Result := -1;
 end;
 
 function FindProcOverload(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;

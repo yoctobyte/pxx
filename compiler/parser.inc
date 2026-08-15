@@ -13318,8 +13318,11 @@ begin
       begin
         idx := FindSym(name);
         { a BARE reference binds under the scope-hiding rule — FindProc alone
-          answers with the set's representative, which ignores `uses` order }
-        procIdx := FindProcBound(name);
+          answers with the set's representative, which ignores `uses` order.
+          In NilPy user code a pylib row must match EXACTLY: Python is
+          case-sensitive and pylib IS its builtin namespace. }
+        if NilPyUserCode then procIdx := FindProcNilPyBound(name)
+        else procIdx := FindProcBound(name);
       end;
 
       { The EXPRESSION half of the own-field-beats-a-unit-name rule; the

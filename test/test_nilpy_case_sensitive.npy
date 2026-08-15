@@ -62,3 +62,33 @@ For = 2
 Not = 3
 And = 4
 print(If, For, Not, And)
+
+# --- a name that collides with a pylib builtin only by CASE ---
+# Python's builtins live in pylib, and the shared lookup's case-INsensitive
+# fallback reached them: a bare read of a module global `counter` resolved to
+# pylib's `Counter` and became a function VALUE (a code address), and
+# `cOUNTER` CALLED it. The fallback is now refused for pylib/pyeval rows, so
+# these all mean what they say.
+# bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc
+counter = 3
+print(counter)
+
+def read_counter():
+    return counter + 1
+print(read_counter())
+
+def outer():
+    def inner():
+        return counter * 2
+    return inner()
+print(outer())
+
+print([counter + i for i in range(3)])
+
+def as_param(counter):
+    return counter + 100
+print(as_param(5))
+
+def counter_fn(n):
+    return "counted:" + str(n)
+print(counter_fn(counter))
