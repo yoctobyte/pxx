@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:203 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1816 rejected:37`
+`unfinished:11 blocked:6 backlog:204 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1816 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,10 +58,10 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 50] [U]` decide-cross-language-qualifier-syntax (unblocks 1)
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
-- `[p 50] [A]` bug-no-qualified-syntax-for-a-cross-language-import
 - `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [B]` feature-b-mimic-codecs-for-nilpy

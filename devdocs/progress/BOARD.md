@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +60,7 @@ _none_
 | bug-nilpy-matmul-operator-does-not-parse | N | 20 | bug | The `@` matrix-multiply operator does not parse | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-statically-clashing-operands-refuse-without-naming-the-types | N | 15 | bug | `\"a\" < 3` with two LITERALS raises `unsupported operand type(s) for this operator` where CPython names both types. The dynamic shape already matches CPython exactly; only the statically-proven clash — where the compiler knows MORE — reports less. | — |
-| bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | — |
+| bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
 | bug-p-class-name-collision-across-units-resolves-first-not-last | P | 45 | bug | Two units exporting the same CLASS name: pxx binds the first unit named, FPC binds the last. The routine half of this was fixed and gated (bug-p-uses-order-does-not-decide-which-unit-wins, done); classes were never done — name-resolution.md §2.2 says scope hiding is 'BUILT for routines, MISSING for types/classes'. Filed because two tickets already cite this slug and no such ticket existed. | — |
@@ -85,6 +85,7 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
+| decide-cross-language-qualifier-syntax | U | 50 | decide | There is no way to say \"C's cube\" once a Pascal Cube is in scope — qualification, the documented universal escape, has no cross-language form. Pick the syntax: file basename as a scope, a reserved language tag (C.cube), or rename in the source. Blocks the own-language-first rule, whose own acceptance test recreates the collision on purpose. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-nilpy-none-str-sentinel-vs-textstr-kind | U | 40 | decide | Re-ask of decide-nilpy-none-str-representation: the chosen fix (a NilPy string kind whose blocks may be zero length) rests on a block kind that nothing in the tree ever stamps, so it is a Track A representation project rather than a bugfix. A None SENTINEL closes the reported bug at a fraction of the cost — but closes less. | — |
@@ -474,10 +475,10 @@ _none_
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
+- [p 50] [U] decide-cross-language-qualifier-syntax (unblocks 1)
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
-- [p 50] [A] bug-no-qualified-syntax-for-a-cross-language-import
 - [p 50] [P] bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - [p 50] [B] feature-b-mimic-codecs-for-nilpy
@@ -647,6 +648,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload
+- **1** — decide-cross-language-qualifier-syntax
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy

@@ -2,7 +2,7 @@
 track: A
 prio: 50
 type: bug
-blocked-by: []
+blocked-by: [decide-cross-language-qualifier-syntax]   # the three options below reserve a name or change what `uses` binds; escalated 2026-08-15
 summary: "Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14."
 ---
 
@@ -97,3 +97,17 @@ those by case, or rename." Update that section when this resolves.
 ## Gate
 
 `make compiler/pascal26` + the two programs above, then `tools/gate.sh quick`.
+
+
+## ESCALATED 2026-08-15 (Track A+N session)
+
+Not fixed: every option here either reserves a global name or changes what
+`uses` binds, and the ticket's own text says Track U may need to pick. Filed as
+[[decide-cross-language-qualifier-syntax]] with the three options, a
+recommendation (option 2, with option 1 as a later addition rather than an
+alternative — they answer different questions), and one measured fact the
+options list was missing: **nothing in `lib/**` declares a unit named `C`, but
+`C` is an ordinary variable name in this repo** (two `test/*.pas` programs use
+it). So option 2 must resolve `C` only in QUALIFIER position, never as a
+reserved word — otherwise it breaks existing Pascal, which decides the
+implementation shape before anyone starts it.
