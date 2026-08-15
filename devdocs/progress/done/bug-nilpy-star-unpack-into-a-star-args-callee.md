@@ -97,4 +97,4 @@ method form with and without a fixed parameter, and the result's type name.
 Re-checked the eleven existing star `.npy` tests against their oracles.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit b7bb489f5.
