@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T10:08:47Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_nilpy_star_methods_and_targets.npy"
-   ],
-   "sha": "89dae725b972d7019a20e6df61cbc18c6c9862c6",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T10:15:54Z",
    "fixed": [],
    "new_red": [],
@@ -498,6 +488,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "57c7b22139d5aa06ef84ad51695dc38d56a43751",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T21:31:04Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8bfb49096dc5bd6b69590d86ce6b414ccf438296",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1721,6 +1719,7 @@
   "test-core#src:test/test_open_array_of_variant.pas": "native",
   "test-core#src:test/test_operator_enumerator.pas": "native",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "native",
+  "test-core#src:test/test_opt_store_reload.pas": "native",
   "test-core#src:test/test_overflow_checks_qplus.pas": "native",
   "test-core#src:test/test_overflow_qplus_narrow.pas": "native",
   "test-core#src:test/test_overflow_succ_pred.pas": "native",
@@ -4201,6 +4200,7 @@
   "test-core#src:test/test_open_array_of_variant.pas": "pass",
   "test-core#src:test/test_operator_enumerator.pas": "pass",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
+  "test-core#src:test/test_opt_store_reload.pas": "pass",
   "test-core#src:test/test_overflow_checks_qplus.pas": "pass",
   "test-core#src:test/test_overflow_qplus_narrow.pas": "pass",
   "test-core#src:test/test_overflow_succ_pred.pas": "pass",
@@ -5461,11 +5461,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T21:16:43Z",
-  "sha": "57c7b22139d5aa06ef84ad51695dc38d56a43751",
+  "date": "2026-08-15T21:31:04Z",
+  "sha": "8bfb49096dc5bd6b69590d86ce6b414ccf438296",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 207.7
+  "wall": 206.2
  },
  "last_bench": {
   "conf_rows": 550,
