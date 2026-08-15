@@ -14617,8 +14617,27 @@ end;
   type. A parameter type with no coercion is refused rather than passed raw.
   Keyword forwarding is checked at run time and refused: binding a runtime dict
   onto named parameters needs a call protocol NilPy does not have. }
+function PyStarParamTakesVariant(procIdx, k: Integer): Boolean;
+{ Can parameter k of procIdx receive a forwarded *args slot, which is always a
+  VARIANT? True whenever something downstream knows how to land it: the
+  parameter is itself a variant, it is a string (the forwarder converts with
+  pystr_of), or IRLowerCallArg unboxes it at lowering time — as a scalar
+  (IRVariantUnboxKind) or, tag-checked via pyvarobj_arg, as a class.
+
+  The one predicate both the arity cap and the argument builder ask, so the
+  "which arities can I build" answer cannot drift from the "what do I emit for
+  this parameter" answer. }
+var ptk: TTypeKind;
+begin
+  ptk := Procs[procIdx].Params[k].TypeKind;
+  PyStarParamTakesVariant :=
+    (ptk = tyVariant) or PyIsStrBaseTk(ptk) or (ptk = tyAnsiString) or
+    IRVariantUnboxKind(ptk) or
+    ((ptk = tyClass) and (not Procs[procIdx].Params[k].IsRef));
+end;
+
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer;
-var required, total, n, k, i, argNode, lastArg, callNode, elemNode: Integer;
+var required, total, fwdTotal, n, k, i, argNode, lastArg, callNode, elemNode: Integer;
     nameNode, headNode, hasArg, hasCall: Integer;   { the parameter's name literal and the was-it-supplied test, for a kwargs fetch; the arg chain's head }
     lenNode, cntNode, condNode, pairNode, ternNode, chkArg, a2, a3: Integer;
     listSym, dictSym, asgn, listCi, dictCi: Integer;
@@ -14664,6 +14683,28 @@ begin
   while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
     Dec(required);
+
+  { The widest arity whose parameters can ALL take a forwarded variant. One
+    unforwardable parameter used to refuse the whole call, but it only rules
+    out the arities that REACH it: `sorted(*[xs])` supplies one argument and
+    never touches `key` (a callable, which no variant can become), and CPython
+    runs it. So cap the accepted count here instead of erroring, and let the
+    arity guard below report a too-large count at run time like any other
+    wrong-arity forward. Only when even the REQUIRED arity cannot be built is
+    the call genuinely unforwardable, and then the old message still fires.
+    bug-nilpy-star-forwarder-refuses-a-container-typed-parameter }
+  fwdTotal := total;
+  for k := 0 to total - 1 do
+    if not PyStarParamTakesVariant(procIdx, k) then
+    begin
+      fwdTotal := k;
+      Break;
+    end;
+  if fwdTotal < required then
+    Error('Nil Python: cannot forward *args into ' + Procs[procIdx].Name
+      + ' — parameter ' + Procs[procIdx].Params[fwdTotal].Name
+      + ' has a type no runtime argument can be coerced to');
+  total := fwdTotal;
 
   { the two runtime guards }
   chkArg := AllocNode(AN_ARG);
@@ -14823,6 +14864,19 @@ begin
         ASTTk[elemNode] := Ord(tyAnsiString);
         ASTLeft[elemNode] := argNode;
       end
+      else if IRVariantUnboxKind(ptk) or
+              ((ptk = tyClass) and (not Procs[procIdx].Params[k].IsRef)) then
+        { Pass the variant STRAIGHT THROUGH — IRLowerCallArg already unboxes it
+          at lowering time, for a scalar parameter (IRVariantUnboxKind, the same
+          predicate) and for a class parameter (tag-checked via pyvarobj_arg, so
+          a variant holding the wrong thing raises TypeError instead of being
+          dereferenced). This table was refusing work the layer below it does,
+          which is why `sum(*[[1, 2]])` — a valid CPython program — did not
+          compile: pylib's `sum(l: TPyList)` is a class parameter, and the
+          ordinary non-star call `sum(d["k"])` binds that same variant fine.
+          Refusing a working CPython program is the one direction NilPy's
+          upward-compatibility rule does not allow.
+          bug-nilpy-star-forwarder-refuses-a-container-typed-parameter }
       else
         Error('Nil Python: cannot forward *args into ' + Procs[procIdx].Name
           + ' — parameter ' + Procs[procIdx].Params[k].Name

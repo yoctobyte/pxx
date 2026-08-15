@@ -388,7 +388,7 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\nTrue\nFalse')"
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy $(TESTTMP)/test_nilpy_starfwd26
-	test "$$($(TESTTMP)/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"
+	test "$$($(TESTTMP)/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c\n3\n[1, 2, 3]\n3\n4.0\na-b\n11\n13\nTypeError')"
 	# a method on a dynamically-typed receiver, dispatched across unrelated classes
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch.npy $(TESTTMP)/test_nilpy_dyndisp26
 	test "$$($(TESTTMP)/test_nilpy_dyndisp26)" = "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"
@@ -6048,7 +6048,7 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\nTrue\nFalse')"
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy $(TESTTMP)/test_nilpy_starfwd26
-	test "$$($(TESTTMP)/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c')"
+	test "$$($(TESTTMP)/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c\n3\n[1, 2, 3]\n3\n4.0\na-b\n11\n13\nTypeError')"
 	# a method on a dynamically-typed receiver, dispatched across unrelated classes
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch.npy $(TESTTMP)/test_nilpy_dyndisp26
 	test "$$($(TESTTMP)/test_nilpy_dyndisp26)" = "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"

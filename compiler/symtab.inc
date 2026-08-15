@@ -2218,6 +2218,26 @@ begin
   Result := (Ord(tk) = 18) or (Ord(tk) = 19) or (Ord(tk) = 20);  { tySingle or tyDouble or tyExtended }
 end;
 
+function IRVariantUnboxKind(target: TTypeKind): Boolean;
+{ Which scalar targets a tyVariant value may be unboxed into. Anything not
+  listed keeps the pre-existing lowering (records, sets, classes, pointers —
+  none of which a variant payload can stand in for).
+
+  Lives here, not in ir.inc where its only caller used to be, because the NilPy
+  *args forwarder needs the same answer when it decides whether an argument may
+  be left as a variant for IRLowerCallArg to unbox — and parser.inc is included
+  before ir.inc. It answers a question about a TYPE KIND, so it has no business
+  being IR-private in the first place. }
+begin
+  IRVariantUnboxKind :=
+    TypeIsFloat(target) or (target = tyBoolean) or (target = tyChar) or
+    (target = tyString) or (target = tyAnsiString) or
+    (target = tyInteger) or (target = tyInt8) or (target = tyInt16) or
+    (target = tyInt32) or (target = tyInt64) or (target = tyNativeInt) or
+    (target = tyUInt8) or (target = tyUInt16) or (target = tyUInt32) or
+    (target = tyUInt64) or (target = tyNativeUInt);
+end;
+
 function TypeIsPyNumeric(tk: TTypeKind): Boolean;
 { The integer and float kinds — a NUMBER in the Python sense, and nothing else.
   Used to decide whether NilPy's `/` is arithmetic. It must exclude tyClass:

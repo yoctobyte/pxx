@@ -507,7 +507,6 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
-function IRVariantUnboxKind(target: TTypeKind): Boolean; forward;
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
 function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
@@ -4216,19 +4215,10 @@ begin
   faFldRecIdxHelper := outIdx >= 0;
 end;
 
-function IRVariantUnboxKind(target: TTypeKind): Boolean;
-{ Which scalar targets a tyVariant value may be unboxed into. Anything not
-  listed keeps the pre-existing lowering (records, sets, classes, pointers —
-  none of which a variant payload can stand in for). }
-begin
-  IRVariantUnboxKind :=
-    TypeIsFloat(target) or (target = tyBoolean) or (target = tyChar) or
-    (target = tyString) or (target = tyAnsiString) or
-    (target = tyInteger) or (target = tyInt8) or (target = tyInt16) or
-    (target = tyInt32) or (target = tyInt64) or (target = tyNativeInt) or
-    (target = tyUInt8) or (target = tyUInt16) or (target = tyUInt32) or
-    (target = tyUInt64) or (target = tyNativeUInt);
-end;
+{ IRVariantUnboxKind moved to symtab.inc — the NilPy frontend has to ask the
+  same question when it decides whether an argument may be left as a variant,
+  and parser.inc is included BEFORE this file. One predicate, both consumers;
+  a private copy in pyparser.inc is how the two answers drift apart. }
 
 function IRFindProc1ByArgTk(const name: AnsiString; tk: TTypeKind): Integer;
 { Pick a 1-argument overload by its parameter's type kind, across ALL units.

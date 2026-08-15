@@ -3,8 +3,6 @@ track: N
 prio: 30
 type: bug
 summary: "NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct."
-status: working
-owner: agent-AN
 ---
 
 # `del x` on a plain variable is a silent no-op
@@ -169,3 +167,57 @@ free) but it is no longer the cheap half of the fork.
 Still parked, still prio 30, and the asymmetry from the note above is unchanged
 and decisive: today's bug is a silent no-op, so any partial version that raises
 where it should not is strictly worse.
+
+## 2026-08-15 (session 3) — two measured facts that change the parked design
+
+Picked it up, measured the two things the parked design assumed, and returned it
+without applying anything. Both assumptions were wrong in ways that matter.
+
+**1. The "forcing a type from a pre-scan" worry is unfounded — the pre-scan
+already exists.** Session 2 parked partly because "forcing a type from a
+pre-scan touches how NilPy allocates locals". It does not need a new pre-scan:
+`PyParseDefBody` already runs a **trial typing pass** over the body
+(`PyTypingPass := True`, `pyparser.inc` ~23593), rolled back and repeated until
+`PyTypingChanged` is false, precisely to infer local types before the frame is
+laid out. The `del` arm runs inside it. So `del x` can call
+`PyNoteLocalType(name, tyVariant)` during the trial round and the real parse
+allocates `x` as a variant for free — no new machinery, no new allocation site.
+Measured: `x = 5` is `tk=13` (tyInt64) today at BOTH module and def scope
+(`PXXDBG=n.locals`), so the forcing is genuinely required, and this is where it
+belongs.
+
+**2. Hoisting the guard in front of the statement is WRONG, and that was the
+plan.** Session 2's design put the read guard in front of the containing
+statement via `PyHoistStmt`. That raises in places CPython does not:
+
+```python
+del x
+if flag and x:      # CPython: never evaluates x when flag is False
+    ...
+```
+
+A hoisted check runs unconditionally, so this raises NameError on a program
+CPython runs to completion — the exact "strictly worse than the current silent
+no-op" failure the ticket's own closing note warns about. Same for `x if c else
+0`, `a or x`, and a read inside a comprehension's filter.
+
+The guard therefore has to be **in-expression**: wrap the ident node so it is
+evaluated exactly where the read is. That is architecturally natural — the ONE
+read arm (`parser.inc` ~4916) already rewrites its own node in place for NilPy
+frame cells (`SymCellPtr` -> `AN_DEREF`), so a wrapper is the same shape. Note
+it is **two** sites, not one: `PyMakeIdent` builds the node for the paths that
+bypass the ordinary expression grammar, and the comment at the read arm says so.
+
+**Revised cost.** Still `VT_UNBOUND` (session 2's correction stands — `VT_EMPTY`
+is None, not unbound). Plus: a pylib guard callable that takes the variant and
+the name and either returns it or raises NameError, minding
+[[project_variant_fn_return_forward_nrvo_corruption]] (a Variant function return
+corrupts under FORWARD — a var-out proc is the safe shape); the wrapper applied
+at both ident-building sites; the trial-pass type forcing above.
+
+**Recommendation: leave it at prio 30 and take it as a deliberate half-day, not
+as a queue item picked up between other work.** Three sessions have now each
+found the previous session's design wrong on one point. The reason it keeps
+happening is not that the fix is hard but that the failure mode is asymmetric —
+today's bug is silent and harmless, and every wrong version of the fix is a
+loud, wrong refusal of a valid program. Nothing applied; back to backlog.

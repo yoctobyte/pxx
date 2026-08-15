@@ -58,8 +58,8 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
+| bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload | N | 25 | bug | `max(*[xs])` and `min(*[xs])` return the LIST instead of its largest/smallest element — the star forwarder resolves the callee to one procIdx before it knows the argument is a container, so it binds the 2-argument `max(a, b)` overload where the direct `max(xs)` call correctly binds the list-taking one. Silent wrong value; the direct spelling is right, which is why no test saw it. | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
-| bug-nilpy-star-forwarder-refuses-a-container-typed-parameter | N | 20 | bug | `sum(*[xs])` is refused at compile time — the run-time *args forwarder rejects any callee parameter it cannot coerce a Variant to, and pylib's `sum(l: TPyList)` is one. Loud, but it refuses a valid CPython program. | — |
 | bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter | N | 20 | bug | `g(*xs)` where `g` declares fixed parameters BEFORE its `*args` is refused: the split between those parameters and the packed tuple depends on len(xs), a run-time fact the compile-time packing cannot answer. Loud and self-naming, but CPython accepts it. | — |
 | bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
@@ -415,9 +415,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1866)
+## done (1867)
 
-1866 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1867 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -618,6 +618,7 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
+- [p 25] [N] bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
@@ -638,7 +639,6 @@ _none_
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 20] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins
-- [p 20] [N] bug-nilpy-star-forwarder-refuses-a-container-typed-parameter
 - [p 20] [N] bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope
