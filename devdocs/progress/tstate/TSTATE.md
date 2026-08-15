@@ -7,5 +7,5 @@
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `89dae725b972`, last good `e0e6a0759c03`, 2 commit(s) in range
+- **test-core#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `dc60b64fb81b`, last good `e0e6a0759c03`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `9c5adbed5933`, last good `4c9da77f9368`, 15 commit(s) in range
