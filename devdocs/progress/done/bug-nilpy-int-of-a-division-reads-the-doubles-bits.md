@@ -37,6 +37,24 @@ always right. Only the consumer read the wrong source —
 `project_variant_store_kind_came_from_the_ast_not_the_value`'s rule, one level
 up: **take the kind from the value, not from a side channel.**
 
+## Fixed at the source, because int() was not the only consumer
+
+The first fix read the node's type in the int() arm. Sweeping the neighbours
+then found the same defect in **`float()`** (`float(7/2)` printed
+4.612811918334231e+18) and in **`round()`** (`round(2/3, 3)` ignored its ndigits
+and printed 0.6666666666666666), each dispatching on `LastExprTk` the same way —
+and any future consumer would have inherited it.
+
+So the real fix is one line at each of the two operator loops: `ParseTerm` and
+`ParseSimpleExpr` now leave `LastExprTk` holding the type of the node they just
+built. Nothing else wrote it after `ParseFactor`, which is why "the type of the
+expression I just parsed" and "the type of the last factor" had silently been
+the same question everywhere except across an operator.
+
+Both spellings are kept in the int() arm — the node test first — since a
+consumer asking the node directly is right regardless of who else writes the
+side channel.
+
 ## Gate
 
 `test/test_nilpy_int_of_an_expression.npy` (+`.expected`, in the Makefile),

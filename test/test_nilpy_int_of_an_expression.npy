@@ -27,4 +27,11 @@ print("bignum", int(2 ** 70))
 
 # the value itself was never wrong -- only int() misread it
 print("value", 7 / 2, 1 / 1)
+
+# float() and round() read the same side channel, and were wrong the same way:
+# float(7/2) printed 4.6e18 and round(2/3, 3) ignored its ndigits.
+print("float", float(7 / 2), float(1.5 + 1), float(2.5 - 1), float(2 * 1.5))
+print("round", round(7 / 2, 1), round(2 / 3, 3), round(1.5 + 1.0, 1))
+print("str", str(7 / 2), str(1.5 + 1), str(2 * 1.5))
+print("abs-max", abs(1.5 - 3), max(1.5 + 1, 0), min(7 / 2, 1))
 print("TEST-OK")

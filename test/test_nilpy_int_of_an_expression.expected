@@ -11,4 +11,8 @@ round-trip 2 4
 variant 3
 bignum 1180591620717411303424
 value 3.5 1.0
+float 3.5 2.5 1.5 3.0
+round 3.5 0.667 2.5
+str 3.5 2.5 3.0
+abs-max 1.5 2.5 1
 TEST-OK

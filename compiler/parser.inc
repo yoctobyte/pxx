@@ -16864,6 +16864,15 @@ begin
     else
       ASTTk[node] := Ord(tyInteger);
     CurASTNode := node;
+    { Keep the side channel with the VALUE. LastExprTk was last written by
+      ParseFactor, so after `7 / 2` it held the type of the `2` — and every
+      consumer that asks it about "the expression I just parsed" got the last
+      FACTOR instead. `int(7/2)` printed 3.5's bit pattern and `float(7/2)`
+      printed 4.6e18, while the identical `x = 7/2; int(x)` was correct because
+      an ident leaves the two agreeing. Fixed at the source rather than at each
+      consumer: the arms below and in ParseSimpleExpr end the same way.
+      bug-nilpy-int-of-a-division-reads-the-doubles-bits }
+    LastExprTk := IntToTypeKind(ASTTk[node]);
   end;
 end;
 
@@ -17118,6 +17127,8 @@ begin
     else
       ASTTk[node] := Ord(tyInteger);
     CurASTNode := node;
+    { the additive level's half of the same rule — see ParseTerm's note }
+    LastExprTk := IntToTypeKind(ASTTk[node]);
   end;
 end;
 
