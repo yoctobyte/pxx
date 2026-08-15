@@ -10,7 +10,7 @@ owner: agent-A
 # Pascal: `uses` is transitive, so every unit's imports leak to its consumers
 
 - **Type:** bug (name resolution / unit visibility) — **Track A**
-- **Status:** blocked
+- **Status:** done
 - **Opened:** 2026-07-28, from [[decide-class-namespace-scoping]]. This is the
   root cause that ticket is a symptom of.
 
@@ -626,3 +626,42 @@ So the fork is:
 Left to the user rather than guessed, because the ticket's own Gate says this
 change *"should not arrive as one commit"* and a wrong call here changes name
 resolution for the whole tree.
+
+## 2026-08-15 (later) — FLIPPED. `uses` is non-transitive by default.
+
+`StrictUses := True` is the default. Taken as Track A's call, which is what
+this ticket delegated it to, on the evidence recorded above: sweep count 0,
+self-host converges at generation 1, `gate.sh quick` GREEN, and the a/b pair
+identical.
+
+### The flag did NOT retire — it inverted
+
+The plan said *"flip and retire the flag"*. Retiring it is the one part of the
+plan not followed, deliberately: `--strict-uses` stays as an accepted no-op (for
+the scripts and write-ups that pass it) and **`--no-strict-uses` is added as the
+escape hatch**.
+
+The reason is the risk this change actually carries. It is not "might be
+wrong" — the rule is right and the corpus proves it. It is that the fallout
+shape is *a name that used to resolve now reporting undefined*, and that can
+only appear in the native tier, i.e. in Track T's asynchronous sweep, hours
+after the push, in somebody else's lane. Retiring the flag would make the way
+back a compiler rebuild; leaving it inverted makes it one argument. That costs
+eight lines and buys every other track an unblock they can apply themselves.
+
+The hatch is a transition aid, not a supported dialect: nothing in-tree passes
+it, and it should be deleted once a full sweep at a post-flip sha comes back
+clean.
+
+### For Track T
+
+The next full sweep is the real verification of this commit — `gate.sh quick`
+cannot see the regression shape, by this ticket's own Gate. A NEW-RED naming an
+undefined identifier that plainly lives in a transitively-reached unit is this
+change, and the correct fix is the missing `uses` clause in the source, not a
+revert. If they arrive in bulk instead of ones, revert this commit's one-line
+default (the hatch makes that testable without a rebuild first).
+
+**Status: resolved.** The rule, the enforcement, the RTL leak closures, the
+ambient marking, the corpus sweep, and now the default — all landed.
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

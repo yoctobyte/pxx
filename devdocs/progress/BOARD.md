@@ -63,7 +63,6 @@ _none_
 | bug-p-class-name-collision-across-units-resolves-first-not-last | P | 45 | bug | Two units exporting the same CLASS name: pxx binds the first unit named, FPC binds the last. The routine half of this was fixed and gated (bug-p-uses-order-does-not-decide-which-unit-wins, done); classes were never done — name-resolution.md §2.2 says scope hiding is 'BUILT for routines, MISSING for types/classes'. Filed because two tickets already cite this slug and no such ticket existed. | — |
 | bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
 | bug-p-scope-hiding-covers-routines-but-not-types-and-classes | P | 60 | bug | The scope-hiding rule shipped 2026-08-10 (bug-p-uses-order-does-not-decide-which-unit-wins) covers ROUTINES only. Types and classes still resolve flat first-match through FindUClass, so `uses a, b` binds b's Who but a's Thing — in the SAME program. This is the sibling arm of an already-fixed rule, and it is what makes a duplicated `Exception` class order-dependent. | — |
-| bug-pascal-uses-is-transitive | A | 80 | bug | REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix the user decided on 2026-08-01 (land the real non-transitive rule) was never built, and the ticket sat in done/ hiding that. It is the root cause of the pylib/sysutils Exception ceiling, the tkinter/reportlab class collision, and the ClassNameIsDeliberatelyShared patch that was supposed to be temporary. Re-measured cost: 35 RTL-internal unit pairs, no user-program-facing leak. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -245,6 +244,7 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
+| regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-builtin-over-variant-receiver | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-lambda-in-range-comprehension | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
@@ -414,9 +414,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1872)
+## done (1873)
 
-1872 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1873 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -462,7 +462,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 80] [A] bug-pascal-uses-is-transitive
+- [p 70] [T] regression-cascade-63d1d0de90d3
 - [p 70] [T] regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
 - [p 70] [T] regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
 - [p 60] [B] feature-b-tkhtmlview-in-nilpy (unblocks 1)

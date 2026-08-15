@@ -181,7 +181,7 @@ begin
   CrtlSrcPulledCount := 0;
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
-  StrictUses := False;
+  StrictUses := True;   { bug-pascal-uses-is-transitive: DEFAULT-ON 2026-08-15 }
   AmbientUnitCount := 0;
   UsesInjected := False;
   VisCacheUnit := -2;
@@ -561,10 +561,21 @@ begin
     begin
       { bug-pascal-uses-is-transitive, the ENFORCEMENT step: a declaration in a
         unit the resolving scope cannot legitimately reach stops being a lookup
-        candidate, so `uses` is finally non-transitive. Behind a flag while the
-        RTL's own accidental leaks are closed one at a time; the endpoint is
-        default-on and this flag retiring. }
+        candidate, so `uses` is finally non-transitive. DEFAULT-ON since
+        2026-08-15, so this flag is now a no-op kept for the scripts and ticket
+        write-ups that pass it. }
       StrictUses := True;
+      Inc(i);
+    end
+    else if option = '--no-strict-uses' then
+    begin
+      { the escape hatch that replaces "retire the flag". The rule is correct
+        and the corpus is clean under it (1660 sources, 0 failures), but a
+        transitive lookup that USED to resolve now reports an undefined name,
+        and that fallout can only surface in the native tier — which is Track
+        T's asynchronous sweep, not the pusher's gate. So the way back for
+        someone blocked by it is one flag, not a compiler rebuild. }
+      StrictUses := False;
       Inc(i);
     end
     else if option = '--warn-ignored-directives' then
