@@ -228,4 +228,4 @@ on these five files warning on legal code; the tree is now clean, so that
 promotion is a decision rather than a blocked one.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 298f2e5fe.
