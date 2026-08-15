@@ -2,7 +2,7 @@
 track: N
 prio: 45
 type: bug
-commit: PENDING-COMMIT
+commit: 1ad845c6e
 blocked-by: []
 summary: "`int(7/2)` printed 4615063718147915776 — 3.5's bit pattern read as an integer. int() took its argument's type from LastExprTk, a side channel that after an operator expression holds the last FACTOR's type, so the float arm was skipped. `x = 7/2; int(x)` was correct."
 ---

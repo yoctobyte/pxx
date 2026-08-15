@@ -2,7 +2,7 @@
 track: N
 prio: 40
 type: bug
-commit: PENDING-COMMIT
+commit: 1ad845c6e
 blocked-by: []
 summary: "`xs *= 2` on a list and `s *= 2` on a str both produced an EMPTY value, silently. The three augmented-assignment sites build an arithmetic binop, while `x = x * n` is decided by three special arms in ParseTerm that none of them consulted."
 ---
