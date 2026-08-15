@@ -1,0 +1,16 @@
+True 2 2
+v True 1
+double True 2
+label True w1
+half True 0.5
+ok True True
+big True 100
+meth True method
+nope False MISS
+double 10
+label w5
+big 500
+box double True 10
+box v True 5
+box nope False MISS
+10 True

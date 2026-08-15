@@ -1,0 +1,60 @@
+# `getattr(o, nm)` / `hasattr(o, nm)` with a COMPUTED name over a @property.
+# The two forms take different routes by construction: a literal name is
+# answered by the FRONTEND against the declared class, a computed one by the
+# runtime predicate against the RTTI — and the RTTI blob carries methods and
+# fields, not properties. So the literal form was right and the computed one
+# answered False and handed back the default, silently.
+#
+# The getter is name-mangled (`@property def double` compiles to the method
+# `__prop_get_double`), so the runtime resolver looks for THAT and calls it —
+# a property has no storage of its own.
+
+class W:
+    def __init__(self):
+        self.v = 1
+
+    @property
+    def double(self):
+        return self.v * 2
+
+    @property
+    def label(self) -> str:
+        return "w" + str(self.v)
+
+    @property
+    def half(self) -> float:
+        return self.v / 2
+
+    @property
+    def ok(self) -> bool:
+        return self.v > 0
+
+    @property
+    def big(self) -> int:
+        return self.v * 100
+
+    def meth(self):
+        return 9
+
+w = W()
+
+# the literal forms, unchanged
+print(hasattr(w, "double"), w.double, getattr(w, "double"))
+
+# ...and the computed ones, which is the bug
+for nm in ["v", "double", "label", "half", "ok", "big", "meth", "nope"]:
+    print(nm, hasattr(w, nm), getattr(w, nm, "MISS") if nm != "meth" else "method")
+
+# a value the property COMPUTES, so it must follow the field
+w.v = 5
+for nm in ["double", "label", "big"]:
+    print(nm, getattr(w, nm))
+
+# through a VARIANT receiver — the other route into the same predicate
+box = [w]
+for nm in ["double", "v", "nope"]:
+    print("box", nm, hasattr(box[0], nm), getattr(box[0], nm, "MISS"))
+
+# a computed name built at run time, which is the shape the idiom really has
+part = "dou"
+print(getattr(w, part + "ble"), hasattr(w, part + "ble"))

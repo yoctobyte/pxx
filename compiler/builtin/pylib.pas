@@ -3821,6 +3821,49 @@ end;
   pydynattr_has_any_v, and the reason it exists is the same: asking the store
   alone reported False for something the very next read returns.
   bug-nilpy-getattr-dunder-not-supported }
+type
+  { A @property GETTER, reached by NAME at run time. The frontend name-mangles
+    the accessors (`@property def double` becomes the method
+    `__prop_get_double` and a real Pascal PROPERTY keeps the plain name), and
+    the RTTI blob carries methods and fields — not properties. So a COMPUTED
+    attribute name found nothing: `hasattr(w, nm)` answered False and
+    `getattr(w, nm, d)` handed back the default, for a property the LITERAL
+    form reads correctly, because the two forms take different routes by
+    construction (frontend vs RTTI).
+    bug-nilpy-a-computed-attribute-name-cannot-see-a-property }
+  TPyPropV = function(recv: Pointer): Variant;
+  TPyPropI = function(recv: Pointer): Int64;
+  TPyPropD = function(recv: Pointer): Double;
+  TPyPropS = function(recv: Pointer): AnsiString;
+  TPyPropB = function(recv: Pointer): Boolean;
+
+function PyPropertyGet(obj: Pointer; const name: AnsiString;
+                       var found: Boolean): Variant;
+{ The getter is CALLED, because a property has no storage of its own — its
+  value is whatever the body computes now.
+
+  Only the return kinds whose ABI is spelled out here are served; anything else
+  answers "not found", which is exactly today's behaviour and never a wrong
+  value read through the wrong convention (the failure PyDefUsedAsValue's note
+  records). An unannotated NilPy getter returns a Variant, which is the common
+  case by a wide margin. }
+var mi: PMethInfo; fv: TPyPropV; fi_: TPyPropI; fd: TPyPropD;
+    fs: TPyPropS; fb: TPyPropB;
+begin
+  found := False;
+  Result := pynone;
+  if obj = nil then Exit;
+  mi := PyFindMethByName(GetInstanceRTTI(obj), '__prop_get_' + name);
+  if (mi = nil) or (mi^.Code = nil) then Exit;
+  case mi^.RetKind of
+    22: begin fv := TPyPropV(mi^.Code); Result := fv(obj); found := True; end;
+    13, 11, 1: begin fi_ := TPyPropI(mi^.Code); Result := pyvar_of_int(fi_(obj)); found := True; end;
+    19: begin fd := TPyPropD(mi^.Code); Result := fd(obj); found := True; end;
+    23: begin fs := TPyPropS(mi^.Code); Result := fs(obj); found := True; end;
+    2:  begin fb := TPyPropB(mi^.Code); Result := pyvar_of_bool(fb(obj)); found := True; end;
+  end;
+end;
+
 function pydynattr_hasattr(obj: Pointer; const name: AnsiString): Boolean;
 var declFound: Boolean; dummy: Variant;
 begin
@@ -3828,6 +3871,10 @@ begin
   if Result then Exit;
   if obj = nil then Exit;
   dummy := PyDeclaredAttrGet(obj, name, declFound);
+  if declFound then begin Result := True; Exit; end;
+  { a @property, whose getter is name-mangled and whose PROPERTY the RTTI does
+    not carry — see PyPropertyGet }
+  dummy := PyPropertyGet(obj, name, declFound);
   if declFound then begin Result := True; Exit; end;
   if PyFindMethByName(GetInstanceRTTI(obj), name) <> nil then
   begin
@@ -4148,6 +4195,9 @@ begin
       bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
     Result := PyDeclaredAttrGet(obj, name, declFound);
     if declFound then Exit;
+    { ...then a @property, CALLED, since it has no storage of its own }
+    Result := PyPropertyGet(obj, name, declFound);
+    if declFound then Exit;
     { ...and LAST, the class's own __getattr__, which is defined precisely to
       answer for names that are not there. CPython's order is instance dict,
       class, then this. bug-nilpy-getattr-dunder-not-supported }
@@ -4206,6 +4256,11 @@ begin
       (`mk(3).v`) resolves at all.
       bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
     Result := PyDeclaredAttrGet(obj, name, declFound);
+    if declFound then Exit;
+    { ...then a @property, on the variant-receiver route as well: one concept,
+      two getters, and the one not maintained with the other is where the bug
+      lives (devdocs/dev/normalise-dont-special-case.md). }
+    Result := PyPropertyGet(obj, name, declFound);
     if declFound then Exit;
     { ...and a METHOD read as a VALUE — `f = obj.scale`, `map(obj.scale, xs)`
       where the receiver is a variant. CALLING it already worked (the frontend
@@ -4268,6 +4323,13 @@ begin
   obj := pyvarobj(v);
   if obj = nil then Exit;
   dummy := PyDeclaredAttrGet(obj, name, declFound);
+  if declFound then begin Result := True; Exit; end;
+  { a @property — its getter is name-mangled and the RTTI carries no property
+    table, so neither of the two questions above can see it. THIS is the
+    predicate a computed name reaches (PyMakeDynAttrByExpr), which is why the
+    literal form saw the property and `hasattr(w, nm)` did not.
+    bug-nilpy-a-computed-attribute-name-cannot-see-a-property }
+  dummy := PyPropertyGet(obj, name, declFound);
   if declFound then begin Result := True; Exit; end;
   Result := PyFindMethByName(GetInstanceRTTI(obj), name) <> nil;
   if Result then Exit;
