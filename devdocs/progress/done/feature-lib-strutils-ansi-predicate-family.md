@@ -78,4 +78,4 @@ empty needle on both sides, `-1`-not-0, case sensitivity on each `Str`/`Text`
 pair, and the no-truncate case.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 251bf2273.
