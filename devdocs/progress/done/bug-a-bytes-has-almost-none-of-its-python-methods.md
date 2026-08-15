@@ -151,4 +151,4 @@ own change rather than riding along. `bytes` has no such gap — it is a real
 class, so the runtime dispatcher finds its methods already.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 9e5b9ebd2.
