@@ -15096,6 +15096,10 @@ var si, ki, n, nxt, pos, listSym, dictSym, keyNode, argNode: Integer;
     posHead, posLast, kwHead, kwLast: Integer;
     nKept: Integer;   { positional slots actually filled so far }
     mtPi, mtSelf, mtCall: Integer;   { pylist_mark_tuple — *args is a tuple }
+    rbSym, rbListCi, rbAsgn, rbK, rbReq, rbScan, rbTail: Integer;  { reach-back splice }
+    rbA1, rbA2, rbA3, rbA4, rbCall, rbHas, rbPair, rbTern, rbVal, rbStart: Integer;
+    rbNames: AnsiString;
+    rbLast: Boolean;
 begin
   si := ProcPyStarIdx[mpi];
   ki := ProcPyKwIdx[mpi];
@@ -15120,14 +15124,167 @@ begin
         packing, so it extends where a written argument appends. Order is the
         chain's, so `f(1, *xs, 9)` comes out in source order for free.
 
-        Only from the star position on. Before it, the split between the fixed
-        parameters and the tuple depends on the operand's LENGTH, which is a
-        run-time fact this compile-time packing cannot answer — say so rather
-        than pack a wrong shape. }
+        From the star position on this is the whole job. REACHING BACK over a
+        fixed parameter — `g(*[9, 8, 7])` on `def g(x, *rest)` — is the case
+        below: the split depends on the operand's LENGTH, which the packing
+        cannot answer at compile time, so it is distributed at run time
+        instead. bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter }
       if pos < si then
-        Error('Nil Python: *unpacking that would fill a fixed parameter of a '
-            + 'collecting callee is not supported yet (the split depends on '
-            + 'the operand''s length)');
+      begin
+        { Bounded to a splice that is the LAST positional. A written argument
+          after it would land at a position nobody can compute, which is the
+          same unanswerable question one level up. }
+        rbLast := True;
+        rbScan := nxt;
+        while rbScan >= 0 do
+        begin
+          if (ASTIVal[rbScan] = 0) or (ASTIVal[rbScan] = PY_ARG_SPLICE) then
+            rbLast := False;
+          rbScan := ASTRight[rbScan];
+        end;
+        if not rbLast then
+          Error('Nil Python: *unpacking before a fixed parameter must be the '
+              + 'last positional argument (a written argument after it lands '
+              + 'at a position that depends on the operand''s length)');
+
+        rbListCi := FindUClass('TPyList');
+        if rbListCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+        { ONCE into a temp: the operand is an expression, and `g(*f())` must
+          call f once however many slots it feeds. }
+        rbSym := AllocVar(PyHiddenName('starp'), tyClass);
+        Syms[rbSym].RecName := REC_UCLASS_BASE + rbListCi;
+        SymSyncTypeRef(rbSym);
+        rbAsgn := AllocNode(AN_ASSIGN);
+        ASTLeft[rbAsgn] := PyMakeIdent(rbSym);
+        ASTRight[rbAsgn] := PyStarOperandAsList(ASTLeft[n], rbListCi);
+        PyHoistStmt(rbAsgn);
+
+        { How many of the slots this operand must cover are REQUIRED. A
+          defaulted parameter cannot precede a non-defaulted one, so the
+          required run is the leading one. }
+        rbReq := 0;
+        rbNames := '';
+        rbK := pos;
+        while (rbK < si) and (rbK < MAX_PROC_PARAMS) and
+              not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + rbK] do
+        begin
+          if rbNames <> '' then rbNames := rbNames + '|';
+          rbNames := rbNames + Procs[mpi].Params[rbK].Name;
+          Inc(rbReq);
+          Inc(rbK);
+        end;
+        if rbReq > 0 then
+        begin
+          rbA1 := AllocNode(AN_ARG);
+          ASTLeft[rbA1] := PyMakeIdent(rbSym);
+          rbA2 := AllocNode(AN_ARG);
+          ASTLeft[rbA2] := AllocNode(AN_INT_LIT);
+          ASTIVal[ASTLeft[rbA2]] := rbReq;
+          ASTTk[ASTLeft[rbA2]] := Ord(tyInteger);
+          rbA3 := AllocNode(AN_ARG);
+          ASTLeft[rbA3] := AllocNode(AN_STR_LIT);
+          ASTSOffset[ASTLeft[rbA3]] := PyStoredName(Procs[mpi].Name);
+          ASTSLen[ASTLeft[rbA3]] := Length(Procs[mpi].Name);
+          ASTTk[ASTLeft[rbA3]] := Ord(tyString);
+          rbA4 := AllocNode(AN_ARG);
+          ASTLeft[rbA4] := AllocNode(AN_STR_LIT);
+          ASTSOffset[ASTLeft[rbA4]] := PyStoredName(rbNames);
+          ASTSLen[ASTLeft[rbA4]] := Length(rbNames);
+          ASTTk[ASTLeft[rbA4]] := Ord(tyString);
+          ASTRight[rbA4] := -1;
+          ASTRight[rbA3] := rbA4;
+          ASTRight[rbA1] := rbA2;
+          ASTRight[rbA2] := rbA3;
+          rbCall := AllocNode(AN_CALL);
+          ASTIVal[rbCall] := FindProc('pystar_check_min');
+          if ASTIVal[rbCall] < 0 then Error('Nil Python: pylib (pystar_check_min) not loaded');
+          ASTTk[rbCall] := Ord(tyInteger);
+          ASTLeft[rbCall] := rbA1;
+          PyHoistStmt(rbCall);
+        end;
+
+        { One positional per fixed slot the operand reaches: element k-pos of
+          it. A slot WITH a default takes the default when the operand ran out
+          — `g(*[9])` on `def g(x, y=2, *rest)` is x=9, y=2 — which is a
+          run-time test, the same pystar_has/ternary pair the forwarded-call
+          desugaring uses. The guard above already covers the required run, so
+          those slots read the element directly. }
+        rbStart := pos;   { the loop below advances pos; the offsets are from HERE }
+        for rbK := rbStart to si - 1 do
+        begin
+          rbA1 := AllocNode(AN_ARG);
+          ASTLeft[rbA1] := PyMakeIdent(rbSym);
+          rbA2 := AllocNode(AN_ARG);
+          ASTLeft[rbA2] := AllocNode(AN_INT_LIT);
+          ASTIVal[ASTLeft[rbA2]] := rbK - rbStart;
+          ASTTk[ASTLeft[rbA2]] := Ord(tyInteger);
+          ASTRight[rbA2] := -1;
+          ASTRight[rbA1] := rbA2;
+          rbVal := AllocNode(AN_CALL);
+          ASTIVal[rbVal] := FindProc('pystar_arg');
+          if ASTIVal[rbVal] < 0 then Error('Nil Python: pylib (pystar_arg) not loaded');
+          ASTTk[rbVal] := Ord(tyVariant);
+          ASTLeft[rbVal] := rbA1;
+          if (rbK < MAX_PROC_PARAMS) and
+             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + rbK] then
+          begin
+            rbA3 := AllocNode(AN_ARG);
+            ASTLeft[rbA3] := PyMakeIdent(rbSym);
+            rbHas := AllocNode(AN_ARG);
+            ASTLeft[rbHas] := AllocNode(AN_INT_LIT);
+            ASTIVal[ASTLeft[rbHas]] := rbK - rbStart;
+            ASTTk[ASTLeft[rbHas]] := Ord(tyInteger);
+            ASTRight[rbHas] := -1;
+            ASTRight[rbA3] := rbHas;
+            rbCall := AllocNode(AN_CALL);
+            ASTIVal[rbCall] := FindProc('pystar_has1');
+            if ASTIVal[rbCall] < 0 then Error('Nil Python: pylib (pystar_has1) not loaded');
+            ASTTk[rbCall] := Ord(tyBoolean);
+            ASTLeft[rbCall] := rbA3;
+            rbPair := AllocNode(AN_PAIR);
+            ASTLeft[rbPair] := rbVal;
+            ASTRight[rbPair] := DefaultArgValueNode(mpi, rbK);
+            rbTern := AllocNode(AN_TERNARY);
+            ASTLeft[rbTern] := rbCall;
+            ASTRight[rbTern] := rbPair;
+            ASTTk[rbTern] := Ord(tyVariant);
+            rbVal := rbTern;
+          end;
+          argNode := AllocNode(AN_ARG);
+          ASTLeft[argNode] := rbVal;
+          ASTIVal[argNode] := 0;
+          ASTRight[argNode] := -1;
+          if posHead < 0 then posHead := argNode else ASTRight[posLast] := argNode;
+          posLast := argNode;
+          Inc(nKept);
+          Inc(pos);
+        end;
+
+        { and everything past the fixed slots joins the packing }
+        if listSym < 0 then listSym := PyNewContainerTemp('TPyList', 'starargs');
+        rbA1 := AllocNode(AN_ARG);
+        ASTLeft[rbA1] := PyMakeIdent(rbSym);
+        rbA2 := AllocNode(AN_ARG);
+        ASTLeft[rbA2] := AllocNode(AN_INT_LIT);
+        ASTIVal[ASTLeft[rbA2]] := si - rbStart;    { elements the fixed slots took }
+        ASTTk[ASTLeft[rbA2]] := Ord(tyInteger);
+        rbA3 := AllocNode(AN_ARG);
+        ASTLeft[rbA3] := AllocNode(AN_INT_LIT);
+        ASTIVal[ASTLeft[rbA3]] := MaxInt;    { pylist_slice clamps hi to count }
+        ASTTk[ASTLeft[rbA3]] := Ord(tyInteger);
+        ASTRight[rbA3] := -1;
+        ASTRight[rbA1] := rbA2;
+        ASTRight[rbA2] := rbA3;
+        rbTail := AllocNode(AN_CALL);
+        ASTIVal[rbTail] := FindProc('pylist_slice');
+        if ASTIVal[rbTail] < 0 then Error('Nil Python: pylib (pylist_slice) not loaded');
+        ASTTk[rbTail] := Ord(tyClass);
+        ASTRight[rbTail] := REC_UCLASS_BASE + rbListCi;
+        ASTLeft[rbTail] := rbA1;
+        PyContainerCall1(listSym, 'TPyList', 'extend', rbTail, -1);
+        n := nxt;
+        Continue;
+      end;
       if listSym < 0 then listSym := PyNewContainerTemp('TPyList', 'starargs');
       PyContainerCall1(listSym, 'TPyList', 'extend',
                        PyStarOperandAsList(ASTLeft[n], FindUClass('TPyList')), -1);

@@ -14,3 +14,16 @@
 (0, 1, 2)
 1/(1, 2)
 tuple
+(9, (8, 7))
+(9, ())
+(1, (8, 7))
+(1, 2, (3, 4))
+(1, 2, ())
+('x', ('y', 'z'))
+(9, 2, ())
+(9, 5, ())
+(9, 5, (1, 2))
+TypeError: rb1() missing 1 required positional argument: 'x'
+TypeError: rb2() missing 1 required positional argument: 'b'
+TypeError: rb4() missing 2 required positional arguments: 'b' and 'c'
+(4, (5, 6)) 1

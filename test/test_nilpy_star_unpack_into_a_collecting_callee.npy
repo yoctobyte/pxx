@@ -49,3 +49,65 @@ print(c.keep(1, *xs))
 
 # and the tuple is a tuple, not a list
 print(type(f(*xs)).__name__)
+
+
+# REACHING BACK over a fixed parameter — the case the splice refused, because
+# how many elements belong to `x` rather than to the packed tuple depends on the
+# operand's LENGTH, which the compile-time packing cannot answer. Distributed at
+# run time instead: an element per fixed slot, the tail sliced into the tuple.
+# bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter
+def rb1(x, *rest):
+    return x, rest
+
+
+def rb2(a, b, *rest):
+    return a, b, rest
+
+
+def rb3(x, y=2, *rest):
+    return x, y, rest
+
+
+def rb4(a, b, c, *rest):
+    return a, b, c, rest
+
+
+print(rb1(*[9, 8, 7]))
+print(rb1(*[9]))            # nothing left for the tuple
+print(rb1(1, *[8, 7]))      # the written-argument form, unchanged
+print(rb2(*[1, 2, 3, 4]))
+print(rb2(*[1, 2]))
+print(rb1(*"xyz"))          # a str operand spreads its characters
+
+# a fixed parameter WITH a default takes the default when the operand ran out,
+# which is a run-time test per slot
+print(rb3(*[9]))
+print(rb3(*[9, 5]))
+print(rb3(*[9, 5, 1, 2]))
+
+# too short raises CPython's TypeError, naming the parameters, rather than
+# reading past the end
+try:
+    rb1(*[])
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    rb2(*[1])
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    rb4(*[1])
+except TypeError as e:
+    print("TypeError:", e)
+
+# the operand is an EXPRESSION and must be evaluated ONCE however many slots
+# it feeds
+calls = []
+
+
+def once():
+    calls.append(1)
+    return [4, 5, 6]
+
+
+print(rb1(*once()), len(calls))

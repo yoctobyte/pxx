@@ -1213,6 +1213,17 @@ function pystar_as_list(const v: Variant): TPyList;
   answered `[4, 9, 2]`. The count is a run-time fact, so the choice lives here.
   bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload }
 function pystar_iterable(l: TPyList): TPyList;
+{ `g(*xs)` where g declares fixed parameters BEFORE its *args: the operand has
+  to cover them, and how many it covers is a run-time fact. Raises CPython's
+  wording when it is too short, rather than reading past the end.
+  bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter }
+procedure pystar_check_min(l: TPyList; lo: Integer; const fname: AnsiString;
+                           const pnames: AnsiString);
+{ Was element i supplied? The positional half of pystar_has, without the
+  kwargs dict — the reach-back distribution has no dict to pass, and
+  synthesising a nil one as an argument node is exactly the kind of
+  hand-built literal that goes wrong quietly. }
+function pystar_has1(l: TPyList; i: Integer): Boolean;
 { True when the variant holds a cursor — the run-time half of the static
   `is TPyIter` test, for the consumption sites that take a Variant. }
 function pyiter_is(const v: Variant): Boolean;
@@ -12066,6 +12077,49 @@ begin
       element may be a str (`max(*["abc"])` is CPython's max("abc") = 'c'),
       a dict, or any other iterable. }
     pystar_iterable := pystar_as_list(l.at(0));
+end;
+
+procedure pystar_check_min(l: TPyList; lo: Integer; const fname: AnsiString;
+                           const pnames: AnsiString);
+var n, miss, i, j, start, shown: Integer;
+    names: AnsiString; msg: AnsiString; one: AnsiString;
+begin
+  n := 0;
+  if l <> nil then n := l.count;
+  if n >= lo then Exit;
+  miss := lo - n;
+  { CPython names them: "g() missing 1 required positional argument: 'x'" and
+    "h() missing 2 required positional arguments: 'a' and 'b'". pnames is the
+    required slots' names in order, '|'-separated, so the missing ones are the
+    tail from index n. }
+  names := '';
+  shown := 0;
+  start := 1;
+  j := 0;
+  for i := 1 to Length(pnames) + 1 do
+    if (i > Length(pnames)) or (pnames[i] = '|') then
+    begin
+      if j >= n then
+      begin
+        one := '''' + Copy(pnames, start, i - start) + '''';
+        if shown = 0 then names := one
+        else if j = lo - 1 then names := names + ' and ' + one
+        else names := names + ', ' + one;
+        Inc(shown);
+      end;
+      Inc(j);
+      start := i + 1;
+    end;
+  if miss = 1 then msg := fname + '() missing 1 required positional argument'
+  else msg := fname + '() missing ' + pystr_of(Int64(miss)) +
+              ' required positional arguments';
+  if names <> '' then msg := msg + ': ' + names;
+  raise TypeError.Create(msg);
+end;
+
+function pystar_has1(l: TPyList; i: Integer): Boolean;
+begin
+  pystar_has1 := (l <> nil) and (i >= 0) and (i < l.count);
 end;
 
 constructor TPyRange.Create;
