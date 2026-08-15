@@ -11958,8 +11958,13 @@ begin
     second `def w_include` still handed over the FIRST body — uforth's whole
     ANS FILE word set. }
   pi := -1;
-  if PyNestPrefix <> '' then pi := FindProc(PyQualifyNested(CurTok.SVal));
-  if pi < 0 then pi := FindProc(CurTok.SVal);
+  { EXACT case: a Python name is case-SENSITIVE, and Pascal's proc lookup is
+    not. `print(Counter)` (no import — CPython's NameError) printed a code
+    address, and worse, a module global named `counter` was claimed by pylib's
+    `Counter` at every value-position read.
+    bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc }
+  if PyNestPrefix <> '' then pi := FindProcExactCase(PyQualifyNested(CurTok.SVal));
+  if pi < 0 then pi := FindProcExactCase(CurTok.SVal);
   if pi < 0 then Exit;
   Result := PyMakeFuncValueFor(pi, CurTok.SVal);
   if Result >= 0 then Next;  { consume the name }

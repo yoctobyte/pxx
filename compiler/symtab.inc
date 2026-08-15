@@ -4614,6 +4614,21 @@ function MatchEligBase(idx: Integer; const name: AnsiString; demote: Boolean;
                   bIdx: Integer; userOnly, dropLateDef: Boolean): Boolean; forward;
 function FindProcBound(const name: AnsiString): Integer; forward;
 
+{ FindProc, but only an EXACT-CASE match counts. Pascal's lookup is
+  case-INSENSITIVE and NilPy's names are not, so a Python name resolved against
+  a builtin that differs only in case: `counter` found pylib's `Counter`, and
+  every bare read of a module global by that name became a function VALUE
+  (a code address printed as 4727019). The distinction it destroys is exactly
+  the one Python programmers use most — `Counter` the type beside `counter` the
+  tally.
+
+  Written on top of FindProc rather than beside it: FindProc's EXACT pass runs
+  first and its case-insensitive fallback only after, so a result whose stored
+  name differs in case can only have come from the fallback. One line, and it
+  cannot drift from the visibility/forward/unit rules the real lookup applies.
+  bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc }
+function FindProcExactCase(const name: AnsiString): Integer; forward;
+
 function FindProc(const name: AnsiString): Integer;
 var i, own, last: Integer; lo: AnsiString;
 begin
@@ -4858,6 +4873,12 @@ end;
   `overload` anywhere in the set means JOIN rather than replace, so the
   representative is kept and ordinary overload resolution decides.
   bug-p-uses-order-does-not-decide-which-unit-wins }
+function FindProcExactCase(const name: AnsiString): Integer;
+begin
+  Result := FindProc(name);
+  if (Result >= 0) and (Procs[Result].Name <> name) then Result := -1;
+end;
+
 function FindProcBound(const name: AnsiString): Integer;
 var i, best, bestR, r: Integer; lo: AnsiString; anyOverload: Boolean;
 begin

@@ -56,3 +56,46 @@ namespace before anything the shared table happens to hold.
 `.npy` diffed against CPython: `print(Counter)` raising NameError; a global
 named `counter` read from a def, from a nested def and from a comprehension;
 `counter` as a parameter name; and a user def named `counter` still callable.
+
+## 2026-08-15 — half landed, and the remaining route MEASURED
+
+`FindProcExactCase` added to `symtab.inc` — `FindProc` filtered to an exact-case
+result. Written on top of the real lookup rather than beside it: FindProc's
+exact pass runs FIRST and its case-insensitive fallback only after, so a result
+whose stored name differs in case can only have come from the fallback. One
+line, and it cannot drift from the visibility / require-forward / unit rules.
+
+Applied to the two NilPy VALUE-position arms — `PyMakeFuncValue` and
+`ParseFactor`'s callable-value arm. Measured effect:
+
+```python
+x = LEN          # was: a code address.  now: "undefined variable (LEN)"
+f = len          # unchanged, still the function value
+```
+
+**The remaining route is the CALL path, and it is a bigger change than this
+one.** A bare name that resolves as a zero-argument call still matches
+case-insensitively:
+
+```python
+print(cOUNTER)   # prints {} — it CALLED pylib's Counter()
+```
+
+That resolution is the shared Pascal name→proc path in `ParseFactor`, not a
+NilPy arm, so making it exact-case for `.npy` only means threading the dialect
+through the shared lookup (or registering pylib's NilPy-facing procs
+case-sensitively via the `ProcCaseSensitive[]` flag that already exists — which
+is probably the better shape, since it says the thing once at registration
+instead of at every lookup).
+
+Not attempted here: `ProcCaseSensitive` is read by the Pascal side too, and
+flipping it for pylib changes what every Pascal `uses pylib` program resolves.
+That is a Track A-shaped decision, not a NilPy-arm edit.
+
+Also worth recording, because it wasted a build: `function F(...): Integer;`
+written in the forward block WITHOUT `forward;` does not fail as a syntax
+error — every routine after it becomes NESTED inside it, and the failure
+surfaces minutes later as "nested routine token buffer overflow" naming a
+routine hundreds of lines away.
+
+Back to the backlog with the diagnosis, per root-cause-over-microfix.

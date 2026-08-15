@@ -10820,9 +10820,12 @@ begin
       if PyExprMode and (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
          ((FindSym(name) < 0) or PyNestedDefOutranksSym(name)) and
-         (FindProc(PyQualifyNested(name)) >= 0) then
+         (FindProcExactCase(PyQualifyNested(name)) >= 0) then
       begin
-        idx := FindProc(PyQualifyNested(name));
+        { EXACT case, as in PyMakeFuncValue's twin arm: a Python name is
+          case-sensitive and Pascal's proc lookup is not, so `Counter` used to
+          answer for `counter`. }
+        idx := FindProcExactCase(PyQualifyNested(name));
         { Same fix as PyMakeFuncValue's twin case, needed here too since a
           bare callable in an ordinary expression position (a `key=`/`cmp=`
           keyword argument, not an assignment RHS) reaches THIS handler
