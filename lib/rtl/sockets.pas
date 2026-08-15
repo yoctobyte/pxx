@@ -184,26 +184,113 @@ begin
   Result.s_addr := ntohl(Net.s_addr);
 end;
 
+{ ---- errno, the FPC contract ----
+
+  The PAL returns -errno; FPC's fp* surface returns -1 and leaves the cause in
+  errno. Passing the PAL value straight through looked harmless and was not:
+  -111 is not -1, so `if r = SOCKET_ERROR` — Synapse's SockCheck, and the idiom
+  every FPC caller writes — read a FAILED call as a success, and the previous
+  `fpGetErrno` answered a hardcoded EIO for every cause. Reduced repro and the
+  FPC diff in
+  [[bug-b-sockets-fp-wrappers-return-raw-negative-errno-and-fpgeterrno-is-a-constant]].
+
+  errno is PER-THREAD in FPC and must be here too: one global would just be a
+  quieter version of the same wrong answer once two threads fail at once. There
+  is no threadvar in this dialect, so this is the tid-keyed table
+  lib/rtl/scheduler.pas already uses for its reactors — linear scan on the fast
+  path, a CAS spinlock only when a thread first claims a slot. }
+{ gettid inlined rather than taken from palthread, for the reason
+  lib/rtl/scheduler.pas gives at its own copy: depending on the thread unit
+  drags in __pxxclone and would force every single-threaded program that opens
+  a socket onto the --threadsafe runtime. Targets without a number here fall
+  back to the shared slot, which is correct for a single-threaded program and
+  is all an ESP build can use anyway. }
+const
+  ERRNO_SLOTS = 64;
+
+var
+  errnoTid: array[0..ERRNO_SLOTS - 1] of Int64;
+  errnoVal: array[0..ERRNO_SLOTS - 1] of cint;
+  errnoLock: Integer;
+
+{ 0 on a target with no gettid number here, which then shares slot 0 — correct
+  for a single-threaded program, and all an ESP build can use anyway. }
+function SelfTid: Int64;
+begin
+  Result := 0;
+{$ifdef CPUX86_64}   Result := __pxxrawsyscall(186, 0, 0, 0, 0, 0, 0); {$endif}
+{$ifdef CPU_I386}    Result := __pxxrawsyscall(224, 0, 0, 0, 0, 0, 0); {$endif}
+{$ifdef CPU_AARCH64} Result := __pxxrawsyscall(178, 0, 0, 0, 0, 0, 0); {$endif}
+{$ifdef CPU_ARM32}   Result := __pxxrawsyscall(224, 0, 0, 0, 0, 0, 0); {$endif}
+{$ifdef CPU_RISCV32} Result := __pxxrawsyscall(178, 0, 0, 0, 0, 0, 0); {$endif}
+end;
+
+function ErrnoSlot: Integer;
+var me, ignore: Int64; i, free: Integer;
+begin
+  me := SelfTid;
+  if me <= 0 then begin Result := 0; Exit; end;
+  for i := 0 to ERRNO_SLOTS - 1 do
+    if errnoTid[i] = me then begin Result := i; Exit; end;
+  while __pxxatomic_cas(@errnoLock, 0, 1) <> 0 do ;      { acquire }
+  free := -1;
+  for i := 0 to ERRNO_SLOTS - 1 do
+    if errnoTid[i] = me then begin free := i; Break; end  { lost the race }
+    else if (free < 0) and (errnoTid[i] = 0) then free := i;
+  { More live threads than slots: slot 0 is shared rather than refused, because
+    a wrong errno is recoverable and a crash in a socket wrapper is not. }
+  if free < 0 then free := 0;
+  errnoTid[free] := me;
+  ignore := __pxxatomic_xchg(@errnoLock, 0);             { release }
+  Result := free;
+end;
+
+{ Route every wrapper's PAL result through this: negative becomes -1 with the
+  cause recorded, non-negative passes through untouched. errno is NOT cleared on
+  success — FPC's is only meaningful after a failure, and clearing it would be a
+  second divergence. }
+function SockRet(r: Int64): cint;
+begin
+  if r < 0 then
+  begin
+    errnoVal[ErrnoSlot] := cint(-r);
+    Result := SOCKET_ERROR;
+  end
+  else
+    Result := cint(r);
+end;
+
+function SockRetSize(r: Int64): ssize_t;
+begin
+  if r < 0 then
+  begin
+    errnoVal[ErrnoSlot] := cint(-r);
+    Result := SOCKET_ERROR;
+  end
+  else
+    Result := r;
+end;
+
 function fpSocket(domain, kind, protocol: cint): cint;
 begin
-  Result := cint(PalSocket(domain, kind, protocol));
+  Result := SockRet(PalSocket(domain, kind, protocol));
 end;
 
 function fpBind(s: cint; addr: PInetSockAddr; addrlen: TSocklen): cint;
 begin
   if addr = nil then begin Result := SOCKET_ERROR; Exit; end;
-  Result := cint(PalBindIpv4(s, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port)));
+  Result := SockRet(PalBindIpv4(s, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port)));
 end;
 
 function fpConnect(s: cint; addr: PInetSockAddr; addrlen: TSocklen): cint;
 begin
   if addr = nil then begin Result := SOCKET_ERROR; Exit; end;
-  Result := cint(PalConnectIpv4(s, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port)));
+  Result := SockRet(PalConnectIpv4(s, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port)));
 end;
 
 function fpListen(s: cint; backlog: cint): cint;
 begin
-  Result := cint(PalListen(s, backlog));
+  Result := SockRet(PalListen(s, backlog));
 end;
 
 procedure FillAddr(addr: PInetSockAddr; host: cuint32; port: cint);
@@ -217,7 +304,7 @@ end;
 function fpAccept(s: cint; addr: PInetSockAddr; addrlen: pTSocklen): cint;
 var host: LongWord; port: Integer;
 begin
-  Result := cint(PalAcceptIpv4(s, host, port));
+  Result := SockRet(PalAcceptIpv4(s, host, port));
   if Result >= 0 then
   begin
     FillAddr(addr, host, port);
@@ -227,24 +314,24 @@ end;
 
 function fpSend(s: cint; msg: Pointer; len: cint; flags: cint): ssize_t;
 begin
-  Result := PalSend(s, msg, len);
+  Result := SockRetSize(PalSend(s, msg, len));
 end;
 
 function fpRecv(s: cint; buf: Pointer; len: cint; flags: cint): ssize_t;
 begin
-  Result := PalRecv(s, buf, len);
+  Result := SockRetSize(PalRecv(s, buf, len));
 end;
 
 function fpSendTo(s: cint; msg: Pointer; len: cint; flags: cint; addr: PInetSockAddr; addrlen: TSocklen): ssize_t;
 begin
   if addr = nil then begin Result := SOCKET_ERROR; Exit; end;
-  Result := PalSendToIpv4(s, msg, len, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port));
+  Result := SockRetSize(PalSendToIpv4(s, msg, len, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port)));
 end;
 
 function fpRecvFrom(s: cint; buf: Pointer; len: cint; flags: cint; addr: PInetSockAddr; addrlen: pTSocklen): ssize_t;
 var host: LongWord; port: Integer;
 begin
-  Result := PalRecvFromIpv4(s, buf, len, host, port);
+  Result := SockRetSize(PalRecvFromIpv4(s, buf, len, host, port));
   if (Result >= 0) and (addr <> nil) then
   begin
     FillAddr(addr, host, port);
@@ -254,13 +341,13 @@ end;
 
 function fpShutdown(s: cint; how: cint): cint;
 begin
-  Result := cint(PalShutdown(s, how));
+  Result := SockRet(PalShutdown(s, how));
 end;
 
 function fpGetSockName(s: cint; name: PInetSockAddr; namelen: pTSocklen): cint;
 var host: LongWord; port: Integer;
 begin
-  Result := cint(PalGetSockNameIpv4(s, host, port));
+  Result := SockRet(PalGetSockNameIpv4(s, host, port));
   if Result >= 0 then
   begin
     FillAddr(name, host, port);
@@ -440,7 +527,7 @@ end;
 function fpGetPeerName(s: cint; name: PInetSockAddr; namelen: pTSocklen): cint;
 var host: LongWord; port: Integer;
 begin
-  Result := cint(PalGetPeerNameIpv4(s, host, port));
+  Result := SockRet(PalGetPeerNameIpv4(s, host, port));
   if Result >= 0 then
   begin
     FillAddr(name, host, port);
@@ -450,30 +537,29 @@ end;
 
 function fpSetSockOpt(s: cint; level: cint; optname: cint; optval: Pointer; optlen: TSocklen): cint;
 begin
-  Result := cint(PalSetSockOpt(s, level, optname, optval, optlen));
+  Result := SockRet(PalSetSockOpt(s, level, optname, optval, optlen));
 end;
 
 function fpGetSockOpt(s: cint; level: cint; optname: cint; optval: Pointer; optlen: pTSocklen): cint;
 begin
-  Result := cint(PalGetSockOpt(s, level, optname, optval, optlen));
+  Result := SockRet(PalGetSockOpt(s, level, optname, optval, optlen));
 end;
 
 function fpIoctl(s: cint; cmd: cint; data: Pointer): cint;
 begin
-  Result := cint(PalIoctl(s, cmd, data));
+  Result := SockRet(PalIoctl(s, cmd, data));
 end;
 
 function CloseSocket(s: cint): cint;
 begin
-  Result := cint(PalSocketClose(s));
+  Result := SockRet(PalSocketClose(s));
 end;
 
 function fpGetErrno: cint;
 begin
-  { PAL primitives return negative on error rather than setting a global errno;
-    we have no thread-global errno, so report a generic failure. Callers that
-    only test "<> 0" (Synapse) are satisfied. }
-  Result := 5; { EIO }
+  { the cause of THIS thread's last failed fp* call. Zero if it has not had one
+    — errno is not cleared by a success, exactly as in FPC. }
+  Result := errnoVal[ErrnoSlot];
 end;
 
 procedure fpFD_ZERO(var fdset: TFDSet);

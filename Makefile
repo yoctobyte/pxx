@@ -9498,7 +9498,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_strpchar.pas $(TESTTMP)/lib_strpchar
 	test "$$($(TESTTMP)/lib_strpchar)" = "$$(printf 'strlcopy-ret=ok\nstrlcopy-trunc=ok\nstrlcopy-short=ok\nstrlcomp-eq=ok\nstrlcomp-lt=ok\nstrlcomp-gt=ok\nsleep=ok\nmove-fillchar=ok\ninttohex-ff=ok\ninttohex-pad=ok\nstringofchar=ok\nstringofchar-0=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_sockets.pas $(TESTTMP)/lib_sockets
-	test "$$($(TESTTMP)/lib_sockets)" = "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok')"
+	test "$$($(TESTTMP)/lib_sockets)" = "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok\nfail-connect-ret=ok\nfail-connect-errno=ok\nfail-socket-ret=ok\nfail-socket-errno=ok\nerrno-survives-success=ok\nfail-send-ret=ok\nfail-send-errno=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_sha256.pas $(TESTTMP)/lib_sha256
 	test "$$($(TESTTMP)/lib_sha256 | grep -c '=ok')" = "12"
 	test "$$($(TESTTMP)/lib_sha256 | grep -c 'FAIL')" = "0"
