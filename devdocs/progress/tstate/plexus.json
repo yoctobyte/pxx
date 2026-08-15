@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T06:56:11Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4e300065e11674e68c82ad3fd115b89f4c10b766",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T07:15:11Z",
    "fixed": [],
    "new_red": [],
@@ -503,6 +495,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "251c361a104bf803daca8bf4b981e427f3b29b8b",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T20:00:04Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "eac295d0bf4d6bcd646f1167d82b1952e94f2a6d",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1819,6 +1819,8 @@
   "test-core#src:test/test_rust_tuple_struct.rs": "native",
   "test-core#src:test/test_scheduler.pas": "native",
   "test-core#src:test/test_scheduler_exc.pas": "native",
+  "test-core#src:test/test_scope_hiding_types.pas": "native",
+  "test-core#src:test/test_scope_hiding_types_rev.pas": "native",
   "test-core#src:test/test_scopedenums.pas": "native",
   "test-core#src:test/test_sealed_ok.pas": "native",
   "test-core#src:test/test_selector_after_property_b289.pas": "native",
@@ -4291,6 +4293,8 @@
   "test-core#src:test/test_rust_tuple_struct.rs": "pass",
   "test-core#src:test/test_scheduler.pas": "pass",
   "test-core#src:test/test_scheduler_exc.pas": "pass",
+  "test-core#src:test/test_scope_hiding_types.pas": "pass",
+  "test-core#src:test/test_scope_hiding_types_rev.pas": "pass",
   "test-core#src:test/test_scopedenums.pas": "pass",
   "test-core#src:test/test_sealed_ok.pas": "pass",
   "test-core#src:test/test_selector_after_property_b289.pas": "pass",
@@ -5450,11 +5454,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T19:43:42Z",
-  "sha": "251c361a104bf803daca8bf4b981e427f3b29b8b",
+  "date": "2026-08-15T20:00:04Z",
+  "sha": "eac295d0bf4d6bcd646f1167d82b1952e94f2a6d",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 215.6
+  "wall": 215.1
  },
  "last_bench": {
   "conf_rows": 550,
