@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:5 backlog:204 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1813 rejected:37`
+`unfinished:10 blocked:6 backlog:204 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1813 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -24,9 +24,10 @@ _none — no lane is locked._
 - `feature-pascal-corpus-generics` [P]
 - `feature-real-dynlib-loader` [B]
 
-## blocked (5) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-b-inttohex-of-a-negative-integer-prints-16-digits` [B] — blocked-by: compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload
+- `bug-nilpy-empty-str-and-none-are-the-same-value` [N] — blocked-by: decide-nilpy-none-str-sentinel-vs-textstr-kind
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `bug-pascal-uses-is-transitive` [A] — blocked-by: task-t-strict-uses-corpus-sweep
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
