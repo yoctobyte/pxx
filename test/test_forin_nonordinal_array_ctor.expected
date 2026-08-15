@@ -1,0 +1,11 @@
+float3: 1.50 2.50 3.50 
+float1: 1.50 
+floatr: 3.50 1.50 2.50 
+count: 3
+fvars : 0.50 9.25 0.50 
+strs  : abc de fg 
+char  : a b 
+str   : b a 
+ints  : 1 2 3 5 
+dynarr: 1.50 2.50 3.50 
+mixed : 1.00 2.50 

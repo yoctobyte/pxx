@@ -4989,6 +4989,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_forin_lit26 | head -1)" = "ints  1 2 3 5 "
 	test "$$($(TESTTMP)/test_forin_lit26 | head -5 | tail -1)" = "mixed 1 2 3 7 9 "
 	test "$$($(TESTTMP)/test_forin_lit26 | head -8 | tail -1)" = "lit   h.e.l.l.o."
+	@# ...and the OTHER half of the same rule: with a NON-ordinal loop variable
+	@# `[...]` is an ARRAY CONSTRUCTOR in SOURCE order, not a set. A float
+	@# constructor used to be built as a set of float bits -- one iteration,
+	@# value 0.0 -- and a string one did not compile. Every expected value is
+	@# FPC 3.2.2's on the same source except the one row the file marks as a
+	@# deliberate divergence (FPC drops the 2.5 in `[1, 2.5]`).
+	@# bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
+	./$(COMPILER) test/test_forin_nonordinal_array_ctor.pas $(TESTTMP)/test_forin_nonord26
+	$(TESTTMP)/test_forin_nonord26 | diff -u test/test_forin_nonordinal_array_ctor.expected -
 	./$(COMPILER) test/test_forin_enumerator.pas $(TESTTMP)/test_forin_enumerator26
 	test "$$($(TESTTMP)/test_forin_enumerator26)" = "$$(printf 'x=11\nx=22\nx=33\nsum=66')"
 	./$(COMPILER) test/test_forin_record_enumerator_b355.pas $(TESTTMP)/test_forin_record_enumerator_b35526

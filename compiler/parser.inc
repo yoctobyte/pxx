@@ -19925,6 +19925,7 @@ end;
 
 function ParseForStatementAST: Integer;
 var forcNode, forcRec, forcSym, forcAssign, forcLoop: Integer;   { for-in over a container EXPRESSION }
+    forcCtorTk: TTypeKind;   { non-ordinal loop var => `[...]` is an ARRAY constructor, not a set }
 var
   varIdx, initNode, limitNode, bodyNode, node: Integer;
   pair1, pair2, pair3, isDownNode: Integer;
@@ -19992,6 +19993,61 @@ begin
       bug-a-for-in-refuses-a-set-constructor-and-a-string-literal }
     if CurTok.Kind = tkLBrack then
     begin
+      { …but only when the LOOP VARIABLE is ORDINAL. FPC decides the bracket
+        list's kind from the variable it is iterating into, not from the
+        elements: with an ordinal variable `[...]` is a set (ordinal order),
+        with anything else it is an ARRAY CONSTRUCTOR (source order). Measured
+        against FPC 3.2.2, which is unambiguous about it — `for c: Char in
+        ['b','a']` prints `a b` and `for s: AnsiString in ['b','a']` prints
+        `b a`, the SAME literal read two ways.
+
+        pxx keyed on the ELEMENT type instead and had no non-ordinal arm at
+        all, so `for d in [1.5, 2.5, 3.5]` built a SET out of float bits: the
+        loop ran ONCE and bound 0.0, losing the count and every value, while
+        the integer, char and dynamic-array-of-Double forms beside it were
+        right. `for s in ['abc','de']` did not compile.
+        bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero }
+      forcCtorTk := tyUnknown;
+      if Syms[varIdx].TypeKind = tyAuto then
+      begin
+        { tyAuto is pxx's own extension, so there is no FPC answer to copy:
+          infer from the first element, and keep the set reading for everything
+          that is not plainly a float or a multi-character string — that is
+          exactly today's behaviour for those. }
+        if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkFloat) then
+          forcCtorTk := tyDouble
+        else if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkString) and
+                (Tokens[TokPos].SLen <> 1) then
+          forcCtorTk := tyAnsiString;
+      end
+      else if not TypeIsOrdinal(Syms[varIdx].TypeKind) then
+        forcCtorTk := Syms[varIdx].TypeKind;
+      if forcCtorTk <> tyUnknown then
+      begin
+        if Syms[varIdx].TypeKind = tyAuto then
+        begin
+          Syms[varIdx].TypeKind := forcCtorTk;
+          SymSyncTypeRef(varIdx);
+        end;
+        forcNode := ParseArrayCtorAST(forcCtorTk, 0, 0);
+        { a dyn-array temp holds the constructor, and the ordinary iterable-
+          variable loop walks it — same shape the string-LITERAL arm below uses,
+          so length and element load come from the one lowering. }
+        LastTypeDynElemRowLen := 0;   { consumed + reset by AllocDynArray }
+        LastTypeDynElemRowLo := 0;
+        forcSym := AllocDynArray('', forcCtorTk, 1);
+        forcAssign := GenMakeAssign(GenMakeIdent(forcSym, forcCtorTk), forcNode);
+        { ParseForInVarAST consumes the `do` and the body itself, exactly as the
+          string-LITERAL arm below relies on }
+        forcLoop := ParseForInVarAST(varIdx, forcSym);
+        Result := AllocNode(AN_SEQ);
+        ASTLeft[Result] := forcAssign;
+        forcNode := AllocNode(AN_SEQ);
+        ASTLeft[forcNode] := forcLoop;
+        ASTRight[forcNode] := -1;
+        ASTRight[Result] := forcNode;
+        Exit;
+      end;
       forcNode := ParseSetLiteralAST;
       forcRec := Ord(tyInteger);            { element kind of the loop variable }
       if (ASTLeft[forcNode] >= 0) and

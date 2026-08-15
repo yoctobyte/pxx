@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:209 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1895 rejected:37`
+`unfinished:11 blocked:4 backlog:209 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1896 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -59,10 +59,10 @@ _none — no lane is locked._
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
-- `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
+- `[p 50] [P]` feature-p-read-text-into-a-char-arm
 
 _163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

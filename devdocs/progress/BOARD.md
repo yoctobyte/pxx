@@ -63,7 +63,6 @@ _none_
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
-| bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero | P | 50 | bug | `for d in [1.5, 2.5, 3.5] do` iterates ONCE and binds 0.0 — the element count and every value are lost. The same loop over an INTEGER or STRING constructor is correct, and over a dynamic array of Double is correct, so it is specifically a float ARRAY CONSTRUCTOR as the for-in source. FPC iterates all three elements | — |
 | bug-pascal-ord-of-a-one-char-string-const-is-its-address | P | 45 | bug | `const C = 'z'; Ord(C)` answers a pointer-looking number (4287626) instead of 122. A one-character untyped const lands in the STRING const table, and Ord() on it takes the value's address rather than its code point. FPC gives 122. Pre-existing — reproduces on `pinned`. | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
@@ -84,6 +83,7 @@ _none_
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
 | decide-cross-language-qualifier-syntax | U | 50 | decide | There is no way to say \"C's cube\" once a Pascal Cube is in scope — qualification, the documented universal escape, has no cross-language form. Pick the syntax: file basename as a scope, a reserved language tag (C.cube), or rename in the source. Blocks the own-language-first rule, whose own acceptance test recreates the collision on purpose. | — |
+| decide-forin-mixed-int-float-ctor-vs-fpc | U | 20 | decide | `for d in [1, 2.5]` — FPC 3.2.2 prints `1.00 0.00`, dropping the 2.5; pxx prints `1.00 2.50`. Shipped as the correct answer rather than copied, because losing a written value is a defect and not a semantic choice. Confirm, or put FPC's answer behind --strict-fpc. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-nilpy-none-str-sentinel-vs-textstr-kind | U | 40 | decide | Re-ask of decide-nilpy-none-str-representation: the chosen fix (a NilPy string kind whose blocks may be zero length) rests on a block kind that nothing in the tree ever stamps, so it is a Track A representation project rather than a bugfix. A None SENTINEL closes the reported bug at a fraction of the cost — but closes less. | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1895)
+## done (1896)
 
-1895 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1896 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -482,7 +482,6 @@ _none_
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [C] bug-c-static-functions-in-different-crtl-modules-collide
-- [p 50] [P] bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
@@ -631,6 +630,7 @@ _none_
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope
+- [p 20] [U] decide-forin-mixed-int-float-ctor-vs-fpc
 - [p 20] [B] feature-b-hardware-sqrt-on-aarch64-and-arm32
 - [p 20] [B] feature-b-rtl-lnxp1-fpc-compat
 - [p 20] [A] feature-cli-widgetset-flag
