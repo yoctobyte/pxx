@@ -108,4 +108,4 @@ still absent. They belong to the FORMAT direction, which this ticket is not, and
 setting nothing honours would be a lie. Filed separately if a consumer wants it.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit cb42c7c51.
