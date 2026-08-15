@@ -4,7 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "pyeval refuses a host method with three user parameters — `pyeval: int-return arity 3 unsupported for put` — with all-positional args, so ordinary reflected calls of arity 3 cannot be made from inside exec()"
-status: backlog
+status: done
+owner: agent-AN
 ---
 
 # pyeval cannot call a host method with three user parameters
@@ -65,3 +66,45 @@ missed silently.
 `make compiler/pascal26` + the repro + `tools/gate.sh quick`, plus the uforth
 corpus (its `vm` methods are the densest real users of this trampoline). A pin,
 since `compiler/builtin/pyeval.pas` changes.
+
+## Resolution (2026-08-15)
+
+**The ticket's "first thing to measure" was the right question, and the answer
+is: the family choice is correct, the arity was not.**
+
+`put` returns nothing, but a NilPy `def` with no `return` is typed **Integer**,
+not void — so `RetKind` really is 1 and the int-return arm really is where it
+belongs. That typing is a known, separately tracked gap
+(`feature-nilpy-none-variant`; see the resolved
+`bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float`, which
+explicitly parks the scalar-shaped-None half there). Confirmed outside exec too:
+`print(c.put(...))` prints `0` where CPython prints `None`, with no exec
+involved — so this ticket is not the place for it, and a comment at the arm now
+records why an implicitly-returning method lands there.
+
+What was genuinely missing is the arity, plus two whole return families:
+
+- `TSFn*` and `TIFn*` stopped at 2 while `TVFn*`/`TVPr*` went to 5. Both now go
+  to 5, so a three-, four- or five-parameter host method marshals like every
+  other.
+- **Double/Single return had no arm at all**, and neither did **class/pointer
+  return** — both fell through to `unsupported host-call return kind`. Added,
+  with the object arm boxing as VT_OBJECT and taking its own reference exactly
+  as the no-argument fast path already does, so a reflected call can hand back
+  an object the next call reaches.
+- A `-> bool` return shares the int family's ABI but not Python's type, and
+  printed `1` where CPython prints `True`. Re-boxed by the declared kind after
+  the call, so one register-shaped family still serves all four kinds.
+
+The refusal message on the remaining `else` arms is now the same
+"host arity N too large" the Variant and void families already used — the old
+per-family wording implied the family was the problem when the arity is.
+
+**Gate:** `test/test_nilpy_pyeval_host_arity_and_returns.npy` (+`.expected`,
+wired into the Makefile) — arities 3, 4 and 5 against void, int, str, float and
+bool returns, all through `exec`. Byte-identical to CPython. The three existing
+`test_nilpy_pyeval_*` tests re-diffed unchanged. `tools/gate.sh quick` GREEN,
+self-host byte-identical.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

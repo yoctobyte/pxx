@@ -1,0 +1,37 @@
+# pyeval's host-call marshaller: every ARITY up to 5 and every RETURN family.
+# bug-pyeval-three-param-host-method-unsupported. Diffed against CPython.
+
+class C:
+    def put(self, a, b, c):
+        print("put", a, b, c)
+    def four(self, a, b, c, d):
+        print("four", a, b, c, d)
+    def five(self, a, b, c, d, e):
+        print("five", a, b, c, d, e)
+    def add3(self, a, b, c) -> int:
+        return a + b + c
+    def add5(self, a, b, c, d, e) -> int:
+        return a + b + c + d + e
+    def cat3(self, a, b, c) -> str:
+        return a + b + c
+    def cat5(self, a, b, c, d, e) -> str:
+        return a + b + c + d + e
+    def avg3(self, a, b, c) -> float:
+        return (a + b + c) / 3.0
+    def rising(self, a, b, c) -> bool:
+        return a < b < c
+
+c = C()
+env = {"c": c}
+ns = {}
+
+src = "def __body__():\n"
+src += "    c.put('A', 'B', 'T')\n"
+src += "    c.four(1, 2, 3, 4)\n"
+src += "    c.five(1, 2, 3, 4, 5)\n"
+src += "    print(c.add3(1, 2, 3), c.add5(1, 2, 3, 4, 5))\n"
+src += "    print(c.cat3('x', 'y', 'z'), c.cat5('a', 'b', 'c', 'd', 'e'))\n"
+src += "    print(c.avg3(1.0, 2.0, 6.0))\n"
+src += "    print(c.rising(1, 2, 3), c.rising(3, 2, 1))\n"
+exec(src, env, ns)
+ns["__body__"]()

@@ -1013,6 +1013,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-progress-claim-silently-drops-owner-without-template-line | T | 30 | bug | `progress.sh claim`/`resolve` silently no-op when a ticket lacks the expected body line | — |
 | bug-property-setter-resolution-uses-order | A | 52 | bug | Class-typed property WRITE mis-parses ("Expected: [") depending on uses order | — |
 | bug-pyeval-exec-requires-a-globals-key-named-vm | N | 45 | bug | pyeval: exec()'s env must contain a key literally named \"vm\" or every host call fails — CPython has no such rule | — |
+| bug-pyeval-three-param-host-method-unsupported | N | 35 | bug | pyeval refuses a host method with three user parameters — `pyeval: int-return arity 3 unsupported for put` — with all-positional args, so ordinary reflected calls of arity 3 cannot be made from inside exec() | — |
 | bug-qplus-narrow-32bit-backends | A | 35 | bug | {$Q+} narrow-width overflow still unchecked on the 32-bit backends | — |
 | bug-r-directive-toggle-treated-as-resource | A | 50 | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-read-preserves-line-remainder | A | 50 | bug | `read` consumes a whole line like `readln` | — |
