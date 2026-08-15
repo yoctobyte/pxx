@@ -151,4 +151,4 @@ the runtime of a compiled `.npy`, not a unit the compiler links
 (project_builtin_change_needs_repin_for_gate_fixedpoint, scope note).
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit f5d36ccef.
