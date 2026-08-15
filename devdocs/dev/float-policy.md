@@ -123,14 +123,28 @@ Worth stating, because the folklore is wrong in two specific ways:
 
   The one real hardware win is `sqrtsd` / `fsqrt`, which IS exact and IS used here.
 
-- **We are still 17x off glibc on `Sin`**, 117 ms vs 7 ms per 1M. The kernels are
-  the same shape, so the gap is call overhead and instruction selection, not the
-  polynomial: no inlining of float-returning leaves
-  ([[feature-opt-inline-float-and-record-returning-leaves]], measured 3.8x on the
-  dd kernels) and no **FMA** — a Horner loop is the textbook FMA case, halving
-  the op count and removing a rounding per term. x86-64 has had FMA3 since
-  Haswell (2013) and aarch64's `FMADD` is baseline. That is optimization
-  headroom, not an accuracy question.
+- **We are still ~17x off glibc on `Sin`** (131 ms vs 7 ms per 1M), and it is
+  **not the polynomial** — the identical algorithm compiled by `gcc -O2
+  -mno-fma`, same instruction set, runs in 9 ms. Decomposed:
+
+  | | | |
+  | --- | --- | --- |
+  | computing `cos` when only `sin` is wanted | 1.5x | ours to fix, `lib/rtl` |
+  | call overhead (hand-inlining everything) | 1.2x | [[feature-opt-inline-float-and-record-returning-leaves]] |
+  | **the x86-64 float value model** | **7.2x** | [[feature-opt-float-register-temporaries]] |
+  | glibc's extra fast paths over ours | 1.3x | — |
+
+  The 7.2x is the one that matters and it is a known, deliberately parked Track O
+  ticket: a Double is carried as raw bits in RAX, so every operation costs three
+  GPR<->XMM transfers plus a stack round-trip. One hand-inlined `Sin` emits 811
+  instructions for 80 float operations, including 316 `movq` — gcc emits 61
+  instructions and zero `movq` for the same source.
+
+  **FMA is a red herring here**: allowing it in the gcc build moved 15 ms to
+  12 ms, ~20%. Worth having eventually; not the gap.
+
+  None of this is an accuracy question, and none of it is `lib/rtl`'s to fix
+  beyond the first row.
 - **80-bit extended is not the trick either.** It buys 11 bits; double-double
   buys 53, and costs the same order of magnitude. It is also unavailable in the
   x86-64 ABI's SSE registers and absent on ARM.

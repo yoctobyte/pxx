@@ -184,7 +184,7 @@ _none_
 | feature-opt-float-format-fast-path | O | 30 | feature | Fixed-point float formatting is 4.7x slower since it started taking its digits from the double's exact decimal expansion (8.8us vs 1.85us per %.2f, measured over 200k). Correct now, and worth a fast path for the values that provably cannot sit near a midpoint. | — |
 | feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
 | feature-opt-heap-per-thread-cache | O | 55 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
-| feature-opt-inline-float-and-record-returning-leaves | O | 55 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
+| feature-opt-inline-float-and-record-returning-leaves | O | 35 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-p-assertions-directive-and-position | P | 40 | feature | Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
@@ -482,7 +482,6 @@ _none_
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [O] feature-opt-heap-per-thread-cache
-- [p 55] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [S] feature-esp-peripheral-callback-api
@@ -583,6 +582,7 @@ _none_
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 35] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 35] [O] feature-opt-complex-packed-double
+- [p 35] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 35] [P] feature-pascal-set-symmetric-difference-operator
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity

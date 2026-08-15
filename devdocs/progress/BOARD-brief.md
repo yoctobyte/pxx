@@ -58,7 +58,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
-- `[p 55] [O]` feature-opt-inline-float-and-record-returning-leaves
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 50] [U]` decide-cross-language-qualifier-syntax (unblocks 1)
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
+- `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
 
 _164 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

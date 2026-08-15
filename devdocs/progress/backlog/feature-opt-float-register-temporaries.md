@@ -84,3 +84,65 @@ Same box, same checksum (74607393270), quiet machine, hyperfine w2/r7:
   where trees meet stores, compares, calls). Fusion killed the WITHIN-tree
   cost; the xmm-resident value model remains the multi-session fix and stays
   the honest scope of this ticket. Do-not-night-tail note still applies.
+
+## Re-confirmed 2026-08-15 from a SECOND workload (Track B, transcendental kernels)
+
+Independent measurement, different code, same root — recorded because it puts a
+clean isolated number on the value model and separates it from two things that
+were being blamed instead.
+
+`lib/rtl/math.pas`'s new fast `Sin` vs **the identical algorithm compiled by
+gcc -O2 -mno-fma** (same instruction set, no FMA, so this is codegen alone), 1M
+calls:
+
+| variant | time | what it isolates |
+| --- | --- | --- |
+| pxx `Sin`, as shipped | 131 ms | |
+| pxx, only the needed kernel (skip the wasted cos) | 77 ms | **1.5x** — algorithmic, Track B's to fix |
+| pxx, hand-inlined into ONE function, zero calls | 65 ms | **1.2x** — call overhead |
+| **gcc, same source, same ISA** | **9 ms** | **7.2x — the value model** |
+| glibc `sin` | 7 ms | 1.3x — glibc's extra fast paths |
+
+**Call overhead is 1.2x here, not the story.** That matters because
+[[feature-opt-inline-float-and-record-returning-leaves]] was filed the same day
+off a 3.8x inlining measurement — but that was on the *double-double* kernels,
+which are ten-op functions called 26 times per evaluation. On ordinary
+plain-double code the inliner is worth ~20%, and this ticket is worth 7x.
+
+Disassembly of the hand-inlined pxx function (`--map`, then objdump on the raw
+image — pxx ELFs carry no section headers):
+
+```
+811 instructions total
+ 80   real float arithmetic
+316   movq xmm<->GP moves        <- gcc emits ZERO for the same source
+125   stack-slot references      <- gcc: 8
+ 61   instructions in gcc's whole function
+```
+
+10 instructions emitted per one of arithmetic. The signature pattern, verbatim:
+
+```asm
+mulsd  xmm0,xmm1
+movq   rax,xmm0                    ; result out to the integer file
+movq   xmm0,rax                    ; ...and straight back, a pure no-op
+movsd  QWORD PTR [rbp-0xb8],xmm0   ; spill
+movsd  xmm0,QWORD PTR [rbp-0xb8]   ; reload, next instruction
+```
+
+28 of those `movq r,xmm ; movq xmm,r` pairs are *provably* dead in this one
+function, and 12 store/reload pairs touch a slot that was live in a register.
+
+Two notes for whoever takes this:
+
+- `Abs()` is still a **call** in the emitted code (2 calls survive the full
+  hand-inline). `andpd` with a sign mask is one instruction; worth checking
+  whether it is a builtin at all.
+- This workload is a better acceptance metric than mandelbrot for the *scalar*
+  half: no array indexing, no loop-carried dependence, just a Horner chain —
+  so it measures the value model almost neat.
+
+**Still the user's call on priority** (parked at 20 on 2026-07-19, "general code
+speed over float"). Recording the number, not arguing the rank: the scope has
+widened since — every frontend's float path, `lib/rtl` math, and the ESP/sensor
+work all sit on this emission.

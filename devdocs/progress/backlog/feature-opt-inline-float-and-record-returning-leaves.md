@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 55
+prio: 35
 type: feature
 blocked-by: []
 summary: "The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers."
@@ -31,6 +31,21 @@ The dd kernels are the extreme case (a `DdMul` is ~10 float ops behind a call,
 and a Horner loop makes 26 of them), but the shape is everywhere: small leaf
 functions returning `Double` or a two-field record are exactly what numeric
 library code is made of.
+
+## Scope correction (measured later the same day) — read before ranking this
+
+The 3.8x above does **not** generalize. Measured on the plain-double fast `Sin`
+path, hand-inlining every call into one function bought only **1.2x** (77 ms ->
+65 ms per 1M). The dd kernels are an outlier precisely because the callee is so
+small that the call dominates it.
+
+The 7.2x on that same workload is the **value model**, not calls:
+[[feature-opt-float-register-temporaries]], which carries a Double as raw bits
+in RAX and so emits three GPR<->XMM transfers plus a stack round-trip per
+operation — 316 `movq` in one function where gcc emits zero.
+
+So: this ticket is real and cheap, but it is the ~20% and that one is the 7x.
+Rank accordingly, and do not let this one be mistaken for the fix.
 
 ## What the inliner does today
 
