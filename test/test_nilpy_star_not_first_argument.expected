@@ -1,0 +1,13 @@
+one-fixed 6
+two-fixed 6
+first 6
+str-operand a/b
+expr 6
+tuple 6
+call 6
+variant 6
+method 12
+in-method 6
+nested 5
+chain x/y/z
+TEST-OK

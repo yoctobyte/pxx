@@ -1,0 +1,57 @@
+# A `*xs` that is NOT the first argument of a call to a plain function.
+# `obj.m(1, *xs)` worked and `f(1, *xs)` reported "expected expression" pointing
+# at the operand -- one construct, two spellings, only one wired.
+# bug-nilpy-star-unpack-into-a-builtin-or-a-bound-method-is-refused
+#
+# The FIRST-position form is a different lowering (a run-time dispatch on
+# len(args), which is what keeps a callee's defaults working) and is owned by
+# test_nilpy_star_forward.npy.
+
+
+def add3(a, b, c):
+    return a + b + c
+
+
+def cat(a, b):
+    return str(a) + "/" + str(b)
+
+
+xs = [2, 3]
+print("one-fixed", add3(1, *xs))
+print("two-fixed", add3(1, 2, *[3]))
+print("first", add3(*[1, 2, 3]))
+print("str-operand", cat("a", *"b"))
+
+# the operand as an expression, not a name
+print("expr", add3(1, *[2, 3][0:2]))
+
+# a tuple operand, and a list built by a call
+def pair():
+    return [2, 3]
+
+print("tuple", add3(1, *(2, 3)))
+print("call", add3(1, *pair()))
+
+# a dynamic (variant) operand -- the unbox path
+d = {"k": [2, 3]}
+print("variant", add3(1, *d["k"]))
+
+# inside a method body, and with a method receiver, so both sites agree
+class K:
+    def g(self, a, b):
+        return a * 10 + b
+
+    def viaself(self, ys):
+        return add3(1, *ys)
+
+
+k = K()
+print("method", k.g(1, *[2]))
+print("in-method", k.viaself([2, 3]))
+
+# nested: the starred operand is itself a call taking a star
+print("nested", add3(1, *[add3(1, *[1, 1]), 1]))
+
+# a user def whose result is starred into another
+print("chain", cat("x", *[cat("y", *["z"])]))
+print("TEST-OK")

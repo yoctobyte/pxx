@@ -12465,6 +12465,58 @@ begin
   mai := Procs[mpi].ParamCount;
 end;
 
+{ `f(1, *xs)` — a PLAIN-proc call whose star is not the first argument. The
+  twin of PyStarUnpackMethodArgs above, and it exists for the same reason: a
+  star is not an expression, so the ordinary argument loop reports "expected
+  expression" pointing at the operand — naming neither the star nor the callee,
+  so it reads as a syntax error in the caller's own code.
+
+  A star in FIRST position is handled before this, by the run-time arity
+  dispatch (PyStarForwardCall), which is what keeps the callee's DEFAULTS
+  working. From any later position the expansion is the compile-time one every
+  method call already used: the remaining declared slots, one pystar_arg read
+  each, behind a single arity guard. It refuses a callee with defaults in the
+  starred range rather than filling None — the same trade that path already
+  makes.
+
+  A method could do `obj.m(1, *xs)` and a free function could not, which is the
+  one-concept-two-sites shape devdocs/dev/normalise-dont-special-case.md is
+  about (bug-nilpy-star-unpack-into-a-builtin-or-a-bound-method-is-refused). }
+procedure PyStarUnpackProcArgs(procIdx: Integer; var argsHead, lastArg, nArgs: Integer);
+var argNode, kwIdx, n: Integer;
+begin
+  while CurTok.Kind <> tkRParen do
+  begin
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) then
+    begin
+      PyStarExpandCallArgs(procIdx, nArgs, argsHead, lastArg);
+      if CurTok.Kind = tkComma then
+        Error('Nil Python: an argument after *unpacking is not supported yet');
+      Break;
+    end;
+    kwIdx := PyKwArgIndex(procIdx, 0);
+    ParseArgExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    ASTIVal[argNode] := kwIdx;
+    ASTRight[argNode] := -1;
+    if lastArg < 0 then argsHead := argNode else ASTRight[lastArg] := argNode;
+    if argsHead < 0 then argsHead := argNode;
+    lastArg := argNode;
+    Inc(nArgs);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  { recount from the chain: the expansion appends one node per remaining slot }
+  nArgs := 0;
+  n := argsHead;
+  while n >= 0 do
+  begin
+    Inc(nArgs);
+    n := ASTRight[n];
+  end;
+end;
+
 { The Python spelling of a pylib container method that pylib declares under a
   DIFFERENT name — in ONE table, because a class-typed receiver is resolved by
   two paths (parser.inc's member access and PyParseClassMethodCall below) and a

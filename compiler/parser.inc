@@ -1008,6 +1008,7 @@ procedure PyPackStarArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer;
 procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python varargs METHOD call (pyparser.inc) }
 function PyStarArgAhead: Boolean; forward; { Nil Python: a `*expr` unpack left in this argument list (pyparser.inc) }
 procedure PyStarUnpackMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer); forward; { Nil Python `obj.m(*xs)` call-site unpack (pyparser.inc) }
+procedure PyStarUnpackProcArgs(procIdx: Integer; var argsHead, lastArg, nArgs: Integer); forward; { Nil Python `f(1, *xs)` call-site unpack (pyparser.inc) }
 function PyIsSetCall: Boolean; forward;   { Nil Python `set(...)` builtin, user definition permitting (pyparser.inc) }
 function PyParseEmptySet: Integer; forward; { Nil Python set() / set(iterable) (pyparser.inc) }
 
@@ -15176,6 +15177,11 @@ begin
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
           Exit;
         end;
+        { `f(1, *xs)` — a star that is not the FIRST argument, which the
+          forwarding arm above is the only one that handles. Same helper the
+          method-call sites use, so the two spellings of one construct agree. }
+        if isNilPy and (ProcPyStarIdx[procIdx] < 0) and PyStarArgAhead then
+          PyStarUnpackProcArgs(procIdx, argsHead, lastArg, nArgs);
         while CurTok.Kind <> tkRParen do
         begin
           { `dict(a=1, b=2)` / `dict(**e)` — in Python the keyword NAMES are dict
