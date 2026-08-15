@@ -156,7 +156,77 @@ function Power(base, exponent: Single): Single;
 function Floor(x: Single): Integer;
 function Ceil(x: Single): Integer;
 
+{ ---- float-exception mask (FPC's Math-unit surface) ----
+
+  x86-64 ONLY, and deliberately ABSENT rather than stubbed elsewhere: the
+  __pxxGetFPUMask/__pxxSetFPUMask intrinsics are a compile-time Error on every
+  other target (i386 not ported; aarch64/arm32/riscv32 have no architecturally
+  guaranteed trap enable). A stub answering "everything is masked" would be a
+  lie a caller cannot detect, so a non-x86-64 build fails to compile the CALL,
+  which is the same refusal the compiler makes.
+
+  pxx's default is quiet IEEE — every exception masked, so nothing traps
+  (user decision, 2026-07-02). This API lets a program OPT IN; it does not
+  unmask anything at startup, and FPC's default differs (FPC leaves invalid /
+  zero-divide / overflow UNmasked so they surface as Pascal exceptions). Do not
+  "fix" that difference here.
+
+  SetExceptionMask returns the PREVIOUS mask — measured against FPC 3.2.2, and
+  the opposite of what the ticket predicted, so save-and-restore reads:
+
+      old := SetExceptionMask(GetExceptionMask - [exZeroDivide]);
+      ...
+      SetExceptionMask(old);
+
+  A SIGFPE handler must NOT re-mask and return: sigreturn restores the FP state
+  from the ucontext and the instruction traps again forever. Recover through
+  __pxxSigPCPtr, or halt.
+  ([[feature-b-fpc-exception-mask-api-in-math]]) }
+{$ifdef CPUX86_64}
+type
+  { the six in x87/MXCSR mask-bit order, which is also FPC's declaration order
+    and the order the intrinsics' 6-bit integer uses — one encoding, not three }
+  TFPUException = (exInvalidOp, exDenormalized, exZeroDivide,
+                   exOverflow, exUnderflow, exPrecision);
+  TFPUExceptionMask = set of TFPUException;
+
+function GetExceptionMask: TFPUExceptionMask;
+function SetExceptionMask(const m: TFPUExceptionMask): TFPUExceptionMask;
+{$endif}
+
 implementation
+
+{$ifdef CPUX86_64}
+{ set <-> the intrinsics' 6-bit integer, 1 = masked. Nothing else lives here:
+  the compiler already chose this encoding so the wrapper is a conversion. }
+function MaskToBits(const m: TFPUExceptionMask): Integer;
+var e: TFPUException;
+begin
+  Result := 0;
+  for e := Low(TFPUException) to High(TFPUException) do
+    if e in m then Result := Result or (1 shl Ord(e));
+end;
+
+function BitsToMask(bits: Integer): TFPUExceptionMask;
+var e: TFPUException;
+begin
+  Result := [];
+  for e := Low(TFPUException) to High(TFPUException) do
+    if (bits and (1 shl Ord(e))) <> 0 then Result := Result + [e];
+end;
+
+function GetExceptionMask: TFPUExceptionMask;
+begin
+  Result := BitsToMask(__pxxGetFPUMask);
+end;
+
+function SetExceptionMask(const m: TFPUExceptionMask): TFPUExceptionMask;
+begin
+  { __pxxSetFPUMask is an EXPRESSION that hands back the previous mask, so the
+    swap is one call and cannot race with itself — no read-then-write pair. }
+  Result := BitsToMask(__pxxSetFPUMask(MaskToBits(m)));
+end;
+{$endif}
 
 type
   PSqrtInt64  = ^Int64;    { double<->bits reinterpret for the Sqrt seed }

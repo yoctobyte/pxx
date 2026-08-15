@@ -9597,6 +9597,12 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_dateparse.pas $(TESTTMP)/lib_dateparse
 	test "$$($(TESTTMP)/lib_dateparse | grep -c '=ok')" = "36"
 	test "$$($(TESTTMP)/lib_dateparse | tail -1)" = "lib_dateparse: all ok"
+	# GetExceptionMask/SetExceptionMask. Deliberately NOT named lib_*.pas: it is
+	# x86-64 only by design, and lib_cross_sweep.sh builds the lib_* glob for
+	# four other targets where the intrinsics are a compile-time refusal.
+	$(PXX_STABLE) -Fulib/rtl test/fpu_exception_mask_x64.pas $(TESTTMP)/lib_fpumask
+	test "$$($(TESTTMP)/lib_fpumask | grep -c '=ok')" = "15"
+	test "$$($(TESTTMP)/lib_fpumask | tail -1)" = "fpu_exception_mask: all ok"
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas $(TESTTMP)/lib_format
 	test "$$($(TESTTMP)/lib_format | grep -c '=ok')" = "27"
 	test "$$($(TESTTMP)/lib_format | grep -c 'FAIL')" = "0"
