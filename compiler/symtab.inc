@@ -501,6 +501,28 @@ begin
     if AmbientUnitIdx[i] = unitIdx then begin UnitIsAmbient := True; Exit; end;
 end;
 
+function UnitIsCTranslationUnit(unitIdx: Integer): Boolean;
+{ True for a `.c` source pulled in as a unit. See CTUnitIdx in defs.inc: these
+  share ONE external-linkage namespace, the way a C program's object files do. }
+var i: Integer;
+begin
+  UnitIsCTranslationUnit := False;
+  if unitIdx < 0 then Exit;
+  for i := 0 to CTUnitCount - 1 do
+    if CTUnitIdx[i] = unitIdx then begin UnitIsCTranslationUnit := True; Exit; end;
+end;
+
+procedure MarkUnitCTranslationUnit(unitIdx: Integer);
+var i: Integer;
+begin
+  if unitIdx < 0 then Exit;
+  for i := 0 to CTUnitCount - 1 do
+    if CTUnitIdx[i] = unitIdx then Exit;
+  if CTUnitCount > 255 then Exit;
+  CTUnitIdx[CTUnitCount] := unitIdx;
+  Inc(CTUnitCount);
+end;
+
 procedure MarkUnitAmbient(unitIdx: Integer);
 var i: Integer;
 begin
@@ -565,6 +587,13 @@ var
 begin
   if declUnit = curUnit then begin VisibilityAllows := True; Exit; end;
   if UnitIsAmbient(declUnit) then begin VisibilityAllows := True; Exit; end;
+  { C's external linkage is FLAT across translation units — an `extern`
+    prototype in one .c resolving to a definition in another .c is what the
+    language says happens, and no `uses` clause could express it because C has
+    none. Pascal's non-transitive rule stops at that boundary.
+    bug-c-sibling-translation-units-cannot-see-each-other }
+  if UnitIsCTranslationUnit(curUnit) and UnitIsCTranslationUnit(declUnit) then
+  begin VisibilityAllows := True; Exit; end;
   if (VisCacheUnit = curUnit) and (VisCacheEdges = UsesEdgeCount) then
   begin
     VisibilityAllows := VisCacheVis[declUnit + 1];

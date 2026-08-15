@@ -32576,6 +32576,11 @@ begin
     savedCaseMode := CaseSensitiveMode;
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
+    { A .c SOURCE joins the program's flat C external-linkage namespace — see
+      CTUnitIdx (defs.inc). A .h does not: a header pulled through `uses` names
+      a foreign library's exports, which stay real externals.
+      bug-c-sibling-translation-units-cannot-see-each-other }
+    if not isCHeader then MarkUnitCTranslationUnit(strIdx);
     CaseSensitiveMode := True;
     CHeaderMode := isCHeader;
     ParseCUnit;

@@ -2151,6 +2151,17 @@ var
     real `uses`/`import` clauses too. }
   AmbientUnitIdx   : array[0..255] of Integer;   { was 32: ambience became transitive over the compiler-injected runtime graph, which is deeper than the handful of roots }
   AmbientUnitCount : Integer;
+  { Every C TRANSLATION UNIT the program pulled in. C has no `uses`: its
+    external-linkage names live in ONE flat namespace shared by every TU, and
+    an `extern` prototype in one .c binding to a definition in another .c is
+    the language rule, not a leak. So Pascal's non-transitive-uses rule must
+    not apply BETWEEN C TUs — a Pascal unit saying
+    `uses 'pyruntime.c', 'fmt_ext_host.c'` gives the second no edge to the
+    first, and the reference to pyruntime.c's __pxx_PyErr_Message stayed a
+    real external and died at LOAD.
+    bug-c-sibling-translation-units-cannot-see-each-other }
+  CTUnitIdx        : array[0..255] of Integer;
+  CTUnitCount      : Integer;
   DeclVisibilityProbe : Boolean;   { while True, DeclVisible answers True for everything. For DIAGNOSTICS ONLY -- asking "does a confusable name exist ANYWHERE" is a different question from "may this scope use it", and a compiler that refuses a call should still be able to say WHY. Never set around anything that RESOLVES. }
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;

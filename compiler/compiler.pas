@@ -182,6 +182,7 @@ begin
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
   AmbientUnitCount := 0;
+  CTUnitCount := 0;
   DeclVisibilityProbe := False;
   UsesInjected := False;
   VisCacheUnit := -2;
