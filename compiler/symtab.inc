@@ -551,8 +551,14 @@ begin
   Inc(CTUnitCount);
 end;
 
-function DeclVisibleBareRoutine(declUnit: Integer): Boolean; forward;
+function DeclVisibleBareRoutine(declUnit: Integer;
+                               const name: AnsiString): Boolean; forward;
 { DeclVisible plus the qualified-only rule — body beside DeclVisible's. }
+function PythonSideDeclaresRoutine(const name: AnsiString;
+                                   exceptUnit: Integer): Boolean; forward;
+{ …and its helper, whose BODY sits below ProcNameMatches because it calls it —
+  the FPC seed build has none of pxx's declare-anywhere laxness and is the canary
+  that catches this (bug-a-fpc-seed-drift-emitasmx64-forward). }
 
 function UnitIsQualifiedOnly(unitIdx: Integer): Boolean;
 { True for a Pascal unit a NilPy `import` pulled in — see QualOnlyUnitIdx. }
@@ -699,21 +705,31 @@ begin
   DeclVisible := VisibilityAllows(CurrentUnitIdx, declUnit);
 end;
 
-function DeclVisibleBareRoutine(declUnit: Integer): Boolean;
-{ DeclVisible for a BARE ROUTINE NAME — the one lookup Python's import rule
-  changes. `import math` binds the name `math`; it does not put the module's
-  contents into the importing module's namespace, so lib/rtl/math's
-  Abs/Min/Max/Round/Sqrt must not join the candidate set for the Python builtin
-  of the same name. Which one won was otherwise decided by overload ranking over
-  a file the user never opened: `max(1.5, 2)` answered 2.0 where CPython answers
-  2, and `abs([-0.0][0])` answered a pointer.
+function DeclVisibleBareRoutine(declUnit: Integer;
+                                const name: AnsiString): Boolean;
+{ DeclVisible for a BARE ROUTINE NAME, plus the one thing Python's import rule
+  changes: a Pascal unit a NilPy `import` pulled in must not AMBUSH a Python
+  builtin of the same name. `import math` links lib/rtl/math, whose Abs/Min/Max/
+  Round then joined the candidate set — and which one won was decided by
+  overload ranking over a file the user never opened. `max(1.5, 2)` answered 2.0
+  where CPython answers the int 2, and the min/max TIE came back reversed.
 
-  ROUTINES ONLY, and that is the whole design. A CLASS from such a unit is
-  reached through the qualifier (`class D(mixinproto.Proto)`), but once it is a
-  base its members are resolved by the COMPILER, not by a name the user wrote —
-  hiding those broke inherited-method lookup outright, which is how the shape of
-  this predicate was decided. Types, constants and symbols are the same case. So
-  it sits at FindProc's chain loops rather than inside DeclVisible.
+  NARROW ON PURPOSE, and this is the interesting part. The rule is NOT "an
+  imported unit's names are invisible", which is what strict Python would say:
+  `import tk` then a bare `TkInit()` is code CPython would reject with a
+  NameError, and NilPy accepting what CPython REJECTS is a documented FEATURE of
+  this dialect, not a defect (devdocs/dev/nilpy-semantics-divergences.md — the
+  compatibility promise runs one way, CPython-works implies NilPy-works). The
+  first cut hid every routine and broke three tk examples that use exactly that
+  laxness; only the AMBUSH is a bug, because there the user's own working
+  meaning silently changes.
+
+  ROUTINES ONLY, for the same reason from the other side. A CLASS from such a
+  unit is reached through the qualifier (`class D(mixinproto.Proto)`), but once
+  it is a base its members are resolved by the COMPILER, not by a name the user
+  wrote — hiding those broke inherited-method lookup outright. Types, constants
+  and symbols are the same case. So this sits at the routine lookups rather than
+  inside DeclVisible.
 
   QualNameLookup turns it off for the frontend's own by-name lookups, which is
   how the `math.pow` shim still reaches Power.
@@ -723,7 +739,9 @@ begin
   if not DeclVisibleBareRoutine then Exit;
   if QualNameLookup or DeclVisibilityProbe then Exit;
   if not NilPyUserCode then Exit;
-  if UnitIsQualifiedOnly(declUnit) then DeclVisibleBareRoutine := False;
+  if not UnitIsQualifiedOnly(declUnit) then Exit;
+  if PythonSideDeclaresRoutine(name, declUnit) then
+    DeclVisibleBareRoutine := False;
 end;
 
 procedure WarnUsesLeakHit(const kind, name: AnsiString; curUnit, declUnit: Integer);
@@ -4897,7 +4915,7 @@ begin
       ProcHdrTok = 0 (builtins/units/interface/methods/nested) always passes. }
     if (Procs[i].Name = lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
-       DeclVisibleBareRoutine(ProcUnitIdx[i]) then
+       DeclVisibleBareRoutine(ProcUnitIdx[i], name) then
       begin
         { LAST declaration wins, not first. The chain is FIFO = registration
           order, and used units are registered before the compiling scope's own
@@ -4943,7 +4961,7 @@ begin
     if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
        CaseEqual(Procs[i].Name, lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
-       DeclVisibleBareRoutine(ProcUnitIdx[i]) then
+       DeclVisibleBareRoutine(ProcUnitIdx[i], name) then
     begin
       if (ProcUnitIdx[i] = CurrentUnitIdx) and (own < 0) then own := i;
       if last < 0 then last := i;
@@ -5479,6 +5497,32 @@ begin
              CaseEqual(Procs[idx].Name, name));
 end;
 
+function PythonSideDeclaresRoutine(const name: AnsiString;
+                                  exceptUnit: Integer): Boolean;
+{ Is this name already a NilPy BUILTIN — a routine pylib/pyeval declares, or one
+  the compiler minted (unit -1)? The question a qualified-only unit's row has to
+  answer before it may be dropped: dropping it is only ever about not AMBUSHING
+  the Python side, never about hiding a unit wholesale. }
+var i, u: Integer;
+begin
+  PythonSideDeclaresRoutine := False;
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
+    if ProcNameMatches(i, name) then
+    begin
+      u := ProcUnitIdx[i];
+      if u <> exceptUnit then
+      begin
+        if u < 0 then begin PythonSideDeclaresRoutine := True; Exit; end;
+        if (Strs[u].Text = 'pylib') or (Strs[u].Text = 'pyeval') then
+        begin PythonSideDeclaresRoutine := True; Exit; end;
+      end;
+    end;
+    i := ProcHashNext[i];
+  end;
+end;
+
 function ProcArityMatches(i, nArgs: Integer): Boolean;
 { Exact arity, OR a call that omits trailing args whose params all carry a default
   value (`f(a; b: T = d)` callable as `f(x)`). The type-match phases only check
@@ -5721,7 +5765,7 @@ begin
     `max(1.5, 2)` never goes through it, which is why the first cut of the fix
     hid a bare `Power` and still answered 2.0.
     bug-nilpy-import-leaks-the-units-names-into-the-python-namespace }
-  if Result and not DeclVisibleBareRoutine(ProcUnitIdx[idx]) then
+  if Result and not DeclVisibleBareRoutine(ProcUnitIdx[idx], name) then
   begin
     { The warn instrument's blind spot, closed: FindProc is NOT the lookup a
       direct call site resolves through, so --warn-uses-leak never saw the
@@ -6037,7 +6081,7 @@ begin
         calls FloatToStr, builtin declares it, and sysutils' copy — which pylib
         cannot see — was silently doing the demoting. }
       if ProcNameMatches(i, name) and (ProcUnitIdx[i] <> bIdx) and
-         DeclVisibleBareRoutine(ProcUnitIdx[i]) then
+         DeclVisibleBareRoutine(ProcUnitIdx[i], name) then
       begin demote := True; Break; end;
       i := ProcHashNext[i];
     end;

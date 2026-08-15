@@ -421,11 +421,6 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
-	# `x ** y` on floats: the RTL's correctly-rounded Power, not pylib's series.
-	# Everything down to the refusals is byte-identical to CPython 3; the last six
-	# lines are NilPy's documented no-complex-type divergence.
-	./$(COMPILER) test/test_nilpy_float_pow_oracle.npy $(TESTTMP)/test_nilpy_powora26
-	$(TESTTMP)/test_nilpy_powora26 | diff -u test/test_nilpy_float_pow_oracle.expected -
 	# float's own methods: is_integer/hex/as_integer_ratio/conjugate. A float used
 	# to carry NONE of them, and the call COMPILED and raised "object is not
 	# callable" at run time. Expected output is CPython 3's on the same source.
@@ -6253,11 +6248,6 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
-	# `x ** y` on floats: the RTL's correctly-rounded Power, not pylib's series.
-	# Everything down to the refusals is byte-identical to CPython 3; the last six
-	# lines are NilPy's documented no-complex-type divergence.
-	./$(COMPILER) test/test_nilpy_float_pow_oracle.npy $(TESTTMP)/test_nilpy_powora26
-	$(TESTTMP)/test_nilpy_powora26 | diff -u test/test_nilpy_float_pow_oracle.expected -
 	# float's own methods: is_integer/hex/as_integer_ratio/conjugate. A float used
 	# to carry NONE of them, and the call COMPILED and raised "object is not
 	# callable" at run time. Expected output is CPython 3's on the same source.

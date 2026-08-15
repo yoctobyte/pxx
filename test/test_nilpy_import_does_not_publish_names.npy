@@ -35,3 +35,18 @@ print(math.log(math.e), math.log10(100.0), math.pi)
 # an aliased import resolves the same way
 import math as m
 print(m.floor(2.7))
+
+# ...and the rule is NARROW, deliberately. Only the AMBUSH is a bug: a bare name
+# from an imported Pascal unit that collides with NOTHING on the Python side
+# still resolves. `import tk` then a bare `TkInit()` is code CPython would
+# reject with a NameError, and NilPy accepting what CPython rejects is a
+# documented FEATURE of this dialect, not a defect — the compatibility promise
+# runs one way. Three examples/tk programs are written in exactly that style;
+# the first cut of this fix hid every routine and broke all three.
+#
+# sysutils is the stand-in here because it needs no display: `Trim` is a routine
+# it declares, nothing on the Python side declares it, so a bare call must work.
+import sysutils as su
+
+print(Trim("  padded  "))
+print(su.Trim("  padded  "))
