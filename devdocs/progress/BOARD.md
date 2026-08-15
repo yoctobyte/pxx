@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (209)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -136,7 +136,6 @@ _none_
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-mimic-string-template | B | 15 | feature | string.Template — the $-placeholder class (substitute, safe_substitute) — is the one member of Python's string module still missing, and it is what logging/__init__.py uses. Deliberately NOT urgent: `import logging` does not resolve at all today, so nothing can reach Template until a logging shim exists. Split out of feature-lib-mimic-string, which shipped every constant and both capwords forms. | — |
 | feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | — |
-| feature-lib-strutils-ansi-predicate-family | B | 25 | feature | lib/rtl/strutils is missing the Ansi* predicate family FPC and Delphi ship — AnsiContainsStr/Text, AnsiStartsStr, AnsiEndsStr, AnsiIndexStr, AnsiReplaceStr — plus AddChar/AddCharR. PadLeft/PadRight are already there, so this is a gap in one corner rather than a missing unit. Found when a differential sweep against FPC would not compile until they were deleted from the probe. | — |
 | feature-lib-sysutils-strtodate-and-strtodatetime | B | 30 | feature | lib/rtl/sysutils has StrToTime but no StrToDate, StrToDateTime, or any of the TryStrToDate/Time/DateTime variants — the parse direction of the date surface is half absent while the format direction (FormatDateTime, EncodeDate, DecodeDate) is complete. Found when a differential probe would not compile against pxx. | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
@@ -410,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1843)
+## done (1844)
 
-1843 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1844 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -615,7 +614,6 @@ _none_
 - [p 25] [P] compat-pascal-unit-deprecated-hint-directive
 - [p 25] [A] feature-a-extended-is-an-alias-for-double
 - [p 25] [A] feature-a-shrink-managed-header-on-32-bit
-- [p 25] [B] feature-lib-strutils-ansi-predicate-family
 - [p 25] [N] feature-nilpy-for-loop-getitem-protocol-fallback
 - [p 25] [N] feature-nilpy-math-module-twelve-absent-names-measured
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields

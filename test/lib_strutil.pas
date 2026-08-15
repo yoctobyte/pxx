@@ -1,7 +1,7 @@
 program lib_strutil;
 { Smoke for the SysUtils string helpers added 2026-06-24: CompareStr/CompareText/
   SameText, TrimLeft/TrimRight, TryStrToInt, StringReplace, QuotedStr. }
-uses sysutils;
+uses sysutils, strutils;
 
 procedure SayBool(const tag: string; b: Boolean);
 begin
@@ -60,4 +60,33 @@ begin
   SayBool('pos-both-empty', Pos('', '') = 0);
   SayBool('pos-found',      Pos('b', 'abc') = 2);
   SayBool('pos-absent',     Pos('z', 'abc') = 0);
+
+  { StrUtils Ansi* family. The rows that matter are the ones nobody guesses
+    right: Starts/Ends take (NEEDLE, haystack) while Contains takes
+    (haystack, needle); an EMPTY needle is FALSE for Contains but TRUE for
+    Starts/Ends; AnsiIndexStr answers -1 when absent; AddChar pads LEFT,
+    AddCharR pads RIGHT, and neither truncates. All measured against
+    FPC 3.2.2. }
+  SayBool('ansi-contains',   AnsiContainsStr('hello', 'ell'));
+  SayBool('ansi-contains-cs', not AnsiContainsStr('hello', 'ELL'));
+  SayBool('ansi-contains-e', not AnsiContainsStr('hello', ''));
+  SayBool('ansi-containstext', AnsiContainsText('hello', 'ELL'));
+  SayBool('ansi-starts',     AnsiStartsStr('he', 'hello') and not AnsiStartsStr('HE', 'hello'));
+  SayBool('ansi-starts-e',   AnsiStartsStr('', 'hello'));
+  SayBool('ansi-starts-long', not AnsiStartsStr('hello!', 'hello'));
+  SayBool('ansi-startstext', AnsiStartsText('HE', 'hello'));
+  SayBool('ansi-ends',       AnsiEndsStr('lo', 'hello') and not AnsiEndsStr('LO', 'hello'));
+  SayBool('ansi-ends-e',     AnsiEndsStr('', 'hello'));
+  SayBool('ansi-endstext',   AnsiEndsText('LO', 'hello'));
+  SayBool('ansi-index',      AnsiIndexStr('b', ['a', 'b', 'c']) = 1);
+  SayBool('ansi-index-miss', AnsiIndexStr('z', ['a', 'b', 'c']) = -1);
+  SayBool('ansi-index-cs',   AnsiIndexStr('B', ['a', 'b', 'c']) = -1);
+  SayBool('ansi-indextext',  AnsiIndexText('B', ['a', 'b', 'c']) = 1);
+  SayBool('ansi-replace',    AnsiReplaceStr('aaa', 'a', 'b') = 'bbb');
+  SayBool('ansi-replace-cs', AnsiReplaceStr('aaa', 'A', 'b') = 'aaa');
+  SayBool('ansi-replacetext', AnsiReplaceText('xAx', 'a', 'B') = 'xBx');
+  SayBool('addchar',         AddChar('.', 'x', 5) = '....x');
+  SayBool('addchar-nogrow',  AddChar('.', 'xxxxxxx', 5) = 'xxxxxxx');
+  SayBool('addcharr',        AddCharR('.', 'x', 5) = 'x....');
+  SayBool('addcharr-nogrow', AddCharR('.', 'xxxxxxx', 5) = 'xxxxxxx');
 end.

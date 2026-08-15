@@ -9585,7 +9585,7 @@ lib-test: pxx-stable-check
 	test "$$($(TESTTMP)/lib_strtoint | grep -c '=ok')" = "36"
 	test "$$($(TESTTMP)/lib_strtoint | tail -1)" = "STRTOINT OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas $(TESTTMP)/lib_strutil
-	test "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" = "37"
+	test "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" = "59"
 	test "$$($(TESTTMP)/lib_strutil | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas $(TESTTMP)/lib_format
 	test "$$($(TESTTMP)/lib_format | grep -c '=ok')" = "27"

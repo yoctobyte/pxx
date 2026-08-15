@@ -1417,6 +1417,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
 | feature-lib-reportlab-shim-pdftextobject | B | 45 | feature | reportlab shim: `PDFTextObject.setTextOrigin` (and whatever follows it) | — |
+| feature-lib-strutils-ansi-predicate-family | B | 25 | feature | lib/rtl/strutils is missing the Ansi* predicate family FPC and Delphi ship — AnsiContainsStr/Text, AnsiStartsStr, AnsiEndsStr, AnsiIndexStr, AnsiReplaceStr — plus AddChar/AddCharR. PadLeft/PadRight are already there, so this is a gap in one corner rather than a missing unit. Found when a differential sweep against FPC would not compile until they were deleted from the probe. | — |
 | feature-lib-tkinter-callable-options-with-args | B | 40 | feature | tkinter façade: a callable option that receives Tk's OWN arguments | — |
 | feature-lib-tkinter-facade-widening-canvas-items | B | 40 | feature | tkinter façade: item specs, StringVar traces, and what settings.py still needs | — |
 | feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
