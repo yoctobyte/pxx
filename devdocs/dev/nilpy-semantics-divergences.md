@@ -415,6 +415,26 @@ and two under flattening, after which the two copies' state diverges silently.
 of the next class in the MRO. Both are refused with a message naming the shared
 ancestor / the calling base, rather than answered wrongly.
 
+## A hand-written `__lt__` under `@dataclass(order=True)` is allowed (2026-08-15)
+
+CPython refuses the combination outright:
+
+```
+TypeError: Cannot overwrite attribute __lt__ in class Rev.
+Consider using functools.total_ordering
+```
+
+NilPy accepts it, and the hand-written method wins — the same rule
+`__eq__` and `__repr__` already follow for the generated pair. Divergence in
+the permitted direction: no program CPython *runs* can observe it, because
+CPython never gets past the decorator. Recorded rather than "fixed", since
+refusing it would buy nothing a working program can see.
+
+Everything else about `order=True` is parity: the four comparisons are
+generated over the field tuple in declaration order, the first differing field
+decides, and `sorted`/`min`/`max` use them.
+`test/test_nilpy_dataclass_order.npy` pins it.
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython

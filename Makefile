@@ -768,8 +768,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_dcexpr26 | diff -u test/test_nilpy_dataclass_expr_default.expected -
 	./$(COMPILER) test/test_nilpy_dataclass_decorator_args.npy $(TESTTMP)/test_nilpy_dcargs26
 	$(TESTTMP)/test_nilpy_dcargs26 | diff -u test/test_nilpy_dataclass_decorator_args.expected -
-	! ./$(COMPILER) test/test_nilpy_dataclass_order_fail.npy $(TESTTMP)/test_nilpy_dcorder26 > $(TESTTMP)/test_nilpy_dcorder.log 2>&1
-	grep -q "order=True is not supported" $(TESTTMP)/test_nilpy_dcorder.log
+	./$(COMPILER) test/test_nilpy_dataclass_order.npy $(TESTTMP)/test_nilpy_dcorder26
+	$(TESTTMP)/test_nilpy_dcorder26 | diff -u test/test_nilpy_dataclass_order.expected -
 	! ./$(COMPILER) test/test_nilpy_dataclass_frozen_fail.npy $(TESTTMP)/test_nilpy_dcfrozen26 > $(TESTTMP)/test_nilpy_dcfrozen.log 2>&1
 	grep -q "frozen=True is not supported" $(TESTTMP)/test_nilpy_dcfrozen.log
 	! ./$(COMPILER) test/test_nilpy_dataclass_unknown_option_fail.npy $(TESTTMP)/test_nilpy_dcunk26 > $(TESTTMP)/test_nilpy_dcunk.log 2>&1

@@ -1,0 +1,11 @@
+[D(v=1), D(v=2), D(v=3)]
+True False False
+True True False False
+[P(x=0, y=5), P(x=1, y=2), P(x=1, y=2), P(x=1, y=9)]
+True False
+True False
+True True False
+P(x=2, y=0) P(x=0, y=1)
+[R(n=1, s='a'), R(n=1, s='z'), R(n=2, s='a')]
+True False
+Plain(v=1) True

@@ -1,0 +1,58 @@
+# `@dataclass(order=True)` — CPython generates __lt__/__le__/__gt__/__ge__ over
+# the FIELD TUPLE, in declaration order. bug-nilpy-dataclass-keyword-arguments-
+# do-not-parse. Diffed against CPython.
+#
+# This file replaces test_nilpy_dataclass_order_fail.npy, which asserted the
+# refusal this feature retires.
+from dataclasses import dataclass
+
+
+@dataclass(order=True)
+class D:
+    v: int
+
+
+print(sorted([D(3), D(1), D(2)]))
+print(D(1) < D(2), D(2) < D(1), D(1) < D(1))
+print(D(1) <= D(1), D(2) >= D(1), D(1) > D(2), D(1) >= D(2))
+
+
+# two fields: the FIRST differing one decides, which is tuple ordering
+@dataclass(order=True)
+class P:
+    x: int
+    y: int
+
+
+print(sorted([P(1, 9), P(1, 2), P(0, 5), P(1, 2)]))
+print(P(1, 2) < P(1, 3), P(1, 3) < P(1, 2))
+print(P(0, 9) < P(1, 0), P(1, 0) < P(0, 9))
+print(P(1, 2) <= P(1, 2), P(1, 2) >= P(1, 2), P(1, 2) < P(1, 2))
+print(max([P(0, 1), P(2, 0)]), min([P(0, 1), P(2, 0)]))
+
+
+# mixed field types, and a default
+@dataclass(order=True)
+class R:
+    n: int
+    s: str = "m"
+
+
+print(sorted([R(2, "a"), R(1, "z"), R(1, "a")]))
+print(R(1, "a") < R(1, "b"), R(1, "b") < R(1, "a"))
+
+
+# NOT tested here: a hand-written __lt__ under order=True. CPython REFUSES that
+# combination outright (`TypeError: Cannot overwrite attribute __lt__`), so
+# there is no parity to assert — NilPy accepts it and lets the hand-written one
+# win, which is a divergence in the permitted direction (see
+# devdocs/dev/nilpy-semantics-divergences.md).
+
+
+# order=False is still the bare-decorator behaviour
+@dataclass(order=False)
+class Plain:
+    v: int
+
+
+print(Plain(1), Plain(1) == Plain(1))

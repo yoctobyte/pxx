@@ -261,6 +261,16 @@ var
     because a class may hand-write one and not the other, and each generated
     body is skipped independently. bug-nilpy-dataclass-no-generated-repr }
   PyDcReprProc: array[0..MAX_UCLASS-1] of Integer;
+  { `@dataclass(order=True)`: CPython then generates __lt__/__le__/__gt__/__ge__
+    comparing the field tuple. The flag is filled by the member pre-pass's token
+    scan rather than by PyParseDataclassArgs, because the pre-pass is the pass
+    that sees every class and knows its `ci` — and both passes reach
+    PyRegisterClassMembers, which is where the four methods are registered.
+    bug-nilpy-dataclass-keyword-arguments-do-not-parse }
+  PyDcOrder: array[0..MAX_UCLASS-1] of Boolean;
+  { the four generated comparison methods, ci*4 + (0=lt, 1=le, 2=gt, 3=ge);
+    -1 where the class hand-wrote one, which WINS as it does for __eq__ }
+  PyDcCmpProc: array[0..MAX_UCLASS*4-1] of Integer;
   { True when the member pre-pass already ran the FULL PyRegisterClassMembers
     for this ci (methods + fields + defaults), so PyParseClass must not run it
     again — a second full run would duplicate the append-only PyDc* defaults
@@ -390,7 +400,8 @@ begin
     { CPython's defaults, dataclasses.dataclass }
     if StrEqual(name, 'init') or StrEqual(name, 'repr') or
        StrEqual(name, 'eq') or StrEqual(name, 'match_args') then dflt := True
-    else if StrEqual(name, 'order') or StrEqual(name, 'unsafe_hash') or
+    else if StrEqual(name, 'order') then dflt := True   { see below — both values work }
+    else if StrEqual(name, 'unsafe_hash') or
             StrEqual(name, 'frozen') or StrEqual(name, 'kw_only') or
             StrEqual(name, 'slots') or StrEqual(name, 'weakref_slot') then dflt := False
     else
@@ -400,7 +411,15 @@ begin
     if (CurTok.Kind <> tkTrue) and (CurTok.Kind <> tkFalse) then
       Error('Nil Python: @dataclass option ''' + name + ''' takes True or False');
     if CurTok.Kind = tkTrue then given := 'True' else given := 'False';
-    if (CurTok.Kind = tkTrue) <> dflt then
+    { `order` is the one option whose NON-default is implemented: order=True
+      generates the four comparison dunders over the field tuple, so neither
+      value needs refusing. Marked by giving it dflt=True above and skipping the
+      check here, rather than by a second special case in the message. }
+    if StrEqual(name, 'order') then
+    begin
+      { accepted either way }
+    end
+    else if (CurTok.Kind = tkTrue) <> dflt then
       Error('Nil Python: @dataclass ' + name + '=' + given +
             ' is not supported (only the default is generated)');
     Next;
@@ -25944,6 +25963,17 @@ begin
   end;
 end;
 
+{ The four comparison dunders `@dataclass(order=True)` generates, in the order
+  PyDcCmpProc indexes them. ONE function, because the registration and the body
+  emitter must agree about which slot is which. }
+function PyDcCmpName(k: Integer): AnsiString;
+begin
+  if k = 0 then Result := '__lt__'
+  else if k = 1 then Result := '__le__'
+  else if k = 2 then Result := '__gt__'
+  else Result := '__ge__';
+end;
+
 { ---- multiple inheritance by FLATTENING ----------------------------------
   bug-nilpy-multiple-inheritance-does-not-parse, re-scoped by
   decide-nilpy-multiple-inheritance-c3-or-delegate.
@@ -26083,6 +26113,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
     ownBS, ownBE, mixIx: Integer;  { the span loop — own body, then each flattened base }
+    dcCmp: Integer;   { @dataclass(order=True): 0=lt 1=le 2=gt 3=ge }
     inMixin: Boolean;
     caVal: Integer;   { class-attribute initialiser token, past any annotation }
     caClassW, caInstW: Boolean;   { how this attribute is written module-wide }
@@ -27243,6 +27274,24 @@ begin
       AddUMeth(ci, k, Length(name), procIdx);
       PyDcReprProc[ci] := procIdx;
     end;
+    { `@dataclass(order=True)` — the four comparison dunders, over the field
+      tuple in declaration order, which is exactly what CPython generates. A
+      hand-written one WINS, the same rule __eq__ and __repr__ follow.
+      bug-nilpy-dataclass-keyword-arguments-do-not-parse }
+    if PyDcOrder[ci] then
+      for dcCmp := 0 to 3 do
+      begin
+        name := PyDcCmpName(dcCmp);
+        if FindUMeth(ci, name) >= 0 then Continue;
+        pnames[0] := 'self'; ptypes[0] := tyClass;
+        pnames[1] := 'other'; ptypes[1] := tyClass;
+        fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+        AppendChar(fullName, '.');
+        for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+        procIdx := RegisterProc(fullName, True, tyBoolean, 2, pnames, ptypes);
+        AddUMeth(ci, PyStoredName(name), Length(name), procIdx);
+        PyDcCmpProc[ci * 4 + dcCmp] := procIdx;
+      end;
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
 
@@ -27880,6 +27929,107 @@ begin
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
+procedure PyEmitDataclassOrder(ci: Integer; which: Integer);
+{ Emit one of the four `@dataclass(order=True)` comparisons. CPython compares
+  the FIELD TUPLES, so the body is tuple ordering written as an expression:
+
+    acc := <base>
+    for i := last downto first:  acc := (a_i OP b_i) or ((a_i = b_i) and acc)
+
+  with OP `<` for lt/le and `>` for gt/ge, and the base being what an
+  all-fields-equal comparison answers — False for the strict pair, True for the
+  or-equal pair. Built backwards for the same reason CPython's own tuple
+  compare short-circuits forwards: the first differing field decides, and every
+  later one only matters while the earlier ones are equal.
+
+  Written as ONE expression rather than a chain of early returns because that is
+  what the AST here builds cheaply, and because the shape then matches
+  PyEmitDataclassEq's accumulator next door.
+  bug-nilpy-dataclass-keyword-arguments-do-not-parse }
+var procIdx, i, k, idx, savedSC, savedFS, savedSelf, patchPos: Integer;
+    selfNode, otherNode, lhs, rhs, cmp, eqN, andN, orN, acc, retNode: Integer;
+    opTok: Integer; baseTrue: Boolean;
+    name: AnsiString;
+begin
+  procIdx := PyDcCmpProc[ci * 4 + which];
+  if procIdx < 0 then Exit;
+  if which < 2 then opTok := Ord(tkLt) else opTok := Ord(tkGt);
+  baseTrue := (which = 1) or (which = 3);        { __le__ / __ge__ }
+  savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
+  FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
+  Procs[procIdx].ScopeBase := SymCount;
+  for i := 0 to 1 do
+  begin
+    if i = 0 then name := 'self' else name := 'other';
+    idx := AllocParam(name, tyClass, False, False);
+    Procs[procIdx].Params[i].SymIdx := idx;
+    Syms[idx].RecName := REC_UCLASS_BASE + ci;
+    SymSyncTypeRef(idx);
+  end;
+  idx := AllocVar('$pyresult', tyBoolean);
+  Procs[procIdx].RetSymIdx := idx;
+  Syms[idx].Kind := skLocal;
+  Procs[procIdx].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
+  PyEmitParamSpills(procIdx, 2);
+  acc := AllocNode(AN_BOOL_LIT);
+  if baseTrue then ASTIVal[acc] := 1 else ASTIVal[acc] := 0;
+  ASTTk[acc] := Ord(tyBoolean);
+  for i := UClsFCount[ci] - 1 downto 0 do
+  begin
+    k := UClsFBase[ci] + i;
+    selfNode := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
+    otherNode := PyMakeIdent(Procs[procIdx].Params[1].SymIdx);
+    lhs := AllocNode(AN_FIELD);
+    ASTLeft[lhs] := selfNode;
+    ASTSOffset[lhs] := UFldNOff[k]; ASTSLen[lhs] := UFldNLen[k];
+    ASTTk[lhs] := UFldTk[k]; ASTRight[lhs] := UFldRec_[k];
+    rhs := AllocNode(AN_FIELD);
+    ASTLeft[rhs] := otherNode;
+    ASTSOffset[rhs] := UFldNOff[k]; ASTSLen[rhs] := UFldNLen[k];
+    ASTTk[rhs] := UFldTk[k]; ASTRight[rhs] := UFldRec_[k];
+    cmp := AllocNode(AN_BINOP);
+    ASTIVal[cmp] := opTok;
+    ASTLeft[cmp] := lhs; ASTRight[cmp] := rhs;
+    ASTTk[cmp] := Ord(tyBoolean);
+    { the equality arm needs its OWN field nodes — a node used twice is emitted
+      twice, and reusing these would evaluate the field access again inside the
+      other operand }
+    selfNode := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
+    otherNode := PyMakeIdent(Procs[procIdx].Params[1].SymIdx);
+    lhs := AllocNode(AN_FIELD);
+    ASTLeft[lhs] := selfNode;
+    ASTSOffset[lhs] := UFldNOff[k]; ASTSLen[lhs] := UFldNLen[k];
+    ASTTk[lhs] := UFldTk[k]; ASTRight[lhs] := UFldRec_[k];
+    rhs := AllocNode(AN_FIELD);
+    ASTLeft[rhs] := otherNode;
+    ASTSOffset[rhs] := UFldNOff[k]; ASTSLen[rhs] := UFldNLen[k];
+    ASTTk[rhs] := UFldTk[k]; ASTRight[rhs] := UFldRec_[k];
+    eqN := AllocNode(AN_BINOP);
+    ASTIVal[eqN] := Ord(tkEq);
+    ASTLeft[eqN] := lhs; ASTRight[eqN] := rhs;
+    ASTTk[eqN] := Ord(tyBoolean);
+    andN := AllocNode(AN_BINOP);
+    ASTIVal[andN] := Ord(tkAnd);
+    ASTLeft[andN] := eqN; ASTRight[andN] := acc;
+    ASTTk[andN] := Ord(tyBoolean);
+    orN := AllocNode(AN_BINOP);
+    ASTIVal[orN] := Ord(tkOr);
+    ASTLeft[orN] := cmp; ASTRight[orN] := andN;
+    ASTTk[orN] := Ord(tyBoolean);
+    acc := orN;
+  end;
+  retNode := AllocNode(AN_ASSIGN);
+  ASTLeft[retNode] := PyMakeIdent(Procs[procIdx].RetSymIdx);
+  ASTRight[retNode] := acc;
+  CompileAST(retNode);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  PatchProcPrologue(patchPos, FrameSize);
+  ProcBodyEnd[procIdx] := CodeLen;
+  ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
+  SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+end;
+
 procedure PyEmitDataclassRepr(ci: Integer);
 { Emit the synthesized @dataclass `__repr__`:
   `Result := 'P(' + 'x=' + repr(self.x) + ', ' + 'y=' + repr(self.y) + ')'`,
@@ -28045,7 +28195,26 @@ begin
         end;
         if (j >= 1) and (Tokens[j].Kind = tkIdent) and
            CaseEqual(GetTokenStr(j), 'dataclass') and (Tokens[j - 1].Kind = tkAt) then
+        begin
           isDC := True;
+          { `@dataclass(order=True)` — scan the argument list this pass just
+            stepped BACK over. Recorded here rather than in
+            PyParseDataclassArgs because that routine runs on the cursor before
+            the class is reached and has no `ci` to record it against, while
+            this pass sees every class and both passes reach
+            PyRegisterClassMembers, which registers the four methods.
+            bug-nilpy-dataclass-keyword-arguments-do-not-parse }
+          k := j + 1;
+          if (k < MainProgramTokCount) and (Tokens[k].Kind = tkLParen) then
+            while (k < MainProgramTokCount) and (Tokens[k].Kind <> tkRParen) do
+            begin
+              if (Tokens[k].Kind = tkIdent) and CaseEqual(GetTokenStr(k), 'order') and
+                 (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkAssign) and
+                 (Tokens[k + 2].Kind = tkTrue) then
+                PyDcOrder[ci] := True;
+              Inc(k);
+            end;
+        end;
         { The FULL registration (methods included) needs the parent link set
           first — a subclass's field offsets and virtual slots continue the
           parent's layout. Resolve the base list here, exactly as PyParseClass
@@ -28486,7 +28655,7 @@ begin
       PyRegisterClassMembers(ci, bodyStart, bodyStart, isDC, False);
     if CurTok.Kind = tkNewline then Next;
     PySkipNewlines;
-    if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); end;
+    if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); PyEmitDataclassOrder(ci, 0); PyEmitDataclassOrder(ci, 1); PyEmitDataclassOrder(ci, 2); PyEmitDataclassOrder(ci, 3); end;
     Exit;
   end;
   Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
@@ -28688,7 +28857,7 @@ begin
     PySkipNewlines;
   end;
   if myMixN > 0 then begin PyMixReplay := False; TokPos := savedTokPos - 1; Next; end;
-  if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); end;
+  if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); PyEmitDataclassOrder(ci, 0); PyEmitDataclassOrder(ci, 1); PyEmitDataclassOrder(ci, 2); PyEmitDataclassOrder(ci, 3); end;
   { AFTER the body: the attribute slots' types are only final once every
     initialiser has been parsed (PyEmitClassAttrExpr retypes them), and the bind
     carries the kind. }
@@ -29775,7 +29944,9 @@ begin
     PyClsBodyS[i] := -1;
     PyClsBodyE[i] := -1;
     PyClsUsedAsMixin[i] := False;
+    PyDcOrder[i] := False;
   end;
+  for i := 0 to MAX_UCLASS * 4 - 1 do PyDcCmpProc[i] := -1;
   PyMixN := 0; PyMixSkipN := 0; PyMixReplay := False;
   PyRegisterClassShells;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);

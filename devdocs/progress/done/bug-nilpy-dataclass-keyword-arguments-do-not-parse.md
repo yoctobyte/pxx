@@ -3,6 +3,7 @@ prio: 30
 track: N
 type: bug
 blocked-by: []
+status: done
 ---
 
 # `@dataclass(order=True)` does not parse — the decorator takes no arguments
@@ -11,7 +12,7 @@ blocked-by: []
 - **Found:** 2026-08-08, while gating
   [[bug-nilpy-list-sort-ignores-lt-dunder-on-objects]] (it was going to be the
   natural third case in that test)
-- **Owner:** —
+- **Owner:** agent-AN
 
 ```python
 from dataclasses import dataclass
@@ -106,3 +107,54 @@ Note for whoever adds `order=True`: an `Optional[int] = None` field prints as
 that is [[bug-nilpy-a-def-returned-none-loses-its-none-ness-in-a-variant-slot]]'s
 int arm, not this ticket. It was in a draft of the new test and was removed for
 that reason.
+
+## Resolution (2026-08-15) — `order=True` generates the comparisons; ticket closed
+
+The remaining work the 2026-08-12 pass named. `@dataclass(order=True)` now
+generates `__lt__`, `__le__`, `__gt__` and `__ge__` over the FIELD TUPLE in
+declaration order, which is what CPython's decorator documents.
+
+**The bodies are tuple ordering written as one expression**, built from the last
+field backwards:
+
+```
+acc := <False for lt/gt, True for le/ge>
+for i := last downto first:  acc := (a_i OP b_i) or ((a_i = b_i) and acc)
+```
+
+That is the same accumulator shape `PyEmitDataclassEq` next door uses, and it
+gives the property that matters: the first differing field decides, and later
+fields only matter while the earlier ones are equal. Verified against CPython on
+a two-field class where both orders of divergence are exercised.
+
+**The flag is recorded by the PRE-PASS, not by `PyParseDataclassArgs`.** That
+routine runs on the cursor before the class is reached and has no `ci` to record
+against, while the pre-pass sees every class — and BOTH passes reach
+`PyRegisterClassMembers`, which is where the four methods are registered. Same
+two-passes-must-agree hazard the 2026-08-12 pass hit with the backwards scan,
+avoided the same way: one place decides.
+
+`PyDcCmpName` is one function asked by both the registration and the body
+emitter, so the two cannot disagree about which of the four slots is which.
+
+**The refusal test is retired WITH the feature.** `test_nilpy_dataclass_order_
+fail.npy` asserted the compile error this ticket just removed; left in place it
+would have compiled and turned the nilpy suite red in a way `gate.sh quick`
+cannot see. Deleted, its Makefile recipe replaced with the real test, and the
+file's own header says what replaced it. `frozen=True` and the unknown-option
+refusals are untouched and still asserted.
+
+**One divergence, in the permitted direction:** CPython REFUSES a hand-written
+`__lt__` under `order=True` (`TypeError: Cannot overwrite attribute __lt__`);
+NilPy accepts it and lets the hand-written one win, as it already does for
+`__eq__`/`__repr__`. No program CPython runs can observe that, so it is recorded
+in `devdocs/dev/nilpy-semantics-divergences.md` rather than refused.
+
+**Gate:** `test/test_nilpy_dataclass_order.npy` (+`.expected`, in the Makefile)
+— single- and two-field ordering, all four operators, `sorted`/`min`/`max`, a
+mixed int/str class with a default, and `order=False` still being the bare
+decorator. Byte-identical to CPython. The five sibling dataclass tests re-run
+unchanged. `tools/gate.sh quick` GREEN, self-host byte-identical.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
