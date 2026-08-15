@@ -2010,15 +2010,21 @@ begin
               end
               else if specialId = 206 then
               begin
-                EmitI32($9E780000); { fcvtzs x0, d0 }
-                EmitI32($9E620000); { scvtf d0, x0 }
+                { Int = the integral part, staying a double. fcvtzs/scvtf put a
+                  64-bit INTEGER in the middle, so every |x| >= 2^63 saturated
+                  to 9223372036854775808.0 and +Inf came back as that same
+                  finite number (bug-a-int-of-a-large-double-saturates-to-32-bit-
+                  on-i386-and-arm32 — its table stopped at 2^43, one range short
+                  of aarch64's ceiling). frintz rounds toward zero in the float
+                  domain: exact for every finite double, pass-through for
+                  inf/NaN, signed zero for |x| < 1 (FPC prints -0 for Int(-0.5)). }
+                EmitI32($1E65C000); { frintz d0, d0 }
                 EmitI32($9E660000); { fmov x0, d0 }
               end
               else
               begin
-                { 205 Frac = x - trunc(x) }
-                EmitI32($9E780001); { fcvtzs x1, d0 }
-                EmitI32($9E620021); { scvtf d1, x1 }
+                { 205 Frac = x - Int(x), both in the float domain (see 206). }
+                EmitI32($1E65C001); { frintz d1, d0 }
                 EmitI32($1E613800); { fsub d0, d0, d1 }
                 EmitI32($9E660000); { fmov x0, d0 }
               end;

@@ -47,4 +47,34 @@ begin
   d := -0.5;  WriteLn('t-0.5 =', Trunc(d), ' r=', Round(d));
   d := 0.0;   WriteLn('tzero =', Trunc(d), ' r=', Round(d));
   q := 12345; WriteLn('tint  =', Trunc(q), ' r=', Round(q));
+
+  { Int/Frac are the FLOAT-domain half of the same family: Double in, Double
+    out, so unlike Trunc/Round they have no range to run out of and nothing
+    here may saturate. Every backend used to lower them through an integer
+    anyway — a 32-bit one on i386/arm32 (ceiling 2^31, so Int(2^43+0.5) was
+    -2147483648.0 and Sin(1e20) went NaN) and a 64-bit one on x86-64/aarch64
+    (ceiling 2^63, so Int(1e20) and Int(+Inf) were wrong too). Only riscv32 and
+    xtensa, which call the softfloat bit-twiddling kernel, were right — which
+    is why the original report read the two 64-bit targets as correct: its
+    table stopped at 2^43, one range short of their boundary.
+    Oracle for every row below is FPC.
+    bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32 }
+  d := 2.75;                  WriteLn('i2.75 =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := -2.75;                 WriteLn('i-2.75=', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := 2147483647.5;          WriteLn('i2^31 =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := -2147483648.5;         WriteLn('i-2^31=', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := 8796093022208.5;       WriteLn('i2^43 =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := -8796093022208.5;      WriteLn('i-2^43=', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := 4503599627370495.5;    WriteLn('i2^52-=', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := 9007199254740992.0;    WriteLn('i2^53 =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := 9223372036854775808.0; WriteLn('i2^63 =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := 1e20;                  WriteLn('i1e20 =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := -1e20;                 WriteLn('i-1e20=', Int(d):0:4, ' f=', Frac(d):0:4);
+  { |x| < 1 keeps the SIGN: FPC prints -0 for Int(-0.5). }
+  d := 0.5;                   WriteLn('i0.5  =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := -0.5;                  WriteLn('i-0.5 =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := 0.0;                   WriteLn('izero =', Int(d):0:4, ' f=', Frac(d):0:4);
+  { infinities pass through unchanged — they have no fractional part to remove }
+  d := 1.0/z;                 WriteLn('i+inf =', Int(d):0:4, ' f=', Frac(d):0:4);
+  d := -1.0/z;                WriteLn('i-inf =', Int(d):0:4);
 end.

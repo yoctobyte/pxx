@@ -720,6 +720,36 @@ begin
   Code[pEnd] := Byte(CodeLen - (pEnd + 1));
 end;
 
+procedure EmitTruncToIntegral386;
+{ xmm0 (double) -> xmm0 (double), fraction removed, rounding toward zero. This
+  is `Int(x)`: a FLOAT-domain operation, so no integer type may appear in it.
+  The old lowering was `cvttsd2si eax` + `cvtsi2sd`, which put a 32-bit integer
+  in the middle and saturated every |x| >= 2^31 to a plausible wrong value —
+  exactly the range Int() exists for (bug-a-int-of-a-large-double-saturates-
+  to-32-bit-on-i386-and-arm32).
+
+  x87 `frndint` rounds in the float domain at the current rounding mode, so the
+  whole job is to switch RC to truncate (control-word bits 11:10 = 11) around
+  it and restore. Infinities and NaN pass through, |x| >= 2^52 is already
+  integral and comes back unchanged, and the load/store are exact because an
+  x87 register is wider than a double. Clobbers eax; the 16-byte scratch holds
+  the double at [esp+0] and the saved/modified control words at [esp+8]/[esp+10]. }
+begin
+  EmitB($83); EmitB($EC); EmitB($10);                        { sub esp, 16 }
+  EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+  EmitB($DD); EmitB($04); EmitB($24);                        { fld qword [esp] }
+  EmitB($D9); EmitB($7C); EmitB($24); EmitB($08);            { fnstcw [esp+8] }
+  EmitB($66); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov ax, [esp+8] }
+  EmitB($66); EmitB($0D); EmitB($00); EmitB($0C);            { or ax, 0x0C00 (RC = truncate) }
+  EmitB($66); EmitB($89); EmitB($44); EmitB($24); EmitB($0A); { mov [esp+10], ax }
+  EmitB($D9); EmitB($6C); EmitB($24); EmitB($0A);            { fldcw [esp+10] }
+  EmitB($D9); EmitB($FC);                                    { frndint }
+  EmitB($D9); EmitB($6C); EmitB($24); EmitB($08);            { fldcw [esp+8] (restore) }
+  EmitB($DD); EmitB($1C); EmitB($24);                        { fstp qword [esp] }
+  EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
+  EmitB($83); EmitB($C4); EmitB($10);                        { add esp, 16 }
+end;
+
 function Is64Bit386(tk: TTypeKind): Boolean;
 begin
   Result := (tk = tyInt64) or (tk = tyUInt64);
@@ -2744,16 +2774,21 @@ begin
               end
               else if j = 205 then
               begin
-                { Frac = x - trunc(x) }
-                EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);            { cvttsd2si eax, xmm0 }
-                EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C8);            { cvtsi2sd xmm1, eax }
-                EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1);            { subsd xmm0, xmm1 }
+                { Frac = x - Int(x), both in the float domain (see
+                  EmitTruncToIntegral386 — the old 32-bit round trip made Frac
+                  wrong for every |x| >= 2^31 too). }
+                EmitB($83); EmitB($EC); EmitB($08);                        { sub esp, 8 }
+                EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 (keep x) }
+                EmitTruncToIntegral386;                                    { xmm0 = Int(x) }
+                EmitB($F2); EmitB($0F); EmitB($10); EmitB($0C); EmitB($24); { movsd xmm1, [esp] (x) }
+                EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C8);            { subsd xmm1, xmm0 }
+                EmitB($F2); EmitB($0F); EmitB($10); EmitB($C1);            { movsd xmm0, xmm1 }
+                EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
               end
               else
               begin
-                { Int = trunc as float }
-                EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);            { cvttsd2si eax, xmm0 }
-                EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0);            { cvtsi2sd xmm0, eax }
+                { Int = the integral part, as a float }
+                EmitTruncToIntegral386;
               end;
             end
             else

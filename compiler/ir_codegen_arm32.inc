@@ -2274,19 +2274,42 @@ begin
                 if Is64BitArm32(IntToTypeKind(IRTk[node])) then
                   EmitI32($E1A01FC0);               { mov r1, r0, asr #31 (widen to Int64) }
               end
-              else if j = 205 then
+              else if (j = 205) or (j = 206) then
               begin
-                { Frac = x - trunc(x). Scratch s8 (in d4): s0 aliases the
-                  low half of d0, converting into it would corrupt x. }
-                EmitI32($EEBD4BC0);                 { vcvt.s32.f64 s8, d0 }
-                EmitI32($EEB81BC4);                 { vcvt.f64.s32 d1, s8 }
-                EmitI32($EE300B41);                 { vsub.f64 d0, d0, d1 }
-              end
-              else
-              begin
-                { Int = trunc as float }
-                EmitI32($EEBD0BC0);                 { vcvt.s32.f64 s0, d0 }
-                EmitI32($EEB80BC0);                 { vcvt.f64.s32 d0, s0 }
+                { Frac / Int are FLOAT-domain operations: remove the fraction,
+                  stay a double. VFPv2/v3 has no round-to-integral instruction
+                  (vrintz is ARMv8), so the old lowering detoured through
+                  vcvt.s32.f64 — a 32-bit integer, which saturated every
+                  |x| >= 2^31 to 2147483647.0 and made Sin(1e20) NaN
+                  (bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32).
+                  The soft-float kernel is pure bit manipulation on the double
+                  (clear the fractional mantissa bits per the exponent), exact
+                  for every finite value and pass-through for inf/NaN — the same
+                  one riscv32 and xtensa already call, which is why they were
+                  the correct targets. The VFP path stays as the fallback for a
+                  minimal program that never linked softfloat, where the old
+                  2^31 ceiling is still better than an unresolved call. }
+                if j = 205 then procIdx := FindProc('__pxx_dfrac')
+                else procIdx := FindProc('__pxx_dint');
+                if procIdx >= 0 then
+                begin
+                  EmitI32($EC510B10);               { vmov r0, r1, d0 (double bits) }
+                  EmitCallProc(procIdx);            { r0:r1 = result bits }
+                  EmitI32($EC410B10);               { vmov d0, r0, r1 }
+                end
+                else if j = 205 then
+                begin
+                  { Frac = x - trunc(x). Scratch s8 (in d4): s0 aliases the
+                    low half of d0, converting into it would corrupt x. }
+                  EmitI32($EEBD4BC0);               { vcvt.s32.f64 s8, d0 }
+                  EmitI32($EEB81BC4);               { vcvt.f64.s32 d1, s8 }
+                  EmitI32($EE300B41);               { vsub.f64 d0, d0, d1 }
+                end
+                else
+                begin
+                  EmitI32($EEBD0BC0);               { vcvt.s32.f64 s0, d0 }
+                  EmitI32($EEB80BC0);               { vcvt.f64.s32 d0, s0 }
+                end;
               end;
             end
             else

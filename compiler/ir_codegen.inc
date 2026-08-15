@@ -1749,6 +1749,45 @@ begin
   Code[pDoneHi]  := Byte(CodeLen - (pDoneHi + 1));
 end;
 
+procedure EmitTruncToIntegralX64;
+{ rax = double BITS in, double BITS out: the integral part, rounded toward
+  zero, staying in the float domain. `Int(x)` is defined for every finite
+  double, so no integer type may appear in the lowering — the old
+  `cvttsd2si rax` + `cvtsi2sd` round trip saturated everything |x| >= 2^63 to
+  INT64_MIN's double and turned +Inf into a large negative number
+  (bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32, whose
+  table only reached 2^43 and so read x86-64 as correct).
+
+  Pure bit manipulation, the same rule __pxx_dint implements for the softfloat
+  targets: clear the fractional mantissa bits selected by the exponent. That
+  makes inf/NaN pass through untouched, |x| >= 2^52 unchanged (already
+  integral), and |x| < 1 a signed zero — which is what FPC prints for
+  Int(-0.5), namely -0. Clobbers rcx and rdx. }
+var pDone, pLt1, pDone2, pDone3: Integer;
+begin
+  EmitB($48); EmitB($89); EmitB($C1);            { mov rcx, rax }
+  EmitB($48); EmitB($C1); EmitB($E9); EmitB($34); { shr rcx, 52 }
+  EmitB($81); EmitB($E1); EmitI32($7FF);         { and ecx, 0x7FF  (biased exponent) }
+  EmitB($81); EmitB($F9); EmitI32(2047);         { cmp ecx, 2047 }
+  EmitB($74); pDone := CodeLen; EmitB(0);        { je .done   (inf / NaN) }
+  EmitB($81); EmitB($F9); EmitI32(1023);         { cmp ecx, 1023 }
+  EmitB($72); pLt1 := CodeLen; EmitB(0);         { jb .lt1    (|x| < 1) }
+  EmitB($81); EmitB($F9); EmitI32(1075);         { cmp ecx, 1075 }
+  EmitB($73); pDone2 := CodeLen; EmitB(0);       { jae .done  (already integral) }
+  EmitB($BA); EmitI32(1075);                     { mov edx, 1075 }
+  EmitB($29); EmitB($CA);                        { sub edx, ecx  (fracbits, 1..52) }
+  EmitB($89); EmitB($D1);                        { mov ecx, edx }
+  EmitB($48); EmitB($D3); EmitB($E8);            { shr rax, cl }
+  EmitB($48); EmitB($D3); EmitB($E0);            { shl rax, cl }
+  EmitB($EB); pDone3 := CodeLen; EmitB(0);       { jmp .done }
+  Code[pLt1] := Byte(CodeLen - (pLt1 + 1));      { .lt1: keep the sign bit only }
+  EmitB($48); EmitB($C1); EmitB($E8); EmitB($3F); { shr rax, 63 }
+  EmitB($48); EmitB($C1); EmitB($E0); EmitB($3F); { shl rax, 63 }
+  Code[pDone]  := Byte(CodeLen - (pDone + 1));
+  Code[pDone2] := Byte(CodeLen - (pDone2 + 1));
+  Code[pDone3] := Byte(CodeLen - (pDone3 + 1));
+end;
+
 procedure EmitWriteVariant;
 { On entry rax = address of a 16-byte variant slot: [tag:8][payload:8].
   Reads the tag and dispatches to the matching scalar writer. Clobbers the
@@ -5464,14 +5503,15 @@ begin
               end
               else if specialId = 206 then
               begin
-                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);           { cvttsd2si rax, xmm0 }
-                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);           { cvtsi2sd xmm0, rax }
-                EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);           { movq rax, xmm0 }
+                EmitTruncToIntegralX64;                                               { rax = Int(x) bits }
               end
               else
-              begin   { 205 Frac = x - trunc(x) }
-                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C8);           { cvttsd2si rcx, xmm0 }
-                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C9);           { cvtsi2sd xmm1, rcx }
+              begin   { 205 Frac = x - Int(x), both in the float domain }
+                EmitB($50);                                                           { push rax (x bits) }
+                EmitTruncToIntegralX64;                                               { rax = Int(x) bits }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C8);           { movq xmm1, rax }
+                EmitB($58);                                                           { pop rax (x) }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);           { movq xmm0, rax }
                 EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1);                       { subsd xmm0, xmm1 }
                 EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);           { movq rax, xmm0 }
               end;
