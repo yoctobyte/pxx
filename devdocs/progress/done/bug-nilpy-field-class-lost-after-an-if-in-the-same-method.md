@@ -148,4 +148,4 @@ reduction** — the reduction is what was lost here. The matrix above is a
 starting point that has been ruled out.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 4efeda138.
