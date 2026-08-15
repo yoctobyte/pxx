@@ -3,6 +3,8 @@ track: N
 prio: 30
 type: bug
 summary: "ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains"
+status: working
+owner: agent-AN
 ---
 
 # reportlab mimic: 4+ distinct fonts corrupts the heap
@@ -176,3 +178,71 @@ warning (`nan` vs `NaN`, `bcmp` vs `BCmp`, "binding to the C declaration"). The
 Pascal build is clean despite its warning, so a collision is not sufficient on
 its own — but silent same-signature collisions are the known hazard class here
 (`test/cmath_no_pascal_hijack.c`) and are worth ruling out early.
+
+## 2026-08-15 (Track N): the faulting routine is NAMED, and the '|' flood is a CONSEQUENCE
+
+Measured against a self-hosted fixedpoint at 7473a64ab. Repro is the ticket's
+own three lines, writing to `/dev/null`.
+
+**Rate:** 0/40 with ASLR on, **2/40 under `setarch -R`**. So disabling ASLR does
+not make it deterministic — layout is not the only variable, and the ticket's
+suggestion to bisect under `setarch -R` will not work as written. Something else
+nondeterministic feeds this.
+
+**The faulting routine is crtl's `__crtl_utoa`** (`lib/crtl/src/stdio.c:102`),
+established by mapping the address rather than guessing: the image is a single
+`LOAD` at `0x400000`, so `rip=0x644e41` is file offset `0x244e41`; `objdump -D -b
+binary` there gives the store, and the same instruction sequence appears exactly
+once in `compiler/pascal26 -S`, under the label `__crtl_utoa`. That
+independently confirms the original gdb signature, which had been recorded when
+the frame was `?? ()`.
+
+**State at the fault** (gdb, frame offsets read from the emitted prologue —
+`out` at `rbp-8`, `v` at `rbp-16`, `base` at `rbp-20`, `upper` at `rbp-24`,
+`n` at `rbp-64`, `tmp[32]` at `rbp-60`):
+
+```
+base=0x7C7C7C46  upper=0x46464646  n=9533
+v=0xFFFFFFFFFFFFFFFF  out=0x7c7c7c7c7c7c7c7c
+tmp: "a4470449" "0e39da1c" "ffffffffffffffffffff" "FFFF" "||||" ...
+```
+
+Read that buffer left to right and the mechanism falls out:
+
+1. The first **16 digits are correct lowercase hex** — so `base` was 16 and
+   valid, and the loop was working.
+2. Then `v` sticks at all-ones and the loop writes `f` forever. It stops
+   shrinking at exactly the iteration where it should have reached 0.
+3. At digit 32 `tmp` overflows its own frame — `tmp[32..35]` is `upper`,
+   `[36..39]` is `base`, `[44..51]` is `out`. **The routine smashes its own
+   parameters**, which is why `base` becomes `0x7C7C7C46` and the digits turn
+   into `F` and `|` (`'0' + 76` = `'|'` for a garbage base).
+4. With `base` garbage the loop cannot terminate at all, and `n` walks up the
+   stack to the guard page — the `0x7c` flood and the `SIGSEGV` on
+   `mov %cl,(%rax)` with `rax = 0x7ffffffff000`.
+
+**So the stack full of `'|'` is the LAST step, not the first.** Every previous
+round of this ticket started from that flood and looked for something writing
+text over the stack; there is no such thing. There is one small buffer that
+overflows into its own frame after the loop that fills it fails to terminate.
+
+**What is NOT wrong:** 64-bit unsigned division. `tools`-free C probe of the
+same loop compiled by pxx — variable base, constant base, dividends with the
+high bit set (`0xc1ad93e094407044`, which is the shape of the value being
+formatted here), bases 8/10/16, plus `while (d) d = d / 16` — is byte-identical
+to gcc. Whatever stops `v` shrinking is not the plain divide.
+
+**A probe INSIDE the loop does not fire.** Instrumented `__crtl_utoa` to write
+`n/base/v/nextv` through `__pxx_write` whenever `n >= 20`: the build still
+crashes at the same rate (3/40) and **never prints a line**. That has to be
+explained before any in-loop instrumentation is trusted — either the crashing
+path is not the one instrumented, or the write is lost. It is the next thing to
+settle, ahead of any further theory.
+
+**Independent of the trigger:** `__crtl_utoa`'s digit loop has **no bound on
+`n`**. A wrong `base` turns a `printf` into an unbounded stack write rather than
+a wrong string, which is what makes this catastrophic instead of cosmetic.
+Filed as [[bug-c-crtl-utoa-digit-loop-is-unbounded]] — deliberately NOT fixed
+here, because bounding the loop would hide the defect that is still unnamed.
+
+**Still open:** why `v` stops shrinking. Parked here rather than guessed at.

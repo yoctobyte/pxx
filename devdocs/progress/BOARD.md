@@ -12,11 +12,12 @@ _none_
 
 _none_
 
-## unfinished (10)
+## unfinished (11)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
+| bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-nilpy-builtins-over-a-user-iterable-answer-empty | N | 30 | bug | list(obj)/sorted(obj)/`x in obj` over a user class with __iter__ answer [] or raise, because the STATICALLY typed call site picks a TPyList overload instead of iterating — the runtime arms are already there | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -45,9 +46,9 @@ _none_
 | bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-b-arcsin-arccos-lose-2-ulps-vs-libm | B | 20 | bug | ArcSin/ArcCos in lib/rtl/math.pas are 1-2 ulps off libm for mid-range arguments (asin(0.5) answers ...982991 where libm and CPython say ...982989); ArcTan agrees exactly | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-b-rtl-math-transcendentals-lose-argument-reduction | B | 35 | bug | lib/rtl/math.pas's sin/cos lose accuracy as the argument grows — 85 ulps at x=100, 1.2 MILLION ulps at 1e6, and 2.4 BILLION at 1e10, where the answer has no correct digits left. Bad argument reduction, not last-bit rounding. pxx's OWN crtl libm already gets every one of these exactly right, so the fix is to share it, not to write one. | — |
 | bug-c-cast-to-float-in-value-position-does-not-round-to-single | C | 25 | bug | `(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it. | — |
+| bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
@@ -578,7 +579,6 @@ _none_
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
-- [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
@@ -602,6 +602,7 @@ _none_
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
+- [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
 - [p 25] [N] bug-n-math-pow-domain-error-raises-the-wrong-exception
 - [p 25] [N] bug-nilpy-hasattr-on-a-builtin-container-or-str-answers-false
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
