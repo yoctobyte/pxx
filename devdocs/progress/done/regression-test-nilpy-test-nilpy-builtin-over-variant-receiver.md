@@ -58,4 +58,4 @@ was relying on the leak.
 Verified: `testmgr --tier full --job
 'test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy'` GREEN
 (was red on the pkgimp diff). gate.sh quick GREEN.
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 5c457c6a9.
