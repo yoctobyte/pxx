@@ -74,4 +74,4 @@ Closed: the cascade is triaged and its larger root is fixed and pushed. The
 residual is one owned ticket in another lane.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 1d9f627c7.
