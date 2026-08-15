@@ -140,4 +140,4 @@ Also closes [[feature-nilpy-codecs-shim]], which asks for the same unit from the
 other direction and was opened first.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 4aee95c53.

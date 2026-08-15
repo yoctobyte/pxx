@@ -174,4 +174,4 @@ Closed as a duplicate rather than resolved separately, so the write-up lives in
 one place.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 4aee95c53.
