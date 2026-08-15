@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T07:37:22Z",
-   "fixed": [
-    "test-core#src:test/test_nilpy_sorted_pairs.npy"
-   ],
-   "new_red": [],
-   "sha": "894b1c6c8a234b6c43288bd417d7fb932c94c47f",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-15T07:41:54Z",
    "fixed": [],
    "new_red": [],
@@ -503,6 +493,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "e9ca16ba9f23daad5e7cc7a02aa2d6f9812140ce",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T20:28:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "fc0b9cc1cf8d1703a31d038e68c161be53b74f03",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -5456,8 +5454,8 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T20:23:43Z",
-  "sha": "e9ca16ba9f23daad5e7cc7a02aa2d6f9812140ce",
+  "date": "2026-08-15T20:28:17Z",
+  "sha": "fc0b9cc1cf8d1703a31d038e68c161be53b74f03",
   "tier": "native",
   "verdict": "GREEN",
   "wall": 204.9
