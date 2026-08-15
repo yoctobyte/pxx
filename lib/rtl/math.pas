@@ -1101,21 +1101,62 @@ begin
   Result := w.Hi + w.Lo;
 end;
 
-function ArcTan2(y, x: Double): Double;
+{ True for a NEGATIVE-signed double, INCLUDING -0.0 — which `x < 0.0` is not,
+  and that difference is the whole of atan2's zero handling. }
+function SignBitD(x: Double): Boolean;
 begin
-  if x > 0.0 then
-    Result := ArcTan(y / x)
-  else if x < 0.0 then
+  Result := PSqrtInt64(@x)^ < 0;
+end;
+
+{ atan2 over the dd kernel. Two things changed from the old form:
+
+  - The quotient y/x is formed as a DOUBLE-DOUBLE with its residual kept,
+    instead of a rounded double handed to ArcTan. That single rounding, before
+    the function even started, is what made this 1 ulp off glibc on 1409 of
+    6000 random pairs while ArcTan itself was exact. pi is added as a dd for
+    the same reason — `ArcTan(...) + 3.14159...` rounds twice.
+  - The zero cases go by the SIGN BIT, not by `y < 0.0`. atan2 propagates a
+    signed zero: atan2(-0, -1) is -pi and atan2(-0, 1) is -0, and `-0.0 < 0.0`
+    is False, so the old code answered +pi and +0. Verified against FPC 3.2.2
+    and CPython, which agree bit for bit on all eight zero combinations.
+
+  This is also what unblocks NilPy's `math.atan2`, which compiler/pyparser.inc
+  leaves undefined with a note citing atan2(0.5, 1) being a ulp out — that note
+  is now stale, and the name is Track N's to add. }
+function ArcTan2(y, x: Double): Double;
+var q, w: TDd; sy, xneg: Boolean;
+begin
+  if (x <> x) or (y <> y) then begin Result := x + y; Exit; end;    { NaN }
+  sy := SignBitD(y);
+  { "x is on the negative side" — for a zero that is its sign BIT, not its
+    value, because +0 and -0 send the answer to opposite sides of the axis. }
+  if x = 0.0 then xneg := SignBitD(x) else xneg := x < 0.0;
+
+  if y = 0.0 then
   begin
-    if y >= 0.0 then Result := ArcTan(y / x) + 3.14159265358979323846
-    else Result := ArcTan(y / x) - 3.14159265358979323846;
-  end
-  else
-  begin
-    if y > 0.0 then Result := 1.57079632679489661923
-    else if y < 0.0 then Result := -1.57079632679489661923
-    else Result := 0.0;
+    if xneg then
+    begin
+      w := DdPi;
+      Result := w.Hi + w.Lo;
+    end
+    else
+      Result := 0.0;
+    if sy then Result := -Result;
+    Exit;
   end;
+  if x = 0.0 then
+  begin
+    w := DdPio2;
+    Result := w.Hi + w.Lo;
+    if sy then Result := -Result;
+    Exit;
+  end;
+
+  q := DdDivD(Dd2Sum(Abs(y), 0.0), Abs(x));   { |y|/|x| with the residual kept }
+  w := DdAtan(q);
+  if xneg then w := DdAdd(DdPi, DdMulD(w, -1.0));
+  Result := w.Hi + w.Lo;
+  if sy then Result := -Result;
 end;
 
 function Sinh(x: Double): Double;

@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (206)
+## backlog (207)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -155,6 +155,7 @@ _none_
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
 | feature-nilpy-match-statement | N | 30 | feature | `match` / `case` — structural pattern matching is not parsed | — |
+| feature-nilpy-math-atan2-now-that-arctan2-is-exact | N | 30 | feature | compiler/pyparser.inc deliberately leaves math.atan2 undefined, with a note citing ArcTan2 being 1 ulp off CPython for atan2(0.5, 1). That reason is gone as of 2026-08-15: ArcTan2 now forms the quotient in double-double, matches CPython on that exact value, and is correctly rounded where glibc is not. One table line, plus removing the stale note. | — |
 | feature-nilpy-math-module-twelve-absent-names-measured | N | 25 | feature | The whole `math` surface swept name by name against CPython: 39 of 51 agree, 12 are absent and fail LOUDLY at compile. Four of them (isqrt, isfinite, ldexp, frexp) are EXACT operations with no rounding question and can land today; the other eight inherit the standing 'do not map a 1-ulp-off RTL routine' policy. | — |
 | feature-nilpy-methods-on-int-and-float | N | 35 | feature | No methods on `int` or `float` — `x.bit_length()`, `x.is_integer()`, `x.hex()` | — |
 | feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
@@ -590,6 +591,7 @@ _none_
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 30] [N] feature-nilpy-match-statement
+- [p 30] [N] feature-nilpy-math-atan2-now-that-arctan2-is-exact
 - [p 30] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 30] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 30] [N] feature-nilpy-threadsafe-containers

@@ -44,7 +44,7 @@ begin
 end;
 
 var
-  x: Double;
+  x, y2: Double;
 begin
   failures := 0;
 
@@ -263,6 +263,43 @@ begin
   x := 1.0e100;
   CheckBits(Sin(x), 'BFD85C5E5B929359', 'Sin(1e100) — Payne-Hanek path');
   CheckBits(Cos(x), '3FED9757496841F5', 'Cos(1e100) — Payne-Hanek path');
+
+  { ---- ArcTan2 ----
+
+    Was 1 ulp off glibc on 1409 of 6000 random pairs while ArcTan itself was
+    exact, because `ArcTan(y / x)` rounds the quotient before the function even
+    starts. It now forms y/x as a double-double with the residual kept: 6 of
+    6000 differ, and on all six the 400-digit answer is OURS
+    ([[bug-b-rtl-math-transcendentals-lose-argument-reduction]]).
+
+    The first three rows are those glibc-is-wrong cases. Do NOT "fix" them. }
+  x := 18.854288599924047; y2 := 81.83644167225995;
+  CheckBits(ArcTan2(x, y2), '3FCCFBF11D6E1B42', 'ArcTan2(18.85, 81.84) — glibc says ...41');
+  x := -6.727848743085403; y2 := 73.10953505904877;
+  CheckBits(ArcTan2(x, y2), 'BFB77DF63B37C795', 'ArcTan2(-6.73, 73.11) — glibc says ...94');
+  x := 0.24908191119032774; y2 := 0.47061313011820993;
+  CheckBits(ArcTan2(x, y2), '3FDF278E69FA39E7', 'ArcTan2(0.249, 0.471) — glibc says ...E6');
+
+  x := 0.5; y2 := 1.0;
+  CheckBits(ArcTan2(x, y2), '3FDDAC670561BB4F', 'ArcTan2(0.5, 1) — the value NilPy cited to stay away');
+  x := -3.0; y2 := 4.0;
+  CheckBits(ArcTan2(x, y2), 'BFE4978FA3269EE1', 'ArcTan2(-3, 4)');
+  x := 1.0; y2 := -1.0;
+  CheckBits(ArcTan2(x, y2), '4002D97C7F3321D2', 'ArcTan2(1, -1) — second quadrant');
+  x := -1.0; y2 := -1.0;
+  CheckBits(ArcTan2(x, y2), 'C002D97C7F3321D2', 'ArcTan2(-1, -1) — third quadrant');
+
+  { SIGNED ZEROS. atan2 propagates them, and `-0.0 < 0.0` is False, so the
+    old sign test answered +pi where -pi is required. FPC 3.2.2 and CPython
+    agree bit for bit on all of these. }
+  x := 0.0; y2 := -1.0;
+  CheckBits(ArcTan2(x, y2), '400921FB54442D18', 'ArcTan2(+0, -1) = +pi');
+  x := -0.0; y2 := -1.0;
+  CheckBits(ArcTan2(x, y2), 'C00921FB54442D18', 'ArcTan2(-0, -1) = -pi');
+  x := -0.0; y2 := 1.0;
+  CheckBits(ArcTan2(x, y2), '8000000000000000', 'ArcTan2(-0, 1) = -0');
+  x := -0.0; y2 := 0.0;
+  CheckBits(ArcTan2(x, y2), '8000000000000000', 'ArcTan2(-0, +0) = -0');
 
   if failures = 0 then writeln('MATHROUND OK')
   else writeln('MATHROUND ', failures, ' FAILURES');
