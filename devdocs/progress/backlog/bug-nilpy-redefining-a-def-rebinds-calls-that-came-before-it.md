@@ -73,3 +73,51 @@ that shadows an imported name, have the same shape.
 sides; different return TYPE (the corrupting case above); a redefinition inside
 a branch that does not execute; and a `class` redefined the same way. Per-fix
 loop.
+
+## 2026-08-15 — mechanism located, PARKED (not started)
+
+Found the exact site and, more usefully, found that this is the **overshoot of a
+shipped fix for the opposite bug**. That changes what a safe fix looks like, so
+it is recorded before anyone starts.
+
+`PyParseDef` (`compiler/pyparser.inc` ~26072):
+
+```pascal
+procIdx := FindProcInUnit(name, -1);
+if procIdx < 0 then procIdx := FindProc(name);
+if (procIdx >= 0) and (Procs[procIdx].BodyAddr >= 0) and
+   (Procs[procIdx].ParamCount = nparams) then
+begin
+  { ...overwrite the FIRST proc's signature, and later its body... }
+```
+
+A same-arity redefinition deliberately **reuses the first def's Proc**. Its own
+comment says why, and cites the ticket it fixed:
+
+> a second same-arity Proc is one no call site can ever reach, and every call
+> kept running the FIRST body forever
+> (`bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs`)
+
+So the two failure modes are the two ends of one lever: give the redefinition
+its own Proc and *no* call reaches it; reuse the first Proc and *every* call
+reaches the second body, including the ones written above it. **Both are wrong,
+and a fix that only moves the lever back re-breaks the shipped ticket.** That is
+the whole reason this is parked rather than attempted.
+
+What CPython actually does is neither: `def` is an assignment executed where it
+stands, so the binding is **positional** — calls above see the first body, calls
+below the second. Two Procs AND a rebinding at the def's position.
+
+**The constraint that makes it non-trivial:** `PyRegisterDefShells` is a
+PRE-PASS that registers every module-level def before any body is parsed, and
+`FindProc`'s hash chain answers the OLDEST registration for a name. So "which
+registration is current" cannot be read off the symbol table at all — it needs a
+per-name cursor advanced as the main parse passes each `def` statement, which
+call-site resolution then consults. That is a change to NilPy name resolution,
+in the one spot with a documented history of regressing in both directions (the
+same block also carries a `def len(x)` builtin-shadowing fix).
+
+**Do not take this as a between-tasks item.** It wants the full sibling set green
+in one go: redefinition with calls on both sides, differing arity (the existing
+separate-Proc path, which must keep working), a def shadowing a pylib builtin,
+and a nested def's qualified name.
