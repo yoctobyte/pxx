@@ -94,4 +94,4 @@ CPython allows. Small and separable — filed as a note here rather than a ticke
 of its own until something asks for it.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit de6a5d540.
