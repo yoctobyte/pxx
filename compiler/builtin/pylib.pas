@@ -1673,6 +1673,11 @@ function pymap_int(l: TPyList): TPyList;
 function pymap_str(l: TPyList): TPyList;
 function pymap_float(l: TPyList): TPyList;
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
+{ `<`, checked in SOURCE operand order — see PyOrdRefuse. Every caller that
+  means "a is less than b" uses this rather than pyvar_gt with the arguments
+  swapped, so an unorderable pair is refused with CPython's wording. }
+function pyvar_lt(const a: Variant; const b: Variant): Boolean;
+procedure PyOrdCheck(const a: Variant; const b: Variant; const op: AnsiString);
 { `next(it)` / `next(it, default)` over a materialised sequence. NOT named
   `next`: itertools' counter already owns that name for its own argument type,
   and adding a TPyList overload made an untyped argument (a ClassVar holding a
@@ -4901,7 +4906,7 @@ begin
       if reverse then
         swapped := pyvar_gt(Self.at(j), Self.at(j - 1))
       else
-        swapped := pyvar_gt(Self.at(j - 1), Self.at(j));
+        swapped := pyvar_lt(Self.at(j), Self.at(j - 1));
       if swapped then
       begin
         v := Self.at(j);
@@ -5979,6 +5984,55 @@ begin
   pymap_float := r;
 end;
 
+{ ORDERING REFUSAL — the one place that decides a pair cannot be ordered, and
+  the one place that words it. CPython:
+
+    '<' not supported between instances of 'NoneType' and 'int'
+
+  The operand names are in SOURCE order, so every caller that implements `<` by
+  swapping into a `>` primitive must check BEFORE it swaps — that is what
+  pyvar_lt below exists for. bug-nilpy-comparing-none-with-a-number-answers-
+  instead-of-raising. }
+procedure PyOrdRefuse(const a: Variant; const b: Variant; const op: AnsiString);
+begin
+  raise TypeError.Create('''' + op + ''' not supported between instances of ''' +
+    pytype_name_v(a) + ''' and ''' + pytype_name_v(b) + '''');
+end;
+
+{ None wears VT_EMPTY, but an object slot with a nil payload reads as NoneType
+  too (pytype_name_v answers 'NoneType' for both), so the predicate takes both
+  rather than leaving one spelling ordered as 0. }
+function PyOrdIsNone(p: PPyVarRec): Boolean;
+begin
+  PyOrdIsNone := (p^.VType = 0) or ((p^.VType = 7) and (p^.Payload = 0));
+end;
+
+{ Is this pair orderable at all? Raises if not; returns silently if it is.
+  Ordering-only — `None == 3` is False in CPython, not an error, and `==`/`!=`
+  never come here. }
+procedure PyOrdCheck(const a: Variant; const b: Variant; const op: AnsiString);
+var pa, pb: PPyVarRec; sa, sb: Boolean;
+begin
+  pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  if PyOrdIsNone(pa) or PyOrdIsNone(pb) then PyOrdRefuse(a, b, op);
+  sa := (pa^.VType = 5) or (pa^.VType = 6);
+  sb := (pb^.VType = 5) or (pb^.VType = 6);
+  { a str against a non-str. The arm inside pyvar_gt raised 'comparison of a
+    string with a number' for this, which is both differently worded and wrong
+    about a list; CPython names the two types. }
+  if sa <> sb then PyOrdRefuse(a, b, op);
+end;
+
+{ `a < b`, as CPython's sort/min actually spell it. Delegates to the `>`
+  primitive with the operands swapped — but checks orderability FIRST, so the
+  refusal names the operator and the operand order the source wrote. }
+function pyvar_lt(const a: Variant; const b: Variant): Boolean;
+begin
+  PyOrdCheck(a, b, '<');
+  pyvar_lt := pyvar_gt(b, a);
+end;
+
+
 function pyvar_gt(const a: Variant; const b: Variant): Boolean;
 var pa, pb: PPyVarRec;
     la, lb, k, n: Int64;
@@ -5988,6 +6042,10 @@ var pa, pb: PPyVarRec;
     pg2: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
+  { None orders against nothing, and a str orders against no non-str. Before
+    this the tag-0 payload fell through to pyvar_to_int and compared as 0, so
+    `min(3, None)` answered None where CPython raises. }
+  PyOrdCheck(a, b, '>');
   { Two SEQUENCES compare LEXICOGRAPHICALLY: the first index where the elements
     differ decides, and if one runs out first the shorter is smaller. Without
     this arm both fell through to pyvar_to_int and `sorted([("b", 2),
@@ -6502,7 +6560,7 @@ begin
   for i := 1 to n - 1 do
   begin
     e := l.at(i);
-    if pyvar_gt(Result, e) then Result := e;
+    if pyvar_lt(e, Result) then Result := e;
   end;
 end;
 
@@ -8185,23 +8243,33 @@ begin
   PPyDouble(@r^.Payload)^ := da / db;
 end;
 
+{ The four ORDERING operators on a variant operand. Each checks orderability
+  first, in the operand order the source wrote and naming its own operator, so
+  `3 < None` reports `'<' ... 'int' and 'NoneType'` exactly as CPython does
+  rather than ordering the tag-0 payload as 0 and answering False.
+  bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising.
+  `==`/`!=` are pyeq_v's business and stay total — `None == 3` is False. }
 function pylt_v(const a: Variant; const b: Variant): Boolean;
 begin
+  PyOrdCheck(a, b, '<');
   Result := pycmp_v(a, b) < 0;
 end;
 
 function pyle_v(const a: Variant; const b: Variant): Boolean;
 begin
+  PyOrdCheck(a, b, '<=');
   Result := pycmp_v(a, b) <= 0;
 end;
 
 function pygt_v(const a: Variant; const b: Variant): Boolean;
 begin
+  PyOrdCheck(a, b, '>');
   Result := pycmp_v(a, b) > 0;
 end;
 
 function pyge_v(const a: Variant; const b: Variant): Boolean;
 begin
+  PyOrdCheck(a, b, '>=');
   Result := pycmp_v(a, b) >= 0;
 end;
 
@@ -8444,7 +8512,7 @@ begin
     cur := l.at(i);
     curK := PyCallKeyVar(key, cur);
     if wantMax then better := pyvar_gt(curK, bestK)
-    else better := pyvar_gt(bestK, curK);
+    else better := pyvar_lt(curK, bestK);
     if better then
     begin
       bestK := curK;
@@ -8509,7 +8577,7 @@ function min(const a: Variant; const b: Variant): Variant; overload;
 begin
   if PyVarIsCallable(b) then begin Result := PyMinMaxByKey(a, b, False); Exit; end;
   if PyMinMaxNoneKey(a, b) then begin Result := min(a); Exit; end;
-  if pyvar_gt(a, b) then Result := b else Result := a;
+  if pyvar_lt(b, a) then Result := b else Result := a;
 end;
 
 function max(const a: Variant; const b: Variant): Variant; overload;

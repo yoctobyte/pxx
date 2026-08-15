@@ -1,0 +1,63 @@
+# None ORDERS against nothing — CPython raises TypeError for <, <=, >, >= with
+# a None operand, and so must min/max/sorted, which are the same comparison
+# wearing a builtin's name. bug-nilpy-comparing-none-with-a-number-answers-
+# instead-of-raising: the tag-0 payload was read as 0, so `min(3, None)`
+# answered None. Diffed against CPython.
+#
+# The operands are named in SOURCE order and the message names the operator the
+# source wrote, which is why the `<`-meaning callers cannot simply swap into the
+# `>` primitive.
+
+
+def t(thunk):
+    try:
+        print(thunk())
+    except TypeError as e:
+        print("TypeError:", e)
+
+
+def f(x):
+    return x
+
+
+# the four rows the ticket names
+t(lambda: min(3, None))
+t(lambda: sorted([1, None]))
+t(lambda: f(3) < f(None))
+t(lambda: f(None) > f(3))
+
+# ...and the rest of the surface, so the refusal is ONE rule rather than four
+t(lambda: max(3, None))
+t(lambda: min([1, None]))
+t(lambda: max([1, None]))
+t(lambda: f(3) <= f(None))
+t(lambda: f(None) >= f(3))
+t(lambda: f(None) < f(None))
+t(lambda: sorted([None, None]))
+t(lambda: min([None, 1], key=f))
+t(lambda: max(["a", None]))
+
+# a str against a number is the same kind of refusal, and used to say
+# "comparison of a string with a number"
+t(lambda: f("a") < f(3))
+t(lambda: f(3) > f("a"))
+t(lambda: sorted([1, "a"]))
+# NOT covered: `"a" < 3` written with two LITERALS. That pair is refused at a
+# different site (PyUnsupportedOperandError, which has no operands to name) and
+# still says "unsupported operand type(s) for this operator" —
+# bug-nilpy-statically-clashing-operands-refuse-without-naming-the-types.
+
+# EQUALITY is total in Python and must stay so — None == 3 is False, not an error
+print(None == 3, None != 3, None == None, None != None)
+print(f(None) == f(3), f(None) != f(3), f(None) == f(None))
+print(None == "a", None == 0, None == False, None == [])
+
+# `is` / `is not` and truthiness are untouched
+print(f(None) is None, f(3) is None, f(None) is not None)
+print(bool(None), not None)
+
+# and the ordinary orderings still order
+print(min(3, 7), max(3, 7), sorted([3, 1, 2]))
+print(min([2.5, 1.5]), max("bca"), sorted(["b", "a"]))
+print(min([[2], [1, 1]], key=len), max([1, 2], key=f))
+print(f(3) < f(4), f(4) <= f(4), f("a") < f("b"), f(1.5) > f(1.0))

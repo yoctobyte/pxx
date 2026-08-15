@@ -1,0 +1,25 @@
+TypeError: '<' not supported between instances of 'NoneType' and 'int'
+TypeError: '<' not supported between instances of 'NoneType' and 'int'
+TypeError: '<' not supported between instances of 'int' and 'NoneType'
+TypeError: '>' not supported between instances of 'NoneType' and 'int'
+TypeError: '>' not supported between instances of 'NoneType' and 'int'
+TypeError: '<' not supported between instances of 'NoneType' and 'int'
+TypeError: '>' not supported between instances of 'NoneType' and 'int'
+TypeError: '<=' not supported between instances of 'int' and 'NoneType'
+TypeError: '>=' not supported between instances of 'NoneType' and 'int'
+TypeError: '<' not supported between instances of 'NoneType' and 'NoneType'
+TypeError: '<' not supported between instances of 'NoneType' and 'NoneType'
+TypeError: '<' not supported between instances of 'int' and 'NoneType'
+TypeError: '>' not supported between instances of 'NoneType' and 'str'
+TypeError: '<' not supported between instances of 'str' and 'int'
+TypeError: '>' not supported between instances of 'int' and 'str'
+TypeError: '<' not supported between instances of 'str' and 'int'
+False True True False
+False True True
+False False False False
+True False False
+False True
+3 7 [1, 2, 3]
+1.5 c ['a', 'b']
+[2] 2
+True True True True
