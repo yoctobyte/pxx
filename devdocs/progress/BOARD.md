@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (200)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,6 +53,7 @@ _none_
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
+| bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219 | N | 25 | bug | divmod(obj, n) on a class declaring __divmod__ dies with 'Runtime error 219' (invalid typecast) instead of returning the pair. The dispatcher demands RetKind=6 (a class) and a NilPy def returning a tuple does not declare that, so the dunder is never called and the fallback casts something that is not a TPyList. | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
@@ -597,6 +598,7 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
+- [p 25] [N] bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
