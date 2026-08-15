@@ -54,7 +54,6 @@ _none_
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
 | bug-nilpy-a-computed-attribute-name-cannot-see-a-property | N | 20 | bug | `getattr(o, nm)` / `hasattr(o, nm)` with a COMPUTED name answers False (and misses the value) for a PROPERTY: the runtime dynamic-attribute predicate is RTTI-based and the RTTI blob carries methods and fields, not properties. | — |
-| bug-nilpy-a-generator-expression-is-not-consumed-once | N | 30 | bug | `g = (x for x in [1,2]); next(g); list(g)` answers [1, 2] where CPython answers [2] — a genexpr bound to a name is materialised eagerly, so it is re-iterable and `next()` does not advance what a later consumer sees. | — |
 | bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc | N | 25 | bug | Proc lookup is case-INSENSITIVE (Pascal heritage) while Python is case-sensitive, so a NilPy name resolves against a builtin that differs only in case: `print(Counter)` prints 4727019 (a code address) where CPython raises NameError. It also made a nested-def helper claim every read of a global named `counter`. | — |
 | bug-nilpy-augmented-sequence-repeat-rebinds-instead-of-mutating | N | 20 | bug | `xs *= 2` on a list REBINDS where CPython mutates in place, so an alias taken beforehand keeps the old contents. Only observable through an alias; the value bound to the name itself is correct. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
@@ -142,6 +141,7 @@ _none_
 | feature-n-nilpy-ast-typing-module-scope | N | 8 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
+| feature-nilpy-a-genexpr-is-lazy-not-materialised | N | 25 | feature | A genexpr's elements are built EAGERLY and then walked by a cursor, so single consumption is right but an INFINITE genexpr still cannot be expressed and side effects all happen at construction. True laziness means a TPyIter whose mapping is the element expression. | — |
 | feature-nilpy-arc-cross-parity | A | 35 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-ascii-flag-fast-path | N | 35 | feature | Make pystr_isascii O(1) by reading PXX_FLAG_ASCII — but first MEASURE whether every string reaching it carries a header, because a false positive there is a silent wrong answer on exactly the non-ASCII strings the character surface exists for | — |
 | feature-nilpy-codecs-shim | B | 40 | feature | `import codecs` — the next wall for the compile-real-libraries campaign | bug-n-str-encode-and-bytes-decode-ignore-the-encoding |
@@ -408,9 +408,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1852)
+## done (1853)
 
-1852 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1853 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -578,7 +578,6 @@ _none_
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
-- [p 30] [N] bug-nilpy-a-generator-expression-is-not-consumed-once
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
@@ -611,6 +610,7 @@ _none_
 - [p 25] [P] compat-pascal-unit-deprecated-hint-directive
 - [p 25] [A] feature-a-extended-is-an-alias-for-double
 - [p 25] [A] feature-a-shrink-managed-header-on-32-bit
+- [p 25] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 25] [N] feature-nilpy-for-loop-getitem-protocol-fallback
 - [p 25] [N] feature-nilpy-math-module-twelve-absent-names-measured
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields

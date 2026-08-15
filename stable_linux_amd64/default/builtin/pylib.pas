@@ -684,6 +684,14 @@ type
     FBox: TPyList;           { the one-slot prefetch }
     FHas: Boolean;           { FBox holds a prefetched value }
     FEnd: Boolean;           { the source is exhausted — never restarts }
+    { A GENERATOR EXPRESSION bound to a name. It walks a materialised list, so
+      its ADVANCE is a list cursor's and nothing about the machinery changes —
+      only what it CALLS itself, which `type(g).__name__` and every error
+      message read. A separate flag rather than a PYITER_GEN kind precisely
+      because the behaviour is identical: a new kind would have to be added to
+      every site that tests FKind, and the one that got missed is where the bug
+      would live. }
+    FIsGen: Boolean;
     constructor Create;
   end;
 
@@ -1124,6 +1132,12 @@ var
   TPyIter's declaration for why it is two calls and not one. }
 function pyiter_of_list(l: TPyList): TPyIter;
 function pyiter_of_str(const s: AnsiString): TPyIter;
+{ A generator expression bound to a NAME. The elements are materialised, but
+  the VALUE is a cursor over them, because single consumption is the observable
+  half of laziness: `g = (x for x in [1, 2]); next(g); list(g)` must answer [2],
+  and while g held the list itself both consumers walked it from the start.
+  bug-nilpy-a-generator-expression-is-not-consumed-once }
+function pyiter_gen(l: TPyList): TPyIter;
 { `iter(x)` over a value whose type is only known at run time — a list, a str,
   a dict (its KEYS, as Python iterates one), bytes, or a cursor, which answers
   ITSELF because CPython's iter() is idempotent on an iterator. }
@@ -1886,6 +1900,18 @@ function any(it: TPyIter): Boolean; overload;
 function all(it: TPyIter): Boolean; overload;
 function any(r: TPyRange): Boolean; overload;
 function all(r: TPyRange): Boolean; overload;
+{ …and over a VARIANT, which is what an unannotated parameter, a dict entry and
+  a container element all are. Without these arms the call fell to the TPyList
+  one and the variant was hard-CAST: `def s(v): return sum(v)` answered 0 for a
+  range and SEGFAULTED for a map cursor, while the identical `sum(range(4))`
+  written inline was right. max/min/len/tuple already had the arm — these four
+  are the ones that did not, which is the whole shape of the bug.
+  pylist_v decides on the run-time tag (a str spreads, a dict gives its keys, a
+  cursor DRAINS, a user __iter__ is walked). }
+function sum(const v: Variant): Variant; overload;
+function sum(const v: Variant; const start: Variant): Variant; overload;
+function any(const v: Variant): Boolean; overload;
+function all(const v: Variant): Boolean; overload;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -11394,6 +11420,7 @@ begin
   FStart := 0;
   FHas := False;
   FEnd := False;
+  FIsGen := False;
 end;
 
 function pyiter_of_list(l: TPyList): TPyIter;
@@ -11409,6 +11436,12 @@ begin
   Result := TPyIter.Create;
   Result.FKind := PYITER_STR;
   Result.FStr := s;
+end;
+
+function pyiter_gen(l: TPyList): TPyIter;
+begin
+  Result := pyiter_of_list(l);
+  Result.FIsGen := True;
 end;
 
 function pyiter_rev_list(l: TPyList): TPyIter;
@@ -12091,6 +12124,7 @@ function pyiter_typename(it: TPyIter): AnsiString;
 begin
   Result := 'iterator';
   if it = nil then Exit;
+  if it.FIsGen then begin Result := 'generator'; Exit; end;
   if it.FKind = PYITER_LIST then Result := 'list_iterator'
   else if it.FKind = PYITER_STR then Result := 'str_iterator'
   else if it.FKind = PYITER_REV then Result := 'list_reverseiterator'
@@ -12198,6 +12232,26 @@ end;
 function all(it: TPyIter): Boolean; overload;
 begin
   Result := all(pyiter_drain(it));
+end;
+
+function sum(const v: Variant): Variant; overload;
+begin
+  Result := sum(pylist_v(v));
+end;
+
+function sum(const v: Variant; const start: Variant): Variant; overload;
+begin
+  Result := sum(pylist_v(v), start);
+end;
+
+function any(const v: Variant): Boolean; overload;
+begin
+  Result := any(pylist_v(v));
+end;
+
+function all(const v: Variant): Boolean; overload;
+begin
+  Result := all(pylist_v(v));
 end;
 
 type

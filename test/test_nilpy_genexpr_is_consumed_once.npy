@@ -1,0 +1,68 @@
+# A generator expression bound to a NAME is consumed ONCE. It used to BE the
+# materialised list, so `g = (x for x in [1,2]); next(g); list(g)` answered
+# [1, 2] where CPython answers [2] — silently. The value is now a cursor over
+# those elements; the elements themselves are still built eagerly, so an
+# INFINITE genexpr is still not expressible (recorded on the ticket).
+#
+# The last two blocks are the reason this file also covers sum/any/all over a
+# VARIANT: a genexpr passed to a def arrives as one, and those three builtins
+# had no variant arm — the call fell to the TPyList overload and hard-cast, so
+# `sum(v)` answered 0 for a range and SEGFAULTED for a cursor.
+
+g0 = (x for x in [1, 2])
+print(next(g0), list(g0))
+
+# parenthesised genexpr consumed in place by a builtin
+print(sum((x for x in [1, 2, 3])))
+print(max((x for x in [4, 1, 9])))
+print(sorted((x for x in [3, 1, 2])))
+print(list((x for x in "abc")))
+print(" ".join((c for c in "xyz")))
+print(any((x > 2 for x in [1, 2, 3])), all((x > 0 for x in [1, 2])))
+
+# for-loops over one
+g = (x * x for x in range(4))
+for v in g:
+    print(v, end=" ")
+print()
+# ...and it is now exhausted
+print(list(g))
+
+# next() twice, then the rest
+h = (c for c in "abcd")
+print(next(h), next(h), list(h))
+
+# passed to a def and consumed there
+def take(it):
+    return list(it)
+
+print(take(x + 1 for x in [1, 2]))
+print(take((x + 1 for x in [1, 2])))
+
+# two consumers: the second sees nothing
+k = (x for x in [7, 8])
+print(list(k), list(k))
+
+# a filter clause, and tuple unpack from one
+m = (x for x in [1, 2, 3, 4] if x % 2 == 0)
+a, b = m
+print(a, b)
+
+# nested in a call chain
+print(list(map(str, (x for x in [1, 2]))))
+print(type((x for x in [1])).__name__)
+
+# a genexpr arriving as a VARIANT parameter, and the builtins over it
+def total(v):
+    return sum(v)
+
+def anyof(v):
+    return any(v)
+
+def allof(v):
+    return all(v)
+
+print(total(x for x in [1, 2, 3]), total((x for x in [1, 2, 3])))
+print(total(range(4)), total(map(lambda x: x * 2, [1, 2])))
+print(anyof(x > 2 for x in [1, 2, 3]), allof(x > 0 for x in [1, 2]))
+print(anyof(filter(None, [0, 0])), allof(range(1, 3)))

@@ -19151,7 +19151,18 @@ begin
     PyHoistStmt(ASTLeft[seq]);
     seq := ASTRight[seq];
   end;
-  Result := PyMakeIdent(tmpSym);
+  { …and the value is a CURSOR over those elements, not the list itself. Single
+    consumption is the observable half of laziness — `g = (x for x in [1, 2]);
+    next(g); list(g)` must answer [2], and with the list as the value both
+    consumers walked it from the start, silently. The elements are still built
+    eagerly, so an INFINITE genexpr is still not expressible; that half is
+    recorded on the ticket rather than half-solved here.
+
+    Only the PARENTHESISED form takes this road. A bare genexpr consumed in
+    place (`sum(x for x in xs)`) comes through PyParseCompExprValue, where
+    nothing observes the container twice and the builtins want a list. }
+  Result := PyCallProc1('pyiter_gen', PyMakeIdent(tmpSym));
+  if Result < 0 then Result := PyMakeIdent(tmpSym);
 end;
 
 { Expression-position DICT comprehension — the brace twin of
