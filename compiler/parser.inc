@@ -3267,6 +3267,7 @@ end;
     in an INSTANCE method the runtime class of Self -> __pxxRttiOf(Self). }
 function GenMakeStaticMethodCall(mpi: Integer; selfNode: Integer): Integer;
 var callNode, lastArg, argSeq, exprNode, argIdx, ai: Integer;
+    mkw, kwHead, kwCount: Integer;
 begin
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := mpi;
@@ -3307,6 +3308,18 @@ begin
         (fpjson) -- and an open-array scalar literal. Without these the '[' is parsed as a
         SET and dies on "set item must be one character". The plain-routine call path has
         always checked for them; the method paths did not. }
+      { `Base.st(1, b=7)` — a KEYWORD argument to a STATIC method reached
+        through the class name. This loop is index-driven and interleaves
+        FillDefaultArgs as it goes, which is why the keyword pair
+        PyKwArgIndex/PyBindKwArgs was not simply bolted on when the INSTANCE
+        shape got it: the two mechanisms would both claim the holes. So a
+        keyword switches this call to the chain-driven discipline — tag the arg
+        with its parameter index, stop at `)`, and let PyBindKwArgs do the
+        reordering and hole-filling it already does for five other call sites.
+        The no-keyword path below is untouched, and PyKwArgIndex returns 0
+        unless isNilPy, so every Pascal call through here is byte-identical.
+        bug-nilpy-a-static-method-called-on-the-class-takes-no-keyword-arguments }
+      mkw := PyKwArgIndex(mpi, 1);
       if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, ai) then
         exprNode := ParseVarRecLiteralAST
       else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, ai) then
@@ -3330,8 +3343,16 @@ begin
       end;
       argSeq := AllocNode(AN_ARG);
       ASTLeft[argSeq] := exprNode;
+      ASTIVal[argSeq] := mkw;
       ASTRight[lastArg] := argSeq;
       lastArg := argSeq;
+      if mkw <> 0 then
+      begin
+        if CurTok.Kind = tkRParen then Break;
+        Expect(tkComma, ',');
+        Inc(ai);
+        Continue;
+      end;
       if (ai < Procs[mpi].ParamCount - 1) and CanFillDefaultsFrom(mpi, ai + 1) then
       begin
         FillDefaultArgs(mpi, ai + 1, callNode, lastArg);
@@ -3341,6 +3362,14 @@ begin
       Inc(ai);
     end;
     Expect(tkRParen, ')');
+    { The chain starts at the SELF argument, exactly as the instance path hands
+      it over — PyKwArgIndex returns the ABSOLUTE parameter index, and self is
+      parameter 0, so the two agree without an offset. A no-keyword chain is
+      returned untouched (PyBindKwArgs exits on its own first test). }
+    kwHead := ASTLeft[callNode];
+    kwCount := 0;
+    PyBindKwArgs(mpi, kwHead, lastArg, kwCount);
+    ASTLeft[callNode] := kwHead;
   end
   else if CanFillDefaultsFrom(mpi, 1) then
     FillDefaultArgs(mpi, 1, callNode, lastArg);

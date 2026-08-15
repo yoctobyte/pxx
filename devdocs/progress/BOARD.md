@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (207)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,7 +50,6 @@ _none_
 | bug-c-cast-to-float-in-value-position-does-not-round-to-single | C | 25 | bug | `(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it. | — |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
-| bug-nilpy-a-static-method-called-on-the-class-takes-no-keyword-arguments | N | 35 | bug | `Base.st(1, b=7)` — a STATIC method reached through the class name — fails with `undefined variable (b)`. The sibling instance shape `Base.meth(self, 1, opt=2)` was fixed; this one goes through GenMakeStaticMethodCall, a positional, index-driven builder shared with Pascal, and was deliberately left rather than forced. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 15 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
@@ -407,9 +406,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1909)
+## done (1910)
 
-1909 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1910 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -553,7 +552,6 @@ _none_
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
-- [p 35] [N] bug-nilpy-a-static-method-called-on-the-class-takes-no-keyword-arguments
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - [p 35] [T] bug-t-csmith-harness-reports-slow-as-a-timeout
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven

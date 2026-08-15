@@ -1,0 +1,33 @@
+# `Base.st(1, b=7)` — a KEYWORD argument to a STATIC method reached through the
+# class name — failed with `undefined variable (b)`. The positional spellings
+# always worked; only the keyword form did not, because that call goes through
+# GenMakeStaticMethodCall, an index-driven builder that interleaves
+# FillDefaultArgs as it walks, rather than the chain-driven loop the INSTANCE
+# shape uses (which took the keyword pair when its own ticket was fixed).
+# bug-nilpy-a-static-method-called-on-the-class-takes-no-keyword-arguments
+#
+# Every spelling below is CPython's, and the positional ones are here on purpose:
+# the fix switches the loop to chain discipline ONLY when a keyword is seen, so
+# the rows that already worked are what says the switch is additive.
+
+class Base:
+    @staticmethod
+    def st(a, b=2, c=3):
+        return str(a) + "-" + str(b) + "-" + str(c)
+
+    def im(self, a, b=9):
+        return "im:" + str(a) + "-" + str(b)
+
+print(Base.st(1))
+print(Base.st(1, 7))
+print(Base.st(1, 7, 8))
+
+# the four that did not compile
+print(Base.st(1, b=7))          # a hole BEFORE the keyword's parameter
+print(Base.st(1, c=9))          # a hole between them, filled from the default
+print(Base.st(1, c=9, b=4))     # out of declaration order
+print(Base.st(a=1, b=7))        # every argument by keyword
+
+# the instance shape shares the reorder helper and must not move
+o = Base()
+print(o.im(1), o.im(1, b=3), Base.im(o, 1, b=3))

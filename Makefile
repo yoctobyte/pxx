@@ -2592,6 +2592,11 @@ test-nilpy: $(COMPILER)
 	# .expected file rather than an inline printf: the output contains quotes.
 	./$(COMPILER) test/test_nilpy_kwarg_overload.npy $(TESTTMP)/test_nilpy_kwovl26
 	$(TESTTMP)/test_nilpy_kwovl26 | diff -u test/test_nilpy_kwarg_overload.expected -
+	# ...and a keyword argument to a STATIC method reached through the class name,
+	# which went through a different, index-driven builder and failed with
+	# "undefined variable (b)" while every positional spelling worked.
+	./$(COMPILER) test/test_nilpy_static_method_kwargs.npy $(TESTTMP)/test_nilpy_smkw26
+	$(TESTTMP)/test_nilpy_smkw26 | diff -u test/test_nilpy_static_method_kwargs.expected -
 	# list(range(...)) and str.expandtabs(). NilPy's range is not a value, it is the counted-loop
 	# lowering in a for header, so list(range(3)) did not compile. Materialised
 	# ONLY inside list( — a general range value would make print(range(3)) print a
