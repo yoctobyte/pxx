@@ -35,4 +35,4 @@ Not a defect: `1a32de34b` made a unit's imports stop leaking into its
 importers, and this source named something it reached only through an import's
 import. FPC rejects it too. The fix is the missing `uses` clause in the source,
 which is what landed. Verified compiling at the fixing sha.
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 7b77f32af.
