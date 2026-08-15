@@ -164,6 +164,27 @@ A sane ladder is 3 then 4, with 2 decided independently on the packed-double
 ticket's own merits. Note 4 does not replace 3: even with full multiversioning,
 a user's own hot loop gets FMA only by compiling for a baseline.
 
+## User framing, 2026-08-15 — this is all OPTIMIZATION, and it is not urgent
+
+*"this is sortof two issues. 1 is optimization. and 2 is 'older' hardware
+support... but i consider this all optimization. for now, we are cool. and, in
+open source style — compile for 'native' (and native only) for best performance,
+or compile 'compat' or 'auto-detect cpu capabilities'. right now, not our worry
+but good to know."*
+
+Two things to carry forward from that:
+
+- **Nothing here is a correctness or portability defect today.** pxx emits v1
+  and runs everywhere. This ticket exists so the question is answered from data
+  when someone reaches for AVX/FMA/AVX-512, not because anything is broken. Do
+  not let it look urgent on the board.
+- **The eventual user-facing shape is the familiar open-source triad**, and it
+  maps onto the options above: `native` (build for this box, fastest, option 3
+  with `--cpu=native`), `compat` (the guaranteed baseline, option 1), and
+  `auto` (detect at startup, option 4 — bounded to the RTL list per the limit
+  above). Same idea generalizes past FMA to the whole AVX family, which is the
+  reason to settle the *mechanism* once rather than per-instruction-set.
+
 ## Ordering — do this AFTER the value model, not before
 
 The measured decomposition of pxx `Sin` vs glibc
