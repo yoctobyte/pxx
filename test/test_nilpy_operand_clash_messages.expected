@@ -1,0 +1,17 @@
+TypeError: '<' not supported between instances of 'str' and 'int'
+TypeError: '>' not supported between instances of 'int' and 'str'
+TypeError: '<=' not supported between instances of 'str' and 'int'
+TypeError: '>=' not supported between instances of 'int' and 'str'
+TypeError: unsupported operand type(s) for -: 'str' and 'int'
+TypeError: unsupported operand type(s) for -: 'int' and 'str'
+TypeError: unsupported operand type(s) for /: 'str' and 'int'
+TypeError: unsupported operand type(s) for //: 'str' and 'int'
+TypeError: unsupported operand type(s) for %: 'int' and 'str'
+TypeError: unsupported operand type(s) for -: 'bool' and 'str'
+TypeError: unsupported operand type(s) for +: 'float' and 'str'
+TypeError: unsupported operand type(s) for -: 'float' and 'str'
+TypeError: can only concatenate str (not "int") to str
+TypeError: can't multiply sequence by non-int of type 'str'
+TypeError: can only concatenate str (not "float") to str
+ab ababab ababab 7 4.5 True True
+ x 1.5 3 1 2 True

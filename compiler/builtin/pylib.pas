@@ -7257,6 +7257,68 @@ end;
   the expression could not even BUILD -- which is the normal Python way to probe
   for operator support.
   bug-nilpy-missing-arith-dunder-aborts-compile-instead-of-raising. }
+{ A statically PROVEN operand clash, worded as CPython words it. The compiler
+  knows both types here — that is why it took this arm — so it passes them as
+  small codes and this composes the message; no IR-level string constants, and
+  no second copy of Python's type vocabulary.
+  op:  1 '+'  2 '-'  3 '*'  4 '/'  5 '//'  6 '%'  7 '<'  8 '<='  9 '>'  10 '>='
+  kind: 0 str  1 int  2 float  3 bool  4 unknown
+  bug-nilpy-statically-clashing-operands-refuse-without-naming-the-types }
+procedure PyOperandClashError(op: Int64; lk: Int64; rk: Int64); forward;
+
+{ The operand type as Python spells it, from the compiler's small code. }
+function PyClashKindName(k: Int64): AnsiString;
+begin
+  if k = 0 then PyClashKindName := 'str'
+  else if k = 1 then PyClashKindName := 'int'
+  else if k = 2 then PyClashKindName := 'float'
+  else if k = 3 then PyClashKindName := 'bool'
+  else PyClashKindName := 'object';
+end;
+
+function PyClashOpName(op: Int64): AnsiString;
+begin
+  if op = 1 then PyClashOpName := '+'
+  else if op = 2 then PyClashOpName := '-'
+  else if op = 3 then PyClashOpName := '*'
+  else if op = 4 then PyClashOpName := '/'
+  else if op = 5 then PyClashOpName := '//'
+  else if op = 6 then PyClashOpName := '%'
+  else if op = 7 then PyClashOpName := '<'
+  else if op = 8 then PyClashOpName := '<='
+  else if op = 9 then PyClashOpName := '>'
+  else PyClashOpName := '>=';
+end;
+
+{ CPython does not use ONE shape for this: comparisons name the operator and
+  both instances, arithmetic names the operator and both types, and `str` has
+  two messages of its own for `+` and `*` that mention neither in that form.
+  All four are reproduced, because a program that greps a message is the only
+  reason the wording matters at all. }
+procedure PyOperandClashError(op: Int64; lk: Int64; rk: Int64);
+var ln, rn, q: AnsiString;
+begin
+  q := Chr(39);
+  ln := PyClashKindName(lk);
+  rn := PyClashKindName(rk);
+  if op >= 7 then
+    raise TypeError.Create(q + PyClashOpName(op) + q +
+      ' not supported between instances of ' + q + ln + q + ' and ' + q + rn + q);
+  { `'a' + 3` and `'a' * 'b'` — str's own wording, and note the DOUBLE quotes
+    around the type in the concatenate message. CPython's, not a typo here. }
+  if (op = 1) and (lk = 0) then
+    raise TypeError.Create('can only concatenate str (not "' + rn + '") to str');
+  if (op = 3) and ((lk = 0) or (rk = 0)) then
+  begin
+    if lk = 0 then
+      raise TypeError.Create('can' + q + 't multiply sequence by non-int of type ' + q + rn + q)
+    else
+      raise TypeError.Create('can' + q + 't multiply sequence by non-int of type ' + q + ln + q);
+  end;
+  raise TypeError.Create('unsupported operand type(s) for ' + PyClashOpName(op) +
+    ': ' + q + ln + q + ' and ' + q + rn + q);
+end;
+
 procedure PyUnsupportedOperandError;
 begin
   raise TypeError.Create('unsupported operand type(s) for this operator');
@@ -8057,6 +8119,20 @@ begin
     PPyAnsiString(@r^.Payload)^ := concat;
     Exit;
   end;
+  { A str against a NON-str. Falling through to the numeric arms reached
+    pyvar_to_float's generic "expected a number, got str" — a message about a
+    coercion, from an operator the user wrote, naming neither the operator nor
+    the other operand. CPython has two specific messages here and they are
+    asymmetric, because `str + x` is a failed CONCATENATION and `x + str` is a
+    failed addition.
+    bug-nilpy-statically-clashing-operands-refuse-without-naming-the-types }
+  if (pa^.VType = 6) or (pa^.VType = 5) then
+    raise TypeError.Create('can only concatenate str (not "' +
+                           pytype_name_v(b) + '") to str');
+  if (pb^.VType = 6) or (pb^.VType = 5) then
+    raise TypeError.Create('unsupported operand type(s) for +: ' + Chr(39) +
+                           pytype_name_v(a) + Chr(39) + ' and ' + Chr(39) +
+                           'str' + Chr(39));
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
     r^.VType := 3;

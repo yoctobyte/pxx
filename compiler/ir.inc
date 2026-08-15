@@ -4419,7 +4419,8 @@ end;
 
 function IRPyOpSpelling(op: Integer): AnsiString;
 begin
-  if op = Ord(tkMinus) then IRPyOpSpelling := '-'
+  if op = Ord(tkStar) then IRPyOpSpelling := '*'
+  else if op = Ord(tkMinus) then IRPyOpSpelling := '-'
   else if op = Ord(tkSlash) then IRPyOpSpelling := '/'
   else if op = Ord(tkDiv) then IRPyOpSpelling := '//'
   else if op = Ord(tkMod) then IRPyOpSpelling := '%'
@@ -4429,6 +4430,38 @@ begin
   else if op = Ord(tkGt) then IRPyOpSpelling := '>'
   else if op = Ord(tkGe) then IRPyOpSpelling := '>='
   else IRPyOpSpelling := '?';
+end;
+
+{ The same operator as the small code pylib's PyOperandClashError takes. Kept
+  beside the spelling table on purpose: the two describe one operator each and
+  a drift between them puts the wrong symbol in a user's traceback. }
+function IRPyOpClashCode(op: Integer): Int64;
+begin
+  if op = Ord(tkPlus) then IRPyOpClashCode := 1
+  else if op = Ord(tkMinus) then IRPyOpClashCode := 2
+  else if op = Ord(tkStar) then IRPyOpClashCode := 3
+  else if op = Ord(tkSlash) then IRPyOpClashCode := 4
+  else if op = Ord(tkDiv) then IRPyOpClashCode := 5
+  else if op = Ord(tkMod) then IRPyOpClashCode := 6
+  else if op = Ord(tkLt) then IRPyOpClashCode := 7
+  else if op = Ord(tkLe) then IRPyOpClashCode := 8
+  else if op = Ord(tkGt) then IRPyOpClashCode := 9
+  else IRPyOpClashCode := 10;
+end;
+
+{ ...and the operand type as the same small code. Mirrors IRPyOperandTypeName
+  row for row. }
+function IRPyOperandKindCode(n: Integer): Int64;
+var tk: TTypeKind;
+begin
+  tk := IntToTypeKind(ASTTk[n]);
+  if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
+    IRPyOperandKindCode := 0
+  else if tk = tyBoolean then IRPyOperandKindCode := 3
+  else if (tk = tySingle) or (tk = tyDouble) or (tk = tyExtended) then
+    IRPyOperandKindCode := 2
+  else if TypeIsPyNumeric(tk) then IRPyOperandKindCode := 1
+  else IRPyOperandKindCode := 4;
 end;
 
 { The operand type as PYTHON spells it — the warning names both sides, so
@@ -6644,6 +6677,35 @@ begin
         operator support — still compiles and runs its handler. }
       if IRPyStaticPairUndefined(node) then
       begin
+        { NAME the types. The warning right above already does, from the same
+          two helpers — the raiser used to say only "unsupported operand
+          type(s) for this operator", so the RUNTIME message was less
+          informative than the compile-time one about the very same node, which
+          is backwards: this arm was taken precisely because both types are
+          provable. Passed as small codes rather than IR-level string
+          constants, which would need the owning-local machinery an IR-built
+          call bypasses.
+          bug-nilpy-statically-clashing-operands-refuse-without-naming-the-types }
+        cpi := FindProc('PyOperandClashError');
+        if cpi >= 0 then
+        begin
+          first := IRAppend(IR_ARG,
+                     IRAppend(IR_CONST_INT, -1, -1, -1,
+                              IRPyOpClashCode(Integer(ASTIVal[node])), Ord(tyInt64)),
+                     -1, -1, 0, Ord(tyInt64));
+          last := IRAppend(IR_ARG,
+                    IRAppend(IR_CONST_INT, -1, -1, -1,
+                             IRPyOperandKindCode(ASTLeft[node]), Ord(tyInt64)),
+                    -1, -1, 0, Ord(tyInt64));
+          IRB[first] := last;
+          argVal := IRAppend(IR_ARG,
+                      IRAppend(IR_CONST_INT, -1, -1, -1,
+                               IRPyOperandKindCode(ASTRight[node]), Ord(tyInt64)),
+                      -1, -1, 0, Ord(tyInt64));
+          IRB[last] := argVal;
+          Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
+          Exit;
+        end;
         cpi := FindProc('PyUnsupportedOperandError');
         if cpi < 0 then Error('Nil Python: pylib (PyUnsupportedOperandError) not loaded');
         Result := IRAppendCall(cpi, -1, -1, ASTTk[node]);

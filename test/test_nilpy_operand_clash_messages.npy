@@ -1,0 +1,84 @@
+# A provably-clashing operand pair, refused in CPython's own words.
+# bug-nilpy-statically-clashing-operands-refuse-without-naming-the-types: the
+# runtime message used to be "unsupported operand type(s) for this operator",
+# less informative than the COMPILE-TIME warning about the very same node — and
+# that arm is taken precisely because both types are provable. Diffed against
+# CPython.
+#
+# Note CPython does not use one shape: comparisons name the operator and both
+# instances, arithmetic names the operator and both types, and str has two
+# messages of its own for + and *.
+
+
+# --- comparisons: '<' not supported between instances of 'str' and 'int'
+try:
+    print("a" < 3)
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print(3 > "a")
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print("a" <= 3)
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print(3 >= "a")
+except TypeError as e:
+    print("TypeError:", e)
+
+# --- arithmetic: unsupported operand type(s) for -: 'str' and 'int'
+try:
+    print("a" - 3)
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print(3 - "a")
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print("a" / 3)
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print("a" // 3)
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print(3 % "a")
+except TypeError as e:
+    print("TypeError:", e)
+
+# --- the other operand types are named too, not just str/int
+try:
+    print(True - "a")
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print(1.5 + "a")
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print(1.5 - "a")
+except TypeError as e:
+    print("TypeError:", e)
+
+# --- str's own two shapes, which mention the operator in neither form
+try:
+    print("a" + 3)
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print("a" * "b")
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    print("a" + 1.5)
+except TypeError as e:
+    print("TypeError:", e)
+
+# --- and the pairs that are DEFINED still compute, which is the other half of
+# the claim: the refusal must not have grown a false positive
+print("a" + "b", "ab" * 3, 3 * "ab", 3 + 4, 3.5 + 1, "a" < "b", 2 < 3)
+print("a" * 0, "" + "x", 3 - 1.5, 7 // 2, 7 % 2, True + 1, True < 2)
