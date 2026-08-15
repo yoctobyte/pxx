@@ -60,4 +60,4 @@ against builtins, where Python is case-sensitive — is filed separately as
 
 `make compiler/pascal26` + `tools/gate.sh quick` GREEN;
 `test/test_nilpy_forward_module_global.npy` matches CPython again.
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 9d7a1ec01.
