@@ -106,4 +106,4 @@ nothing connected them. The board is the record; a fix that skips it stays
 invisible to every later agent.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit acb6f762a.
