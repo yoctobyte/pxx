@@ -107,4 +107,4 @@ its own frozen `compiler/builtin/*.pas`, and only a HEAD-built frontend emits
 the new call, so nothing that builds against `pinned` can reach it.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 61b95e238.
