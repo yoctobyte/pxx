@@ -24,3 +24,6 @@ ok: /tmp/testmgr-scratch-2210398/test_nilpy_sortpairs26  [code=2246151B  data=45
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-15 — auto-closed by the plexus watcher: `test-core#src:test/test_nilpy_sorted_pairs.npy` passes at 894b1c6c8a23 (tier native); it was red at bb845b13ceb3. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
