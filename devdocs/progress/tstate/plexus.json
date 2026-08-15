@@ -5547,12 +5547,11 @@
   },
   {
    "bad": "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c",
-   "good": "639f0759d75d7761f94bd8b8d8cb26d505a8a0a5",
+   "good": "7a8480bc37226af2142a7a7b447ea21f293aa101",
    "job": "test-nilpy#src:test/test_nilpy_import_sqlite.npy",
    "name": "test-nilpy#01",
    "opened": "2026-08-15T15:21:20Z",
    "range": [
-    "7a8480bc37226af2142a7a7b447ea21f293aa101",
     "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c"
    ],
    "src": "test/test_nilpy_import_sqlite.npy"
