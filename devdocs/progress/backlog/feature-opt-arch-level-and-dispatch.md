@@ -91,13 +91,59 @@ resolves the symbol once, via a resolver function that reads CPUID), and gcc
 exposes it as `__attribute__((target_clones("fma","default")))`. It is a solved
 shape, not a novel one.
 
+### ...but it does NOT generalize, and that limit decides the ticket
+
+The user's follow-up, 2026-08-15: *"so you suggest to inline, but make compile
+the outer function twice. so, what if the outer function is really a big
+draconian piece of code?"* — correct, and the paragraph above was written off a
+cherry-picked example.
+
+The thing you clone is whatever function **contains** the arithmetic, so the
+question is *whose* function that is:
+
+- **Ours** (`Sin`, `Exp`, a matrix kernel, a hash round): bounded, because we
+  choose the list. `Sin` is ~800 instructions; a dozen of those doubled is a few
+  KB and one indirect call per invocation is noise.
+- **The user's** (`z := a*b + c` inside a 3000-line render loop): the function
+  that would have to be cloned is *their* render loop. Double the code, double
+  the I-cache footprint, and nobody but the author can judge whether it is worth
+  it.
+
+Which is exactly why gcc does **not** multiversion user code automatically:
+`target_clones` is an attribute the author writes on a function they chose. For
+the general case gcc offers `-march=`/`-mfma` — a global baseline, decided once,
+by the human.
+
+The rule underneath is granularity of work per dispatch, not function size:
+
+> **Runtime dispatch pays only when there is a chunk of work big enough to
+> amortize one indirect call.**
+
+`memcpy` qualifies (one call, N bytes) — which is why glibc multiversions it.
+`Sin` qualifies. Scalar `a*b+c` does **not**: one FMA is ~4 cycles and an
+indirect call is ~5, so per-operation dispatch is *slower than having no FMA at
+all*. The middle move — factor the FMA-able part into a cloned helper — only
+works if that helper does **bulk** work (a whole array, a whole block), because
+it reintroduces a call at that boundary. That is an algorithm restructuring, not
+a compiler switch.
+
+**So the option set collapses:** cloning covers the RTL hot list and nothing
+else. Arbitrary user code can only be served by a compile-time baseline. Option
+4 is therefore *narrower* than it first reads — it is not an alternative to
+option 3, it is a supplement to it for a dozen named functions.
+
 The cost model that follows:
 
 - **Worth cloning:** `Sin`, `Cos`, `Exp`, `Ln`, a matrix kernel, a hash round —
-  anything where the body is big enough that one indirect call is noise.
+  body big enough that one indirect call is noise, small enough that doubling it
+  is free.
 - **Never clone:** `Abs`, `DdMul`, `Dd2Sum` — tiny leaves where the call *is*
-  the cost. (Note `Abs()` is currently a real call even after hand-inlining, per
-  [[feature-opt-float-register-temporaries]] — fix that first regardless.)
+  the cost, and where you would pay the indirect call *and* lose the caller's
+  ability to inline.
+- **Cannot clone:** anything in user code. Flag territory.
+
+(Note `Abs()` is currently a real call even after hand-inlining, per
+[[feature-opt-float-register-temporaries]] — fix that first regardless.)
 
 ## Options
 
@@ -110,11 +156,13 @@ The cost model that follows:
    breaks; whoever knows their target gets the codegen. Cheapest way to *have*
    FMA at all, and the natural fit for a compiler that already has `--target`.
 4. **Runtime multiversioning** of a short list of RTL hot functions, per the
-   shape above. Most capability, most machinery — pxx would need CPUID emission,
-   a startup resolver, and a cloning pass.
+   shape above. Most machinery — pxx would need CPUID emission, a startup
+   resolver, and a cloning pass — and per the limit above it buys **only** those
+   named functions. User code still needs option 3.
 
 A sane ladder is 3 then 4, with 2 decided independently on the packed-double
-ticket's own merits.
+ticket's own merits. Note 4 does not replace 3: even with full multiversioning,
+a user's own hot loop gets FMA only by compiling for a baseline.
 
 ## Ordering — do this AFTER the value model, not before
 
