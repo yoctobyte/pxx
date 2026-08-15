@@ -7939,7 +7939,22 @@ begin
       if depth = 0 then Break;
       Dec(depth);
     end
-    else if (depth = 0) and (CurTok.Kind in [tkComma, tkNewline, tkDedent]) then Break;
+    else if (depth = 0) and (CurTok.Kind in [tkComma, tkNewline, tkDedent]) then Break
+    { …and at a COMPREHENSION's `for`, which ends the body exactly the way a
+      comma does. `list(lambda: k for k in range(3))` is a genexpr OVER
+      lambdas: CPython's grammar puts the lambda body in `expression`, and
+      `for` cannot follow one — an unparenthesised `for` inside a lambda body
+      is not a thing the language has. Without the stop, the body span ran on
+      through `k for k in range ( 3 )`, so the reconstructed source was a
+      comprehension, the genexpr had no `for` clause left to iterate, and
+      `list(...)` came back EMPTY where CPython gives three closures.
+      `for` lexes as a plain tkIdent here (PyParseFor uses PyIsIdent('for')),
+      and no Python name can be spelled `for`, so the text test is exact.
+      A trailing `if` needs no stop of its own: it can only be the
+      comprehension's, and that is already past this `for`.
+      bug-nilpy-lambda-body-swallows-a-comprehensions-for }
+    else if (depth = 0) and (CurTok.Kind = tkIdent) and
+            CaseEqual(CurTok.SVal, 'for') then Break;
     Next;
   end;
   bEnd := TokPos - 1;
@@ -18302,11 +18317,12 @@ end;
   divert to the comprehension desugar BEFORE the EXPR is parsed, because the
   EXPR references the loop variable, which is not in scope until the `for`. }
 function PyBareGenExprAhead: Boolean;
-var i, depth: Integer;
+var i, depth, lamPend: Integer;
 begin
   Result := False;
   i := TokPos - 1;                 { CurTok's index — first arg token }
   depth := 0;
+  lamPend := 0;                    { depth-0 `lambda`s whose ':' is still ahead }
   while i < TokCount do
   begin
     if Tokens[i].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
@@ -18326,6 +18342,20 @@ begin
       surfacing as "undefined variable" on the loop's own iterable, in a
       function whose parameter plainly exists.
       bug-nilpy-a-bare-genexpr-scan-runs-past-the-statement }
+    { A LAMBDA's colon is not a statement boundary. `list(lambda: k for k in
+      range(3))` is a genexpr over lambdas, and the depth-0 ':' stop above made
+      this scan Exit on the lambda's own colon and answer False — so the call
+      never diverted to the comprehension desugar, the lambda body swallowed
+      `k for k in range(3)` whole, and list() came back EMPTY.
+      Counted, not a flag: `lambda a: lambda b: ...` has two pending colons,
+      and consuming one per `lambda` keeps the LAST colon a real boundary
+      again. Only depth-0 lambdas count; a parenthesised one takes its colon
+      with it inside the brackets.
+      bug-nilpy-lambda-body-swallows-a-comprehensions-for }
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            CaseEqual(GetTokenStr(i), 'lambda') then Inc(lamPend)
+    else if (depth = 0) and (Tokens[i].Kind = tkColon) and (lamPend > 0) then
+      Dec(lamPend)
     else if (depth = 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent,
                                                 tkSemicolon, tkColon]) then Exit
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and

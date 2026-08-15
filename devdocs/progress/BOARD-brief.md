@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:213 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1884 rejected:37`
+`unfinished:11 blocked:4 backlog:212 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1885 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,9 +32,8 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 197, ranked
+## Ready — top 30 of 196, ranked
 
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
 - `[p 60] [B]` feature-b-tkhtmlview-in-nilpy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-int-of-a-large-double-is-int64-min-on-x86-64
@@ -64,5 +63,6 @@ _none — no lane is locked._
 - `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [B]` feature-b-mimic-codecs-for-nilpy
+- `[p 50] [C]` feature-c-vla-via-alloca
 
-_167 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_166 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
