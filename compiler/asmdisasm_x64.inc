@@ -405,11 +405,27 @@ begin
       text := mnem + ' ' + DisXmm(mrm.RegField) + ', ' + rmTxt;
       Result := (p + 2 + mrm.Consumed) - pos; Exit;
     end;
-    if (legacyPfx = $66) and (opc2 = $2E) then   { ucomisd }
+    { xorpd — the packed-double xor, which is how a zero xmm is made. Emitted by
+      the Trunc/Round saturation sequence and by nothing else that had been
+      disassembled before, so it showed up as `db 66 / db 0f` beside comisd. }
+    if (legacyPfx = $66) and (opc2 = $57) then
     begin
       if not DisParseModRM(p + 2, len, rexR, rexX, rexB, mrm) then begin text := 'db ' + DisHexByte(Code[pos]); Result := 1; Exit; end;
       if mrm.IsReg then rmTxt := DisXmm(mrm.RmReg) else rmTxt := mrm.MemText;
-      text := 'ucomisd ' + DisXmm(mrm.RegField) + ', ' + rmTxt;
+      text := 'xorpd ' + DisXmm(mrm.RegField) + ', ' + rmTxt;
+      Result := (p + 2 + mrm.Consumed) - pos; Exit;
+    end;
+    { ucomisd ($2E) and its ORDERED twin comisd ($2F) — one arm, because they
+      differ only in whether a quiet NaN raises. Only ucomisd was decoded, so
+      the Trunc/Round saturation sequence (which uses comisd to pick the
+      saturation direction) disassembled as `db 66 / db 0f / db 2f` and the
+      -S no-undecoded-bytes check went red. }
+    if (legacyPfx = $66) and ((opc2 = $2E) or (opc2 = $2F)) then
+    begin
+      if not DisParseModRM(p + 2, len, rexR, rexX, rexB, mrm) then begin text := 'db ' + DisHexByte(Code[pos]); Result := 1; Exit; end;
+      if mrm.IsReg then rmTxt := DisXmm(mrm.RmReg) else rmTxt := mrm.MemText;
+      if opc2 = $2E then mnem := 'ucomisd' else mnem := 'comisd';
+      text := mnem + ' ' + DisXmm(mrm.RegField) + ', ' + rmTxt;
       Result := (p + 2 + mrm.Consumed) - pos; Exit;
     end;
     if (legacyPfx = $66) and ((opc2 = $6E) or (opc2 = $7E)) then   { movq gpr<->xmm }
