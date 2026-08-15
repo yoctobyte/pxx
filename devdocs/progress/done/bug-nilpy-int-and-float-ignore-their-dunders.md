@@ -2,7 +2,7 @@
 track: N
 prio: 40
 type: bug
-commit: PENDING-COMMIT
+commit: 6e1271684
 blocked-by: []
 summary: "`int(obj)` and `float(obj)` asked the object nothing — they handed the conversion intrinsic an object HANDLE, so `int(V(4))` printed 129729065648272 for a class that declares __int__. A class declaring neither now raises CPython's TypeError instead of printing a pointer."
 ---
