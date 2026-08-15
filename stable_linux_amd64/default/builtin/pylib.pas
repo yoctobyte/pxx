@@ -1649,6 +1649,8 @@ function dict(const v: Variant): TPyDict; overload;
   only moves the crash. Per the no-compiler-appeasement rule this stays
   platonic and waits for the resolution fix, at which point it starts being
   selected with no further change here. }
+{ dict(<cursor>): the pairs a cursor yields — dict(zip(a, b)). }
+function dict(it: TPyIter): TPyDict; overload;
 function dict(l: TPyList): TPyDict; overload;
 
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
@@ -14548,14 +14550,30 @@ end;
 { dict(v) where v is a VARIANT holding a dict — `dict(vm.attr)` once the field
   read boxes to a variant. A non-dict (None/other) yields an empty dict. }
 function dict(const v: Variant): TPyDict; overload;
-var o: TObject;
+var o: TObject; seq: TPyList;
 begin
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
     if o is TPyDict then begin Result := dict(TPyDict(o)); Exit; end;
+    { ANY other iterable is a sequence of (key, value) PAIRS, which is the
+      other half of Python's dict() constructor: `dict(zip(names, values))` is
+      the idiom, and zip answers a cursor. With only the TPyDict arm here that
+      call boxed its cursor, matched this overload and answered {} — silently,
+      on the commonest way to build a dict at all
+      (bug-nilpy-dict-of-a-zip-or-any-cursor-is-empty). The pair walk itself is
+      dict(TPyList), which is TPyDict.update. }
+    seq := pyseq_of_obj(o);
+    if seq <> nil then begin Result := dict(seq); Exit; end;
   end;
   Result := TPyDict.Create;   { None / non-mapping }
+end;
+
+{ dict(<cursor>) with a STATIC cursor type — the same rule one level up, so the
+  call does not have to be boxed into a variant to find its meaning. }
+function dict(it: TPyIter): TPyDict; overload;
+begin
+  Result := dict(pyiter_drain(it));
 end;
 
 { dict(pairs): each element is a (key, value) sequence. TPyDict.update(TPyList)
