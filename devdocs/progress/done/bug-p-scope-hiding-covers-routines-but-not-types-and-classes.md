@@ -165,4 +165,4 @@ divergence, filed separately by Track T on 2026-08-14), and updates
 types/classes".
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 34e066b7e.

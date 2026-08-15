@@ -88,4 +88,4 @@ Filing it was still the right call: the argument in
 tracked, and it now is — with a fix rather than a link.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 34e066b7e.
