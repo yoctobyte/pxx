@@ -1,0 +1,25 @@
+# Case mappings that CHANGE THE CODE-POINT COUNT — 'ß'.upper() is 'SS', two
+# characters from one. bug-nilpy-case-mapping-cannot-change-code-point-count.
+# Diffed against CPython.
+
+# the two the ticket names
+print("ß".upper(), "ß".lower(), "ß".capitalize(), "ß".title(), "ß".swapcase())
+print("İ".upper(), "İ".lower(), "İ".capitalize(), "İ".swapcase())
+
+# ...and the rest of the expanding set
+print("ŉ".upper(), "ŉ".title(), "ǰ".upper(), "ẖ".upper())
+print("ﬀ".upper(), "ﬁ".upper(), "ﬂ".upper(), "ﬃ".upper(), "ﬄ".upper())
+print("ﬅ".upper(), "ﬆ".upper())
+print("ﬁ".capitalize(), "ﬃ".title(), "ﬀ".swapcase())
+print("և".upper(), "և".capitalize(), "և".title())
+
+# in WORDS, which is where a length change actually has to be carried
+print("straße".upper(), "STRASSE".lower())
+print("ﬁn".upper(), "ﬁn".capitalize(), "ﬁn".swapcase())
+print("ß ß".upper(), "ß ß".title(), "grüße dich".title())
+
+# ordinary letters either side of them are unchanged — the common path, pinned
+# at the same time as the ticket asks
+print("a".upper(), "É".lower(), "z".capitalize(), "Ab".swapcase())
+print("héllo".upper(), "ΑΘΉΝΑ".lower(), "москва".upper(), "աբգ".upper())
+print("ԱԲԳ".lower())

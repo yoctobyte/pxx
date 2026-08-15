@@ -37,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (209)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +52,6 @@ _none_
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
 | bug-n-math-pow-domain-error-raises-the-wrong-exception | N | 25 | bug | Every math domain error in NilPy raises `ZeroDivisionError: division by zero` where CPython raises `ValueError: math domain error` — sqrt(-1), log(-1), log(0) and pow(-8, 0.5) all of them, and the same call compiled as PASCAL returns Nan without raising at all. Three behaviours for one operation; a CPython program's `except ValueError:` catches none of ours. | — |
 | bug-nilpy-a-one-name-tuple-loop-target-is-refused | N | 25 | bug | `for (x,) in pairs:` — a one-name PARENTHESISED loop target with a trailing comma — is refused. Python unpacks the 1-tuple; a single-name target here would bind the whole element, so this needs an unpack, not just comma tolerance. | — |
-| bug-nilpy-case-mapping-cannot-change-code-point-count | N | 30 | bug | `'ß'.upper()` answers 'ß' where CPython answers 'SS', and `'İ'.lower()` answers 'İ' where CPython answers 'i̇'. pystr_upper/pystr_lower map byte by byte, so a case mapping that changes the code-point COUNT cannot be expressed at all. ASCII and Latin-1 are correct. | — |
 | bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising | N | 25 | bug | `min(3, None)` answers None where CPython raises TypeError — pyvar_gt orders None against a number instead of refusing. Low priority: comparing None is a bug in the calling program, and every shape CPython accepts is unaffected. But it is the wrong DIRECTION of laxity: we answer a question CPython refuses to answer, silently. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 40 | bug | `\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not. | — |
@@ -408,9 +407,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1807)
+## done (1808)
 
-1807 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1808 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -585,7 +584,6 @@ _none_
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption
-- [p 30] [N] bug-nilpy-case-mapping-cannot-change-code-point-count
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [N] bug-nilpy-getattr-dunder-not-supported
 - [p 30] [N] bug-nilpy-max-and-min-do-not-iterate-a-dict

@@ -910,6 +910,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_pyeval_arity26 | diff -u test/test_nilpy_pyeval_host_arity_and_returns.expected -
 	./$(COMPILER) test/test_nilpy_math_surface_and_random.npy $(TESTTMP)/test_nilpy_math_random26
 	$(TESTTMP)/test_nilpy_math_random26 | diff -u test/test_nilpy_math_surface_and_random.expected -
+	./$(COMPILER) test/test_nilpy_case_mapping_expands.npy $(TESTTMP)/test_nilpy_case_expand26
+	$(TESTTMP)/test_nilpy_case_expand26 | diff -u test/test_nilpy_case_mapping_expands.expected -
 	./$(COMPILER) test/test_nilpy_non_ascii_case_and_explode.npy $(TESTTMP)/test_nilpy_nonascii_case26
 	$(TESTTMP)/test_nilpy_nonascii_case26 | diff -u test/test_nilpy_non_ascii_case_and_explode.expected -
 	./$(COMPILER) test/test_nilpy_raise_bare_class.npy $(TESTTMP)/test_nilpy_raisebare26

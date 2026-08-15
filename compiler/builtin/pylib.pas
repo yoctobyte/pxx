@@ -2222,6 +2222,10 @@ begin
   { Cyrillic: а-я -> А-Я, and the separate ё-џ block }
   if (cp >= $430) and (cp <= $44F) then begin PyCpUpper := cp - 32; Exit; end;
   if (cp >= $450) and (cp <= $45F) then begin PyCpUpper := cp - 80; Exit; end;
+  { Armenian: ա-ֆ -> Ա-Ֆ, offset 48. Reached by ordinary Armenian text and also
+    by the title form of the և ligature, whose expansion's second letter has to
+    lower. }
+  if (cp >= $561) and (cp <= $586) then begin PyCpUpper := cp - 48; Exit; end;
 end;
 
 function PyCpLower(cp: Int64): Int64;
@@ -2249,8 +2253,70 @@ begin
   if (cp >= $38E) and (cp <= $38F) then begin PyCpLower := cp + 63; Exit; end;
   if cp = $3AA then begin PyCpLower := $3CA; Exit; end;
   if cp = $3AB then begin PyCpLower := $3CB; Exit; end;
+  if (cp >= $531) and (cp <= $556) then begin PyCpLower := cp + 48; Exit; end;
   if (cp >= $410) and (cp <= $42F) then begin PyCpLower := cp + 32; Exit; end;
   if (cp >= $400) and (cp <= $40F) then begin PyCpLower := cp + 80; Exit; end;
+end;
+
+{ The case mappings that CHANGE THE CODE-POINT COUNT — `'ß'.upper()` is `'SS'`,
+  not a single character. A 1:1 mapper cannot express these at all, which is why
+  they were left alone until PyStrMapCase gained a code-point cursor and a
+  growable result; now they are a table.
+
+  Answers '' when the code point has no multi-character upper mapping, so the
+  caller falls through to the ordinary PyCpUpper. The TITLE form CPython uses
+  for capitalize()/title() is this same string with only its first character
+  upper ('Ss', 'Ffi'), which is derived rather than tabulated.
+  bug-nilpy-case-mapping-cannot-change-code-point-count }
+function PyCpUpperStr(cp: Int64): AnsiString;
+begin
+  PyCpUpperStr := '';
+  if cp = $DF then PyCpUpperStr := 'SS'                     { ß }
+  else if cp = $149 then PyCpUpperStr := #$CA#$BC + 'N'     { ŉ -> ʼN }
+  else if cp = $1F0 then PyCpUpperStr := 'J' + #$CC#$8C     { ǰ -> J + caron }
+  else if cp = $587 then PyCpUpperStr := #$D4#$B5#$D5#$92   { և -> ԵՒ }
+  else if cp = $1E96 then PyCpUpperStr := 'H' + #$CC#$B1    { ẖ }
+  else if cp = $1E97 then PyCpUpperStr := 'T' + #$CC#$88    { ẗ }
+  else if cp = $1E98 then PyCpUpperStr := 'W' + #$CC#$8A    { ẘ }
+  else if cp = $1E99 then PyCpUpperStr := 'Y' + #$CC#$8A    { ẙ }
+  else if cp = $FB00 then PyCpUpperStr := 'FF'
+  else if cp = $FB01 then PyCpUpperStr := 'FI'
+  else if cp = $FB02 then PyCpUpperStr := 'FL'
+  else if cp = $FB03 then PyCpUpperStr := 'FFI'
+  else if cp = $FB04 then PyCpUpperStr := 'FFL'
+  else if cp = $FB05 then PyCpUpperStr := 'ST'
+  else if cp = $FB06 then PyCpUpperStr := 'ST';
+end;
+
+{ …and the one in the other direction: `'İ'.lower()` is `i` plus a COMBINING
+  DOT ABOVE, two code points. Its 1:1 sibling is deliberately absent (see
+  PyCpUpper's note on the Turkish dotted/dotless I). }
+function PyCpLowerStr(cp: Int64): AnsiString;
+begin
+  PyCpLowerStr := '';
+  if cp = $130 then PyCpLowerStr := 'i' + #$CC#$87;
+end;
+
+{ An expansion in TITLE form: first character upper, the rest lower — 'Ss' from
+  'SS'. Derived from the upper table rather than tabulated beside it, so the two
+  cannot drift. }
+function PyTitleFormOf(const up: AnsiString): AnsiString;
+var i: Integer; cp: Int64; seenCased: Boolean;
+begin
+  PyTitleFormOf := '';
+  i := 1;
+  seenCased := False;
+  while i <= Length(up) do
+  begin
+    cp := PyUtf8CpAt(up, i);
+    { lowercase everything after the first CASED character, not after the first
+      character: `'ŉ'.title()` is `ʼN`, whose leading modifier apostrophe is
+      uncased, so the N is the one that stays upper. Lowering by position gave
+      `ʼn`. }
+    if seenCased then cp := PyCpLower(cp)
+    else if (PyCpUpper(cp) <> cp) or (PyCpLower(cp) <> cp) then seenCased := True;
+    PyCpToUtf8(PyTitleFormOf, cp);
+  end;
 end;
 
 { Walk a UTF-8 string, mapping each code point. `mode` 0 = upper, 1 = lower,
@@ -2260,6 +2326,7 @@ end;
   fifth. }
 function PyStrMapCase(const s: AnsiString; mode: Integer): AnsiString;
 var i, n: Integer; cp, mapped: Int64; first, prevAlnum: Boolean;
+    wantUp, wantTitle: Boolean;
 begin
   Result := '';
   n := Length(s);
@@ -2270,25 +2337,51 @@ begin
   begin
     cp := PyUtf8CpAt(s, i);
     mapped := cp;
-    if mode = 0 then mapped := PyCpUpper(cp)
-    else if mode = 1 then mapped := PyCpLower(cp)
+    { does this position want the UPPER mapping, the TITLE one, or LOWER? One
+      decision, so the count-changing table below is consulted once rather than
+      per mode. }
+    wantUp := False; wantTitle := False;
+    if mode = 0 then wantUp := True
     else if mode = 2 then
     begin
-      if first then mapped := PyCpUpper(cp) else mapped := PyCpLower(cp);
+      if first then wantTitle := True;
     end
     else if mode = 3 then
-    begin
-      mapped := PyCpUpper(cp);
-      if mapped = cp then mapped := PyCpLower(cp);
-    end
+      { …including a character whose only upper mapping is a multi-character
+        one: `'ß'.swapcase()` is `'SS'`, and asking PyCpUpper alone said "no
+        mapping, so it must already be uppercase" and left it alone }
+      wantUp := (PyCpUpper(cp) <> cp) or (PyCpUpperStr(cp) <> '')
     else if mode = 4 then
     begin
-      if prevAlnum then mapped := PyCpLower(cp) else mapped := PyCpUpper(cp);
+      if not prevAlnum then wantTitle := True;
       { a character is "in a word" when it has a case mapping either way or is
         an ASCII digit — CPython's title() rule, near enough for this block }
       prevAlnum := (PyCpUpper(cp) <> cp) or (PyCpLower(cp) <> cp) or
-                   ((cp >= 48) and (cp <= 57));
+                   ((cp >= 48) and (cp <= 57)) or (PyCpUpperStr(cp) <> '');
     end;
+    { …and a swapcase of an already-uppercase character with a multi-character
+      LOWER mapping }
+    if (mode = 3) and (not wantUp) and (PyCpLowerStr(cp) <> '') then
+    begin
+      Result := Result + PyCpLowerStr(cp);
+      first := False;
+      Continue;
+    end;
+    if (mode = 1) and (PyCpLowerStr(cp) <> '') then
+    begin
+      Result := Result + PyCpLowerStr(cp);
+      first := False;
+      Continue;
+    end;
+    if (wantUp or wantTitle) and (PyCpUpperStr(cp) <> '') then
+    begin
+      if wantTitle then Result := Result + PyTitleFormOf(PyCpUpperStr(cp))
+      else Result := Result + PyCpUpperStr(cp);
+      first := False;
+      Continue;
+    end;
+    if wantUp or wantTitle then mapped := PyCpUpper(cp)
+    else if mode <> 0 then mapped := PyCpLower(cp);
     PyCpToUtf8(Result, mapped);
     first := False;
   end;
