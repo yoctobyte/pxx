@@ -133,7 +133,7 @@ _none_
 | feature-esp-peripheral-callback-api | S | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
-| feature-lib-mimic-string | B | 40 | feature | Write lib/pcl/mimic_string.pas — ascii_lowercase, ascii_uppercase, digits, punctuation, whitespace, capwords. The resolver now prefers a mimic_ shim over a same-named C header, so this is the half that makes `import string` in a .npy stop finding /usr/include/string.h. | — |
+| feature-lib-mimic-string-template | B | 15 | feature | string.Template — the $-placeholder class (substitute, safe_substitute) — is the one member of Python's string module still missing, and it is what logging/__init__.py uses. Deliberately NOT urgent: `import logging` does not resolve at all today, so nothing can reach Template until a logging shim exists. Split out of feature-lib-mimic-string, which shipped every constant and both capwords forms. | — |
 | feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | — |
 | feature-lib-strutils-ansi-predicate-family | B | 25 | feature | lib/rtl/strutils is missing the Ansi* predicate family FPC and Delphi ship — AnsiContainsStr/Text, AnsiStartsStr, AnsiEndsStr, AnsiIndexStr, AnsiReplaceStr — plus AddChar/AddCharR. PadLeft/PadRight are already there, so this is a gap in one corner rather than a missing unit. Found when a differential sweep against FPC would not compile until they were deleted from the probe. | — |
 | feature-lib-sysutils-strtodate-and-strtodatetime | B | 30 | feature | lib/rtl/sysutils has StrToTime but no StrToDate, StrToDateTime, or any of the TryStrToDate/Time/DateTime variants — the parse direction of the date surface is half absent while the format direction (FormatDateTime, EncodeDate, DecodeDate) is complete. Found when a differential probe would not compile against pxx. | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1840)
+## done (1841)
 
-1840 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1841 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -549,7 +549,6 @@ _none_
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [E] feature-demo-nilpy-ide
-- [p 40] [B] feature-lib-mimic-string
 - [p 40] [B] feature-nilpy-codecs-shim
 - [p 40] [N] feature-nilpy-cpyext-cycle-collector
 - [p 40] [N] feature-nilpy-enum-class
@@ -640,6 +639,7 @@ _none_
 - [p 15] [N] bug-nilpy-delattr-globals-and-locals-are-absent
 - [p 15] [N] bug-nilpy-no-complex-number-type
 - [p 15] [A] compat-pascal-binop-operand-eval-order
+- [p 15] [B] feature-lib-mimic-string-template
 - [p 15] [N] feature-nilpy-nested-def-as-value
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 15] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile

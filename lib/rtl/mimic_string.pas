@@ -31,15 +31,76 @@ const
   octdigits: AnsiString = '01234567';
   punctuation: AnsiString = '!"#$%&' + #39 + '()*+,-./:;<=>?@[\]^_`{|}~';
   whitespace: AnsiString = ' ' + #9 + #10 + #13 + #11 + #12;
+  { digits + letters + punctuation + whitespace, IN THAT ORDER — CPython builds
+    it by concatenation and code compares against it, so the order is part of
+    the value. Spelled out rather than concatenated from the constants above,
+    because a const expression over other AnsiString consts is not something to
+    rely on here. }
+  printable: AnsiString =
+    '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+    '!"#$%&' + #39 + '()*+,-./:;<=>?@[\]^_`{|}~' + ' ' + #9 + #10 + #13 + #11 + #12;
 
 { `string.capwords(s)` — split on whitespace, capitalise each word, join with a
   single space. NOT the same as `s.title()`, which upper-cases after every
   non-letter: `capwords("don't")` is "Don't" while `"don't".title()` is
   "Don'T". Python ships both for that reason, so the difference is the point of
   having this. }
-function capwords(const s: AnsiString): AnsiString;
+function capwords(const s: AnsiString): AnsiString; overload;
+
+{ `string.capwords(s, sep)` — a DIFFERENT function, not a variation. CPython is
+  `(sep or ' ').join(map(str.capitalize, s.split(sep)))`, and with an explicit
+  sep the split neither collapses runs nor strips: measured against 3.12,
+  capwords('a--b', '-') is 'A--B' and capwords('-a-', '-') is '-A-', where the
+  no-sep form would have dropped the empty fields. sep may be multi-character
+  ('a__b', '__' -> 'A__B').
+
+  Each field goes through str.capitalize(), which upper-cases the first
+  character and LOWER-CASES THE REST — so capwords('a b-c d', '-') is
+  'A b-C d', with the b after the space left alone because it is not the start
+  of a field. }
+function capwords(const s, sep: AnsiString): AnsiString; overload;
 
 implementation
+
+{ first char up, the rest down — str.capitalize(), shared by both forms }
+function CapitalizeField(const w: AnsiString): AnsiString;
+var k: Integer;
+begin
+  Result := w;
+  if Length(Result) = 0 then Exit;
+  if (Result[1] >= 'a') and (Result[1] <= 'z') then
+    Result[1] := Chr(Ord(Result[1]) - 32);
+  for k := 2 to Length(Result) do
+    if (Result[k] >= 'A') and (Result[k] <= 'Z') then
+      Result[k] := Chr(Ord(Result[k]) + 32);
+end;
+
+function capwords(const s, sep: AnsiString): AnsiString;
+var i, start, sl, n: Integer; first: Boolean;
+begin
+  Result := '';
+  sl := Length(sep);
+  n := Length(s);
+  if sl = 0 then begin Result := CapitalizeField(s); Exit; end;
+  first := True;
+  start := 1;
+  i := 1;
+  while i <= n - sl + 1 do
+  begin
+    if Copy(s, i, sl) = sep then
+    begin
+      if not first then Result := Result + sep;
+      Result := Result + CapitalizeField(Copy(s, start, i - start));
+      first := False;
+      i := i + sl;
+      start := i;
+    end
+    else Inc(i);
+  end;
+  { the final field, which is '' when s ends with sep — and CPython keeps it }
+  if not first then Result := Result + sep;
+  Result := Result + CapitalizeField(Copy(s, start, n - start + 1));
+end;
 
 function capwords(const s: AnsiString): AnsiString;
 var i, k, n: Integer; word: AnsiString; first: Boolean;
