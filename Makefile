@@ -4413,6 +4413,11 @@ test-core: $(COMPILER)
 	# values right, side effects doubled, which is why only a csmith checksum saw it.
 	./$(COMPILER) test/cstruct_assign_value_side_effects.c $(TESTTMP)/cstruct_assign_value26
 	test "$$($(TESTTMP)/cstruct_assign_value26)" = "ok"
+	# ...and its VALUE half: that same expression handed to a BY-VALUE parameter
+	# passed only the first eightbyte, because the argument resolved to REC_NONE
+	# and the record temp was sized by the 8-byte fallback (csmith seed 91110).
+	./$(COMPILER) test/cstruct_assign_value_byvalue_arg.c $(TESTTMP)/cstruct_assign_arg26
+	test "$$($(TESTTMP)/cstruct_assign_arg26)" = "ok"
 	./$(COMPILER) test/cnested_union_b44.c $(TESTTMP)/cnested_union_b4426
 	$(TESTTMP)/cnested_union_b4426; test "$$?" = "42"
 	./$(COMPILER) test/canon_agg_global_b45.c $(TESTTMP)/canon_agg_global_b4526

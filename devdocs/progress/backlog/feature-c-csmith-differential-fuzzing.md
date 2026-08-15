@@ -1,6 +1,6 @@
 ---
 prio: 60
-owner: claude-A-N-nightly
+owner: agent-acpn
 ---
 
 # C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live
@@ -228,3 +228,23 @@ from 90000, 300 seeds from 91000.
 Scoreboard for the session: 550 seeds, 2 findings, 1 fixed, 1 unreduced.
 Parked to `backlog/` rather than left in `working/` — the campaign is a standing
 one and `working/` is a live lock.
+
+### seed 91110 — reduced and fixed, 2026-08-16
+
+The open one above is closed. Reduction path, for the next reader: the
+per-global checksum (`./t_gcc 1`) named `g_42[2]` and a direct print narrowed it
+to one value (1 vs 0); a gdb watchpoint on `g_42[2]` named the two writes that
+reach it; a printf at the second showed both operands already differing, which
+moved the hunt back to the first, in `func_27` — whose struct argument was
+`((*l_1698) = l_1697)`. Eleven lines out of 1723.
+
+The bug: `ResolveNodeRec` had no AN_ASSIGN arm, so the argument resolved to
+REC_NONE and the by-value record temp took the 8-byte fallback size —
+[[bug-c-a-struct-assignment-passed-by-value-copies-only-eight-bytes]]. The full
+1723-line program now agrees with gcc on every checksum.
+
+Note that BOTH bugs this campaign found in two sessions are the same construct
+from two angles: a struct assignment used as a value, once for how many times it
+RUNS and once for what its VALUE is. That is worth reading as a hint about where
+to look next — the C expression forms that hand-written code has no reason to
+write are where the frontend's coverage actually thins out.

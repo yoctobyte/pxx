@@ -9203,6 +9203,18 @@ begin
       `func_10(((*g_3), g_15), ...)` -- a struct handed over by value through a comma
       -- segfaulted, while the same struct passed directly was fine. }
     Result := ResolveNodeRec(ASTRight[node])
+  else if ASTKind[node] = AN_ASSIGN then
+    { `x = y` yields the value STORED, so its record is the DESTINATION's — the
+      same rule the comma arm above states for its right operand, and the type
+      half of the aggregate rule the AN_ASSIGN lowering states in ir.inc.
+      Without it a struct assignment handed to a by-value parameter resolved to
+      REC_NONE, so the argument temp was sized by the REC_NONE fallback (8
+      bytes) and only the first eightbyte of the struct was copied: csmith seed
+      91110 passed `func_27(((*l_1698) = l_1697), ...)` and the callee read a
+      16-byte struct whose second half was stack garbage — every VALUE derived
+      from the first field was right, which is why it took a checksum to see.
+      bug-c-a-struct-assignment-passed-by-value-copies-only-eight-bytes }
+    Result := ResolveNodeRec(ASTLeft[node])
   else if ASTKind[node] = AN_FIELD then
   begin
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
