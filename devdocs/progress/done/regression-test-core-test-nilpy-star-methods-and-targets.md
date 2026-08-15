@@ -106,4 +106,4 @@ inside a def. Whole import family green on HEAD and, as the control, identical
 on `pinned` except for this test: `dotted_import`, `--no-shims`,
 `fallback_import`, `fallback_import_try_wins`, `import_in_body`.
 `tools/gate.sh quick` GREEN.
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 538b192c9.
