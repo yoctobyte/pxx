@@ -39,12 +39,12 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (203)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32 | A | 55 | bug | `Int(x)` — the builtin that returns the integral part as a FLOAT — routes through a 32-bit conversion on i386 and arm32, so any \|x\| >= 2^31 comes back as the saturated integer: Int(8796093022208.5) is -2147483648.0 on i386 and 2147483647.0 on arm32, against the correct 8796093022208.0. `Trunc` of the same value is right on both, and riscv32 (also 32-bit) is right, so this is those two backends, not a word-size limit. Silent wrong value in a builtin with no diagnostic. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-rtl-math-transcendentals-lose-argument-reduction | B | 35 | bug | lib/rtl/math.pas's sin/cos lose accuracy as the argument grows — 85 ulps at x=100, 1.2 MILLION ulps at 1e6, and 2.4 BILLION at 1e10, where the answer has no correct digits left. Bad argument reduction, not last-bit rounding. pxx's OWN crtl libm already gets every one of these exactly right, so the fix is to share it, not to write one. | — |
 | bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents | B | 30 | bug | StrToFloat costs 2.6-2.9 ms per value for small-exponent input ('1.2e-320') against 0.72 us in CPython — a ~3600x gap — and 116 us even mid-range. The answer is right; the slow path is a 63-step bit-pattern search whose every step expands a candidate to its EXACT ~1080-digit decimal. Correct by construction and priced accordingly. Found timing a float differential harness, where parsing 121k values took ~60 s and the arithmetic under test took none of it. | — |
 | bug-c-cast-to-float-in-value-position-does-not-round-to-single | C | 25 | bug | `(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it. | — |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
@@ -88,6 +88,7 @@ _none_
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-nilpy-none-str-sentinel-vs-textstr-kind | U | 40 | decide | Re-ask of decide-nilpy-none-str-representation: the chosen fix (a NilPy string kind whose blocks may be zero length) rests on a block kind that nothing in the tree ever stamps, so it is a Track A representation project rather than a bugfix. A None SENTINEL closes the reported bug at a fraction of the cost — but closes less. | — |
+| decide-rtl-math-correctly-rounded-vs-fast-tier | U | 35 | decide | lib/rtl/math.pas's transcendentals are correctly rounded and ~1000x slower than libm — MEASURED: Ln+Exp 16,480 ms per 1M pairs against glibc's 13 ms, and the new dd Sin/Cos 29,383 ms against a plain-double 673 ms. That is the SHIPPED standard today, not a proposal. Question: is one correctly-rounded tier the intended answer for a language whose demos draw graphics, or does the RTL want a fast tier alongside it? Three options, recommendation inside. | — |
 | decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | When an overload set has both a `set of T` and an `array of const` parameter at the SAME slot, what should `f([x])` mean? Measured: FPC 3.2.2 is itself uses-order dependent and flips answer, and pxx flips on a different order — so there is no reference behaviour to copy. Rare, and nothing in the tree hits it; filed because the fix next door made the question visible, not because anything is broken. | — |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
@@ -239,6 +240,8 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
+| regression-test-nilpy-test-nilpy-builtin-over-variant-receiver | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-lambda-in-range-comprehension | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-c-retire-the-crtl-name-dodge-prefixes | C | 50 | task | Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -404,9 +407,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1863)
+## done (1864)
 
-1863 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1864 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -452,6 +455,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
+- [p 70] [T] regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -463,6 +468,7 @@ _none_
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [A] bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32
 - [p 55] [C] bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
@@ -553,10 +559,10 @@ _none_
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
-- [p 35] [B] bug-b-rtl-math-transcendentals-lose-argument-reduction
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
+- [p 35] [U] decide-rtl-math-correctly-rounded-vs-fast-tier
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 35] [S] feature-c-esp-conformance-coverage
 - [p 35] [S] feature-dns-esp-backend

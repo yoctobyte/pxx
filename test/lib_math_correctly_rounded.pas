@@ -222,6 +222,48 @@ begin
   x := 1.0;
   CheckBits(SqrtSoft(x), '3FF0000000000000', 'SqrtSoft(1) — perfect square, no neighbour step');
 
+  { ---- Sin / Cos / Tan: ARGUMENT REDUCTION ----
+
+    Added 2026-08-15 with the double-double reduction port
+    ([[bug-b-rtl-math-transcendentals-lose-argument-reduction]]). The old
+    reduction was `x - Trunc(x/2pi)*2pi` in plain double with a rounded 2pi,
+    and the error grew with the argument until nothing was left:
+
+        x        sin ulp        cos ulp
+        100           85             51
+        1e6    1,220,648        228,032
+        1e10   2,461,005,116  687,050,531
+
+    At 1e10 the answer was uncorrelated with the true value. Two defects in one
+    line: the rounded 2pi, and `Trunc(...)` into a 32-bit INTEGER, which
+    overflows past x ~ 1.3e10.
+
+    These rows are therefore not last-bit assertions — they are "does the
+    reduction exist". 1e100 exercises the Payne-Hanek path (|x| >= 1e8) rather
+    than Cody-Waite. Values are glibc's, verified against 400-digit arithmetic;
+    where the two disagree — as they do for a huge argument near a multiple of
+    pi/2 — the high-precision answer is the one written here. ---- }
+  x := 100.0;
+  CheckBits(Sin(x), 'BFE03425B78C4DB8', 'Sin(100) — was 85 ulp out');
+  CheckBits(Cos(x), '3FEB981DBF665FDF', 'Cos(100) — was 51 ulp out');
+  x := 123.456;
+  CheckBits(Sin(x), 'BFE9B9DADC41AEB6', 'Sin(123.456)');
+  CheckBits(Cos(x), 'BFE307E5980A1558', 'Cos(123.456)');
+  CheckBits(Tan(x), '3FF5A0FE5DA94891', 'Tan(123.456)');
+  x := 1000.0;
+  CheckBits(Sin(x), '3FEA75CC150A206B', 'Sin(1000)');
+  CheckBits(Cos(x), '3FE1FF026793F1BB', 'Cos(1000)');
+  x := 1.0e6;
+  CheckBits(Sin(x), 'BFD6664B2568D867', 'Sin(1e6) — was 1.2 MILLION ulp out');
+  CheckBits(Cos(x), '3FEDF9DF9906D32C', 'Cos(1e6) — was 228,032 ulp out');
+  x := 1.0e10;
+  CheckBits(Sin(x), 'BFDF334C7896A4E3', 'Sin(1e10) — was 2.4 BILLION ulp out');
+  CheckBits(Cos(x), '3FEBF098901C931A', 'Cos(1e10) — was 687 MILLION ulp out');
+  CheckBits(Tan(x), 'BFE1DE000F443F50', 'Tan(1e10)');
+  x := 1.0e100;
+  CheckBits(Sin(x), 'BFD85C5E5B929359', 'Sin(1e100) — Payne-Hanek path');
+  CheckBits(Cos(x), '3FED9757496841F5', 'Cos(1e100) — Payne-Hanek path');
+
   if failures = 0 then writeln('MATHROUND OK')
   else writeln('MATHROUND ', failures, ' FAILURES');
 end.

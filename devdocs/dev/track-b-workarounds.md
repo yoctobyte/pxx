@@ -16,6 +16,7 @@ before assuming the workaround is still needed.
 
 | Where | Workaround | Blocking bug (open) | Revert to |
 |---|---|---|---|
+| `lib/rtl/math.pas` (`DdFloor`, `DdRint`) | `Double(Trunc(x))` where `Int(x)` is the natural spelling | [[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]] | `Int(x)` |
 | `lib/rtl/bignum.pas` (`BigFromStr`, `BigDivMod`), `examples/bignum/bigmath.pas` | managed-return calls bound to a temp before being passed as an arg (no `BigAdd(BigMulSmall(x,…),…)` nesting) | [[bug-managed-record-result-self-arg]] (aka `bug-nested-managed-return-call-arg`) | nest the calls directly |
 | `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] — *partial:* limbs are the idiomatic choice anyway, so this is **not** a pure workaround; keep even after the fix | — (keep) |
 | `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — **fixed generally (v72)**, but a full revert of *this unit* still segfaults at the GCM path (residual, NOT minimally reproducible — every isolated `array :=` pattern passes on v72). **Keep `BlkCopy` here** until the residual is understood. | (do not revert yet) |

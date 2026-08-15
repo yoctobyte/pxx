@@ -633,10 +633,16 @@ var t, f, a: Double;
 begin
   a := Abs(x);
   if a >= 4503599627370496.0 then begin Result := x; Exit; end;  { >= 2^52: integral }
-  { Int(), not Floor(): a is non-negative here so the two agree, and Floor now
-    returns a 32-bit Integer which would SILENTLY OVERFLOW for a between 2^31
-    and 2^52 — a range this function is explicitly still handling. }
-  t := Int(a);
+  { Trunc(), not Int() and not Floor(). Floor returns a 32-bit Integer which
+    would SILENTLY OVERFLOW for a between 2^31 and 2^52 — a range this function
+    is explicitly still handling. Int() reads better and is what this used to
+    say, but it saturates to 32 bits on i386 and arm32
+    ([[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]]),
+    which is the same trap one level down. Today's callers all stay under 2^31
+    so nothing was observably wrong here — this is closing the latent half.
+    Trunc is 64-bit and right on every target; a is non-negative, so truncation
+    and floor agree. }
+  t := Double(Trunc(a));
   f := a - t;
   if f > 0.5 then t := t + 1.0
   else if f = 0.5 then
@@ -784,46 +790,234 @@ begin
   Result := r.Hi + r.Lo;
 end;
 
-function Sin(x: Double): Double;
-{ reduce mod 2Pi to [-Pi,Pi], then Taylor. }
-var r, term, sum, p: Double; k, i, den: Integer;
+{ ================= trigonometry on the dd kernel =================
+
+  What was here before was `r := x - Trunc(x/2pi) * 2pi` in plain double with a
+  rounded 2pi, then a Taylor series. Measured against glibc, the error grew with
+  the argument until nothing was left: 85 ulp at x=100, 1.2 MILLION at 1e6, and
+  2.4 BILLION at 1e10, where the answer was uncorrelated with the true value.
+  Two independent defects in that one line — the rounded 2pi (which is what
+  argument reduction is a whole field about), and `Trunc(...)` into an INTEGER,
+  which silently overflows past 2^31, i.e. beyond x ~ 1.3e10.
+
+  This is the port of lib/crtl/src/math.c's reduction, which already got every
+  one of those rows exactly right ([[bug-b-rtl-math-transcendentals-lose-argument-reduction]]).
+  Third time this file has replaced a plain-double mechanism with the crtl dd
+  one rather than patching it. }
+
+{ floor as a Double. Three primitives were candidates and only one is correct
+  here:
+    - Floor() returns a 32-bit Integer, which the ~2^50 values the Payne-Hanek
+      path feeds this would silently overflow;
+    - Int() is the natural spelling — remove the fraction, stay in the float
+      domain — but it SATURATES to 32 bits on i386 and arm32
+      ([[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]]),
+      which turned Sin(1e20) into NaN on exactly those two targets while
+      x86-64, aarch64 and riscv32 were green;
+    - Trunc() is 64-bit and correct on every target, so that is what this uses,
+      with the sign correction Trunc does not do.
+  Revert to Int() when that Track A bug lands (devdocs/dev/track-b-workarounds.md). }
+function DdFloor(x: Double): Double;
+var t: Double;
 begin
-  k := Trunc(x / 6.28318530717958647692);
-  r := x - k * 6.28318530717958647692;
-  if r > 3.14159265358979323846 then r := r - 6.28318530717958647692;
-  if r < -3.14159265358979323846 then r := r + 6.28318530717958647692;
-  term := r; sum := r; p := r * r; i := 1;
-  while i <= 30 do
-  begin
-    den := (2 * i) * (2 * i + 1);
-    term := -term * p / den;
-    sum := sum + term;
-    i := i + 1;
-  end;
-  Result := sum;
+  if Abs(x) >= 4503599627370496.0 then begin Result := x; Exit; end;  { >= 2^52 }
+  t := Double(Trunc(x));
+  if t > x then t := t - 1.0;
+  Result := t;
 end;
 
-function Cos(x: Double): Double;
-var r, term, sum, p: Double; k, i, den: Integer;
+{ Cody-Waite reduction x = n*(pi/2) + r, |r| <= pi/4(1+eps), r as a dd.
+  pi/2 is split into three 24-bit chunks — n*chunk is then EXACT for |n| < 2^28
+  — plus a dd tail, so r carries about 2^-150 absolute error. That is enough for
+  full relative accuracy even for the double closest to a multiple of pi/2
+  (~2^-54 away). VALID FOR |x| < 1e8; past that the chunks no longer carry the
+  bits the answer is made of, and the caller switches to Payne-Hanek.
+  Returns the quadrant n mod 4. }
+function TrigReduce(x: Double; var r: TDd): Integer;
+var nd, s1, s2: Double; n: Int64; t, p: TDd;
 begin
-  k := Trunc(x / 6.28318530717958647692);
-  r := x - k * 6.28318530717958647692;
-  if r > 3.14159265358979323846 then r := r - 6.28318530717958647692;
-  if r < -3.14159265358979323846 then r := r + 6.28318530717958647692;
-  term := 1.0; sum := 1.0; p := r * r; i := 1;
-  while i <= 30 do
+  nd := DdRint(x * DdBits($3FE45F306DC9C883));          { x * 2/pi }
+  n := Trunc(nd);
+  if n = 0 then
   begin
-    den := (2 * i - 1) * (2 * i);
-    term := -term * p / den;
-    sum := sum + term;
-    i := i + 1;
+    r.Hi := x; r.Lo := 0.0;
+    Result := 0;
+    Exit;
   end;
-  Result := sum;
+  s1 := x  - nd * DdBits($3FF921FB60000000);            { pi/2 chunk A, exact }
+  s2 := s1 - nd * DdBits($BE6777A5C0000000);            { chunk B, exact }
+  t  := Dd2Sum(s2, -(nd * DdBits($BCDEE59DA0000000)));  { chunk C }
+  p  := Dd2Prod(nd, DdBits($3B298A2E03707345));         { dd tail d1 }
+  t  := DdAdd(t, DdMulD(p, -1.0));
+  t.Lo := t.Lo - nd * DdBits($B7C6FDB1F7759834);        { d2 (tiny) }
+  r := Dd2Sum(t.Hi, t.Lo);
+  Result := Integer(n and 3);
+end;
+
+{ 2/pi as 24-bit chunks, 1440 bits — the table Payne-Hanek needs to reduce ANY
+  double. 24 bits is not arbitrary: a 24x24-bit product is below 2^48 and so is
+  EXACT in a double, which is what lets the convolution below run in plain
+  double arithmetic with no int128 and no error terms. Copied from
+  lib/crtl/src/math.c, where it was derived at 700 decimal digits and its
+  leading entries checked against fdlibm's published ipio2. }
+const
+  IPIO2: array[0..59] of Double = (
+    10680707.0,    7228996.0,    1387004.0,    2578385.0,
+    16069853.0,   12639074.0,    9804092.0,    4427841.0,
+    16666979.0,   11263675.0,   12935607.0,    2387514.0,
+     4345298.0,   14681673.0,    3074569.0,   13734428.0,
+    16653803.0,    1880361.0,   10960616.0,    8533493.0,
+     3062596.0,    8710556.0,    7349940.0,    6258241.0,
+     3772886.0,    3769171.0,    3798172.0,    8675211.0,
+    12450088.0,    3874808.0,    9961438.0,     366607.0,
+    15675153.0,    9132554.0,    7151469.0,    3571407.0,
+     2607881.0,   12013382.0,    4155038.0,    6285869.0,
+     7677882.0,   13102053.0,   15825725.0,     473591.0,
+     9065106.0,   15363067.0,    6271263.0,    9264392.0,
+     5636912.0,    4652155.0,    7056368.0,   13614112.0,
+    10155062.0,    1944035.0,    9527646.0,   15080200.0,
+     6658437.0,    6231200.0,    6832269.0,   16767104.0);
+
+{ Payne-Hanek, for ax = |x| >= 1e8. Writing ax = X * 2^(e0-48) with X in three
+  24-bit chunks and 2/pi as the chunk sum above, the product collects by
+  k = i+j into terms C_k * 2^(e0-24(k+1)). Only the low two integer bits survive
+  `mod 4`, so terms whose exponent is >= 2 contribute a multiple of 4 and are
+  skipped outright — which is why the work is CONSTANT no matter how enormous x
+  is. Returns the quadrant and sets r, |r| <= pi/4. }
+function TrigReduceBig(ax: Double; var r: TDd): Integer;
+var
+  tx: array[0..2] of Double;
+  z, ck, t, nd: Double;
+  acc, fr: TDd;
+  e0, k, kstart, i, j, ek, q: Integer;
+begin
+  e0 := 0;
+  z := ax;
+  while z >= 16777216.0 do begin z := z * 0.5; e0 := e0 + 1; end;
+  while z < 8388608.0   do begin z := z * 2.0; e0 := e0 - 1; end;
+  for i := 0 to 2 do
+  begin
+    tx[i] := Int(z);                     { z >= 0, so Int is the integral part }
+    z := (z - tx[i]) * 16777216.0;
+  end;
+
+  kstart := 0;
+  while (e0 - 24 * (kstart + 1)) > 1 do kstart := kstart + 1;
+
+  acc.Hi := 0.0; acc.Lo := 0.0;
+  for k := kstart to kstart + 7 do
+  begin
+    ek := e0 - 24 * (k + 1);
+    ck := 0.0;
+    for j := 0 to 2 do
+    begin
+      i := k - j;
+      if (i >= 0) and (i < 60) then
+        ck := ck + tx[j] * IPIO2[i];     { exact: each product < 2^48 }
+    end;
+    if ck <> 0.0 then
+    begin
+      t := DdLdexp(ck, ek);
+      { Reduce mod 4 while t is still exactly representable. t carries 50
+        significant bits; the residue needs at most 2 integer bits plus t's
+        fractional bits, and whenever t >= 4 that total stays inside 53 — so
+        this subtraction is EXACT, not merely close. }
+      if (t >= 4.0) or (t <= -4.0) then t := t - 4.0 * DdFloor(t * 0.25);
+      acc := DdAdd(acc, Dd2Sum(t, 0.0));
+    end;
+  end;
+
+  { fold back into [0,4), then split into quadrant and a residue in [-1/2, 1/2]
+    so that |r| <= pi/4 for the kernels }
+  t := DdFloor((acc.Hi + acc.Lo) * 0.25);
+  acc := DdAdd(acc, Dd2Sum(-4.0 * t, 0.0));
+  nd := DdRint(acc.Hi + acc.Lo);
+  fr := DdAdd(acc, Dd2Sum(-nd, 0.0));
+  q := Integer(Trunc(nd) and 3);
+  r := DdMul(fr, DdPio2);
+  Result := q;
+end;
+
+{ sin/cos of a reduced dd argument, |r| <= ~0.786, by a 13-term dd Taylor in
+  Horner form. }
+function SinKernel(r: TDd): TDd;
+var r2, s: TDd; k: Integer;
+begin
+  r2 := DdMul(r, r);
+  s.Hi := 1.0; s.Lo := 0.0;
+  for k := 13 downto 1 do
+  begin
+    s := DdMul(DdDivD(r2, Double(2 * k * (2 * k + 1))), s);
+    s := DdAdd(Dd2Sum(1.0, 0.0), DdMulD(s, -1.0));
+  end;
+  Result := DdMul(r, s);
+end;
+
+function CosKernel(r: TDd): TDd;
+var r2, s: TDd; k: Integer;
+begin
+  r2 := DdMul(r, r);
+  s.Hi := 1.0; s.Lo := 0.0;
+  for k := 13 downto 1 do
+  begin
+    s := DdMul(DdDivD(r2, Double((2 * k - 1) * 2 * k)), s);
+    s := DdAdd(Dd2Sum(1.0, 0.0), DdMulD(s, -1.0));
+  end;
+  Result := s;
+end;
+
+{ sin and cos together — they share the reduction and both kernels, and every
+  caller here wants one or the other of the pair. q selects which. }
+procedure SinCosDd(x: Double; var sn, cs: TDd);
+var r, a, b: TDd; q: Integer;
+begin
+  if Abs(x) >= 1.0e8 then q := TrigReduceBig(Abs(x), r)
+  else q := TrigReduce(x, r);
+  a := SinKernel(r);
+  b := CosKernel(r);
+  case q of
+    0: begin sn := a; cs := b; end;
+    1: begin sn := b; cs := DdMulD(a, -1.0); end;
+    2: begin sn := DdMulD(a, -1.0); cs := DdMulD(b, -1.0); end;
+  else begin sn := DdMulD(b, -1.0); cs := a; end;
+  end;
+end;
+
+{ sin/cos/tan. The big-argument path reduces |x| and the caller reapplies the
+  sign, because sin and tan are ODD and cos is EVEN — folding that into the
+  reduction instead would need a second quadrant mapping. }
+function Sin(x: Double): Double;
+var sn, cs: TDd;
+begin
+  if x <> x then begin Result := x; Exit; end;                  { NaN }
+  if x = 0.0 then begin Result := x; Exit; end;                 { keeps -0 }
+  if (x - x) <> 0.0 then begin Result := (x - x) / (x - x); Exit; end;  { Inf -> NaN }
+  SinCosDd(Abs(x), sn, cs);
+  Result := sn.Hi + sn.Lo;
+  if x < 0.0 then Result := -Result;
+end;
+function Cos(x: Double): Double;
+var sn, cs: TDd;
+begin
+  if x <> x then begin Result := x; Exit; end;
+  if (x - x) <> 0.0 then begin Result := (x - x) / (x - x); Exit; end;
+  SinCosDd(Abs(x), sn, cs);              { cos is even — no sign fixup }
+  Result := cs.Hi + cs.Lo;
 end;
 
 function Tan(x: Double): Double;
+var sn, cs, t: TDd;
 begin
-  Result := Sin(x) / Cos(x);
+  if x <> x then begin Result := x; Exit; end;
+  if x = 0.0 then begin Result := x; Exit; end;                 { keeps -0 }
+  if (x - x) <> 0.0 then begin Result := (x - x) / (x - x); Exit; end;
+  { the QUOTIENT is formed in double-double, not from two rounded doubles:
+    Sin(x)/Cos(x) rounds twice before dividing, and near an odd multiple of
+    pi/2 the divisor's own error is what the answer is made of. }
+  SinCosDd(Abs(x), sn, cs);
+  t := DdDiv(sn, cs);
+  Result := t.Hi + t.Lo;
+  if x < 0.0 then Result := -Result;
 end;
 
 function ArcTan(x: Double): Double;
