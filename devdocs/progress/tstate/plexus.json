@@ -5525,14 +5525,11 @@
   },
   {
    "bad": "36d1bffda39d58099b403745c48b95cd8c1d7c58",
-   "good": "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c",
+   "good": "ae1ef2b1ff270fbe3e6036e271e15e0210bc950f",
    "job": "test-nilpy#src:test/test_cpyext_markupsafe.npy",
    "name": "test-nilpy#644",
    "opened": "2026-08-15T15:21:20Z",
    "range": [
-    "3142e6d9738f8a651d78271f00b44f1a816bb33d",
-    "f5c37d3e70c2d58ce048578ac87e912d1b010f21",
-    "ae1ef2b1ff270fbe3e6036e271e15e0210bc950f",
     "56a54014384b8b866c5433989abb7275f9a71db8",
     "d615f8f69bc1c91fbd97330781239beeacb7164b",
     "a13dca9e3d59d78dac968b2feb325d80461773b9",
