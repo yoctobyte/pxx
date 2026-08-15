@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T06:11:13Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a5d4d58e143279cf2d48e674d1b56054146a7f84",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T06:15:48Z",
    "fixed": [],
    "new_red": [],
@@ -498,6 +490,19 @@
    "sha": "e7f93ee65273b0756b8c9ec966161dda2f48124d",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-15T18:12:45Z",
+   "fixed": [
+    "test-core#src:test/test_basic_comprehensive.bas",
+    "test-core#src:test/test_c_cross_ns_arity_fail.pas",
+    "test-core#src:test/test_exception_unhandled.pas@3",
+    "test-core#src:test/test_math_unit.pas@1"
+   ],
+   "new_red": [],
+   "sha": "f68d60cebf509d987d004e344f2108b36cbbadf9",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -3690,7 +3695,7 @@
   "test-core#src:test/test_auto_var.pas": "pass",
   "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
-  "test-core#src:test/test_basic_comprehensive.bas": "fail",
+  "test-core#src:test/test_basic_comprehensive.bas": "pass",
   "test-core#src:test/test_basic_goto_gosub.bas": "pass",
   "test-core#src:test/test_big_static_array_open_param.pas": "pass",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "pass",
@@ -3703,7 +3708,7 @@
   "test-core#src:test/test_byval_record_temp.pas": "pass",
   "test-core#src:test/test_byvalue_record_managed_copy.pas": "pass",
   "test-core#src:test/test_c_cross_ns_arity.pas": "pass",
-  "test-core#src:test/test_c_cross_ns_arity_fail.pas": "fail",
+  "test-core#src:test/test_c_cross_ns_arity_fail.pas": "pass",
   "test-core#src:test/test_c_crypt.pas": "pass",
   "test-core#src:test/test_c_define_const.pas": "pass",
   "test-core#src:test/test_c_dlopen.pas": "pass",
@@ -3870,7 +3875,7 @@
   "test-core#src:test/test_exception_typed.pas": "pass",
   "test-core#src:test/test_exception_unhandled.pas@1": "pass",
   "test-core#src:test/test_exception_unhandled.pas@2": "pass",
-  "test-core#src:test/test_exception_unhandled.pas@3": "fail",
+  "test-core#src:test/test_exception_unhandled.pas@3": "pass",
   "test-core#src:test/test_exception_unit.pas": "pass",
   "test-core#src:test/test_exception_unit_unhandled.pas": "pass",
   "test-core#src:test/test_exceptions.pas": "pass",
@@ -4023,7 +4028,7 @@
   "test-core#src:test/test_math.pas": "pass",
   "test-core#src:test/test_math_intrinsics_no_uses.pas": "pass",
   "test-core#src:test/test_math_parens.pas": "pass",
-  "test-core#src:test/test_math_unit.pas@1": "fail",
+  "test-core#src:test/test_math_unit.pas@1": "pass",
   "test-core#src:test/test_member_visibility.pas@1": "pass",
   "test-core#src:test/test_member_visibility.pas@2": "pass",
   "test-core#src:test/test_metaclass_array_element_b328.pas": "pass",
@@ -5435,11 +5440,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T18:00:29Z",
-  "sha": "e7f93ee65273b0756b8c9ec966161dda2f48124d",
+  "date": "2026-08-15T18:12:45Z",
+  "sha": "f68d60cebf509d987d004e344f2108b36cbbadf9",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 208.6
+  "verdict": "GREEN",
+  "wall": 204.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5469,49 +5474,6 @@
   "borg"
  ],
  "open_regressions": [
-  {
-   "bad": "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c",
-   "cascade": [
-    "test-core#src:test/test_basic_comprehensive.bas",
-    "test-core#src:test/test_c_cross_ns_arity_fail.pas",
-    "test-core#src:test/test_c_crypt.pas",
-    "test-core#src:test/test_c_define_const.pas",
-    "test-core#src:test/test_c_dlopen.pas",
-    "test-core#src:test/test_c_enum.pas",
-    "test-core#src:test/test_c_gtk_call.pas",
-    "test-core#src:test/test_c_gtk_types.pas",
-    "test-core#src:test/test_c_gtk_window.pas",
-    "test-core#src:test/test_c_header_case_sensitive_import.pas",
-    "test-core#src:test/test_c_import.pas",
-    "test-core#src:test/test_c_macro_soup.pas",
-    "test-core#src:test/test_c_packed_aligned.pas",
-    "test-core#src:test/test_c_preprocess.pas@1",
-    "test-core#src:test/test_c_preprocess.pas@2",
-    "test-core#src:test/test_c_slicea.pas",
-    "test-core#src:test/test_c_struct_fields.pas",
-    "test-core#src:test/test_c_struct_many.pas",
-    "test-core#src:test/test_c_struct_tags.pas",
-    "test-core#src:test/test_c_typedef.pas",
-    "test-core#src:test/test_exception_unhandled.pas@3",
-    "test-core#src:test/test_math_unit.pas@1",
-    "test-core#src:test/test_nilpy_c_define_const.npy",
-    "test-core#src:test/test_nilpy_c_pointer.npy",
-    "test-core#src:test/test_shared_object.pas",
-    "test-core#src:test/test_sqlite_crud.pas",
-    "test-core#src:test/test_sqlite_crud_autotyped.pas",
-    "test-core#src:test/test_sqlite_crud_lazy.pas",
-    "test-core#src:test/test_string_to_pchar_auto.pas"
-   ],
-   "good": "639f0759d75d7761f94bd8b8d8cb26d505a8a0a5",
-   "job": "cascade@63d1d0de90d3",
-   "name": "",
-   "opened": "2026-08-15T14:48:12Z",
-   "range": [
-    "7a8480bc37226af2142a7a7b447ea21f293aa101",
-    "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c"
-   ],
-   "src": ""
-  },
   {
    "bad": "56a54014384b8b866c5433989abb7275f9a71db8",
    "good": "ae1ef2b1ff270fbe3e6036e271e15e0210bc950f",
