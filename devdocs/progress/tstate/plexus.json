@@ -5513,16 +5513,14 @@
    "src": "test/test_cpyext_errformat.npy"
   },
   {
-   "bad": "36d1bffda39d58099b403745c48b95cd8c1d7c58",
+   "bad": "d615f8f69bc1c91fbd97330781239beeacb7164b",
    "good": "ae1ef2b1ff270fbe3e6036e271e15e0210bc950f",
    "job": "test-nilpy#src:test/test_cpyext_hello.npy",
    "name": "test-nilpy#641",
    "opened": "2026-08-15T15:21:20Z",
    "range": [
     "56a54014384b8b866c5433989abb7275f9a71db8",
-    "d615f8f69bc1c91fbd97330781239beeacb7164b",
-    "a13dca9e3d59d78dac968b2feb325d80461773b9",
-    "36d1bffda39d58099b403745c48b95cd8c1d7c58"
+    "d615f8f69bc1c91fbd97330781239beeacb7164b"
    ],
    "src": "test/test_cpyext_hello.npy"
   },
