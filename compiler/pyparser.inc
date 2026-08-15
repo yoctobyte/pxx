@@ -11530,7 +11530,8 @@ begin
   Result := PyUnboundStrMethodValue;
   if Result >= 0 then Exit;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;  { a CALL }
-  if FindSym(CurTok.SVal) >= 0 then Exit;                                 { a variable }
+  if (FindSym(CurTok.SVal) >= 0) and
+     (not PyNestedDefOutranksSym(CurTok.SVal)) then Exit;                 { a variable }
   { A BUILTIN TYPE NAME — `L = list`, and this is the second entry point for it
     exactly as it is for the unbound str method above. Five of the eleven type
     names (`list`, `dict`, `tuple`, `bytes`, `bool`) are ALSO pylib procs, so
@@ -19845,6 +19846,38 @@ begin
       if pfx[i] = '.' then cut := i;
     if cut = 0 then pfx := '' else pfx := Copy(pfx, 1, cut - 1);
   end;
+end;
+
+{ A nested def OUTRANKS a module-level variable of the same spelling — the
+  question every `FindSym(name) < 0` gate around PyQualifyNested was really
+  asking, and getting wrong.
+
+  `def m(b): def g(x): ... ; return g` with a module-level `g = m(10)` returned
+  None: the `def` binds a LOCAL of the enclosing scope in Python, so it shadows
+  the global unconditionally, but the gates read "a symbol of this name exists
+  at all" and handed `return g` the global — which the assignment being parsed
+  was still waiting on. Loud, but it blamed the caller ("the name is None"), and
+  it needs only the outer name to match, which is exactly what a factory whose
+  product keeps the factory's own inner name looks like
+  (bug-nilpy-a-nested-def-shadowed-by-an-outer-name-binds-to-None).
+
+  A skGlobal only. A genuine LOCAL of the same name is a REBINDING in the same
+  scope (`def g(): ...` then `g = 5`) and must keep winning; the redefinition
+  machinery above is what settles def-vs-def.
+
+  Not handled: an enclosing body that declares `global g`, where Python gives
+  the module binding back. PyBodyDeclaresNonlocal is the shape a fix would
+  follow; no corpus needs it yet. }
+function PyNestedDefOutranksSym(const name: AnsiString): Boolean;
+var si: Integer;
+begin
+  Result := False;
+  if not isNilPy then Exit;
+  if PyNestPrefix = '' then Exit;
+  si := FindSym(name);
+  if si < 0 then Exit;                  { the caller's own gate already passes }
+  if Syms[si].Kind <> skGlobal then Exit;
+  Result := FindProc(PyQualifyNested(name)) >= 0;
 end;
 
 { Does the body span declare `nonlocal <name>`? Scanned from tokens, like the

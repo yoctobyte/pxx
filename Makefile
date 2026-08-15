@@ -914,6 +914,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_maxmin_iter26 | diff -u test/test_nilpy_max_min_iterables.expected -
 	./$(COMPILER) test/test_nilpy_nested_def_default_override.npy $(TESTTMP)/test_nilpy_nestdefdflt26
 	$(TESTTMP)/test_nilpy_nestdefdflt26 | diff -u test/test_nilpy_nested_def_default_override.expected -
+	./$(COMPILER) test/test_nilpy_nested_def_outer_name_collision.npy $(TESTTMP)/test_nilpy_nestdefcollide26
+	$(TESTTMP)/test_nilpy_nestdefcollide26 | diff -u test/test_nilpy_nested_def_outer_name_collision.expected -
 	./$(COMPILER) test/test_nilpy_bare_genexpr_arguments.npy $(TESTTMP)/test_nilpy_genexprarg26
 	$(TESTTMP)/test_nilpy_genexprarg26 | diff -u test/test_nilpy_bare_genexpr_arguments.expected -
 	./$(COMPILER) test/test_nilpy_hasattr_getattr_property.npy $(TESTTMP)/test_nilpy_hasprop26

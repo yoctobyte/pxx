@@ -1,0 +1,10 @@
+collide 11 12
+rebound 101
+default 6 21
+inner-call 6 999
+two-level 6
+indirect 6
+moduledef 31 2
+control 8
+value-first 2 5
+TEST-OK

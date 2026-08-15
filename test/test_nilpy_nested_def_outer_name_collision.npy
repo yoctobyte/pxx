@@ -1,0 +1,89 @@
+# A nested def is a LOCAL binding of its enclosing scope, so it shadows a
+# module-level variable of the same spelling. Naming the factory's product
+# after the factory's own inner def -- `g = make(); def g` inside make -- used
+# to bind None, because `return g` read the module global that the assignment
+# was still waiting on.
+# bug-nilpy-a-nested-def-shadowed-by-an-outer-name-binds-to-None
+
+def make(base):
+    def g(x):
+        return x + base
+    return g
+
+g = make(10)
+print("collide", g(1), g(2))
+
+# the same name reused for a SECOND factory's product
+g = make(100)
+print("rebound", g(1))
+
+# a default argument on the shadowed def, and a call through the outer name
+def make_d(base):
+    def h(x, off=base):
+        return x + off
+    return h
+
+h = make_d(5)
+print("default", h(1), h(1, 20))
+
+# the inner def CALLED inside its own enclosing scope while the outer name
+# exists: the local def must win there too
+def make_c(base):
+    def k(x):
+        return x * base
+    return k(3)
+
+k = 999
+print("inner-call", make_c(2), k)
+
+# two levels: the middle def's name also collides
+def outer(n):
+    def mid(a):
+        def inner(b):
+            return a + b + n
+        return inner
+    return mid
+
+mid = outer(1)
+inner = mid(2)
+print("two-level", inner(3))
+
+# the collision through an intermediate variable, not straight from the call
+def make2(base):
+    def p(x):
+        return x - base
+    return p
+
+t = make2(4)
+p = t
+print("indirect", p(10))
+
+# a module-level DEF of the same name is a different question and still works
+def z(x):
+    return x * 2
+
+def make3(base):
+    def z(x):
+        return x + base
+    return z
+
+zz = make3(30)
+print("moduledef", zz(1), z(1))
+
+# controls: distinct names, and a plain value bound to the colliding name
+def make4(base):
+    def w(x):
+        return x + base
+    return w
+
+w2 = make4(7)
+print("control", w2(1))
+
+def make5(base):
+    def v(x):
+        return x + base
+    return v
+
+v = 5
+print("value-first", make5(1)(1), v)
+print("TEST-OK")

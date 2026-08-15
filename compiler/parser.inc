@@ -899,6 +899,7 @@ function PyMakeSubscriptRead(selfNode, idxArgs, ci, pri: Integer): Integer; forw
 function PyCloneArgChain(head: Integer): Integer; forward;
 function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Python nested-def name lookup (pyparser.inc) }
+function PyNestedDefOutranksSym(const name: AnsiString): Boolean; forward; { Nil Python: a nested def shadows a module global (pyparser.inc) }
 function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil Python `xs * n` (pyparser.inc) }
 function PyMakeListRepeat(a, b: Integer): Integer; forward;              { Nil Python `xs * n` (pyparser.inc) }
 function PyBytesRepeatPair(a, b: Integer): Boolean; forward;             { Nil Python `bytes * n` (pyparser.inc) }
@@ -10799,7 +10800,7 @@ begin
       end;
       if PyExprMode and (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
-         (FindSym(name) < 0) and
+         ((FindSym(name) < 0) or PyNestedDefOutranksSym(name)) and
          (FindProc(PyQualifyNested(name)) >= 0) then
       begin
         idx := FindProc(PyQualifyNested(name));
@@ -10851,7 +10852,8 @@ begin
         call is written unqualified, so rewrite the name here, before any
         lookup — overload matching resolves by name too, not just FindProc
         (feature-nilpy-nested-defs). }
-      if PyExprMode and (PyNestPrefix <> '') and (FindSym(name) < 0) then
+      if PyExprMode and (PyNestPrefix <> '') and
+         ((FindSym(name) < 0) or PyNestedDefOutranksSym(name)) then
         name := PyQualifyNested(name);
       if CaseEqual(name, 'await') and CurProcIsAsync then
       begin
