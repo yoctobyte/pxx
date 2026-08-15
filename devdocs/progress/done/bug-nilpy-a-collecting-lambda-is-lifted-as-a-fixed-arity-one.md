@@ -3,7 +3,7 @@ track: N
 prio: 40
 type: bug
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: d45fa43cc
 summary: "`lambda *a: len(a)` — the lifter's parameter loop skipped the `*` outright, so `a` became an ordinary parameter and `f(1, 2)` raised \"TypeError: <lambda>() takes 1 positional argument but 2 were given\" on a form CPython accepts. The star position now rides the bound-fn object and the bridge packs."
 ---
 
