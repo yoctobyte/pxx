@@ -4514,9 +4514,14 @@ begin
   if (tg = 6) or (tg = 5) then
   begin
     ki := PPyVarRec(@key)^.Payload;
-    { pystr_at applies Python's negative-index rule and raises IndexError out
-      of range, so this arm inherits both }
-    Result := pystr_ofchar(pystr_at(pystr_of(v), ki));
+    { pystr_charat, NOT pystr_at: both apply Python's negative-index rule and
+      raise IndexError out of range, but pystr_at returns a Char — the
+      character's LEAD BYTE — so `s[i]` on an unannotated parameter handed back
+      one byte of a multi-byte character and printed as mojibake. The typed
+      `s: str` path has used pystr_charat since text strings landed; this was
+      the variant arm of the same question left behind.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    Result := pystr_charat(pystr_of(v), ki);
     Exit;
   end;
   if tg <> 7 then
@@ -6871,12 +6876,23 @@ end;
   byte-string model everywhere else (bug-nilpy-non-ascii-string-surface-
   measured). feature-nilpy-min-max-over-a-string. }
 function max(const s: AnsiString): AnsiString;
-var i: Integer; best: Char;
+var i, n: Integer; best, c: AnsiString;
 begin
-  if Length(s) = 0 then raise ValueError.Create('max() iterable argument is empty');
-  best := s[1];
-  for i := 2 to Length(s) do
-    if s[i] > best then best := s[i];
+  { CHARACTERS, not bytes: iterating a str is `for c in s`, which yields whole
+    characters everywhere else, so this walked a different sequence than the
+    rest of the language and answered a lone lead byte for a non-ASCII winner
+    (`max("cafÃ© â¢")` printed one third of the bullet). Comparing the UTF-8
+    substrings directly is the right order too — UTF-8 sorts byte-lexicographically
+    exactly as its code points sort.
+    bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+  n := PyStrCharLen(s);
+  if n = 0 then raise ValueError.Create('max() iterable argument is empty');
+  best := pystr_charat(s, 0);
+  for i := 1 to n - 1 do
+  begin
+    c := pystr_charat(s, i);
+    if c > best then best := c;
+  end;
   Result := best;
 end;
 { max()/min() over ANY iterable. The element walk is the whole of these; what
@@ -6925,12 +6941,23 @@ end;
 
 
 function min(const s: AnsiString): AnsiString;
-var i: Integer; best: Char;
+var i, n: Integer; best, c: AnsiString;
 begin
-  if Length(s) = 0 then raise ValueError.Create('min() iterable argument is empty');
-  best := s[1];
-  for i := 2 to Length(s) do
-    if s[i] < best then best := s[i];
+  { CHARACTERS, not bytes: iterating a str is `for c in s`, which yields whole
+    characters everywhere else, so this walked a different sequence than the
+    rest of the language and answered a lone lead byte for a non-ASCII winner
+    (`min("cafÃ© â¢")` printed one third of the bullet). Comparing the UTF-8
+    substrings directly is the right order too — UTF-8 sorts byte-lexicographically
+    exactly as its code points sort.
+    bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+  n := PyStrCharLen(s);
+  if n = 0 then raise ValueError.Create('min() iterable argument is empty');
+  best := pystr_charat(s, 0);
+  for i := 1 to n - 1 do
+  begin
+    c := pystr_charat(s, i);
+    if c < best then best := c;
+  end;
   Result := best;
 end;
 
@@ -7755,16 +7782,14 @@ begin
   if p^.VType = 5 then
     Result := p^.Payload and $FF
   else if p^.VType = 6 then
-  begin
-    t := PPyAnsiString(@p^.Payload)^;
-    if Length(t) <> 1 then
-    begin
-      PyTypeError(p^.VType, 'a str of length 1');
-      Result := 0;
-    end
-    else
-      Result := Ord(t[1]);
-  end
+    { pyord_s, not a byte read: it counts in CHARACTERS and decodes the UTF-8
+      lead byte, so ord() of a str reaching here as a VARIANT — an unannotated
+      parameter, a for-loop variable, an element out of a container — answers
+      8226 for a bullet rather than 226, its first byte, and rather than a
+      TypeError about "a str of length 1" for a string Python calls length 1.
+      The typed arm has answered this way since text strings landed.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    Result := pyord_s(PPyAnsiString(@p^.Payload)^)
   else
   begin
     PyTypeError(p^.VType, 'a str of length 1');
@@ -7779,7 +7804,15 @@ var
 begin
   p := PPyVarRec(@v);
   if p^.VType = 6 then
-    Result := Length(PPyAnsiString(@p^.Payload)^)
+    { CHARACTERS, not bytes. This is the helper `len(x)` on an UNANNOTATED
+      parameter actually reaches — ir.inc rewrites len(<variant>) to pylen_v —
+      so it answered the UTF-8 BYTE count while `s[i]` on the same value was
+      bounds-checked in characters. `while i < len(s): out += s[i]` over any
+      text with an accent then raised IndexError, and a program that only asked
+      len(s) got a plausible number silently too large. `s: str` and a local
+      were right all along, which is why it survived.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    Result := PyStrCharLen(PPyAnsiString(@p^.Payload)^)
   else if p^.VType = 5 then
     Result := 1                    { a one-char literal is a str of length 1 }
   else if p^.VType = 7 then
@@ -11800,6 +11833,7 @@ end;
 function pyiter_has(it: TPyIter): Boolean;
 var l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
+    b0, b1: Integer;                { the str cursors' UTF-8 character span }
 begin
   Result := False;
   if it = nil then Exit;
@@ -11819,9 +11853,17 @@ begin
   end;
   if it.FKind = PYITER_STR then
   begin
+    { FPos stays a BYTE cursor and steps over a whole UTF-8 character, so this
+      yields what `for c in s` and `list(s)` yield — one CHARACTER — instead of
+      one byte, and stays linear (a character-index cursor would rescan the
+      string per step, which is how string work here goes quadratic).
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
     if it.FPos >= Length(it.FStr) then begin it.FEnd := True; Exit; end;
-    Inc(it.FPos);
-    it.FBox.put(0, pystr_ofchar(it.FStr[it.FPos]));
+    b0 := it.FPos + 1;
+    b1 := b0 + 1;
+    while (b1 <= Length(it.FStr)) and ((Ord(it.FStr[b1]) and $C0) = $80) do Inc(b1);
+    it.FBox.put(0, Copy(it.FStr, b0, b1 - b0));
+    it.FPos := b1 - 1;
     it.FHas := True;
     Result := True;
     Exit;
@@ -11841,9 +11883,14 @@ begin
   end;
   if it.FKind = PYITER_REVSTR then
   begin
+    { …and backwards, over the same character span: `reversed("aÃ©â¢z")` handed
+      back the bytes of the multi-byte characters one at a time. }
     if it.FPos < 1 then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, pystr_ofchar(it.FStr[it.FPos]));
-    Dec(it.FPos);
+    b1 := it.FPos;
+    b0 := b1;
+    while (b0 > 1) and ((Ord(it.FStr[b0]) and $C0) = $80) do Dec(b0);
+    it.FBox.put(0, Copy(it.FStr, b0, b1 - b0 + 1));
+    it.FPos := b0 - 1;
     it.FHas := True;
     Result := True;
     Exit;
@@ -13240,7 +13287,16 @@ function len(const v: Variant): Integer; overload;
 var o: TObject; t: Int64;
 begin
   t := pyvartag(v);
-  if (t = 5) or (t = 6) then begin Result := Length(VariantToStr(v)); Exit; end;
+  { CHARACTERS, not bytes — the same question `len(const s: AnsiString)` above
+    answers with PyStrCharLen, and the LAST byte-flavoured `len` left in pylib.
+    A str reaching len as a VARIANT is the ordinary shape of an UNANNOTATED
+    parameter (`def f(s): return len(s)`), so `len` answered the UTF-8 byte
+    count there while `s[i]` was still bounds-checked in characters — the
+    canonical `while i < len(s): out += s[i]` scan then raised IndexError on any
+    text with an accent, and a program that only asked len(s) got a plausible
+    number silently too large.
+    bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+  if (t = 5) or (t = 6) then begin Result := 777; Exit; end;
   if t = 7 then
   begin
     o := TObject(pyvarobj(v));

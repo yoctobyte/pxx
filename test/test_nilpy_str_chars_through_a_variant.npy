@@ -1,0 +1,96 @@
+# The character/byte rule, taken through the VARIANT arm.
+#
+# test_nilpy_str_counts_characters covers a str the compiler knows statically —
+# a local, a literal, an annotated `s: str`. Every one of those was already
+# right. A str reaching a helper as a VARIANT is a DIFFERENT set of runtime
+# routines (pylen_v, pyvar_getitem, pyord_v, the pyiter str cursors, len/max/min
+# over an AnsiString), and those were still counting BYTES:
+#
+#   len(s) on an unannotated parameter answered the UTF-8 byte count while s[i]
+#   was bounds-checked in characters, so `while i < len(s): out += s[i]` raised
+#   IndexError on any accented text, and a program that only asked len(s) got a
+#   plausible number silently too large.
+#
+# Three shapes put a str into a variant, and all three are asserted below: an
+# UNANNOTATED parameter, a for-loop variable, and an element taken out of a
+# container. Every expected line is what CPython 3.12 prints for this file.
+#
+# bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters
+
+t = "café — naïve •"
+
+
+# --- an unannotated parameter ------------------------------------------------
+def f_len(s):
+    return len(s)
+
+
+def f_idx(s):
+    return s[0]
+
+
+def f_ord(s):
+    return ord(s[0])
+
+
+def f_neg(s):
+    return s[-1]
+
+
+def f_max(s):
+    return max(s)
+
+
+def f_min(s):
+    return min(s)
+
+
+def f_rev(s):
+    return [c for c in reversed(s)]
+
+
+def rebuild(s):
+    # the canonical scan: it needs len(s) and s[i] to agree, and it is what
+    # raised IndexError before
+    out = ""
+    i = 0
+    while i < len(s):
+        out += s[i]
+        i += 1
+    return out
+
+
+print("len", f_len(t), len(t))
+print("idx", f_idx(t), f_neg(t))
+print("ord", f_ord("•"), f_ord("é"), f_ord("a"))
+print("minmax", f_max(t), f_min(t) == " ")
+print("rebuild", rebuild(t) == t)
+print("rev", "".join(f_rev(t)))
+
+# an ANNOTATED parameter and a local were always right -- asserted so a fix that
+# moved the variant arm the wrong way is still caught
+def annotated(s: str) -> int:
+    return len(s)
+
+
+print("annotated", annotated(t), len(t))
+
+# --- a for-loop variable is a variant ---------------------------------------
+words = ["café", "naïve", "•", "ascii"]
+for w in words:
+    print("word", w[0], ord(w[0]), len(w))
+
+# --- an element out of a container ------------------------------------------
+d = {"k": t}
+print("dict", len(d["k"]), d["k"][0])
+print("list", len(words[2]), words[2][0], ord(words[2][0]))
+
+# --- the str cursors, forward and backward ----------------------------------
+print("iter", list(iter(t)) == list(t))
+print("reversed", "".join(reversed(t)) == t[::-1])
+print("enumerate", list(enumerate("aé•")))
+print("sum", sum(len(c) for c in t), len(t))
+
+# --- bytes must still count BYTES -------------------------------------------
+b = t.encode("utf-8")
+print("bytes", len(b), len(t))

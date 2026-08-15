@@ -1,0 +1,18 @@
+len 14 14
+idx c •
+ord 8226 233 97
+minmax • True
+rebuild True
+rev • evïan — éfac
+annotated 14 14
+word c 99 4
+word n 110 5
+word • 8226 1
+word a 97 5
+dict 14 c
+list 1 • 8226
+iter True
+reversed True
+enumerate [(0, 'a'), (1, 'é'), (2, '•')]
+sum 14 14
+bytes 20 14

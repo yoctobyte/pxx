@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:211 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1889 rejected:37`
+`unfinished:11 blocked:4 backlog:210 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1890 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,9 +32,8 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 195, ranked
+## Ready — top 30 of 194, ranked
 
-- `[p 65] [N]` bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -64,5 +63,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [B]` feature-b-mimic-codecs-for-nilpy
 - `[p 50] [C]` feature-c-vla-via-alloca
+- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_165 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_164 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

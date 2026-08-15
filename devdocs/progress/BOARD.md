@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (211)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -58,7 +58,6 @@ _none_
 | bug-nilpy-field-class-lost-after-an-if-in-the-same-method | N | 55 | bug | A `self.f = Cls(...)` assignment that comes AFTER an if/for in the same method is never recorded as a class field, so the field falls back to dynamic — silently, because a direct call on it still works and only a bound method taken as a VALUE fails | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
-| bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters | N | 65 | bug | len(s) on an UNANNOTATED str parameter answers in BYTES while s[i] is bounds-checked in CHARACTERS — so `while i < len(s): out += s[i]` over any non-ASCII text raises IndexError, and the in-range indexes hand back single mojibake bytes. `s: str` is correct; a local is correct; only the unannotated parameter is wrong. | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
@@ -411,9 +410,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1889)
+## done (1890)
 
-1889 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1890 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -459,7 +458,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 65] [N] bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [A] bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units
 - [p 60] [C] feature-c-csmith-differential-fuzzing

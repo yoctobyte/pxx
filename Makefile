@@ -1500,6 +1500,14 @@ test-nilpy: $(COMPILER)
 	# is broken by any half-conversion. ASCII stays byte-identical.
 	./$(COMPILER) test/test_nilpy_str_counts_characters.npy $(TESTTMP)/test_nilpy_strchars26
 	$(TESTTMP)/test_nilpy_strchars26 | diff -u test/test_nilpy_str_counts_characters.expected -
+	# ...and the same rule through the VARIANT arm -- an unannotated parameter, a
+	# for-loop variable, a container element. Those are a DIFFERENT set of runtime
+	# routines (pylen_v, pyvar_getitem, pyord_v, the pyiter str cursors, len/max/min
+	# over an AnsiString) and every one of them was still counting BYTES, so len(s)
+	# and s[i] disagreed on the same value. .expected is CPython 3.12's own output.
+	# bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters
+	./$(COMPILER) test/test_nilpy_str_chars_through_a_variant.npy $(TESTTMP)/test_nilpy_varchars26
+	$(TESTTMP)/test_nilpy_varchars26 | diff -u test/test_nilpy_str_chars_through_a_variant.expected -
 	# a str is an ITERABLE: "-".join(s), print(*s), f(*s), [*s]/{*s}. All four
 	# SEGFAULTED -- the routines behind them are reached by name and take a real
 	# TPyList, so a string handle was dereferenced as an object pointer.
