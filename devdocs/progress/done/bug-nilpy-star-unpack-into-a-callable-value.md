@@ -114,4 +114,4 @@ callee reached this way, a lambda as the value, and the decorator itself over
 two different arities. Re-checked ten neighbouring star/callable tests.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit c35f61df0.
