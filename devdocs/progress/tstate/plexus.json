@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T05:22:21Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e93aeb896a7889e4e4e0b9de0c57a540755f3d06",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T05:30:22Z",
    "fixed": [],
    "new_red": [],
@@ -456,6 +448,14 @@
    "sha": "36d1bffda39d58099b403745c48b95cd8c1d7c58",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-15T15:26:00Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "36d1bffda39d58099b403745c48b95cd8c1d7c58",
+   "tier": "slow",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -5397,11 +5397,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T15:21:20Z",
+  "date": "2026-08-15T15:26:00Z",
   "sha": "36d1bffda39d58099b403745c48b95cd8c1d7c58",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 1024.4
+  "tier": "slow",
+  "verdict": "GREEN",
+  "wall": 269.7
  },
  "last_bench": {
   "conf_rows": 550,
