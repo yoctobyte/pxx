@@ -118,4 +118,4 @@ every row except the documented `[1, 2.5]` one.** The existing
 `gate.sh quick` + self-host fixedpoint GREEN, FPC seed canary included.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 27deacd86.
