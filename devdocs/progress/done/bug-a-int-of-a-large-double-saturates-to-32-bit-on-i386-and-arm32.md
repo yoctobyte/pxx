@@ -148,3 +148,14 @@ revert-when-fixed lifecycle.
 
 ## Log
 - 2026-08-15 — resolved, commit 5b6e1728d.
+
+
+---
+
+## Follow-up 2026-08-15: the same defect survives on **x86-64**
+
+This ticket fixed i386 and arm32. Measured later on x86-64, `Int(1.0e300)`
+returns `-9.2233720368547758E+018` = `INT64_MIN`, so the builtin still routes
+through an integer conversion there — same defect, different word size. Filed
+separately rather than reopening this record:
+[[bug-a-int-of-a-large-double-is-int64-min-on-x86-64]].

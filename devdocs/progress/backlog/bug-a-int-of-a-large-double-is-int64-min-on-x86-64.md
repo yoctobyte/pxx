@@ -1,0 +1,72 @@
+---
+track: A
+prio: 60
+type: bug
+blocked-by: []
+summary: "Int(1.0e300) returns -9.2233720368547758E+018 (INT64_MIN) on x86-64. FPC returns 1e300. Int() is defined on DOUBLES and must not visit an integer at all: for |x| >= 2^52 every double is already integral, so Int(x) IS x. The i386/arm32 half of this was fixed under bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32; x86-64 was never in scope and is still wrong. Frac(x) is wrong at the same magnitudes."
+---
+
+# `Int()` of a large double is `INT64_MIN` on x86-64
+
+- **Type:** bug (builtin — **Track A**). Filed by Track B, which found it and
+  does not edit the compiler.
+- Found 2026-08-15 while fixing `FMod` in `lib/rtl/math.pas`. Sibling of
+  [[bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32]], which
+  is **done** and fixed the 32-bit targets only.
+
+## Measured, pinned v339, x86-64
+
+```
+Int(3.5)      3.0                       correct
+Int(1.0e18)   1000000000000000000.0     correct
+Int(3.3e299)  -9.2233720368547758E+018  WRONG
+Int(1.0e300)  -9.2233720368547758E+018  WRONG
+```
+
+FPC 3.2.2:
+
+```
+Int(1.0e300)   1.00000000000000000001E+0300
+Int(3.3e299)   3.29999999999999999999E+0299
+Frac(1.0e300)  0.00000000000000000000E+0000
+```
+
+`-9.2233720368547758E+018` is `INT64_MIN`, the x86 "integer indefinite" result.
+So the builtin is still going through a 64-bit integer conversion. The 32-bit
+targets saturated at 2^31 and x86-64 lands on INT64_MIN — **one defect, two word
+sizes**, and the earlier fix addressed the symptom on two backends rather than
+the cause.
+
+## The fix needs no conversion at all
+
+`Int` returns a DOUBLE. For |x| >= 2^52 every double is already an integer, so
+there is nothing to truncate:
+
+```
+if Abs(x) >= 4503599627370496.0 then Result := x      { 2^52 }
+else <the existing Int64 route, which is safe below 2^52>
+```
+
+A magnitude test and an early return. `lib/rtl/math.pas`'s `DdRint` already
+does exactly this and says why in a comment citing the older ticket.
+
+## Also wrong: `Frac`
+
+`Frac(x) = x - Int(x)`, so it inherits this at the same magnitudes. FPC gives
+`Frac(1e300) = 0`. Check whether `Frac` is implemented in terms of `Int` or
+separately, and fix both — per
+`devdocs/dev/normalise-dont-special-case.md`, if the two have separate
+implementations the second one is the one that stays broken.
+
+## Not blocking the RTL
+
+`lib/rtl/math.pas`'s `FMod` used to be `x - Int(x/y)*y` and returned
+`FMod(1e300, 3.0) = 1e300` because of this. Track B replaced it with an exact
+scaled-subtraction loop that never calls `Int`, so the RTL no longer depends on
+the builtin being right. This ticket stands for user code and for `Frac`.
+
+## Gate
+
+`make test` + self-host byte-identical, plus `Int` and `Frac` matching FPC 3.2.2
+at 1e300, 3.3e299, 2^52, 2^52-0.5, 2^63, and the negatives of each — on
+x86-64 **and** the 32-bit targets, so the earlier fix is not regressed.

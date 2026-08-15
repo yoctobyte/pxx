@@ -1836,8 +1836,33 @@ begin
 end;
 
 function Hypot(x, y: Double): Double;
+{ `Sqrt(x*x + y*y)` squares before it adds, so it dies at both ends of the
+  range on values the ANSWER can represent perfectly well:
+
+    Hypot(3e300, 4e300)   was Inf   want 5e300     x*x overflowed
+    Hypot(3e-200, 4e-200) was 0     want 5e-200    x*x underflowed to zero
+
+  Scaling by the larger operand fixes both at once: t = small/large is in
+  [0, 1], so 1 + t*t is in [1, 2] and cannot overflow or underflow, and the one
+  multiply by `large` at the end puts the magnitude back. Same cancellation
+  family as the hyperbolics — an intermediate leaving the representable range
+  while the result never does. }
+var ax, ay, t: Double;
 begin
-  Result := Sqrt(x * x + y * y);
+  ax := Abs(x);
+  ay := Abs(y);
+  { IEEE 754: hypot(+-Inf, anything) is +Inf, INCLUDING hypot(Inf, NaN) — the
+    infinity wins over the NaN. Test it before the NaN check for that reason. }
+  if (ax > 1.7976931348623157e308) or (ay > 1.7976931348623157e308) then
+  begin
+    Result := 1.7976931348623157e308 * 2.0;
+    Exit;
+  end;
+  if (x <> x) or (y <> y) then begin Result := x + y; Exit; end;   { NaN }
+  if ay > ax then begin t := ax; ax := ay; ay := t; end;
+  if ax = 0.0 then begin Result := 0.0; Exit; end;
+  t := ay / ax;
+  Result := ax * Sqrt(1.0 + t * t);
 end;
 
 { ---- FPC's RoundTo family (see the interface note for why these formulas) ---- }
@@ -2198,10 +2223,53 @@ begin
 end;
 
 function FMod(x, y: Double): Double;
-{ truncated remainder: x - trunc(x/y)*y, sign of x }
+{ Truncated remainder, sign of x. `x - Int(x/y)*y` was wrong twice over:
+
+  - `Int` of a large double is INT64_MIN on x86-64 and saturates on the 32-bit
+    targets ([[bug-a-int-of-a-large-double-is-int64-min-on-x86-64]]), so
+    FMod(1e300, 3.0) returned 1e300 — the INPUT, entirely unreduced, where the
+    answer is 0.
+  - even with a correct Int, x/y ROUNDS, and multiplying the rounded quotient
+    back by y cannot recover the remainder once the ratio exceeds 2^53.
+
+  fmod is one of the few libm functions whose result is EXACTLY defined — no
+  rounding is permitted — so an approximate formula is the wrong shape entirely.
+  This is the scaled repeated subtraction, in which every step is exact:
+  the invariant is ax < 2*d, so a subtraction only ever happens when
+  d <= ax < 2*d, and Sterbenz's lemma makes `ax - d` exact there. Halving d is
+  exact because it is a power-of-two scale. Therefore so is the result.
+
+  The loop runs once per binade between |x| and |y| — about 1000 iterations in
+  the extreme FMod(1e300, 3.0) case, a handful in every ordinary one. }
+var ax, ay, d: Double; n, i: Integer;
 begin
-  if y = 0.0 then begin Result := 0.0; Exit; end;
-  Result := x - Int(x / y) * y;
+  if (x <> x) or (y <> y) then begin Result := x + y; Exit; end;      { NaN }
+  ay := Abs(y);
+  if ay = 0.0 then begin Result := 0.0; Exit; end;                    { FPC: 0, not NaN }
+  ax := Abs(x);
+  if ax > 1.7976931348623157e308 then begin Result := ax - ax; Exit; end;  { Inf -> NaN }
+  if ay > 1.7976931348623157e308 then begin Result := x; Exit; end;   { y = Inf }
+  if ax < ay then begin Result := x; Exit; end;
+  if ax = ay then
+  begin
+    if x < 0.0 then Result := -0.0 else Result := 0.0;
+    Exit;
+  end;
+  { scale ay up while it stays at or below ax — d never exceeds ax, so the
+    doubling cannot overflow no matter how large ax is }
+  d := ay;
+  n := 0;
+  while d <= ax * 0.5 do
+  begin
+    d := d * 2.0;
+    n := n + 1;
+  end;
+  for i := n downto 0 do
+  begin
+    if ax >= d then ax := ax - d;      { exact: d <= ax < 2*d }
+    d := d * 0.5;
+  end;
+  if x < 0.0 then Result := -ax else Result := ax;
 end;
 
 function Sign(x: Double): Integer;

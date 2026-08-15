@@ -168,6 +168,25 @@ begin
   { x*x overflows past 1.3e154, which used to turn asinh/acosh(1e200) into Inf }
   CheckUlp(ArcSinh(1.0e200), 461.2101657793691, 2, 'asinh-huge-no-x2-overflow');
   CheckUlp(ArcCosh(1.0e200), 461.2101657793691, 2, 'acosh-huge');
+
+  { ---- Hypot and FMod, the same bug class one more time ----
+    Hypot was Sqrt(x*x + y*y), so it died at BOTH ends on values the answer
+    represents perfectly: Hypot(3e300,4e300) was Inf and Hypot(3e-200,4e-200)
+    was 0. FMod was x - Int(x/y)*y, which returned FMod(1e300,3) = 1e300 -- the
+    input, unreduced -- because Int() of a large double is INT64_MIN
+    ([[bug-a-int-of-a-large-double-is-int64-min-on-x86-64]]) and because a
+    rounded quotient cannot recover a remainder past 2^53 anyway.
+
+    FMod is asserted at tolerance ZERO: fmod is one of the few libm functions
+    whose result is EXACTLY defined, so "close" is not a passing answer. }
+  CheckUlp(Hypot(3.0e300, 4.0e300), 5e+300, 2, 'hypot-huge-no-overflow');
+  CheckUlp(Hypot(3.0e-200, 4.0e-200), 5e-200, 2, 'hypot-tiny-no-underflow');
+  CheckUlp(Hypot(3.0, 4.0), 5.0, 0, 'hypot-3-4-exact');
+  CheckUlp(Hypot(0.0, -5.0), 5.0, 0, 'hypot-zero-arm');
+  CheckUlp(FMod(5.5, 2.0), 1.5, 0, 'fmod-basic');
+  CheckUlp(FMod(-5.5, 2.0), -1.5, 0, 'fmod-neg-keeps-x-sign');
+  CheckUlp(FMod(1.0e18, 3.0), 1.0, 0, 'fmod-1e18');
+  CheckUlp(FMod(1.0e300, 3.0), 0.0, 0, 'fmod-huge-exact');
   CheckUlp(Power(1.0001, 10000.0), 2.7181459268249255, 2, 'power-amplified');
 
   { EXACT even in fast mode, and deliberately so: the reductions pull the
@@ -233,6 +252,13 @@ begin
   SayBool('atanh-one-inf', ArcTanh(1.0) > 1.0e308);
   SayBool('atanh-neg-one-neginf', ArcTanh(-1.0) < -1.0e308);
   SayBool('asinh-inf', ArcSinh(inf) > 1.0e308);
+  { IEEE 754 is explicit that an infinity beats a NaN here }
+  SayBool('hypot-inf-nan-is-inf', Hypot(inf, nan) > 1.0e308);
+  SayBool('hypot-nan', Hypot(nan, 1.0) <> Hypot(nan, 1.0));
+  SayBool('fmod-y-zero', FMod(1.0, 0.0) = 0.0);
+  SayBool('fmod-x-inf-nan', FMod(inf, 3.0) <> FMod(inf, 3.0));
+  SayBool('fmod-y-inf', FMod(5.0, inf) = 5.0);
+  SayBool('fmod-smaller', FMod(1.0, 3.0) = 1.0);
 
   { bounded, not growing: |sin| <= 1 must hold at every magnitude, which is the
     cheap check that catches a reduction that has come apart }
