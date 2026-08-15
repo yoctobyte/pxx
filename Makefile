@@ -289,6 +289,14 @@ test-nilpy: $(COMPILER)
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
 	# searches the source file's own directory first.
 	./$(COMPILER) examples/tk/tkinter_facade.npy $(TESTTMP)/test_nilpy_tkinter26
+	# ...and the OPPOSITE polarity: `Text` the widget must NOT capture `Text` the
+	# RTL file record inside a unit that never named tkinter. `uses tkinter,
+	# configparser` failed to build IN lib/rtl/configparser.pas, on `Assign(f,
+	# path)` with a class where a record belongs -- so a Tk UI plus a settings
+	# file could not be combined. Pure Pascal, no NilPy: it is the lookup, not
+	# the frontend. Compiled, not run (X display), same as the facade above.
+	# bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units
+	./$(COMPILER) examples/tk/uses_tkinter_and_configparser.pas $(TESTTMP)/test_tk_cfgparser26
 	# a field assigned `tk.Canvas(...)` keeps its class in ANY method, so calls on
 	# it resolve statically and take keyword arguments (same X-display caveat)
 	./$(COMPILER) examples/tk/field_class_identity.npy $(TESTTMP)/test_nilpy_fldcls26
@@ -5982,6 +5990,14 @@ test-core: $(COMPILER)
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
 	# searches the source file's own directory first.
 	./$(COMPILER) examples/tk/tkinter_facade.npy $(TESTTMP)/test_nilpy_tkinter26
+	# ...and the OPPOSITE polarity: `Text` the widget must NOT capture `Text` the
+	# RTL file record inside a unit that never named tkinter. `uses tkinter,
+	# configparser` failed to build IN lib/rtl/configparser.pas, on `Assign(f,
+	# path)` with a class where a record belongs -- so a Tk UI plus a settings
+	# file could not be combined. Pure Pascal, no NilPy: it is the lookup, not
+	# the frontend. Compiled, not run (X display), same as the facade above.
+	# bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units
+	./$(COMPILER) examples/tk/uses_tkinter_and_configparser.pas $(TESTTMP)/test_tk_cfgparser26
 	# a field assigned `tk.Canvas(...)` keeps its class in ANY method, so calls on
 	# it resolve statically and take keyword arguments (same X-display caveat)
 	./$(COMPILER) examples/tk/field_class_identity.npy $(TESTTMP)/test_nilpy_fldcls26

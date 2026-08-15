@@ -1317,17 +1317,36 @@ end;
   parses with one argument and fails with two.
   decide-class-namespace-scoping. }
 function FindUClassNonRecord(const name: AnsiString): Integer;
-var i: Integer; lo, name2: AnsiString;
+{ …under the SAME visibility and scope-hiding rule as FindUClass. This scan was
+  flat and global, and that is the whole of
+  bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units: a
+  program saying `uses tkinter, configparser` stopped compiling INSIDE
+  lib/rtl/configparser.pas, whose own `var f: Text` means the RTL FILE record —
+  lib/pcl's `Text = class(Widget)` answered a question asked by a unit that
+  never named tkinter, and `Assign(f, path)` then had a class where a record
+  belonged. configparser alone compiles; adding tkinter elsewhere in the program
+  was the entire difference.
+
+  Preferring the CLASS over a same-named RECORD is still right where the asker
+  is a NilPy class position (bug-nilpy-text-class-name-binds-the-rtl-file-record
+  wired this predicate in for exactly that). It was only ever wrong because it
+  answered for scopes that cannot see the class at all — so the fix is the
+  visibility rule, not a fourth mechanism on top of the three lib/pcl already
+  carries for the flat namespace. }
+var i, bestRank, r: Integer; lo, name2: AnsiString;
 begin
   Result := -1;
+  bestRank := -2;
   name2 := name;
   lo := ULower(name2);
   for i := 0 to UClsCount - 1 do
-    if (not UClsIsRecord[i]) and UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
+    if (not UClsIsRecord[i]) and UNameMatch(UClsNOff[i], UClsNLen[i], lo) and
+       (ClassNameIsAmbientIntrinsic(lo) or DeclVisible(UClsUnitIdx[i])) then
     begin
-      Result := i;
-      Exit;
+      r := UsesRankOf(CurrentUnitIdx, UClsUnitIdx[i]);
+      if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
     end;
+  if Result >= 0 then Exit;
   { Class-name ALIASES too, exactly as FindUClass resolves them. Without this
     the two predicates disagree about the same name, and the NilPy construction
     intercept (parser.inc, `FindUClassNonRecord(...) and next is '('`) stood
