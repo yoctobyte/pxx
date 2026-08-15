@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T07:50:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "bf9ab7584ea105c854ee0b70039c498c9d120fd4",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-15T08:04:29Z",
    "fixed": [],
    "new_red": [],
@@ -501,6 +493,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "b39fb6984ed881a37e00622cef5f2780b739b1ae",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T20:43:12Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "3f792227b5b012dbdf89c82c960e1e88f1665db5",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1435,6 +1435,7 @@
   "test-core#src:test/test_forin_literal_sources.pas": "native",
   "test-core#src:test/test_forin_member_access.pas": "native",
   "test-core#src:test/test_forin_native.pas": "native",
+  "test-core#src:test/test_forin_nonordinal_array_ctor.pas": "native",
   "test-core#src:test/test_forin_property_b295.pas": "native",
   "test-core#src:test/test_forin_record_enumerator_b355.pas": "native",
   "test-core#src:test/test_forin_set_member.pas": "native",
@@ -3911,6 +3912,7 @@
   "test-core#src:test/test_forin_literal_sources.pas": "pass",
   "test-core#src:test/test_forin_member_access.pas": "pass",
   "test-core#src:test/test_forin_native.pas": "pass",
+  "test-core#src:test/test_forin_nonordinal_array_ctor.pas": "pass",
   "test-core#src:test/test_forin_property_b295.pas": "pass",
   "test-core#src:test/test_forin_record_enumerator_b355.pas": "pass",
   "test-core#src:test/test_forin_set_member.pas": "pass",
@@ -5454,11 +5456,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T20:35:32Z",
-  "sha": "b39fb6984ed881a37e00622cef5f2780b739b1ae",
+  "date": "2026-08-15T20:43:12Z",
+  "sha": "3f792227b5b012dbdf89c82c960e1e88f1665db5",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 215.4
+  "wall": 204.8
  },
  "last_bench": {
   "conf_rows": 550,
