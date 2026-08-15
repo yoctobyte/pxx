@@ -20356,6 +20356,29 @@ begin
     Result := PyMakeBytesRepeat(left, right);
     Exit;
   end;
+  { a VARIANT target — an unannotated parameter, a dict value, a list element.
+    Nothing here can tell a list from an int, so the decision moves to run time:
+    pymul_v_inplace repeats a mutable list in place and answers the same handle,
+    and is the ordinary pymul_v for everything else. The store around it STAYS
+    (unlike the statically-typed arm above): when the fallback runs, the product
+    is a new value the target must receive. }
+  if (IntToTypeKind(ASTTk[left]) = tyVariant) and
+     PyIsRepeatCountTk(IntToTypeKind(ASTTk[right])) then
+  begin
+    ipPi := FindProc('pymul_v_inplace');
+    if ipPi >= 0 then
+    begin
+      ipA := AllocNode(AN_ARG); ASTLeft[ipA] := left;
+      ipB := AllocNode(AN_ARG); ASTLeft[ipB] := PyForceVariant(right);
+      ASTRight[ipB] := -1;
+      ASTRight[ipA] := ipB;
+      Result := AllocNode(AN_CALL);
+      ASTIVal[Result] := ipPi;
+      ASTTk[Result] := Ord(tyVariant);
+      ASTLeft[Result] := ipA;
+      Exit;
+    end;
+  end;
   if PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) and
      (not PyIsStrBaseTk(IntToTypeKind(ASTTk[right]))) then
   begin

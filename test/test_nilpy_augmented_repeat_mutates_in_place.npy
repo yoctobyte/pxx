@@ -64,8 +64,22 @@ dd = {"k": [3]}
 dd["k"] *= 3
 print(dd["k"])
 
-# NOT covered here: `xs *= 2` where the target reads as a VARIANT — an
-# unannotated parameter, a dict VALUE — still rebinds, so an alias of THAT
-# keeps the old contents. The in-place arm keys on the operand's STATIC type,
-# and a subscript read is a variant. Filed as
+# a VARIANT target — an unannotated parameter — decides at RUN time, so the
+# caller sees the mutation
+def double(xs):
+    xs *= 2
+
+g = [4, 5]
+double(g)
+print(g)
+
+# ...and the same parameter over the kinds that must NOT mutate
+def bump(v):
+    v *= 3
+    return v
+
+print(bump(2), bump("x"), bump(1.5), bump((1, 2)))
+
+# NOT covered here: a dict VALUE as the target — `dd["k"] *= 3` still rebinds,
+# so an alias of it keeps the old contents. Filed as
 # bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds.

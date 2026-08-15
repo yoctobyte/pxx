@@ -1420,6 +1420,7 @@ function pylen_v(const v: Variant): Int64;
 function pyord_v(const v: Variant): Int64;
 function pyord_s(const s: AnsiString): Int64;
 function pychr_s(n: Int64): AnsiString;
+function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
 function pymul_v(const a: Variant; const b: Variant): Variant;
 { Python's `**`. int**non-negative-int is exact within Int64 (exponentiation
   by squaring, so it inherits whatever overflow behaviour chained `*` already
@@ -7734,6 +7735,34 @@ begin
     PyTypeError(p^.VType, 'a str, list, dict or bytes');
     Result := 0;
   end;
+end;
+
+function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
+{ The AUGMENTED product, `xs *= n`, where the target reads as a VARIANT — an
+  unannotated parameter, a dict value, a list element. A mutable LIST is
+  repeated IN PLACE and the same handle answered, so an alias taken beforehand
+  sees the new contents, which is what Python does; everything else is the
+  ordinary product, computed by pymul_v itself rather than re-implemented here.
+
+  A tuple and a frozenset are immutable and take the ordinary path — the kind
+  check lives in pylist_repeat_inplace, which is the one place that knows it.
+  bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds }
+var o: TObject;
+begin
+  { BOTH integer tags: a boxed literal wears VT_INT (1) and a boxed Int64
+    VT_INT64 (2), and testing only one is how the arm silently never fired. }
+  if (pyvartag(a) = 7) and (pyvarobj(a) <> nil) and
+     ((pyvartag(b) = 1) or (pyvartag(b) = 2) or (pyvartag(b) = 4)) then
+  begin
+    o := TObject(pyvarobj(a));
+    if (o is TPyList) and (TPyList(o).FKind = PYSEQ_LIST) then
+    begin
+      pylist_repeat_inplace(TPyList(o), pyvar_to_int(b));
+      Result := a;
+      Exit;
+    end;
+  end;
+  Result := pymul_v(a, b);
 end;
 
 function pymul_v(const a: Variant; const b: Variant): Variant;
