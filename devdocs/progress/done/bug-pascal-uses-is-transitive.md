@@ -664,4 +664,4 @@ default (the hatch makes that testable without a rebuild first).
 
 **Status: resolved.** The rule, the enforcement, the RTL leak closures, the
 ambient marking, the corpus sweep, and now the default — all landed.
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 56a540143.
