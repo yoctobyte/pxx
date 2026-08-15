@@ -193,4 +193,4 @@ Test: `test/lib_math_correctly_rounded.pas` gains 15 rows at 100, 123.456,
 than Cody-Waite.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit dc60b64fb.
