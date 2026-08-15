@@ -325,3 +325,4 @@
 2026-08-15T03:11:50Z  v325  16d7fe9f78ddf94c81ce909348823e915ebfb93b2316df7bc9000aa69df72d47  3b11c7e305a9be903a47eb2b9df96b0615a786ee  fix(N): dict() takes any iterable of pairs, not only a dict
 2026-08-15T03:26:16Z  v326  16d7fe9f78ddf94c81ce909348823e915ebfb93b2316df7bc9000aa69df72d47  89021e5c53fadfe6076668c43937570aeb15e7c5  fix(N): TPyFile.writelines, and file the genexpr-as-method-argument gap
 2026-08-15T03:38:56Z  v327  40cd716417a5441ea638685910eb7d009d5167301421ad907632cb6a669dbfd0  6dd610f83834f53271dcf7bd592be0a423994ba1  fix(N): a builtin type as a key= callback jumped to address 13
+2026-08-15T04:33:43Z  v328  3dc4ec13b70c34466a5bc0e97bff3248112e6b9b910d2971b3dc99ea1c80e2d0  1b9cd3496c1f3de5a2bba43dff90cbb2cf48a09f  docs(progress): record the shas the resolves landed as

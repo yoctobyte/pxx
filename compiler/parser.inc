@@ -962,6 +962,10 @@ function PyIsParenCompAhead: Boolean; forward;      { `(x for x in xs)` (pyparse
 function PyNextOverListAhead: Boolean; forward;     { is `next(...)`'s argument a sequence? (pyparser.inc) }
 function PyParseParenComp: Integer; forward;
 function PyMakeZip(aNode, bNode, cNode, dNode: Integer): Integer; forward;   { `zip(a, b[, c[, d]])` as a value; -1 for an absent stream (pyparser.inc) }
+function PyMakeZipN(listNode: Integer): Integer; forward;                    { `zip(*rows)` / zip past four — over a LIST of iterables (pyparser.inc) }
+function PyZipStarOperand(node: Integer): Integer; forward;                  { the star operand of `zip(*rows)` as a TPyList (pyparser.inc) }
+function PyZipTailList(a, b, c, d: Integer): Integer; forward;               { four parsed zip operands plus the rest, as a TPyList temp (pyparser.inc) }
+function PyStarIsIterableForm(const nm: AnsiString): Boolean; forward;       { `max(*xs)` means max(xs) — the two names that is true of (pyparser.inc) }
 function PyIsSetCompAhead: Boolean; forward;    { set comprehension (pyparser.inc) }
 function PyParseSetComp: Integer; forward;
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer; forward; { `Cls().m(...)` (pyparser.inc) } { Nil Python expression-position comprehension (pyparser.inc) }
@@ -15153,7 +15157,8 @@ begin
           the argument count is a run-time fact, so it desugars to a dispatch on
           len(args) (PyStarForwardCall). Detected before the argument loop —
           which parses expressions, and `*x` is not one. }
-        else if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] < 0) then
+        else if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] < 0) and
+                not PyStarIsIterableForm(name) then
         begin
           Next;                          { the '*' }
           ParseArgExpr;
@@ -15176,6 +15181,26 @@ begin
           CurASTNode := PyStarForwardCall(procIdx, fwdList, fwdDict);
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
           Exit;
+        end;
+        { `max(*xs)` / `min(*xs)` — for these two, and only these two, CPython's
+          starred call means exactly the ITERABLE form the callee already takes,
+          so the run-time arity dispatch is the wrong mechanism: it looked for a
+          three-argument max and raised "forwarded call got 3 arguments,
+          expected 2 to 2" at run time. One argument, and ordinary overload
+          matching below picks max(TPyList).
+          bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
+        if isNilPy and (CurTok.Kind = tkStar) and PyStarIsIterableForm(name) and
+           (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkStar) then
+        begin
+          Next;                          { the '*' }
+          ParseArgExpr;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := PyZipStarOperand(CurASTNode);
+          ASTIVal[argSeq] := 0;
+          ASTRight[argSeq] := -1;
+          argsHead := argSeq;
+          lastArg := argSeq;
+          nArgs := 1;
         end;
         { `f(1, *xs)` — a star that is not the FIRST argument, which the
           forwarding arm above is the only one that handles. Same helper the
@@ -15986,6 +16011,19 @@ begin
       form is recognised earlier (PyParseForZip) and walks both containers by
       index; here the pairs have to exist as a list. }
     Next; Expect(tkLParen, '(');
+    { `zip(*rows)` — the TRANSPOSE idiom, and the one zip whose stream count is
+      a RUN-TIME fact. It cannot ride the fixed argument chain below, which is
+      why it did not parse at all; the operand IS the list of iterables. }
+    if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) then
+    begin
+      Next;                                { the '*' }
+      ParseArgExpr;
+      CurASTNode := PyMakeZipN(PyZipStarOperand(CurASTNode));
+      Expect(tkRParen, ')');
+      LastExprTk := tyClass;
+      Exit;
+    end;
     ParseArgExpr;
     smBase := CurASTNode;
     Expect(tkComma, ',');
@@ -16003,9 +16041,17 @@ begin
       if CurTok.Kind = tkComma then
       begin
         Next; ParseArgExpr; zipD := CurASTNode;
+        { …and past four, where the fixed chain used to stop with "not
+          supported yet — zip the first four and zip the result". The N-way
+          entry takes a LIST, so the remaining streams are collected into one
+          and the ceiling is gone rather than raised. }
         if CurTok.Kind = tkComma then
-          Error('Nil Python: zip() of more than four iterables is not '
-                + 'supported yet — zip the first four and zip the result');
+        begin
+          CurASTNode := PyMakeZipN(PyZipTailList(smBase, zipB, zipC, zipD));
+          Expect(tkRParen, ')');
+          LastExprTk := tyClass;
+          Exit;
+        end;
       end;
     end;
     CurASTNode := PyMakeZip(smBase, zipB, zipC, zipD);

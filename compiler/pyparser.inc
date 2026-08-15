@@ -698,6 +698,10 @@ begin
 end;
 
 function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer; forward;
+function PyStarOperandAsList(node, listCi: Integer): Integer; forward;
+function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;
+procedure PyContainerCall1(tmpSym: Integer; const clsName, meth: AnsiString;
+                           argA, argB: Integer); forward;
 
 { Materialise the `from mod import NAME as ALIAS` bindings queued by
   PyParseImportRun (see PyImpAliasSym). Drains the queue, so whichever flush
@@ -8950,6 +8954,66 @@ begin
   ASTTk[Result] := Ord(tyClass);
   ASTRight[Result] := ProcRetRecId[ASTIVal[Result]];
   ASTLeft[Result] := a0;
+end;
+
+{ `zip(*rows)`, and any zip of more than four streams -> pyiter_zip_n over a
+  LIST of iterables. The fixed two/three/four-way lowering above counts the
+  streams while PARSING, which is why the transpose idiom -- the commonest zip
+  in real Python -- did not parse at all, and why five streams met a "not
+  supported yet". One run-time entry replaces the ceiling rather than adding a
+  fifth field to it (bug-nilpy-star-unpack-into-a-fixed-arity-builtin). }
+function PyMakeZipN(listNode: Integer): Integer;
+var argNode: Integer;
+begin
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := listNode;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := FindProc('pyiter_zip_n');
+  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pyiter_zip_n) not loaded');
+  ASTTk[Result] := Ord(tyClass);
+  ASTRight[Result] := ProcRetRecId[ASTIVal[Result]];
+  ASTLeft[Result] := argNode;
+end;
+
+{ Is `f(*xs)` the same call as `f(xs)` for this builtin? True for exactly two
+  names: CPython's max/min take EITHER an iterable or the values spread out, and
+  both spellings answer the same thing. Nothing else on the builtin surface has
+  that property — `sum(*xs)` and `sorted(*xs)` do not — so this is a two-entry
+  list rather than a rule, and it stays that way deliberately. }
+function PyStarIsIterableForm(const nm: AnsiString): Boolean;
+begin
+  Result := CaseEqual(nm, 'max') or CaseEqual(nm, 'min');
+end;
+
+{ The star operand of `zip(*rows)` as a TPyList node — the same normalisation
+  every other star operand passes through, so a variant is unboxed and a str
+  spreads its characters. }
+function PyZipStarOperand(node: Integer): Integer;
+var listCi: Integer;
+begin
+  listCi := FindUClass('TPyList');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  Result := PyStarOperandAsList(node, listCi);
+end;
+
+{ Four already-parsed zip operands plus every remaining one, collected into a
+  TPyList temp. CurTok is the comma before the fifth. }
+function PyZipTailList(a, b, c, d: Integer): Integer;
+var tmpSym: Integer;
+begin
+  tmpSym := PyNewContainerTemp('TPyList', 'zipn');
+  PyContainerCall1(tmpSym, 'TPyList', 'append', a, -1);
+  PyContainerCall1(tmpSym, 'TPyList', 'append', b, -1);
+  PyContainerCall1(tmpSym, 'TPyList', 'append', c, -1);
+  PyContainerCall1(tmpSym, 'TPyList', 'append', d, -1);
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    ParseArgExpr;
+    PyContainerCall1(tmpSym, 'TPyList', 'append', CurASTNode, -1);
+  end;
+  Result := PyMakeIdent(tmpSym);
 end;
 
 function PyMakeSubscriptRead(selfNode, idxArgs, ci, pri: Integer): Integer;
@@ -19184,9 +19248,15 @@ begin
     PyParseForIn hands it to the two-name pair-unpack path that a plain list of
     pairs already takes.
     bug-nilpy-zip-in-a-comprehension-fails-to-parse }
+  { `for a, b in zip(*rows):` is excluded for the same reason the comprehension
+    is: this desugar walks TWO named containers by index, and a starred zip has
+    no count until it runs. Falling through hands it to the pair-unpack path
+    over the zip EXPRESSION, which the N-way cursor already serves.
+    bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
   if (name2 <> '') and (PyForExtraCount = 0) and (PyCompTarget < 0) and
      PyIsIdent('zip') and (not PyUserShadowsProc('zip')) and
-     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+     ((TokPos + 1 >= TokCount) or (Tokens[TokPos + 1].Kind <> tkStar)) then
   begin
     Result := PyParseForZip(name, name2);
     Exit;

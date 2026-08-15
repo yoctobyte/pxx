@@ -1,0 +1,60 @@
+# zip(*rows) -- the transpose idiom -- did not parse, because the zip lowering
+# counted its streams while PARSING. Past four it stopped outright with "zip()
+# of more than four iterables is not supported yet". Both are the same fixed
+# arity, and pyiter_zip_n over a LIST of iterables replaces it.
+# Also max(*xs)/min(*xs), which compiled and then raised at run time.
+# bug-nilpy-star-unpack-into-a-fixed-arity-builtin
+
+m = [[1, 2], [3, 4]]
+print("transpose", list(zip(*m)))
+print("transpose3", list(zip(*[[1, 2, 3], [4, 5, 6], [7, 8, 9]])))
+print("twice", list(zip(*list(zip(*m)))))
+
+pairs = [["a", "b"], [1, 2]]
+print("dict", dict(zip(*pairs)))
+
+# a row of every iterable shape the fixed forms accept
+print("strs", list(zip(*["ab", "cd"])))
+print("range", list(zip(*[range(3), "xyz"])))
+print("mixed", list(zip(*[[1, 2], "ab", range(9, 11)])))
+
+# shortest wins, and the empty cases
+print("uneven", list(zip(*[[1, 2, 3], [4, 5]])))
+print("empty-row", list(zip(*[[], [1]])))
+print("no-rows", list(zip(*[])))
+print("one-row", list(zip(*[[1, 2]])))
+
+# past four streams, written out
+print("five", list(zip([1, 2], [3, 4], [5, 6], [7, 8], [9, 10])))
+print("six", list(zip("ab", "cd", "ef", "gh", "ij", "kl")))
+
+# the two/three/four-way forms are unchanged
+print("two", list(zip("ab", [1, 2])))
+print("three", list(zip([1, 2], [3, 4], [5, 6])))
+print("four", list(zip([1], [2], [3], [4])))
+
+# a starred zip consumed by a for loop and by a comprehension
+for a, b in zip(*m):
+    print("loop", a, b)
+print("comp", [a + b for a, b in zip(*m)])
+
+# the operand as an expression rather than a name
+rows = [[1, 2], [3, 4], [5, 6]]
+print("slice", list(zip(*rows[0:2])))
+
+
+def make_rows():
+    return [[1, 2], [3, 4]]
+
+
+print("call", list(zip(*make_rows())))
+
+# a variant operand (the unbox path)
+d = {"rows": [[1, 2], [3, 4]]}
+print("variant", list(zip(*d["rows"])))
+
+# max/min over a starred list is the iterable form
+xs = [1, 5, 3]
+print("maxmin", max(*xs), min(*xs), max(*[2, 9]), min(*"qap"))
+print("maxctl", max(xs), min(xs), max(1, 2), min(1, 2))
+print("TEST-OK")

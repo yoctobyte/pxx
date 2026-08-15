@@ -103,6 +103,13 @@ const
     `__iter__` answered (which for the ordinary `return self` IS the source).
     bug-nilpy-iterator-protocol-on-a-user-class }
   PYITER_USEROBJ = 9;
+  { an N-WAY zip, whose stream count is a RUN-TIME fact: `zip(*rows)`, the
+    transpose idiom. FSrc holds the cursors (object-tagged variants) instead of
+    a leaf list, because four FUp fields cannot hold a count nobody knows until
+    the call runs. The fixed two/three/four-way forms above are unchanged — a
+    pair still yields a PAIR, and the common case pays nothing for this.
+    bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
+  PYITER_ZIPN   = 10;
 
 type
   TPyVarRec = record
@@ -1139,6 +1146,11 @@ function pyiter_zip_ii(a: TPyIter; b: TPyIter): TPyIter;
   the arity is known at the call site. }
 function pyiter_zip_iii(a: TPyIter; b: TPyIter; c: TPyIter): TPyIter;
 function pyiter_zip_iiii(a: TPyIter; b: TPyIter; c: TPyIter; d: TPyIter): TPyIter;
+{ …and the N-way form, whose streams arrive as a LIST of iterables — `zip(*rows)`
+  and any zip past four. Each element is converted with pyiter_v, so a row may be
+  a list, a str, a range, a cursor or a user iterable, exactly as a written
+  operand may. }
+function pyiter_zip_n(items: TPyList): TPyIter;
 { map(f, xs) / filter(f, xs). `key` is a callable in any of its four
   representations; filter's `key` may be nil, which is Python's own
   `filter(None, xs)` "keep the truthy elements" shorthand. }
@@ -11436,6 +11448,29 @@ begin
   PXXObjRetain(Pointer(d));
 end;
 
+function pyiter_zip_n(items: TPyList): TPyIter;
+var i, n: Integer; cur: TPyIter; pv: Variant;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_ZIPN;
+  Result.FSrc := TPyList.Create;
+  PXXObjRetain(Pointer(Result.FSrc));
+  n := 0;
+  if items <> nil then n := len(items);
+  i := 0;
+  while i < n do
+  begin
+    { pyiter_v is the one iterable-to-cursor conversion, so a row that is itself
+      a str/range/dict/user object works without a per-shape arm here. }
+    cur := pyiter_v(items.at(i));
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(cur)));
+    PXXObjRetain(Pointer(cur));
+    Result.FSrc.append(pv);
+    Inc(i);
+  end;
+end;
+
 function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -11509,6 +11544,7 @@ end;
   loop is seen, exactly as the eager index loop saw it. }
 function pyiter_has(it: TPyIter): Boolean;
 var l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
+    zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
 begin
   Result := False;
   if it = nil then Exit;
@@ -11661,6 +11697,38 @@ begin
     it.FBox.put(0, it.FStart);
     it.FStart := it.FStart + it.FStep;
     Dec(it.FPos);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_ZIPN then
+  begin
+    { Same shortest-wins rule and same left-to-right consumption order as the
+      fixed forms: each stream is asked in turn and the first exhausted one ends
+      the zip, having already consumed the ones to its left. The tuple is built
+      only once a stream has answered, so the ordinary end-of-zip step (stream 0
+      exhausted) allocates nothing. }
+    zn := 0;
+    if it.FSrc <> nil then zn := len(it.FSrc);
+    pair := nil;
+    zi := 0;
+    while zi < zn do
+    begin
+      zc := TPyIter(pyvarobj(it.FSrc.at(zi)));
+      if not pyiter_has(zc) then begin it.FEnd := True; Exit; end;
+      if pair = nil then
+      begin
+        pair := TPyList.Create;
+        pair.FKind := PYSEQ_TUPLE;
+      end;
+      pair.append(pyiter_take(zc));
+      Inc(zi);
+    end;
+    if pair = nil then begin it.FEnd := True; Exit; end;   { zip() of nothing }
+    PPyVarRec(@pv)^.VType := 7;
+    PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
+    PXXObjRetain(Pointer(pair));
+    it.FBox.put(0, pv);
     it.FHas := True;
     Result := True;
     Exit;
@@ -11951,7 +12019,7 @@ begin
   else if it.FKind = PYITER_MAP then Result := 'map'
   else if it.FKind = PYITER_FILTER then Result := 'filter'
   else if it.FKind = PYITER_ENUM then Result := 'enumerate'
-  else if it.FKind = PYITER_ZIP then Result := 'zip'
+  else if (it.FKind = PYITER_ZIP) or (it.FKind = PYITER_ZIPN) then Result := 'zip'
   else if it.FKind = PYITER_RANGE then Result := 'range_iterator';
 end;
 
