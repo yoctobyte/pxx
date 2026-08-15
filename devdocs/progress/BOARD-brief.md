@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:11 blocked:4 backlog:203 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1904 rejected:37`
+`working:1 unfinished:11 blocked:4 backlog:204 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1904 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 187, ranked
+## Ready — top 30 of 188, ranked
 
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -65,4 +65,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [C]` task-c-retire-the-crtl-name-dodge-prefixes
 - `[p 48] [P]` feature-pascal-class-management-operators
 
-_157 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_158 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
