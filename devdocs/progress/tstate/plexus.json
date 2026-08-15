@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T00:13:57Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f7942368c3a7ea8b7f9488608ed713e42b3f1422",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T00:19:12Z",
    "fixed": [],
    "new_red": [],
@@ -406,6 +398,16 @@
    "sha": "31216f26dcb787c2b5779926e5837617d484515c",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T06:44:57Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_nilpy_sorted_pairs.npy"
+   ],
+   "sha": "bb845b13ceb3c2f2d94f63dfe35f366489826f04",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -3990,7 +3992,7 @@
   "test-core#src:test/test_nilpy_rebind_type.npy": "pass",
   "test-core#src:test/test_nilpy_rtl_exception_surface.npy": "pass",
   "test-core#src:test/test_nilpy_selfassigned_comprehension.npy": "pass",
-  "test-core#src:test/test_nilpy_sorted_pairs.npy": "pass",
+  "test-core#src:test/test_nilpy_sorted_pairs.npy": "fail",
   "test-core#src:test/test_nilpy_star_args.npy": "pass",
   "test-core#src:test/test_nilpy_star_forward.npy": "pass",
   "test-core#src:test/test_nilpy_star_methods_and_targets.npy": "pass",
@@ -5228,11 +5230,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T06:38:24Z",
-  "sha": "31216f26dcb787c2b5779926e5837617d484515c",
+  "date": "2026-08-15T06:44:57Z",
+  "sha": "bb845b13ceb3c2f2d94f63dfe35f366489826f04",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 196.0
+  "verdict": "RED",
+  "wall": 196.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5261,7 +5263,22 @@
  "migrated_from": [
   "borg"
  ],
- "open_regressions": [],
+ "open_regressions": [
+  {
+   "bad": "bb845b13ceb3c2f2d94f63dfe35f366489826f04",
+   "good": "31216f26dcb787c2b5779926e5837617d484515c",
+   "job": "test-core#src:test/test_nilpy_sorted_pairs.npy",
+   "name": "test-core#1056",
+   "opened": "2026-08-15T06:44:57Z",
+   "range": [
+    "043e6eedac1fd19f523878f457df40915e9c8c76",
+    "5ea447d506df6584feecca202d62e03ae2772b57",
+    "ba6022847d331d4b674e46635ceb7afff911d6ae",
+    "bb845b13ceb3c2f2d94f63dfe35f366489826f04"
+   ],
+   "src": "test/test_nilpy_sorted_pairs.npy"
+  }
+ ],
  "pin_shadow": {
   "at": "2026-08-14T09:57:55Z",
   "qualifies": true,
