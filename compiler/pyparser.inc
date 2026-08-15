@@ -7707,13 +7707,27 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     lamRecs: array[0..MAX_PROC_PARAMS-1] of Integer;
     newPi, bindPi, varBindPi: Integer;
     lamManagedCap: Boolean;   { a capture the lifter cannot take -> do not lift }
+    lamStarIdx, starPend, starCi, starPi: Integer;   { `lambda *a:` }
 begin
   Next;                                { consume `lambda` }
   params := '';
   nParams := 0;
   dcCount := 0;
+  { `lambda *a:` — the star was simply skipped by the loop below, so `a` became
+    an ordinary parameter and the lifted body read one argument where the caller
+    passed three ("takes 1 positional argument but 2 were given" on a form
+    CPython accepts). Counted rather than flagged so `**kw` (two tkStar) is not
+    mistaken for it — that one is still unsupported, and stays as it was. }
+  lamStarIdx := -1;
+  starPend := 0;
   while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do
   begin
+    if CurTok.Kind = tkStar then
+    begin
+      Inc(starPend);
+      Next;
+      Continue;
+    end;
     if CurTok.Kind = tkIdent then
     begin
       if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) then
@@ -7768,10 +7782,12 @@ begin
       end;
       if nParams > High(pNames) then Error('Nil Python: too many lambda parameters');
       pNames[nParams] := LowerCase(CurTok.SVal);
+      if starPend = 1 then lamStarIdx := nParams;
       Inc(nParams);
       if params <> '' then params := params + ',';
       params := params + CurTok.SVal;
     end;
+    starPend := 0;
     Next;
   end;
   Expect(tkColon, ':');
@@ -7840,6 +7856,15 @@ begin
         lamRecs[i] := REC_NONE;
         lamN := i + 1;
       end;
+    { the collecting parameter is a TPyList, not a Variant — the same type the
+      def-header parse gives `*args`, and what the bridge packs into }
+    if (lamStarIdx >= 0) and (lamStarIdx < lamN) then
+    begin
+      starCi := FindUClass('TPyList');
+      if starCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+      lamTypes[lamStarIdx] := tyClass;
+      lamRecs[lamStarIdx] := REC_UCLASS_BASE + starCi;
+    end;
     lamOwn := lamN;                       { captures are bound AFTER these }
     lamManagedCap := False;
     { the `key=key` defaults first: Python's own idiom for pinning a value }
@@ -7950,7 +7975,8 @@ begin
       lamProc := RegisterProc('$pylam' + AIntToStr(PyLamSeq), True, tyVariant,
                               lamN, lamNames, lamTypes);
       Procs[lamProc].BodyAddr := -1;
-      for j := 1 to lamN - 1 do
+      if lamStarIdx >= 0 then ProcPyStarIdx[lamProc] := lamStarIdx;
+      for j := 0 to lamN - 1 do
         if (lamTypes[j] = tyClass) and (lamRecs[j] >= REC_UCLASS_BASE) and
            (j < MAX_PROC_PARAMS) then
           ProcParamRecId[lamProc * MAX_PROC_PARAMS + j] := lamRecs[j];
@@ -8007,7 +8033,27 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := ownPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
       end;
+      { …and which own slot COLLECTS, so the bridge packs into it instead of
+        handing the body a loose argument where its signature says TPyList. }
+      starPi := FindProc('pyboundfn_setstar');
+      if (lamStarIdx >= 0) and (starPi >= 0) then
+      begin
+        argA := AllocNode(AN_ARG);
+        ASTLeft[argA] := node;
+        argB := AllocNode(AN_ARG);
+        vNode := AllocNode(AN_INT_LIT);
+        ASTIVal[vNode] := lamStarIdx; ASTTk[vNode] := Ord(tyInt64);
+        ASTLeft[argB] := vNode;
+        ASTRight[argA] := argB;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := starPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+      end;
       defPi := FindProc('pyboundfn_setdefaults');
+      { A collecting lambda has no fixed arity to declare, and a default written
+        after the star is KEYWORD-only in Python — never supplied positionally,
+        so there is no positional override to arrange either. setstar above
+        carries the whole rule (at least StarIdx arguments, no ceiling). }
+      if lamStarIdx >= 0 then defPi := -1;
       { Emitted even when dcCount = 0. `base` is the caller-side index where the
         defaulted params begin, which is exactly the count of REQUIRED caller
         arguments — so this call is also how a lifted lambda declares its legal
@@ -10870,6 +10916,7 @@ begin
      (nm <> 'pyclosure_setarity') and
      (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
      (nm <> 'pyboundfn_setown') and (nm <> 'pyboundfn_setdefaults') and
+     (nm <> 'pyboundfn_setstar') and
      (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') and
      (nm <> 'pyboundfn_bind_cell') then Exit;
   boxPi := FindProc('pyvar_of_callable');
@@ -14086,6 +14133,7 @@ begin
     (nm = 'pyclosure_setarity') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
     (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
+    (nm = 'pyboundfn_setstar') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
     (nm = 'pyboundfn_bind_cell');
 end;

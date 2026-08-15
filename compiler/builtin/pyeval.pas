@@ -182,6 +182,10 @@ function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
 { Declare how many OWN parameters the compiled body takes before its captures.
   Without it the bridge assumes one — see the NOwn note on TBoundFnObj. }
 function pyboundfn_setown(obj: Pointer; nown: Int64): Pointer;
+{ Declare that own parameter `si` is the lambda's `*args` slot: the bridge then
+  PACKS the caller's surplus arguments into the TPyList the body declares
+  there, and drops the fixed-arity check for an open-ended one. }
+function pyboundfn_setstar(obj: Pointer; si: Int64): Pointer;
 { Declare which bound slots are a lambda's DEFAULTED parameters, so a caller
   that supplies one overrides the default instead of having the argument
   silently dropped — see the NDef note on TBoundFnObj. }
@@ -2265,6 +2269,15 @@ type
       allocator size class, which MEASURABLY made the still-leaking shapes
       leak more. 20 slots x 2 bits = 40 bits, so one Int64 is ample. }
     BKindMask: Int64;
+    { A lambda that COLLECTS: `lambda *a: len(a)`. The own-parameter slot at
+      this index is the callee's TPyList, and the caller's surplus arguments
+      have to be packed into it — work a written call site does at compile
+      time (PyPackStarArgs) and which nothing could do here, because the arity
+      is only known when the bridge runs. -1 = no star parameter.
+      Also the ARITY rule for such a lambda: at least StarIdx arguments, no
+      upper bound (a default after `*` is keyword-only in Python and cannot be
+      supplied positionally at all). }
+    StarIdx: Int64;
   end;
   PBoundFnObj = ^TBoundFnObj;
   { A plain compiled def taken as a value: the value IS its code address.
@@ -2382,6 +2395,7 @@ begin
     bug-nilpy-lifted-lambda-does-not-enforce-arity }
   o^.NDef := 0; o^.NDefBase := -1; o^.DefVarMask := 0;   { no defaulted params unless told }
   o^.BKindMask := 0;
+  o^.StarIdx := -1;                                      { pyboundfn_setstar overrides }
   for i := 0 to 19 do o^.Bound[i] := 0;
   pyboundfn_new := Pointer(o);
 end;
@@ -2396,6 +2410,16 @@ begin
   o := PBoundFnObj(obj);
   o^.NOwn := nown;
   pyboundfn_setown := obj;
+end;
+
+function pyboundfn_setstar(obj: Pointer; si: Int64): Pointer;
+{ Chained like setown, and for the same reason. si is the own-parameter index
+  of the lambda's `*args` slot. }
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.StarIdx := si;
+  pyboundfn_setstar := obj;
 end;
 
 function pyboundfn_setdefaults(obj: Pointer; base, count, varmask: Int64): Pointer;
@@ -2631,7 +2655,8 @@ procedure pyboundfn_callvn(objptr: Pointer; const a0, a1, a2: Variant;
 var o: PBoundFnObj; b: PInt64; code: Pointer;
     va0, va1, va2: Variant;
     vd0, vd1, vd2: Variant;   { by-address slots for an OVERRIDDEN variant default }
-    dv: Int64;
+    dv, si: Int64;
+    star: TPyList;
     p: array[0..31] of Int64;
     n, i: Integer;
     f0: TBF0; f1: TBF1; f2: TBF2; f3: TBF3; f4: TBF4; f5: TBF5;
@@ -2653,6 +2678,26 @@ begin
   if n > 0 then p[0] := PyBoundFnArgWord(o, a0, @va0);
   if n > 1 then p[1] := PyBoundFnArgWord(o, a1, @va1);
   if n > 2 then p[2] := PyBoundFnArgWord(o, a2, @va2);
+  { `lambda *a:` — the own slot at StarIdx is a TPyList, and every argument
+    from that position on belongs INSIDE it. The word written there by the
+    loop above (the first surplus argument, read as a list pointer) is
+    overwritten, which is the whole bug: the body's `len(a)` measured a boxed
+    integer. Marked as a tuple, as PyPackStarArgs marks it at a written call
+    site, or `print(a)` shows brackets. }
+  si := o^.StarIdx;
+  star := nil;
+  if si >= 0 then
+  begin
+    star := TPyList.Create;
+    if si < nargs then
+    begin
+      if si <= 0 then star.append(a0);
+      if (si <= 1) and (nargs > 1) then star.append(a1);
+      if (si <= 2) and (nargs > 2) then star.append(a2);
+    end;
+    pylist_mark_tuple(star);
+    if si <= 31 then p[si] := Int64(NativeInt(star));
+  end;
   { a body declaring MORE own params than the caller passed still gets a slot
     per parameter -- zeroed, which is what an unsupplied argument reads as }
   n := o^.NOwn;
@@ -2720,6 +2765,9 @@ begin
     raise TypeError.Create('closure call needs ' + pystr_of(n + o^.NBound)
       + ' argument slots, past the 32 the runtime bridge can pass');
   end;
+  { the packed tuple's own +1, dropped like the hidden local a written call
+    site gets: a body that KEEPS it has retained it by now }
+  if star <> nil then PXXObjRelease(Pointer(star));
   res := rv;
 end;
 
@@ -2829,6 +2877,15 @@ begin
   if o = nil then Exit;
   if not pyboundfn_is(o) then Exit;
   b := PBoundFnObj(o);
+  { a collecting lambda has no upper bound — `lambda *a:` takes anything, and
+    a default written after the star is keyword-only, never positional }
+  if b^.StarIdx >= 0 then
+  begin
+    lo := b^.StarIdx;
+    hi := lo;
+    PyBoundFnArityBad := n < lo;
+    Exit;
+  end;
   if b^.NDefBase < 0 then Exit;                   { unchecked }
   lo := b^.NDefBase;
   hi := b^.NDefBase + b^.NDef;

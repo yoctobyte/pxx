@@ -1,0 +1,27 @@
+# `lambda *a:` — the lifter skipped the star, so `a` became an ordinary
+# parameter and the bridge passed one argument where the caller wrote three:
+# "TypeError: <lambda>() takes 1 positional argument but 2 were given" on a form
+# CPython accepts. The star position now rides the bound-fn object
+# (pyboundfn_setstar) and the bridge packs, as a written call site does.
+
+f = lambda *a: len(a)
+print(f(), f(1), f(1, 2), f(1, 2, 3))
+
+# what the body SEES is a tuple, exactly as `def h(*a)` gives
+g = lambda *a: str(a) + " " + type(a).__name__
+print(g(1, "two"))
+
+# fixed parameters before the star stay loose
+h = lambda x, *rest: str(x) + "|" + str(rest)
+print(h(1), h(1, 2), h(1, 2, 3))
+
+# as an ARGUMENT rather than through a name — the other way a lambda travels
+def use(fn):
+    return fn(4, 5, 6)
+
+print(use(lambda *a: sum(a)))
+
+# with a capture: the star slot is an own parameter, the capture is bound after
+k = 100
+cap = lambda *a: k + len(a)
+print(cap(1, 2))

@@ -4324,6 +4324,7 @@ begin
     (nm = 'pyclosure_setarity') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
     (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
+    (nm = 'pyboundfn_setstar') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
     (nm = 'pyboundfn_bind_cell');
 end;
