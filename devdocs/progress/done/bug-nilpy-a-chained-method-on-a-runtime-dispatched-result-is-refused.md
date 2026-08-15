@@ -63,4 +63,4 @@ verified against CPython / their `.expected`:
 this chain, one to four links deep.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit e10590243.
