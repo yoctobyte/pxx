@@ -1,0 +1,10 @@
+named 4 4.5
+fresh 7 7.5
+call-result 3 3.5
+only-int 10
+int-typeerror
+float-typeerror
+float-typeerror-2
+plain 3 3.0 5 5.0 2 2.9
+expr 3 3.5
+TEST-OK

@@ -7415,6 +7415,27 @@ begin
   raise TypeError.Create('''' + cls + ''' object does not support item deletion');
 end;
 
+{ `int(obj)` / `float(obj)` where obj's class declares no `__int__` /
+  `__float__` — CPython's own message shapes. A raise, not a compile error, for
+  the same reason as the two above: a try/except around it must still build.
+  Without them the conversion handed the intrinsic an object HANDLE and the
+  program printed the POINTER (bug-nilpy-int-and-float-ignore-their-dunders). }
+procedure PyNoIntError(const cls: AnsiString);
+begin
+  if cls = '' then
+    raise TypeError.Create('int() argument must be a string, a bytes-like object or a real number');
+  raise TypeError.Create('int() argument must be a string, a bytes-like object or a real number, not '''
+                         + cls + '''');
+end;
+
+procedure PyNoFloatError(const cls: AnsiString);
+begin
+  if cls = '' then
+    raise TypeError.Create('float() argument must be a string or a real number');
+  raise TypeError.Create('float() argument must be a string or a real number, not '''
+                         + cls + '''');
+end;
+
 function pyvar_to_int(const v: Variant): Int64;
 var
   p: PPyVarRec;

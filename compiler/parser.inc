@@ -11228,6 +11228,31 @@ begin
           intrinsic -- reuse it rather than duplicating its SSE lowering. Every
           other argument type goes to -200, whose lowering handles string
           (parse the text), variant (unbox) and int/bool (identity). }
+        { A user class declaring `__int__`. Python asks the object; this asked
+          nothing and handed the -200 intrinsic an object HANDLE, so
+          `int(V(4))` printed 129729065648272 — the pointer. Silent, and the
+          class plainly declares the member. The float twin is in float()'s
+          arm below. bug-nilpy-int-and-float-ignore-their-dunders }
+        if (IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
+           (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) and
+           (not PyRecIsPylibOwnClass(ResolveNodeRec(CurASTNode))) then
+        begin
+          if FindUMeth(ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE, '__int__') >= 0 then
+            node := PyCallMeth1(ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE,
+                                '__int__', CurASTNode, -1)
+          else
+            { no __int__ at all: CPython raises TypeError naming the class, and
+              at RUN time, so `try: int(o) / except TypeError:` still compiles —
+              the trade PyNoSetitemError already makes }
+            node := PyClassErrCallNode('PyNoIntError',
+                                       ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE);
+          if node >= 0 then
+          begin
+            CurASTNode := node;
+            LastExprTk := IntToTypeKind(ASTTk[node]);
+            Exit;
+          end;
+        end;
         { The NODE's type, not LastExprTk. `int(7/2)` printed
           4615063718147915776 -- 3.5's BIT PATTERN read as an integer -- because
           LastExprTk after an operator expression is the last FACTOR's type
@@ -11812,6 +11837,25 @@ begin
       else if NilPyUserCode and (name = 'float') and (not PyUserShadowsProc(name)) then
       begin
         Next; Expect(tkLParen, '('); ParseArgExpr; Expect(tkRParen, ')');
+        { …and a user class declaring `__float__` — the twin of int()'s
+          `__int__` arm. bug-nilpy-int-and-float-ignore-their-dunders }
+        if (IntToTypeKind(ASTTk[CurASTNode]) = tyClass) and
+           (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) and
+           (not PyRecIsPylibOwnClass(ResolveNodeRec(CurASTNode))) then
+        begin
+          if FindUMeth(ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE, '__float__') >= 0 then
+            node := PyCallMeth1(ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE,
+                                '__float__', CurASTNode, -1)
+          else
+            node := PyClassErrCallNode('PyNoFloatError',
+                                       ResolveNodeRec(CurASTNode) - REC_UCLASS_BASE);
+          if node >= 0 then
+          begin
+            CurASTNode := node;
+            LastExprTk := IntToTypeKind(ASTTk[node]);
+            Exit;
+          end;
+        end;
         { Dispatched on the ARGUMENT type, not by overload: a string is PARSED
           (and raises ValueError on failure, which uforth catches), an integer
           is widened, and a float is already the answer. }

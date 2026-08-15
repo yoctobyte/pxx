@@ -1,0 +1,62 @@
+# int(obj) and float(obj) asked the object nothing: they handed the conversion
+# intrinsic an object HANDLE, so int(V(4)) printed 129729065648272 -- the
+# pointer -- for a class that plainly declares __int__. A class declaring
+# neither now raises CPython's TypeError instead of printing a pointer.
+# bug-nilpy-int-and-float-ignore-their-dunders
+
+
+class V:
+    def __init__(self, n):
+        self.n = n
+
+    def __int__(self):
+        return self.n
+
+    def __float__(self):
+        return float(self.n) + 0.5
+
+
+class OnlyInt:
+    def __init__(self, n):
+        self.n = n
+
+    def __int__(self):
+        return self.n * 2
+
+
+class Plain:
+    def __init__(self, n):
+        self.n = n
+
+
+v = V(4)
+print("named", int(v), float(v))
+print("fresh", int(V(7)), float(V(7)))
+
+
+def mk(n):
+    return V(n)
+
+
+print("call-result", int(mk(3)), float(mk(3)))
+print("only-int", int(OnlyInt(5)))
+
+try:
+    print(int(Plain(1)))
+except TypeError:
+    print("int-typeerror")
+
+try:
+    print(float(Plain(1)))
+except TypeError:
+    print("float-typeerror")
+
+try:
+    print(float(OnlyInt(1)))
+except TypeError:
+    print("float-typeerror-2")
+
+# the ordinary conversions are untouched
+print("plain", int(3), float(3), int("5"), float("5"), int(2.9), float(2.9))
+print("expr", int(7 / 2), float(7 / 2))
+print("TEST-OK")
