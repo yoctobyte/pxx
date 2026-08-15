@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 42ba5044e
 summary: "`mk(5)[2]` on a class declaring __getitem__ printed the OBJECT POINTER, `C(5)[2]` did not parse, `mk()[k] = v` was refused, and a user object held in a VARIANT raised 'not subscriptable'. The subscript protocol was wired to one receiver shape — a named variable — out of four."
 ---
 
