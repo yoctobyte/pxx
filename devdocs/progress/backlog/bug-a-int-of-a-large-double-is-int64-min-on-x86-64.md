@@ -3,7 +3,7 @@ track: A
 prio: 60
 type: bug
 blocked-by: []
-summary: "Int(1.0e300) returns -9.2233720368547758E+018 (INT64_MIN) on x86-64. FPC returns 1e300. Int() is defined on DOUBLES and must not visit an integer at all: for |x| >= 2^52 every double is already integral, so Int(x) IS x. The i386/arm32 half of this was fixed under bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32; x86-64 was never in scope and is still wrong. Frac(x) is wrong at the same magnitudes."
+summary: "TWO facets. (1) Int(1.0e300) returns -9.2233720368547758E+018 (INT64_MIN) on x86-64. (2) Int(-0.5) returns +0.0 where FPC and C give -0.0, which alone accounts for 443 of 443 SimpleRoundTo divergences from FPC. FPC returns 1e300. Int() is defined on DOUBLES and must not visit an integer at all: for |x| >= 2^52 every double is already integral, so Int(x) IS x. The i386/arm32 half of this was fixed under bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32; x86-64 was never in scope and is still wrong. Frac(x) is wrong at the same magnitudes."
 ---
 
 # `Int()` of a large double is `INT64_MIN` on x86-64
@@ -49,6 +49,33 @@ else <the existing Int64 route, which is safe below 2^52>
 
 A magnitude test and an early return. `lib/rtl/math.pas`'s `DdRint` already
 does exactly this and says why in a comment citing the older ticket.
+
+## Second facet, same builtin: `Int` LOSES THE SIGN OF ZERO
+
+Found the same day, auditing `SimpleRoundTo` against FPC:
+
+| | pxx | FPC | C's `trunc()` |
+| --- | --- | --- | --- |
+| `Int(-0.5)` | `+0.0` | **`-0.0`** | `-0.0` |
+| `Int(-0.9)` | `+0.0` | **`-0.0`** | `-0.0` |
+| `Int(-0.0)` | `+0.0` | **`-0.0`** | `-0.0` |
+| `Int(-1.5)` | `-1.0` | `-1.0` | `-1.0` |
+
+`Int` truncates toward zero, so for x in (-1, 0] the true result is **negative
+zero** — IEEE 754 keeps the sign, and so do FPC and C. Only the magnitude-zero
+cases are affected, which is why it survived: `Int(-1.5)` is right.
+
+It matters downstream. `lib/rtl/math.pas`'s `SimpleRoundTo` is FPC's own formula
+(`Int(AValue*RV - 0.5) / RV`), and it diverges from FPC on **443 of 2,937**
+compared cases — every single one a `+0.0` where FPC gives `-0.0`, and **zero
+genuine value differences**. Fix `Int` and all 443 go away. `RoundTo` matched
+FPC on all 2,937 because its formula routes through `Round`, not `Int`.
+
+(Methodology note for whoever verifies: FPC's untyped real constants are
+Extended, so any input built from literal arithmetic hands the two compilers
+DIFFERENT doubles — 338 of 520 differed that way on a first attempt, which made
+`RoundTo` look broken when it is not. Build the inputs from `Int64` bit patterns
+reinterpreted through a pointer.)
 
 ## Also wrong: `Frac`
 
