@@ -972,3 +972,4 @@
 {"date": "2026-08-15T23:25:23Z", "fixed": [], "full": false, "new_red": [], "sha": "6bff7ae1b4dec813d8afd8c70f68116f65dce002", "tier": "native", "verdict": "GREEN", "wall": 214.9}
 {"date": "2026-08-15T23:45:01Z", "fixed": [], "full": false, "new_red": ["test-core#src:examples/tk/tkinter_facade.npy"], "sha": "f8b8a7eb5ed266fce811c26e44fbe82d1a56faf3", "tier": "native", "verdict": "RED", "wall": 216.5}
 {"date": "2026-08-15T23:49:51Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_nilpy_float_pow_oracle.npy"], "sha": "c9706630b486c3fe27dfe131b692ecf7e8496c5a", "tier": "native", "verdict": "RED", "wall": 216.3}
+{"date": "2026-08-15T23:59:43Z", "fixed": ["test-core#src:examples/tk/tkinter_facade.npy"], "full": false, "new_red": [], "sha": "3b66d2be1f26ed436832bffe185d102a730cc26b", "tier": "native", "verdict": "GREEN", "wall": 225.9}

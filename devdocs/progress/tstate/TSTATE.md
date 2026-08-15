@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `c9706630b486` | 2026-08-15T23:49:51Z | RED (native) | 216.3s | `343a52551808` RED |
+| plexus | `3b66d2be1f26` | 2026-08-15T23:59:43Z | GREEN (native) | 225.9s | `343a52551808` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -29,5 +29,3 @@
   - `test-uforth#toolstest`
   </details>
 - **test-uforth#blocktest** (plexus): bad `343a52551808`, last good `c8f5070671be`, 67 commit(s) in range
-- **test-core#src:examples/tk/tkinter_facade.npy** — examples/tk/tkinter_facade.npy lib/rtl/configparser.pas (plexus): bad `f8b8a7eb5ed2`, last good `6bff7ae1b4de`, 4 commit(s) in range
-- **test-core#src:test/test_nilpy_float_pow_oracle.npy** — test/test_nilpy_float_pow_oracle.npy test/test_nilpy_float_pow_oracle.expected (plexus): bad `c9706630b486`, last good `f8b8a7eb5ed2`, 4 commit(s) in range
