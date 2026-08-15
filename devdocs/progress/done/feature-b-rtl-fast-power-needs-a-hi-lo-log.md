@@ -194,4 +194,4 @@ reaches NilPy yet, and it is worth knowing before anyone credits it there.
 modes and on all four targets.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 11321a09c.
