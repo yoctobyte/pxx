@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T11:59:53Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "dbed942785d0b198fb6be044ab6ee85920e50fa7",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-15T13:23:10Z",
    "fixed": [],
    "new_red": [],
@@ -523,6 +515,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "131bfc19999779e25d60f761ecfc855e7cb5efb7",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T22:53:42Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "93629c0791ead8ba2f04c60b6151a6234a386431",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1129,6 +1129,7 @@
   "test-core#src:test/cstrlit_index_b174.c": "native",
   "test-core#src:test/cstrtok_b181.c": "native",
   "test-core#src:test/cstruct_array_stride_b23.c": "native",
+  "test-core#src:test/cstruct_assign_value_byvalue_arg.c": "native",
   "test-core#src:test/cstruct_assign_value_side_effects.c": "native",
   "test-core#src:test/cstruct_b3.c": "native",
   "test-core#src:test/cstruct_bitfield_b96.c": "native",
@@ -3626,6 +3627,7 @@
   "test-core#src:test/cstrlit_index_b174.c": "pass",
   "test-core#src:test/cstrtok_b181.c": "pass",
   "test-core#src:test/cstruct_array_stride_b23.c": "pass",
+  "test-core#src:test/cstruct_assign_value_byvalue_arg.c": "pass",
   "test-core#src:test/cstruct_assign_value_side_effects.c": "pass",
   "test-core#src:test/cstruct_b3.c": "pass",
   "test-core#src:test/cstruct_bitfield_b96.c": "pass",
@@ -5515,11 +5517,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T22:43:49Z",
-  "sha": "131bfc19999779e25d60f761ecfc855e7cb5efb7",
+  "date": "2026-08-15T22:53:42Z",
+  "sha": "93629c0791ead8ba2f04c60b6151a6234a386431",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 214.3
+  "wall": 214.9
  },
  "last_bench": {
   "conf_rows": 550,
