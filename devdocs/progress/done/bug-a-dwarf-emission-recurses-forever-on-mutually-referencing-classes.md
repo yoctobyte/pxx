@@ -149,4 +149,4 @@ Gate: `gate.sh quick` GREEN + self-host fixedpoint; `dwarf_smoke.sh` OK. No pin
 (nothing under `compiler/builtin/**` changed).
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit dd193ae6f.
