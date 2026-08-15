@@ -126,4 +126,4 @@ Gate: `tools/gate.sh lib` GREEN, which includes `cmath_hyperbolic_family_b383.c`
 qemu on i386, aarch64 and arm32.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit c54543dc1.
