@@ -32514,6 +32514,32 @@ begin
       failed with the va_list local reported as an undeclared identifier.
       bug-cfront-unit-globals-unregistered. }
     AddDefaultCIncludeDirs;
+
+    { …and so does the C RUNTIME BRIDGE. A C translation unit lowers `malloc`
+      onto pxxcio's `__pxx_malloc` and `write` onto `__pxx_write` whatever
+      pulled it in, but only the C-PROGRAM path (cparser.inc's entry stub)
+      marked those units ambient. A `.c` reached through a Pascal unit's uses
+      clause therefore had no visibility edge to them, so under --strict-uses
+      the lowering found no bodied proc, left the name a real external, and the
+      program died at LOAD with `undefined symbol: __pxx_malloc`.
+
+      Ambient for exactly the reason builtin/builtinheap/pylib already are:
+      these hold the runtime helpers CODEGEN emits calls to, and no source
+      clause could have declared them — the C TU has no uses clause at all.
+      Same guard as the C-program pull, and idempotent, so an enclosing unit
+      that already says `uses pxxcio` (lib/pcl's reportlab shims do) is
+      unaffected.
+
+      Exactly the shape of the AddDefaultCIncludeDirs fix directly above, which
+      had the same cause: something the C-PROGRAM path registered and the
+      pulled-from-a-unit path did not.
+      bug-pascal-uses-is-transitive }
+    if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
+       ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+    begin
+      ParseUsesUnitAmbient('builtinheap');
+      ParseUsesUnitAmbient('pxxcio');
+    end;
     CPreprocess(UnitContent, GetFilePath(path));
 
     { Append preprocessed tokens using C Lexer }

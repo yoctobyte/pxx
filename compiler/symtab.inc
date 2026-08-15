@@ -8481,10 +8481,23 @@ begin
     load the same way. Every program this rejects was already broken; the change
     is that it now says so at compile time, with the flag named.
     bug-c-pthread-without-threadsafe-builds-then-dies-at-load }
+  { Matched against palpthread's ACTUAL export prefixes, not a bare `__pxx_p`.
+    That 7-character test also caught `__pxx_pipe2` and `__pxx_poll`, which are
+    pxxcio's ordinary PAL I/O wrappers with no thread content whatsoever — so a
+    program that left `pipe()` external was told to rebuild with --threadsafe,
+    naming a flag that has nothing to do with it. Surfaced by the --strict-uses
+    corpus sweep, which was the only configuration that made pxxcio's body
+    invisible and so turned pipe2 into a real external; the over-broad guard is
+    latent without it, not introduced by it.
+    bug-pascal-uses-is-transitive / task-t-strict-uses-corpus-sweep }
   if (procIdx >= 0) and (procIdx < MAX_PROCS) then
   begin
     enm := Procs[procIdx].Name;
-    if (Length(enm) >= 7) and (Copy(enm, 1, 7) = '__pxx_p') and
+    if ((Copy(enm, 1, 14) = '__pxx_pthread_') or
+        (Copy(enm, 1, 13) = '__pxx_pmutex_') or
+        (Copy(enm, 1, 12) = '__pxx_pcond_') or
+        (enm = '__pxx_ponce') or
+        (enm = '__pxx_pmonotonic_ns')) and
        (not ThreadSafeMode) then
       Error(enm + ' needs the thread-safe runtime: rebuild with --threadsafe '
             + '(<pthread.h> lowers onto the pxx thread PAL, which that flag '
