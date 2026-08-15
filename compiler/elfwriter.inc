@@ -1021,13 +1021,30 @@ begin
   begin
     if tkOrd = 6 then
     begin
-      { emit (or reuse) the struct body under tkOrd 5, then point at it }
-      i := DbgEnsureScalar(5, recId);
+      { The pointer DIE is emitted and REGISTERED FIRST, with its target ref4
+        left blank and patched once the body exists. A type graph may be
+        CYCLIC — `TB = class;` forward, TA holding a TB, TB holding a TA, which
+        is what the forward declaration exists to allow — and registering only
+        after the body was walked meant the walk re-entered itself and ran the
+        compiler's stack out. The pointer is where the cycle is legal, so it is
+        where it must be cut. }
       off := DbgLen - DbgInfoSecOff;
       DbgTypeRegister(tkOrd, recId, 0, off);
-      DbgPutULEB(13); DbgPutB(DbgPtrSize); DbgPutU32(i);
+      DbgPutULEB(13); DbgPutB(DbgPtrSize);
+      i := DbgLen; DbgPutU32(0);                  { target ref4 — patched below }
+      DbgPatchU32(i, DbgEnsureScalar(5, recId));
       DbgEnsureScalar := off; Exit;
     end;
+    { Second cut, for a cycle that reaches a struct BODY while that same body is
+      still being emitted (a by-value shape a pointer never breaks). The DIE
+      cannot nest inside itself, so the inner reference degrades to the named
+      void* cheat rather than recursing. }
+    if DbgTypeLookup(9500, recId, 0) >= 0 then
+    begin
+      DbgEnsureScalar := DbgEmitNamedCheat(DbgTypeDisplayName(tkOrd, recId));
+      Exit;
+    end;
+    DbgTypeRegister(9500, recId, 0, 0);
     ci := recId - REC_UCLASS_BASE;
     fb := UClsFBase[ci]; fc := UClsFCount[ci];
     for i := 0 to fc - 1 do

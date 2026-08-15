@@ -110,4 +110,51 @@ if command -v readelf >/dev/null 2>&1; then
   done
 fi
 
+# A CYCLIC type graph — `TB = class;` forward, TA holds a TB, TB holds a TA —
+# is legal Pascal and is exactly what the forward declaration exists to allow.
+# The type walker used to register a struct only AFTER walking its fields, so it
+# re-entered itself and ran the COMPILER's stack out (SIGSEGV, no diagnostic).
+# Synapse's TTCPBlockSocket <-> TCustomSSL is this shape, so no Synapse program
+# could be built with debug info at all.
+MSRC="$TMP/dbgmutu.pas"; MEXE="$TMP/dbgmutu"
+cat > "$MSRC" <<'EOM'
+program dbgmutu;
+type
+  TB = class;
+  TA = class
+    b: TB;
+    v: Integer;
+  end;
+  TB = class
+    a: TA;
+    w: Integer;
+  end;
+var x: TA;
+begin
+  x := TA.Create;
+  x.v := 41;
+  x.b := TB.Create;
+  x.b.w := 7;
+  x.b.a := x;
+  writeln('m=', x.v + x.b.w);
+end.
+EOM
+"$PXX" -g "$MSRC" "$MEXE" >/dev/null 2>&1 || { echo "dwarf-g: FAIL — cyclic class types crashed the compiler under -g"; exit 1; }
+MOUT="$("$MEXE")"
+[ "$MOUT" = "m=48" ] || { echo "dwarf-g: FAIL — cyclic sample output wrong (got: $MOUT)"; exit 1; }
+if command -v readelf >/dev/null 2>&1; then
+  MDI="$(readelf --debug-dump=info "$MEXE" 2>/dev/null)"
+  # each type described exactly ONCE, and both are present
+  for N in TA TB; do
+    C="$(echo "$MDI" | grep -cE "DW_AT_name[[:space:]]+: $N\$")"
+    [ "$C" = "1" ] || { echo "dwarf-g: FAIL — $N described $C times, expected 1"; exit 1; }
+  done
+fi
+if command -v gdb >/dev/null 2>&1; then
+  MLOG="$(gdb -q -batch -ex "set debuginfod enabled off" \
+    -ex "break dbgmutu.pas:19" -ex run -ex "print x.v" -ex "print x.b.w" "$MEXE" 2>/dev/null)"
+  echo "$MLOG" | grep -qE '\$2 = 7' \
+    || { echo "dwarf-g: FAIL — cannot read through the type cycle (expected 7)"; echo "$MLOG"; exit 1; }
+fi
+
 echo "dwarf-g: OK"
