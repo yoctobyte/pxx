@@ -290,4 +290,4 @@ the range. The abs/import oracles and uforth.py were re-checked after the pull
 was added.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 6a4fa40ae.
