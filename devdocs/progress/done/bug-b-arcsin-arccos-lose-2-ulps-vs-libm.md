@@ -103,4 +103,4 @@ ticket asked for (`math.asin(0.5)`, `math.acos(0.5)`, `math.atan(2.0)`,
 `math.acos(0.9999)`), which now match CPython exactly.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 1a35da630.

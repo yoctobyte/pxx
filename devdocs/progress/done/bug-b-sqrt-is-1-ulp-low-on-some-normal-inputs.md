@@ -132,4 +132,4 @@ the same one-instruction win, and both hosts can be exercised here under qemu.
 Not done under this ticket, which was about correctness.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 1a35da630.
