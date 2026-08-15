@@ -966,6 +966,7 @@ function PyParseParenComp: Integer; forward;
 function PyMakeZip(aNode, bNode, cNode, dNode: Integer): Integer; forward;   { `zip(a, b[, c[, d]])` as a value; -1 for an absent stream (pyparser.inc) }
 function PyMakeZipN(listNode: Integer): Integer; forward;                    { `zip(*rows)` / zip past four — over a LIST of iterables (pyparser.inc) }
 function PyZipStarOperand(node: Integer): Integer; forward;                  { the star operand of `zip(*rows)` as a TPyList (pyparser.inc) }
+function PyStarIterableNode(listNode: Integer): Integer; forward;            { `max(*xs)`: the iterable to compare — the one element's contents, or the list (pyparser.inc) }
 function PyZipTailList(a, b, c, d: Integer): Integer; forward;               { four parsed zip operands plus the rest, as a TPyList temp (pyparser.inc) }
 function PyStarIsIterableForm(const nm: AnsiString): Boolean; forward;       { `max(*xs)` means max(xs) — the two names that is true of (pyparser.inc) }
 function PyIsSetCompAhead: Boolean; forward;    { set comprehension (pyparser.inc) }
@@ -15346,14 +15347,23 @@ begin
           three-argument max and raised "forwarded call got 3 arguments,
           expected 2 to 2" at run time. One argument, and ordinary overload
           matching below picks max(TPyList).
-          bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
+          bug-nilpy-star-unpack-into-a-fixed-arity-builtin
+
+          The equivalence `max(*xs)` == `max(xs)` holds only for TWO OR MORE
+          starred elements, where comparing the elements is comparing the list.
+          With exactly one it is `max(xs[0])` — over that element's CONTENTS —
+          so `max(*[[4, 9, 2]])` is 9 and the bare rewrite answered `[4, 9, 2]`,
+          a silent wrong value. The count is a run-time fact, so pystar_iterable
+          picks between the two; for two or more it hands the list straight back
+          and this is exactly the old lowering.
+          bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload }
         if isNilPy and (CurTok.Kind = tkStar) and PyStarIsIterableForm(name) and
            (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkStar) then
         begin
           Next;                          { the '*' }
           ParseArgExpr;
           argSeq := AllocNode(AN_ARG);
-          ASTLeft[argSeq] := PyZipStarOperand(CurASTNode);
+          ASTLeft[argSeq] := PyStarIterableNode(PyZipStarOperand(CurASTNode));
           ASTIVal[argSeq] := 0;
           ASTRight[argSeq] := -1;
           argsHead := argSeq;

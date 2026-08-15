@@ -22,4 +22,7 @@ call [(1, 3), (2, 4)]
 variant [(1, 3), (2, 4)]
 maxmin 5 1 9 a
 maxctl 5 1 2 1
+max1 9 2
+max1f 1.5
+max1s c
 TEST-OK

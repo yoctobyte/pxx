@@ -9244,6 +9244,26 @@ begin
   Result := PyStarOperandAsList(node, listCi);
 end;
 
+function PyStarIterableNode(listNode: Integer): Integer;
+{ Wrap a star operand (already a TPyList) in pystar_iterable, which picks the
+  element's contents when exactly ONE was starred and hands the list back
+  otherwise. See the call site in parser.inc for why the count decides.
+  bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload }
+var argNode, listCi: Integer;
+begin
+  listCi := FindUClass('TPyList');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := listNode;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := FindProc('pystar_iterable');
+  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pystar_iterable) not loaded');
+  ASTTk[Result] := Ord(tyClass);
+  ASTRight[Result] := REC_UCLASS_BASE + listCi;
+  ASTLeft[Result] := argNode;
+end;
+
 { Four already-parsed zip operands plus every remaining one, collected into a
   TPyList temp. CurTok is the comma before the fifth. }
 function PyZipTailList(a, b, c, d: Integer): Integer;

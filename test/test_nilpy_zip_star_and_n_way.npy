@@ -57,4 +57,13 @@ print("variant", list(zip(*d["rows"])))
 xs = [1, 5, 3]
 print("maxmin", max(*xs), min(*xs), max(*[2, 9]), min(*"qap"))
 print("maxctl", max(xs), min(xs), max(1, 2), min(1, 2))
+
+# ONE starred element: the star supplies it as the sole argument, so the
+# comparison runs over ITS contents. `max(xs)` is NOT the same lowering here,
+# which is what the two-or-more rewrite silently assumed — it compared a
+# one-element list of lists and answered the inner list.
+# bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload
+print("max1", max(*[[4, 9, 2]]), min(*[[4, 9, 2]]))
+print("max1f", max(*[[1.5, 0.5]]))
+print("max1s", max(*["abc"]))
 print("TEST-OK")

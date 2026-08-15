@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:213 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1867 rejected:37`
+`unfinished:11 blocked:6 backlog:212 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1868 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 197, ranked
+## Ready — top 30 of 196, ranked
 
 - `[p 70] [T]` regression-test-core-test-nilpy-star-methods-and-targets
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
@@ -67,4 +67,4 @@ _none — no lane is locked._
 - `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
 - `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 
-_167 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_166 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

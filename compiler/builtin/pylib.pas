@@ -1205,6 +1205,14 @@ function pyiter_drain(it: TPyIter): TPyList;
   anything non-iterable raises — one normalisation, every star path.
   bug-nilpy-a-star-operand-in-a-variant-is-cast-not-converted }
 function pystar_as_list(const v: Variant): TPyList;
+{ The iterable `max(*xs)` / `min(*xs)` actually compares. The frontend rewrites
+  those two to the single-argument iterable form, which is right for two or
+  more elements — comparing the elements IS comparing the list — but wrong for
+  exactly ONE: `max(*[[4, 9, 2]])` is CPython's `max([4, 9, 2])` = 9, over the
+  element's CONTENTS, and the rewrite compared a one-element list of lists and
+  answered `[4, 9, 2]`. The count is a run-time fact, so the choice lives here.
+  bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload }
+function pystar_iterable(l: TPyList): TPyList;
 { True when the variant holds a cursor — the run-time half of the static
   `is TPyIter` test, for the consumption sites that take a Variant. }
 function pyiter_is(const v: Variant): Boolean;
@@ -12047,6 +12055,17 @@ begin
     if o is TPyList then begin pystar_as_list := TPyList(o); Exit; end;
   end;
   pystar_as_list := pyiter_drain(pyiter_v(v));
+end;
+
+function pystar_iterable(l: TPyList): TPyList;
+begin
+  pystar_iterable := l;
+  if (l <> nil) and (l.count = 1) then
+    { ONE starred element: the star supplies it as the sole argument, so the
+      comparison runs over ITS contents. pystar_as_list, not a cast — the
+      element may be a str (`max(*["abc"])` is CPython's max("abc") = 'c'),
+      a dict, or any other iterable. }
+    pystar_iterable := pystar_as_list(l.at(0));
 end;
 
 constructor TPyRange.Create;
