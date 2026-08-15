@@ -75,4 +75,4 @@ variable, a module-level `def` of the same name (a different question, still
 right), and controls. `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 9496262c9.
