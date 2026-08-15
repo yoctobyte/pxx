@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (201)
+## backlog (202)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -153,6 +153,7 @@ _none_
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
 | feature-nilpy-match-statement | N | 30 | feature | `match` / `case` — structural pattern matching is not parsed | — |
+| feature-nilpy-math-module-twelve-absent-names-measured | N | 25 | feature | The whole `math` surface swept name by name against CPython: 39 of 51 agree, 12 are absent and fail LOUDLY at compile. Four of them (isqrt, isfinite, ldexp, frexp) are EXACT operations with no rounding question and can land today; the other eight inherit the standing 'do not map a 1-ulp-off RTL routine' policy. | — |
 | feature-nilpy-methods-on-int-and-float | N | 35 | feature | No methods on `int` or `float` — `x.bit_length()`, `x.is_integer()`, `x.hex()` | — |
 | feature-nilpy-multi-arg-callback-bridges | N | 35 | feature | nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument | — |
 | feature-nilpy-nested-def-as-value | N | 15 | feature | SUPERSEDED: nested def as a VALUE (stored, passed, returned) | — |
@@ -607,6 +608,7 @@ _none_
 - [p 25] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 25] [B] feature-lib-strutils-ansi-predicate-family
 - [p 25] [N] feature-nilpy-for-loop-getitem-protocol-fallback
+- [p 25] [N] feature-nilpy-math-module-twelve-absent-names-measured
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields
 - [p 25] [N] feature-nilpy-str-surface-gaps-2026-08-09
 - [p 25] [O] feature-opt-alloc-intent-hint
