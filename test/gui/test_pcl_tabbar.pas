@@ -5,7 +5,7 @@ program test_pcl_tabbar;
   tab button's OnClick fires through the normal trampoline
   (gtk_button_clicked, synchronous — same discipline as test_pcl_click). }
 
-uses gtk3, controls, stdctrls, extctrls, forms;
+uses gtk3, controls, stdctrls, extctrls, forms, gtk3_c;
 
 type
   THandler = class

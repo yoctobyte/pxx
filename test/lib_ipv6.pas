@@ -7,7 +7,7 @@ program lib_ipv6;
   A host with IPv6 disabled in the kernel cannot run this, so socket() failing
   with EAFNOSUPPORT is reported as a SKIP rather than a failure — the point is
   to catch a broken sockaddr_in6 layout, not to assert the CI box's netstack. }
-uses platform;
+uses platform, platform_types;
 
 const
   PORT = 28846;

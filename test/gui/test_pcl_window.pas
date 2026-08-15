@@ -5,7 +5,7 @@ program test_pcl_window;
   timeout quits so the test terminates unattended. Closing the window also
   quits (Application wires "destroy"). No event handlers yet — slice 2. }
 
-uses gtk3, controls, stdctrls, forms;
+uses gtk3, controls, stdctrls, forms, gtk3_c;
 
 var
   Form1: TForm;

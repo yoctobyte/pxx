@@ -3,7 +3,7 @@ unit glarea;
 
 interface
 
-uses classes_lite, controls, uwidgetset;
+uses classes_lite, controls, uwidgetset, typinfo;
 
 type
   TGLArea = class(TControl)

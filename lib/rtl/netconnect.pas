@@ -32,7 +32,7 @@ unit netconnect;
 
 interface
 
-uses platform, net, dns, dns_wire_core;
+uses platform, net, dns, dns_wire_core, platform_types;
 
 const
   { Nothing resolved at all — distinct from "resolved but every address

@@ -1718,6 +1718,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-a-disassembler-cannot-decode-comisd-and-xorpd | A | 60 | regression | the -S disassembler had no comisd or xorpd, so the Trunc/Round saturation sequence printed `db 66 / db 0f / db 2f` and test-asm's no-undecoded-bytes check went red on hello.pas and compiler.pas | — |
 | regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c | B | 70 | regression | NEW-RED: `--system-libs=c` now links libm — the Floor/Ceil result-type change | — |
 | regression-cascade-25678cbdd57c | T | 90 | regression | regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch) | — |
+| regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |

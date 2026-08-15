@@ -4,7 +4,7 @@ program test_gtk_window;
   ~3 seconds (no signal callbacks yet — proc-address is the next enabler),
   then exits cleanly. Proves widget creation + rendering over the FFI. }
 
-uses gtk3;
+uses gtk3, gtk3_c;
 
 var
   win, btn: PGtkWidget;

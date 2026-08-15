@@ -3,7 +3,7 @@ program triangle;
 
 {$define PXX_MANAGED_STRING}
 
-uses gtk3, controls, stdctrls, forms, extctrls, glarea, gl_c, sysutils, math;
+uses gtk3, controls, stdctrls, forms, extctrls, glarea, gl_c, sysutils, math, typinfo;
 
 const
   VERT_SRC = '#version 330 core'#10'layout(location=0) in vec2 aPos;'#10'layout(location=1) in vec3 aColor;'#10'uniform mat4 uRot;'#10'out vec3 vColor;'#10'void main() {'#10'  gl_Position = uRot * vec4(aPos, 0.0, 1.0);'#10'  vColor = aColor;'#10'}'#10;

@@ -9,7 +9,7 @@ program lib_p256field;
 
   Runs on 32-bit targets too, where p256field's MulHiU64 takes the Pascal
   fallback -- so this doubles as the cross-target check of the whole stack. }
-uses bignum, p256field;
+uses bignum, p256field, sysutils;
 
 var
   fails: Integer;

@@ -6,7 +6,7 @@ program test_pcl_showmessage;
   DismissCB after 400ms to tear the dialog down (the synthetic equivalent of
   clicking OK). Prints before/after to prove the call returned cleanly. }
 
-uses gtk3, dialogs;
+uses gtk3, dialogs, gtk3_c;
 
 function DismissCB(data: Pointer): Integer; cdecl;
 begin

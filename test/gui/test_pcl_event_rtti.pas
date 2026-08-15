@@ -6,7 +6,7 @@ program test_pcl_event_rtti;
   A TForm subclass inherits TForm.Create (window) via parent method lookup;
   its published BtnClick handler is found in RTTI. Fires synchronously twice. }
 
-uses typinfo, classes_lite, gtk3, controls, stdctrls, forms;
+uses typinfo, classes_lite, gtk3, controls, stdctrls, forms, gtk3_c;
 
 type
   TMyForm = class(TForm)

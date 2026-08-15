@@ -3,7 +3,7 @@ program raytracer_gui;
 
 {$define PXX_MANAGED_STRING}
 
-uses gtk3, controls, stdctrls, forms, extctrls, graphics, math, sysutils, baseunix;
+uses gtk3, controls, stdctrls, forms, extctrls, graphics, math, sysutils, baseunix, gtk3_c;
 
 const
   MAXDEPTH = 3;

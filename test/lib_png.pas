@@ -2,7 +2,7 @@ program lib_png;
 { Unit test for RTL image/png. Encodes a tiny RGBA image to valid PNG bytes,
   decodes it back, and verifies CRC rejection. }
 
-uses image, png;
+uses image, png, hashing;
 
 var
   img, outImg: TImage;

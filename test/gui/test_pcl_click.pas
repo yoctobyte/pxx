@@ -6,7 +6,7 @@ program test_pcl_click;
   -> CallMethod(Code, Data=handler, Sender=button) -> THandler.Clicked runs
   with Self = the handler. Deterministic; expected count 1 then 2. }
 
-uses gtk3, controls, stdctrls, forms;
+uses gtk3, controls, stdctrls, forms, gtk3_c;
 
 type
   THandler = class

@@ -2,7 +2,7 @@ program test_pcl_drawing;
 
 { Test canvas operations and custom paint box drawing. }
 
-uses gtk3, controls, extctrls, graphics, forms;
+uses gtk3, controls, extctrls, graphics, forms, typinfo;
 
 var
   Form1: TForm;

@@ -21,7 +21,7 @@ program solitaire_gui;
 
 {$define PXX_MANAGED_STRING}
 
-uses gtk3, controls, stdctrls, forms, extctrls, graphics, menus, sysutils, klondike;
+uses gtk3, controls, stdctrls, forms, extctrls, graphics, menus, sysutils, klondike, gtk3_c;
 
 const
   COL_TABLE = $00206018;   { felt green, $00BBGGRR }

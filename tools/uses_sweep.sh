@@ -34,7 +34,7 @@ DIRS=("$@")
 [ ${#DIRS[@]} -eq 0 ] && DIRS=(test examples lib)
 
 OUT=$(mktemp -d)
-trap 'rm -rf "$OUT"' EXIT
+trap 'rm -rf "$OUT" "${SKIP:-}"' EXIT
 
 # A unit is not compilable on its own and a fixture may be deliberately broken;
 # both answer "this file is a unit, not a program" or live under a fixture dir,
@@ -47,8 +47,27 @@ list_sources() {
   done
 }
 
+# Sources the sweep must NOT judge, read from the Makefile rather than guessed:
+#   - a recipe line starting with `!` means the compile MUST fail (a %FAIL-style
+#     negative). Its error IS the assertion.
+#   - a recipe passing `--flags` compiles it differently than we do, so our
+#     failure says nothing about the tree (test_auto_locals needs --auto-locals
+#     and is undefined-variable-by-design without it).
+# Both showed up as "leaks" on the first honest run, which is how this list came
+# to exist -- a sweep that cries wolf on four files gets ignored on the fifth.
+SKIP=$(mktemp)
+grep -oE '^[[:space:]]*(@?!|@?[^|]*--[a-z-]+ )[^#]*(test|examples|lib)/[A-Za-z0-9_/.-]+\.(pas|npy|c|bas)' Makefile 2>/dev/null \
+  | grep -oE '(test|examples|lib)/[A-Za-z0-9_/.-]+\.(pas|npy|c|bas)' | sort -u > "$SKIP"
+export SKIP
+
 compile_one() {
   src="$1"; out="$2"
+  grep -qxF "$src" "$SKIP" 2>/dev/null && return 0
+  # ...and a source that includes the COMPILER's own .inc files is an FPC-built
+  # harness (the test_asm_emit_* family mocks a code buffer around the shipped
+  # emitter). The Makefile builds those with $(FPC) through a shell loop, so the
+  # path never appears literally and the skip list above cannot see it.
+  grep -q '{\$include \.\./compiler/' "$src" 2>/dev/null && return 0
   # BOTH streams, and gate on the EXIT CODE. pascal26 reports diagnostics on
   # STDOUT, so the obvious `2>&1 >/dev/null` spelling captures nothing at all
   # and the sweep reports a clean tree no matter what it compiles -- which is

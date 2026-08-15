@@ -5,7 +5,7 @@ program test_pcl_input;
   asm method-dispatch delivers them to the handler — we assert the handler ran
   with the injected values. }
 
-uses gtk3, controls, extctrls, forms;
+uses gtk3, controls, extctrls, forms, typinfo, gtk3_c;
 
 type
   { GdkEventButton, GTK3 / 64-bit layout — enough fields for a button press. }

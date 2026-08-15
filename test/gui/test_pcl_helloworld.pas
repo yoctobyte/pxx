@@ -6,7 +6,7 @@ program test_pcl_helloworld;
   streamed OnClick -> ShowMessage), a second timeout dismisses the dialog and
   quits. Proves metaclass + initialization + wildcard $R + ShowMessage together. }
 
-uses interfaces, forms, controls, stdctrls, dialogs, classes_lite, typinfo, lfm, gtk3;
+uses interfaces, forms, controls, stdctrls, dialogs, classes_lite, typinfo, lfm, gtk3, gtk3_c;
 
 {$R *.lfm}
 

@@ -1,6 +1,6 @@
 program test_pcl_menus;
 
-uses gtk3, gtk3_c, controls, menus, forms, classes_lite, uwidgetset, gtk3widgets;
+uses gtk3, gtk3_c, controls, menus, forms, classes_lite, uwidgetset, gtk3widgets, typinfo;
 
 var
   Form1: TForm;

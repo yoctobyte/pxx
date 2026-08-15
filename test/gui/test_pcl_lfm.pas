@@ -7,7 +7,7 @@ program test_pcl_lfm;
   GTK widgets (CreateInstance never ran constructors), applies captions, and
   parents the button. A synchronous click runs the streamed handler. }
 
-uses typinfo, classes_lite, resources, lfm, gtk3, controls, stdctrls, forms;
+uses typinfo, classes_lite, resources, lfm, gtk3, controls, stdctrls, forms, gtk3_c;
 
 {$R TMainForm test_pcl_lfm.lfm}
 

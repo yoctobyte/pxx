@@ -6,7 +6,7 @@ program test_gtk_signals;
   - a 2s timeout fires AutoQuit, so the program also terminates unattended
     and exercises a @proc callback through GTK's actual main loop. }
 
-uses gtk3;
+uses gtk3, gtk3_c;
 
 var
   win, btn: PGtkWidget;

@@ -10,7 +10,7 @@ program test_pcl_stream_paned;
   Needs a display (widget ctors build gtk handles) — run on Xvfb. }
 
 uses typinfo, classes_lite, resources, lfm, gtk3, controls, stdctrls, extctrls,
-  forms, sysutils;
+  forms, sysutils, uwidgetset;
 
 function YN(b: Boolean): AnsiString; begin if b then YN := 'T' else YN := 'F'; end;
 

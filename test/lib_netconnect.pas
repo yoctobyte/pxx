@@ -12,7 +12,7 @@
   first regardless); only the AAAA-fallback case is skipped, since it cannot be
   distinguished from "v6 does not work here". }
 program lib_netconnect;
-uses netconnect, net, platform, dns, dns_wire_core, sysutils;
+uses netconnect, net, platform, dns, dns_wire_core, sysutils, platform_types;
 
 var fails: Integer;
 
