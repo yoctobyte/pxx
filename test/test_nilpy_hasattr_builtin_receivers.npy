@@ -1,0 +1,51 @@
+# hasattr is Python's duck-typing primitive, so it has to answer about METHODS,
+# not only about declared fields. bug-nilpy-hasattr-on-a-builtin-container-or-
+# str-answers-false: `hasattr([1], "append")` said False about a method the very
+# next line calls. Diffed against CPython.
+
+l = [1, 2]
+d = {"k": 1}
+s = "x"
+b = b"y"
+t = (1, 2)
+
+# the rows the ticket names
+print(hasattr(l, "append"), hasattr(d, "keys"), hasattr(s, "upper"))
+
+# ...and the rest of each receiver's surface, positive AND negative — a fix that
+# answered True for everything would pass the line above
+print(hasattr(l, "count"), hasattr(l, "sort"), hasattr(l, "extend"), hasattr(l, "nope"))
+print(hasattr(d, "get"), hasattr(d, "items"), hasattr(d, "values"), hasattr(d, "nope"))
+print(hasattr(s, "split"), hasattr(s, "strip"), hasattr(s, "startswith"), hasattr(s, "nope"))
+print(hasattr(b, "decode"), hasattr(t, "count"), hasattr(t, "index"), hasattr(b, "nope"))
+print(hasattr(1, "bit_length"), hasattr(1, "nope"))
+
+# the same names still CALL, which is the claim hasattr is making
+print(l.count(1), d.get("k"), s.upper(), t.count(1), (1).bit_length())
+
+# getattr keeps its default for a name that really is absent
+print(getattr(l, "nope", "dflt"), getattr(s, "nope", "dflt"), getattr(d, "nope", "dflt"))
+
+# a user class is unaffected — fields, methods and inherited members
+class C:
+    def __init__(self):
+        self.f = 1
+
+    def m(self):
+        return 2
+
+
+class D(C):
+    pass
+
+
+c = C()
+print(hasattr(c, "f"), hasattr(c, "m"), hasattr(c, "nope"))
+print(hasattr(D(), "f"), hasattr(D(), "m"), hasattr(D(), "nope"))
+c.dyn = 3
+print(hasattr(c, "dyn"))
+
+# NOT asserted: hasattr(1.5, "is_integer"). Float methods are not implemented at
+# all (feature-nilpy-methods-on-int-and-float) — `x.is_integer()` compiles and
+# then raises at run time — so answering True here would be a claim the call
+# cannot honour.

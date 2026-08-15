@@ -10084,6 +10084,54 @@ begin
   Result := FindUField(ci, attr);
 end;
 
+{ Does this receiver have this attribute, as far as the FRONTEND can tell?
+
+  `PyAttrFieldIdx` above answers only "is it a declared FIELD of a user class",
+  which is the right question for building a field read and the wrong one for
+  `hasattr`. A method is an attribute; so is a str method, an int method, and a
+  pylib container method reached under its Python ALIAS. Asking the field
+  question alone made `hasattr([1], "append")` and `hasattr("s", "upper")`
+  answer False about methods the very next line calls successfully — and
+  `hasattr` is Python's duck-typing primitive, so a False sends `if
+  hasattr(x, "read")` down the wrong branch silently.
+
+  Deliberately reuses the SAME tables the CALL uses (FindUMeth,
+  PyPylibMethodAlias, PyStrMethodInfo, PyIsIntMethodBaseTk) rather than listing
+  names again — a second list is a second thing to keep in step, and the drift
+  is exactly what this bug was.
+  bug-nilpy-hasattr-on-a-builtin-container-or-str-answers-false }
+{ FPC seed: single-pass, and this one is defined further down (PyStrMethodInfo
+  and PyIsIntMethodName are both above, so they need no forward).
+  bug-a-fpc-seed-drift-emitasmx64-forward }
+function PyPylibMethodAlias(ci: Integer; const mname: AnsiString): AnsiString; forward;
+
+function PyAttrExists(recvNode: Integer; const attr: AnsiString): Boolean;
+var rec, ci: Integer; tk, rt: TTypeKind; pn, al: AnsiString; wa: Integer;
+begin
+  PyAttrExists := False;
+  if recvNode < 0 then Exit;
+  if PyAttrFieldIdx(recvNode, attr) >= 0 then begin PyAttrExists := True; Exit; end;
+  rec := ResolveNodeRec(recvNode);
+  if rec >= REC_UCLASS_BASE then
+  begin
+    ci := rec - REC_UCLASS_BASE;
+    if FindUMeth(ci, attr) >= 0 then begin PyAttrExists := True; Exit; end;
+    { the Python spelling, which is what the user wrote: `d.keys()` reaches a
+      pylib method under a different Pascal name, and the RTTI lookup the
+      runtime predicate does knows only the Pascal one }
+    al := PyPylibMethodAlias(ci, attr);
+    if (al <> '') and (FindUMeth(ci, al) >= 0) then begin PyAttrExists := True; Exit; end;
+  end;
+  tk := IntToTypeKind(ASTTk[recvNode]);
+  if (tk = tyAnsiString) or (tk = tyString) or (tk = tyChar) then
+    if PyStrMethodInfo(attr, pn, rt, wa) then begin PyAttrExists := True; Exit; end;
+  { BOTH halves: PyIsIntMethodBaseTk answers "may an int method claim this
+    RECEIVER", which is true of any name on an int — it is a dispatch question,
+    not an existence one. `hasattr(1, "nope")` must still be False. }
+  if PyIsIntMethodBaseTk(tk, attr) and PyIsIntMethodName(attr) then
+    PyAttrExists := True;
+end;
+
 { `hasattr(<variant>, "name")` cannot be answered at compile time — the receiver's
   class is a RUN-TIME fact — but the frontend still knows something decisive: the
   set of user classes that DECLARE the name. So the answer is a run-time test of

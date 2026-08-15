@@ -942,6 +942,7 @@ function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) in
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
 function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
+function PyAttrExists(recvNode: Integer; const attr: AnsiString): Boolean; forward; { Nil Python hasattr: field OR method OR str/int method (pyparser.inc) }
 function PyHasAttrClassChain(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr over a VARIANT receiver: run-time class test (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
 function PyMakeDynAttrByExpr(recvNode, nameNode, dfltNode: Integer; wantHas: Boolean): Integer; forward; { ...and the COMPUTED-name form, resolved at run time (pyparser.inc) }
@@ -9478,7 +9479,7 @@ end;
 procedure ParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
-    intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -11274,6 +11275,13 @@ begin
         end;
         atName := PyParseAttrName;
         atFld := PyAttrFieldIdx(atRecv, atName);
+        { hasattr asks a WIDER question than "is it a declared field" — a method
+          is an attribute too. Answered from the same tables the call uses; see
+          PyAttrExists. Only the hasattr ANSWER moves: `atFld` stays the field
+          index, because getattr builds a field read out of it and a method
+          index there would be read as an offset.
+          bug-nilpy-hasattr-on-a-builtin-container-or-str-answers-false }
+        atExists := (atFld >= 0) or ((not atIsGet) and PyAttrExists(atRecv, atName));
         atDflt := -1;
         if CurTok.Kind = tkComma then
         begin
@@ -11288,7 +11296,7 @@ begin
           getattr WITH a default keeps the old behaviour (return the default for
           an unknown attribute) rather than the store, which is what the
           censused getattr(e, "errno", 1) probes want. }
-        if (atFld < 0) and (not (atIsGet and (atDflt >= 0))) and
+        if (not atExists) and (not (atIsGet and (atDflt >= 0))) and
            (IntToTypeKind(ASTTk[atRecv]) in [tyVariant, tyClass]) then
         begin
           { A VARIANT receiver has no static class, so atFld < 0 here does NOT
@@ -11351,7 +11359,7 @@ begin
         if not atIsGet then
         begin
           node := AllocNode(AN_INT_LIT);
-          if atFld >= 0 then ASTIVal[node] := 1 else ASTIVal[node] := 0;
+          if atExists then ASTIVal[node] := 1 else ASTIVal[node] := 0;
           ASTTk[node] := Ord(tyBoolean);
           CurASTNode := node;
           LastExprTk := tyBoolean;
