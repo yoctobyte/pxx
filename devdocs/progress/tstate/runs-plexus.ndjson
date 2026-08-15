@@ -939,3 +939,4 @@
 {"date": "2026-08-15T17:56:26Z", "fixed": [], "full": false, "new_red": [], "sha": "f34272f086cc1d57a41fd9d0964611bea00b6381", "tier": "native", "verdict": "RED", "wall": 198.7}
 {"date": "2026-08-15T18:00:29Z", "fixed": [], "full": false, "new_red": [], "sha": "e7f93ee65273b0756b8c9ec966161dda2f48124d", "tier": "native", "verdict": "RED", "wall": 208.6}
 {"date": "2026-08-15T18:12:45Z", "fixed": ["test-core#src:test/test_basic_comprehensive.bas", "test-core#src:test/test_c_cross_ns_arity_fail.pas", "test-core#src:test/test_exception_unhandled.pas@3", "test-core#src:test/test_math_unit.pas@1"], "full": false, "new_red": [], "sha": "f68d60cebf509d987d004e344f2108b36cbbadf9", "tier": "native", "verdict": "GREEN", "wall": 204.0}
+{"date": "2026-08-15T18:34:48Z", "fixed": [], "full": false, "new_red": [], "sha": "c8f5070671bec5a125a793077cdb0f990aa28cd1", "tier": "native", "verdict": "GREEN", "wall": 204.2}
