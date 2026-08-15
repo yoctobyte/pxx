@@ -86,4 +86,4 @@ comparison, and field and subscript targets. `test_nilpy_augmented_sequence_repe
 unchanged.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 572b6f2e9.
