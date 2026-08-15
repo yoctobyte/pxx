@@ -2,7 +2,7 @@
 track: A
 prio: 55
 type: bug
-blocked-by: []
+blocked-by: [bug-nilpy-uses-math-breaks-abs-on-a-float]
 summary: "NilPy's `x ** y` does NOT go through the RTL's Power — pypow_v carries its own hand-rolled series ln/exp in compiler/builtin/pylib.pas. Measured against CPython over 105 pairs: 18 exact, 48 within 16 ulp, 15 worse, worst 1282 ulp (`1.0001 ** 10000` = 2.718145926824356 against 2.7181459268249255). The comment justifying it says the value is 'about to be str()'d through a known-truncated float formatter anyway', and that formatter now prints full precision."
 ---
 
@@ -84,3 +84,88 @@ implementations cannot silently disagree again.
 `x ** y`". That is **not true today**, and it is worth knowing before anyone
 credits NilPy speedups to the RTL work: making `**` 26x faster and 1-ulp
 accurate is this ticket, not that one.
+
+## 2026-08-16 — prototyped, MEASURED, and NOT landed. The wall is bigger than the ticket says.
+
+A working prototype exists and is kept as
+`devdocs/dev/prototypes/nilpy-float-pow-via-rtl-power.patch` (apply with
+`git apply`). It is not on master, and this section is why.
+
+### What it does, and what it bought
+
+Neither of the ticket's two routes: a THIRD one, which is smaller than both.
+`math.pow` already resolves to the RTL's `Power` (see `PyStdlibShimName`), so
+`**` was pointed at the same routine rather than either porting kernels or
+merging overload sets:
+
+1. `PyMakePow` lowers a STATICALLY float `**` to `Power` via
+   `FindProcArityDouble` — the same call `math.pow` makes, and for the same
+   reason (`Power(Integer, Integer)` is declared first and truncates).
+2. A loop variable or list element is a VARIANT, so it reaches `pypow_v` at RUN
+   time and no static intercept can see it. pylib cannot name `Power` (builtin
+   unit), so a `PyPowHook` function pointer was added beside pypow_v and the
+   frontend installs `@Power` as the program's first statement — the shape
+   `builtinheap` already uses for its object finalizer.
+3. `pypow_dom` keeps the two REFUSALS the move would otherwise have lost: the
+   RTL's Power answers NaN for a negative base with a fractional exponent (a
+   COMPLEX in CPython) and +inf for `0.0 ** -1` (a ZeroDivisionError). A silent
+   wrong number where there used to be a sentence is the wrong trade.
+
+Measured over 120 (base, exponent) pairs against CPython:
+
+| | exact | within 1 ulp | worst |
+| --- | --- | --- | --- |
+| before | 78 | 98 | **84 ulp** |
+| prototype | 107 | **120** | **1 ulp** |
+
+`1.0001 ** 10000` moves from `2.718145926824356` to CPython's
+`2.7181459268249255` — the headline of this ticket — in all three spellings
+(literal, named, `**=`) AND through a loop.
+
+### Why it is not landed: `math` cannot be pulled into a NilPy program at all
+
+Every version of this needs `Power` linked, which needs the `math` unit in the
+program. That breaks `abs`:
+
+- `ParseUsesUnitAmbient('math')` → `abs(-1.5)` stops compiling:
+  *"no overload of abs matches these arguments (Double); candidates:
+  abs(LongInt)"*. Pulling it BEFORE pylib/pyeval instead of after changes
+  nothing, so this is not the last-named-unit rule.
+- `ParseUsesUnit('math')` (ordinary, not ambient) → it COMPILES and answers
+  WRONG: `abs(-0.0)` gives `-0.0` where CPython gives `0.0`, and
+  `abs([-0.0][0])` gives **6642640** — a pointer read as a number. Silently.
+
+`test_nilpy_abs_minmax_sum_oracle.npy` catches both, which is the only reason
+this was not pushed.
+
+Worth knowing: an EXPLICIT `import math` plus `abs(-1.5)` compiles correctly on
+HEAD and FAILS on the pinned binary, so the visibility work landed earlier on
+2026-08-15 already fixed one arm of this. The ambient/implicit arm is still
+broken, and the wrong-VALUE arm above is a different bug again.
+
+### So the routes are now three, ranked
+
+1. **A small builtin unit carrying Power's kernels**, which pylib may `uses`
+   directly. This is the ticket's route 1, but confined: a private unit exposes
+   no `Abs`/`Min`/`Max`/`Round` to collide with, so it sidesteps the wall
+   instead of fighting it, and `pypow_v` calls it with no hook and no frontend
+   change at all. `Power` needs `TDd`, `Dd2Prod`, `DdRint`, `FMod`,
+   `FastLogHiLo`, `FastExpHiLoCore`, `DdBits` — bigger than the ~150 lines this
+   ticket estimated, and still the smallest thing that works.
+2. **Fix what `uses math` does to `abs`** and then apply the prototype
+   unchanged. This is the `normalise-dont-special-case` answer and it is a real
+   name-resolution bug worth its own ticket — the wrong VALUE arm especially.
+   Filed as [[bug-nilpy-uses-math-breaks-abs-on-a-float]].
+3. The prototype as-is, gated on the program not calling `abs`. Rejected: that
+   is a rule nobody can predict from the source.
+
+### Residual, whichever route lands
+
+13 of the 120 pairs stay 1 ulp below CPython — the RTL `Power`'s own rounding,
+not the plumbing. That is [[bug-nilpy-float-pow-loses-a-ulp-vs-libm]] and it is
+where the remaining work is once `**` and `math.pow` are one answer.
+
+Also measured and NOT this ticket: `2.0 ** 10000` answers `+inf` where CPython
+raises `OverflowError`, on the pinned binary and on HEAD alike — a general float
+policy divergence (`1e300 * 1e300` does the same). Filed as
+[[bug-nilpy-float-overflow-answers-inf-where-cpython-raises]].
