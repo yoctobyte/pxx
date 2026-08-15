@@ -3,7 +3,7 @@ track: N
 prio: 60
 type: bug
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: 9821c16fa
 summary: "PyBareGenExprAhead scanned forward with no statement boundary, so `p.extra = 7` followed several lines later by an unrelated `for` loop parsed the 7 as a generator expression over it — reported as \"undefined variable\" on the LOOP's own iterable, in a function whose parameter plainly exists. A regression from c003256c0; test_nilpy_getattr_computed_name was red."
 ---
 
