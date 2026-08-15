@@ -89,4 +89,4 @@ a property whose value changes when the field does; a variant receiver
 unchanged.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit eb0013981.
