@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`x.is_integer()` / `.hex()` / `.as_integer_ratio()` / `.conjugate()` work on a statically float receiver but raise AttributeError when the float arrives as a Variant — a loop variable, a list element, an unannotated parameter. `for v in vals: print(v.hex())` is the shape, and it is the ordinary one."
+status: done
+owner: agent-acpn
 ---
 
 # float methods are invisible to the runtime method dispatcher
@@ -66,3 +68,52 @@ hoist order wrong.
 are not intercepted here either — an int receiver takes neither the float path
 nor an int-method path. Cheap to add alongside, and it belongs with this ticket
 rather than as a third one.
+
+## FIXED 2026-08-16
+
+Built as the ticket asked — one arm, mirroring the str machinery rather than
+inventing a second mechanism. Two entry points, because that is what the str
+path has and for the same reason:
+
+- **the float-FIRST block** (beside the str-first block at the top of
+  `PyParseVariantMethod`), for a name no class declares — `is_integer`,
+  `conjugate`, `as_integer_ratio`. It has to exist because the closed-world
+  dispatcher's "no class declares a method" arm is a hard COMPILE error, and a
+  float receiver has no class to declare anything.
+- **the float ARM** at the end of the same function, for a name a class DOES
+  declare — `hex`, which `TPyBytes` carries. Same `pyvar_is_*tag(v) ? … : …`
+  ternary the str arm builds, with the guard widened and an `flArmBuilt` fixup
+  restoring the raise when the arm turns out not to fit.
+
+pylib gained `pyvar_is_floattag` (tag 3) and `pyvar_is_inttag` (tags 1, 2)
+beside `pyvar_is_strtag`, and nothing else — the four float functions already
+existed.
+
+### The int half, which the ticket asked for and which is not a formality
+
+`(3).is_integer()` is `True` and `(3).as_integer_ratio()` is `(3, 1)` in
+CPython — **ints, not 3.0 and (3.0, 1.0)**. So an int receiver could not simply
+be routed through the float functions; that would answer the wrong TYPE rather
+than a missing method. Three int entry points (`pyint_is_integer`,
+`pyint_conjugate`, `pyint_as_integer_ratio`), and the flavour is chosen:
+
+- statically, by `PyIsFloatMethodBaseTk(tk, nm)` at the two receiver-typed
+  intercepts, and
+- at RUN time, by a nested `pyvar_is_floattag(v) ? <float form> : <int form>`
+  inside both entry points above — because `for v in [1, 2.5]` is one loop over
+  two tags and no compile-time answer is right for both.
+
+`hex` is excluded from the shared set: int has no `.hex()`.
+
+### Gate
+
+`make compiler/pascal26` (self-host fixedpoint, byte-identical) + `tools/gate.sh
+quick` GREEN. `test/test_nilpy_float_methods_variant.npy` pins it against
+CPython: loop variable, dict value, unannotated parameter, `bytes.hex()` and
+`bytearray.hex()` still reaching TPyBytes, a user class declaring the same names
+still winning on its own instances, `None.hex()` still raising, the static and
+grouped int forms, and the mixed `[1, 2.5]` list. The four static-receiver rows
+`test_nilpy_float_methods` pins are unchanged.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

@@ -426,6 +426,12 @@ test-nilpy: $(COMPILER)
 	# callable" at run time. Expected output is CPython 3's on the same source.
 	./$(COMPILER) test/test_nilpy_float_methods.npy $(TESTTMP)/test_nilpy_floatm26
 	$(TESTTMP)/test_nilpy_floatm26 | diff -u test/test_nilpy_float_methods.expected -
+	# ...and the same four on a VARIANT receiver (loop variable, dict value,
+	# unannotated parameter), which raised AttributeError while the static form
+	# worked. Pins both directions at once: bytes.hex() and a user class
+	# declaring the same names must still reach their own methods.
+	./$(COMPILER) test/test_nilpy_float_methods_variant.npy $(TESTTMP)/test_nilpy_floatmv26
+	$(TESTTMP)/test_nilpy_floatmv26 | diff -u test/test_nilpy_float_methods_variant.expected -
 	# The ASCII-shaped `bytes` contract, added as a SET: this class used to carry
 	# endswith and no startswith, and a bytes method CPython defines and pxx omits
 	# is a hard compile error. Expected output is CPython 3's on the same source.
@@ -6226,6 +6232,12 @@ test-core: $(COMPILER)
 	# callable" at run time. Expected output is CPython 3's on the same source.
 	./$(COMPILER) test/test_nilpy_float_methods.npy $(TESTTMP)/test_nilpy_floatm26
 	$(TESTTMP)/test_nilpy_floatm26 | diff -u test/test_nilpy_float_methods.expected -
+	# ...and the same four on a VARIANT receiver (loop variable, dict value,
+	# unannotated parameter), which raised AttributeError while the static form
+	# worked. Pins both directions at once: bytes.hex() and a user class
+	# declaring the same names must still reach their own methods.
+	./$(COMPILER) test/test_nilpy_float_methods_variant.npy $(TESTTMP)/test_nilpy_floatmv26
+	$(TESTTMP)/test_nilpy_floatmv26 | diff -u test/test_nilpy_float_methods_variant.expected -
 	# The ASCII-shaped `bytes` contract, added as a SET: this class used to carry
 	# endswith and no startswith, and a bytes method CPython defines and pxx omits
 	# is a hard compile error. Expected output is CPython 3's on the same source.

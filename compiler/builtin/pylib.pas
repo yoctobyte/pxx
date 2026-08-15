@@ -1077,6 +1077,14 @@ function pyfloat_is_integer(x: Double): Boolean;
 function pyfloat_conjugate(x: Double): Double;
 function pyfloat_hex(x: Double): AnsiString;
 function pyfloat_as_integer_ratio(x: Double): TPyList;
+{ int's three methods of the same NAMES. An int is not a float here: CPython's
+  (3).as_integer_ratio() is (3, 1) and (3).conjugate() is 3 — ints, not 3.0 —
+  so routing an int receiver through the float versions would answer a wrong
+  TYPE rather than a missing method. int has no .hex(); that name belongs to
+  float and bytes only. }
+function pyint_is_integer(x: Int64): Boolean;
+function pyint_conjugate(x: Int64): Int64;
+function pyint_as_integer_ratio(x: Int64): TPyList;
 { os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
   (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
   imports and never become symbols.
@@ -4515,6 +4523,30 @@ end;
 function pyvar_is_strtag(const v: Variant): Boolean;
 begin
   Result := pyvartag(v) in [5, 6];
+end;
+
+{ True iff v holds a FLOAT (VT_DOUBLE, tag 3) — the twin of pyvar_is_strtag,
+  and used the same way: the runtime method dispatcher widens its objtag guard
+  by this and grows a float arm, so `for v in [2.0, 0.1]: v.hex()` reaches
+  pyfloat_hex instead of raising AttributeError. Deliberately tag 3 ALONE and
+  not "any number": an int receiver's is_integer/as_integer_ratio/conjugate
+  answer INT-flavoured values in CPython ((3, 1), 3 — not 3.0), so routing an
+  int through the float arm would be a wrong answer rather than a missing one.
+  bug-nilpy-float-methods-are-invisible-to-the-runtime-dispatcher }
+function pyvar_is_floattag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) = 3;
+end;
+
+{ True iff v holds an INT (VT_INT / VT_INT64). Its partner: the three methods
+  int and float SHARE — is_integer, conjugate, as_integer_ratio — pick their
+  implementation between the two at RUN time, because only the tag says which
+  the variant holds. Bools are excluded on purpose (VT_BOOL is its own tag);
+  CPython does answer True.is_integer(), but a bool receiver is not what any of
+  this was filed for and guessing at it here would be inventing behaviour. }
+function pyvar_is_inttag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) in [1, 2];
 end;
 
 { True iff v's payload is a real object pointer (VT_OBJECT, tag 7) -- the only
@@ -10968,6 +11000,28 @@ begin
   Result.FKind := PYSEQ_TUPLE;
   Result.append(num);
   Result.append(den);
+end;
+
+{ int's three. Trivial by definition — an int IS an integer, its complex
+  conjugate is itself, and its exact ratio is n/1 — but they have to exist as
+  entry points because the frontend intercepts the NAME, and because their
+  results are int-flavoured where float's are not. }
+function pyint_is_integer(x: Int64): Boolean;
+begin
+  Result := True;
+end;
+
+function pyint_conjugate(x: Int64): Int64;
+begin
+  Result := x;
+end;
+
+function pyint_as_integer_ratio(x: Int64): TPyList;
+begin
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(x);
+  Result.append(Int64(1));
 end;
 
 function pyfloat_parse(const s: AnsiString): Double;

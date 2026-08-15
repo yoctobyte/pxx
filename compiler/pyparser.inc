@@ -10099,11 +10099,54 @@ begin
   PyIsFloatBaseTk := (tk = tyDouble) or (tk = tySingle) or (tk = tyExtended);
 end;
 
-{ The one dispatcher for a float method, mirroring PyParseIntMethod. CurTok is
-  the '(' ; all four take no arguments. }
-function PyParseFloatMethod(baseNode: Integer; const nm: AnsiString): Integer;
+{ The three of the four that INT carries too — `(3).is_integer()` is True and
+  `(3).as_integer_ratio()` is (3, 1) in CPython 3.12. `hex` is not among them:
+  int has no .hex(), that name is float's and bytes'. Their int spellings
+  answer INT-flavoured values (3, not 3.0), which is why they are separate
+  pylib entry points rather than a cast into the float ones. }
+function PyIsIntFloatSharedMethodName(const nm: AnsiString): Boolean;
+begin
+  PyIsIntFloatSharedMethodName := (nm = 'is_integer') or
+                                  (nm = 'as_integer_ratio') or
+                                  (nm = 'conjugate');
+end;
+
+{ Does this receiver type claim this float-family name? Float takes all four;
+  int takes the shared three. Static types only — see PyIsFloatBaseTk. }
+function PyIsFloatMethodBaseTk(tk: TTypeKind; const nm: AnsiString): Boolean;
+begin
+  PyIsFloatMethodBaseTk := PyIsFloatBaseTk(tk) or
+    (PyIsIntBaseTk(tk) and PyIsIntFloatSharedMethodName(nm));
+end;
+
+{ The float-method CALL over an ALREADY-LOWERED, already-float receiver. Split
+  out of PyParseFloatMethod so the runtime dispatcher's float arm builds the
+  same node from a receiver it unboxed itself rather than growing a second
+  spelling of the table — one place decides which pylib proc and which result
+  type each of the four names has. }
+function PyMakeFloatMethodOn(recvNode: Integer; const nm: AnsiString;
+                            asInt: Boolean): Integer;
 var procIdx, callNode, a0: Integer; fn: AnsiString; retTk: TTypeKind;
 begin
+  if asInt then
+  begin
+    { the int flavour of the shared three — int-valued results, not float }
+    retTk := tyInt64;
+    if nm = 'is_integer' then begin fn := 'pyint_is_integer'; retTk := tyBoolean; end
+    else if nm = 'as_integer_ratio' then begin fn := 'pyint_as_integer_ratio'; retTk := tyClass; end
+    else fn := 'pyint_conjugate';
+    procIdx := FindProc(fn);
+    if procIdx < 0 then Error('Nil Python: pylib (' + fn + ') not loaded');
+    a0 := AllocNode(AN_ARG); ASTLeft[a0] := recvNode; ASTRight[a0] := -1;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := procIdx;
+    ASTTk[callNode] := Ord(retTk);
+    ASTRight[callNode] := ProcRetRecId[procIdx];
+    ASTLeft[callNode] := a0;
+    LastExprTk := retTk;
+    Result := callNode;
+    Exit;
+  end;
   retTk := tyDouble;
   if nm = 'is_integer' then begin fn := 'pyfloat_is_integer'; retTk := tyBoolean; end
   else if nm = 'hex' then begin fn := 'pyfloat_hex'; retTk := tyAnsiString; end
@@ -10111,9 +10154,7 @@ begin
   else fn := 'pyfloat_conjugate';
   procIdx := FindProc(fn);
   if procIdx < 0 then Error('Nil Python: pylib (' + fn + ') not loaded');
-  Expect(tkLParen, '(');
-  Expect(tkRParen, ')');
-  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode; ASTRight[a0] := -1;
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := recvNode; ASTRight[a0] := -1;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := procIdx;
   ASTTk[callNode] := Ord(retTk);
@@ -10121,6 +10162,16 @@ begin
   ASTLeft[callNode] := a0;
   LastExprTk := retTk;
   Result := callNode;
+end;
+
+{ The one dispatcher for a float method, mirroring PyParseIntMethod. CurTok is
+  the '(' ; all four take no arguments. }
+function PyParseFloatMethod(baseNode: Integer; const nm: AnsiString;
+                            asInt: Boolean): Integer;
+begin
+  Expect(tkLParen, '(');
+  Expect(tkRParen, ')');
+  Result := PyMakeFloatMethodOn(baseNode, nm, asInt);
 end;
 
 { Is CurTok the '.' of an intercepted int-method suffix? Used by the generic
@@ -13418,9 +13469,15 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     vtTmpSym, vtAsgn, vtGuardArg, vtGuardCall, vtNotNode, vtNameArg,
     vtArg1, vtArg2, vtRaiseCall, vtIfNode, vtPairNode: Integer;
     smArmPossible, smArmBuilt: Boolean;
+    flArmPossible, flArmBuilt: Boolean;
+    flGuardCall, flOrNode, flUnboxArg, flUnboxCall, flCall,
+    flPairNode, flTern, flArg1, flArg2, flNotNode, flRaiseCall,
+    flIfNode, flPair2: Integer;
 begin
   smArmPossible := False;
   smArmBuilt := False;
+  flArmPossible := False;
+  flArmBuilt := False;
   { A receiver that came from an optional module which did not resolve — the
     name itself, or anything assigned from it. Checked BEFORE class dispatch:
     otherwise a same-named method on an unrelated class captures the call
@@ -13491,6 +13548,134 @@ begin
     ASTTk[unboxCall] := Ord(tyAnsiString);
     ASTLeft[unboxCall] := unboxArg;
     Result := PyParseStrMethod(unboxCall, mname);
+    Exit;
+  end;
+  { A FLOAT method on a variant receiver, when no class declares the name —
+    is_integer / conjugate / as_integer_ratio today. The str-first block above,
+    with pyvar_is_floattag for the guard and pyvar_to_float for the unbox: a
+    genuine float reaches the intrinsic, anything else raises AttributeError
+    naming the method, which is what CPython does.
+
+    The class-declared case (`hex`, which TPyBytes carries) is NOT handled here
+    — it falls through to the closed-world dispatcher and is answered by the
+    float ARM near the end of this function, exactly as a class-declared str
+    name is. Two entry points for one concept, but they are the two the str
+    path already has and for the same reason: this one exists because the
+    dispatcher's "no class declares" arm is a hard compile ERROR, and a float
+    receiver has no class to declare anything.
+    bug-nilpy-float-methods-are-invisible-to-the-runtime-dispatcher }
+  if PyIsFloatMethodName(LowerCase(mname)) and
+     not PyAnyClassDeclaresMeth(mname) then
+  begin
+    smTmpSym := AllocVar(PyHiddenName('fl'), tyVariant);
+    smAsgn := AllocNode(AN_ASSIGN);
+    ASTLeft[smAsgn] := PyMakeIdent(smTmpSym);
+    ASTRight[smAsgn] := baseNode;
+    PyHoistStmt(smAsgn);
+    baseNode := PyMakeIdent(smTmpSym);
+
+    i := FindProc('pyvar_is_floattag');
+    if i < 0 then Error('Nil Python: pylib (pyvar_is_floattag) not loaded');
+    smGuardArg := AllocNode(AN_ARG); ASTLeft[smGuardArg] := PyMakeIdent(smTmpSym);
+    smGuardCall := AllocNode(AN_CALL);
+    ASTIVal[smGuardCall] := i; ASTTk[smGuardCall] := Ord(tyBoolean);
+    ASTLeft[smGuardCall] := smGuardArg;
+    { An INT receiver is legitimate for the three names int shares, and only
+      the runtime tag says which the variant holds — so the guard admits both
+      tags and the VALUE below picks the flavour with the same test. Without
+      this, `for v in [1, 2.5]: v.is_integer()` raised on the int and answered
+      on the float, which is precisely the asymmetry this ticket is about, one
+      type over. }
+    flArmPossible := PyIsIntFloatSharedMethodName(LowerCase(mname));
+    if flArmPossible then
+    begin
+      i := FindProc('pyvar_is_inttag');
+      if i < 0 then Error('Nil Python: pylib (pyvar_is_inttag) not loaded');
+      flArg1 := AllocNode(AN_ARG); ASTLeft[flArg1] := PyMakeIdent(smTmpSym);
+      flGuardCall := AllocNode(AN_CALL);
+      ASTIVal[flGuardCall] := i; ASTTk[flGuardCall] := Ord(tyBoolean);
+      ASTLeft[flGuardCall] := flArg1;
+      flOrNode := AllocNode(AN_BINOP);
+      ASTIVal[flOrNode] := Ord(tkOr);
+      ASTLeft[flOrNode] := smGuardCall;
+      ASTRight[flOrNode] := flGuardCall;
+      ASTTk[flOrNode] := Ord(tyBoolean);
+      smNotNode := AllocNode(AN_NOT);
+      ASTLeft[smNotNode] := flOrNode; ASTTk[smNotNode] := Ord(tyBoolean);
+    end
+    else
+    begin
+      smNotNode := AllocNode(AN_NOT);
+      ASTLeft[smNotNode] := smGuardCall; ASTTk[smNotNode] := Ord(tyBoolean);
+    end;
+
+    i := FindProc('pydynattr_no_method');
+    if i < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
+    smNameArg := AllocNode(AN_STR_LIT);
+    ASTSOffset[smNameArg] := PyStoredName(mname);
+    ASTSLen[smNameArg] := Length(mname);
+    ASTTk[smNameArg] := Ord(tyString);
+    smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
+    smArg1 := AllocNode(AN_ARG); ASTLeft[smArg1] := PyMakeIdent(smTmpSym); ASTRight[smArg1] := smArg2;
+    smRaiseCall := AllocNode(AN_CALL);
+    ASTIVal[smRaiseCall] := i; ASTTk[smRaiseCall] := Ord(tyUnknown);
+    ASTLeft[smRaiseCall] := smArg1;
+
+    smIfNode := AllocNode(AN_IF);
+    ASTLeft[smIfNode] := smNotNode;
+    smPairNode := AllocNode(AN_PAIR);
+    ASTLeft[smPairNode] := smRaiseCall; ASTRight[smPairNode] := -1;
+    ASTRight[smIfNode] := smPairNode;
+    PyHoistStmt(smIfNode);
+
+    i := FindProc('pyvar_to_float');
+    if i < 0 then Error('Nil Python: pylib (pyvar_to_float) not loaded');
+    unboxArg := AllocNode(AN_ARG);
+    ASTLeft[unboxArg] := baseNode;
+    unboxCall := AllocNode(AN_CALL);
+    ASTIVal[unboxCall] := i;
+    ASTTk[unboxCall] := Ord(tyDouble);
+    ASTLeft[unboxCall] := unboxArg;
+    Result := PyParseFloatMethod(unboxCall, LowerCase(mname), False);
+    if flArmPossible then
+    begin
+      { the int flavour of the same call, chosen at run time by the tag —
+        `pyvar_is_floattag(v) ? <float form> : <int form>`. The arguments were
+        already consumed by PyParseFloatMethod above (all three take none), so
+        the two forms cannot disagree about what was parsed. }
+      i := FindProc('pyvar_to_int');
+      if i < 0 then Error('Nil Python: pylib (pyvar_to_int) not loaded');
+      flUnboxArg := AllocNode(AN_ARG);
+      ASTLeft[flUnboxArg] := PyMakeIdent(smTmpSym);
+      flUnboxCall := AllocNode(AN_CALL);
+      ASTIVal[flUnboxCall] := i;
+      ASTTk[flUnboxCall] := Ord(tyInt64);
+      ASTLeft[flUnboxCall] := flUnboxArg;
+      flCall := PyMakeFloatMethodOn(flUnboxCall, LowerCase(mname), True);
+
+      i := FindProc('pyvar_is_floattag');
+      if i < 0 then Error('Nil Python: pylib (pyvar_is_floattag) not loaded');
+      flArg1 := AllocNode(AN_ARG); ASTLeft[flArg1] := PyMakeIdent(smTmpSym);
+      flGuardCall := AllocNode(AN_CALL);
+      ASTIVal[flGuardCall] := i; ASTTk[flGuardCall] := Ord(tyBoolean);
+      ASTLeft[flGuardCall] := flArg1;
+
+      flPairNode := AllocNode(AN_PAIR);
+      ASTLeft[flPairNode] := Result;
+      ASTRight[flPairNode] := flCall;
+      flTern := AllocNode(AN_TERNARY);
+      ASTLeft[flTern] := flGuardCall;
+      ASTRight[flTern] := flPairNode;
+      { `is_integer` agrees (Boolean both ways) and `conjugate` does not
+        (Double vs Int64) — a disagreeing pair is genuinely dynamic, exactly as
+        every other arm in this function decides it. }
+      if IntToTypeKind(ASTTk[Result]) <> IntToTypeKind(ASTTk[flCall]) then
+        ASTTk[flTern] := Ord(tyVariant)
+      else
+        ASTTk[flTern] := ASTTk[Result];
+      LastExprTk := IntToTypeKind(ASTTk[flTern]);
+      Result := flTern;
+    end;
     Exit;
   end;
   { Python's dict views on a VARIANT receiver. The typed path (parser.inc's
@@ -13873,6 +14058,48 @@ begin
     ASTRight[smNotNode] := smGuardCall;
     ASTTk[smNotNode] := Ord(tyBoolean);
     vtGuardCall := smNotNode;
+  end;
+  { …and the same widening for a FLOAT receiver, for the four float methods.
+    Same reasoning as the str arm above and the same fixup below when the arm
+    turns out not to fit: the guard is hoisted BEFORE the argument list is
+    parsed, so it can only be widened by NAME here, and all four names take no
+    arguments. `hex` is why this is a tag arm and not a name-only intercept —
+    bytes.hex() is a real method that must keep reaching TPyBytes, and it does:
+    that receiver carries tag 7 and lands on the class arms.
+    bug-nilpy-float-methods-are-invisible-to-the-runtime-dispatcher }
+  flArmPossible := PyIsFloatMethodName(LowerCase(mname));
+  if flArmPossible then
+  begin
+    i := FindProc('pyvar_is_floattag');
+    if i < 0 then Error('Nil Python: pylib (pyvar_is_floattag) not loaded');
+    flArg1 := AllocNode(AN_ARG); ASTLeft[flArg1] := PyMakeIdent(vtTmpSym);
+    flGuardCall := AllocNode(AN_CALL);
+    ASTIVal[flGuardCall] := i; ASTTk[flGuardCall] := Ord(tyBoolean);
+    ASTLeft[flGuardCall] := flArg1;
+    { …and the INT tag for the three names int shares, same as the float-first
+      block above: a user class declaring `is_integer` is what routes the call
+      here, and an int in the same container must still answer. }
+    if PyIsIntFloatSharedMethodName(LowerCase(mname)) then
+    begin
+      i := FindProc('pyvar_is_inttag');
+      if i < 0 then Error('Nil Python: pylib (pyvar_is_inttag) not loaded');
+      flArg2 := AllocNode(AN_ARG); ASTLeft[flArg2] := PyMakeIdent(vtTmpSym);
+      flUnboxCall := AllocNode(AN_CALL);
+      ASTIVal[flUnboxCall] := i; ASTTk[flUnboxCall] := Ord(tyBoolean);
+      ASTLeft[flUnboxCall] := flArg2;
+      flOrNode := AllocNode(AN_BINOP);
+      ASTIVal[flOrNode] := Ord(tkOr);
+      ASTLeft[flOrNode] := flGuardCall;
+      ASTRight[flOrNode] := flUnboxCall;
+      ASTTk[flOrNode] := Ord(tyBoolean);
+      flGuardCall := flOrNode;
+    end;
+    flOrNode := AllocNode(AN_BINOP);
+    ASTIVal[flOrNode] := Ord(tkOr);
+    ASTLeft[flOrNode] := vtGuardCall;
+    ASTRight[flOrNode] := flGuardCall;
+    ASTTk[flOrNode] := Ord(tyBoolean);
+    vtGuardCall := flOrNode;
   end;
   vtNotNode := AllocNode(AN_NOT);
   ASTLeft[vtNotNode] := vtGuardCall; ASTTk[vtNotNode] := Ord(tyBoolean);
@@ -14360,6 +14587,138 @@ begin
       Result := tern;
       smArmBuilt := True;
     end;
+  end;
+  { THE FLOAT ARM — `pyvar_is_floattag(recv) ? <float method> : <everything
+    above>`. The str arm's construction with one substitution: the receiver is
+    unboxed with pyvar_to_float rather than rendered with pystr_of, and the four
+    names take no arguments, so the arity test is `i = 0` rather than a row
+    lookup. Added after the str arm, which makes IT the outermost test; the two
+    name sets are disjoint (str has no hex/is_integer/conjugate/
+    as_integer_ratio), so the order is not load-bearing today and the nesting is
+    kept in one direction on purpose.
+
+    The value this fixes is the ordinary one: `for v in vals: print(v.hex())`.
+    A loop variable, a list element and an unannotated parameter are all
+    variants, and the static intercepts that claim these four names need a
+    receiver they can type. }
+  if flArmPossible and (i = 0) then
+  begin
+    flUnboxArg := AllocNode(AN_ARG);
+    ASTLeft[flUnboxArg] := PyMakeIdent(vtTmpSym);
+    flUnboxCall := AllocNode(AN_CALL);
+    ASTIVal[flUnboxCall] := FindProc('pyvar_to_float');
+    if ASTIVal[flUnboxCall] < 0 then
+      Error('Nil Python: pylib (pyvar_to_float) not loaded');
+    ASTTk[flUnboxCall] := Ord(tyDouble);
+    ASTLeft[flUnboxCall] := flUnboxArg;
+
+    flCall := PyMakeFloatMethodOn(flUnboxCall, LowerCase(mname), False);
+
+    { the int flavour, chosen at run time by the tag — the same two-form shape
+      the float-first block builds, here nested INSIDE the arm so the class
+      candidates stay the outer alternative. }
+    if PyIsIntFloatSharedMethodName(LowerCase(mname)) then
+    begin
+      k := FindProc('pyvar_to_int');
+      if k < 0 then Error('Nil Python: pylib (pyvar_to_int) not loaded');
+      flArg2 := AllocNode(AN_ARG); ASTLeft[flArg2] := PyMakeIdent(vtTmpSym);
+      flUnboxCall := AllocNode(AN_CALL);
+      ASTIVal[flUnboxCall] := k; ASTTk[flUnboxCall] := Ord(tyInt64);
+      ASTLeft[flUnboxCall] := flArg2;
+      flRaiseCall := PyMakeFloatMethodOn(flUnboxCall, LowerCase(mname), True);
+
+      k := FindProc('pyvar_is_floattag');
+      if k < 0 then Error('Nil Python: pylib (pyvar_is_floattag) not loaded');
+      flArg1 := AllocNode(AN_ARG); ASTLeft[flArg1] := PyMakeIdent(vtTmpSym);
+      flNotNode := AllocNode(AN_CALL);
+      ASTIVal[flNotNode] := k; ASTTk[flNotNode] := Ord(tyBoolean);
+      ASTLeft[flNotNode] := flArg1;
+
+      flPair2 := AllocNode(AN_PAIR);
+      ASTLeft[flPair2] := flCall;
+      ASTRight[flPair2] := flRaiseCall;
+      flOrNode := AllocNode(AN_TERNARY);
+      ASTLeft[flOrNode] := flNotNode;
+      ASTRight[flOrNode] := flPair2;
+      if IntToTypeKind(ASTTk[flCall]) <> IntToTypeKind(ASTTk[flRaiseCall]) then
+        ASTTk[flOrNode] := Ord(tyVariant)
+      else
+        ASTTk[flOrNode] := ASTTk[flCall];
+      flCall := flOrNode;
+    end;
+
+    k := FindProc('pyvar_is_floattag');
+    if k < 0 then Error('Nil Python: pylib (pyvar_is_floattag) not loaded');
+    flArg1 := AllocNode(AN_ARG); ASTLeft[flArg1] := PyMakeIdent(vtTmpSym);
+    flGuardCall := AllocNode(AN_CALL);
+    ASTIVal[flGuardCall] := k; ASTTk[flGuardCall] := Ord(tyBoolean);
+    ASTLeft[flGuardCall] := flArg1;
+    if PyIsIntFloatSharedMethodName(LowerCase(mname)) then
+    begin
+      k := FindProc('pyvar_is_inttag');
+      if k < 0 then Error('Nil Python: pylib (pyvar_is_inttag) not loaded');
+      flArg2 := AllocNode(AN_ARG); ASTLeft[flArg2] := PyMakeIdent(vtTmpSym);
+      flNotNode := AllocNode(AN_CALL);
+      ASTIVal[flNotNode] := k; ASTTk[flNotNode] := Ord(tyBoolean);
+      ASTLeft[flNotNode] := flArg2;
+      flOrNode := AllocNode(AN_BINOP);
+      ASTIVal[flOrNode] := Ord(tkOr);
+      ASTLeft[flOrNode] := flGuardCall;
+      ASTRight[flOrNode] := flNotNode;
+      ASTTk[flOrNode] := Ord(tyBoolean);
+      flGuardCall := flOrNode;
+    end;
+
+    flPairNode := AllocNode(AN_PAIR);
+    ASTLeft[flPairNode] := flCall;
+    ASTRight[flPairNode] := Result;
+    flTern := AllocNode(AN_TERNARY);
+    ASTLeft[flTern] := flGuardCall;
+    ASTRight[flTern] := flPairNode;
+    { Same rule as every other arm: the type of the WHOLE chain. `hex` returns
+      a string and `is_integer` a boolean, so an arm that disagrees with the
+      class arm makes the expression genuinely dynamic — typing it from either
+      side alone is how a value gets silently stringified to nothing. }
+    if IntToTypeKind(ASTTk[flCall]) <> IntToTypeKind(ASTTk[Result]) then
+      ASTTk[flTern] := Ord(tyVariant)
+    else
+      ASTTk[flTern] := ASTTk[flCall];
+    LastExprTk := IntToTypeKind(ASTTk[flTern]);
+    Result := flTern;
+    flArmBuilt := True;
+  end;
+  { The float half of the unkept-promise fixup below: the guard was widened to
+    let a float receiver through, and if no arm was built (the call wrote
+    arguments, which none of the four take) a float receiver would reach the
+    hard object cast. Put the raise back for exactly that case. }
+  if flArmPossible and (not flArmBuilt) then
+  begin
+    k := FindProc('pyvar_is_floattag');
+    if k < 0 then Error('Nil Python: pylib (pyvar_is_floattag) not loaded');
+    flArg1 := AllocNode(AN_ARG); ASTLeft[flArg1] := PyMakeIdent(vtTmpSym);
+    flGuardCall := AllocNode(AN_CALL);
+    ASTIVal[flGuardCall] := k; ASTTk[flGuardCall] := Ord(tyBoolean);
+    ASTLeft[flGuardCall] := flArg1;
+
+    k := FindProc('pydynattr_no_method');
+    if k < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
+    flNotNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[flNotNode] := PyStoredName(mname);
+    ASTSLen[flNotNode] := Length(mname);
+    ASTTk[flNotNode] := Ord(tyString);
+    flArg2 := AllocNode(AN_ARG); ASTLeft[flArg2] := flNotNode; ASTRight[flArg2] := -1;
+    flArg1 := AllocNode(AN_ARG); ASTLeft[flArg1] := PyMakeIdent(vtTmpSym);
+    ASTRight[flArg1] := flArg2;
+    flRaiseCall := AllocNode(AN_CALL);
+    ASTIVal[flRaiseCall] := k; ASTTk[flRaiseCall] := Ord(tyUnknown);
+    ASTLeft[flRaiseCall] := flArg1;
+
+    flIfNode := AllocNode(AN_IF);
+    ASTLeft[flIfNode] := flGuardCall;
+    flPair2 := AllocNode(AN_PAIR);
+    ASTLeft[flPair2] := flRaiseCall; ASTRight[flPair2] := -1;
+    ASTRight[flIfNode] := flPair2;
+    PyHoistStmt(flIfNode);
   end;
   { The objtag guard above was widened to let a STRING receiver through on the
     promise of a str arm. If no arm was built after all — the argument count

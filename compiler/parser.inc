@@ -992,9 +992,11 @@ function PyIterArgAsList(n: Integer): Integer; forward; { Nil Python: explode a 
 function PyIsIntBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: is this an int base for .to_bytes? (pyparser.inc) }
 function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>.to_bytes(...) intrinsic (pyparser.inc) }
 function PyParseIntMethod(baseNode: Integer; const nm: AnsiString): Integer; forward; { Nil Python intercepted int method (pyparser.inc) }
-function PyParseFloatMethod(baseNode: Integer; const nm: AnsiString): Integer; forward; { Nil Python intercepted float method (pyparser.inc) }
+function PyParseFloatMethod(baseNode: Integer; const nm: AnsiString; asInt: Boolean): Integer; forward; { Nil Python intercepted float method (pyparser.inc) }
 function PyIsFloatMethodName(const nm: AnsiString): Boolean; forward; { Nil Python: is_integer/hex/as_integer_ratio/conjugate (pyparser.inc) }
 function PyIsFloatBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: a STATICALLY float receiver (pyparser.inc) }
+function PyIsFloatMethodBaseTk(tk: TTypeKind; const nm: AnsiString): Boolean; forward; { ...plus int for the three names it shares }
+function PyIsIntFloatSharedMethodName(const nm: AnsiString): Boolean; forward; { is_integer / as_integer_ratio / conjugate }
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
 function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
@@ -5982,10 +5984,10 @@ begin
         bytes.hex(). bug-a-bytes-has-almost-none-of-its-python-methods }
       if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
          PyIsFloatMethodName(LowerCase(fieldName)) and
-         PyIsFloatBaseTk(tk) then
+         PyIsFloatMethodBaseTk(tk, LowerCase(fieldName)) then
       begin
         Next;   { consume the method name; CurTok is now the '(' }
-        node := PyParseFloatMethod(node, LowerCase(fieldName));
+        node := PyParseFloatMethod(node, LowerCase(fieldName), PyIsIntBaseTk(tk));
         tk := IntToTypeKind(ASTTk[node]);
         recName := ASTRight[node];
         Continue;
@@ -16415,12 +16417,14 @@ begin
         (Tokens[TokPos].Kind = tkIdent) and
         PyIsFloatMethodName(LowerCase(GetTokenStr(TokPos))) and
         (Tokens[TokPos + 1].Kind = tkLParen) and
-        PyIsFloatBaseTk(IntToTypeKind(ASTTk[CurASTNode])) do
+        PyIsFloatMethodBaseTk(IntToTypeKind(ASTTk[CurASTNode]),
+                              LowerCase(GetTokenStr(TokPos))) do
   begin
     smBase := CurASTNode;
     smName := LowerCase(GetTokenStr(TokPos));
     Next; Next;                 { '.' and the name; CurTok = '(' }
-    CurASTNode := PyParseFloatMethod(smBase, smName);
+    CurASTNode := PyParseFloatMethod(smBase, smName,
+                     PyIsIntBaseTk(IntToTypeKind(ASTTk[smBase])));
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and

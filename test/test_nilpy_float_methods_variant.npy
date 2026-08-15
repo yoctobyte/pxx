@@ -1,0 +1,62 @@
+# The four float methods on a VARIANT receiver — a loop variable, a dict value,
+# an unannotated parameter. They worked on a statically float name and raised
+# `AttributeError: 'float' object has no attribute 'hex'` on every other shape,
+# which is the ordinary one: `for v in vals: print(v.hex())`.
+# bug-nilpy-float-methods-are-invisible-to-the-runtime-dispatcher
+#
+# Every value below is CPython 3's on this same source. 1e300 is deliberately
+# absent: its as_integer_ratio numerator does not fit 64 bits and pxx raises
+# OverflowError there by design (devdocs/dev/nilpy-semantics-divergences.md) —
+# test_nilpy_float_methods pins the STATIC receivers and says the same.
+
+vals = [2.0, 0.1, -1.5, 0.0, -0.0]
+for v in vals:
+    print(v.hex(), v.is_integer(), v.conjugate(), v.as_integer_ratio())
+
+# bytes.hex() is a DIFFERENT method of the same name and keeps working: that
+# receiver carries the object tag, so it lands on the class arms rather than on
+# the float arm. This is the pair the fix has to satisfy at once — a name-only
+# intercept would steal it.
+print(b"ab".hex(), bytearray(b"\x00\xff").hex())
+
+def f(x):
+    return x.is_integer()
+
+print(f(4.0), f(4.5))
+
+d = {"a": 2.5}
+print(d["a"].hex(), d["a"].is_integer())
+
+# A user class declaring the same names must still win on ITS OWN instances,
+# while the float in the same list takes the float arm. Both directions in one
+# loop, because a fix that got only one of them would still pass a one-sided
+# test.
+class C:
+    def is_integer(self):
+        return "mine"
+    def hex(self):
+        return "myhex"
+
+for x in [C(), 2.0]:
+    print(x.is_integer(), x.hex())
+
+# ...and a receiver that is neither raises, rather than being stringified into
+# a plausible answer.
+n = None
+try:
+    n.hex()
+except AttributeError:
+    print("AttributeError on None")
+
+# THE INT HALF. CPython 3.12 gives int these same three (not hex), and their
+# results are int-flavoured — (3, 1) and 3, never (3.0, 1.0) and 3.0 — so they
+# are separate pylib entry points rather than a cast into the float ones.
+n = 3
+print(n.is_integer(), n.as_integer_ratio(), n.conjugate())
+print((3).is_integer(), (-7).as_integer_ratio(), (0).conjugate())
+print(n.bit_length())
+
+# ...and the mixed list, which is the shape that says the choice is made at RUN
+# time from the tag and not once at compile time from the first element.
+for v in [1, 2.5]:
+    print(v.is_integer(), v.as_integer_ratio(), v.conjugate())
