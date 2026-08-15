@@ -1994,6 +1994,12 @@ test-nilpy: $(COMPILER)
 	# pointer, because the intrinsic was gated on the name not resolving at all.
 	./$(COMPILER) test/test_nilpy_abs_under_import_math.npy $(TESTTMP)/test_nilpy_absim26
 	$(TESTTMP)/test_nilpy_absim26 | diff -u test/test_nilpy_abs_under_import_math.expected -
+	# ...and the general rule under it: `import math` binds the NAME math, it does
+	# not publish the unit's routines into the Python builtin namespace. max(1.5, 2)
+	# answered 2.0 and the min/max TIE came back reversed. Qualified math.X still
+	# reaches the RTL — that is what the import binds.
+	./$(COMPILER) test/test_nilpy_import_does_not_publish_names.npy $(TESTTMP)/test_nilpy_impub26
+	$(TESTTMP)/test_nilpy_impub26 | diff -u test/test_nilpy_import_does_not_publish_names.expected -
 	@# float formatting rounds ties to EVEN: "%.0f" % 7.5 is 8, not 7 — it used
 	@# to round the FRACTION alone, which loses the parity half-even needs
 	./$(COMPILER) test/test_nilpy_format_half_even.npy $(TESTTMP)/test_nilpy_halfeven26

@@ -718,6 +718,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-identifiers-are-case-insensitive | N | 80 | bug | NilPy identifiers are case-INSENSITIVE; Python's are case-sensitive | — |
 | bug-nilpy-immediately-invoked-lambda-is-not-callable | N | 55 | bug | `(lambda a, b: a - b)(9, 4)` raises TypeError: object is not callable, and a zero-arg `(lambda: 7)()` does not even parse. The identical lambda bound to a NAME first is fine | — |
 | bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float | N | 55 | bug | A function with no `return` yields UNINITIALIZED garbage, not None | — |
+| bug-nilpy-import-leaks-the-units-names-into-the-python-namespace | A | 50→55 | bug | NilPy implements `import math` as `ParseUsesUnit('math')`, so every routine lib/rtl/math declares becomes visible UNQUALIFIED in the user's Python namespace and competes with the Python builtin of the same name. `max(1.5, 2)` answers 2.0 instead of 2. Python's `import X` binds only the name `X`. | — |
 | bug-nilpy-import-lost-after-a-fallback-import-block | N | 70 | bug | A C library's function name shadows a Python module name as a qualifier | — |
 | bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |

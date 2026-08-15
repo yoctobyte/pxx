@@ -2152,6 +2152,22 @@ var
     real `uses`/`import` clauses too. }
   AmbientUnitIdx   : array[0..255] of Integer;   { was 32: ambience became transitive over the compiler-injected runtime graph, which is deeper than the handful of roots }
   AmbientUnitCount : Integer;
+  { Every PASCAL unit a NilPy `import` pulled in. Python's `import math` binds
+    exactly ONE name — `math` — and does NOT put the module's contents into the
+    importing module's namespace; that is what `from math import *` is for, and
+    nobody writes it. NilPy implements the import as ParseUsesUnit, which is
+    Pascal's `uses`, so lib/rtl/math's Abs/Min/Max/Round/Sqrt joined the
+    candidate set for every Python builtin of the same name — and which one won
+    was decided by overload ranking over a file the user never opened
+    (bug-nilpy-import-leaks-the-units-names-into-the-python-namespace).
+    Marked at the Pascal branch of the unit resolver, so a `.py` MODULE import
+    and every Pascal `uses` are untouched. Read by DeclVisible, which skips
+    these rows while NilPy USER code is being compiled; QualNameLookup turns
+    that off for the frontend's own by-name lookups (`math.pow` -> Power). }
+  QualOnlyUnitIdx   : array[0..255] of Integer;
+  QualOnlyUnitCount : Integer;
+  PyImportPending   : Boolean;   { a NilPy plain `import` is resolving right now }
+  QualNameLookup    : Boolean;   { this lookup IS the qualified one — do not hide }
   { Every C TRANSLATION UNIT the program pulled in. C has no `uses`: its
     external-linkage names live in ONE flat namespace shared by every TU, and
     an `extern` prototype in one .c binding to a definition in another .c is

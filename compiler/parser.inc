@@ -32914,6 +32914,12 @@ begin
     NestedComments := True;
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
+    { A PASCAL unit reached through a NilPy plain `import` is qualified-only —
+      `import math` binds the name `math`, not the module's contents. Marked
+      here, in the Pascal branch alone: a `.py` module import and every Pascal
+      `uses` never reach this line with the flag set.
+      bug-nilpy-import-leaks-the-units-names-into-the-python-namespace }
+    if PyImportPending then MarkUnitQualifiedOnly(strIdx);
 
     { Pascal `{$define}` is scoped to the UNIT that writes it (like FPC/Delphi
       and like a C translation unit) — save the define table now and restore

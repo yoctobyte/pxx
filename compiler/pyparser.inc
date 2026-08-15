@@ -10466,8 +10466,15 @@ begin
     Only this one name asks, so no other stdlib shim changes its answer.
     bug-n-math-trunc-and-log-need-frontend-intercepts }
   procIdx := -1;
+  { THIS lookup is the qualified one. `math.sqrt` names the module explicitly,
+    so the unit's names are reachable here even though a NilPy `import` makes
+    them invisible to bare-name resolution — that is the whole distinction
+    QualNameLookup carries.
+    bug-nilpy-import-leaks-the-units-names-into-the-python-namespace }
+  QualNameLookup := True;
   if pname = 'Power' then procIdx := FindProcArityDouble(pname, 2);
   if procIdx < 0 then procIdx := FindProc(pname);
+  QualNameLookup := False;
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
   for i := 1 to nTok do Next;          { the dotted name; CurTok = '(' }
   Expect(tkLParen, '(');
@@ -31172,7 +31179,16 @@ begin
               CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
               CaseEqual(impRoot, 'typing') or CaseEqual(impRoot, 'random') or
               CaseEqual(impRoot, 'itertools')) then
+      begin
+        { A PLAIN `import X` binds one name. If X resolves to a PASCAL unit, its
+          contents must NOT join the Python builtin namespace — see
+          PyImportPending. `from X import a, b` is a different statement and is
+          left alone: it names what it publishes, which is the whole point of
+          writing it. }
+        PyImportPending := True;
         ParseUsesUnit(impName);
+        PyImportPending := False;
+      end;
       if PyIsIdent('as') then
       begin
         Next;
@@ -31401,7 +31417,13 @@ begin
            CaseEqual(impRoot, 'itertools') then
           { skip }
         else
+        begin
+          { plain `import X` — qualified-only if X is a Pascal unit; see
+            PyImportPending and the twin site in PyParseOneImport }
+          PyImportPending := True;
           ParseUsesUnit(impName);
+          PyImportPending := False;
+        end;
         { `import X as Y` — Python's module alias, and the same thing a Pascal
           `uses X as Y` already does (feature-uses-alias-as): register the alias
           with the unit resolver so a `Y.Sym` qualifier resolves onto X's

@@ -1,0 +1,37 @@
+# Python's `import math` binds exactly ONE name: `math`. It does NOT put the
+# module's contents into the importing module's namespace — that is what
+# `from math import *` is for, and nobody writes it.
+#
+# NilPy implemented the import as ParseUsesUnit, which is Pascal's `uses`, so
+# every routine lib/rtl/math declares joined the candidate set for the Python
+# builtin of the same name — and which one won was decided by overload ranking
+# over a file the user never opened:
+#
+#   max(1.5, 2)      -> 2.0   where CPython answers 2 (the ARGUMENT, int)
+#   min(-0.0, 0.0)   -> the LAST of an equal pair, where CPython returns the first
+#   abs([-0.0][0])   -> a pointer printed as a number (fixed separately)
+#
+# bug-nilpy-import-leaks-the-units-names-into-the-python-namespace
+import math
+
+# max/min return the ARGUMENT, so the int survives — the row that was 2.0
+print(min(1.5, 2), max(1.5, 2), max(2, 1.5), min(2, 1.5))
+
+# the TIE: CPython returns the FIRST of an equal pair, math's Min/Max the last
+print(min(-0.0, 0.0), max(-0.0, 0.0))
+print(min(0.0, -0.0), max(0.0, -0.0))
+
+# the rest of the set math.pas also declares and NilPy also has a builtin for
+print(abs(-1.5), abs(-0.0), abs(-3), round(2.5), round(-1.5))
+print(min([3, 1, 2]), max([3, 1, 2]), min(3, 1, 2), max(3, 1, 2))
+print(sum([1.5, 2.5]), sum([1, 2, 3]))
+
+# ...and the QUALIFIED spellings, which must keep reaching the RTL: naming the
+# module is exactly what the import binds.
+print(math.floor(-1.5), math.ceil(-1.5), math.sqrt(2.0))
+print(math.fabs(-2.5), math.trunc(2.7), math.copysign(1.0, -0.0))
+print(math.log(math.e), math.log10(100.0), math.pi)
+
+# an aliased import resolves the same way
+import math as m
+print(m.floor(2.7))
