@@ -5273,13 +5273,16 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-15T02:47:40Z",
+  "date": "2026-08-15T08:22:10Z",
   "red": [
-   "test-nilpy#621"
+   "test-core#1056",
+   "test-nilpy#24",
+   "test-nilpy#203",
+   "test-nilpy#649"
   ],
-  "sha": "7e7266d27e8154144034bf5c083ccce9960510b3",
+  "sha": "f11e0ed9816edc1d57ef8ee6e6ab0e5b9885db6c",
   "tier": "full",
-  "ver": "v323",
+  "ver": "v339",
   "verdict": "RED"
  },
  "renamed_from": [
