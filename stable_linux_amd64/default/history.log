@@ -310,3 +310,4 @@
 2026-08-14T23:46:29Z  v310  289699034bf56592576202e592132a1427ba7b19c01847994cc65dabab9a7a94  ce8b1582352a2a172c41bcf639c8a9d31539ebd6  docs(progress): record the shas the resolves landed as
 2026-08-14T23:56:30Z  v311  2e1de97942eeb3d8fbdefa54e4dbc33621157444f4ea95ec1b4ed12ca2b83541  d7038c2bfce2c0c7bbfd87feef2a109b7a713433  docs(progress): record the shas the resolves landed as
 2026-08-15T00:02:09Z  v312  2e1de97942eeb3d8fbdefa54e4dbc33621157444f4ea95ec1b4ed12ca2b83541  738945e6555143424ca0051adb7b2b6c4dcf5e0d  docs(progress): record the shas the resolves landed as
+2026-08-15T00:07:32Z  v313  fe822c9ee9316b7b84dfae60029fdf0d191e346f6bdcaf156ee2d46453532115  ffc733275cfb9c4fb5995a13a0cdde8ddd6eaf30  fix(N): user iterables reach the conversion points (zip, enumerate, join)
