@@ -99,3 +99,27 @@ class S:
 sv = S()
 sv.x, sv.y = 3, 4
 print(sv.x, sv.y)
+
+
+# A ONE-NAME tuple target — `(x,)` with the trailing comma — is a 1-tuple
+# UNPACK, not a name with meaningless parens around it, so it binds the
+# element's single member. bug-nilpy-a-one-name-tuple-loop-target-is-refused
+for (only,) in [(1,), (2,)]:
+    print("one", only)
+
+# the trailing comma is legal on a longer group too, and changes nothing there
+for (a, b,) in [(5, 6)]:
+    print("two", a, b)
+
+# ...while a group WITHOUT the comma keeps having its parens stripped, so the
+# names bind positionally exactly as before
+for (a, b) in [(7, 8)]:
+    print("plain", a, b)
+
+# and a single name with no comma still binds the whole element
+for x in [(9,)]:
+    print("whole", x)
+
+# a one-name group nested beside another target
+for n, (only,) in [(0, (1,)), (1, (2,))]:
+    print("nested", n, only)

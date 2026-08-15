@@ -18517,7 +18517,7 @@ function PyParseForTargetSlot(slot: Integer): AnsiString;
   keyed end to end on a flat list of names, and a nested group is exactly the
   index-unpack it already performs for `for a, b in pairs`, one level down.
   feature-nilpy-starred-and-nested-unpacking }
-var n: Integer;
+var n: Integer; trailComma: Boolean;
 begin
   if (slot >= 0) and (slot <= PY_FOR_NEST_SLOTS) then PyForNestCount[slot] := 0;
   if CurTok.Kind = tkStar then
@@ -18535,6 +18535,7 @@ begin
     Error('Nil Python: too many names in a for target');
   Next;                                  { '(' }
   n := 0;
+  trailComma := False;
   repeat
     if CurTok.Kind = tkStar then
       Error('Nil Python: a STARRED name inside a nested loop target is not '
@@ -18549,9 +18550,16 @@ begin
     PyForNestName[slot][n] := CurTok.SVal;
     Inc(n);
     Next;
-  until not Eat(tkComma);
+    if not Eat(tkComma) then Break;
+    { a TRAILING comma — `(only,)`, and also the legal `(a, b,)`. For ONE name
+      it is what makes the target a 1-tuple UNPACK rather than a plain name:
+      `for (only,) in [(1,)]` binds 1, not (1,). That is why it is remembered
+      rather than merely tolerated.
+      bug-nilpy-a-one-name-tuple-loop-target-is-refused }
+    if CurTok.Kind = tkRParen then begin trailComma := True; Break; end;
+  until False;
   Expect(tkRParen, ')');
-  if n < 2 then
+  if (n < 2) and (not trailComma) then
     Error('Nil Python: a nested loop target needs at least two names');
   PyForNestCount[slot] := n;
   Result := PyHiddenName('nst');
@@ -18589,7 +18597,14 @@ begin
       else if Tokens[pScan].Kind = tkRParen then Dec(pDepth);
       Inc(pScan);
     end;
-    if (pDepth = 0) and (pScan < TokCount) and (Tokens[pScan].Kind = tkIn) then
+    { …but NOT when the group ends with a trailing comma. `for (a, b) in xs`
+      has meaningless parens and is stripped here; `for (only,) in xs` is a
+      1-tuple UNPACK, and stripping its parens would bind the whole element to
+      `only`. Left for PyParseForTargetSlot, which owns groups and now accepts
+      a one-name one when the comma is there.
+      bug-nilpy-a-one-name-tuple-loop-target-is-refused }
+    if (pDepth = 0) and (pScan < TokCount) and (Tokens[pScan].Kind = tkIn) and
+       ((pScan < 2) or (Tokens[pScan - 2].Kind <> tkComma)) then
     begin
       parenTarget := True;
       Next;
