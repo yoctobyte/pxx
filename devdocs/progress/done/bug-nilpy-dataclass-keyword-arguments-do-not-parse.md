@@ -157,4 +157,4 @@ decorator. Byte-identical to CPython. The five sibling dataclass tests re-run
 unchanged. `tools/gate.sh quick` GREEN, self-host byte-identical.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 6582d9a20.
