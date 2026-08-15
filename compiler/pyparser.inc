@@ -10142,6 +10142,50 @@ end;
   bug-a-fpc-seed-drift-emitasmx64-forward }
 function PyPylibMethodAlias(ci: Integer; const mname: AnsiString): AnsiString; forward;
 
+function PyMakePropRead(recvNode: Integer; const attr: AnsiString): Integer;
+{ `getattr(o, "p")` where `p` is a PROPERTY — the read the ordinary `o.p`
+  builds, reached from the one place that has only a NAME. Field-backed
+  properties become the backing-field read; method-backed ones the getter call.
+  -1 when the receiver has no user class or declares no such property, so the
+  caller keeps its dynamic-store path.
+
+  Without it, `getattr` and `hasattr` disagreed about the same name: reading
+  `e.args` worked, `hasattr(e, "args")` said False, and once hasattr learned
+  about properties `getattr(e, "args")` still raised AttributeError — trading a
+  wrongly-taken branch for a crash (bug-nilpy-hasattr-does-not-see-a-property). }
+var rec, ci, pri, i, fld: Integer; accName: AnsiString;
+begin
+  Result := -1;
+  if recvNode < 0 then Exit;
+  rec := ResolveNodeRec(recvNode);
+  if rec < REC_UCLASS_BASE then Exit;
+  ci := rec - REC_UCLASS_BASE;
+  pri := FindUProp(ci, attr);
+  if pri < 0 then Exit;
+  if UPropIsIndexed[pri] then Exit;        { needs an index nobody passed }
+  if UPropReadFLen[pri] > 0 then
+  begin
+    accName := '';
+    for i := 0 to UPropReadFLen[pri] - 1 do
+      AppendChar(accName, TokChars[UPropReadFOff[pri] + i]);
+    fld := AllocNode(AN_FIELD);
+    ASTLeft[fld] := recvNode;
+    ASTSOffset[fld] := UPropReadFOff[pri];
+    ASTSLen[fld] := UPropReadFLen[pri];
+    ASTTk[fld] := UPropTk[pri];
+    ASTRight[fld] := UPropRec[pri];
+    Result := fld;
+    Exit;
+  end;
+  if UPropReadMLen[pri] > 0 then
+  begin
+    accName := '';
+    for i := 0 to UPropReadMLen[pri] - 1 do
+      AppendChar(accName, TokChars[UPropReadMOff[pri] + i]);
+    Result := PyCallMeth1(ci, accName, recvNode, -1);
+  end;
+end;
+
 function PyAttrExists(recvNode: Integer; const attr: AnsiString): Boolean;
 var rec, ci: Integer; tk, rt: TTypeKind; pn, al: AnsiString; wa: Integer;
 begin
@@ -10153,6 +10197,13 @@ begin
   begin
     ci := rec - REC_UCLASS_BASE;
     if FindUMeth(ci, attr) >= 0 then begin PyAttrExists := True; Exit; end;
+    { a PROPERTY is a member too — `e.args` on an exception is one, and reading
+      it works, so answering False here made hasattr DISAGREE with the access
+      right next to it: `hasattr(e, "args")` was False while `e.args` printed
+      ('k',). A program that branches on hasattr took the wrong arm
+      (bug-nilpy-hasattr-does-not-see-a-property). FindUProp walks ancestors,
+      like FindUMeth. }
+    if FindUProp(ci, attr) >= 0 then begin PyAttrExists := True; Exit; end;
     { the Python spelling, which is what the user wrote: `d.keys()` reaches a
       pylib method under a different Pascal name, and the RTTI lookup the
       runtime predicate does knows only the Pascal one }

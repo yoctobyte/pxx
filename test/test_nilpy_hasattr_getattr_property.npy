@@ -1,0 +1,49 @@
+# hasattr/getattr must agree with the access beside them — PROPERTIES included.
+# bug-nilpy-hasattr-does-not-see-a-property: `e.args` read fine while
+# `hasattr(e, "args")` said False, so a program guarding with hasattr took the
+# wrong branch; teaching hasattr alone then made getattr RAISE for a name
+# hasattr had just approved, so both halves land together. Diffed against CPython.
+
+# hasattr must agree with the access beside it — properties included
+class T:
+    def __init__(self, c):
+        self._c = c
+    @property
+    def f(self):
+        return self._c * 2
+    def m(self):
+        return 1
+
+t = T(3)
+print(t.f, hasattr(t, "f"), hasattr(t, "m"), hasattr(t, "_c"), hasattr(t, "nope"))
+print(getattr(t, "f"), getattr(t, "nope", "dflt"))
+
+class U(T):
+    pass
+u = U(4)
+print(u.f, hasattr(u, "f"), hasattr(u, "nope"))
+
+e = KeyError("k")
+print(e.args, hasattr(e, "args"), hasattr(e, "nope"))
+try:
+    raise ValueError("v")
+except ValueError as ex:
+    print(ex.args, hasattr(ex, "args"), str(ex))
+
+# a property that is field-backed on a pylib class, and the setter side
+class WithBoth:
+    def __init__(self):
+        self.v = 1
+    @property
+    def double(self):
+        return self.v * 2
+
+w = WithBoth()
+print(w.double, hasattr(w, "double"), getattr(w, "double"), getattr(w, "double", 0))
+print(getattr(w, "v"), getattr(w, "gone", "d"))
+# hasattr/getattr agree for every shape on one object. NOT asserted for a
+# property: a COMPUTED name goes through the runtime dynamic-attribute
+# predicate, which is RTTI-based and cannot see properties —
+# bug-nilpy-a-computed-attribute-name-cannot-see-a-property.
+for nm in ["v", "gone"]:
+    print(nm, hasattr(w, nm), getattr(w, nm, "MISS"))

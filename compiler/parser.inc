@@ -947,6 +947,8 @@ function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) in
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
 function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
+{ getattr(o, "p") where p is a PROPERTY — the read `o.p` builds (pyparser.inc) }
+function PyMakePropRead(recvNode: Integer; const attr: AnsiString): Integer; forward;
 function PyAttrExists(recvNode: Integer; const attr: AnsiString): Boolean; forward; { Nil Python hasattr: field OR method OR str/int method (pyparser.inc) }
 function PyHasAttrClassChain(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr over a VARIANT receiver: run-time class test (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
@@ -9485,7 +9487,7 @@ end;
 procedure ParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
-    intBaseArg, atRecv, atFld, atDflt: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -11288,6 +11290,13 @@ begin
           index there would be read as an offset.
           bug-nilpy-hasattr-on-a-builtin-container-or-str-answers-false }
         atExists := (atFld >= 0) or ((not atIsGet) and PyAttrExists(atRecv, atName));
+        { a PROPERTY is neither a field nor a dynamic attribute: getattr must
+          build the read `o.p` builds, or it raises AttributeError for a name
+          hasattr (which does see properties) has just said yes to
+          (bug-nilpy-hasattr-does-not-see-a-property) }
+        atProp := -1;
+        if atFld < 0 then atProp := PyMakePropRead(atRecv, atName);
+        if atProp >= 0 then atExists := True;
         atDflt := -1;
         if CurTok.Kind = tkComma then
         begin
@@ -11296,6 +11305,12 @@ begin
           atDflt := CurASTNode;
         end;
         Expect(tkRParen, ')');
+        if atIsGet and (atProp >= 0) then
+        begin
+          CurASTNode := atProp;
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
         { An undeclared attribute may be set DYNAMICALLY at run time (on a
           variant OR a class instance), which a compile-time field check cannot
           see — resolve hasattr/getattr through the dynamic-attribute store. A
