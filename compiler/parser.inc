@@ -30670,8 +30670,14 @@ begin
           EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + j * 4);
         end;
       end
-      else if Syms[idx].TypeKind = tyDouble then
+      else if (Syms[idx].TypeKind = tyDouble) and
+              (Syms[idx].IsArray or not Syms[idx].IsRef) then
       begin
+        { By-VALUE double only. A `var/out d: Double` is a pointer in one
+          4-byte slot (the sz walk above already counts it as one, via
+          pbyref[j]), so the 8-byte copy here wrote past the slot — with the
+          param at [ebp-4] the second dword landed on [ebp+0], the SAVED EBP.
+          It falls through to the generic 4-byte handle copy below. }
         EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
         EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);
         EmitB($8B); EmitB($85); EmitI32(12 + sz);    { mov eax, [ebp+disp+4] }

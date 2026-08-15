@@ -2923,6 +2923,10 @@ begin
             if nArgs < Procs[procIdx].ParamCount then
             begin
               tk := Procs[procIdx].Params[nArgs].TypeKind;
+              { A by-ref float/64-bit param is a pointer: one 4-byte slot. }
+              if Procs[procIdx].Params[nArgs].IsRef and
+                 not Procs[procIdx].Params[nArgs].IsArray then
+                tk := tyPointer;
               if (tk = tyDouble) or (tk = tyExtended) or Is64Bit386(tk) then
                 Inc(argBytes, 8)
               else
@@ -2945,6 +2949,12 @@ begin
           while argNode <> -1 do
           begin
             tk := Procs[procIdx].Params[i].TypeKind;
+            { `var d: Double` on a cdecl external is a `double*`: the address is
+              already in eax and goes in one 4-byte slot, exactly as the
+              argBytes accounting above now counts it. }
+            if Procs[procIdx].Params[i].IsRef and
+               not Procs[procIdx].Params[i].IsArray then
+              tk := tyPointer;
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
               IREmitNode386(IRA[argNode]);               { float -> xmm0 (double) }
@@ -3097,7 +3107,17 @@ begin
           end;
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) then
           begin
-            if TypeIsFloat(Procs[procIdx].Params[nArgs].TypeKind) then
+            { A by-reference float param (`var/out r: Double|Single`) is a
+              POINTER, not a value: eax already holds the argument's address and
+              the 4-byte `push eax` below is the whole marshalling. Without this
+              guard the float path ran cvtsi2sd over the address and pushed it
+              as an 8-byte double, so the callee dereferenced the low dword of
+              a converted pointer and faulted. Mirrors the `IsArray or not
+              IsRef` shape the 64-bit by-value branch above already uses — an
+              open array of Double keeps the 8-byte push both sides agree on. }
+            if TypeIsFloat(Procs[procIdx].Params[nArgs].TypeKind) and
+               (Procs[procIdx].Params[nArgs].IsArray or
+                not Procs[procIdx].Params[nArgs].IsRef) then
             begin
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
                 EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]])); { int -> xmm0 (64-bit/unsigned aware) }

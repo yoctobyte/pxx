@@ -39,11 +39,10 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (212)
+## backlog (211)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-i386-var-float-parameter-faults-on-first-access | A | 70 | bug | On i386 ONLY, any access through a by-reference float parameter (`var r: Double` or `var r: Single`, and `out` likewise) segfaults on the first read or write inside the callee. Five-line repro. x86-64, aarch64, arm32 and riscv32 are all correct. Every optimization level, -O0 through -O3. Declaring the parameter and never touching it is fine, so it is the deref, not the prologue. | — |
 | bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32 | A | 55 | bug | `Int(x)` — the builtin that returns the integral part as a FLOAT — routes through a 32-bit conversion on i386 and arm32, so any \|x\| >= 2^31 comes back as the saturated integer: Int(8796093022208.5) is -2147483648.0 on i386 and 2147483647.0 on arm32, against the correct 8796093022208.0. `Trunc` of the same value is right on both, and riscv32 (also 32-bit) is right, so this is those two backends, not a word-size limit. Silent wrong value in a builtin with no diagnostic. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents | B | 30 | bug | StrToFloat costs 2.6-2.9 ms per value for small-exponent input ('1.2e-320') against 0.72 us in CPython — a ~3600x gap — and 116 us even mid-range. The answer is right; the slow path is a 63-step bit-pattern search whose every step expands a candidate to its EXACT ~1080-digit decimal. Correct by construction and priced accordingly. Found timing a float differential harness, where parsing 121k values took ~60 s and the arithmetic under test took none of it. | — |
@@ -414,9 +413,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1864)
+## done (1865)
 
-1864 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1865 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -462,7 +461,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-a-i386-var-float-parameter-faults-on-first-access
 - [p 70] [T] regression-test-core-test-nilpy-star-methods-and-targets
 - [p 70] [T] regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
 - [p 70] [T] regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
