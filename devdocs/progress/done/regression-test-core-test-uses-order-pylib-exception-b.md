@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 1 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -27,3 +28,11 @@ pascal26:51: error: on: unknown exception class
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolved — expected fallout of `1a32de34b`, fixed in `8711ece92`
+
+Not a defect: `1a32de34b` made a unit's imports stop leaking into its
+importers, and this source named something it reached only through an import's
+import. FPC rejects it too. The fix is the missing `uses` clause in the source,
+which is what landed. Verified compiling at the fixing sha.
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
