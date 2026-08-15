@@ -1,0 +1,50 @@
+# setattr -- the third member of the attribute trio. hasattr and getattr have
+# been here since the protocol landed; setattr was absent outright ("undefined
+# variable"), so the READ half of a dynamic attribute was expressible and the
+# WRITE half was not, on a receiver whose `o.name = v` already writes through
+# the same store.
+# bug-nilpy-setattr-is-absent
+
+
+class P:
+    def __init__(self):
+        self.x = 1
+
+
+p = P()
+
+# a DECLARED field: setattr and `o.x = v` must write the same slot
+setattr(p, "x", 5)
+print("declared", p.x, getattr(p, "x"))
+p.x = 6
+print("still-one-slot", p.x, getattr(p, "x"))
+
+# an UNDECLARED attribute goes to the dynamic store, and the read half sees it
+setattr(p, "y", 7)
+print("dynamic", p.y, getattr(p, "y"), hasattr(p, "y"))
+
+# a COMPUTED name -- the shape that makes setattr worth having
+k = "z"
+setattr(p, k, 9)
+print("computed", getattr(p, "z"), getattr(p, k))
+setattr(p, "w_" + k, 11)
+print("concat", getattr(p, "w_z"))
+
+# in a loop, the idiom this is written for
+for n in ["a", "b"]:
+    setattr(p, n, n * 2)
+print("loop", p.a, p.b, getattr(p, "a"))
+
+# overwriting, and values of several types
+setattr(p, "y", "str")
+setattr(p, "lst", [1, 2])
+setattr(p, "none", None)
+print("types", getattr(p, "y"), getattr(p, "lst"), getattr(p, "none"))
+
+# the negative rows still answer as before
+print("absent", hasattr(p, "nope"), getattr(p, "nope", "dflt"))
+
+# a second instance does not see the first's dynamic attributes
+q = P()
+print("per-instance", hasattr(q, "y"), q.x)
+print("TEST-OK")

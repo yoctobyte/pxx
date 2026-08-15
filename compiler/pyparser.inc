@@ -8748,6 +8748,38 @@ begin
   ASTLeft[Result] := a0;
 end;
 
+{ `setattr(o, <expr>, v)` — the COMPUTED-name write, the mirror of
+  PyMakeDynAttrByExpr's read. The name arrives as an expression (a variant, in
+  the shape that motivates setattr at all: `setattr(o, "f_" + k, v)`), and the
+  runtime entry takes an AnsiString, so it is rendered with pystr_of — the one
+  conversion every other by-name site uses. }
+function PyMakeDynAttrSetByExpr(recvNode, nameNode, valNode: Integer): Integer;
+var procIdx, a0, a1, a2, sNode, sArg: Integer;
+begin
+  procIdx := FindProc('pydynattr_set_v');
+  if procIdx < 0 then Error('Nil Python: pylib (pydynattr_set_v) not loaded');
+  if IntToTypeKind(ASTTk[nameNode]) <> tyAnsiString then
+  begin
+    sArg := AllocNode(AN_ARG);
+    ASTLeft[sArg] := PyForceVariant(nameNode);
+    ASTRight[sArg] := -1;
+    sNode := AllocNode(AN_CALL);
+    ASTIVal[sNode] := FindProc('pystr_of');
+    if ASTIVal[sNode] < 0 then Error('Nil Python: pylib (pystr_of) not loaded');
+    ASTTk[sNode] := Ord(tyAnsiString);
+    ASTLeft[sNode] := sArg;
+    nameNode := sNode;
+  end;
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyForceVariant(recvNode);
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := PyForceVariant(valNode);
+  ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyUnknown);
+  ASTLeft[Result] := a0;
+end;
+
 { Publish this class's class ATTRIBUTES to the run time, one
   `pyclsattr_bind(<RTTI blob>, "name", @slot, kind)` per attribute, hoisted where
   the class statement runs.

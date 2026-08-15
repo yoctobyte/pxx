@@ -1,0 +1,10 @@
+declared 5 5
+still-one-slot 6 6
+dynamic 7 7 True
+computed 9 9
+concat 11
+loop aa bb aa
+types str [1, 2] None
+absent False dflt
+per-instance False 1
+TEST-OK

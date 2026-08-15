@@ -948,6 +948,7 @@ function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) in
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
 function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
+function PyMakeDynAttrSetByExpr(recvNode, nameNode, valNode: Integer): Integer; forward; { Nil Python setattr with a computed name (pyparser.inc) }
 { getattr(o, "p") where p is a PROPERTY — the read `o.p` builds (pyparser.inc) }
 function PyMakePropRead(recvNode: Integer; const attr: AnsiString): Integer; forward;
 function PyAttrExists(recvNode: Integer; const attr: AnsiString): Boolean; forward; { Nil Python hasattr: field OR method OR str/int method (pyparser.inc) }
@@ -11483,6 +11484,63 @@ begin
           Error('Nil Python: getattr on an attribute this type does not declare needs a default');
         CurASTNode := atDflt;
         LastExprTk := IntToTypeKind(ASTTk[atDflt]);
+        Exit;
+      end
+      else if isNilPy and (name = 'setattr') and (not PyUserShadowsProc('setattr')) then
+      begin
+        { The third member of the attribute trio. hasattr and getattr have been
+          here since the protocol landed and setattr was simply absent —
+          `undefined variable (setattr)` — so the read half of a dynamic
+          attribute was expressible and the write half was not, on a receiver
+          whose `o.name = v` form already writes through the same store.
+          bug-nilpy-setattr-is-absent }
+        Next; Expect(tkLParen, '(');
+        ParseExpr;
+        atRecv := CurASTNode;
+        { A COMPUTED name — `setattr(o, "f_" + k, v)`, which is the shape that
+          makes setattr worth having at all. Same literal-vs-expression test
+          getattr uses: a string TOKEN is the literal path only when the whole
+          argument is that token. }
+        if (CurTok.Kind = tkComma) and (TokPos < TokCount) and
+           ((Tokens[TokPos].Kind <> tkString) or
+            ((TokPos + 1 < TokCount) and
+             (not (Tokens[TokPos + 1].Kind in [tkComma, tkRParen])))) then
+        begin
+          Expect(tkComma, ',');
+          ParseExpr;
+          atFld := CurASTNode;             { the name EXPRESSION }
+          Expect(tkComma, ',');
+          ParseExpr;
+          atDflt := CurASTNode;            { the value }
+          Expect(tkRParen, ')');
+          CurASTNode := PyMakeDynAttrSetByExpr(atRecv, atFld, atDflt);
+          LastExprTk := tyUnknown;
+          Exit;
+        end;
+        atName := PyParseAttrName;         { consumes the ',' and the literal }
+        Expect(tkComma, ',');
+        ParseExpr;
+        atDflt := CurASTNode;              { the value }
+        Expect(tkRParen, ')');
+        atFld := PyAttrFieldIdx(atRecv, atName);
+        if atFld >= 0 then
+        begin
+          { a DECLARED field: the ordinary field store, so setattr and
+            `o.name = v` write the same slot rather than two }
+          node := AllocNode(AN_FIELD);
+          ASTLeft[node] := atRecv;
+          ASTSOffset[node] := PyStoredName(atName);
+          ASTSLen[node] := Length(atName);
+          ASTTk[node] := UFldTk[atFld];
+          argSeq := AllocNode(AN_ASSIGN);
+          ASTLeft[argSeq] := node;
+          ASTRight[argSeq] := atDflt;
+          CurASTNode := argSeq;
+          LastExprTk := tyUnknown;
+          Exit;
+        end;
+        CurASTNode := PyMakeDynAttrSet(atRecv, atName, PyForceVariant(atDflt));
+        LastExprTk := tyUnknown;
         Exit;
       end
       else if NilPyUserCode and (name = 'exec') then
