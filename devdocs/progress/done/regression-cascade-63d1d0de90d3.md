@@ -50,3 +50,6 @@ prio: 70
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+## Log
+- 2026-08-15 — auto-closed by the plexus watcher: `cascade@63d1d0de90d3` passes at f68d60cebf50 (tier native); it was red at 63d1d0de90d3. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
