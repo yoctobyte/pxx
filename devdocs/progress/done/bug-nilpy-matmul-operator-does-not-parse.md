@@ -96,4 +96,4 @@ Not in scope, found while testing: a USER-DEFINED decorator (`@deco` where
 @dataclass and @overload)". Unrelated to `@` the operator; filed separately.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 65300c7f4.
