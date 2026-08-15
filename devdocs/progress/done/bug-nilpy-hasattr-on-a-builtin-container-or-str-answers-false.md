@@ -114,4 +114,4 @@ value) is also untouched — that is the method-as-value machinery, not this
 predicate.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 16d5108c2.
