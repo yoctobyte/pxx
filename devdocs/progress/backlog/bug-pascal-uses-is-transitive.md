@@ -3,7 +3,7 @@ summary: "REOPENED 2026-08-14 — only the MEASUREMENT step ever landed. The fix
 type: bug
 track: A
 prio: 80
-blocked-by: [task-t-strict-uses-corpus-sweep]
+blocked-by: []   # task-t-strict-uses-corpus-sweep landed; cleared 2026-08-15
 owner: agent-A
 ---
 

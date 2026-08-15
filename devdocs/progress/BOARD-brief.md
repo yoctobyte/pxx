@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:6 backlog:212 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1871 rejected:37`
+`unfinished:11 blocked:4 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1871 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -25,19 +25,19 @@ _none — no lane is locked._
 - `feature-pascal-corpus-generics` [P]
 - `feature-real-dynlib-loader` [B]
 
-## blocked (6) — has an unmet blocker; do not claim
+## blocked (4) — has an unmet blocker; do not claim
 
 - `bug-b-inttohex-of-a-negative-integer-prints-16-digits` [B] — blocked-by: compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload
 - `bug-nilpy-empty-str-and-none-are-the-same-value` [N] — blocked-by: decide-nilpy-none-str-sentinel-vs-textstr-kind
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
-- `bug-pascal-uses-is-transitive` [A] — blocked-by: task-t-strict-uses-corpus-sweep
-- `feature-b-tkhtmlview-in-nilpy` [B] — blocked-by: bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 
-## Ready — top 30 of 196, ranked
+## Ready — top 30 of 198, ranked
 
+- `[p 80] [A]` bug-pascal-uses-is-transitive
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-lambda-in-range-comprehension
+- `[p 60] [B]` feature-b-tkhtmlview-in-nilpy (unblocks 1)
 - `[p 60] [O]` feature-opt-accumulator-value-tracker (unblocks 1)
 - `[p 60] [A]` bug-a-int-of-a-large-double-is-int64-min-on-x86-64
 - `[p 60] [P]` bug-p-scope-hiding-covers-routines-but-not-types-and-classes
@@ -64,7 +64,5 @@ _none — no lane is locked._
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [C]` bug-c-static-functions-in-different-crtl-modules-collide
-- `[p 50] [P]` bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
-- `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 
-_166 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

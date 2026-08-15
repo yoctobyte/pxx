@@ -1,7 +1,7 @@
 ---
 track: B
 prio: 45  # auto
-blocked-by: [feature-inline-asm-xmm-operands]
+blocked-by: []   # feature-inline-asm-xmm-operands landed; cleared 2026-08-15
 ---
 
 # Random library — HW/OS/software tiered RNG (cross-target capability test)

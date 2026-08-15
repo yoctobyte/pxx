@@ -2,7 +2,7 @@
 track: B
 prio: 50
 type: feature
-blocked-by: [feature-nilpy-import-a-py-module-from-the-library-path, bug-nilpy-text-class-name-binds-the-rtl-file-record]
+blocked-by: []   # both landed; cleared 2026-08-15
 summary: "Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect"
 status: working
 owner: claude-B

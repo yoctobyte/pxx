@@ -2,7 +2,7 @@
 track: B
 prio: 40
 type: feature
-blocked-by: bug-n-str-encode-and-bytes-decode-ignore-the-encoding
+blocked-by: []   # bug-n-str-encode-and-bytes-decode-ignore-the-encoding landed; cleared 2026-08-15
 ---
 
 # `import codecs` — the next wall for the compile-real-libraries campaign
