@@ -2,7 +2,7 @@
 track: N
 prio: 30
 type: bug
-commit: PENDING-COMMIT
+commit: c9be1dddb
 blocked-by: []
 summary: "`setattr(o, name, v)` was `undefined variable` — the READ half of a dynamic attribute (hasattr/getattr) was expressible and the WRITE half was not, on a receiver whose `o.name = v` already writes through the same store."
 ---
