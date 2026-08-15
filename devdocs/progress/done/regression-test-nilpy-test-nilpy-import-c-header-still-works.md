@@ -31,3 +31,6 @@ pascal26:25: error: undefined variable (malloc)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-15 — auto-closed by the plexus watcher: `test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy` passes at c8f5070671be (tier full); it was red at 63d1d0de90d3. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
