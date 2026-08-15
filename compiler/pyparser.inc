@@ -19290,8 +19290,23 @@ begin
       Deterministic name (see PyCompHiddenLoopName) — stable across the
       typing pre-pass and the real pass over the same tokens. }
     hName := PyCompHiddenLoopName(forTokIdx, 0);
-    symIdx := AllocVar(hName, tyInt64);
-    userSym := -1;              { the hidden name IS the target; no copy needed }
+    { The comprehension gets the SAME body copy the statement form gets, and for
+      the reason the note below says it does not need one: "nothing outside able
+      to observe its terminal value". A LAMBDA IN THE BODY can.
+
+        g = [lambda: k for k in range(3)]
+        print([f() for f in g])        # CPython [2, 2, 2]   pxx [3, 3, 3]
+
+      The closure captures the loop variable, and the counter is left one past
+      the end on normal exit — the same two silent wrong values the statement
+      form was fixed for, reachable through the capture instead of through a
+      later read. A LIST or STR source was already right, which is what pins it
+      to this lowering rather than to closures.
+      One extra Int64 local per range comprehension, and one fewer special case
+      (devdocs/dev/normalise-dont-special-case.md).
+      bug-nilpy-a-lambda-in-a-range-comprehension-captures-the-counter-past-the-end }
+    userSym := AllocVar(hName, tyInt64);        { what the renamed body reads }
+    symIdx := AllocVar(PyCompHiddenLoopName(forTokIdx, 1), tyInt64);
   end
   else
   begin

@@ -1,0 +1,49 @@
+# A lambda inside a RANGE comprehension captures the loop variable, and the
+# comprehension's counter was left one past the end on normal exit -- so the
+# closures all answered 3 where CPython answers 2. The statement `for` was
+# fixed for exactly this and the comprehension was reasoned to be exempt
+# ("nothing outside able to observe its terminal value"); a capture can.
+# A list or str source was already right.
+# bug-nilpy-a-lambda-in-a-range-comprehension-captures-the-counter-past-the-end
+
+g = [lambda: k for k in range(3)]
+print("range", [f() for f in g])
+
+g2 = [lambda: k for k in [10, 20, 30]]
+print("list", [f() for f in g2])
+
+g3 = [lambda: k for k in "abc"]
+print("str", [f() for f in g3])
+
+# the default-argument idiom pins per iteration, and must keep doing so
+g4 = [lambda k=k: k for k in range(3)]
+print("pinned", [f() for f in g4])
+
+# a genexpr and a dict comprehension take the same lowering
+g5 = list(lambda: k for k in range(3))
+print("genexpr", [f() for f in g5])
+g6 = {k: (lambda: k) for k in range(2)}
+print("dict", [f() for f in g6.values()])
+
+# a range with a start and a step -- the gap widens when the step is not 1
+g7 = [lambda: k for k in range(0, 10, 3)]
+print("step", [f() for f in g7])
+
+# an EMPTY range binds nothing at all
+g8 = [lambda: 0 for k in range(0)]
+print("empty", g8)
+
+# the ordinary comprehension values are unchanged
+print("values", [x * 2 for x in range(4)])
+print("filter", [x for x in range(10) if x % 3 == 0])
+print("nested", [x + y for x in range(2) for y in range(3)])
+print("dictcomp", {x: x * x for x in range(3)})
+print("setcomp", sorted({x % 2 for x in range(5)}))
+print("genexpr-sum", sum(x for x in range(5)))
+
+# the comprehension variable still does not leak into the enclosing scope
+k = 99
+print("noleak", [k for _ in range(2)], k)
+i = 5
+print("noclobber", [i for i in range(2)], i)
+print("TEST-OK")

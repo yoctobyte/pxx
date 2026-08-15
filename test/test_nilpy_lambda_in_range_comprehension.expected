@@ -1,0 +1,17 @@
+range [2, 2, 2]
+list [30, 30, 30]
+str ['c', 'c', 'c']
+pinned [0, 1, 2]
+genexpr [2, 2, 2]
+dict [1, 1]
+step [9, 9, 9, 9]
+empty []
+values [0, 2, 4, 6]
+filter [0, 3, 6, 9]
+nested [0, 1, 2, 1, 2, 3]
+dictcomp {0: 0, 1: 1, 2: 4}
+setcomp [0, 1]
+genexpr-sum 10
+noleak [99, 99] 99
+noclobber [0, 1] 5
+TEST-OK
