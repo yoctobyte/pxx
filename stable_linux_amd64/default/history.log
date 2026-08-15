@@ -323,3 +323,4 @@
 2026-08-15T02:17:11Z  v323  577cddfb1645bbf9a161258bc1d525c1fdb0bc6a2e4ebdde66bdf077d2fc3d8d  7e7266d27e8154144034bf5c083ccce9960510b3  docs(progress): record the shas the resolves landed as
 2026-08-15T02:52:43Z  v324  d7a2cbae8783956f3dfef24331d138a273586c7dd25676ab51643058f573a832  fb1e58dde63b2d23bd0e5b68bcf0a9f086883786  fix(N): one object->sequence chain, so the consumption builtins see a user iterable
 2026-08-15T03:11:50Z  v325  16d7fe9f78ddf94c81ce909348823e915ebfb93b2316df7bc9000aa69df72d47  3b11c7e305a9be903a47eb2b9df96b0615a786ee  fix(N): dict() takes any iterable of pairs, not only a dict
+2026-08-15T03:26:16Z  v326  16d7fe9f78ddf94c81ce909348823e915ebfb93b2316df7bc9000aa69df72d47  89021e5c53fadfe6076668c43937570aeb15e7c5  fix(N): TPyFile.writelines, and file the genexpr-as-method-argument gap

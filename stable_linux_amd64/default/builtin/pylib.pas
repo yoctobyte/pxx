@@ -618,6 +618,11 @@ type
       pystr_startswith_any uses for the same reason.
       bug-nilpy-file-write-picks-the-bytes-overload-for-a-non-str-argument }
     function write(const v: Variant): Int64; overload;
+    { f.writelines(seq) — CPython adds NO separator; the caller's strings carry
+      their own newlines. Takes the same variant the write() row above takes,
+      for the same reason, and accepts any iterable through pyseq_of_obj.
+      (bug-nilpy-file-writelines-is-absent) }
+    procedure writelines(const v: Variant);
     procedure seek(pos: Int64); overload;
     procedure seek(pos: Int64; whence: Int64); overload;
     function tell: Int64;
@@ -15049,6 +15054,21 @@ begin
     { an int/float/bool/None argument is a TypeError in CPython too, and saying
       so beats writing its decimal spelling and looking like it worked }
     raise TypeError.Create('write() argument must be str or bytes');
+end;
+
+procedure TPyFile.writelines(const v: Variant);
+var seq: TPyList; i: Integer; o: Pointer;
+begin
+  seq := nil;
+  if pyvar_is_objtag(v) then
+  begin
+    o := pyvarobj(v);
+    if o <> nil then seq := pyseq_of_obj(TObject(o));
+  end;
+  if seq = nil then
+    raise TypeError.Create('writelines() argument must be an iterable of str');
+  for i := 0 to seq.count - 1 do
+    Self.write(seq.at(i));
 end;
 
 procedure TPyFile.seek(pos: Int64);
