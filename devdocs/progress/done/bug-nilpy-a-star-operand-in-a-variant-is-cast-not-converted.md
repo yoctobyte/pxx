@@ -94,4 +94,4 @@ splice and the callable-value dispatch, plus the operand read out of a dict
 entry. Re-checked twelve neighbouring star tests.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 56e70f1d7.
