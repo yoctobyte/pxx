@@ -2,7 +2,7 @@
 track: N
 prio: 30
 type: bug
-commit: PENDING-COMMIT
+commit: 3875ea48d
 blocked-by: []
 summary: "`[lambda: k for k in range(3)]` answered 3 from every closure where CPython answers 2 — the comprehension's counter is left one past the end on normal exit, and a lambda in the body can observe it. The statement `for` was fixed for exactly this and the comprehension was reasoned to be exempt."
 ---
