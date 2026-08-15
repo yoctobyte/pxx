@@ -984,6 +984,7 @@ function PyIsIntMethodName(const nm: AnsiString): Boolean; forward; { Nil Python
 function PyIsIntMethodSuffixAhead: Boolean; forward; { Nil Python: at an intercepted int-method suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a value (pyparser.inc) }
+function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer; forward; { the same pair for a KNOWN proc (pyparser.inc) }
 function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
 function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer; forward; { Nil Python: a callable VALUE heading for a Pointer parameter (pyparser.inc) }
@@ -10855,9 +10856,28 @@ begin
         node := PyNestedDefClosureValue(idx);
         if node < 0 then
         begin
+          { A callee that COLLECTS cannot travel as a bare address either: the
+            packing of surplus arguments into its one TPyList parameter is
+            work the CALL SITE does, and an address carries nothing that says
+            so. The {code, recv} pair does — pybound_new_star records the star
+            position — so a variadic def takes that road even with no captures.
+            `return wrapper` over `def wrapper(*args)` (the shape every Python
+            decorator has) otherwise called the body with loose Variants where
+            it declares a list. }
+          if (idx >= 0) and (idx < ProcCount) and (ProcPyStarIdx[idx] >= 0) then
+            node := PyMakeFuncValueFor(idx, name);
+          if node >= 0 then
+          begin
+            CurASTNode := node;
+            LastExprTk := tyVariant;
+            Exit;
+          end;
           node := AllocNode(AN_PROCADDR);
           ASTIVal[node] := idx;
           ASTTk[node] := Ord(tyPointer);
+          CurASTNode := node;
+          LastExprTk := tyPointer;
+          Exit;
         end;
         CurASTNode := node;
         LastExprTk := tyPointer;

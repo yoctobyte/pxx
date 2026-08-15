@@ -1239,6 +1239,16 @@ function pyiter_no_len(it: TPyIter): Int64;
   that answer available (the umbrella's one behaviour removal). }
 
 function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
+{ The same pair for a callee that COLLECTS its surplus arguments — `def h(*a)`
+  taken as a value. starIdx is the USER-space parameter index of the `*args`
+  slot (Self excluded; -1 = no star), and the dynamic bridge below packs
+  everything from that position into the TPyList the compiled body declares
+  there. Without it pybound_callv3 handed the callee three loose Variants where
+  its signature says one list pointer: `k = h; k(1,2,3)` answered 1 for
+  `len(a)`, and richer bodies segfaulted
+  (bug-nilpy-a-star-args-def-taken-as-a-value-is-called-with-loose-arguments). }
+function pybound_new_star(code, recv: Pointer; isFunc: Boolean;
+                          starIdx: Int64): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
 { True when Code is a genuine Variant-returning FUNCTION (NilPy's default def
@@ -4177,7 +4187,11 @@ begin
       mi := PyFindMethByName(GetInstanceRTTI(obj), name);
       if (mi <> nil) and (mi^.Code <> nil) then
       begin
-        Result := pybound_new(mi^.Code, obj, mi^.RetKind <> 0);
+        { the star index rides the meth Flags word in SIGNATURE space (Self at
+          0); the bridge wants it in the callee's OWN space, hence the -1 on
+          top of the +1 the encoding adds to keep 0 meaning "none". }
+        Result := pybound_new_star(mi^.Code, obj, mi^.RetKind <> 0,
+                    Integer((mi^.Flags shr 8) and 255) - 2);
         Exit;
       end;
     end;
@@ -12165,7 +12179,7 @@ begin
 end;
 
 type
-  TPyBoundRec = record Code, Recv: Pointer; IsFunc: Boolean; end;
+  TPyBoundRec = record Code, Recv: Pointer; IsFunc: Boolean; StarIdx: Integer; end;
   PPyBoundRec = ^TPyBoundRec;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
@@ -12256,6 +12270,12 @@ begin
 end;
 
 function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
+begin
+  pybound_new := pybound_new_star(code, recv, isFunc, -1);
+end;
+
+function pybound_new_star(code, recv: Pointer; isFunc: Boolean;
+                          starIdx: Int64): Variant;
 var b: PPyBoundRec; r: PPyVarRec;
 begin
   { RAW refcounted block (no VMT): rc at [b-16], PXX_OBJ_MAGIC_RAW at [b-8].
@@ -12266,6 +12286,7 @@ begin
   b^.Code := code;
   b^.Recv := recv;
   b^.IsFunc := isFunc;
+  b^.StarIdx := Integer(starIdx);
   PXXObjRetain(code);   { a closure-obj code is refcounted; plain addresses no-op }
   PXXObjRetain(recv);
   r := PPyVarRec(@Result);
@@ -12319,6 +12340,30 @@ type
   TPyCbFP2 = procedure(const a0, a1: Variant);
   TPyCbFP3 = procedure(const a0, a1, a2: Variant);
   TPyCbFP4 = procedure(const a0, a1, a2, a3: Variant);
+  { A callee that COLLECTS. `def h(a, *rest)` compiles to one Variant parameter
+    and ONE TPyList — the surplus arguments are packed by the CALL SITE
+    (PyPackStarArgs), which a dynamic call through a function value has no
+    chance to do. So the packing moves here, and the signature the callee
+    really has gets its own family: fixed Variants up to the star position,
+    then the list. `*args` keeps its container type even under the
+    function-object ABI (PyDefUsedAsValue widens every OTHER parameter), which
+    is what makes this shape predictable enough to declare. }
+  TPyCbFS0 = function(l: TPyList): Variant;
+  TPyCbFS1 = function(const a0: Variant; l: TPyList): Variant;
+  TPyCbFS2 = function(const a0, a1: Variant; l: TPyList): Variant;
+  TPyCbFS3 = function(const a0, a1, a2: Variant; l: TPyList): Variant;
+  TPyCbFSP0 = procedure(l: TPyList);
+  TPyCbFSP1 = procedure(const a0: Variant; l: TPyList);
+  TPyCbFSP2 = procedure(const a0, a1: Variant; l: TPyList);
+  TPyCbFSP3 = procedure(const a0, a1, a2: Variant; l: TPyList);
+  TPyCbMS0 = function(recv: Pointer; l: TPyList): Variant;
+  TPyCbMS1 = function(recv: Pointer; const a0: Variant; l: TPyList): Variant;
+  TPyCbMS2 = function(recv: Pointer; const a0, a1: Variant; l: TPyList): Variant;
+  TPyCbMS3 = function(recv: Pointer; const a0, a1, a2: Variant; l: TPyList): Variant;
+  TPyCbMSP0 = procedure(recv: Pointer; l: TPyList);
+  TPyCbMSP1 = procedure(recv: Pointer; const a0: Variant; l: TPyList);
+  TPyCbMSP2 = procedure(recv: Pointer; const a0, a1: Variant; l: TPyList);
+  TPyCbMSP3 = procedure(recv: Pointer; const a0, a1, a2: Variant; l: TPyList);
 
 function pycallback_is(const cb: Variant): Boolean;
 begin
@@ -12380,6 +12425,73 @@ begin
   pybound_recv := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Recv;
 end;
 
+function pybound_star(const v: Variant): Integer;
+begin
+  pybound_star := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.StarIdx;
+end;
+
+function PyBoundCallStar(code, recv: Pointer; isFn: Boolean;
+                         si, nargs: Integer;
+                         const a0, a1, a2, a3: Variant): Variant;
+{ The packing half of a dynamic call into a variadic callee. si is the callee's
+  own `*args` position (Self already excluded), so arguments si..nargs-1 are the
+  ones it never declared a slot for. They become the TUPLE the body sees — a
+  tuple, not a list, exactly as PyPackStarArgs marks it at a written call site,
+  or `print(args)` renders brackets and `type(args).__name__` answers 'list'. }
+var star: TPyList; av: array[0..3] of Variant; i: Integer;
+    fs0: TPyCbFS0; fs1: TPyCbFS1; fs2: TPyCbFS2; fs3: TPyCbFS3;
+    ps0: TPyCbFSP0; ps1: TPyCbFSP1; ps2: TPyCbFSP2; ps3: TPyCbFSP3;
+    ms0: TPyCbMS0; ms1: TPyCbMS1; ms2: TPyCbMS2; ms3: TPyCbMS3;
+    qs0: TPyCbMSP0; qs1: TPyCbMSP1; qs2: TPyCbMSP2; qs3: TPyCbMSP3;
+begin
+  PyBoundCallStar := pynone;
+  if (si < 0) or (si > 3) then
+    raise TypeError.Create('calling a function value whose *args parameter is at '
+      + 'position ' + pystr_of(Int64(si))
+      + ' is past what the dynamic bridge can pack');
+  av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
+  star := TPyList.Create;
+  for i := si to nargs - 1 do star.append(av[i]);
+  pylist_mark_tuple(star);
+  if recv = nil then
+  begin
+    if isFn then
+      case si of
+        0: begin fs0 := TPyCbFS0(code); PyBoundCallStar := fs0(star); end;
+        1: begin fs1 := TPyCbFS1(code); PyBoundCallStar := fs1(av[0], star); end;
+        2: begin fs2 := TPyCbFS2(code); PyBoundCallStar := fs2(av[0], av[1], star); end;
+        3: begin fs3 := TPyCbFS3(code); PyBoundCallStar := fs3(av[0], av[1], av[2], star); end;
+      end
+    else
+      case si of
+        0: begin ps0 := TPyCbFSP0(code); ps0(star); end;
+        1: begin ps1 := TPyCbFSP1(code); ps1(av[0], star); end;
+        2: begin ps2 := TPyCbFSP2(code); ps2(av[0], av[1], star); end;
+        3: begin ps3 := TPyCbFSP3(code); ps3(av[0], av[1], av[2], star); end;
+      end;
+  end
+  else
+  begin
+    if isFn then
+      case si of
+        0: begin ms0 := TPyCbMS0(code); PyBoundCallStar := ms0(recv, star); end;
+        1: begin ms1 := TPyCbMS1(code); PyBoundCallStar := ms1(recv, av[0], star); end;
+        2: begin ms2 := TPyCbMS2(code); PyBoundCallStar := ms2(recv, av[0], av[1], star); end;
+        3: begin ms3 := TPyCbMS3(code); PyBoundCallStar := ms3(recv, av[0], av[1], av[2], star); end;
+      end
+    else
+      case si of
+        0: begin qs0 := TPyCbMSP0(code); qs0(recv, star); end;
+        1: begin qs1 := TPyCbMSP1(code); qs1(recv, av[0], star); end;
+        2: begin qs2 := TPyCbMSP2(code); qs2(recv, av[0], av[1], star); end;
+        3: begin qs3 := TPyCbMSP3(code); qs3(recv, av[0], av[1], av[2], star); end;
+      end;
+  end;
+  { the temp's own +1, dropped like the hidden local a written call site gets:
+    a body that KEEPS the tuple (returns it, stores it) has retained it by now }
+  PXXObjRelease(Pointer(star));
+end;
+
 { CALL a function value and KEEP its result — what an expression `f(x)` needs and
   pycallback_call* (a void event handler) cannot give. Both halves of the pair
   are honoured: a nil receiver is a plain def, a non-nil one a bound method whose
@@ -12396,6 +12508,12 @@ begin
   if code = nil then Exit;
   recv := pybound_recv(cb);
   isFn := pybound_isfunc(cb);
+  if pybound_star(cb) >= 0 then
+  begin
+    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 0,
+                              pynone, pynone, pynone, pynone);
+    Exit;
+  end;
   if recv = nil then
   begin
     if isFn then begin f0 := TPyCbF0(code); Result := f0(); end
@@ -12418,6 +12536,12 @@ begin
   if code = nil then Exit;
   recv := pybound_recv(cb);
   isFn := pybound_isfunc(cb);
+  if pybound_star(cb) >= 0 then
+  begin
+    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 1,
+                              a0, pynone, pynone, pynone);
+    Exit;
+  end;
   if recv = nil then
   begin
     if isFn then begin f1 := TPyCbF1(code); Result := f1(a0); end
@@ -12440,6 +12564,12 @@ begin
   if code = nil then Exit;
   recv := pybound_recv(cb);
   isFn := pybound_isfunc(cb);
+  if pybound_star(cb) >= 0 then
+  begin
+    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 2,
+                              a0, a1, pynone, pynone);
+    Exit;
+  end;
   if recv = nil then
   begin
     if isFn then begin f2 := TPyCbF2(code); Result := f2(a0, a1); end
@@ -12462,6 +12592,12 @@ begin
   if code = nil then Exit;
   recv := pybound_recv(cb);
   isFn := pybound_isfunc(cb);
+  if pybound_star(cb) >= 0 then
+  begin
+    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 3,
+                              a0, a1, a2, pynone);
+    Exit;
+  end;
   if recv = nil then
   begin
     if isFn then begin f3 := TPyCbF3(code); Result := f3(a0, a1, a2); end
@@ -12489,6 +12625,11 @@ begin
   if code = nil then Exit;
   recv := pybound_recv(cb);
   isFn := pybound_isfunc(cb);
+  if pybound_star(cb) >= 0 then
+  begin
+    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 4, a0, a1, a2, a3);
+    Exit;
+  end;
   if recv = nil then
   begin
     if isFn then begin f4 := TPyCbF4(code); Result := f4(a0, a1, a2, a3); end

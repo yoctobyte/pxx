@@ -1,0 +1,61 @@
+# A def that COLLECTS, reached through a function VALUE rather than a written
+# call. The packing of surplus arguments into the callee's one TPyList is work
+# the call site normally does (PyPackStarArgs); a dynamic call has no chance to,
+# so the star position rides the {code, recv} pair (pybound_new_star) and the
+# bridge packs at run time.
+#
+# Before that, `k = h; k(1, 2, 3)` handed the body three loose Variants where its
+# signature declares one list: len(a) answered 1, and richer bodies segfaulted.
+
+def h(*a):
+    return len(a)
+
+k = h
+print(k(), k(1), k(1, 2), k(1, 2, 3))
+
+# what the body actually SEES — a tuple, as at a written call site
+def show(*a):
+    return str(a) + " " + type(a).__name__
+
+s = show
+print(s(1, "two", 3))
+
+# fixed parameters BEFORE the star: those stay loose, the rest pack
+def fixed(x, *rest):
+    return str(x) + "|" + str(rest)
+
+f = fixed
+print(f(1), f(1, 2), f(1, 2, 3))
+
+# an explicit `-> None` def is a real procedure, a different call shape
+def out(*a) -> None:
+    print("out", a)
+
+o = out
+o(1, 2)
+
+# a BOUND METHOD that collects — the pair carries a receiver as well
+class C:
+    def __init__(self, n):
+        self.n = n
+
+    def take(self, *a):
+        return self.n + len(a)
+
+c = C(10)
+m = c.take
+print(m(), m(1), m(1, 2))
+
+# the decorator shape: a nested def returned as a value. It has nothing to
+# capture, so it used to travel as a bare code address, which carries no star.
+def mk():
+    def wrapper(*args):
+        return "wrapped" + str(args)
+    return wrapper
+
+w = mk()
+print(w(1, 2))
+
+# through a container, so the call goes out via the variant dispatch path
+tbl = {"h": h, "fixed": fixed}
+print(tbl["h"](7, 8, 9), tbl["fixed"]("a", "b"))

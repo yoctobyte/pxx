@@ -697,7 +697,6 @@ begin
   end;
 end;
 
-function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer; forward;
 function PyStarOperandAsList(node, listCi: Integer): Integer; forward;
 function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;
 procedure PyContainerCall1(tmpSym: Integer; const clsName, meth: AnsiString;
@@ -11178,8 +11177,16 @@ end;
   selfNode supplies the receiver. }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer;
 var procAddr, recvArg, selfArg, callNode, boundPi, isFuncNode, isFuncArg: Integer;
+    starIdx, starNode, starArg: Integer;
 begin
-  boundPi := FindProc('pybound_new');
+  { `*args` on a METHOD is recorded in SIGNATURE space (Self at 0); the runtime
+    bridge is handed the receiver separately, so it wants the callee's own
+    index. See PyMakeFuncValueFor for the same conversion on a plain def. }
+  starIdx := -1;
+  if (mpi >= 0) and (mpi < ProcCount) and (ProcPyStarIdx[mpi] > 0) then
+    starIdx := ProcPyStarIdx[mpi] - 1;
+  if starIdx >= 0 then boundPi := FindProc('pybound_new_star')
+  else boundPi := FindProc('pybound_new');
   if boundPi < 0 then Error('Nil Python: pylib (pybound_new) not loaded');
   procAddr := AllocNode(AN_PROCADDR);
   ASTIVal[procAddr] := mpi;
@@ -11199,6 +11206,15 @@ begin
   isFuncArg := AllocNode(AN_ARG); ASTLeft[isFuncArg] := isFuncNode;
   ASTRight[selfArg] := recvArg;  ASTRight[recvArg] := isFuncArg;
   ASTRight[isFuncArg] := -1;
+  if starIdx >= 0 then
+  begin
+    starNode := AllocNode(AN_INT_LIT);
+    ASTIVal[starNode] := starIdx;
+    ASTTk[starNode]   := Ord(tyInt64);
+    starArg := AllocNode(AN_ARG); ASTLeft[starArg] := starNode;
+    ASTRight[starArg] := -1;
+    ASTRight[isFuncArg] := starArg;
+  end;
   ASTLeft[callNode] := selfArg;
   Result := callNode;
 end;
@@ -11549,8 +11565,8 @@ end;
   the `from mod import f as g` alias desugar — builds the identical value
   instead of growing a second copy that can drift from this one. }
 function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer;
-var procAddr, argA, argB, argC, callNode, nilNode, isFuncNode, boundPi,
-    altPi, wpj: Integer;
+var procAddr, argA, argB, argC, argD, callNode, nilNode, isFuncNode, boundPi,
+    altPi, wpj, starIdx, starNode: Integer;
     paramsAllVariant: Boolean;
 begin
   Result := -1;
@@ -11610,7 +11626,13 @@ begin
        Procs[pi].IsFunc and PyScalarWrappableRetType(Procs[pi].RetType) then
       pi := PyGetOrMakeCallableWrapper(pi);
   end;
-  boundPi := FindProc('pybound_new');
+  { A callee that COLLECTS needs the star-aware pair: its compiled signature
+    has ONE TPyList where the call wrote loose arguments, and only the RUNTIME
+    knows how many arrive through a function value. See pybound_new_star. }
+  starIdx := -1;
+  if (pi >= 0) and (pi < ProcCount) then starIdx := ProcPyStarIdx[pi];
+  if starIdx >= 0 then boundPi := FindProc('pybound_new_star')
+  else boundPi := FindProc('pybound_new');
   if boundPi < 0 then Exit;
   procAddr := AllocNode(AN_PROCADDR);
   ASTIVal[procAddr] := pi;
@@ -11630,6 +11652,14 @@ begin
   argC := AllocNode(AN_ARG); ASTLeft[argC] := isFuncNode; ASTRight[argC] := -1;
   ASTRight[argB] := argC;
   ASTRight[argA] := argB;
+  if starIdx >= 0 then
+  begin
+    starNode := AllocNode(AN_INT_LIT);
+    ASTIVal[starNode] := starIdx;
+    ASTTk[starNode]   := Ord(tyInt64);
+    argD := AllocNode(AN_ARG); ASTLeft[argD] := starNode; ASTRight[argD] := -1;
+    ASTRight[argC] := argD;
+  end;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := boundPi;
   ASTTk[callNode] := Ord(tyVariant);
@@ -14050,7 +14080,8 @@ begin
   if ASTIVal[n] < 0 then Exit;
   nm := LowerCase(Procs[ASTIVal[n]].Name);
   PyNodeIsCallableValue :=
-    (nm = 'pybound_new') or (nm = 'pyvar_of_callable') or
+    (nm = 'pybound_new') or (nm = 'pybound_new_star') or
+    (nm = 'pyvar_of_callable') or
     (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
     (nm = 'pyclosure_setarity') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or

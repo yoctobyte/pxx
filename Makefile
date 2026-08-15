@@ -920,6 +920,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_nestdefdeftime26 | diff -u test/test_nilpy_nested_def_default_at_def_time.expected -
 	./$(COMPILER) test/test_nilpy_star_not_first_argument.npy $(TESTTMP)/test_nilpy_starnotfirst26
 	$(TESTTMP)/test_nilpy_starnotfirst26 | diff -u test/test_nilpy_star_not_first_argument.expected -
+	./$(COMPILER) test/test_nilpy_star_args_as_a_function_value.npy $(TESTTMP)/test_nilpy_starvalue26
+	$(TESTTMP)/test_nilpy_starvalue26 | diff -u test/test_nilpy_star_args_as_a_function_value.expected -
 	./$(COMPILER) test/test_nilpy_zip_star_and_n_way.npy $(TESTTMP)/test_nilpy_zipstarn26
 	$(TESTTMP)/test_nilpy_zipstarn26 | diff -u test/test_nilpy_zip_star_and_n_way.expected -
 	./$(COMPILER) test/test_nilpy_divmod_dunder.npy $(TESTTMP)/test_nilpy_divmoddunder26
