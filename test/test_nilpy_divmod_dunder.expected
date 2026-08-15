@@ -1,4 +1,12 @@
-direct    (2, 1)
-reflected ('rdivmod', 7, 3)
-numbers   (2, 1) (-3, 2) (3.0, 1.5)
-bare      TypeError
+obj-int (3, 2)
+obj-int2 (-4, 3)
+int-obj (4, 3)
+both-direct ('d', 1)
+both-reflected ('r', 1)
+unpack 3 2
+index 3 2
+loop 90
+typeerror
+builtin (3, 1) (-4, 1) (-4, -1)
+builtin-float (3.0, 1.5)
+TEST-OK

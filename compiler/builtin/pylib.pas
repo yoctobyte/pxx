@@ -7881,12 +7881,19 @@ begin
     CPython's own reflected rule is covered by trying __rdivmod__ on b.
     feature-nilpy-arithmetic-dunders-full-protocol }
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
-  if (pa^.VType = 7) and (pb^.VType = 7) and
-     (pa^.Payload <> 0) and (pb^.Payload <> 0) then
+  oa := nil; ob := nil;
+  if (pa^.VType = 7) and (pa^.Payload <> 0) then oa := TObject(Pointer(NativeInt(pa^.Payload)));
+  if (pb^.VType = 7) and (pb^.Payload <> 0) then ob := TObject(Pointer(NativeInt(pb^.Payload)));
+  { EITHER side being a user object is enough. Requiring BOTH meant
+    `divmod(D(17), 5)` — a user class and a plain number, which is what code
+    actually writes — never reached __divmod__ at all and fell into the numeric
+    path, where the object handle was cast and the program died with runtime
+    error 219 (bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219).
+    A dunder taking `other` as a Variant has always been able to receive the
+    number; only this gate said otherwise. }
+  if ((oa <> nil) and not ((oa is TPyList) or (oa is TPyDict) or (oa is TPyBytes))) or
+     ((ob <> nil) and not ((ob is TPyList) or (ob is TPyDict) or (ob is TPyBytes))) then
   begin
-    oa := TObject(Pointer(NativeInt(pa^.Payload)));
-    ob := TObject(Pointer(NativeInt(pb^.Payload)));
-    if not ((oa is TPyList) or (oa is TPyDict) or (oa is TPyBytes)) then
     begin
       if PyUserObjDivmod(oa, ob, a, b, r) then
       begin
@@ -15886,7 +15893,14 @@ var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
     sres: AnsiString; ores: Pointer; r: PPyVarRec;
 begin
   PyUserArithCall1 := False;
-  if (selfObj = nil) or (otherObj = nil) then Exit;
+  { `otherObj` is NOT required, and never was used: the only parameter shape
+    this accepts is a Variant (the pk[1] test below), so the other operand
+    travels as `otherV` and may be an int, a str or anything else. Demanding an
+    object here made `divmod(D(17), 5)` — a user class and a plain number, the
+    ordinary spelling — fall through to the numeric path and die with runtime
+    error 219 (bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219).
+    The parameter stays for the reflected call sites' symmetry. }
+  if selfObj = nil then Exit;
   if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
@@ -16016,11 +16030,31 @@ end;
   left to the caller's fallback rather than cast to a tuple it is not. }
 function PyUserObjDivmod(pobj, qobj: TObject; const pv, qv: Variant;
                          var res: TObject): Boolean;
+var rv: Variant; o: TObject;
 begin
-  PyUserObjDivmod := PyUserObjObjDunder(pobj, qobj, qv, '__divmod__', res);
+  { Through PyUserArithCall1, the dispatcher that covers every RetKind the
+    frontend emits, rather than PyUserObjObjDunder, which demanded RetKind 6 (a
+    declared class). An unannotated `def __divmod__(self, o): return (a, b)`
+    returns a VARIANT — RetKind 22 — so the guard rejected the method, the
+    caller's fallback cast a value that was not a TPyList, and the program died
+    with a bare runtime error 219 naming neither divmod nor the class. Same
+    guard, same symptom, as the __hash__ one below.
+
+    The pair is unboxed here and RETAINED: `rv` is a LOCAL variant, so its scope
+    exit runs PXXVarClear and releases an object-tagged slot — see PyObjAsVar's
+    note. Anything that is not a TPyList answers False and leaves the caller its
+    fallback, which is Python's contract ("a pair") kept rather than cast. }
+  PyUserObjDivmod := PyUserArithCall1(pobj, qobj, qv, '__divmod__', rv);
   if not PyUserObjDivmod then
-    PyUserObjDivmod := PyUserObjObjDunder(qobj, pobj, pv, '__rdivmod__', res);
-  if PyUserObjDivmod and not (res is TPyList) then PyUserObjDivmod := False;
+    PyUserObjDivmod := PyUserArithCall1(qobj, pobj, pv, '__rdivmod__', rv);
+  if not PyUserObjDivmod then Exit;
+  PyUserObjDivmod := False;
+  if pyvartag(rv) <> 7 then Exit;
+  o := TObject(pyvarobj(rv));
+  if not (o is TPyList) then Exit;
+  PXXObjRetain(Pointer(o));
+  res := o;
+  PyUserObjDivmod := True;
 end;
 
 { See the forward declaration above PyVarEq. Only `def __hash__(self) -> int`

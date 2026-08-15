@@ -1,19 +1,9 @@
-# feature-nilpy-arithmetic-dunders-full-protocol — the __divmod__ arm.
-#
-# `divmod(M(7), M(3))` reached pyfloordiv_v with two object handles and died
-# with `Runtime error 219` (a bad cast) — it neither called __divmod__ nor
-# raised. Both arms are covered here because they fail differently: a class
-# WITH the dunder was a crash, and a class WITHOUT one should be a catchable
-# TypeError (CPython's answer), which is also what the crash was hiding.
-#
-# The reflected arm needs the left operand to have NO __divmod__, or the direct
-# one shadows it — hence `Bare` on the left rather than another R.
-#
-# The numeric control matters: divmod() over ints and floats already worked and
-# goes down a different path, so a fix that captured every operand pair would
-# pass the object cases and silently break the ordinary ones.
-#
-# Expectations are CPython's own output.
+# divmod() over a user class. Two gates were wrong at once: pydivmod_v demanded
+# that BOTH operands be objects, so divmod(D(17), 5) never reached __divmod__;
+# and the dispatcher behind it demanded RetKind 6, a declared class, while an
+# unannotated def returning a tuple returns a VARIANT. The program died with a
+# bare "Runtime error 219" naming neither divmod nor the class.
+# bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219
 
 
 class D:
@@ -21,7 +11,7 @@ class D:
         self.v = v
 
     def __divmod__(self, o):
-        return (self.v // o.v, self.v % o.v)
+        return (self.v // o, self.v % o)
 
 
 class R:
@@ -29,20 +19,50 @@ class R:
         self.v = v
 
     def __rdivmod__(self, o):
-        return ("rdivmod", o.v, self.v)
+        return (o // self.v, o % self.v)
 
 
-class Bare:
+class Both:
+    def __init__(self, v):
+        self.v = v
+
+    def __divmod__(self, o):
+        return ("d", self.v)
+
+    def __rdivmod__(self, o):
+        return ("r", self.v)
+
+
+class Plain:
     def __init__(self, v):
         self.v = v
 
 
-print("direct   ", divmod(D(7), D(3)))
-print("reflected", divmod(Bare(7), R(3)))
-print("numbers  ", divmod(7, 3), divmod(-7, 3), divmod(7.5, 2))
+print("obj-int", divmod(D(17), 5))
+print("obj-int2", divmod(D(-17), 5))
+print("int-obj", divmod(23, R(5)))
+print("both-direct", divmod(Both(1), 2))
+print("both-reflected", divmod(9, Both(1)))
 
+# the same object twice, and the result used as a pair
+q, r = divmod(D(17), 5)
+print("unpack", q, r)
+print("index", divmod(D(17), 5)[0], divmod(D(17), 5)[1])
+
+# in a loop, so a leaked or freed pair would show
+tot = 0
+for i in range(5):
+    a, b = divmod(D(100 + i), 7)
+    tot = tot + a + b
+print("loop", tot)
+
+# a class with neither dunder is a TypeError, not a 219
 try:
-    divmod(Bare(7), Bare(3))
-    print("bare     ", "NO ERROR")
+    print(divmod(Plain(3), 2))
 except TypeError:
-    print("bare     ", "TypeError")
+    print("typeerror")
+
+# the builtin rows are unchanged
+print("builtin", divmod(7, 2), divmod(-7, 2), divmod(7, -2))
+print("builtin-float", divmod(7.5, 2))
+print("TEST-OK")
