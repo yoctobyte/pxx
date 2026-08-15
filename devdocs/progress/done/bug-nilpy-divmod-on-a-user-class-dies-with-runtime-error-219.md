@@ -64,4 +64,4 @@ neither (TypeError, not 219), and the builtin int/float rows unchanged.
 `gate.sh quick` GREEN, pinned v329.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 250cbc198.
