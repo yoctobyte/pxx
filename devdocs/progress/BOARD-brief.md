@@ -5,18 +5,19 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:11 blocked:6 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1818 rejected:37`
+`unfinished:12 blocked:6 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:74 done:1818 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: agent-AN
+_none — no lane is locked._
 
-## unfinished (11) — parked mid-flight; re-claim, do not duplicate
+## unfinished (12) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-builtins-over-a-user-iterable-answer-empty` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
+- `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - `feature-a-typeref-migrate-consumers` [A]

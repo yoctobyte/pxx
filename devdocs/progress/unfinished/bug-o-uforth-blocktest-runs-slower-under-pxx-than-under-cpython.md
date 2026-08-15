@@ -539,3 +539,46 @@ prove it on hardware.
 fresh heap block on every evaluation. `PXX_FLAG_STATIC` is defined and unused.
 That, plus `PXXAlloc`/`PXXFree` around it, is the 28.5% this ticket is now
 actually about. Not started.
+
+### Follow-up 1 sized, NOT started — and the obvious implementation is wrong
+
+Sized before parking, because the shape that suggests itself is unsound and
+that is worth knowing before someone spends a session on it.
+
+**The tempting version: intern inside `PXXStrFromLit`,** keyed on
+`(src, len)`. A literal's source address is a stable `.rodata` address, so a
+repeat evaluation would hit the cache and skip the allocation entirely — no
+backend changes, all of it in `builtinheap.pas`.
+
+**It is wrong, because `PXXStrFromLit` is not a literal-only entry point.**
+Measured by reading the callers of the per-backend shim
+(`AnsiStrFromLiteralAddr`, 12 call sites in `ir_codegen.inc` alone):
+
+| call site | source it passes |
+| --- | --- |
+| `IR_CONST_STR` load | `.rodata` — the literal case |
+| `EmitAnsiStrFromInlineString` | an inline `[len][chars]` blob |
+| PChar -> AnsiString | an arbitrary pointer, heap or foreign |
+| readln | the **BSS line buffer**, which is overwritten every line |
+| copy of an existing managed string | a HEAP handle |
+
+Two of those are fatal to an address-keyed cache: the BSS line buffer is
+MUTATED between calls, so the cache would answer with a previous line; and a
+heap handle's address is RECYCLED after free, so the cache would answer with a
+dead string's contents. Both are silent wrong VALUES, which is the failure class
+this repo is worst at finding.
+
+**So the real shape is a second shim** — one used only for the `IR_CONST_STR`
+load — and that is per-backend setup across six drivers, which is the recurring
+landmine ([[project_call_to_code_offset_zero_is_the_elf_entry_point]] is the
+same shape). Sized as its own session, not a tail-end addition.
+
+Two facts that make the eventual implementation safe, both checked here:
+
+- **Identity is fine.** `PXXStrUnique` copies whenever `rc > 1`, so an interned
+  block with a SATURATED refcount copies on every write — `s1 := 'abc'; s2 :=
+  'abc'; s1[1] := 'x'` cannot alias. `PXXStrDecRef` can never free it either.
+- **`PXX_FLAG_STATIC` already exists** (builtinheap.pas:181, declared
+  "reserved, unused") and is the natural stamp for "never freed, always COW".
+
+Parked to `unfinished/` with follow-up 2 landed and follow-up 1 sized.
