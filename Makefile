@@ -9589,6 +9589,12 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas $(TESTTMP)/lib_strutil
 	test "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" = "59"
 	test "$$($(TESTTMP)/lib_strutil | grep -c 'FAIL')" = "0"
+	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
+	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
+	# under the d/m/y default, and a two-digit year uses a SLIDING window.
+	$(PXX_STABLE) -Fulib/rtl test/lib_dateparse.pas $(TESTTMP)/lib_dateparse
+	test "$$($(TESTTMP)/lib_dateparse | grep -c '=ok')" = "36"
+	test "$$($(TESTTMP)/lib_dateparse | tail -1)" = "lib_dateparse: all ok"
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas $(TESTTMP)/lib_format
 	test "$$($(TESTTMP)/lib_format | grep -c '=ok')" = "27"
 	test "$$($(TESTTMP)/lib_format | grep -c 'FAIL')" = "0"

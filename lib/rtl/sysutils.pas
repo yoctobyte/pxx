@@ -269,6 +269,15 @@ var
   TimeSeparator: Char;
   DateSeparator: Char;
   DecimalSeparator: Char;
+  { Field ORDER for StrToDate — only the y/m/d letters and their sequence are
+    read, so 'd/m/y' and 'dd/mm/yyyy' parse alike. FPC's own C-locale default
+    is 'd/m/y' with DateSeparator '-', which looks inconsistent and is not:
+    '/' inside a format string MEANS "the date separator". }
+  ShortDateFormat: AnsiString;
+  { A one- or two-digit year is placed in the 100 years ENDING at
+    CurrentYear - TwoDigitYearCenturyWindow + 100, i.e. the window slides with
+    the clock. FPC's default is 50. }
+  TwoDigitYearCenturyWindow: Word;
   { Grouping and currency, for Format's '%n' and '%m'. FPC's own defaults are
     these regardless of the process locale (verified against fpc under both
     LANG=C and en_US.UTF-8), so hardcoding them IS the parity answer, not a
@@ -480,10 +489,39 @@ function IncMonth(const DateTime: TDateTime; NumberOfMonths: Integer): TDateTime
   tokens (mmm/ddd) are NOT implemented — extend when a consumer needs them. }
 function FormatDateTime(const Fmt: string; DateTime: TDateTime): string;
 
-{ Parse "hh[:nn[:ss]]" (TimeSeparator-separated) into a time-of-day fraction.
-  Raises Exception on malformed input (FPC raises EConvertError; callers like
-  Synapse just catch Exception). No AM/PM, no milliseconds — extend on demand. }
+{ Parse "hh[:nn[:ss[.zzz]]]" (TimeSeparator-separated) into a time-of-day
+  fraction. Raises EConvertError on malformed input. The fraction after the
+  DecimalSeparator is a MILLISECOND FIELD, not a decimal fraction — '.25' is
+  25 ms — and is accepted only after a full h:m:s; see the implementation.
+  No AM/PM — extend on demand. }
 function StrToTime(const S: string): TDateTime;
+
+{ The parse direction of the date surface, mirroring the format direction
+  (FormatDateTime / EncodeDate). Field ORDER comes from ShortDateFormat and the
+  separator from DateSeparator, so ISO input is NOT universally valid: with the
+  d/m/y default, StrToDate('2026-08-14') raises, exactly as FPC does — it reads
+  2026 as the day. Measured against FPC 3.2.2, including:
+
+  - one field is the DAY (current month and year), two are day+month (current
+    year), three follow ShortDateFormat, four raise;
+  - a year written with one or two digits goes through
+    TwoDigitYearCenturyWindow, so '49' is 2049 and '99' is 1999 (the pivot
+    moves with the current year — it is a sliding window, not a fixed century);
+  - StrToDate REJECTS a trailing time, and StrToDateTime accepts either half
+    alone;
+  - the two failure classes carry different messages, and callers do match on
+    them: a shape that does not scan is `"%s" is not a valid date format`,
+    while fields that scan but do not exist (month 13, 29 Feb 2026) are the
+    unquoted `Invalid date`.
+
+  The TryStrTo* arms share one parser with the raising arms rather than
+  duplicating it — the split between those two is where this family keeps
+  going wrong ([[feature-lib-sysutils-strtodate-and-strtodatetime]]). }
+function StrToDate(const S: string): TDateTime;
+function StrToDateTime(const S: string): TDateTime;
+function TryStrToDate(const S: string; var Value: TDateTime): Boolean;
+function TryStrToTime(const S: string; var Value: TDateTime): Boolean;
+function TryStrToDateTime(const S: string; var Value: TDateTime): Boolean;
 
 { Wall-clock now as a TDateTime (CLOCK_REALTIME via the PAL; UTC — this RTL
   has no timezone database, matching its POSIX/C fixed-locale stance). }
@@ -3164,21 +3202,21 @@ end;
   RAISES rather than truncating), and only after a full h:m:s ('13:05.5'
   raises).
   ([[bug-b-strtotime-raises-the-wrong-class-and-rejects-milliseconds]]) }
-function StrToTime(const S: string): TDateTime;
+function TryStrToTime(const S: string; var Value: TDateTime): Boolean;
 var
   part: array[0..2] of Integer;
   np, i, v, digits, ms, msDigits: Integer;
   c: Char;
   inFrac: Boolean;
-
-  procedure Bad;
-  begin
-    { FPC's exact wording — "is not a valid time", not "is an invalid time",
-      which is what the integer arms say. Callers match on message text. }
-    raise EConvertError.CreateFmt('"%s" is not a valid time', [S]);
-  end;
-
 begin
+  { Every rejection is `Exit` with Result already False. The raising arm
+    (StrToTime) is a two-line wrapper over this, so the two cannot answer
+    differently — which is the failure mode this family kept having. }
+  Result := False;
+  { cleared on failure, not left alone: FPC declares these OUT params and a
+    failed TryStrTo* is observably 0 there, so code that prints the variable
+    without checking the Boolean sees the same thing on both. Measured. }
+  Value := 0.0;
   part[0] := 0; part[1] := 0; part[2] := 0;
   np := 0;
   v := 0;
@@ -3193,7 +3231,7 @@ begin
       begin
         ms := ms * 10 + (Ord(c) - Ord('0'));
         msDigits := msDigits + 1;
-        if msDigits > 3 then Bad;      { FPC rejects a 4th digit }
+        if msDigits > 3 then Exit;     { FPC rejects a 4th digit }
       end
       else
       begin
@@ -3212,13 +3250,208 @@ begin
             and (np = 2) then       { only after h:m:s, as FPC requires }
       inFrac := True
     else if c <> ' ' then
-      Bad;
+      Exit;
   end;
-  if digits = 0 then Bad;
-  if inFrac and (msDigits = 0) then Bad;
+  if digits = 0 then Exit;
+  if inFrac and (msDigits = 0) then Exit;
   part[np] := v;
-  if (part[0] > 23) or (part[1] > 59) or (part[2] > 59) then Bad;
-  Result := EncodeTime(part[0], part[1], part[2], ms);
+  if (part[0] > 23) or (part[1] > 59) or (part[2] > 59) then Exit;
+  Value := EncodeTime(part[0], part[1], part[2], ms);
+  Result := True;
+end;
+
+function StrToTime(const S: string): TDateTime;
+begin
+  if not TryStrToTime(S, Result) then
+    { FPC's exact wording — "is not a valid time", not "is an invalid time",
+      which is what the integer arms say. Callers match on message text. }
+    raise EConvertError.CreateFmt('"%s" is not a valid time', [S]);
+end;
+
+{ ParseDate results. The two failure classes are not cosmetic: FPC gives a
+  different message for each, and a caller that greps the message sees them. }
+const
+  dpOK      = 0;
+  dpFormat  = 1;   { does not scan as a date at all -> quoted message }
+  dpInvalid = 2;   { scans, but the fields name no real day -> 'Invalid date' }
+
+function ParseDate(const S: string; var Value: TDateTime): Integer;
+var
+  fld, fdig: array[0..2] of Integer;
+  order: array[0..2] of Char;
+  nf, i, k, v, digits, st, en, no, yd: Integer;
+  y, mo, d, base: Integer;
+  cy, cmo, cd: Word;
+  c: Char;
+  sy, sm, sd: Boolean;
+begin
+  Result := dpFormat;
+  st := 1; en := Length(S);
+  while (st <= en) and (S[st] = ' ') do st := st + 1;
+  while (en >= st) and (S[en] = ' ') do en := en - 1;
+  if st > en then Exit;
+
+  { scan digit runs separated by DateSeparator; anything else is not a date.
+    A TRAILING separator is tolerated ('14-08-2026-' parses) but a fourth
+    field is not — both measured. }
+  nf := 0; v := 0; digits := 0;
+  for i := st to en do
+  begin
+    c := S[i];
+    if (c >= '0') and (c <= '9') then
+    begin
+      v := v * 10 + (Ord(c) - Ord('0'));
+      digits := digits + 1;
+      if digits > 4 then Exit;
+    end
+    else if c = DateSeparator then
+    begin
+      if (digits = 0) or (nf > 2) then Exit;
+      fld[nf] := v; fdig[nf] := digits; nf := nf + 1;
+      v := 0; digits := 0;
+    end
+    else
+      Exit;
+  end;
+  if digits > 0 then
+  begin
+    if nf > 2 then Exit;
+    fld[nf] := v; fdig[nf] := digits; nf := nf + 1;
+  end;
+  if nf = 0 then Exit;
+
+  { field order = the order the y/m/d letters first appear in ShortDateFormat,
+    so 'd/m/y' and 'dd/mm/yyyy' behave alike. A format naming fewer than three
+    of them cannot order anything, so fall back to FPC's default. }
+  no := 0; sy := False; sm := False; sd := False;
+  for i := 1 to Length(ShortDateFormat) do
+  begin
+    c := ShortDateFormat[i];
+    if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    if (c = 'y') and (not sy) then begin order[no] := 'y'; no := no + 1; sy := True; end
+    else if (c = 'm') and (not sm) then begin order[no] := 'm'; no := no + 1; sm := True; end
+    else if (c = 'd') and (not sd) then begin order[no] := 'd'; no := no + 1; sd := True; end;
+  end;
+  if no < 3 then
+  begin
+    order[0] := 'd'; order[1] := 'm'; order[2] := 'y';
+  end;
+
+  { fields not given default to TODAY, which is why a bare '15' is the 15th of
+    the current month. }
+  DecodeDate(Date, cy, cmo, cd);
+  y := cy; mo := cmo; d := cd; yd := 4;
+  for k := 0 to nf - 1 do
+    case order[k] of
+      'y': begin y := fld[k]; yd := fdig[k]; end;
+      'm': mo := fld[k];
+      'd': d := fld[k];
+    end;
+
+  { sliding two-digit-year window: the 100 years ending TwoDigitYearCenturyWindow
+    years before today, rounded down to a century. With window 50 in 2026 the
+    low bound is 1976, so '49' is 2049 and '99' is 1999. }
+  if yd <= 2 then
+  begin
+    base := ((cy - TwoDigitYearCenturyWindow) div 100) * 100;
+    y := base + y;
+    if y < (cy - TwoDigitYearCenturyWindow) then y := y + 100;
+  end;
+
+  if (mo < 1) or (mo > 12) or (y < 1) or (y > 9999) then
+  begin
+    Result := dpInvalid;
+    Exit;
+  end;
+  if (d < 1) or (d > MonthDays[IsLeapYear(Word(y))][mo]) then
+  begin
+    Result := dpInvalid;
+    Exit;
+  end;
+  Value := EncodeDate(Word(y), Word(mo), Word(d));
+  Result := dpOK;
+end;
+
+function TryStrToDate(const S: string; var Value: TDateTime): Boolean;
+begin
+  Value := 0.0;                 { see TryStrToTime }
+  Result := ParseDate(S, Value) = dpOK;
+end;
+
+procedure RaiseDateError(code: Integer; const S: string);
+begin
+  if code = dpInvalid then
+    raise EConvertError.Create('Invalid date')
+  else
+    raise EConvertError.CreateFmt('"%s" is not a valid date format', [S]);
+end;
+
+function StrToDate(const S: string): TDateTime;
+var code: Integer;
+begin
+  code := ParseDate(S, Result);
+  if code <> dpOK then RaiseDateError(code, S);
+end;
+
+{ Split "<date> <time>" on whitespace. A lone token is a TIME if it contains
+  TimeSeparator and a DATE otherwise, which is how FPC decides — and why
+  StrToDateTime('x') complains about a date and not a time. }
+procedure SplitDateTime(const S: string; var ds, ts: string);
+var st, en, i, sp: Integer;
+begin
+  st := 1; en := Length(S);
+  while (st <= en) and ((S[st] = ' ') or (S[st] = #9)) do st := st + 1;
+  while (en >= st) and ((S[en] = ' ') or (S[en] = #9)) do en := en - 1;
+  sp := 0;
+  for i := st to en do
+    if (S[i] = ' ') or (S[i] = #9) then begin sp := i; Break; end;
+  ds := ''; ts := '';
+  if sp > 0 then
+  begin
+    ds := Copy(S, st, sp - st);
+    ts := Trim(Copy(S, sp, en - sp + 1));
+  end
+  else if Pos(TimeSeparator, Copy(S, st, en - st + 1)) > 0 then
+    ts := Copy(S, st, en - st + 1)
+  else
+    ds := Copy(S, st, en - st + 1);
+end;
+
+function TryStrToDateTime(const S: string; var Value: TDateTime): Boolean;
+var ds, ts: string; dv, tv: TDateTime;
+begin
+  SplitDateTime(S, ds, ts);
+  dv := 0.0; tv := 0.0;
+  Value := 0.0;                 { see TryStrToTime }
+  Result := False;
+  { time half FIRST — FPC validates it before the date, and it shows in which
+    half a mixed-up string is blamed on ('12:34:56 14-08-2026' complains that
+    the right-hand token is not a valid TIME). Order is observable here. }
+  if ts <> '' then
+    if not TryStrToTime(ts, tv) then Exit;
+  if ds <> '' then
+    if ParseDate(ds, dv) <> dpOK then Exit;
+  if (ds = '') and (ts = '') then Exit;
+  Value := dv + tv;
+  Result := True;
+end;
+
+function StrToDateTime(const S: string): TDateTime;
+var ds, ts: string; dv, tv: TDateTime; code: Integer;
+begin
+  SplitDateTime(S, ds, ts);
+  dv := 0.0; tv := 0.0;
+  if (ds = '') and (ts = '') then RaiseDateError(dpFormat, S);
+  { time half first — see TryStrToDateTime }
+  if ts <> '' then
+    if not TryStrToTime(ts, tv) then
+      raise EConvertError.CreateFmt('"%s" is not a valid time', [ts]);
+  if ds <> '' then
+  begin
+    code := ParseDate(ds, dv);
+    if code <> dpOK then RaiseDateError(code, ds);
+  end;
+  Result := dv + tv;
 end;
 
 function FormatDateTime(const Fmt: string; DateTime: TDateTime): string;
@@ -3411,6 +3644,8 @@ initialization
   PXXIoErrorHook := @SysRaiseIoError;
   TimeSeparator := ':';
   DateSeparator := '-';
+  ShortDateFormat := 'd/m/y';
+  TwoDigitYearCenturyWindow := 50;
   DecimalSeparator := '.';
   ThousandSeparator := ',';
   CurrencyString := '$';
