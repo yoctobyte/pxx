@@ -557,3 +557,72 @@ shape-2 (filters not composing) failures it names — both are compiler one-line
 retire the flag. Nothing here is half-applied: the enforcement is off by
 default, self-host converges at generation 1, and gate.sh quick is green at
 every commit.
+
+## 2026-08-15 — the sweep's ONE failure is fixed; the flip is measured and ready
+
+`task-t-strict-uses-corpus-sweep` landed (1660 sources, **one** strict-only
+failure) and this ticket's `blocked-by` was stale — it had been invisible to
+`ready`/`next` at prio 80 for that reason alone. Cleared, and the finding
+worked (commit `63d1d0de9`).
+
+### The one failure was TWO bugs, and neither was ambient marking
+
+T classified `test_nilpy_dotted_package_import.npy` as *"closest to shape 1,
+recorded rather than forced into a box"* — correctly hedged, because it was not
+shape 1 at all:
+
+1. **The pthread capability guard matched a 7-character prefix, `__pxx_p`.**
+   That also catches `__pxx_pipe2` and `__pxx_poll`, which are pxxcio's ordinary
+   PAL I/O wrappers with no thread content whatsoever, so a program that left
+   `pipe()` external was told to rebuild with `--threadsafe` — a flag with
+   nothing to do with it. Now matched against palpthread's actual export
+   prefixes. **Latent, not caused by strict:** strict was merely the only
+   configuration that made pxxcio's body invisible and so turned `pipe2` into a
+   real external.
+
+2. **A C translation unit pulled in by a Pascal unit's uses clause had no edge
+   to the C runtime bridge.** Only the C-PROGRAM path marked
+   `builtinheap`/`pxxcio` ambient, so a `.c` reached through a unit lowered
+   `malloc` onto `__pxx_malloc`, found no bodied proc under strict, kept it as a
+   real external, and died at LOAD with `undefined symbol: __pxx_malloc`. Marked
+   ambient at the embedded-C site for the same reason `builtin`/`pylib` already
+   are — they hold the runtime helpers CODEGEN emits calls to, and a C TU has no
+   uses clause that could declare them. This is *exactly* the shape of the
+   `AddDefaultCIncludeDirs` fix sitting three lines above it, which had the same
+   cause: something the C-PROGRAM path registered and the pulled-from-a-unit
+   path did not.
+
+That file now compiles **and runs** identically with and without the flag, so
+the sweep's finding count is **0**.
+
+### The flip itself: measured green, not pushed
+
+`StrictUses := True` as the default was built and exercised, then reverted —
+the result is data, not a landed change:
+
+| check | result |
+| --- | --- |
+| self-host fixedpoint | converges, generation 1 |
+| `tools/gate.sh quick` | GREEN |
+| `test_uses_order_pylib_exception_a` / `_b` | both run, output **IDENTICAL** — the property the pair exists to prove |
+| `test_nilpy_rtl_exception_surface` | runs |
+| FPC seed canary | GREEN |
+| headline repro (`IntToStr` through `priv`) | `undefined variable` under the flag, compiles without it |
+
+### What is left is a JUDGEMENT call, not more work
+
+Everything this ticket asked for is done except the one-line default change, and
+the evidence above is the strongest it has ever had. The remaining risk is
+precisely the one this ticket's own Gate names: **these regressions only show in
+the NATIVE tier, so `gate.sh quick` cannot see them**, and the corpus sweep that
+could is dated `2026-08-14` — many commits ago, including this session's.
+
+So the fork is:
+
+- **flip now** and let Track T's next sweep catch any fallout (revert is one
+  line), or
+- **re-sweep at this sha first**, then flip.
+
+Left to the user rather than guessed, because the ticket's own Gate says this
+change *"should not arrive as one commit"* and a wrong call here changes name
+resolution for the whole tree.
