@@ -164,4 +164,4 @@ Gated by a new assertion beside the dotted-import test: the same file built
 gate line, written down.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit e6fd258d8.
