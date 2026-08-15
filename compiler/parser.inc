@@ -131,6 +131,7 @@ begin
   SetLength(ASTEnumId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
   SetLength(ASTFile, n);
   SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
+  SetLength(ASTPyUser, n);
   ASTCapacity := n;
 end;
 
@@ -156,6 +157,10 @@ begin
   ASTRChk[ASTNodeCount]    := ((kind = AN_ASSIGN) or (kind = AN_INDEX)) and
                               StmtRChecks;
   ASTIChk[ASTNodeCount]    := (kind = AN_CALL) and StmtIChecks;
+  { the Python operator semantics apply to the USER's code, not to a Pascal RTL
+    unit compiled into the same program — recorded at birth because the unit
+    context is gone by IR lowering (see ASTPyUser in defs.inc) }
+  ASTPyUser[ASTNodeCount]  := NilPyUserCode;
   { DWARF -g: stamp the line for nodes from the main source file, and for any
     MARKED source whose token range was recorded with DbgMarkTokFile (an
     imported `.py` module). Everything else — the Pascal RTL, pylib, the unit
@@ -195,6 +200,7 @@ begin
   ASTQChk[Result]     := ASTQChk[node];
   ASTRChk[Result]     := ASTRChk[node];
   ASTIChk[Result]     := ASTIChk[node];
+  ASTPyUser[Result]   := ASTPyUser[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;

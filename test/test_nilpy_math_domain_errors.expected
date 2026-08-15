@@ -1,0 +1,27 @@
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+ValueError: math domain error
+True True
+True True
+inf inf
+0.0 1.5707963267948966 -1.5707963267948966 0.0 3.141592653589793
+0.0 0.0 0.0
+64.0 -512.0 1.0 0.25
+ValueError: math domain error
+1.4142135623730951 1.0 3.0 3.0
+1024.0 1.4142135623730951
+3.0 2.9999999999999996
+ZeroDivisionError: division by zero
+ZeroDivisionError: integer division or modulo by zero
+ZeroDivisionError: integer modulo by zero

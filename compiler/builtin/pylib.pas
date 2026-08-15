@@ -1754,6 +1754,16 @@ function pymath_copysign(x, y: Double): Double;
   None of them needs a transcendental, which is what keeps them buildable inside
   a BUILTIN unit (see the note on math.log above for why that matters).
   bug-nilpy-math-surface-remaining-gaps-and-degrees-association }
+{ CPython's math domain refusals, as ARGUMENT guards: each returns its argument
+  unchanged or raises `ValueError: math domain error`, so the frontend can wrap
+  the argument of the RTL routine it already calls. Checking the ARGUMENT and
+  not the result is what keeps `sqrt(nan)` answering nan, as CPython does — a
+  NaN fails every comparison and passes straight through.
+  bug-n-math-pow-domain-error-raises-the-wrong-exception }
+function pymath_dom_nonneg(x: Double): Double;
+function pymath_dom_pos(x: Double): Double;
+function pymath_dom_unit(x: Double): Double;
+function pymath_dom_pow(b: Double; e: Double): Double;
 function pymath_modf(x: Double): TPyList;
 function pymath_prod(l: TPyList): Variant;
 function pymath_fsum(l: TPyList): Double;
@@ -6211,6 +6221,47 @@ end;
 { math.modf(x) -> (fractional, integral), BOTH floats and both carrying x's
   sign, which is CPython's contract — modf(-2.5) is (-0.5, -2.0), not
   (0.5, -2.0). A tuple, so it belongs here rather than in the RTL. }
+{ `math.sqrt(-1)` and friends. CPython raises ValueError('math domain error')
+  where IEEE — and therefore the Pascal RTL these lower to — answers a quiet NaN
+  or -Inf. The guard sits on the ARGUMENT so a NaN input still answers NaN.
+  bug-n-math-pow-domain-error-raises-the-wrong-exception }
+function pymath_dom_nonneg(x: Double): Double;
+begin
+  if x < 0.0 then raise ValueError.Create('math domain error');
+  pymath_dom_nonneg := x;
+end;
+
+{ log/log2/log10: zero is out of domain too, and gives -Inf rather than NaN. }
+function pymath_dom_pos(x: Double): Double;
+begin
+  if x < 0.0 then raise ValueError.Create('math domain error');
+  if x = 0.0 then raise ValueError.Create('math domain error');
+  pymath_dom_pos := x;
+end;
+
+{ asin/acos: [-1, 1]. }
+function pymath_dom_unit(x: Double): Double;
+begin
+  if (x < -1.0) or (x > 1.0) then raise ValueError.Create('math domain error');
+  pymath_dom_unit := x;
+end;
+
+{ math.pow(b, e): CPython refuses a negative base with a non-integral exponent —
+  the result is complex, and math is the real-only module. Returns the BASE, so
+  the frontend wraps argument 0 and the exponent reaches both. 0 ** negative is
+  the other refusal and wears the same message. }
+function pymath_dom_pow(b: Double; e: Double): Double;
+var t: Double;
+begin
+  if b < 0.0 then
+  begin
+    t := e - Int(e);
+    if t <> 0.0 then raise ValueError.Create('math domain error');
+  end;
+  if (b = 0.0) and (e < 0.0) then raise ValueError.Create('math domain error');
+  pymath_dom_pow := b;
+end;
+
 function pymath_modf(x: Double): TPyList;
 var ip: Double; pb: PInt64;
 begin

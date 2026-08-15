@@ -912,6 +912,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_math_random26 | diff -u test/test_nilpy_math_surface_and_random.expected -
 	./$(COMPILER) test/test_nilpy_max_min_iterables.npy $(TESTTMP)/test_nilpy_maxmin_iter26
 	$(TESTTMP)/test_nilpy_maxmin_iter26 | diff -u test/test_nilpy_max_min_iterables.expected -
+	./$(COMPILER) test/test_nilpy_math_domain_errors.npy $(TESTTMP)/test_nilpy_mathdomain26
+	$(TESTTMP)/test_nilpy_mathdomain26 | diff -u test/test_nilpy_math_domain_errors.expected -
 	./$(COMPILER) test/test_nilpy_getattr_dunder.npy $(TESTTMP)/test_nilpy_getattrdunder26
 	$(TESTTMP)/test_nilpy_getattrdunder26 | diff -u test/test_nilpy_getattr_dunder.expected -
 	./$(COMPILER) test/test_nilpy_none_comparison_raises.npy $(TESTTMP)/test_nilpy_nonecmp26

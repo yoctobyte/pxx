@@ -984,6 +984,18 @@ end;
 
   `is` declines too: it lowers to the SAME tkEq node and is told apart only by
   PY_BINOP_IDENTITY, the marker the by-contents arms above already consult. }
+{ Do Python's operator semantics apply to THIS node? PyProgramMode is true for
+  the whole compilation, including the Pascal RTL units an `import` drags in —
+  so gating on it alone gave lib/rtl/math.pas's `z / z` NaN idiom a
+  ZeroDivisionError and every imported unit's `div`/`mod` Python's floor rule.
+  ASTPyUser records NilPyUserCode at the node's birth, which is the only place
+  the unit context still exists.
+  bug-n-math-pow-domain-error-raises-the-wrong-exception }
+function PyNodeIsUser(node: Integer): Boolean;
+begin
+  PyNodeIsUser := PyProgramMode and (node >= 0) and ASTPyUser[node];
+end;
+
 function IRPyVarEqTry(left, right, item, node: Integer): Integer;
 var cpi, g0, g1, g2, varIdx, elseLabel, endLabel, trySym: Integer;
 begin
@@ -6716,7 +6728,7 @@ begin
         one MULTIPLIES, which cannot be decided here -- pymul_v dispatches on
         the tag. (An earlier attempt guessed "variant operand of * is a string"
         and was reverted; it miscompiled v * 2 on an int.) }
-      if PyProgramMode and (Integer(ASTIVal[node]) = Ord(tkStar)) and
+      if PyNodeIsUser(node) and (Integer(ASTIVal[node]) = Ord(tkStar)) and
          ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) then
       begin
@@ -6731,7 +6743,7 @@ begin
         Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
         Exit;
       end;
-      if PyProgramMode and (Integer(ASTIVal[node]) = Ord(tkStar)) and
+      if PyNodeIsUser(node) and (Integer(ASTIVal[node]) = Ord(tkStar)) and
          (IRNodeIsPyStr(ASTLeft[node]) <> IRNodeIsPyStr(ASTRight[node])) then
       begin
         if IRNodeIsPyStr(ASTLeft[node]) then
@@ -6787,7 +6799,7 @@ begin
         is too. Same failure the list rule above fixes, and it is checked first
         because a range is a class handle like any other and would otherwise
         fall into the pointer compare. }
-      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
+      if PyNodeIsUser(node) and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (FindUClass('TPyRange') >= 0) and
          (ResolveNodeRec(ASTLeft[node]) = REC_UCLASS_BASE + FindUClass('TPyRange')) and
@@ -6805,7 +6817,7 @@ begin
           Result := IRAppend(IR_NOT, Result, -1, -1, 0, Ord(tyBoolean));
         Exit;
       end;
-      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
+      if PyNodeIsUser(node) and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (IRNodePyListRec(ASTLeft[node]) >= 0) and
          (IRNodePyListRec(ASTLeft[node]) = IRNodePyListRec(ASTRight[node])) then
@@ -6837,7 +6849,7 @@ begin
         is why equality was right while ordering was not. Compare its result
         against 0 with the SOURCE operator, which keeps <, <=, > and >= correct
         including at equality. }
-      if PyProgramMode and
+      if PyNodeIsUser(node) and
          ((Integer(ASTIVal[node]) = Ord(tkLt)) or (Integer(ASTIVal[node]) = Ord(tkLe)) or
           (Integer(ASTIVal[node]) = Ord(tkGt)) or (Integer(ASTIVal[node]) = Ord(tkGe))) and
          (IRNodePyListRec(ASTLeft[node]) >= 0) and
@@ -6865,7 +6877,7 @@ begin
         the new pybytes_cmp providing the -1/0/1 (bug-nilpy-list-ordering-
         compares-heap-addresses, the bytes half its Scope section asked to
         check). }
-      if PyProgramMode and
+      if PyNodeIsUser(node) and
          ((Integer(ASTIVal[node]) = Ord(tkLt)) or (Integer(ASTIVal[node]) = Ord(tkLe)) or
           (Integer(ASTIVal[node]) = Ord(tkGt)) or (Integer(ASTIVal[node]) = Ord(tkGe))) and
          (IRNodePyBytesRec(ASTLeft[node]) >= 0) and
@@ -6889,7 +6901,7 @@ begin
         `if cfg == defaults:` never fired
         (bug-nilpy-dict-equality-compares-identity). pydict_eq ignores
         insertion order, which is what Python's rule requires. }
-      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
+      if PyNodeIsUser(node) and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (IRNodePyDictRec(ASTLeft[node]) >= 0) and
          (IRNodePyDictRec(ASTLeft[node]) = IRNodePyDictRec(ASTRight[node])) then
@@ -6913,7 +6925,7 @@ begin
         ordinary-Python idiom of caching a tuple against None failed to
         compile. A list never equals a non-list, which is the rule pylib's
         pylist_eq_v applies. }
-      if PyProgramMode and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
+      if PyNodeIsUser(node) and (ASTSLen[node] <> PY_BINOP_IDENTITY) and
          ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
          (((IRNodePyListRec(ASTLeft[node]) >= 0) and
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) or
@@ -6949,7 +6961,7 @@ begin
         the quotient and the remainder TOGETHER -- fixing one alone would break
         the identity a = (a//b)*b + (a%b) for mixed signs.
         (bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives.) }
-      if PyProgramMode and
+      if PyNodeIsUser(node) and
          ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) and
          ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant) or
@@ -6991,7 +7003,7 @@ begin
         container-equality blocks above already route them. `+` is not here
         either — it needs a str/list concat arm pyadd_v does not have yet, and
         is tracked separately. }
-      if PyProgramMode and
+      if PyNodeIsUser(node) and
          ((Integer(ASTIVal[node]) = Ord(tkMinus)) or
           (Integer(ASTIVal[node]) = Ord(tkSlash)) or
           (Integer(ASTIVal[node]) = Ord(tkPlus)) or
@@ -7062,7 +7074,7 @@ begin
         exception out. Promotable-int operands are left on the old path — their
         rvalue is a frame SLOT ADDRESS (project_promotable_int_stages123), so
         handing one to a Double parameter would pass the address as a number. }
-      if PyProgramMode and (Integer(ASTIVal[node]) = Ord(tkSlash)) and
+      if PyNodeIsUser(node) and (Integer(ASTIVal[node]) = Ord(tkSlash)) and
          TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTLeft[node]])) and
          TypeIsPyNumeric(IntToTypeKind(ASTTk[ASTRight[node]])) and
          (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]]))) and
@@ -7089,7 +7101,7 @@ begin
         branch below, whose PXXPromoFloorDiv/FloorMod carry Python's sign rule.
         Both operands are checked, not just the node, so a promo operand cannot
         be narrowed into the Int64 helper either. }
-      if PyProgramMode and
+      if PyNodeIsUser(node) and
          ((Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) and
          (not TypeIsPromoInt(IntToTypeKind(ASTTk[node]))) and
          (not TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]]))) and
@@ -7313,8 +7325,8 @@ begin
             handles them even for two plain VT_INT64 operands (Python `1 << 64`
             promotes; Python >> is arithmetic, the native op is logical). A
             Pascal Variant shl keeps the native wrapping semantics. }
-          else if (item = Ord(tkShl)) and PyProgramMode then promoOp := 9
-          else if (item = Ord(tkShr)) and PyProgramMode then promoOp := 10;
+          else if (item = Ord(tkShl)) and PyNodeIsUser(node) then promoOp := 9
+          else if (item = Ord(tkShr)) and PyNodeIsUser(node) then promoOp := 10;
           if (promoOp = 0) or (FindProc('PXXPromoVarArithTry') < 0) then
             Result := IRAppend(IR_VAR_BINOP, left, right, item, idx, Ord(tyVariant))
           else

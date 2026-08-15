@@ -2771,6 +2771,16 @@ var
   ASTFile    : array of Integer; { .debug_line file index for that line (1 = main file); see DbgFileOfTok }
   ASTQChk    : array of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
   ASTRChk    : array of Boolean; { AN_ASSIGN built inside a {$R+} region: the value is range-checked against the DEST's ordinal bounds before the store (set centrally in AllocNode from TokRChecks; copied by CloneAST) — feature-pascal-range-checks-r-plus }
+  { Was this node parsed from code the NilPy USER wrote (the .npy program or an
+    imported .py module), as opposed to a Pascal RTL unit dragged into the same
+    compilation by an `import`? The Python-semantics operator intercepts in
+    ir.inc used PyProgramMode, which is true for the WHOLE program — so
+    lib/rtl/math.pas's own `z / z` NaN idiom became a pytruediv_f call and
+    raised ZeroDivisionError, and every `div`/`mod` in an imported RTL unit
+    silently acquired Python's floor rule. NilPyUserCode is the parse-time
+    predicate; this is how it survives to lowering.
+    bug-n-math-pow-domain-error-raises-the-wrong-exception }
+  ASTPyUser  : array of Boolean;
   ASTIChk    : array of Boolean; { AN_CALL built inside a {$I+} region: a Text-I/O callee gets a PXXIoCheck sequenced after it at IR lowering }
   ASTNodeCount : Integer;
   ASTCapacity : Integer;   { current allocated length of the per-node AST arrays (grown by EnsureASTCapacity) }

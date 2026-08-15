@@ -1,0 +1,65 @@
+# CPython's math module REFUSES its domain errors; IEEE answers a quiet NaN or
+# -Inf. bug-n-math-pow-domain-error-raises-the-wrong-exception — every row here
+# used to be `ZeroDivisionError: division by zero`, because the Python `/`
+# intercept was applying to the Pascal RTL's own `z / z` NaN idiom.
+# Diffed against CPython.
+import math
+
+
+def t(f):
+    try:
+        print(f())
+    except Exception as e:
+        print(type(e).__name__ + ":", e)
+
+
+# the four rows the ticket names
+t(lambda: math.sqrt(-1))
+t(lambda: math.log(-1))
+t(lambda: math.log(0))
+t(lambda: math.pow(-8, 0.5))
+
+# ...and the rest of the domain surface
+t(lambda: math.log10(0))
+t(lambda: math.log10(-1))
+t(lambda: math.log2(0))
+t(lambda: math.log2(-1))
+t(lambda: math.asin(2))
+t(lambda: math.acos(2))
+t(lambda: math.asin(-1.5))
+t(lambda: math.acos(-1.5))
+t(lambda: math.sqrt(-0.5))
+t(lambda: math.log(-0.0001))
+
+# a NaN ARGUMENT is NOT a domain error — it passes through, which is why the
+# guard checks the argument and not the result
+nan = float("nan")
+print(math.isnan(math.sqrt(nan)), math.isnan(math.log(nan)))
+print(math.isnan(math.asin(nan)), math.isnan(math.pow(nan, 2)))
+
+# an INFINITE argument keeps its IEEE answer too. NOT asserted: math.sqrt(inf),
+# which answers nan — the RTL's Newton kernel has no infinity guard, pre-existing
+# and unrelated (bug-b-sqrt-of-infinity-answers-nan).
+inf = float("inf")
+print(math.log(inf), math.pow(inf, 2))
+
+# the boundaries are IN the domain
+print(math.sqrt(0), math.asin(1), math.asin(-1), math.acos(1), math.acos(-1))
+print(math.log(1), math.log10(1), math.log2(1))
+
+# a negative base with an INTEGRAL exponent is fine — only a fractional one is
+# a complex result and therefore refused
+print(math.pow(-8, 2), math.pow(-8, 3), math.pow(-8, 0), math.pow(-2, -2))
+t(lambda: math.pow(0, -1))
+
+# and the ordinary values still compute
+print(math.sqrt(2), math.log(math.e), math.log10(1000), math.log2(8))
+# asin/acos are 1-2 ulps off libm here (bug-b-arcsin-arccos-lose-2-ulps-vs-libm),
+# so they are asserted at the boundaries above rather than mid-range.
+print(math.pow(2, 10), math.pow(2, 0.5))
+print(math.log(8, 2), math.log(1000, 10))
+
+# a real ZeroDivisionError is still a ZeroDivisionError
+t(lambda: 1 / 0)
+t(lambda: 1 // 0)
+t(lambda: 1 % 0)

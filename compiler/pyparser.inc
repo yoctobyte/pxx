@@ -9801,6 +9801,14 @@ begin
   { ...and the five that need a container or an exact algorithm rather than a
     rename. All of them are pure arithmetic, which is what lets them live in a
     builtin unit at all — see math.log's note. }
+  { sqrt/log10/log2 resolved by ORDINARY qualified lookup (the RTL spells them
+    the same), which is why they were never in this table. They are here now so
+    they reach PyParseStdlibCall, where the domain guard is wrapped around
+    argument 0 — `math.sqrt(-1)` must raise ValueError, not answer nan.
+    bug-n-math-pow-domain-error-raises-the-wrong-exception }
+  else if dotted = 'math.sqrt' then Result := 'Sqrt'
+  else if dotted = 'math.log10' then Result := 'Log10'
+  else if dotted = 'math.log2' then Result := 'Log2'
   else if dotted = 'math.modf' then Result := 'pymath_modf'
   else if dotted = 'math.prod' then Result := 'pymath_prod'
   else if dotted = 'math.fsum' then Result := 'pymath_fsum'
@@ -9881,6 +9889,8 @@ end;
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer;
 var procIdx, callNode, argNode, lastArg, i, nArgs: Integer;
     lnA, lnB, lnArg, divNode: Integer;   { math.log(x, base) — see below }
+    domPi, domArg, domArg2, domCall: Integer;   { math domain guard — see below }
+    domName: AnsiString;
 begin
   nArgs := 0;
   { Python's math module is FLOAT-ONLY, so when the shim name has an all-Double
@@ -9937,6 +9947,51 @@ begin
     wrote. Say what is actually unsupported, and why, since the workaround is
     one line of user code.
     bug-n-math-trunc-and-log-need-frontend-intercepts }
+  { CPython's math module REFUSES its domain errors; IEEE — and so the Pascal
+    RTL these lower to — answers a quiet NaN or -Inf. Wrap argument 0 in the
+    matching pylib guard, which returns it unchanged or raises
+    `ValueError: math domain error`.
+
+    On the ARGUMENT rather than the result, because that is where the domain
+    is: `math.sqrt(float('nan'))` is nan in CPython, and a result check could
+    not tell that from `sqrt(-1)`. And here rather than in a pylib shim for the
+    reason math.log is lowered here — a BUILTIN unit cannot reach the RTL's
+    transcendentals at all.
+    bug-n-math-pow-domain-error-raises-the-wrong-exception }
+  if (nArgs >= 1) and (ASTLeft[callNode] >= 0) then
+  begin
+    domName := '';
+    if pname = 'Sqrt' then domName := 'pymath_dom_nonneg'
+    else if (pname = 'Ln') and (nArgs = 1) then domName := 'pymath_dom_pos'
+    else if (pname = 'Log10') or (pname = 'Log2') then domName := 'pymath_dom_pos'
+    else if (pname = 'ArcSin') or (pname = 'ArcCos') then domName := 'pymath_dom_unit'
+    else if (pname = 'Power') and (nArgs = 2) then domName := 'pymath_dom_pow';
+    if domName <> '' then
+    begin
+      domPi := FindProc(domName);
+      if domPi < 0 then Error('Nil Python: pylib (' + domName + ') not loaded');
+      domArg := AllocNode(AN_ARG);
+      ASTLeft[domArg] := ASTLeft[ASTLeft[callNode]];
+      ASTRight[domArg] := -1;
+      if domName = 'pymath_dom_pow' then
+      begin
+        { the EXPONENT reaches both the guard and Power itself, so it is parked
+          in a temp first — an AST node used twice is EMITTED twice, and
+          `math.pow(b, f())` would call f() a second time. }
+        ASTLeft[ASTRight[ASTLeft[callNode]]] :=
+          PyEvalOnce(ASTLeft[ASTRight[ASTLeft[callNode]]]);
+        domArg2 := AllocNode(AN_ARG);
+        ASTLeft[domArg2] := CloneAST(ASTLeft[ASTRight[ASTLeft[callNode]]]);
+        ASTRight[domArg2] := -1;
+        ASTRight[domArg] := domArg2;
+      end;
+      domCall := AllocNode(AN_CALL);
+      ASTIVal[domCall] := domPi;
+      ASTTk[domCall] := Ord(tyDouble);
+      ASTLeft[domCall] := domArg;
+      ASTLeft[ASTLeft[callNode]] := domCall;
+    end;
+  end;
   { math.log(x, base) — lowered HERE, in the frontend, as the division of two
     Ln calls, and deliberately not mapped to the RTL's LogN.
 
