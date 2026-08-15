@@ -68,4 +68,4 @@ Verified: the test matches its .expected byte for byte. Swept 14 further
 lambda/genexpr/key= shapes against CPython 3.12 — all agree except the
 pre-existing `repr` of a function object (address and qualname format), which
 this change does not touch. gate.sh quick + self-host fixedpoint GREEN.
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 8f2ce3391.
