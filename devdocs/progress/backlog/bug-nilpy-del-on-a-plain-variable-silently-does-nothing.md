@@ -3,6 +3,8 @@ track: N
 prio: 30
 type: bug
 summary: "NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct."
+status: working
+owner: agent-AN
 ---
 
 # `del x` on a plain variable is a silent no-op
@@ -94,3 +96,51 @@ Per-fix loop. A `.npy` test with `del` on a module-scope name, a def-local, and
 both container forms (which must stay correct), diffed against CPython — or, if
 option 2 is taken, a `{%FAIL}`-style expectation that the bare-name form is
 rejected.
+
+## 2026-08-15 — designed, costed, and PARKED with the trap named
+
+Worked the implementation far enough to price it, then stopped rather than
+half-apply it. What the ticket says ("a sentinel plus a check on read") is
+right; what it does not say is where the cost actually lands, which is the
+REBIND, not the read.
+
+**The read hook is cheap and was the thing I expected to be hard.** There is
+exactly ONE arm that turns a bare NilPy name into a value — the `AN_IDENT`
+construction in `parser.inc` (~4875) — and an assignment TARGET does not reach
+it (targets go through `PyAssignTargetSym`). So a guard can be hoisted in front
+of the read via the existing `PyHoistStmt` machinery, gated on `PyExprMode`,
+for the handful of names a pre-scan finds in a `del <name>` statement. The
+`del` arm itself is already isolated and takes an early exit before any
+expression parse, so it cannot guard itself by accident.
+
+**The rebind is where it gets decided, and it is a two-way choice with no
+obviously right answer** — which is why this is parked rather than guessed:
+
+1. **Hidden "deleted" flag per name.** `del x` sets it, the read guard tests
+   it. Then a later `x = 5` must CLEAR it, and a name is bound at all sixteen
+   `PyAssignTargetSym` call sites (plain assign, augmented, for-target,
+   with-target, unpack, chained, nested…). Miss one and a rebound name raises
+   NameError — a **wrong refusal of a valid program**, the one direction
+   upward compatibility does not allow. Hooking the resolver itself would emit
+   a side effect from a lookup, which is the trial-parse-hoist landmine
+   (`project_trial_parse_rewind_leaves_its_hoists_queued`).
+2. **Sentinel VALUE in the name's own slot.** `del x` stores an "unbound" tag
+   and the guard compares against it. A later `x = 5` clears it for free — no
+   store hook at all, all sixteen sites correct by construction. The cost is
+   that the name must be a VARIANT to hold the tag, so the pre-scan has to
+   force the type of every `del`-able name, and the allocation sites are as
+   numerous as the binding ones.
+
+Option 2 is the better shape (it deletes the store-hook problem instead of
+managing it) and is what I would build, but forcing a type from a pre-scan
+touches how NilPy allocates locals, which is not a change to start at the tail
+of a long session.
+
+**Nothing was applied**; the ticket returns to the backlog with the design and
+the trap recorded, per `root-cause-over-microfix`'s "bank the diagnosis and
+park it, never microfix as a consolation".
+
+One measurement worth keeping: today's behaviour is a silent no-op, so any
+partial implementation that raises where it should not is strictly WORSE than
+the current bug. That asymmetry is what makes option 2 the safe one and option
+1 the one that needs completeness before it is safe at all.
