@@ -5398,13 +5398,11 @@
   },
   {
    "bad": "dc60b64fb81b36d339c60ef363f612f41e15095e",
-   "good": "3005526961b1a3ba08b37ca49d6c9ee82f88cfbc",
+   "good": "166a4c136c0e02c2f0287589a9ccddfa4c29d766",
    "job": "test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy",
    "name": "test-nilpy#103",
    "opened": "2026-08-15T10:40:12Z",
    "range": [
-    "f336b50743bfb7b21472f16eade9f4981107feae",
-    "166a4c136c0e02c2f0287589a9ccddfa4c29d766",
     "e0e6a0759c03dbbdfcc45cc8b0c19e3c4e9278bd",
     "dc60b64fb81b36d339c60ef363f612f41e15095e"
    ],
