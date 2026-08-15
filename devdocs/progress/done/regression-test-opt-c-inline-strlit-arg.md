@@ -24,3 +24,6 @@ OPT DIFF O1: test_math_unit
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-15 — auto-closed by the plexus watcher: `test-opt#src:test/c_inline_strlit_arg.c` passes at c8f5070671be (tier opt); it was red at 36d1bffda39d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
