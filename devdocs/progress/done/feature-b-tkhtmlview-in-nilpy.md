@@ -223,4 +223,4 @@ Pascal caller, and the A ticket above is the same disease. Its comment was
 updated to say so rather than to keep naming a file that is now Python.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 19cd264e1.
