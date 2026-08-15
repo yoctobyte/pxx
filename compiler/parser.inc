@@ -917,6 +917,9 @@ function PyCallMeth2(ci: Integer; const mname: AnsiString;
                      selfNode, arg1, arg2: Integer): Integer; forward;   { two-arg method call (pyparser.inc) }
 function PyMakeTupleFrom(firstNode: Integer): Integer; forward;   { build a tuple from an existing first element (pyparser.inc) }
 function PyBareGenExprAhead: Boolean; forward;   { bare genexpr as a call arg (pyparser.inc) }
+{ a user object with __iter__ handed to a pylib routine that wants a container
+  (bug-nilpy-builtins-over-a-user-iterable-answer-empty) — body in pyparser.inc }
+function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean; forward;
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
@@ -15209,6 +15212,24 @@ begin
         end;
 
         procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
+        { A user object implementing the iterator protocol, passed to a pylib
+          routine that wants a container: drain it and retry ONCE, or fix the
+          argument of a match that was made on class assignability rather than
+          on meaning. See PyFixIterableArgs — one rule keyed on the PARAMETER,
+          not a list of builtin names
+          (bug-nilpy-builtins-over-a-user-iterable-answer-empty). }
+        if isNilPy and (procIdx < 0) and PyFixIterableArgs(-1, argsHead, nArgs) then
+        begin
+          currArg := argsHead;
+          for i := 0 to nArgs - 1 do
+          begin
+            argTypes[i] := IntToTypeKind(ASTTk[ASTLeft[currArg]]);
+            currArg := ASTRight[currArg];
+          end;
+          procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
+        end
+        else if isNilPy and (procIdx >= 0) then
+          PyFixIterableArgs(procIdx, argsHead, nArgs);
         if procIdx < 0 then
         begin
           { Generic dynamic-array Copy(arr[, index [, count]]) intrinsic. Only when
@@ -22849,6 +22870,21 @@ begin
           end;
 
           procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
+          { see the twin expression site: a user iterable meeting a pylib
+            container parameter (bug-nilpy-builtins-over-a-user-iterable-
+            answer-empty) }
+          if isNilPy and (procIdx < 0) and PyFixIterableArgs(-1, argsHead, nArgs) then
+          begin
+            currArg := argsHead;
+            for i := 0 to nArgs - 1 do
+            begin
+              argTypes[i] := IntToTypeKind(ASTTk[ASTLeft[currArg]]);
+              currArg := ASTRight[currArg];
+            end;
+            procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
+          end
+          else if isNilPy and (procIdx >= 0) then
+            PyFixIterableArgs(procIdx, argsHead, nArgs);
           if procIdx < 0 then
             procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
           if procIdx < 0 then

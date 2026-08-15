@@ -1485,6 +1485,22 @@ function pystr_repeat_v(const v: Variant; n: Int64): AnsiString;
   language, so a None stored in a container arrived as integer 0
   (feature-nilpy-none-variant). }
 function pynone: Variant;
+{ THE one chain that turns an OBJECT into a materialised sequence: a list, a
+  dict's keys, a bytes' values, a drained cursor, a range, or a user class
+  implementing `__iter__`. Answers nil when `o` is none of those, so each
+  caller keeps its OWN refusal (set() and list() word it differently) and its
+  own kind stamping, while the chain itself exists once.
+
+  It exists because that chain had been written out FIVE times — pylist_v,
+  list(Variant), tuple(Variant), pyset_of and pyeval's sorted(Variant) — and the copies had drifted: only
+  pylist_v had grown the user-`__iter__` arm, so `list(bag)`, `tuple(bag)` and
+  `sorted(bag)` answered [] while the same object iterated correctly in a `for`
+  (bug-nilpy-builtins-over-a-user-iterable-answer-empty). pyset_of had drifted
+  further still and knew neither cursors nor ranges.
+
+  Always a FRESH list: `list(xs)` copies, and every caller here wants to own
+  its result. }
+function pyseq_of_obj(o: TObject): TPyList;
 { The VARIANT forms of two more builtins, for the same reason pylen_v exists: a
   for-in loop variable is always a variant, and an overload set resolved by
   static type picks the wrong member for it. }
@@ -6753,14 +6769,13 @@ begin
     raise TypeError.Create('set() argument must be iterable');
   end;
   o := TObject(pyvarobj(v));
-  if o is TPyList then
+  { the shared chain — a list, a dict's keys, bytes, a cursor, a range or a
+    user `__iter__`. Added ONE BY ONE rather than adopted wholesale, because a
+    set DEDUPLICATES on add: `set([1, 1, 2])` is {1, 2}. Before this, pyset_of
+    knew only lists and dicts, so set(range(3)) and set(bag) refused. }
+  kl := pyseq_of_obj(o);
+  if kl <> nil then
   begin
-    for i := 0 to TPyList(o).count - 1 do r.add(TPyList(o).at(i));
-    Exit;
-  end;
-  if o is TPyDict then
-  begin
-    kl := TPyDict(o).keylist;
     for i := 0 to kl.count - 1 do r.add(kl.at(i));
     Exit;
   end;
@@ -11856,14 +11871,26 @@ end;
 function pyiter_of_userobj(o: TObject): TPyIter;
 var itv: Variant; ito: TObject;
 begin
+  ito := o;
+  if o <> nil then
+    if PyUserObjNoArgDunder(o, '__iter__', itv) then
+    begin
+      if pyvartag(itv) = 7 then ito := TObject(pyvarobj(itv));
+    end;
+  { `def __iter__(self): return iter(self.items)` — the most common way to
+    write __iter__ at all — hands back a pylib CURSOR, which IS an iterator.
+    The __next__ probe below only recognises a USER class, so it refused with
+    "iter() returned non-iterator of type 'TPyIter'": a correct CPython program
+    rejected by the check that exists to catch an incorrect one.
+    bug-nilpy-builtins-over-a-user-iterable-answer-empty }
+  if (ito <> nil) and (ito is TPyIter) then
+  begin
+    Result := TPyIter(ito);
+    Exit;
+  end;
   Result := TPyIter.Create;
   Result.FKind := PYITER_USEROBJ;
   if o = nil then begin Result.FEnd := True; Exit; end;
-  ito := o;
-  if PyUserObjNoArgDunder(o, '__iter__', itv) then
-  begin
-    if pyvartag(itv) = 7 then ito := TObject(pyvarobj(itv));
-  end;
   if not PyUserObjHasDunder(ito, '__next__') then
     raise TypeError.Create('iter() returned non-iterator of type ''' +
                            TObject(ito).ClassName + '''');
@@ -14217,6 +14244,28 @@ begin
   Result := TPyDict.Create;
 end;
 
+function pyseq_of_obj(o: TObject): TPyList;
+begin
+  Result := nil;
+  if o = nil then Exit;
+  if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
+  { A DICT yields its KEYS — `list(d)` and `for x in d` are both the key
+    sequence in Python. }
+  if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
+  { bytes — the byte VALUES, same as the static arm. }
+  if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
+  { a cursor DRAINS, leaving it exhausted, which is CPython's
+    single-consumption rule. Every caller of this wants a materialised
+    sequence, so laziness cannot survive here — the lazy path for a `for`
+    header is the cursor loop in PyParseForIn, which never reaches this. }
+  if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
+  if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
+  { a USER class implementing the iterator protocol, drained the same way a
+    cursor is. This is the arm the three copies of this chain were missing. }
+  if PyUserObjHasDunder(o, '__iter__') then
+    Result := pyiter_drain(pyiter_of_userobj(o));
+end;
+
 function pylist_v(const v: Variant): TPyList;
 var o: TObject;
 begin
@@ -14224,29 +14273,8 @@ begin
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
-    { A DICT yields its KEYS — `list(d)` and `for x in d` are both the key
-      sequence in Python. Missing here, so iterating a dict that had been
-      erased to a variant (a list element, an unannotated parameter, a value
-      out of another dict) refused with "expected a str or a list", while the
-      identical dict with a static type iterated fine
-      (bug-nilpy-two-name-for-over-a-variant-assumes-a-dict). }
-    if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
-    { bytes erased to a variant — the byte values, same as the static arm. }
-    if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
-    { a cursor DRAINS. Every caller of this wants a materialised sequence, so
-      laziness cannot survive here — the lazy path for a `for` header is the
-      cursor loop in PyParseForIn, which never reaches this. }
-    if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
-    if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
-    { a USER class implementing the iterator protocol — drained the same way a
-      cursor is, since `list(obj)`, `sorted(obj)` and `x in obj` all want a
-      materialised sequence. bug-nilpy-iterator-protocol-on-a-user-class }
-    if PyUserObjHasDunder(o, '__iter__') then
-    begin
-      Result := pyiter_drain(pyiter_of_userobj(o));
-      Exit;
-    end;
+    Result := pyseq_of_obj(o);
+    if Result <> nil then Exit;
   end;
   PyTypeError(pyvartag(v), 'a str, a list or a dict');
   Result := TPyList.Create;
@@ -14332,20 +14360,17 @@ end;
 function tuple(const v: Variant): TPyList; overload;
 var o: TObject;
 begin
-  { mirrors list(const v: Variant), with the tuple flag stamped on the result }
+  { mirrors list(const v: Variant), with the tuple flag stamped on the result —
+    the same shared chain, so a user iterable and a cursor arrive here too }
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyList then begin Result := tuple(TPyList(o)); Exit; end;
-    if o is TPyDict then
+    Result := pyseq_of_obj(o);
+    if Result <> nil then
     begin
-      Result := TPyDict(o).keylist;
       Result.FKind := PYSEQ_TUPLE;
       Exit;
     end;
-    if o is TPyBytes then begin Result := tuple(TPyBytes(o)); Exit; end;
-    if o is TPyIter then begin Result := tuple(TPyIter(o)); Exit; end;
-    if o is TPyRange then begin Result := tuple(TPyRange(o)); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := tuple(pystr_of(v)); Exit; end;
   Result := TPyList.Create;      { None / empty }
@@ -14479,19 +14504,16 @@ end;
 { list(v) where v is a VARIANT — copy the list/str it holds. `list(fb or [])`
   reaches this once `or` returns its operand as a variant. }
 function list(const v: Variant): TPyList; overload;
-var o: TObject; i: Integer;
+var o: TObject;
 begin
+  { one chain, shared with pylist_v / tuple / set — see pyseq_of_obj. A cursor
+    is consumed, not copied, which is what makes a lazy map indistinguishable
+    from the eager one it replaced. }
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyList then begin Result := list(TPyList(o)); Exit; end;
-    if o is TPyDict then begin Result := TPyDict(o).keylist; Exit; end;
-    if o is TPyBytes then begin Result := list(TPyBytes(o)); Exit; end;
-    { a CURSOR is consumed, not copied — list(map(f, xs)) is the shape that
-      makes a lazy map indistinguishable from the eager one it replaced, and
-      it leaves the cursor exhausted, as CPython does }
-    if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
-    if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
+    Result := pyseq_of_obj(o);
+    if Result <> nil then Exit;
   end;
   if pyvartag(v) = 6 then begin Result := list(pystr_of(v)); Exit; end;
   Result := TPyList.Create;   { None / empty }
@@ -15574,6 +15596,7 @@ function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
                               var res: Variant): Boolean;
 var cls: PClassRTTI; mi: PMethInfo;
     fv: TNoArgV; fo: TNoArgO; fi: TNoArgI; fs: TNoArgS; fb: TNoArgB; fd: TNoArgD;
+    ro: TObject;
 begin
   PyUserObjNoArgDunder := False;
   if o = nil then Exit;
@@ -15592,7 +15615,9 @@ begin
   if mi^.RetKind = 6 then
   begin
     fo := TNoArgO(mi^.Code);
-    res := TObject(fo(Pointer(o)));
+    ro := fo(Pointer(o));
+    if ro <> nil then PXXObjRetain(Pointer(ro));
+    res := TObject(ro);
     PyUserObjNoArgDunder := True;
     Exit;
   end;

@@ -33,6 +33,9 @@ function PyIsPylibContainerCi(ci: Integer): Boolean; forward;
 { Materialises a cursor where a real sequence is needed. Used by `in` and the
   str-method argument path, both of which sit above its definition. }
 function PyDrainIfCursor(node: Integer): Integer; forward;
+{ "a user class declaring __iter__" — PyDrainIfCursor asks it, and sits above
+  its definition. }
+function PyNodeIsUserIterable(node: Integer): Boolean; forward;
 { Wraps any iterable node in a cursor — enumerate()/zip() in parser.inc. }
 function PyMakeIterOf(node: Integer): Integer; forward;
 { One-argument call to a plain pylib function; PyMakeIterOf sits above it. }

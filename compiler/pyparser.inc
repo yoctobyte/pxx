@@ -17025,10 +17025,105 @@ begin
   Result := node;
   if node < 0 then Exit;
   if IntToTypeKind(ASTTk[node]) <> tyClass then Exit;
+  { A USER object implementing `__iter__` is materialised here too — the sites
+    that call this want A SEQUENCE, and CPython gets one from any iterable, not
+    only from a cursor. Without it `a, b, c = bag` refused ("not a list, tuple
+    or variant") and `x in bag` raised, on an object a `for` walks correctly
+    (bug-nilpy-builtins-over-a-user-iterable-answer-empty).
+
+    NOT when the class also declares `__contains__`: CPython asks that first,
+    and the `x in obj` caller dispatches to it AFTER this call — draining here
+    would take the membership test away from the method written for it. }
+  if PyNodeIsUserIterable(node) and
+     (FindUMeth(ResolveNodeRec(node) - REC_UCLASS_BASE, '__contains__') < 0) then
+  begin
+    Result := PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', node));
+    Exit;
+  end;
   iterCi := FindUClass('TPyIter');
   if iterCi < 0 then Exit;
   if ResolveNodeRec(node) <> REC_UCLASS_BASE + iterCi then Exit;
   Result := PyCallProc1('pyiter_drain', node);
+end;
+
+function PyNodeIsUserIterable(node: Integer): Boolean;
+{ node's STATIC type is a genuine user class declaring `__iter__` — the shape
+  every "make this argument iterable" site has to recognise. pylib's own
+  containers are tyClass too and are ruled out, exactly as the dunder-dispatch
+  branches do (see PyRecIsPylibOwnClass). }
+var rec: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if IntToTypeKind(ASTTk[node]) <> tyClass then Exit;
+  rec := ResolveNodeRec(node);
+  if rec < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(rec) then Exit;
+  Result := FindUMeth(rec - REC_UCLASS_BASE, '__iter__') >= 0;
+end;
+
+function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean;
+{ A user object implementing the iterator protocol, handed to a pylib routine
+  that wants a CONTAINER. `list(bag)` / `sorted(bag)` / `tuple(bag)` resolved
+  against the `TPyList` overload and the callee then read a user object through
+  a TPyList layout — answering [] rather than crashing, which is the quiet half
+  of bug-nilpy-builtins-over-a-user-iterable-answer-empty. `sum(bag)` /
+  `min` / `max` / `any` / `all` have no such overload and refused outright.
+
+  Both halves are one rule, applied where the PARAMETER type is known rather
+  than per builtin name — a name list is the second path that stays broken
+  (devdocs/dev/normalise-dont-special-case.md):
+
+  - `procIdx >= 0` (a match was found): drain the argument wherever the chosen
+    parameter is a TPyList, wrap it in a cursor where the parameter is a
+    TPyIter. This is the arm that FIXES A WRONG MATCH — the overload was
+    selected on class assignability, not on meaning.
+  - `procIdx < 0` (no overload matched): drain every user-iterable argument so
+    the caller can retry the match once. That is what gives `sum(bag)` the
+    `sum(TPyList)` row.
+
+  Returns True when it changed anything. The two runtime halves already exist
+  and are gate-tested: `pyiter_of_userobj` walks `__iter__`/`__next__` through
+  the RTTI and catches StopIteration; `pyiter_drain` materialises the cursor. }
+var i, currArg, listCi, iterCi, pRec: Integer;
+begin
+  Result := False;
+  if not PyExprMode then Exit;
+  if nArgs <= 0 then Exit;
+  listCi := FindUClass('TPyList');
+  iterCi := FindUClass('TPyIter');
+  if (listCi < 0) or (iterCi < 0) then Exit;
+  currArg := argsHead;
+  i := 0;
+  while (currArg >= 0) and (i < nArgs) do
+  begin
+    if PyNodeIsUserIterable(ASTLeft[currArg]) then
+    begin
+      if procIdx < 0 then
+      begin
+        ASTLeft[currArg] :=
+          PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', ASTLeft[currArg]));
+        Result := True;
+      end
+      else if i < MAX_PROC_PARAMS then
+      begin
+        pRec := ProcParamRecId[procIdx * MAX_PROC_PARAMS + i];
+        if pRec = REC_UCLASS_BASE + listCi then
+        begin
+          ASTLeft[currArg] :=
+            PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', ASTLeft[currArg]));
+          Result := True;
+        end
+        else if pRec = REC_UCLASS_BASE + iterCi then
+        begin
+          ASTLeft[currArg] := PyCallProc1('pyiter_of_userobj', ASTLeft[currArg]);
+          Result := True;
+        end;
+      end;
+    end;
+    currArg := ASTRight[currArg];
+    Inc(i);
+  end;
 end;
 
 function PyCallMeth2(ci: Integer; const mname: AnsiString;

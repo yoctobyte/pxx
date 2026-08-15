@@ -1,6 +1,8 @@
 # A user class with __iter__ passed to the builtins that CONSUME an iterable.
-# bug-nilpy-builtins-over-a-user-iterable-answer-empty — the conversion-point
-# half. Diffed against CPython.
+# bug-nilpy-builtins-over-a-user-iterable-answer-empty. Diffed against CPython.
+# Two halves, both here: the CONVERSION POINTS (for, comprehensions, enumerate,
+# zip) and the OVERLOAD-RESOLVED builtins (list, tuple, set, sorted, sum, min,
+# max, any, all, `in`, unpack) that used to answer [] or refuse.
 
 class Bag:
     def __init__(self, items):
@@ -37,3 +39,65 @@ print(list(zip("ab", b)))
 
 # ...and a fresh iterator each time, so it is re-iterable
 print([x for x in b], [x for x in b])
+
+
+# --- the consumption builtins. Every one of these answered [] (list, tuple,
+# set, sorted) or refused outright (sum, min, max, any, all, `in`, unpack)
+# while the loops above already walked the same object correctly.
+
+class Counter:
+    """a self-iterator: __iter__ returns self, __next__ raises StopIteration"""
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+    def __iter__(self):
+        return self
+    def __next__(self):
+        if self.i >= self.n:
+            raise StopIteration
+        self.i += 1
+        return self.i
+
+
+b = Bag([10, 20, 30])
+print(list(b), tuple(b), sorted(b))
+print(sorted(Bag([3, 1, 2])), sorted(Bag([3, 1, 2]), reverse=True))
+print(sum(Bag([1, 2])), min(b), max(b))
+print(any(Bag([0, 1])), all(Bag([1, 1])), all(Bag([1, 0])))
+print(set(Bag([1, 1, 2])))
+print(len(list(b)))
+a, c, d = Bag([1, 2, 3])
+print(a, c, d)
+print(", ".join([str(x) for x in b]))
+print([x * 2 for x in b], [x for x in b if x > 10])
+for i, x in enumerate(Bag(["p", "q"])):
+    print(i, x)
+print(list(zip(Bag([1, 2]), "xy")))
+print(list(Counter(3)), tuple(Counter(2)), sum(Counter(4)))
+print(sorted(Counter(3), reverse=True), set(Counter(2)))
+print(list(Bag([])), sum(Bag([])), sorted(Bag([])))
+
+# controls: the same builtins over the built-in receivers, unchanged
+print(list([1, 2]), tuple([1, 2]), sorted([2, 1]), set([1, 1]))
+print(list("ab"), list({"k": 1}), sorted({"b": 1, "a": 2}))
+print(list(range(3)), sorted(range(3), reverse=True), set(range(2)))
+print(list(iter([5, 6])), sorted(iter([6, 5])), sum(iter([1, 2])))
+print(list(b"ab"), tuple(b"ab"))
+print(sum([1, 2]), min([1, 2]), max("ab"), any([0]), all([1]))
+
+# `in` over a user iterable: CPython falls back to iteration when there is no
+# __contains__, and asks __contains__ first when there is one.
+print(20 in b, 99 in b, 1 in Counter(3))
+
+class Has:
+    def __init__(self, items):
+        self.items = items
+    def __iter__(self):
+        return iter(self.items)
+    def __contains__(self, x):
+        print("(asked __contains__)")
+        return x in self.items
+
+h = Has([1, 2])
+print(1 in h, 9 in h)
+print(list(h), sorted(h))

@@ -5119,16 +5119,20 @@ begin
 end;
 
 function sorted(const v: Variant; key: Pointer; reverse: Boolean): TPyList; overload;
-var o: TObject;
+var o: TObject; seq: TPyList;
 begin
-  { dispatch on the runtime tag, exactly as list(const v: Variant) does }
+  { dispatch on the runtime tag through pylib's ONE object->sequence chain
+    (pyseq_of_obj), exactly as list(const v: Variant) does. This was a
+    hand-copied chain of four `is` tests and, like the other copies, it never
+    grew the user-`__iter__` arm: `sorted(bag)` answered [] on an object that
+    iterates correctly in a `for`
+    (bug-nilpy-builtins-over-a-user-iterable-answer-empty). Sorting a dict
+    still sorts its KEYS — pyseq_of_obj answers the key list. }
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyList then begin Result := sorted(TPyList(o), key, reverse); Exit; end;
-    if o is TPyDict then begin Result := sorted(TPyDict(o), key, reverse); Exit; end;
-    if o is TPyRange then begin Result := sorted(TPyRange(o), key, reverse); Exit; end;
-    if o is TPyIter then begin Result := sorted(pyiter_drain(TPyIter(o)), key, reverse); Exit; end;
+    seq := pyseq_of_obj(o);
+    if seq <> nil then begin Result := sorted(seq, key, reverse); Exit; end;
   end;
   if pyvartag(v) = 6 then begin Result := sorted(pystr_of(v), key, reverse); Exit; end;
   Result := TPyList.Create;      { None / empty }
