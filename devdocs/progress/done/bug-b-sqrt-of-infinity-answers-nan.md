@@ -136,4 +136,4 @@ nothing, and reverted. Filed as
 [[bug-b-arcsin-arccos-lose-2-ulps-vs-libm]].
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 71ede23be.
