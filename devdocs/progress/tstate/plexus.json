@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T06:33:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "87e659b65ab98601f02dd6da2473b076df73402f",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-15T06:38:24Z",
    "fixed": [],
    "new_red": [],
@@ -504,6 +496,16 @@
    "new_red": [],
    "sha": "c8f5070671bec5a125a793077cdb0f990aa28cd1",
    "tier": "slow",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T19:02:34Z",
+   "fixed": [
+    "test-opt#src:test/c_inline_strlit_arg.c"
+   ],
+   "new_red": [],
+   "sha": "c8f5070671bec5a125a793077cdb0f990aa28cd1",
+   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -2784,7 +2786,11 @@
   "test-nilpy#src:test/test_pascal_self_result_delphi.pas@2": "full",
   "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas": "full",
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "full",
+  "test-opt#src:compiler/compiler.pas@1": "opt",
+  "test-opt#src:compiler/compiler.pas@2": "opt",
+  "test-opt#src:compiler/compiler.pas@3": "opt",
   "test-opt#src:test/c_inline_strlit_arg.c": "opt",
+  "test-opt#src:test/test_atomic64.pas": "opt",
   "test-riscv32#00": "full",
   "test-riscv32#src:test/ccross_args.c@1": "full",
   "test-riscv32#src:test/ccross_args.c@2": "full",
@@ -5247,7 +5253,11 @@
   "test-nilpy#src:test/test_pascal_self_result_delphi.pas@2": "pass",
   "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas": "pass",
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "pass",
-  "test-opt#src:test/c_inline_strlit_arg.c": "fail",
+  "test-opt#src:compiler/compiler.pas@1": "pass",
+  "test-opt#src:compiler/compiler.pas@2": "pass",
+  "test-opt#src:compiler/compiler.pas@3": "pass",
+  "test-opt#src:test/c_inline_strlit_arg.c": "pass",
+  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
   "test-riscv32#src:test/ccross_args.c@2": "pass",
@@ -5442,11 +5452,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T18:57:21Z",
+  "date": "2026-08-15T19:02:34Z",
   "sha": "c8f5070671bec5a125a793077cdb0f990aa28cd1",
-  "tier": "slow",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 269.6
+  "wall": 301.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5541,68 +5551,6 @@
     "56a54014384b8b866c5433989abb7275f9a71db8"
    ],
    "src": "test/test_cpyext_markupsafe.npy test/nilpy_units/vendor/cyadd.pyx"
-  },
-  {
-   "bad": "36d1bffda39d58099b403745c48b95cd8c1d7c58",
-   "good": "dbed942785d0b198fb6be044ab6ee85920e50fa7",
-   "job": "test-opt#src:test/c_inline_strlit_arg.c",
-   "name": "test-opt#00",
-   "opened": "2026-08-15T15:30:47Z",
-   "range": [
-    "e64df0866a58c8ae4f174e49c86c807bf965c3de",
-    "25b9a7a5de95c84c952bb653fb076a0c202f9f77",
-    "5c2102d7c88781f43a4e81d401b05b39f88736ed",
-    "ae1a6e8232022a9628ecb85f655cd333c9ce2ce6",
-    "81bb48edcaef1157d0793e336595967fbd1ee0a5",
-    "f49be74bab075db7b62c4676de73f814416f72f9",
-    "205459f7973b0e34006f211c330ffb4d473a1f2b",
-    "fbdd8d494e47e98df943a910a43bf2f5c5aaea7a",
-    "e97999b6c7cf6ae589ce0071c04c9ede4904c863",
-    "1d1c621e40b7101677294f805774d76e77656932",
-    "7792a068c4f046ffe0cd56d2cc36d616c77aa33e",
-    "4eaad7303dae23be3b036f0bbb398eca9111e08c",
-    "733bf275a09e52ddca26ccd3d07e68a051c224b4",
-    "ea6d19d8ef4300d5e5c62f64b1075090d680ca25",
-    "7062f17eeec662c2a9b40e47f068e162acfd2393",
-    "c085a6b1a82b1fdf41357b12699e991355a8846f",
-    "5b6e1728dff1c05352f720914e8a24043020ffe3",
-    "a246786dccd4ecea737c25e99fc95c89250bb9b4",
-    "6ed62373949d7b2d19a70cf5eeaedcc9d9cb3390",
-    "80bc5aa815f147d97f5d609e931dd2ae6f0d81f1",
-    "11ee7dd0afb5abfb69eb9fb76bca42fffddd1832",
-    "4114b568614bdc4b1ae1972ad16c0c2c110da14f",
-    "a06afaad080be46f332594ce24448ea7d9764714",
-    "f9e6534ae0cb83b4067ad4b09fd6c0e46d416206",
-    "61b95e2388148556c11daf740a6c63261d27d6b3",
-    "85ffad90d09de23740836be621df9b3323914651",
-    "e56b7cc6b50f8958198c2977798c94338dc34656",
-    "c54543dc15e5a301f581a5936155aa9e4da8b607",
-    "36b2b55d2ff14a57591e2e52a0aa6ffea750c365",
-    "101a3465ff6d7b029129411a4b600343f2b9b0db",
-    "0337fd6e099fccf9440872475609c7b38ff94ae8",
-    "75c7acb46cb5b75ed88b0a1ef29788dd9b050232",
-    "ea14cdec6c1a4bc26269f61dadb3b4b28c55d30e",
-    "1697f4a0162a9930cb98cfadb1066eaff5fe0491",
-    "56c7fd568741b6e8e705fdf845d16ca945da8c66",
-    "33fe88602c780e0b721831ae9c89df74f4e5fc18",
-    "538b192c9e14621feea1ca50a54aef47bc272228",
-    "0d8e7393a09c2c36c8cdb2d2816d037a02ce16a9",
-    "e8f9b2a2ba9fcb58fcc5c2d10f26d4a8412f65ac",
-    "0ecd2784ec3dbcd4099ce356182961af1bed47db",
-    "7643f88f28266fc007cd9f7afc842d533c206102",
-    "d75deb89a1e4118747c9b5c356e43201a627c856",
-    "639f0759d75d7761f94bd8b8d8cb26d505a8a0a5",
-    "7a8480bc37226af2142a7a7b447ea21f293aa101",
-    "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c",
-    "3142e6d9738f8a651d78271f00b44f1a816bb33d",
-    "f5c37d3e70c2d58ce048578ac87e912d1b010f21",
-    "ae1ef2b1ff270fbe3e6036e271e15e0210bc950f",
-    "56a54014384b8b866c5433989abb7275f9a71db8",
-    "d615f8f69bc1c91fbd97330781239beeacb7164b",
-    "a13dca9e3d59d78dac968b2feb325d80461773b9",
-    "36d1bffda39d58099b403745c48b95cd8c1d7c58"
-   ],
-   "src": "test/c_inline_strlit_arg.c"
   }
  ],
  "pin_shadow": {
