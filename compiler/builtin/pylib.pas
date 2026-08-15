@@ -15720,7 +15720,14 @@ begin
   if src <> nil then Result.FIsByteArray := src.FIsByteArray;
 end;
 
-procedure PyBytesPut(b: TPyBytes; i: Integer; v: Integer);
+{ Store one byte at an ABSOLUTE index. Deliberately NOT named PyBytesPut: that
+  name is taken by the ENCODER's cursor-advancing form
+  `PyBytesPut(b; var at: Integer; v: Int64)`, and a same-named three-argument
+  overload beside it silently won the encoder's own call sites — every byte of
+  `"hi".encode("latin-1")` landed at the same index and the string came back as
+  `b'i\x00'`. Pascal overload resolution had two plausible candidates and no
+  reason to prefer the right one. }
+procedure PyBytesSet(b: TPyBytes; i: Integer; v: Integer);
 var p: PByte;
 begin
   p := PByte(NativeInt(b.FData) + i);
@@ -15773,14 +15780,14 @@ function TPyBytes.lower: TPyBytes;
 var i: Integer;
 begin
   Result := PyBytesLike(Self, FLen);
-  for i := 0 to FLen - 1 do PyBytesPut(Result, i, PyByteLower(at(i)));
+  for i := 0 to FLen - 1 do PyBytesSet(Result, i, PyByteLower(at(i)));
 end;
 
 function TPyBytes.upper: TPyBytes;
 var i: Integer;
 begin
   Result := PyBytesLike(Self, FLen);
-  for i := 0 to FLen - 1 do PyBytesPut(Result, i, PyByteUpper(at(i)));
+  for i := 0 to FLen - 1 do PyBytesSet(Result, i, PyByteUpper(at(i)));
 end;
 
 { CPython's title(): every RUN of letters gets an upper-case first byte and
@@ -15801,7 +15808,7 @@ begin
     end
     else
       inWord := False;
-    PyBytesPut(Result, i, v);
+    PyBytesSet(Result, i, v);
   end;
 end;
 
@@ -15815,7 +15822,7 @@ begin
   begin
     v := at(i);
     if i = 0 then v := PyByteUpper(v) else v := PyByteLower(v);
-    PyBytesPut(Result, i, v);
+    PyBytesSet(Result, i, v);
   end;
 end;
 
@@ -15828,7 +15835,7 @@ begin
     v := at(i);
     if (v >= 65) and (v <= 90) then v := v + 32
     else if (v >= 97) and (v <= 122) then v := v - 32;
-    PyBytesPut(Result, i, v);
+    PyBytesSet(Result, i, v);
   end;
 end;
 
@@ -15854,7 +15861,7 @@ begin
   if doR then
     while (hi > lo) and PyBytesInSet(chars, b.at(hi - 1)) do Dec(hi);
   Result := PyBytesLike(b, hi - lo);
-  for i := 0 to (hi - lo) - 1 do PyBytesPut(Result, i, b.at(lo + i));
+  for i := 0 to (hi - lo) - 1 do PyBytesSet(Result, i, b.at(lo + i));
 end;
 
 { The no-argument forms want a NIL `chars`, which a bare `nil` literal cannot
@@ -15903,7 +15910,7 @@ function TPyBytes.replace(old_, new_: TPyBytes): TPyBytes;
 var i, k, n, hits, outLen, w: Integer;
 begin
   if (old_ = nil) or (old_.FLen = 0) then begin Result := PyBytesLike(Self, FLen);
-    for i := 0 to FLen - 1 do PyBytesPut(Result, i, at(i)); Exit; end;
+    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i)); Exit; end;
   n := old_.FLen;
   hits := 0;
   i := 0;
@@ -15913,7 +15920,7 @@ begin
   if hits = 0 then
   begin
     Result := PyBytesLike(Self, FLen);
-    for i := 0 to FLen - 1 do PyBytesPut(Result, i, at(i));
+    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i));
     Exit;
   end;
   outLen := FLen - hits * n;
@@ -15926,12 +15933,12 @@ begin
     if (i + n <= FLen) and (pybytes_find(Self, old_, i) = i) then
     begin
       if new_ <> nil then
-        for k := 0 to new_.FLen - 1 do begin PyBytesPut(Result, w, new_.at(k)); Inc(w); end;
+        for k := 0 to new_.FLen - 1 do begin PyBytesSet(Result, w, new_.at(k)); Inc(w); end;
       i := i + n;
     end
     else
     begin
-      PyBytesPut(Result, w, at(i));
+      PyBytesSet(Result, w, at(i));
       Inc(w);
       Inc(i);
     end;
@@ -15973,7 +15980,7 @@ var i: Integer;
 begin
   if hi < lo then hi := lo;
   Result := PyBytesLike(b, hi - lo);
-  for i := 0 to (hi - lo) - 1 do PyBytesPut(Result, i, b.at(lo + i));
+  for i := 0 to (hi - lo) - 1 do PyBytesSet(Result, i, b.at(lo + i));
 end;
 
 { .split() with no separator: split on RUNS of whitespace and DROP the empty
@@ -16073,9 +16080,9 @@ begin
   for i := 0 to parts.count - 1 do
   begin
     if i > 0 then
-      for k := 0 to FLen - 1 do begin PyBytesPut(Result, w, at(k)); Inc(w); end;
+      for k := 0 to FLen - 1 do begin PyBytesSet(Result, w, at(k)); Inc(w); end;
     part := TPyBytes(TObject(pyvarobj(parts.at(i))));
-    for k := 0 to part.FLen - 1 do begin PyBytesPut(Result, w, part.at(k)); Inc(w); end;
+    for k := 0 to part.FLen - 1 do begin PyBytesSet(Result, w, part.at(k)); Inc(w); end;
   end;
 end;
 
@@ -16087,13 +16094,13 @@ begin
   if table = nil then
   begin
     Result := PyBytesLike(Self, FLen);
-    for i := 0 to FLen - 1 do PyBytesPut(Result, i, at(i));
+    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i));
     Exit;
   end;
   if table.FLen <> 256 then
     raise ValueError.Create('translation table must be 256 characters long');
   Result := PyBytesLike(Self, FLen);
-  for i := 0 to FLen - 1 do PyBytesPut(Result, i, table.at(at(i)));
+  for i := 0 to FLen - 1 do PyBytesSet(Result, i, table.at(at(i)));
 end;
 
 { The is* predicates are all FALSE on an empty bytes in CPython — "at least one

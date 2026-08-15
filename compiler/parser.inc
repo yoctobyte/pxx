@@ -16441,11 +16441,25 @@ begin
     The string loop above needs a string-typed base, so this shape did not
     parse at all. Routed to runtime dispatch, which is what decides a variant's
     method everywhere else; a receiver that really is a number still fails
-    there, by name. Restricted to a CALL base so nothing else changes. }
+    there, by name. Restricted to a CALL base so nothing else changes.
+
+    AN_TERNARY is admitted for the SECOND link of such a chain: the
+    runtime-dispatched method this loop builds comes back as a ternary (the
+    `pyvar_is_strtag(recv) ? str-method : class-method` fan PyParseVariantMethod
+    assembles), not as an AN_CALL, so `open(p).read().strip().upper()` had a
+    receiver no loop in this cluster claimed and reported `unexpected token` at
+    the second name — while `.strip()` alone parsed. Latent until a name was
+    declared by BOTH a class and the str table (which is program-dependent: it
+    fires the moment any class in the program declares `strip`/`upper`), so
+    adding the Python method set to TPyBytes made it universal. A user's own
+    `(a if c else b).upper()` lands here too, which is the same rule Python
+    has — a primary takes a suffix whatever produced it.
+    bug-nilpy-a-chained-method-on-a-runtime-dispatched-result-is-refused }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind = tkLParen) and
-        (ASTKind[CurASTNode] = AN_CALL) and
+        ((ASTKind[CurASTNode] = AN_CALL) or
+         (ASTKind[CurASTNode] = AN_TERNARY)) and
         not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
   begin
     Next;                       { consume '.'; CurTok = the method name }
@@ -16503,11 +16517,15 @@ begin
     that it consulted the setattr side-store alone and answered a false
     AttributeError for a field that plainly exists, which is why this ticket
     was filed rather than the parse gap papered over.
-    bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
+    bug-nilpy-a-bare-attribute-on-a-call-result-is-refused
+
+    AN_TERNARY for the same reason as the '.method()' loop above — a
+    runtime-dispatched result is a ternary, so `x.split(",").foo` needs it too. }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind <> tkLParen) and
-        (ASTKind[CurASTNode] = AN_CALL) and
+        ((ASTKind[CurASTNode] = AN_CALL) or
+         (ASTKind[CurASTNode] = AN_TERNARY)) and
         not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
   begin
     smBase := CurASTNode;
