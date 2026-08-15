@@ -116,4 +116,4 @@ grouped int forms, and the mixed `[1, 2.5]` list. The four static-receiver rows
 `test_nilpy_float_methods` pins are unchanged.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit e8d939c2e.
