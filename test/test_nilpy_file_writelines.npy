@@ -1,0 +1,21 @@
+# f.writelines(seq) — absent, so the ordinary way to write a list of lines
+# raised "TPyFile has no method writelines" (bug-nilpy-file-writelines-is-absent).
+# CPython adds NO separator: the caller's strings carry their own newlines, and
+# a tuple or any other iterable is accepted. Diffed against CPython.
+
+import os
+p = "/tmp/pxx_test_writelines.txt"
+with open(p, "w") as f:
+    f.writelines(["a\n", "b\n"])
+    f.writelines([])
+with open(p) as f:
+    print(repr(f.read()))
+with open(p, "w") as f:
+    f.writelines([str(i) + "\n" for i in [1, 2]])
+with open(p) as f:
+    print(f.readlines())
+with open(p, "w") as f:
+    f.writelines(("x", "y"))
+with open(p) as f:
+    print(repr(f.read()))
+os.remove(p)

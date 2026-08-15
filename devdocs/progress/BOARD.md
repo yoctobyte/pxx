@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (202)
+## backlog (203)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,6 +52,7 @@ _none_
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
 | bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
+| bug-nilpy-bare-genexpr-as-a-method-argument-does-not-parse | N | 25 | bug | `obj.take(x for x in xs)` — a bare generator expression as a METHOD argument — dies with `undefined variable (x)`. The diversion that parses one (PyBareGenExprAhead) is wired into the ordinary-call argument path and the str-method path, but not into the user-method call path. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219 | N | 25 | bug | divmod(obj, n) on a class declaring __divmod__ dies with 'Runtime error 219' (invalid typecast) instead of returning the pair. The dispatcher demands RetKind=6 (a class) and a NilPy def returning a tuple does not declare that, so the dunder is never called and the fallback casts something that is not a TPyList. | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
@@ -403,9 +404,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1823)
+## done (1824)
 
-1823 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1824 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -599,6 +600,7 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
+- [p 25] [N] bug-nilpy-bare-genexpr-as-a-method-argument-does-not-parse
 - [p 25] [N] bug-nilpy-divmod-on-a-user-class-dies-with-runtime-error-219
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
