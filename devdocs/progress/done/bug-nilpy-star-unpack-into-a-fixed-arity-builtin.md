@@ -79,4 +79,4 @@ comprehension; the operand as a slice, a call and a variant; and
 `gate.sh quick` GREEN, pinned v328 (the change touches `compiler/builtin/**`).
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit b5beb1cea.
