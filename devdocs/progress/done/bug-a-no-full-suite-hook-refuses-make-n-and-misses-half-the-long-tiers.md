@@ -159,4 +159,4 @@ scheduled T worker must export `PXX_TRACK=T`; that belongs in the worker's own
 setup, not in the hook.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 02ab5fc9d.
