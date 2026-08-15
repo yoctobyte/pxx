@@ -908,3 +908,4 @@
 {"date": "2026-08-15T08:44:34Z", "fixed": [], "full": false, "new_red": [], "sha": "4c9da77f9368ee00abe9614ae864cee612275db6", "tier": "slow", "verdict": "GREEN", "wall": 273.1}
 {"date": "2026-08-15T08:49:38Z", "fixed": [], "full": false, "new_red": [], "sha": "4c9da77f9368ee00abe9614ae864cee612275db6", "tier": "opt", "verdict": "GREEN", "wall": 293.3}
 {"date": "2026-08-15T10:08:47Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_nilpy_star_methods_and_targets.npy"], "sha": "89dae725b972d7019a20e6df61cbc18c6c9862c6", "tier": "native", "verdict": "RED", "wall": 347.8}
+{"date": "2026-08-15T10:15:54Z", "fixed": [], "full": false, "new_red": [], "sha": "9c5adbed5933720b035fa4fd6545c822c9ae1014", "tier": "native", "verdict": "RED", "wall": 348.9}
