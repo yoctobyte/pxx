@@ -1072,6 +1072,11 @@ function pyfloat_parse(const s: AnsiString): Double;
   code. }
 function pyfloat_any(const v: Variant): Double;
 function pyfloat_ofint(v: Int64): Double;
+{ float's own methods — see the implementations for the formats. }
+function pyfloat_is_integer(x: Double): Boolean;
+function pyfloat_conjugate(x: Double): Double;
+function pyfloat_hex(x: Double): AnsiString;
+function pyfloat_as_integer_ratio(x: Double): TPyList;
 { os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
   (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
   imports and never become symbols.
@@ -10816,6 +10821,153 @@ end;
 function pyfloat_ofint(v: Int64): Double;
 begin
   Result := v;
+end;
+
+{ ---- float's own methods ------------------------------------------------
+  A `float` carried NONE of them: not is_integer, not hex, not
+  as_integer_ratio, not conjugate. `x.is_integer()` in particular is ordinary
+  modern Python and is what a library reaches for instead of `x == int(x)` —
+  and it did not fail at COMPILE time, it built a call to None and raised
+  "object is not callable" at run time, which is worse.
+  bug-a-bytes-has-almost-none-of-its-python-methods }
+
+function pyfloat_is_integer(x: Double): Boolean;
+begin
+  { Infinity and NaN are not integral, and Int() of either is not either — but
+    Int(inf) = inf compares equal to inf, so the class has to be excluded
+    explicitly rather than left to the comparison. }
+  Result := False;
+  if x <> x then Exit;                                  { NaN }
+  if (x > 1.7e308) or (x < -1.7e308) then Exit;         { +-inf }
+  Result := Int(x) = x;
+end;
+
+function pyfloat_conjugate(x: Double): Double;
+{ A real number is its own conjugate. Present because CPython's float has it
+  (the numeric tower's `complex` interface), and a library that walks that
+  interface calls it on real values. }
+begin
+  Result := x;
+end;
+
+function PyHexDigitOf(v: Int64): Char;
+begin
+  if v < 10 then PyHexDigitOf := Chr(48 + v) else PyHexDigitOf := Chr(87 + v);
+end;
+
+function pyfloat_hex(x: Double): AnsiString;
+{ CPython's float.hex(): the EXACT value, `[-]0x1.<13 hex digits>p<+|->exp`.
+  Exact because a double's mantissa is 52 bits = 13 hex digits with nothing
+  left over, which is the whole point of the format — it round-trips where
+  decimal does not.
+
+  Three shapes, from the exponent field:
+    2047        -> 'inf' / '-inf' / 'nan' (CPython prints these unprefixed)
+    0, mant 0   -> '0x0.0p+0' — the ONE case with a single fraction digit
+    0, mant<>0  -> subnormal: leading digit 0 and the exponent PINNED at -1022,
+                   not the -1023 the raw field would suggest
+    otherwise   -> leading digit 1, exponent = field - 1023
+  No trailing-zero stripping: (2.0).hex() is '0x1.0000000000000p+1'. }
+var bits, expo, mant, e, d: Int64; neg: Boolean; k: Integer; lead: Char;
+begin
+  bits := PyExDecDoubleToBits(x);
+  neg := bits < 0;
+  expo := (bits shr 52) and 2047;
+  mant := bits and $000FFFFFFFFFFFFF;
+  if expo = 2047 then
+  begin
+    if mant <> 0 then begin Result := 'nan'; Exit; end;
+    if neg then Result := '-inf' else Result := 'inf';
+    Exit;
+  end;
+  if (expo = 0) and (mant = 0) then
+  begin
+    if neg then Result := '-0x0.0p+0' else Result := '0x0.0p+0';
+    Exit;
+  end;
+  if expo = 0 then begin lead := '0'; e := -1022; end
+  else begin lead := '1'; e := expo - 1023; end;
+  Result := '';
+  if neg then Result := '-';
+  Result := Result + '0x' + lead + '.';
+  for k := 12 downto 0 do
+  begin
+    d := (mant shr (k * 4)) and 15;
+    Result := Result + PyHexDigitOf(d);
+  end;
+  Result := Result + 'p';
+  if e < 0 then begin Result := Result + '-'; e := -e; end
+  else Result := Result + '+';
+  Result := Result + pystr_of(e);
+end;
+
+function pyfloat_as_integer_ratio(x: Double): TPyList;
+{ The EXACT rational the double stands for, in lowest terms — the denominator
+  is always a power of two, so "lowest terms" just means shifting until the
+  numerator is odd.
+
+  NilPy's ints are 64-bit, and CPython's are not, so a value whose exact
+  numerator does not fit — |x| >= 2^63, and every subnormal, whose denominator
+  is 2^1074 — RAISES rather than answering a truncated pair. A silently wrong
+  ratio is the outcome worth avoiding here; the range that does fit is exactly
+  the range NilPy's ints describe anyway. }
+var num, den, bits, expo, mant: Int64; neg: Boolean;
+begin
+  bits := PyExDecDoubleToBits(x);
+  neg := bits < 0;
+  expo := (bits shr 52) and 2047;
+  mant := bits and $000FFFFFFFFFFFFF;
+  if expo = 2047 then
+  begin
+    if mant <> 0 then
+      raise ValueError.Create('cannot convert NaN to integer ratio');
+    raise OverflowError.Create('cannot convert Infinity to integer ratio');
+  end;
+  if (expo = 0) and (mant = 0) then
+  begin
+    Result := TPyList.Create;
+    Result.FKind := PYSEQ_TUPLE;
+    Result.append(Int64(0));
+    Result.append(Int64(1));
+    Exit;
+  end;
+  if expo = 0 then
+    raise OverflowError.Create(
+      'as_integer_ratio: a subnormal needs a denominator of 2^1074, which does'
+      + ' not fit a 64-bit int');
+  { value = (2^52 + mant) * 2^(expo-1023-52) }
+  num := Int64($0010000000000000) + mant;
+  expo := expo - 1023 - 52;
+  den := 1;
+  { shift the numerator UP while the exponent is positive — overflowing here is
+    exactly the |x| >= 2^63 case }
+  while expo > 0 do
+  begin
+    if num > $3FFFFFFFFFFFFFFF then
+      raise OverflowError.Create(
+        'as_integer_ratio: the exact numerator does not fit a 64-bit int');
+    num := num * 2;
+    expo := expo - 1;
+  end;
+  { ...and reduce: a trailing zero bit in the numerator halves both sides }
+  while (expo < 0) and ((num and 1) = 0) do
+  begin
+    num := num div 2;
+    expo := expo + 1;
+  end;
+  while expo < 0 do
+  begin
+    if den > $3FFFFFFFFFFFFFFF then
+      raise OverflowError.Create(
+        'as_integer_ratio: the exact denominator does not fit a 64-bit int');
+    den := den * 2;
+    expo := expo + 1;
+  end;
+  if neg then num := -num;
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(num);
+  Result.append(den);
 end;
 
 function pyfloat_parse(const s: AnsiString): Double;

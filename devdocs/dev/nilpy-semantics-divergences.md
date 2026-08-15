@@ -435,6 +435,30 @@ generated over the field tuple in declaration order, the first differing field
 decides, and `sorted`/`min`/`max` use them.
 `test/test_nilpy_dataclass_order.npy` pins it.
 
+## `float.as_integer_ratio()` raises where CPython answers a big int (2026-08-15)
+
+NilPy's ints are 64-bit; CPython's are arbitrary precision. That difference is
+program-wide and pre-existing, but `as_integer_ratio` is the first place where
+the *exact* answer is routinely outside the 64-bit range, so it is worth naming:
+
+```python
+(1e300).as_integer_ratio()   # CPython: a 1000-bit numerator over 1
+                             # NilPy:   OverflowError
+(5e-324).as_integer_ratio()  # CPython: (1, 2**1074)
+                             # NilPy:   OverflowError (subnormal denominator)
+```
+
+The whole normal range answers exactly and matches CPython bit for bit —
+`(3.5)` is `(7, 2)`, `(0.1)` is `(3602879701896397, 36028797018963968)`.
+Outside it the choice was between a truncated pair and a raise, and a silently
+wrong ratio is the worse of the two. This is a symptom of the 64-bit int
+decision rather than a rule of its own: it goes away for free if NilPy ever
+grows big ints.
+
+Same statement, no divergence, for the other three: `is_integer`, `hex` and
+`conjugate` are exact over every double including the infinities, NaN and the
+subnormals.
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython

@@ -1,0 +1,42 @@
+# A `float` carried NONE of its methods — not is_integer, not hex, not
+# as_integer_ratio, not conjugate. `x.is_integer()` in particular is ordinary
+# modern Python and is what a library reaches for instead of `x == int(x)`.
+#
+# The failure mode was the bad one: the call COMPILED, because the member read
+# produced None, and blew up at run time with "object is not callable".
+# bug-a-bytes-has-almost-none-of-its-python-methods
+#
+# Every value below is CPython 3's on this same source. The receivers are
+# STATICALLY float on purpose — a float in a container or a loop variable is a
+# Variant, and the runtime method dispatcher does not know these four yet
+# (bug-nilpy-float-methods-are-invisible-to-the-runtime-dispatcher).
+import math
+
+x = 3.5
+y = 4.0
+z = 0.1
+neg = -1.5
+zero = 0.0
+mzero = -0.0
+big = 1e300
+inf = math.inf
+nan = math.nan
+
+print(y.is_integer(), x.is_integer(), zero.is_integer(), inf.is_integer(), nan.is_integer())
+
+# hex is EXACT: 13 hex digits is a double's mantissa with nothing left over,
+# which is why the format round-trips where decimal does not. No trailing-zero
+# stripping — (2.0).hex() keeps all thirteen.
+print(x.hex(), y.hex(), z.hex(), neg.hex())
+print(zero.hex(), mzero.hex(), big.hex())
+print(inf.hex(), (-inf).hex(), nan.hex())
+
+print(x.as_integer_ratio(), z.as_integer_ratio(), y.as_integer_ratio())
+print(neg.as_integer_ratio(), zero.as_integer_ratio(), mzero.as_integer_ratio())
+
+print(x.conjugate(), neg.conjugate(), zero.conjugate())
+
+# bytes.hex() is a DIFFERENT method of the same name, and it keeps working:
+# the float names are claimed only where the receiver's type is known, exactly
+# so that a name-only test cannot steal this one.
+print(b"ab".hex(), bytearray(b"\x00\xff").hex())

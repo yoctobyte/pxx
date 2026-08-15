@@ -421,6 +421,11 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# float's own methods: is_integer/hex/as_integer_ratio/conjugate. A float used
+	# to carry NONE of them, and the call COMPILED and raised "object is not
+	# callable" at run time. Expected output is CPython 3's on the same source.
+	./$(COMPILER) test/test_nilpy_float_methods.npy $(TESTTMP)/test_nilpy_floatm26
+	$(TESTTMP)/test_nilpy_floatm26 | diff -u test/test_nilpy_float_methods.expected -
 	# The ASCII-shaped `bytes` contract, added as a SET: this class used to carry
 	# endswith and no startswith, and a bytes method CPython defines and pxx omits
 	# is a hard compile error. Expected output is CPython 3's on the same source.
@@ -6206,6 +6211,11 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# float's own methods: is_integer/hex/as_integer_ratio/conjugate. A float used
+	# to carry NONE of them, and the call COMPILED and raised "object is not
+	# callable" at run time. Expected output is CPython 3's on the same source.
+	./$(COMPILER) test/test_nilpy_float_methods.npy $(TESTTMP)/test_nilpy_floatm26
+	$(TESTTMP)/test_nilpy_floatm26 | diff -u test/test_nilpy_float_methods.expected -
 	# The ASCII-shaped `bytes` contract, added as a SET: this class used to carry
 	# endswith and no startswith, and a bytes method CPython defines and pxx omits
 	# is a hard compile error. Expected output is CPython 3's on the same source.

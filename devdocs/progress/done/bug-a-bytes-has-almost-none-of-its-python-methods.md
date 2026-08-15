@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`bytes` carries decode/find/endswith/hex/count and essentially nothing else; `float` carries NONE of its methods at all — no lower, upper, startswith, split, strip, replace, join, translate, index. `b.lower()` is what stops webencodings, and every one of these is reachable from ordinary CPython code that has no reason to expect a gap."
-status: working
+status: done
 owner: claude-A-N-nightly
 ---
 
@@ -87,3 +87,68 @@ scalar type carrying an ad-hoc subset of its Python methods) about a second
 type, and whoever fixes one is a grep away from the other. `float`'s are even
 smaller than `bytes`'s — `is_integer`, `hex`/`fromhex`, `as_integer_ratio`, and
 `real`/`imag`/`conjugate` are trivia on a double.
+
+## Resolution (2026-08-15) — both halves, in two commits
+
+### `bytes`
+
+Added as a SET, per this ticket: case (`lower`/`upper`/`title`/`capitalize`/
+`swapcase`), `strip`/`lstrip`/`rstrip` in BOTH the whitespace and
+character-set forms, `split`/`rsplit`/`splitlines`/`join`, `replace`,
+`translate`, `startswith`, `index`/`rfind`/`rindex`, and
+`isdigit`/`isalpha`/`isalnum`/`isspace`/`isupper`/`islower`.
+
+Two rules that were worth stating once rather than fifteen times, and are:
+
+- ASCII-only exactly where CPython is ASCII-only. `b'\xc3\xa9'.lower()` is
+  unchanged in CPython too — a bytes object has no encoding to case-map
+  through — which removes the only part that could have been subtle.
+- Every buffer-BUILDING method carries `FIsByteArray` across (`PyBytesLike` is
+  the one constructor they all go through), or `bytearray(...).lower()`
+  silently becomes a `bytes`. Same rule `pybytes_slice` already states.
+
+### `float`
+
+`is_integer`, `hex`, `as_integer_ratio`, `conjugate` — the four callables.
+`hex` is exact (13 hex digits IS a double's mantissa, which is the point of
+the format) including the infinities, NaN, ±0 and the subnormals;
+`as_integer_ratio` is exact over the whole 64-bit range and RAISES outside it
+rather than answering a truncated pair (recorded in
+`devdocs/dev/nilpy-semantics-divergences.md`, since NilPy ints are 64-bit and
+CPython's are not — it goes away for free if that ever changes).
+
+**The interesting decision:** the float names are claimed only at the two
+intercept sites that KNOW the receiver's static type, and deliberately NOT in
+`PyIsIntMethodName`. That test feeds `PyIsIntMethodSuffixAhead`, which sees a
+NAME and no receiver — and `hex` is already a method of `bytes`. A name-only
+claim would make every generic postfix chain step aside for `b.hex()` and hand
+it to an int intrinsic that cannot serve it. The price is that a grouped
+`(3.5).hex()` takes the ordinary path, which is worth it.
+
+### Oracle
+
+Both tests' expected output is CPython 3's on the same source, diffed rather
+than reasoned about, and the surprising cases are kept deliberately:
+`b"they're".title()` is `b"They'Re"`, `b"aaa".replace(b"aa", b"a")` is `b"aa"`,
+`b"".split(b",")` is `[b'']` while `b"".split()` is `[]`, `b"123".isupper()` is
+False, `(2.0).hex()` keeps all thirteen digits.
+
+Tests: `test/test_nilpy_bytes_methods.npy` and
+`test/test_nilpy_float_methods.npy` (+ `.expected`), wired into `test-nilpy`
+and `test-core`.
+
+Gate: `tools/gate.sh quick` GREEN. A pylib change moves no compiler binary
+(the compiler does not `use` pylib), so no re-pin is a gate requirement.
+
+### Left open, filed
+
+[[bug-nilpy-float-methods-are-invisible-to-the-runtime-dispatcher]] — the four
+float methods reach a STATICALLY float receiver only. A float arriving as a
+Variant (loop variable, list element, unannotated parameter) still raises
+AttributeError. The fix is one more arm in `PyParseVariantMethod`, mirroring
+the str arm that is already there; it is delicate AST surgery and deserves its
+own change rather than riding along. `bytes` has no such gap — it is a real
+class, so the runtime dispatcher finds its methods already.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

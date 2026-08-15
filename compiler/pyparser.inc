@@ -10069,6 +10069,60 @@ begin
   else PyParseIntMethod := PyParseBitLenCount(baseNode, nm);
 end;
 
+{ ---- float's own methods ------------------------------------------------
+
+  A `float` carried none of them, and the failure mode was the bad one: the
+  call COMPILED and raised "object is not callable" at run time, because the
+  member read produced None. `x.is_integer()` is ordinary modern Python and is
+  what a library reaches for instead of `x == int(x)`.
+  bug-a-bytes-has-almost-none-of-its-python-methods
+
+  Deliberately NOT folded into PyIsIntMethodName, and this is the interesting
+  part: that test is consulted by PyIsIntMethodSuffixAhead, which sees only the
+  NAME and no receiver, and `hex` is already a method of `bytes`. Adding `hex`
+  to a name-only test would make every generic postfix chain step aside for
+  `b.hex()` and hand it to an int intrinsic that cannot serve it. So the float
+  names are claimed only at the two sites that KNOW the receiver's type, and a
+  grouped `(3.5).hex()` is left to the ordinary path rather than bought at the
+  price of breaking bytes.hex(). }
+function PyIsFloatMethodName(const nm: AnsiString): Boolean;
+begin
+  PyIsFloatMethodName := (nm = 'is_integer') or (nm = 'hex') or
+                         (nm = 'as_integer_ratio') or (nm = 'conjugate');
+end;
+
+function PyIsFloatBaseTk(tk: TTypeKind): Boolean;
+begin
+  { STATICALLY float only. A Variant receiver is left to the runtime method
+    dispatch: the value in it may be a bytes, and `bytes.hex()` is a real
+    method that must keep reaching TPyBytes. }
+  PyIsFloatBaseTk := (tk = tyDouble) or (tk = tySingle) or (tk = tyExtended);
+end;
+
+{ The one dispatcher for a float method, mirroring PyParseIntMethod. CurTok is
+  the '(' ; all four take no arguments. }
+function PyParseFloatMethod(baseNode: Integer; const nm: AnsiString): Integer;
+var procIdx, callNode, a0: Integer; fn: AnsiString; retTk: TTypeKind;
+begin
+  retTk := tyDouble;
+  if nm = 'is_integer' then begin fn := 'pyfloat_is_integer'; retTk := tyBoolean; end
+  else if nm = 'hex' then begin fn := 'pyfloat_hex'; retTk := tyAnsiString; end
+  else if nm = 'as_integer_ratio' then begin fn := 'pyfloat_as_integer_ratio'; retTk := tyClass; end
+  else fn := 'pyfloat_conjugate';
+  procIdx := FindProc(fn);
+  if procIdx < 0 then Error('Nil Python: pylib (' + fn + ') not loaded');
+  Expect(tkLParen, '(');
+  Expect(tkRParen, ')');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode; ASTRight[a0] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(retTk);
+  ASTRight[callNode] := ProcRetRecId[procIdx];
+  ASTLeft[callNode] := a0;
+  LastExprTk := retTk;
+  Result := callNode;
+end;
+
 { Is CurTok the '.' of an intercepted int-method suffix? Used by the generic
   postfix chains to LEAVE the suffix alone so the intrinsic can claim it — a
   grouped `(10).to_bytes(...)` would otherwise be eaten as a member access on an
