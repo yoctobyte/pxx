@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-14T08:19:33Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e44da6c5e6a2f8de4083e8d418d7ee1d5e3a5d4c",
-   "tier": "slow",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-14T08:24:43Z",
    "fixed": [],
    "new_red": [],
@@ -410,6 +402,17 @@
    "sha": "5ab7de02672c23f3c568c5bdd6ee836c71f8c33e",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-15T00:24:31Z",
+   "fixed": [
+    "test-asm#src:compiler/compiler.pas",
+    "test-asm#src:test/hello.pas"
+   ],
+   "new_red": [],
+   "sha": "d61380078f3515f28f8c6ca0d0f0ab69b2438853",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -3095,8 +3098,8 @@
   "test-arm32#src:test/test_uint32_write.pas": "pass",
   "test-arm32#src:test/test_uint64_ops.pas": "pass",
   "test-arm32#src:test/test_variant_class_cross.pas": "pass",
-  "test-asm#src:compiler/compiler.pas": "fail",
-  "test-asm#src:test/hello.pas": "fail",
+  "test-asm#src:compiler/compiler.pas": "pass",
+  "test-asm#src:test/hello.pas": "pass",
   "test-asm#src:test/test_asm_avx.pas": "pass",
   "test-asm#src:test/test_asm_cpuid.pas": "pass",
   "test-asm#src:test/test_asm_entry_global.asm": "pass",
@@ -5232,11 +5235,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T00:19:12Z",
-  "sha": "5ab7de02672c23f3c568c5bdd6ee836c71f8c33e",
+  "date": "2026-08-15T00:24:31Z",
+  "sha": "d61380078f3515f28f8c6ca0d0f0ab69b2438853",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 238.0
+  "verdict": "GREEN",
+  "wall": 228.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5265,38 +5268,7 @@
  "migrated_from": [
   "borg"
  ],
- "open_regressions": [
-  {
-   "bad": "d2172550a236aea07e51f3dc97d1f814246299d4",
-   "good": "59f70a2ce7b0881c63b6e08aeced734e926960f4",
-   "job": "test-asm#src:compiler/compiler.pas",
-   "name": "test-asm#18",
-   "opened": "2026-08-14T23:04:19Z",
-   "range": [
-    "c429a571bf07c065f1a506978188d0c42e24eef2",
-    "7196a23998893d69bce97328ced50aab30826c60",
-    "3f64a1a8ddf7f522acbceb72f21c956cbb48fc83",
-    "3bf1484cfada354ddfc841c7ada23a4affd12226",
-    "d2172550a236aea07e51f3dc97d1f814246299d4"
-   ],
-   "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "d2172550a236aea07e51f3dc97d1f814246299d4",
-   "good": "59f70a2ce7b0881c63b6e08aeced734e926960f4",
-   "job": "test-asm#src:test/hello.pas",
-   "name": "test-asm#17",
-   "opened": "2026-08-14T23:04:19Z",
-   "range": [
-    "c429a571bf07c065f1a506978188d0c42e24eef2",
-    "7196a23998893d69bce97328ced50aab30826c60",
-    "3f64a1a8ddf7f522acbceb72f21c956cbb48fc83",
-    "3bf1484cfada354ddfc841c7ada23a4affd12226",
-    "d2172550a236aea07e51f3dc97d1f814246299d4"
-   ],
-   "src": "test/hello.pas"
-  }
- ],
+ "open_regressions": [],
  "pin_shadow": {
   "at": "2026-08-14T09:57:55Z",
   "qualifies": true,
