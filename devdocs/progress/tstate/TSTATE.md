@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `c8f5070671be` | 2026-08-15T18:34:48Z | GREEN (native) | 204.2s | `36d1bffda39d` RED |
+| plexus | `c8f5070671be` | 2026-08-15T18:52:41Z | RED (full) | 1026.7s | `c8f5070671be` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -13,7 +13,4 @@
 - **test-nilpy#src:test/test_cpyext_errformat.npy** — test/test_cpyext_errformat.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
 - **test-nilpy#src:test/test_cpyext_hello.npy** — test/test_cpyext_hello.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
 - **test-nilpy#src:test/test_cpyext_markupsafe.npy** — test/test_cpyext_markupsafe.npy test/nilpy_units/vendor/cyadd.pyx (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy** — test/test_nilpy_import_c_header_still_works.npy (plexus): bad `63d1d0de90d3`, last good `7a8480bc3722`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_import_sqlite.npy** — test/test_nilpy_import_sqlite.npy (plexus): bad `63d1d0de90d3`, last good `7a8480bc3722`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_sqlite_crud.npy** — test/test_nilpy_sqlite_crud.npy lib/rtl/regex.pas (plexus): bad `63d1d0de90d3`, last good `639f0759d75d`, 2 commit(s) in range
 - **test-opt#src:test/c_inline_strlit_arg.c** — test/c_inline_strlit_arg.c (plexus): bad `36d1bffda39d`, last good `dbed942785d0`, 52 commit(s) in range
