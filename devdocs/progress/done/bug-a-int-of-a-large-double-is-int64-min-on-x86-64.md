@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "TWO facets. (1) Int(1.0e300) returns -9.2233720368547758E+018 (INT64_MIN) on x86-64. (2) Int(-0.5) returns +0.0 where FPC and C give -0.0, which alone accounts for 443 of 443 SimpleRoundTo divergences from FPC. FPC returns 1e300. Int() is defined on DOUBLES and must not visit an integer at all: for |x| >= 2^52 every double is already integral, so Int(x) IS x. The i386/arm32 half of this was fixed under bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32; x86-64 was never in scope and is still wrong. Frac(x) is wrong at the same magnitudes."
+status: done
+owner: agent-an-night
 ---
 
 # `Int()` of a large double is `INT64_MIN` on x86-64
@@ -97,3 +99,39 @@ the builtin being right. This ticket stands for user code and for `Frac`.
 `make test` + self-host byte-identical, plus `Int` and `Frac` matching FPC 3.2.2
 at 1e300, 3.3e299, 2^52, 2^52-0.5, 2^63, and the negatives of each — on
 x86-64 **and** the 32-bit targets, so the earlier fix is not regressed.
+
+## Resolution (2026-08-15): already fixed at HEAD by 5b6e1728d — verified, both facets
+
+`fix(A): Int/Frac stay in the float domain on all five targets` (5b6e1728d,
+landed after this ticket's pinned-v339 measurements) is exactly the fix this
+ticket asks for, and it went further than the write-up: `EmitTruncToIntegralX64`
+does the pure bit manipulation (clear the fractional mantissa bits selected by
+the exponent), so inf/NaN pass through, |x| >= 2^52 is returned unchanged, and
+|x| < 1 becomes a SIGNED zero. No integer register appears in the lowering, so
+there is no range to run out of. i386 got `EmitTruncToIntegral386` (x87
+`frndint` with RC=truncate); riscv32/xtensa already routed through `__pxx_dint`.
+
+Verified at HEAD (c304fca4d + this session's commits), self-hosted build:
+
+- **FPC 3.2.2 oracle, byte-identical output** on all 15 cases the Gate section
+  names — `Int` at 3.5, -0.5, -0.9, -1.5, 1e18, 3.3e299, 1e300, -1e300, 2^52,
+  2^52-0.5, ±2^63, and `Frac` at 1e300, -0.5, 2.75. `Int(1e300)` = 1e300 (was
+  INT64_MIN); `Int(-0.5)` = `-0.0` (was `+0.0`).
+- **All five targets agree with FPC byte for byte**: x86-64 native, i386
+  native, aarch64 / arm32 / riscv32 under qemu. The earlier 32-bit fix is not
+  regressed.
+- **The downstream claim holds.** 3000 pseudo-random doubles built from `Int64`
+  BIT PATTERNS (per the ticket's own methodology note, so both compilers see
+  the same double), compared as bit patterns of the result: `SimpleRoundTo(d,-2)`,
+  `SimpleRoundTo(d,-4)` and `RoundTo(d,-2)` are **bit-identical to FPC on all
+  9000 comparisons** — 0 divergences, where the ticket measured 443.
+
+  (Comparing the same sweep as *printed text* shows a difference that is NOT a
+  value difference: FPC's `Write(x:0:20)` stops at ~17 significant digits and
+  pads zeros, pxx prints the full decimal expansion. Worth knowing before
+  someone reads it as a regression.)
+
+No code change needed. Closing as fixed-elsewhere.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.

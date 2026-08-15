@@ -37,11 +37,10 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (212)
+## backlog (211)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-int-of-a-large-double-is-int64-min-on-x86-64 | A | 60 | bug | TWO facets. (1) Int(1.0e300) returns -9.2233720368547758E+018 (INT64_MIN) on x86-64. (2) Int(-0.5) returns +0.0 where FPC and C give -0.0, which alone accounts for 443 of 443 SimpleRoundTo divergences from FPC. FPC returns 1e300. Int() is defined on DOUBLES and must not visit an integer at all: for \|x\| >= 2^52 every double is already integral, so Int(x) IS x. The i386/arm32 half of this was fixed under bug-a-int-of-a-large-double-saturates-to-32-bit-on-i386-and-arm32; x86-64 was never in scope and is still wrong. Frac(x) is wrong at the same magnitudes. | — |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
@@ -412,9 +411,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1885)
+## done (1886)
 
-1885 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1886 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -462,7 +461,6 @@ _none_
 
 - [p 60] [B] feature-b-tkhtmlview-in-nilpy (unblocks 1)
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
-- [p 60] [A] bug-a-int-of-a-large-double-is-int64-min-on-x86-64
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
