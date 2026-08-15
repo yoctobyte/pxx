@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `36d1bffda39d` | 2026-08-15T15:26:00Z | GREEN (slow) | 269.7s | `36d1bffda39d` RED |
+| plexus | `36d1bffda39d` | 2026-08-15T15:30:47Z | RED (opt) | 274.9s | `36d1bffda39d` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -49,3 +49,4 @@
 - **test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy** — test/test_nilpy_import_c_header_still_works.npy (plexus): bad `36d1bffda39d`, last good `0d8e7393a09c`, 14 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_import_sqlite.npy** — test/test_nilpy_import_sqlite.npy (plexus): bad `36d1bffda39d`, last good `0d8e7393a09c`, 14 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_sqlite_crud.npy** — test/test_nilpy_sqlite_crud.npy lib/rtl/regex.pas (plexus): bad `36d1bffda39d`, last good `0d8e7393a09c`, 14 commit(s) in range
+- **test-opt#src:test/c_inline_strlit_arg.c** — test/c_inline_strlit_arg.c (plexus): bad `36d1bffda39d`, last good `dbed942785d0`, 52 commit(s) in range
