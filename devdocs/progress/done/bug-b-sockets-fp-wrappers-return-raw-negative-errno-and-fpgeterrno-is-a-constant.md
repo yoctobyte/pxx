@@ -135,4 +135,4 @@ values it asserts were read off a separate FPC 3.2.2 build of the same three
 calls instead.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 50401e1e0.
