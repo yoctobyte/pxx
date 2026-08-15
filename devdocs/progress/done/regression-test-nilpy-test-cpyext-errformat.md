@@ -59,4 +59,4 @@ express it. So the Pascal rule stops at that boundary:
 Verified: all five cpyext tests produce their expected output byte for byte
 (errformat, hello, args_errors, containers, markupsafe, cython). Gate quick +
 self-host fixedpoint GREEN.
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit c304fca4d.
