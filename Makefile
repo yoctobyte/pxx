@@ -1363,6 +1363,15 @@ test-nilpy: $(COMPILER)
 	@# a DOTTED package import (from a.b import c / import a.b / import a.b as x)
 	./$(COMPILER) test/test_nilpy_dotted_package_import.npy $(TESTTMP)/test_nilpy_dottedimport26
 	test "$$($(TESTTMP)/test_nilpy_dottedimport26)" = "dotted imports ok"
+	@# ...and the same file under --threadsafe, which is what pulled the pxxcio
+	@# heap bridge into a C translation unit's view. It used to compile clean and
+	@# die at LOAD with `undefined symbol: __pxx_malloc`, so the assertion is
+	@# objdump, not the exit code: NO __pxx_* may reach the dynamic import table.
+	@# objdump -T, never readelf -- readelf is blind on pxx binaries.
+	@# bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports
+	./$(COMPILER) --threadsafe test/test_nilpy_dotted_package_import.npy $(TESTTMP)/test_nilpy_dottedimport_ts26
+	test "$$($(TESTTMP)/test_nilpy_dottedimport_ts26)" = "dotted imports ok"
+	test "$$(objdump -T $(TESTTMP)/test_nilpy_dottedimport_ts26 2>/dev/null | grep -c '__pxx_')" = "0"
 	@# a nested def's own default parameter captures by value, at definition time
 	./$(COMPILER) test/test_nilpy_nested_def_default_capture.npy $(TESTTMP)/test_nilpy_defcap26
 	test "$$($(TESTTMP)/test_nilpy_defcap26)" = "$$(printf '11\n21\n15')"

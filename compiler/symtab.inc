@@ -8626,6 +8626,29 @@ begin
             + '(<pthread.h> lowers onto the pxx thread PAL, which that flag '
             + 'selects; without it this would import a pxx-internal symbol '
             + 'from libc and fail at load)');
+    { …and the GENERAL rule the pthread case is one instance of. `__pxx_*` is
+      the reserved prefix for pxx's own runtime bridge — the PAL wrappers, the
+      heap bridge (__pxx_malloc/_free/_realloc/_atexit), the softfloat and
+      cpyext helpers. No shared library on any system exports one, so an
+      unbodied `__pxx_*` reaching the import table is ALWAYS a build that will
+      die at load with `symbol lookup error`, naming a symbol absent from the
+      user's source, after a compile that reported nothing.
+
+      Three separate tickets were that same failure: __pxx_pmutex_init above,
+      __pxx_malloc when the C bridge lost its visibility edge
+      (bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports),
+      and __pxx_PyErr_Message when two sibling C translation units stopped
+      seeing each other. Each was diagnosed from a runtime message and an
+      objdump; the invariant is one check at the choke point, which is where
+      the parent ticket's IREmitCodeCall(0) guard already showed this shape
+      pays. }
+    if Copy(enm, 1, 6) = '__pxx_' then
+      Error(enm + ' is a pxx-internal runtime symbol and cannot be imported '
+            + 'dynamically: no library exports it, so this build would link '
+            + 'clean and die at load with "undefined symbol: ' + enm + '". '
+            + 'Something that should supply its body is not visible here — a '
+            + 'missing `uses` of the unit that defines it, or a C translation '
+            + 'unit compiled without its Pascal bridge.');
   end;
   extIdx := -1;
   for i := 0 to ExternalCount-1 do

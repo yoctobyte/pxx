@@ -331,6 +331,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-static-local-initializer-reruns-every-call | A+C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
 | bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
+| bug-c-strict-uses-turns-pxxcio-bridge-into-undefined-dynamic-imports | C | 55 | bug | Under `--strict-uses`, the pxxcio heap-bridge functions (`__pxx_malloc`/`_free`/`_realloc`/`_atexit`) are emitted as UNDEFINED DYNAMIC IMPORTS instead of resolving to their Pascal bodies, so the binary compiles clean and dies at load with `undefined symbol: __pxx_malloc`. This is the second, distinct failure mode carved out of bug-a-threadsafe-segfaults-on-every-nilpy-program. | — |
 | bug-c-string-h-compiles-stdlib-c-twice | C | 60 | bug | #include <string.h>, with nothing used, compiles lib/crtl/src/stdlib.c TWICE — 51 functions get two bodies each. #include <stdlib.h> alone does not | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
