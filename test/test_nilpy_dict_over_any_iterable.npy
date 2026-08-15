@@ -1,0 +1,30 @@
+# dict() over every iterable of PAIRS, not only over a dict.
+# bug-nilpy-dict-of-a-zip-or-any-cursor-is-empty: dict(zip(names, values)) —
+# the commonest way to build a dict — answered {} silently, because zip hands
+# back a cursor and the only variant arm dict() had was "is it a TPyDict".
+# Diffed against CPython.
+
+print(dict(zip("ab", [1, 2])))
+print(dict(zip(["a","b"], [1, 2])))
+print(list(zip("ab", [1, 2])))
+print(dict([("a", 1), ("b", 2)]))
+print(dict([["a", 1]]))
+d = {}
+for k, v in zip("ab", [1,2]):
+    d[k] = v
+print(d)
+print(dict(a=1, b=2))
+print(dict({"a": 1}))
+print(dict(zip(range(3), "abc")))
+print(dict(map(lambda p: (p, p*2), [1, 2])))
+print(dict(enumerate("ab")))
+it = iter([("k", 1)])
+print(dict(it))
+class Bag:
+    def __init__(self, items):
+        self.items = items
+    def __iter__(self):
+        return iter(self.items)
+print(dict(Bag([("a", 1), ("b", 2)])))
+print(dict(filter(lambda kv: kv[1] > 1, [("a",1),("b",2)])))
+print(dict([]), dict())
