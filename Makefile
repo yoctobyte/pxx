@@ -9230,8 +9230,14 @@ lib-test: pxx-stable-check
 	# same pattern/subject pairs, including every songformatter pattern
 	$(PXX_STABLE) -Fulib/rtl test/lib_regex.pas $(TESTTMP)/lib_regex
 	test "$$($(TESTTMP)/lib_regex | tail -n 1)" = "REGEX OK"
+	# xoshiro256**: a seed fixes the stream, and the stream is the CROSS-TARGET
+	# oracle — byte-identical on x86-64, i386, aarch64 and arm32, so a diff here
+	# is a 64-bit shift/multiply codegen bug rather than a library one. Expected
+	# output lives in a file because it is multi-line; the values changed on
+	# 2026-08-15 when RandRange stopped using a biased `mod`, and changing them
+	# again would be a red flag rather than a refresh.
 	$(PXX_STABLE) test/lib_random.pas $(TESTTMP)/lib_random
-	test "$$($(TESTTMP)/lib_random)" = "$$(printf '5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ')"
+	$(TESTTMP)/lib_random | diff -u test/lib_random.expected -
 	# per-stream PRNG state: reproducibility + independent split streams (no lock)
 	$(PXX_STABLE) test/lib_randomstate.pas $(TESTTMP)/lib_randomstate
 	test "$$($(TESTTMP)/lib_randomstate | tail -n 1)" = "RANDOMSTATE OK"

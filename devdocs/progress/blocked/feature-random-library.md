@@ -1,13 +1,14 @@
 ---
 track: B
 prio: 45  # auto
-blocked-by: []   # feature-inline-asm-xmm-operands landed; cleared 2026-08-15
+blocked-by: [feature-a-rdrand-cpuid-compiler-builtins]   # Track B portion done 2026-08-15; only the HW tier remains and it is Track A
+owner: claude-B
 ---
 
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
 
 - **Type:** feature
-- **Status:** backlog (software core + FPC surface + Linux OS entropy tier landed;
+- **Status:** working
   remaining work is HW tiers and thread-safe state)
 - **Relation:** a real, reusable RTL library that doubles as a broad
   cross-target test: runtime capability probing, per-target inline asm, a
@@ -274,3 +275,47 @@ unreachable — this is not "not written yet", it is not expressible.
 `blocked-by: feature-inline-asm-xmm-operands`, which now tracks the whole missing
 mnemonic surface including `cpuid`. Nothing further is available in this lane.
 
+
+
+---
+
+## Track B portion COMPLETE 2026-08-15; what remains is Track A
+
+### Landed
+
+- **Two real defects fixed in `RandRange`**, both measured, not argued:
+  - **Modulo bias.** `lo + (Next shr 33) mod span` skewed a wide span badly —
+    over 2,000,000 draws of `RandRange(0, 1499999999)`, the low 43.17% of the
+    range collected **60.23%** of results. Small spans hid it (a d6 is off by
+    ~3e-9), which is how it survived in a library whose entire purpose is
+    distribution quality. Replaced with masked rejection: **43.19%** measured,
+    against 43.17% ideal, and chi-square 6.36 on 16 bins over 1.6M draws
+    (15 dof, expect ~15).
+  - **Overflow crash.** `span := hi - lo + 1` in Integer wraps to 0 for the full
+    range, so `RandRange(Low(Integer), High(Integer))` divided by zero and
+    raised **EDivByZero**. The span is a UInt64 from Int64 operands now and the
+    whole range is legal.
+- **API completed** per the surface above: `RandRange64` (full Int64 span,
+  including the degenerate whole-of-Int64 case where no rejection is possible),
+  `RandomDouble` (53-bit [0,1) — note this is NOT the builtin `Random: Double`,
+  which is the legacy LCG), `RandomBytes`, and the per-state siblings
+  `RandomStateRange64` / `RandomStateDouble` / `RandomStateBytes`.
+- **Cross-target oracle verified.** The seeded stream is **byte-identical on
+  x86-64, i386, aarch64 and arm32**, which is what this ticket wanted the
+  software tier to be. `test/lib_random.expected` pins it.
+- Thread-safe state was already done (shared state under a lock; `TRandomState`
+  for per-thread streams with no lock and independent reproducibility).
+
+### Remaining, and none of it is Track B
+
+- **Tier 1 (hardware entropy)** needs compiler intrinsics, because the design
+  mandate keeps per-arch instructions out of the `.pas`. The source cited
+  `feature-rdrand-cpuid-compiler-builtins`, which **had never been filed** —
+  now [[feature-a-rdrand-cpuid-compiler-builtins]].
+- **riscv32 cannot build this unit at all**: the shared state's lock needs
+  atomics the core has no instruction for, and the compiler refuses with a clear
+  message rather than miscompiling. [[bug-a-riscv32-and-xtensa-have-no-atomic-codegen]]
+  (marked done, but this unit still does not build — worth re-checking against
+  that record). So the cross-target oracle covers 4 targets, not 6.
+- **`Random128`** from the API sketch is not implemented: there is no 128-bit
+  integer type to return. Left out deliberately rather than faked with a record.

@@ -66,11 +66,26 @@ function LCGNext: LongWord;
 { Reseed xoshiro from OS entropy (or HW when tier 1 lands). Non-reproducible. }
 procedure XoshiroRandomize;
 
-{ Inclusive lo..hi, drawn from xoshiro. }
+{ Inclusive lo..hi, drawn from xoshiro, and UNBIASED — masked rejection rather
+  than `mod`, so every value in the range is equally likely and the whole
+  Integer range is legal. The previous `mod` form skewed a wide span badly
+  (60.23% of draws into the low 43.17% of the range, measured) and raised
+  EDivByZero on Low(Integer)..High(Integer). }
 function RandRange(lo, hi: Integer): Integer;
+
+{ Inclusive lo..hi over the full Int64 range, same rejection scheme. }
+function RandRange64(lo, hi: Int64): Int64;
 
 { Raw 64-bit random value (xoshiro). }
 function Random64: UInt64;
+
+{ Uniform in [0,1) with a full 53-bit significand. Note this is NOT the builtin
+  `Random: Double`, which runs the legacy LCG; this one draws from xoshiro. }
+function RandomDouble: Double;
+
+{ Fill n bytes of `buf` — keys, nonces, padding. Spends all 8 bytes of each
+  draw, so the cost is n/8 draws. }
+procedure RandomBytes(var buf; n: Integer);
 
 { --- Explicit generator state (the thread-safe way) --- }
 
@@ -87,6 +102,9 @@ function Random64: UInt64;
   thread index: nearby seeds are exactly what SplitMix64 exists to decorrelate,
   and hand-picked ones are how correlated "random" streams get shipped. }
 type
+  { a byte cursor for the buffer-filling entry points }
+  PRandByte = ^Byte;
+
   TRandomState = record
     s0, s1, s2, s3: UInt64;
   end;
@@ -101,8 +119,17 @@ function RandomStateRandomize(var st: TRandomState): Boolean;
 { Raw 64-bit draw; advances only `st`. No lock. }
 function RandomStateNext(var st: TRandomState): UInt64;
 
-{ Inclusive lo..hi drawn from `st`. }
+{ Inclusive lo..hi drawn from `st`, unbiased as RandRange. }
 function RandomStateRange(var st: TRandomState; lo, hi: Integer): Integer;
+
+{ Int64 range from `st`. }
+function RandomStateRange64(var st: TRandomState; lo, hi: Int64): Int64;
+
+{ [0,1) from `st`, 53-bit. }
+function RandomStateDouble(var st: TRandomState): Double;
+
+{ Fill n bytes from `st`. No lock — the per-thread way to make key material. }
+procedure RandomStateBytes(var st: TRandomState; var buf; n: Integer);
 
 { Derive an independent child stream from `parent`, advancing the parent. Use
   this to fan out one seed into N per-thread states. }
@@ -281,17 +308,117 @@ begin
   Random64 := XoshiroNext;
 end;
 
+{ Smallest 2^k-1 that covers m. Used to cut a draw down to the width of the
+  requested span before rejection, so the loop rejects less than half the time
+  in the worst case and the expected number of draws stays under 2. }
+function RangeMask(m: UInt64): UInt64;
+begin
+  m := m or (m shr 1);
+  m := m or (m shr 2);
+  m := m or (m shr 4);
+  m := m or (m shr 8);
+  m := m or (m shr 16);
+  m := m or (m shr 32);
+  RangeMask := m;
+end;
+
+{ Masked REJECTION, not `mod`, and the span is computed in 64 bits.
+
+  What this replaces was `lo + (Next shr 33) mod span`, which had two defects,
+  both measured rather than argued:
+
+  - **Modulo bias.** A 31-bit draw folded into a span that does not divide
+    2^31 hands the low values an extra source value each. Over 2,000,000 draws
+    of RandRange(0, 1499999999), the low 43.17% of the range collected
+    **60.23%** of the results. Small spans hid it — a d6 is off by ~3e-9 — so
+    it survived in a library whose entire purpose is distribution quality.
+  - **Overflow.** `span := hi - lo + 1` in Integer wraps to 0 for the full
+    range, and RandRange(Low(Integer), High(Integer)) then divided by zero and
+    raised EDivByZero. The span is a UInt64 computed from Int64 operands now,
+    so the whole range is legal.
+
+  Rejection is the honest fix: draw, mask to the span's width, and redraw on
+  the values that would have skewed the result. It costs an occasional extra
+  draw and nothing else. }
 function RandRange(lo, hi: Integer): Integer;
-var span: Integer; v: UInt64;
+var span, mask, v: UInt64;
 begin
   if hi < lo then
   begin
     RandRange := lo;
     Exit;
   end;
-  span := hi - lo + 1;
-  v := XoshiroNext shr 33;
-  RandRange := lo + Integer(v mod UInt64(span));
+  span := UInt64(Int64(hi) - Int64(lo) + 1);
+  if span = 1 then
+  begin
+    RandRange := lo;
+    Exit;
+  end;
+  mask := RangeMask(span - 1);
+  repeat
+    v := XoshiroNext and mask;
+  until v < span;
+  RandRange := Integer(Int64(lo) + Int64(v));
+end;
+
+{ Int64 span. `span` wraps to 0 for the full Int64 range, which is exactly the
+  case where every draw is in range and no rejection is needed. }
+function RandRange64(lo, hi: Int64): Int64;
+var span, mask, v: UInt64;
+begin
+  if hi < lo then
+  begin
+    RandRange64 := lo;
+    Exit;
+  end;
+  span := UInt64(hi) - UInt64(lo) + 1;
+  if span = 0 then
+  begin
+    RandRange64 := Int64(XoshiroNext);
+    Exit;
+  end;
+  if span = 1 then
+  begin
+    RandRange64 := lo;
+    Exit;
+  end;
+  mask := RangeMask(span - 1);
+  repeat
+    v := XoshiroNext and mask;
+  until v < span;
+  RandRange64 := Int64(UInt64(lo) + v);
+end;
+
+{ [0,1) with a full 53-bit significand — the top 53 bits of a draw scaled by
+  2^-53. The TOP bits, because that is the half a scrambled generator is
+  strongest in, and because taking the bottom ones is the classic way to ship a
+  generator that fails a spectral test it would otherwise pass. }
+function RandomDouble: Double;
+begin
+  RandomDouble := Double(XoshiroNext shr 11) * 1.1102230246251565e-16;
+end;
+
+{ Fill n bytes. Draws 64 bits at a time and spends all eight, so a large buffer
+  costs n/8 draws rather than n. }
+procedure RandomBytes(var buf; n: Integer);
+var p: PRandByte; v: UInt64; i, k: Integer;
+begin
+  p := PRandByte(@buf);
+  i := 0;
+  while i < n do
+  begin
+    v := XoshiroNext;
+    k := n - i;
+    if k > 8 then k := 8;
+    while k > 0 do
+    begin
+      p^ := Byte(v and $FF);
+      v := v shr 8;
+      p := PRandByte(PtrUInt(p) + 1);
+      i := i + 1;
+      k := k - 1;
+    end;
+  end;
 end;
 
 
@@ -338,17 +465,78 @@ begin
   RandomStateNext := XoshiroStep(st.s0, st.s1, st.s2, st.s3);
 end;
 
+{ Same rejection as RandRange — see the note there for why `mod` is wrong. }
 function RandomStateRange(var st: TRandomState; lo, hi: Integer): Integer;
-var span: Integer; v: UInt64;
+var span, mask, v: UInt64;
 begin
   if hi < lo then
   begin
     RandomStateRange := lo;
     Exit;
   end;
-  span := hi - lo + 1;
-  v := RandomStateNext(st) shr 33;
-  RandomStateRange := lo + Integer(v mod UInt64(span));
+  span := UInt64(Int64(hi) - Int64(lo) + 1);
+  if span = 1 then
+  begin
+    RandomStateRange := lo;
+    Exit;
+  end;
+  mask := RangeMask(span - 1);
+  repeat
+    v := RandomStateNext(st) and mask;
+  until v < span;
+  RandomStateRange := Integer(Int64(lo) + Int64(v));
+end;
+
+function RandomStateRange64(var st: TRandomState; lo, hi: Int64): Int64;
+var span, mask, v: UInt64;
+begin
+  if hi < lo then
+  begin
+    RandomStateRange64 := lo;
+    Exit;
+  end;
+  span := UInt64(hi) - UInt64(lo) + 1;
+  if span = 0 then
+  begin
+    RandomStateRange64 := Int64(RandomStateNext(st));
+    Exit;
+  end;
+  if span = 1 then
+  begin
+    RandomStateRange64 := lo;
+    Exit;
+  end;
+  mask := RangeMask(span - 1);
+  repeat
+    v := RandomStateNext(st) and mask;
+  until v < span;
+  RandomStateRange64 := Int64(UInt64(lo) + v);
+end;
+
+function RandomStateDouble(var st: TRandomState): Double;
+begin
+  RandomStateDouble := Double(RandomStateNext(st) shr 11) * 1.1102230246251565e-16;
+end;
+
+procedure RandomStateBytes(var st: TRandomState; var buf; n: Integer);
+var p: PRandByte; v: UInt64; i, k: Integer;
+begin
+  p := PRandByte(@buf);
+  i := 0;
+  while i < n do
+  begin
+    v := RandomStateNext(st);
+    k := n - i;
+    if k > 8 then k := 8;
+    while k > 0 do
+    begin
+      p^ := Byte(v and $FF);
+      v := v shr 8;
+      p := PRandByte(PtrUInt(p) + 1);
+      i := i + 1;
+      k := k - 1;
+    end;
+  end;
 end;
 
 procedure RandomStateSplit(var parent: TRandomState; var child: TRandomState);

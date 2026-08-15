@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:3 backlog:217 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1879 rejected:37`
+`unfinished:11 blocked:4 backlog:217 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1879 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -25,11 +25,12 @@ _none — no lane is locked._
 - `feature-pascal-corpus-generics` [P]
 - `feature-real-dynlib-loader` [B]
 
-## blocked (3) — has an unmet blocker; do not claim
+## blocked (4) — has an unmet blocker; do not claim
 
 - `bug-nilpy-empty-str-and-none-are-the-same-value` [N] — blocked-by: decide-nilpy-none-str-sentinel-vs-textstr-kind
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
+- `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
 ## Ready — top 30 of 201, ranked
 
