@@ -12832,6 +12832,24 @@ begin
       n := Procs[mpi].ParamCount - 1;
       Break;
     end;
+    { …and into a method that COLLECTS, where the operand is SPLICED into the
+      packing instead of expanded into slots. Same arm the plain-call path has;
+      PyPackStarArgs below reads the marker. }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) and (ProcPyStarIdx[mpi] >= 0) then
+    begin
+      Next;                              { the '*' }
+      ParseArgExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      ASTIVal[argNode] := PY_ARG_SPLICE;
+      ASTRight[argNode] := -1;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(n);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
     kwIdx := PyKwArgIndex(mpi, 1);
     if kwIdx <> 0 then anyKw := True;
     ParseArgExpr;
@@ -14549,7 +14567,17 @@ begin
   cnt := 1;                          { Self }
   while CurTok.Kind <> tkRParen do
   begin
+    { `obj.m(*xs)` into a method that COLLECTS — SPLICED into the packing, not
+      expanded into slots (a collecting callee has none to expand into). Same
+      arm the plain-call path has; PyPackStarArgs below reads the marker. A
+      star is not an expression, so it must be taken before ParseArgExpr. }
     kwIdx := PyKwArgIndex(mpi, 1);
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) and (ProcPyStarIdx[mpi] >= 0) then
+    begin
+      Next;
+      kwIdx := PY_ARG_SPLICE;
+    end;
     ParseArgExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
@@ -14664,6 +14692,24 @@ begin
       if dictSym < 0 then dictSym := PyNewContainerTemp('TPyDict', 'kwargs');
       keyNode := (-ASTIVal[n]) - 1;
       PyContainerCall1(dictSym, 'TPyDict', 'setitem', keyNode, ASTLeft[n]);
+    end
+    else if ASTIVal[n] = PY_ARG_SPLICE then
+    begin
+      { `f(*xs)` into a callee that collects: the operand's ELEMENTS join the
+        packing, so it extends where a written argument appends. Order is the
+        chain's, so `f(1, *xs, 9)` comes out in source order for free.
+
+        Only from the star position on. Before it, the split between the fixed
+        parameters and the tuple depends on the operand's LENGTH, which is a
+        run-time fact this compile-time packing cannot answer — say so rather
+        than pack a wrong shape. }
+      if pos < si then
+        Error('Nil Python: *unpacking that would fill a fixed parameter of a '
+            + 'collecting callee is not supported yet (the split depends on '
+            + 'the operand''s length)');
+      if listSym < 0 then listSym := PyNewContainerTemp('TPyList', 'starargs');
+      PyContainerCall1(listSym, 'TPyList', 'extend',
+                       PyStarOperandAsList(ASTLeft[n], FindUClass('TPyList')), -1);
     end
     else if ASTIVal[n] > 0 then
     begin

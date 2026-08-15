@@ -15368,6 +15368,29 @@ begin
             Inc(nArgs);
             Break;
           end;
+          { `f(*xs)` where `f` itself COLLECTS. The forwarding arm above declines
+            this by construction (it dispatches into a callee's fixed slots, of
+            which a variadic has none), so it used to reach the expression parse
+            and report "expected expression". A collecting callee wants the
+            operand SPLICED into the packing instead — `extend` where a written
+            argument `append`s — which PyPackStarArgs does with the marker set
+            here. bug-nilpy-star-unpack-into-a-star-args-callee }
+          if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] >= 0) and
+             (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkStar) then
+          begin
+            Next;                        { the '*' }
+            ParseArgExpr;
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := CurASTNode;
+            ASTIVal[argSeq] := PY_ARG_SPLICE;
+            if argsHead = -1 then argsHead := argSeq else ASTRight[lastArg] := argSeq;
+            lastArg := argSeq;
+            Inc(nArgs);
+            if CurTok.Kind = tkComma then Next
+            else if CurTok.Kind <> tkRParen then
+              Error('expected comma or close parenthesis');
+            Continue;
+          end;
           { NilPy `key=expr`: consumes the name, yields paramIndex+1 (0 = positional) }
           kwIdx := PyKwArgIndex(procIdx, 0);
           if kwIdx > 0 then slotIdx := kwIdx - 1 else slotIdx := nArgs;

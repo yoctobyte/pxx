@@ -1,0 +1,51 @@
+# `f(*xs)` where `f` ITSELF declares `*args`. Both existing star paths declined
+# it: the run-time forwarding arm dispatches into a callee's fixed slots (a
+# collecting one has none), and the compile-time expansion fills declared slots
+# (likewise). So it reached the expression parse and reported "expected
+# expression", naming neither the star nor the callee.
+#
+# A collecting callee wants the operand SPLICED into its packing — extend where
+# a written argument appends — which keeps source order for free.
+
+def f(*a):
+    return a
+
+xs = [1, 2]
+print(f(*xs))
+print(f(0, *xs))
+print(f(*xs, 3))
+print(f(0, *xs, 3))
+print(f(*[]))
+print(f(*"ab"))          # a str is an iterable: its CHARACTERS spread
+print(f(*(7, 8)))
+print(f(*xs, *xs))
+
+# a fixed parameter before the star is fine as long as WRITTEN arguments fill it
+def g(x, *rest):
+    return str(x) + "|" + str(rest)
+
+print(g(1, *xs))
+print(g(1, *[]))
+
+# re-forwarding from one variadic into another — the wrapper idiom
+def w(*a):
+    return f(*a)
+
+print(w(4, 5))
+print(w())
+
+# on a METHOD, where Self occupies slot 0
+class C:
+    def take(self, *a):
+        return a
+
+    def keep(self, x, *rest):
+        return str(x) + "/" + str(rest)
+
+c = C()
+print(c.take(*xs))
+print(c.take(0, *xs))
+print(c.keep(1, *xs))
+
+# and the tuple is a tuple, not a list
+print(type(f(*xs)).__name__)

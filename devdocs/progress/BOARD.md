@@ -39,7 +39,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (207)
+## backlog (208)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -62,7 +62,8 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-star-forwarder-refuses-a-container-typed-parameter | N | 20 | bug | `sum(*[xs])` is refused at compile time — the run-time *args forwarder rejects any callee parameter it cannot coerce a Variant to, and pylib's `sum(l: TPyList)` is one. Loud, but it refuses a valid CPython program. | — |
-| bug-nilpy-star-unpack-into-a-star-args-callee | N | 25 | bug | `f(*xs)` where `f` itself declares `*args` reports \"expected expression\" — the forwarding arm explicitly excludes a callee that collects, and the compile-time expansion has no fixed slots to expand into. Wrapper-to-variadic forwarding is refused in both directions of the star. | — |
+| bug-nilpy-star-unpack-into-a-callable-value | N | 35 | bug | `fn(*args)` where `fn` is a callable VALUE (a parameter, a dict entry) reports \"expected expression\": every star arm keys on the CALLEE'S signature, and a value has none at the call site. This is the last piece of the plain decorator idiom. | — |
+| bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter | N | 20 | bug | `g(*xs)` where `g` declares fixed parameters BEFORE its `*args` is refused: the split between those parameters and the packed tuple depends on len(xs), a run-time fact the compile-time packing cannot answer. Loud and self-naming, but CPython accepts it. | — |
 | bug-nilpy-str-format-refuses-keyword-fields | N | 25 | bug | `\"{k}\".format(k=3)` fails to compile as `undefined variable (k)`, and `.format(**d)` as `expected expression`. Positional `.format()` handles zero to eight arguments; the NAMED field form is refused outright. | — |
 | bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
 | bug-p-bare-all-defaulted-routine-refused-in-argument-position | P | 40 | bug | A bare all-defaulted routine name is refused in ARGUMENT position, though statement and expression position now fill the trailing defaults and call — and in the default (objfpc) mode the meaning is unambiguous, because a procedural reference requires `@F` there. | — |
@@ -408,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1846)
+## done (1847)
 
-1846 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1847 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -561,6 +562,7 @@ _none_
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [B] bug-b-rtl-math-transcendentals-lose-argument-reduction
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
+- [p 35] [N] bug-nilpy-star-unpack-into-a-callable-value
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
@@ -604,7 +606,6 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-cast-to-float-in-value-position-does-not-round-to-single
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
-- [p 25] [N] bug-nilpy-star-unpack-into-a-star-args-callee
 - [p 25] [N] bug-nilpy-str-format-refuses-keyword-fields
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
@@ -628,6 +629,7 @@ _none_
 - [p 20] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins
 - [p 20] [N] bug-nilpy-star-forwarder-refuses-a-container-typed-parameter
+- [p 20] [N] bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope
 - [p 20] [A] feature-cli-widgetset-flag

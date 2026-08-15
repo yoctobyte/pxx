@@ -17,6 +17,14 @@ const
   PY_MAX_NESTED = 512;  { queued nested defs per enclosing body (feature-nilpy-nested-defs); uforth registers ~100 native-word bodies in one setup function }
   PY_MAX_CAPS = 20;     { enclosing locals one nested def may capture }
   PY_MAX_DEF_GLOBALS = 32;  { `global`/`nonlocal` names one def body may declare }
+  { An AN_ARG whose value is a `*xs` operand SPLICED into a collecting callee's
+    packing — `f(*xs)` where `f` itself declares `*args`. Rides ASTIVal, whose
+    other meanings on an AN_ARG are 0 = positional, >0 = a parameter SLOT
+    (bounded by MAX_PROC_PARAMS) and <0 = a **kwargs pair, so a value this far
+    out is unambiguous. Read and cleared by PyPackStarArgs, which runs
+    immediately after the argument loop that sets it, so the marker never
+    outlives one call's parse. }
+  PY_ARG_SPLICE = 1000000;
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;
