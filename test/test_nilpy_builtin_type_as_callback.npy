@@ -1,0 +1,33 @@
+# A builtin TYPE used as a CALLBACK, and str() of a container through the
+# dynamic path. Two halves of one crossing:
+#   bug-nilpy-a-builtin-type-as-a-key-callback-segfaults — sorted(xs, key=str)
+#     jumped to address 13 (the variant TAG passed as a code pointer).
+#   bug-nilpy-str-of-a-container-through-a-callback-is-empty — map(str, [(1,2)])
+#     answered [""] while [str(x) for x in ...] was correct.
+# Diffed against CPython.
+
+# a builtin TYPE handed to a callback slot
+xs = [3, 1, 20]
+print(sorted(xs, key=str))
+print(sorted(xs, key=int), sorted(xs, key=float))
+print(sorted(["b", "A", "c"], key=str))
+print(min(xs, key=str), max(xs, key=str))
+print(min(["bb", "a"], key=str), max([1.5, 2], key=float))
+print(sorted([True, False], key=bool), sorted(["1", "20", "3"], key=int))
+print(sorted([[1,2,3],[1]], key=len), sorted(xs, key=lambda v: -v))
+d = {"b": 2, "a": 1}
+print(sorted(d, key=str), sorted(d.items(), key=str))
+# a type still works as a VALUE, which is the other half of the same construct
+t = str
+print(t(5), t, type(5) == int, isinstance(5, int))
+L = list
+print(L("ab"), L())
+print(sorted(xs, key=repr))
+
+t = (1, 2)
+print(str(t))
+print(str([1, 2]), str({"a": 1}), str({1, 2}))
+print(list(map(str, [(1,2), [3], {"k":1}, 5, "s"])))
+d = {"b": 2, "a": 1}
+print([str(x) for x in d.items()])
+print(str(d.items()) != "")

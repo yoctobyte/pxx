@@ -920,6 +920,8 @@ function PyBareGenExprAhead: Boolean; forward;   { bare genexpr as a call arg (p
 { a user object with __iter__ handed to a pylib routine that wants a container
   (bug-nilpy-builtins-over-a-user-iterable-answer-empty) — body in pyparser.inc }
 function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean; forward;
+{ a builtin TYPE handed to a callback (Pointer) parameter — body in pyparser.inc }
+function PyFixCallableTypeArgs(const nm: AnsiString; argsHead, nArgs: Integer): Boolean; forward;
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
@@ -15196,6 +15198,11 @@ begin
         PyPackStarArgs(procIdx, argsHead, lastArg, nArgs, 0);
         PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
+        { a builtin TYPE in a callback slot becomes the address of the routine
+          that type performs — BEFORE the types below are read, since they are
+          what picks the overload (bug-nilpy-a-builtin-type-as-a-key-callback-
+          segfaults) }
+        if isNilPy then PyFixCallableTypeArgs(name, argsHead, nArgs);
         currArg := argsHead;
         for i := 0 to nArgs - 1 do
         begin
@@ -22857,6 +22864,9 @@ begin
           PyPackStarArgs(procIdx, argsHead, lastArg, nArgs, 0);
           PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 
+          { see the twin site: a builtin TYPE in a callback slot, before the
+            types that pick the overload are read }
+          if isNilPy then PyFixCallableTypeArgs(name, argsHead, nArgs);
           currArg := argsHead;
           for i := 0 to nArgs - 1 do
           begin

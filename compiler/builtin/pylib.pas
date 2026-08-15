@@ -1473,6 +1473,20 @@ procedure pybtype_call1(const t: Variant; const a0: Variant; var res: Variant);
 { ...and the zero-argument form, `list()` / `str()` / `int()` through a name:
   Python's empty value of that type. }
 procedure pybtype_call0(const t: Variant; var res: Variant);
+{ The same conversion as a ONE-ARGUMENT FUNCTION, one per type, so a builtin
+  type can be handed to a CALLBACK slot — `sorted(xs, key=str)`,
+  `min(xs, key=int)`. Those slots are a raw code Pointer (PyCallKey1), and a
+  type held as a value is a VARIANT: coerced into the pointer parameter it
+  passed the variant's TAG WORD as a code address and the program jumped to
+  address 13 (bug-nilpy-a-builtin-type-as-a-key-callback-segfaults). The
+  frontend rewrites the argument to one of these instead. }
+function pyconv_str(const a0: Variant): Variant;
+function pyconv_int(const a0: Variant): Variant;
+function pyconv_float(const a0: Variant): Variant;
+function pyconv_bool(const a0: Variant): Variant;
+function pyconv_list(const a0: Variant): Variant;
+function pyconv_dict(const a0: Variant): Variant;
+function pyconv_set(const a0: Variant): Variant;
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
 { Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
@@ -15255,6 +15269,55 @@ begin
   end;
 end;
 
+function pyconv_str(const a0: Variant): Variant;
+var tmp: Variant;
+begin
+  pybtype_call1(pybtype(PYBT_STR), a0, tmp);
+  Result := tmp;
+end;
+
+function pyconv_int(const a0: Variant): Variant;
+var tmp: Variant;
+begin
+  pybtype_call1(pybtype(PYBT_INT), a0, tmp);
+  Result := tmp;
+end;
+
+function pyconv_float(const a0: Variant): Variant;
+var tmp: Variant;
+begin
+  pybtype_call1(pybtype(PYBT_FLOAT), a0, tmp);
+  Result := tmp;
+end;
+
+function pyconv_bool(const a0: Variant): Variant;
+var tmp: Variant;
+begin
+  pybtype_call1(pybtype(PYBT_BOOL), a0, tmp);
+  Result := tmp;
+end;
+
+function pyconv_list(const a0: Variant): Variant;
+var tmp: Variant;
+begin
+  pybtype_call1(pybtype(PYBT_LIST), a0, tmp);
+  Result := tmp;
+end;
+
+function pyconv_dict(const a0: Variant): Variant;
+var tmp: Variant;
+begin
+  pybtype_call1(pybtype(PYBT_DICT), a0, tmp);
+  Result := tmp;
+end;
+
+function pyconv_set(const a0: Variant): Variant;
+var tmp: Variant;
+begin
+  pybtype_call1(pybtype(PYBT_SET), a0, tmp);
+  Result := tmp;
+end;
+
 procedure pybtype_call0(const t: Variant; var res: Variant);
 var tmp: Variant;
 begin
@@ -16334,6 +16397,20 @@ begin
   if pyvartag(v) = 3 then
   begin
     Result := PyFloatStr(PPyDouble(@PPyVarRec(@v)^.Payload)^);
+    Exit;
+  end;
+  { an OBJECT — a list, dict, set, bytes, or a user instance — renders the way
+    print renders it. Without this arm it fell through to VariantToStr, which
+    is builtin.pas's LOW-LEVEL scalar formatter and knows nothing about pylib's
+    objects, so it answered the EMPTY STRING: `map(str, [(1,2), [3]])` gave
+    ['', ''] while the identical `[str(x) for x in ...]` was correct, because
+    the comprehension reaches the frontend's own str lowering and only the
+    DYNAMIC path comes here (bug-nilpy-str-of-a-container-through-a-callback-
+    is-empty). The three rendering paths again —
+    project_nilpy_three_rendering_paths_print_str_fstring. }
+  if pyvartag(v) = 7 then
+  begin
+    Result := pyvar_print_of(v);
     Exit;
   end;
   Result := VariantToStr(v);

@@ -17096,6 +17096,97 @@ begin
   Result := FindUMeth(rec - REC_UCLASS_BASE, '__iter__') >= 0;
 end;
 
+function PyBuiltinTypeCallbackProc(code: Integer): Integer;
+{ The one-argument pylib routine a builtin TYPE performs when it is CALLED —
+  `str` -> pyconv_str. Only the codes pybtype_call1 actually implements; the
+  rest answer -1 and keep today's behaviour, which is that routine's own named
+  refusal rather than a wrong answer. }
+begin
+  Result := -1;
+  case code of
+    1: Result := FindProc('pyconv_str');
+    2: Result := FindProc('pyconv_int');
+    3: Result := FindProc('pyconv_float');
+    4: Result := FindProc('pyconv_bool');
+    6: Result := FindProc('pyconv_list');
+    7: Result := FindProc('pyconv_dict');
+    8: Result := FindProc('pyconv_set');
+  end;
+end;
+
+function PyNameWantsCallbackAt(const nm: AnsiString; slot: Integer): Boolean;
+{ Does ANY routine of this name take a raw callback Pointer in that slot? The
+  question has to be asked of the whole overload family, before matching, for
+  the reason PyFixCallableTypeArgs documents. }
+var c: Integer;
+begin
+  Result := False;
+  if slot >= MAX_PROC_PARAMS then Exit;
+  for c := 0 to ProcCount - 1 do
+    if CaseEqual(Procs[c].Name, nm) and (slot < Procs[c].ParamCount) and
+       (Procs[c].Params[slot].TypeKind = tyPointer) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+function PyFixCallableTypeArgs(const nm: AnsiString; argsHead, nArgs: Integer): Boolean;
+{ `sorted(xs, key=str)` / `min(xs, key=int)` — a builtin TYPE handed to a
+  CALLBACK parameter. Those parameters are a raw code `Pointer` (PyCallKey1
+  calls through it), while a type held as a value is the VT_BTYPE VARIANT that
+  `pybtype(code)` builds. Coerced into the pointer slot, the variant passed its
+  TAG WORD as the code address and the program jumped to address 13: a SIGSEGV
+  with no diagnostic, on an everyday Python idiom
+  (bug-nilpy-a-builtin-type-as-a-key-callback-segfaults). The faulting PC being
+  a small tag number is the tell — see
+  project_nilpy_callable_has_three_representations, which is this same crossing.
+
+  Rewrites the argument to the ADDRESS of the one-argument routine that type
+  performs, which is what the slot has always wanted.
+
+  BEFORE overload matching, not after: the argument's TYPE is what picks the
+  overload, and a variant-typed one made `min(xs, key=str)` bind the scalar
+  `min(Variant, Variant)` — a wrong overload, which no post-match fixup can
+  undo. That is also why the question is asked of the NAME's whole family
+  rather than of a chosen proc. Nothing else can match: the argument node has
+  to be the `pybtype(<literal>)` call the frontend itself builds. }
+var i, currArg, argN, code, wrapPi, btPi, node: Integer;
+begin
+  Result := False;
+  if not PyExprMode then Exit;
+  if nArgs <= 0 then Exit;
+  btPi := FindProc('pybtype');
+  if btPi < 0 then Exit;
+  currArg := argsHead;
+  i := 0;
+  while (currArg >= 0) and (i < nArgs) and (i < MAX_PROC_PARAMS) do
+  begin
+    node := ASTLeft[currArg];
+    if (node >= 0) and (ASTKind[node] = AN_CALL) and (ASTIVal[node] = btPi) and
+       PyNameWantsCallbackAt(nm, i) then
+    begin
+      argN := ASTLeft[node];
+      if (argN >= 0) and (ASTLeft[argN] >= 0) and
+         (ASTKind[ASTLeft[argN]] = AN_INT_LIT) then
+      begin
+        code := Integer(ASTIVal[ASTLeft[argN]]);
+        wrapPi := PyBuiltinTypeCallbackProc(code);
+        if wrapPi >= 0 then
+        begin
+          node := AllocNode(AN_PROCADDR);
+          ASTIVal[node] := wrapPi;
+          ASTTk[node] := Ord(tyPointer);
+          ASTLeft[currArg] := node;
+          Result := True;
+        end;
+      end;
+    end;
+    currArg := ASTRight[currArg];
+    Inc(i);
+  end;
+end;
+
 function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean;
 { A user object implementing the iterator protocol, handed to a pylib routine
   that wants a CONTAINER. `list(bag)` / `sorted(bag)` / `tuple(bag)` resolved
