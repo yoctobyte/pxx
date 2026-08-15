@@ -139,4 +139,4 @@ compiles and runs. `test/test_nilpy_import_does_not_publish_names.npy` pins the
 whole set against CPython, qualified spellings included.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit e94b8cda3.
