@@ -338,10 +338,34 @@ type
   TSFn0 = function(self: Pointer): AnsiString;
   TSFn1 = function(self: Pointer; const a: Variant): AnsiString;
   TSFn2 = function(self: Pointer; const a, b: Variant): AnsiString;
-  { Int64-return, N Variant args (0..2). }
+  TSFn3 = function(self: Pointer; const a, b, c: Variant): AnsiString;
+  TSFn4 = function(self: Pointer; const a, b, c, d: Variant): AnsiString;
+  TSFn5 = function(self: Pointer; const a, b, c, d, e: Variant): AnsiString;
+  { Int64-return, N Variant args. The families used to stop at 2 while the
+    Variant and void ones went to 5, so an ordinary three-parameter method was
+    refused by ARITY — `pyeval: int-return arity 3 unsupported for put` — with
+    all-positional arguments. bug-pyeval-three-param-host-method-unsupported }
   TIFn0 = function(self: Pointer): Int64;
   TIFn1 = function(self: Pointer; const a: Variant): Int64;
   TIFn2 = function(self: Pointer; const a, b: Variant): Int64;
+  TIFn3 = function(self: Pointer; const a, b, c: Variant): Int64;
+  TIFn4 = function(self: Pointer; const a, b, c, d: Variant): Int64;
+  TIFn5 = function(self: Pointer; const a, b, c, d, e: Variant): Int64;
+  { Double-return and CLASS/pointer-return, which had no arm at all: a host
+    method answering a float or an object died on "unsupported host-call return
+    kind" rather than on arity. Same Variant-argument ABI as the families above. }
+  TDFn0 = function(self: Pointer): Double;
+  TDFn1 = function(self: Pointer; const a: Variant): Double;
+  TDFn2 = function(self: Pointer; const a, b: Variant): Double;
+  TDFn3 = function(self: Pointer; const a, b, c: Variant): Double;
+  TDFn4 = function(self: Pointer; const a, b, c, d: Variant): Double;
+  TDFn5 = function(self: Pointer; const a, b, c, d, e: Variant): Double;
+  TOFn0 = function(self: Pointer): Pointer;
+  TOFn1 = function(self: Pointer; const a: Variant): Pointer;
+  TOFn2 = function(self: Pointer; const a, b: Variant): Pointer;
+  TOFn3 = function(self: Pointer; const a, b, c: Variant): Pointer;
+  TOFn4 = function(self: Pointer; const a, b, c, d: Variant): Pointer;
+  TOFn5 = function(self: Pointer; const a, b, c, d, e: Variant): Pointer;
   { Register-family shape: every param travels as ONE pointer-sized value in an
     integer register, so one set of thunk types calls them all —
     int/int64/bool/char/pointer/class directly, AnsiString as its data pointer,
@@ -870,8 +894,10 @@ var
   code: Pointer;
   vf0: TVFn0; vf1: TVFn1; vf2: TVFn2; vf3: TVFn3; vf4: TVFn4; vf5: TVFn5;
   vp0: TVPr0; vp1: TVPr1; vp2: TVPr2; vp3: TVPr3; vp4: TVPr4; vp5: TVPr5;
-  sf0: TSFn0; sf1: TSFn1; sf2: TSFn2;
-  if0: TIFn0; if1: TIFn1; if2: TIFn2;
+  sf0: TSFn0; sf1: TSFn1; sf2: TSFn2; sf3: TSFn3; sf4: TSFn4; sf5: TSFn5;
+  if0: TIFn0; if1: TIFn1; if2: TIFn2; if3: TIFn3; if4: TIFn4; if5: TIFn5;
+  df0: TDFn0; df1: TDFn1; df2: TDFn2; df3: TDFn3; df4: TDFn4; df5: TDFn5;
+  of0: TOFn0; of1: TOFn1; of2: TOFn2; of3: TOFn3; of4: TOFn4; of5: TOFn5;
   pf0: TPFn0; pf1: TPFn1; pf2: TPFn2; pf3: TPFn3; pf4: TPFn4; pf5: TPFn5;
   pvf0: TPVFn0; pvf1: TPVFn1; pvf2: TPVFn2; pvf3: TPVFn3; pvf4: TPVFn4; pvf5: TPVFn5;
   psf0: TPSFn0; psf1: TPSFn1; psf2: TPSFn2; psf3: TPSFn3; psf4: TPSFn4; psf5: TPSFn5;
@@ -1097,29 +1123,84 @@ begin
     Exit;
   end;
 
-  { AnsiString return (next_token_strict, next_token, …) — arity 0..2 }
+  { AnsiString return (next_token_strict, next_token, …) — arity 0..5 }
   if rk = 23 then
   begin
     case n of
       0: begin sf0 := TSFn0(code); res := MakeStr(sf0(vmobj)); end;
       1: begin sf1 := TSFn1(code); res := MakeStr(sf1(vmobj, a0)); end;
       2: begin sf2 := TSFn2(code); res := MakeStr(sf2(vmobj, a0, a1)); end;
+      3: begin sf3 := TSFn3(code); res := MakeStr(sf3(vmobj, a0, a1, a2)); end;
+      4: begin sf4 := TSFn4(code); res := MakeStr(sf4(vmobj, a0, a1, a2, a3)); end;
+      5: begin sf5 := TSFn5(code); res := MakeStr(sf5(vmobj, a0, a1, a2, a3, a4)); end;
     else
-      begin writeln('pyeval: string-return arity ', n, ' unsupported for ', name); Halt(1); end;
+      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
     Exit;
   end;
 
-  { Int64 / Integer / Boolean / Char return — arity 0..2 }
+  { Int64 / Integer / Boolean / Char return — arity 0..5.
+
+    An implicitly-returning NilPy method lands HERE, not in the void arm: a def
+    with no `return` is typed Integer, which is why an ordinary
+    `def put(self, a, b, c)` was refused as "int-return arity 3" even though it
+    returns nothing. That typing is its own, separately tracked gap
+    (feature-nilpy-none-variant); what this arm owes it is the arity. }
   if (rk = 13) or (rk = 1) or (rk = 2) or (rk = 3) then
   begin
     case n of
       0: begin if0 := TIFn0(code); res := pyvar_of_int(if0(vmobj)); end;
       1: begin if1 := TIFn1(code); res := pyvar_of_int(if1(vmobj, a0)); end;
       2: begin if2 := TIFn2(code); res := pyvar_of_int(if2(vmobj, a0, a1)); end;
+      3: begin if3 := TIFn3(code); res := pyvar_of_int(if3(vmobj, a0, a1, a2)); end;
+      4: begin if4 := TIFn4(code); res := pyvar_of_int(if4(vmobj, a0, a1, a2, a3)); end;
+      5: begin if5 := TIFn5(code); res := pyvar_of_int(if5(vmobj, a0, a1, a2, a3, a4)); end;
     else
-      begin writeln('pyeval: int-return arity ', n, ' unsupported for ', name); Halt(1); end;
+      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
+    { A BOOLEAN return shares this family's ABI but not its Python type: boxed
+      as an int it printed `1` where CPython prints `True`. Re-boxed by the
+      declared kind after the call, so the one register-shaped family still
+      serves all four kinds. }
+    if rk = 2 then res := pyvar_of_bool(pyvar_to_int(res) <> 0);
+    Exit;
+  end;
+
+  { Double / Single return — arity 0..5. No arm at all before this: a host
+    method answering a float died on "unsupported host-call return kind". }
+  if (rk = 19) or (rk = 18) then
+  begin
+    case n of
+      0: begin df0 := TDFn0(code); res := df0(vmobj); end;
+      1: begin df1 := TDFn1(code); res := df1(vmobj, a0); end;
+      2: begin df2 := TDFn2(code); res := df2(vmobj, a0, a1); end;
+      3: begin df3 := TDFn3(code); res := df3(vmobj, a0, a1, a2); end;
+      4: begin df4 := TDFn4(code); res := df4(vmobj, a0, a1, a2, a3); end;
+      5: begin df5 := TDFn5(code); res := df5(vmobj, a0, a1, a2, a3, a4); end;
+    else
+      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+    end;
+    Exit;
+  end;
+
+  { CLASS / pointer return — arity 0..5, boxed as VT_OBJECT with the slot taking
+    its own reference, exactly as the no-argument fast path above does. This is
+    what lets a reflected call hand back an object the next call can reach. }
+  if (rk = 6) or (rk = 17) then
+  begin
+    pret := nil;
+    case n of
+      0: begin of0 := TOFn0(code); pret := of0(vmobj); end;
+      1: begin of1 := TOFn1(code); pret := of1(vmobj, a0); end;
+      2: begin of2 := TOFn2(code); pret := of2(vmobj, a0, a1); end;
+      3: begin of3 := TOFn3(code); pret := of3(vmobj, a0, a1, a2); end;
+      4: begin of4 := TOFn4(code); pret := of4(vmobj, a0, a1, a2, a3); end;
+      5: begin of5 := TOFn5(code); pret := of5(vmobj, a0, a1, a2, a3, a4); end;
+    else
+      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+    end;
+    PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
+    PXXObjRetain(Pointer(NativeInt(pret)));
     Exit;
   end;
 
