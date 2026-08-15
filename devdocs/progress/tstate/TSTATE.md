@@ -3,13 +3,28 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `343a52551808` | 2026-08-15T22:04:50Z | GREEN (native) | 214.4s | `c8f5070671be` RED |
+| plexus | `343a52551808` | 2026-08-15T22:24:30Z | RED (full) | 1133.7s | `343a52551808` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-nilpy#src:test/test_cpyext_args_errors.npy** — test/test_cpyext_args_errors.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
-- **test-nilpy#src:test/test_cpyext_containers.npy** — test/test_cpyext_containers.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
-- **test-nilpy#src:test/test_cpyext_cython.npy** — test/test_cpyext_cython.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
-- **test-nilpy#src:test/test_cpyext_errformat.npy** — test/test_cpyext_errformat.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
-- **test-nilpy#src:test/test_cpyext_hello.npy** — test/test_cpyext_hello.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
-- **test-nilpy#src:test/test_cpyext_markupsafe.npy** — test/test_cpyext_markupsafe.npy test/nilpy_units/vendor/cyadd.pyx (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
+- **CASCADE 17 jobs** (plexus): bad `343a52551808`, last good `c8f5070671be`, 67 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `test-nilpy#src:test/test_nilpy_encode.npy`
+  - `test-nilpy#src:test/test_nilpy_encode_decode_codecs.npy`
+  - `test-nilpy#src:test/test_nilpy_intrinsic_result_chain.npy`
+  - `test-nilpy#src:test/test_nilpy_math_domain_errors.npy`
+  - `test-nilpy#src:test/test_nilpy_math_log.npy`
+  - `test-uforth#core`
+  - `test-uforth#coreexttest`
+  - `test-uforth#coreplustest`
+  - `test-uforth#doubletest`
+  - `test-uforth#exceptiontest`
+  - `test-uforth#facilitytest`
+  - `test-uforth#filetest`
+  - `test-uforth#localstest`
+  - `test-uforth#memorytest`
+  - `test-uforth#searchordertest`
+  - `test-uforth#stringtest`
+  - `test-uforth#toolstest`
+  </details>
