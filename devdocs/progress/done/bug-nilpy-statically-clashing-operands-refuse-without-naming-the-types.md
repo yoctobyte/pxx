@@ -109,4 +109,4 @@ more arm in `pyadd_v`, left because no row of this ticket asked for it and the
 message it gives today is at least about the right operator.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 3bc3efe69.
