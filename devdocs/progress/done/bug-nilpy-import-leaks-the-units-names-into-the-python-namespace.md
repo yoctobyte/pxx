@@ -140,3 +140,24 @@ whole set against CPython, qualified spellings included.
 
 ## Log
 - 2026-08-16 — resolved, commit e94b8cda3.
+
+## AMENDED same day — the rule is narrower than this write-up first said
+
+Track T came back red on three `examples/tk/*.npy` programs within the hour.
+They write `import tk` and then call a bare `TkInit()`; hiding every routine of
+an imported unit made that a hard error. It should not be one: CPython would
+raise NameError there, and **NilPy accepting what CPython rejects is a feature
+of this dialect, not a defect** — the compatibility promise runs one way
+(`devdocs/dev/nilpy-semantics-divergences.md`).
+
+So the final rule drops a qualified-only unit's routine **only when the Python
+side already declares that name** (`PythonSideDeclaresRoutine`: pylib, pyeval,
+or a compiler-minted proc). That is precisely the ambush set —
+`abs`/`min`/`max`/`round` — where the user's own working meaning silently
+changes. `TkInit`, `Tk_` and `Trim` collide with nothing and still resolve.
+
+Read the two together: the sections above describe how the mechanism is wired
+(qualified-only marking, `DeclVisibleBareRoutine`, the `MatchEligBase` gate),
+and this one describes what it is allowed to hide. Both were arrived at by
+being wrong first, in opposite directions — too narrow a hook, then too wide a
+rule — which is why they are recorded rather than smoothed over.
