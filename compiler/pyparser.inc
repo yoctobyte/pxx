@@ -18085,6 +18085,18 @@ begin
       Dec(depth);
     end
     else if (depth = 0) and (Tokens[i].Kind = tkComma) then Exit
+    { …and a STATEMENT BOUNDARY. A genexpr argument always sits inside the
+      call's parentheses, and NilPy suppresses newlines inside brackets, so a
+      newline at depth 0 means the scan has left the argument list entirely and
+      is reading the code that FOLLOWS. Without this it did: `p.extra = 7`
+      parses its value through ParseArgExpr, the scan ran on past the end of
+      the statement and found the `for` of an unrelated loop several lines
+      below, and the value 7 was parsed as a generator expression over it —
+      surfacing as "undefined variable" on the loop's own iterable, in a
+      function whose parameter plainly exists.
+      bug-nilpy-a-bare-genexpr-scan-runs-past-the-statement }
+    else if (depth = 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent,
+                                                tkSemicolon, tkColon]) then Exit
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
             (LowerCase(GetTokenStr(i)) = 'for') then
     begin
