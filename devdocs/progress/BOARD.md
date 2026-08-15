@@ -36,7 +36,7 @@ _none_
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (218)
+## backlog (221)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -101,7 +101,6 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-mimic-codecs-for-nilpy | B | 50 | feature | A `mimic_codecs` unit so `import codecs` resolves: the charmap trio (build/decode/encode), lookup/register/CodecInfo and the five base classes. Measured as the exact surface webencodings needs, which is the bottom rung of the webencodings -> tinycss2 -> html5lib ladder in feature-nilpy-thirdparty-libraries-as-targets. | — |
-| feature-b-rtl-fast-ln-exp-path | B | 60 | feature | Sin/Cos/Tan got a fast default path (261 ms vs 31,828 ms per 1M, ~1 ulp) under the 2026-08-15 float policy. Ln and Exp did not, and they are the WORSE case: 16,480 ms per 1M against glibc's 13 ms, a 1270x ratio. Same treatment — a plain-double minimax kernel by default, the existing double-double one behind -dPXX_FLOAT_EXACT. | — |
 | feature-b-rtl-fast-power-needs-a-hi-lo-log | B | 45 | feature | Ln/Exp/Log10/Log2 went 66-107x faster on 2026-08-15; Power and LogN did NOT and are now the two slowest functions in the RTL at ~18-19 s per 1M. Both were left on the double-double log DELIBERATELY: Power amplifies the log's error by \|y\|, and LogN is a quotient where each rounding lands in the answer. One fix serves both — a fast extra-precision (hi/lo double) log, which is what fdlibm's pow carries instead of calling log. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | — |
@@ -245,6 +244,10 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
+| regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
+| regression-test-core-test-c-cross-ns-arity | T | 70 | regression | regression: test-core#src:test/test_c_cross_ns_arity.pas red at 60502ed0c353 (auto-filed by twatch) | — |
+| regression-test-core-test-c-unit-globals | T | 70 | regression | regression: test-core#src:test/test_c_unit_globals.pas red at 60502ed0c353 (auto-filed by twatch) | — |
+| regression-test-core-test-uses-order-pylib-exception-b | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_b.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-errformat | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_errformat.npy red at 36d1bffda39d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-builtin-over-variant-receiver | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy red at 36d1bffda39d (auto-filed by twatch) | — |
@@ -417,9 +420,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1874)
+## done (1875)
 
-1874 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1875 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -466,6 +469,10 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-cascade-63d1d0de90d3
+- [p 70] [T] regression-test-core-test-asyncecho
+- [p 70] [T] regression-test-core-test-c-cross-ns-arity
+- [p 70] [T] regression-test-core-test-c-unit-globals
+- [p 70] [T] regression-test-core-test-uses-order-pylib-exception-b
 - [p 70] [T] regression-test-nilpy-test-cpyext-errformat
 - [p 70] [T] regression-test-nilpy-test-nilpy-builtin-over-variant-receiver
 - [p 70] [T] regression-test-nilpy-test-nilpy-import-c-header-still-works
@@ -475,7 +482,6 @@ _none_
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
 - [p 60] [A] bug-a-int-of-a-large-double-is-int64-min-on-x86-64
 - [p 60] [P] bug-p-scope-hiding-covers-routines-but-not-types-and-classes
-- [p 60] [B] feature-b-rtl-fast-ln-exp-path
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
