@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-14T21:27:51Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "19e30dcdad672f440079b59256314ab671f22d04",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-14T21:54:52Z",
    "fixed": [
     "test-asm#src:test/test_asm_avx.pas"
@@ -407,6 +399,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "ba913205aa5b0919b2820f42a1f5a19b5912fa3b",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-15T05:22:21Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "e93aeb896a7889e4e4e0b9de0c57a540755f3d06",
    "tier": "native",
    "verdict": "RED"
   }
@@ -5231,11 +5231,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T05:17:58Z",
-  "sha": "ba913205aa5b0919b2820f42a1f5a19b5912fa3b",
+  "date": "2026-08-15T05:22:21Z",
+  "sha": "e93aeb896a7889e4e4e0b9de0c57a540755f3d06",
   "tier": "native",
   "verdict": "RED",
-  "wall": 236.1
+  "wall": 193.5
  },
  "last_bench": {
   "conf_rows": 550,
