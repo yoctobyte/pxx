@@ -107,4 +107,4 @@ because a test that covers someone else's open bug goes red for a change that
 did not cause it.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 11ee7dd0a.
