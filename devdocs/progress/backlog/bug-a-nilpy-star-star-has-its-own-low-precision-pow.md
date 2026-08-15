@@ -2,7 +2,7 @@
 track: A
 prio: 55
 type: bug
-blocked-by: [bug-nilpy-uses-math-breaks-abs-on-a-float]
+blocked-by: [bug-nilpy-import-leaks-the-units-names-into-the-python-namespace]
 summary: "NilPy's `x ** y` does NOT go through the RTL's Power — pypow_v carries its own hand-rolled series ln/exp in compiler/builtin/pylib.pas. Measured against CPython over 105 pairs: 18 exact, 48 within 16 ulp, 15 worse, worst 1282 ulp (`1.0001 ** 10000` = 2.718145926824356 against 2.7181459268249255). The comment justifying it says the value is 'about to be str()'d through a known-truncated float formatter anyway', and that formatter now prints full precision."
 ---
 
@@ -169,3 +169,51 @@ Also measured and NOT this ticket: `2.0 ** 10000` answers `+inf` where CPython
 raises `OverflowError`, on the pinned binary and on HEAD alike — a general float
 policy divergence (`1e300 * 1e300` does the same). Filed as
 [[bug-nilpy-float-overflow-answers-inf-where-cpython-raises]].
+
+## 2026-08-16 (later) — the wall MOVED, one name to the left
+
+[[bug-nilpy-uses-math-breaks-abs-on-a-float]] landed, so route 2's first
+obstacle is gone: the prototype was re-applied to HEAD and `abs` is now correct
+under it, in every shape the oracle test covers.
+
+It still cannot land. `test_nilpy_abs_minmax_sum_oracle.npy` now fails on
+`min`/`max` instead, and only on the TIE:
+
+```
+print(min(-0.0, 0.0), max(-0.0, 0.0))    CPython: -0.0 -0.0    with math: 0.0 0.0
+print(min(0.0, -0.0), max(0.0, -0.0))    CPython:  0.0  0.0    with math: -0.0 -0.0
+```
+
+CPython's min/max return the FIRST of an equal pair; math's `Min`/`Max`
+overloads return the last, and pulling the unit puts them in the candidate set.
+No values are otherwise wrong — the arithmetic is fine, the TIE-BREAK is
+backwards, which is the same silent class the abs bug was.
+
+So the blocker is now precisely
+[[bug-nilpy-import-leaks-the-units-names-into-the-python-namespace]] — the
+general form the abs fix was split away from, and this ticket is its second
+customer. That ticket's fix (load the unit, do not publish its names) unblocks
+this one with the prototype applied UNCHANGED; no further work is needed here
+once it lands.
+
+The prototype patch is unchanged and still applies to HEAD
+(`git apply devdocs/dev/prototypes/nilpy-float-pow-via-rtl-power.patch`).
+
+### Ranking the three routes again, with what is now known
+
+1. **[[bug-nilpy-import-leaks-the-units-names-into-the-python-namespace]], then
+   apply the prototype.** Now the shortest path, and it is the root cause rather
+   than a detour: two tickets have been blocked by it, the fix is one
+   qualified-only flag consulted in `DeclVisible`, and everything else here is
+   already built and measured (107/120 exact, worst 1 ulp).
+2. A private builtin unit carrying Power's kernels. Still viable, still the
+   fallback if route 1 turns out to disturb name resolution — but it is now
+   clearly the LARGER job: `TDd`, `DdBits`, `Dd2Prod`, `DdRint`, `FastLogHiLo`,
+   `FastExpHiLoCore`, `Power`, `FMod` and their transitive helpers are ~500
+   lines of numeric kernel, and code copied from `lib/rtl` into `compiler/`
+   carries the masked-FPU assumption (see the RTL-copy landmine) — a wrong
+   answer in a Horner chain is the most expensive kind of bug to find here.
+3. Gate on the program not calling `abs` — still rejected, and now also `min`
+   and `max`, which makes the unpredictability of the rule self-evident.
+
+Parked back to backlog: not stuck on effort, stuck on one named ticket.
