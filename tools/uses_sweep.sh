@@ -49,8 +49,12 @@ list_sources() {
 
 compile_one() {
   src="$1"; out="$2"
-  err=$("$COMPILER" -Futest "$src" "$out/$(echo "$src" | tr / _).bin" 2>&1 >/dev/null)
-  [ -z "$err" ] && return 0
+  # BOTH streams, and gate on the EXIT CODE. pascal26 reports diagnostics on
+  # STDOUT, so the obvious `2>&1 >/dev/null` spelling captures nothing at all
+  # and the sweep reports a clean tree no matter what it compiles -- which is
+  # what the first cut of this script did, over 1600 sources, in silence.
+  err=$("$COMPILER" -Futest "$src" "$out/$(echo "$src" | tr / _).bin" 2>&1)
+  [ $? -eq 0 ] && return 0
   # not signal: a unit compiled as a program, or a test that is MEANT to fail
   case "$err" in
     *"is a unit, not a program"*) return 0 ;;
@@ -66,11 +70,22 @@ compile_one() {
 export -f compile_one
 export COMPILER ALL
 
-echo "sweeping: ${DIRS[*]}"
+swept=$(list_sources | wc -l)
+echo "sweeping: ${DIRS[*]} ($swept sources)"
 list_sources | sort | xargs -P "$(nproc)" -I{} bash -c 'compile_one "$@"' _ {} "$OUT" \
   | sort | tee "$OUT/hits"
 
-n=$(grep -c 'LEAK?' "$OUT/hits" 2>/dev/null || echo 0)
+# grep -c prints 0 AND exits 1 when there are no matches, so `|| echo 0` appended
+# a SECOND zero and the arithmetic test below died on "0\n0". Count with wc
+# instead, which has one failure mode and no exit-status opinion.
+n=$(grep -c 'LEAK?' "$OUT/hits" 2>/dev/null | head -1)
+[ -n "$n" ] || n=0
 echo "---"
-echo "leak-signature failures: $n"
+echo "swept $swept source(s); leak-signature failures: $n"
+# A sweep that reports zero because it compiled NOTHING is worse than useless --
+# it reads exactly like a clean tree. Refuse to claim success on an empty run.
+if [ "$swept" -lt 100 ]; then
+  echo "REFUSING to report clean: only $swept sources swept, expected hundreds." >&2
+  exit 2
+fi
 [ "$n" -eq 0 ] && exit 0 || exit 1
