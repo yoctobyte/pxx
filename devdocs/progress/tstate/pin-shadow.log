@@ -82,3 +82,4 @@
 2026-08-14T08:14:02Z	plexus	e44da6c5e6a2f8de4083e8d418d7ee1d5e3a5d4c	WOULD PIN e44da6c5e6a2 — 0 red(s), all allowlisted, self-host clean, streak 4/2
 2026-08-14T09:57:55Z	plexus	0e72359074a6015925116e7a2ee841f83a8be5ca	WOULD PIN 0e72359074a6 — 0 red(s), all allowlisted, self-host clean, streak 5/2
 2026-08-15T08:39:48Z	plexus	4c9da77f9368ee00abe9614ae864cee612275db6	would NOT pin 4c9da77f9368 — 2 red(s) not in the allowlist: test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy, test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy
+2026-08-15T10:40:12Z	plexus	9c5adbed5933720b035fa4fd6545c822c9ae1014	would NOT pin 9c5adbed5933 — 4 red(s) not in the allowlist: test-core#src:test/test_nilpy_star_methods_and_targets.npy, test-nilpy#src:test/test_nilpy_builtin_over_variant_receiver.npy, test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy, test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy

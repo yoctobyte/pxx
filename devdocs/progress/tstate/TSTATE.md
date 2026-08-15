@@ -3,8 +3,9 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `9c5adbed5933` | 2026-08-15T10:15:54Z | RED (native) | 348.9s | `4c9da77f9368` RED |
+| plexus | `9c5adbed5933` | 2026-08-15T10:40:12Z | RED (full) | 1446.7s | `9c5adbed5933` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-core#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `89dae725b972`, last good `4c9da77f9368`, 12 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy** — test/test_nilpy_star_methods_and_targets.npy (plexus): bad `9c5adbed5933`, last good `4c9da77f9368`, 15 commit(s) in range
