@@ -119,9 +119,42 @@ begin
   CheckUlp(ArcCos(0.5), 1.0471975511965979, 2, 'acos-0.5');
   CheckUlp(ArcTan(2.0), 1.1071487177940904, 2, 'atan-2');
   CheckUlp(ArcTan2(0.5, 1.0), 0.4636476090008061, 2, 'atan2');
-  CheckUlp(Ln(2.0), 0.6931471805599453, 2, 'ln-2');
-  CheckUlp(Exp(1.0), 2.718281828459045, 2, 'exp-1');
   CheckUlp(Sqrt(2.0), 1.4142135623730951, 0, 'sqrt-2-exact');
+
+  { ---- the log / exp family ----
+    Ln and Exp were the WORST ratio in the RTL (1270x glibc) before the fast
+    kernels; Log10/Log2/LogN/Sinh all sit on top of them. The large-|x| rows are
+    the ones that catch a broken reduction, exactly as with trig: an error here
+    grows with the exponent rather than staying at 1-2 ulp. }
+  CheckUlp(Ln(2.0), 0.6931471805599453, 2, 'ln-2');
+  CheckUlp(Ln(1.0e300), 690.7755278982137, 2, 'ln-1e300');
+  CheckUlp(Ln(1.0000001), 9.999999505838704e-08, 2, 'ln-near-1');
+  CheckUlp(Exp(1.0), 2.718281828459045, 2, 'exp-1');
+  CheckUlp(Exp(-1.0), 0.36787944117144233, 2, 'exp-neg1');
+  CheckUlp(Exp(700.0), 1.0142320547350045e+304, 2, 'exp-700');
+  CheckUlp(Exp(-700.0), 9.85967654375977e-305, 2, 'exp-neg700');
+  CheckUlp(Exp(1.0e-10), 1.0000000001, 2, 'exp-tiny');
+  CheckUlp(Log10(2.0), 0.3010299956639812, 2, 'log10-2');
+  CheckUlp(Log2(10.0), 3.321928094887362, 2, 'log2-10');
+  CheckUlp(Log2(1.0e-300), -996.5784284662087, 2, 'log2-1e-300');
+  CheckUlp(LogN(2.0, 8.0), 3.0, 2, 'logn-2-8');
+  CheckUlp(Sinh(1.0), 1.1752011936438014, 2, 'sinh-1');
+  CheckUlp(Cosh(1.0), 1.5430806348152437, 2, 'cosh-1');
+  CheckUlp(Tanh(1.0), 0.7615941559557649, 2, 'tanh-1');
+  CheckUlp(Power(1.0001, 10000.0), 2.7181459268249255, 2, 'power-amplified');
+
+  { EXACT even in fast mode, and deliberately so: the reductions pull the
+    exponent out by bit extraction, which is exact, so a power of the base has
+    nothing left to round. People read these values off a screen — Log10(1000)
+    printing 2.9999999999999996 is the kind of "correct to 2 ulp" that gets
+    filed as a bug. Tolerance 0, not 2. }
+  CheckUlp(Log10(1000.0), 3.0, 0, 'log10-1000-exact');
+  CheckUlp(Log10(1.0e300), 300.0, 0, 'log10-1e300-exact');
+  CheckUlp(Log2(1024.0), 10.0, 0, 'log2-1024-exact');
+  CheckUlp(Log2(1.0), 0.0, 0, 'log2-1-exact');
+  CheckUlp(Ln(1.0), 0.0, 0, 'ln-1-exact');
+  CheckUlp(Exp(0.0), 1.0, 0, 'exp-0-exact');
+  CheckUlp(Power(2.0, 10.0), 1024.0, 0, 'power-2-10-exact');
 
   { ---- behaviour: EXACT in both modes, no tolerance ---- }
   CheckExact(Sin(0.0),  '0000000000000000', 'sin-plus-zero');
@@ -141,6 +174,19 @@ begin
   SayBool('asin-domain-nan', ArcSin(2.0) <> ArcSin(2.0));
   SayBool('ln-zero-neginf', Ln(0.0) < -1.0e308);
   SayBool('ln-neg-nan', Ln(-1.0) <> Ln(-1.0));
+  SayBool('ln-inf-inf', Ln(inf) > 1.0e308);
+  SayBool('log10-zero-neginf', Log10(0.0) < -1.0e308);
+  SayBool('log2-zero-neginf', Log2(0.0) < -1.0e308);
+  SayBool('log10-neg-nan', Log10(-2.0) <> Log10(-2.0));
+  SayBool('exp-inf', Exp(inf) > 1.0e308);
+  SayBool('exp-neginf-zero', Exp(-inf) = 0.0);
+  SayBool('exp-nan', Exp(nan) <> Exp(nan));
+  SayBool('exp-overflow-inf', Exp(800.0) > 1.0e308);
+  SayBool('exp-underflow-zero', Exp(-800.0) = 0.0);
+  { the denormal floor: exp(-745) is representable ONLY as a subnormal, so a
+    flush-to-zero would show up right here }
+  SayBool('exp-denormal-not-flushed', (Exp(-745.0) > 0.0) and (Exp(-745.0) < 1.0e-322));
+  SayBool('ln-denormal-arg', (Ln(5.0e-324) < -744.0) and (Ln(5.0e-324) > -745.0));
 
   { bounded, not growing: |sin| <= 1 must hold at every magnitude, which is the
     cheap check that catches a reduction that has come apart }

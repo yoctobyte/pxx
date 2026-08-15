@@ -82,6 +82,46 @@ And per `sin` kernel call, the same arithmetic three ways:
 122x, and the two agree on every digit any program prints. The reduction is
 shared, so `Sin(1e100)` is within 2 ulp in **both** columns.
 
+The log/exp family followed on the same day. Per 1M calls:
+
+| | exact (dd) | **default (fast)** | ratio |
+| --- | --- | --- | --- |
+| `Ln` | 9,453 ms | **103 ms** | 92x |
+| `Exp` | 9,085 ms | **121 ms** | 75x |
+| `Log10` | 9,569 ms | **144 ms** | 66x |
+| `Log2` | 10,345 ms | **140 ms** | 74x |
+| `Sinh` | 18,133 ms | **170 ms** | 107x |
+| `Power` | 19,098 ms | 17,977 ms | **1.06x — see below** |
+
+Accuracy over 14,551 sampled arguments, against glibc:
+
+| | bit-exact | worst |
+| --- | --- | --- |
+| `Ln` | 90.5% | 1 ulp |
+| `Exp` | 89.6% | 1 ulp |
+| `Log2` | 86.7% | 1 ulp |
+| `Log10` | 85.2% | 2 ulp (10 of 3000 cases) |
+
+And two properties held EXACTLY rather than to tolerance, because the reductions
+extract the exponent by bit manipulation: `Log10(10^n)` is exactly `n` for
+n = 0..22, and `Log2(2^n)` is exactly `n` for n = -60..60. Those are asserted at
+tolerance **0** in the test — `Log10(1000)` printing `2.9999999999999996` is the
+kind of "correct to 2 ulp" that gets filed as a bug, rightly.
+
+**`Power` and `LogN` are deliberately still on the dd log.** `y*log(x)` amplifies the log's
+error by |y|, so a 1-ulp log becomes hundreds of ulp for a large exponent —
+`Power(1.0001, 10000)` would lose most of its significance. Only a *fast
+extra-precision* log fixes that (fdlibm's `pow` carries its own hi/lo log2
+rather than calling `log`), which is its own piece of work:
+[[feature-b-rtl-fast-power-needs-a-hi-lo-log]].
+
+`LogN` is the same story from the other side: `Log10`/`Log2` are fast *and*
+exact because exponent extraction hands them the integer part, but an arbitrary
+base makes `LogN` a genuine quotient where every rounding lands in the answer.
+The naive fast version gave `LogN(10,1000) = 2.9999999999999996`, and
+`test/lib_log_exactness.pas` caught it in the lib gate. **That test is the
+reason to run `tools/gate.sh lib` rather than only the file you are editing.**
+
 **The accuracy work that got us here was not wasted** — it found and fixed real
 defects: `Sqrt` returning `-Inf` just below DBL_MAX, `ArcCos` 1099 ulp out from
 a cancelling subtraction, `Sin` uncorrelated with the truth past 1e10, `Int()`

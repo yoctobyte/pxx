@@ -239,6 +239,7 @@ end;
 type
   PSqrtInt64  = ^Int64;    { double<->bits reinterpret for the Sqrt seed }
   PSqrtDouble = ^Double;
+  PDdRawI64 = ^Int64;
 
 { ================= Double core ================= }
 
@@ -463,6 +464,13 @@ type
 function DdBits(b: Int64): Double;
 begin
   Result := PSqrtDouble(@b)^;
+end;
+
+{ the other direction — a double's bit pattern, for the exponent extraction the
+  fast log/exp reductions do }
+function DdRawBits(x: Double): Int64;
+begin
+  Result := PDdRawI64(@x)^;
 end;
 
 { |a| >= |b| assumed — one operation fewer than the general 2Sum. }
@@ -776,33 +784,250 @@ begin
   Result := sres;
 end;
 
+{ ================= the FAST log / exp family =================
+
+  Same split as the trig above, and the same reason: the double-double Ln/Exp
+  are correctly rounded and 1270x slower than glibc — the worst ratio in the
+  RTL, and it sits under Log10, Log2, LogN, Power and every `x ** y` in NilPy.
+  devdocs/dev/float-policy.md is the policy; these are the default path and the
+  dd ones stay behind -dPXX_FLOAT_EXACT.
+
+  Both are the fdlibm minimax kernels (Sun Microsystems, freely distributable),
+  the same source as the sin/cos ones. Accuracy is < 1 ulp; the structure is
+  what buys it, not the polynomial degree:
+
+  - Ln reduces x = 2^k * m with m in [sqrt(2)/2, sqrt(2)) by EXPONENT
+    EXTRACTION, which is exact, and then evaluates log(m) through
+    s = f/(2+f) — an odd series in s converges far faster than one in f and,
+    more importantly, s is small so the polynomial never has to fight
+    cancellation.
+  - Exp reduces x = k*ln2 + r with ln2 carried as a hi/lo PAIR, so the
+    reduction keeps ~106 bits even though the kernel is plain double. That is
+    the same "reduction stays exact in both modes" rule the trig path follows.
+
+  The k*ln2 hi/lo split is why LN2HI has its low 32 bits zero: k*LN2HI is then
+  an EXACT product for every k in range, and the whole reduction error lives in
+  the k*LN2LO term. }
+const
+  { log(1+f) minimax coefficients over s = f/(2+f) }
+  LG1 = 6.666666666666735130e-01;   LG2 = 3.999999999940941908e-01;
+  LG3 = 2.857142874366239149e-01;   LG4 = 2.222219843214978396e-01;
+  LG5 = 1.818357216161805012e-01;   LG6 = 1.531383769920937332e-01;
+  LG7 = 1.479819860511658591e-01;
+  { exp(r) minimax coefficients, |r| <= 0.5*ln2 }
+  EP1 =  1.66666666666666019037e-01;  EP2 = -2.77777777770155933842e-03;
+  EP3 =  6.61375632143793436117e-05;  EP4 = -1.65339022054652515390e-06;
+  EP5 =  4.13813679705723846039e-08;
+
+function FastLnBits(x: Double): Double;
+{ x MUST be finite and > 0 — every caller guards NaN/0/negative/Inf first. }
+var
+  b, lowHalf: Int64;
+  hx, ii, jj, k: Integer;
+  f, sred, z, rpoly, w, t1, t2, dk, hfsq, ln2hi, ln2lo, xx: Double;
+begin
+  ln2hi := DdBits($3FE62E42FEE00000);      { ln2, high 32 bits of mantissa }
+  ln2lo := DdBits($3DEA39EF35793C76);      { ...and the rest }
+  xx := x;
+  b := DdRawBits(xx);
+  hx := Integer(b shr 32);
+  k := 0;
+  if hx < $00100000 then                   { subnormal: scale up by 2^54 first }
+  begin
+    k := -54;
+    xx := xx * DdBits($4350000000000000);
+    b := DdRawBits(xx);
+    hx := Integer(b shr 32);
+  end;
+  k := k + ((hx shr 20) - 1023);
+  hx := hx and $000FFFFF;
+  { pick the binade so m lands in [sqrt(2)/2, sqrt(2)) — the magic constant is
+    the mantissa of sqrt(2) rounded, and the `and $100000` asks which side of
+    it hx falls on }
+  ii := (hx + $95F64) and $100000;
+  lowHalf := b and $00000000FFFFFFFF;
+  b := (Int64(hx or (ii xor $3FF00000)) shl 32) or lowHalf;
+  xx := DdBits(b);
+  k := k + (ii shr 20);
+  f := xx - 1.0;
+  dk := Double(k);
+  if ((hx + 2) and $000FFFFF) < 3 then     { |f| < 2^-20: the series is overkill }
+  begin
+    if f = 0.0 then
+    begin
+      if k = 0 then begin Result := 0.0; Exit; end;
+      Result := dk * ln2hi + dk * ln2lo;
+      Exit;
+    end;
+    rpoly := f * f * (0.5 - 0.33333333333333333 * f);
+    if k = 0 then Result := f - rpoly
+    else Result := dk * ln2hi - ((rpoly - dk * ln2lo) - f);
+    Exit;
+  end;
+  sred := f / (2.0 + f);
+  z := sred * sred;
+  w := z * z;
+  t1 := w * (LG2 + w * (LG4 + w * LG6));
+  t2 := z * (LG1 + w * (LG3 + w * (LG5 + w * LG7)));
+  rpoly := t2 + t1;
+  ii := hx - $6147A;
+  jj := $6B851 - hx;
+  { the two forms differ only in whether 0.5*f*f is split out; the second is
+    for f near the middle of the range, where f - s*(f-R) would cancel }
+  if (ii or jj) > 0 then
+  begin
+    hfsq := 0.5 * f * f;
+    if k = 0 then Result := f - (hfsq - sred * (hfsq + rpoly))
+    else Result := dk * ln2hi - ((hfsq - (sred * (hfsq + rpoly) + dk * ln2lo)) - f);
+  end
+  else
+  begin
+    if k = 0 then Result := f - sred * (f - rpoly)
+    else Result := dk * ln2hi - ((sred * (f - rpoly) - dk * ln2lo) - f);
+  end;
+end;
+
+function FastExpD(x: Double): Double;
+{ x MUST be finite and inside (-746, 710) — the caller handles the edges. }
+var
+  hi, lo, t, c, y, xx, ax, ln2hi, ln2lo: Double;
+  k: Integer;
+begin
+  ln2hi := DdBits($3FE62E42FEE00000);
+  ln2lo := DdBits($3DEA39EF35793C76);
+  xx := x;
+  ax := Abs(xx);
+  hi := 0.0; lo := 0.0; k := 0;
+  if ax > 0.34657359027997264 then                 { > 0.5*ln2: reduce }
+  begin
+    if ax < 1.0397207708399179 then                { < 1.5*ln2: k is +-1 }
+    begin
+      if xx > 0.0 then begin hi := xx - ln2hi; lo := ln2lo; k := 1; end
+      else begin hi := xx + ln2hi; lo := -ln2lo; k := -1; end;
+    end
+    else
+    begin
+      if xx > 0.0 then k := Trunc(DdBits($3FF71547652B82FE) * xx + 0.5)
+      else k := Trunc(DdBits($3FF71547652B82FE) * xx - 0.5);
+      t := Double(k);
+      hi := xx - t * ln2hi;                        { exact: LN2HI's low bits are 0 }
+      lo := t * ln2lo;
+    end;
+    xx := hi - lo;
+  end
+  else if ax < 3.725290298461914e-09 then          { |x| < 2^-28: 1+x IS the answer }
+  begin
+    Result := 1.0 + xx;
+    Exit;
+  end;
+  t := xx * xx;
+  c := xx - t * (EP1 + t * (EP2 + t * (EP3 + t * (EP4 + t * EP5))));
+  if k = 0 then
+  begin
+    Result := 1.0 - ((xx * c) / (c - 2.0) - xx);
+    Exit;
+  end;
+  y := 1.0 - ((lo - (xx * c) / (2.0 - c)) - hi);
+  Result := DdLdexp(y, k);
+end;
+
+function FastLogSplit(x: Double; var k: Integer): Double;
+{ x = 2^kk * m with m in [sqrt(2)/2, sqrt(2)). The exponent comes out by bit
+  extraction, so it is EXACT — which is the whole point: a power of two returns
+  m = 1.0 and the answer is the integer kk with nothing left to round. That is
+  what keeps Log2(2^n) and Log10(10^n) clean, and it is why these do not simply
+  scale FastLnBits by 1/ln2 (which would round twice, once in the log and once
+  in the multiply).
+
+  `var k: Integer` is safe on i386; a `var Double` would not be
+  ([[bug-a-i386-var-float-parameter-faults-on-first-access]]), hence m coming
+  back as the RESULT rather than a second out-parameter. }
+var b, lowHalf: Int64; hx, ii, kk: Integer; xx: Double;
+begin
+  xx := x;
+  b := DdRawBits(xx);
+  hx := Integer(b shr 32);
+  kk := 0;
+  if hx < $00100000 then                     { subnormal: scale up by 2^54 }
+  begin
+    kk := -54;
+    xx := xx * DdBits($4350000000000000);
+    b := DdRawBits(xx);
+    hx := Integer(b shr 32);
+  end;
+  kk := kk + ((hx shr 20) - 1023);
+  hx := hx and $000FFFFF;
+  ii := (hx + $95F64) and $100000;
+  lowHalf := b and $00000000FFFFFFFF;
+  { ii xor $3FF00000 is $3FF00000 (2^0) when ii = 0 and $3FE00000 (2^-1) when
+    ii = $100000 — i.e. it picks the binade that lands m around 1 }
+  b := (Int64(hx or (ii xor $3FF00000)) shl 32) or lowHalf;
+  kk := kk + (ii shr 20);
+  k := kk;
+  Result := DdBits(b);
+end;
+
+function FastLog10D(x: Double): Double;
+{ log10(x) = k*log10(2) + log10(m). log10(2) is carried as a hi/lo pair so the
+  k term keeps its low bits — with k up to 1074 a single rounded log10(2) would
+  cost several ulp at the top of the range. }
+var k: Integer; m, y, z: Double;
+begin
+  m := FastLogSplit(x, k);
+  y := Double(k);
+  z := y * DdBits($3D59FEF311F12B36)                 { log10(2), low }
+       + DdBits($3FDBCB7B1526E50E) * FastLnBits(m);  { (1/ln10) * ln m }
+  Result := z + y * DdBits($3FD34413509F6000);       { log10(2), high }
+end;
+
+function FastLog2D(x: Double): Double;
+var k: Integer; m: Double;
+begin
+  m := FastLogSplit(x, k);
+  { k is exact and |log2(m)| <= 0.5, so the sum cannot cancel }
+  Result := Double(k) + FastLnBits(m) * DdBits($3FF71547652B82FE);
+end;
+
 function Exp(x: Double): Double;
 { Correctly rounded, over the double-double kernel: reduce x = k*ln2 + r with
   ln2 carried to ~106 bits, Taylor e^r, then one rounding on the way out. The
   old plain-double version was ~1 ulp off (exp(1) came back as
   2.7182818284590446 against libm's 2.718281828459045). }
+{$ifdef PXX_FLOAT_EXACT}
 var a, sres: TDd; k: Integer;
+{$endif}
 begin
   if x <> x then begin Result := x; Exit; end;                { NaN }
   if x > 710.0 then begin Result := DdLdexp(1.0, 1024) * 2.0; Exit; end;   { +Inf }
   if x < -746.0 then begin Result := DdBits(1) * 0.5; Exit; end;           { +0 }
+{$ifdef PXX_FLOAT_EXACT}
   a.Hi := x;
   a.Lo := 0.0;
   sres := DdExpCore(a, k);
   Result := DdScale(sres, k);
+{$else}
+  Result := FastExpD(x);
+{$endif}
 end;
 
 function Ln(x: Double): Double;
-{ Correctly rounded, over the double-double kernel above. }
-var z: Double; r: TDd;
+{ Correctly rounded under -dPXX_FLOAT_EXACT; the fdlibm kernel by default. }
+var z: Double;
+{$ifdef PXX_FLOAT_EXACT}
+    r: TDd;
+{$endif}
 begin
   { FPC-faithful IEEE: Ln(0) = -Inf, Ln(negative) = NaN (C log() binds here). }
   if x <> x then begin Result := x; Exit; end;
   if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
   if x = 0.0 then begin z := 0.0; Result := -1.0 / z; Exit; end;
   if x > 1.7976931348623157e308 then begin Result := x; Exit; end;   { +Inf }
+{$ifdef PXX_FLOAT_EXACT}
   r := DdLogD(x);
   Result := r.Hi + r.Lo;
+{$else}
+  Result := FastLnBits(x);
+{$endif}
 end;
 
 { ================= trigonometry on the dd kernel =================
@@ -1380,36 +1605,54 @@ end;
   second rounding, and it measured as 1 ulp off libm on Log10(3), Log10(0.3) and
   Log2(7) while Ln itself was already bit-identical. }
 function Log10(x: Double): Double;
-var r, c: TDd; z: Double;
+var z: Double;
+{$ifdef PXX_FLOAT_EXACT}
+    r, c: TDd;
+{$endif}
 begin
   if x <> x then begin Result := x; Exit; end;
   if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
   if x = 0.0 then begin z := 0.0; Result := -1.0 / z; Exit; end;
   if x > 1.7976931348623157e308 then begin Result := x; Exit; end;
+{$ifdef PXX_FLOAT_EXACT}
   c.Hi := DdBits($3FDBCB7B1526E50E);        { 1/ln10 }
   c.Lo := DdBits($3C695355BAAAFAD3);
   r := DdMul(DdLogD(x), c);
   Result := r.Hi + r.Lo;
+{$else}
+  { NOT FastLnBits(x) * (1/ln10): that rounds twice and loses the property
+    people actually look at, Log10 of a power of ten being an exact integer.
+    Splitting the exponent out first keeps the integer part exact and confines
+    the approximation to the mantissa. }
+  Result := FastLog10D(x);
+{$endif}
 end;
 
 function Log2(x: Double): Double;
-var r, c: TDd; z: Double;
+var z: Double;
+{$ifdef PXX_FLOAT_EXACT}
+    r, c: TDd;
+{$endif}
 begin
   if x <> x then begin Result := x; Exit; end;
   if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
   if x = 0.0 then begin z := 0.0; Result := -1.0 / z; Exit; end;
   if x > 1.7976931348623157e308 then begin Result := x; Exit; end;
+{$ifdef PXX_FLOAT_EXACT}
   c.Hi := DdBits($3FF71547652B82FE);        { 1/ln2 }
   c.Lo := DdBits($3C7777D0FFDA0D24);
   r := DdMul(DdLogD(x), c);
   Result := r.Hi + r.Lo;
+{$else}
+  Result := FastLog2D(x);
+{$endif}
 end;
 
 function LogN(base, x: Double): Double;
 { NOTE the argument order — base FIRST, as in FPC. Python's math.log(x, base) is
   the other way round, which is why NilPy needs its own intercept rather than
   binding to this (bug-n-math-trunc-and-log-need-frontend-intercepts). }
-var r: TDd; z: Double;
+var r: TDd;
 begin
   if (x <> x) or (base <> base) then begin Result := x + base; Exit; end;
   if (x <= 0.0) or (base <= 0.0) or (base = 1.0) then
@@ -1418,6 +1661,17 @@ begin
     Result := Ln(x) / Ln(base);
     Exit;
   end;
+  { STAYS double-double in both modes, deliberately. Log10 and Log2 can be both
+    fast and exact because the exponent extraction hands them the integer part
+    for free; an arbitrary base has no such trick, so LogN is a genuine QUOTIENT
+    of two logarithms and each rounding lands directly in the answer.
+    FastLnBits(x) / FastLnBits(base) measured LogN(10,1000) = 2.9999999999999996
+    and LogN(3,81) = 4.0000000000000009 — test/lib_log_exactness.pas asserts both
+    of those are integers, and it is right to.
+
+    The way out is a fast hi/lo log, which Power needs for the same reason:
+    [[feature-b-rtl-fast-power-needs-a-hi-lo-log]]. Until then, correctness wins
+    over speed here — LogN is not an inner-loop function the way Ln/Exp are. }
   r := DdDiv(DdLogD(x), DdLogD(base));
   Result := r.Hi + r.Lo;
 end;
@@ -1633,6 +1887,10 @@ begin
     neg := yodd;
     ax := -base;
   end;
+  { the LOG stays double-double even in fast mode, and that is deliberate:
+    y*log(x) is multiplied by the exponent before exp() sees it, so an error in
+    log(x) is AMPLIFIED by |y|. Power(1.0000001, 1e7) would lose most of its
+    significance to a 1-ulp log. Only the final exp is the fast one. }
   w := DdLogD(ax);
   p := Dd2Prod(w.Hi, exponent);
   p.Lo := p.Lo + w.Lo * exponent;
