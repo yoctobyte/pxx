@@ -127,4 +127,4 @@ re-apply `devdocs/dev/prototypes/nilpy-float-pow-via-rtl-power.patch` and
 re-measure rather than assume; the min/max half above is still live under it.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 81c43aeae.
