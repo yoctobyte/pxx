@@ -5536,13 +5536,11 @@
   },
   {
    "bad": "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c",
-   "good": "7643f88f28266fc007cd9f7afc842d533c206102",
+   "good": "639f0759d75d7761f94bd8b8d8cb26d505a8a0a5",
    "job": "test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy",
    "name": "test-nilpy#419",
    "opened": "2026-08-15T15:21:20Z",
    "range": [
-    "d75deb89a1e4118747c9b5c356e43201a627c856",
-    "639f0759d75d7761f94bd8b8d8cb26d505a8a0a5",
     "7a8480bc37226af2142a7a7b447ea21f293aa101",
     "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c"
    ],
