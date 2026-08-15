@@ -202,3 +202,29 @@ valgrind can) and one compared an int with a pointer, making the checksum depend
 on where the globals land (caught by requiring gcc PIE and `-no-pie` to agree).
 The five-layer interestingness test is in that ticket; copy it rather than
 re-deriving it.
+
+## SESSION 2026-08-15/16 — 550 seeds, one bug fixed, one open
+
+Two sweeps run in the background while other tickets were worked: 250 seeds
+from 90000, 300 seeds from 91000.
+
+- **seed 90202 — fixed.** Reduced to a one-page repro and closed as
+  [[bug-c-a-struct-assignment-used-as-a-value-runs-its-rhs-twice]]: `y = (x =
+  f())` walked the inner `copy_rec` twice — once as a top-level statement, once
+  as the outer copy's source — so `f()` ran twice. Every VALUE was right and
+  only the side effects doubled, which is exactly why the whole human-written
+  corpus (lua, sqlite, tcc, zlib, c-testsuite) missed it and a checksum found
+  it. Pinned by `test/cstruct_assign_value_side_effects.c`.
+- **seed 90044 — not a bug.** Filed as `PXX_TIMEOUT`, but both binaries
+  finished and agreed; pxx took 18.2s to gcc -O0's 6.9s. The harness's fixed
+  wall-clock limit sits between the two, and the bucket name sends the reader
+  hunting an infinite loop. Tool fix filed as
+  [[bug-t-csmith-harness-reports-slow-as-a-timeout]].
+- **seed 91110 — OPEN, unreduced.** `MISCOMPILE_VS_GCC`; the divergence is in
+  the elements of `g_42`. The per-global checksum trick (`./t_gcc 1` prints a
+  checksum after EVERY global) is the lever — it names the first global that
+  differs and cuts the reduction to that one. Start here next session.
+
+Scoreboard for the session: 550 seeds, 2 findings, 1 fixed, 1 unreduced.
+Parked to `backlog/` rather than left in `working/` — the campaign is a standing
+one and `working/` is a live lock.
