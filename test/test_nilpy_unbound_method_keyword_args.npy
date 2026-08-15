@@ -1,0 +1,61 @@
+# An UNBOUND method call takes keyword arguments.
+#
+# `Base.__init__(self, master, background=bg)` is how a class extending a
+# library widget builds its base, and it is one of the two spellings Python
+# offers for reaching a parent's implementation (super() is the other,
+# bug-nilpy-super-and-unbound-parent-method-calls). That path parsed its
+# arguments with a bare ParseExpr per argument and knew nothing about keywords,
+# so a ctor died on `Expected: )` and any other method on `undefined variable
+# (bg)` -- while the same call through super() was fine.
+#
+# Every expected line is CPython 3.12's output for this file.
+# bug-nilpy-an-unbound-method-call-takes-no-keyword-arguments
+
+
+class Base:
+    def __init__(self, m, background=None, border=0):
+        self.s = str(m) + "|" + str(background) + "|" + str(border)
+
+    def meth(self, a, opt=None, more=1):
+        return str(a) + "/" + str(opt) + "/" + str(more)
+
+
+class D(Base):
+    # the shape that was broken: a keyword whose value happens to share its name
+    def __init__(self, m, background=None):
+        Base.__init__(self, m, background=background)
+
+    def one(self):
+        return Base.meth(self, 1, opt=2)
+
+    # a keyword that SKIPS a defaulted parameter, so the hole has to be filled
+    def skip(self):
+        return Base.meth(self, 1, more=9)
+
+    # keywords OUT OF declaration order
+    def swapped(self):
+        return Base.meth(self, 1, more=9, opt=8)
+
+    # no keyword at all -- the path that already worked, kept as the control
+    def plain(self):
+        return Base.meth(self, 1)
+
+
+d = D("m", "w")
+print(d.s)
+print(d.one(), d.skip(), d.swapped(), d.plain())
+
+# ...and from outside the class, on an explicit receiver
+print(Base.meth(d, 5, opt=6))
+
+# the defaulted parameters still default
+print(D("m").s)
+print(Base("z", border=3).s)
+
+# super() must keep working -- it is the other half of the same pair
+class S(Base):
+    def __init__(self, m):
+        super().__init__(m, background="via-super")
+
+
+print(S("q").s)

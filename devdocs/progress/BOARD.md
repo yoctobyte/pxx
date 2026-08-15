@@ -50,12 +50,12 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 35 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-c-static-functions-in-different-crtl-modules-collide | C | 50 | bug | `static` functions with the same name in two crtl .c files (or a static in a header) share one unit identity, so the duplicate-definition warning false-fires — legal C flagged as a redefinition. Blocks promoting that warning to an error | — |
+| bug-nilpy-a-static-method-called-on-the-class-takes-no-keyword-arguments | N | 35 | bug | `Base.st(1, b=7)` — a STATIC method reached through the class name — fails with `undefined variable (b)`. The sibling instance shape `Base.meth(self, 1, opt=2)` was fixed; this one goes through GenMakeStaticMethodCall, a positional, index-driven builder shared with Pascal, and was deliberately left rather than forced. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler | N | 70 | bug | `class Codec(codecs.Codec): pass` — a NilPy class whose own name equals its imported base's name — makes the compiler LOOP FOREVER. No diagnostic, no progress, no timeout. Four lines reproduce it, and it is the canonical spelling of every codec module in CPython's stdlib. | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 15 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
-| bug-nilpy-field-class-lost-after-an-if-in-the-same-method | N | 55 | bug | A `self.f = Cls(...)` assignment that comes AFTER an if/for in the same method is never recorded as a class field, so the field falls back to dynamic — silently, because a direct call on it still works and only a bound method taken as a VALUE fails | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused | N | 55 | bug | `class StreamWriter(Codec, codecs.StreamWriter)` is refused — 'cannot flatten base class ... A second base must be a class defined earlier in this file; an imported or built-in one cannot be flattened'. NilPy flattens multiple bases, and the flattening only reads bases whose body is in the current file, so the mixin-from-a-module shape that stdlib codecs are built out of does not compile. | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1894)
+## done (1895)
 
-1894 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1895 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -469,7 +469,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-bytes-has-almost-none-of-its-python-methods
-- [p 55] [N] bug-nilpy-field-class-lost-after-an-if-in-the-same-method
 - [p 55] [N] bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
@@ -561,6 +560,7 @@ _none_
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
+- [p 35] [N] bug-nilpy-a-static-method-called-on-the-class-takes-no-keyword-arguments
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization

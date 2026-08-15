@@ -1060,6 +1060,15 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_super26)" = "$$(printf '%b' 'BA 7 3 9\nCA 18')"
 	./$(COMPILER) test/test_nilpy_unbound_base_init.npy $(TESTTMP)/test_nilpy_unbound_base_init26
 	test "$$($(TESTTMP)/test_nilpy_unbound_base_init26)" = "$$(printf '%b' 'M(1,2,base) 1 2 base\nL(3,4,5,base) 3 base\nS:B(7,base) 7 base\n9 9\nTrue True True')"
+	@# ...and that call takes KEYWORD arguments: `Base.__init__(self, m,
+	@# background=bg)` is how a class extending a library widget builds its base.
+	@# The unbound path parsed a bare expression per argument and knew nothing
+	@# about keywords, so a ctor died on `Expected: )` and any other method on
+	@# `undefined variable`, while the same call via super() was fine. Skipped
+	@# and out-of-order keywords are covered too; .expected is CPython 3.12's.
+	@# bug-nilpy-an-unbound-method-call-takes-no-keyword-arguments
+	./$(COMPILER) test/test_nilpy_unbound_method_keyword_args.npy $(TESTTMP)/test_nilpy_unbound_kw26
+	$(TESTTMP)/test_nilpy_unbound_kw26 | diff -u test/test_nilpy_unbound_method_keyword_args.expected -
 	./$(COMPILER) test/test_nilpy_classattr_expr.npy $(TESTTMP)/test_nilpy_classattr_expr26
 	test "$$($(TESTTMP)/test_nilpy_classattr_expr26)" = "$$(printf '%b' 'Normalt8\nNormal\n2 1 5\n1')"
 	./$(COMPILER) test/test_nilpy_minmax.npy $(TESTTMP)/test_nilpy_minmax26

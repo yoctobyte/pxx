@@ -3994,6 +3994,7 @@ var
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
+  mkwIdx, mkwCount: Integer;   { keyword binding for the UNBOUND `A.m(self, k=v)` spelling }
   methName: AnsiString;
   isAssign: Boolean;
   selfClassCi, selfIdx, fldIdx, selfNode: Integer;
@@ -4838,18 +4839,37 @@ begin
           begin
             Next;
             margSeq := -1; mlastArg := -1;
+            mkwCount := 0;
             while CurTok.Kind <> tkRParen do
             begin
+              { …taking KEYWORD arguments, like every other call spelling does.
+                This loop was a bare ParseExpr per argument, so
+                `Base.__init__(self, m, background=bg)` — the standard way a
+                class that extends a library widget builds its base — died on
+                `Expected: )` for a ctor and `undefined variable (bg)` for any
+                other method, while the SAME call through `super().__init__`
+                was fine. PyKwArgIndex/PyBindKwArgs are the same pair
+                PyMakeSuperCall uses; firstParam is 1 because slot 0 is the
+                receiver, which this spelling passes POSITIONALLY as the first
+                argument.
+                bug-nilpy-an-unbound-method-call-takes-no-keyword-arguments }
+              mkwIdx := PyKwArgIndex(mpi, 1);
               ParseExpr;
               mexprNode := AllocNode(AN_ARG);
               ASTLeft[mexprNode] := CurASTNode;
+              ASTIVal[mexprNode] := mkwIdx;
               ASTRight[mexprNode] := -1;
               if margSeq = -1 then margSeq := mexprNode
               else ASTRight[mlastArg] := mexprNode;
               mlastArg := mexprNode;
+              Inc(mkwCount);
               if CurTok.Kind = tkComma then Next else Break;
             end;
             Expect(tkRParen, ')');
+            { reorder into declaration order and fill the holes a keyword left
+              below the highest bound parameter; a trailing hole stays for the
+              existing default path }
+            PyBindKwArgs(mpi, margSeq, mlastArg, mkwCount);
             mcallNode := AllocNode(AN_CALL);
             ASTIVal[mcallNode] := mpi;
             ASTLeft[mcallNode] := margSeq;
