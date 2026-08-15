@@ -151,4 +151,4 @@ CPython. Gate: `gate.sh quick` GREEN + self-host fixedpoint; no pin (nothing
 under `compiler/builtin/**`).
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 642d5b98a.
