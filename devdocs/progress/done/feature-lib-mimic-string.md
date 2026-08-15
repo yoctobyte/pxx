@@ -121,4 +121,4 @@ All 13 rows of the surface diffed against CPython 3.12 — every constant,
 separator edge cases above — identical. `make lib-test` green against v300.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit d6b9f4a44.
