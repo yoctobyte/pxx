@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:205 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1901 rejected:37`
+`working:1 unfinished:11 blocked:4 backlog:203 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1902 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-c-csmith-differential-fuzzing` [C] — owner: claude-A-N-nightly
 
 ## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
@@ -32,9 +32,8 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 189, ranked
+## Ready — top 30 of 187, ranked
 
-- `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [A]` feature-inline-asm-xtensa
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
@@ -45,7 +44,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` bug-a-bytes-has-almost-none-of-its-python-methods
 - `[p 55] [A]` bug-a-nilpy-star-star-has-its-own-low-precision-pow
-- `[p 55] [N]` bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -64,5 +62,7 @@ _none — no lane is locked._
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
+- `[p 50] [A]` feature-release-checksums-repro
+- `[p 50] [C]` task-c-retire-the-crtl-name-dodge-prefixes
 
-_159 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_157 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

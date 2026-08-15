@@ -1,0 +1,16 @@
+# TWO bases whose bodies are not in this file has no answer here and is refused
+# rather than half-taken: exactly one of them can become the Pascal parent, and
+# every other base is FLATTENED by replaying its own body, which an imported
+# class does not have in this compilation. Taking the first and dropping the
+# second would make the second's members silently go missing at run time, which
+# is the one outcome worse than not supporting the shape.
+# bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
+import mixinproto
+import mixinproto2
+
+
+class Two(mixinproto.Protocol, mixinproto2.Protocol2):
+    pass
+
+
+print("unreachable")

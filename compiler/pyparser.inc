@@ -296,6 +296,15 @@ var
     through call chains that would otherwise thread it through unrelated code. }
   PyMixN: Integer;
   PyMixCi: array[0..5] of Integer;
+  { Does this flattened base stand BEFORE the one that became the real parent?
+    It usually does not — the parent is normally the first base — but it can:
+    an IMPORTED base has no body to flatten, so it is chosen as the parent even
+    from second position, which is what makes `class SW(Codec,
+    codecs.StreamWriter)` compile at all. C3 is left-to-right, so a base that
+    precedes the parent BEATS it and must be allowed to override the parent's
+    slot; one that follows it loses to the whole parent chain.
+    bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused }
+  PyMixBeforeParent: array[0..5] of Boolean;
   { Method/attribute names the DERIVED class defines itself, or an earlier base
     already supplied. A later base's definition of the same name loses (C3
     left-to-right, first base wins) and is skipped in BOTH passes — registration
@@ -27689,16 +27698,24 @@ var k, g, mi: Integer;
 begin
   PyMixSkipN := 0;
   PyMixCollectKeys(ownBS, ownBE);
-  { Everything the REAL parent chain already supplies. C3 puts the first base
-    (and its ancestors) ahead of every flattened one, so a later base's
-    definition of an inherited name loses — and without this it silently WON,
-    by being registered as an override of the parent's slot. }
-  g := UClsParent[ci];
-  while g >= 0 do
+  { Everything the REAL parent chain already supplies — but ONLY for a base
+    that stands AFTER the parent in the declared list. C3 is left-to-right, so
+    the parent and its ancestors come ahead of a base written after it and that
+    base's definition of an inherited name loses (without this it silently WON,
+    by being registered as an override of the parent's slot) — while a base
+    written BEFORE the parent beats it, and overriding the parent's slot is
+    then exactly the right outcome. The parent is not always the first base:
+    an imported one has no body to flatten and so is chosen from wherever it
+    stands. bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused }
+  if not PyMixBeforeParent[upTo] then
   begin
-    for mi := UClsMBase[g] to UClsMBase[g] + UClsMCount[g] - 1 do
-      PyMixSkipAdd(PyRawName(UMthNOff[mi], UMthNLen[mi]));
-    g := UClsParent[g];
+    g := UClsParent[ci];
+    while g >= 0 do
+    begin
+      for mi := UClsMBase[g] to UClsMBase[g] + UClsMCount[g] - 1 do
+        PyMixSkipAdd(PyRawName(UMthNOff[mi], UMthNLen[mi]));
+      g := UClsParent[g];
+    end;
   end;
   for k := 0 to upTo - 1 do
     if PyMixCi[k] >= 0 then
@@ -29724,7 +29741,7 @@ end;
   these entries are orphaned rather than duplicated. }
 procedure PyRegisterClassFieldsPrepass;
 var i, j, k, ci, bs, be, depth, baseCi: Integer;
-    isDC, hoist: Boolean;
+    isDC, hoist, multiBase: Boolean;
 begin
   { FIRST: which classes are named as a SECOND base anywhere? They are flattened
     into their host and not compiled standalone (see PyClsUsedAsMixin), and both
@@ -29822,6 +29839,7 @@ begin
           be resolved yet, fall back to fields-only and let PyParseClass do
           the full run as before. }
         hoist := True;
+        multiBase := False;
         { a class that exists to be flattened registers FIELDS only — its
           methods are compiled into each host, never into itself }
         if PyClsUsedAsMixin[ci] then hoist := False;
@@ -29842,17 +29860,19 @@ begin
             else
               baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
           end;
-          if (baseCi >= 0) and not PyClsUsedAsMixin[baseCi] then
-            UClsParent[ci] := baseCi
-          else
-            hoist := False;
           { MULTIPLE BASES — a comma at the header's own paren depth. The extra
             bases are FLATTENED, which needs each one's recorded body span, and
-            spans are recorded in source order by PyParseClass. So the full
-            registration is deferred to there (fields-only here), exactly as an
-            unresolvable base already defers it — rather than resolving a base
-            list a second way in this pass and risking the two passes
-            disagreeing. bug-nilpy-multiple-inheritance-does-not-parse }
+            spans are recorded in source order by PyParseClass. So the whole
+            decision is deferred to there — rather than resolving a base list a
+            second way in this pass and risking the two passes disagreeing.
+            bug-nilpy-multiple-inheritance-does-not-parse
+
+            Deferred INCLUDING the parent, which this pass used to set from the
+            first base before even looking for a comma. With more than one base
+            the parent is a CHOICE (an imported base can only be the parent —
+            nothing here can flatten it), PyParseClass makes it, and a different
+            answer here laid the fields out over the WRONG parent's size.
+            bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused }
           j := i + 2; depth := 0;
           while j < MainProgramTokCount do
           begin
@@ -29864,11 +29884,19 @@ begin
             end
             else if (depth = 1) and (Tokens[j].Kind = tkComma) then
             begin
+              multiBase := True;
               hoist := False;
               Break;
             end
             else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
             Inc(j);
+          end;
+          if not multiBase then
+          begin
+            if (baseCi >= 0) and not PyClsUsedAsMixin[baseCi] then
+              UClsParent[ci] := baseCi
+            else
+              hoist := False;
           end;
         end;
         { Skip the header to the COLON that ends it, honouring a parenthesised
@@ -30055,10 +30083,13 @@ end;
 
 procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
-    realBases, baseDepth, baseQUnit: Integer;
+    realBases, baseDepth, baseQUnit, parentIx: Integer;
+    baseCiList: array[0..6] of Integer;
+    baseAtTok: array[0..6] of Integer;
     baseQName: AnsiString;
     mixK, sharedCi, myMixN, savedTokPos: Integer;
     myMixCi: array[0..5] of Integer;
+    myMixBP: array[0..5] of Boolean;
     propName: AnsiString;
 begin
   Expect(tkClass, 'class');
@@ -30169,44 +30200,93 @@ begin
             + ' — a base class must not be the class being declared, nor one of'
             + ' its descendants');
     Inc(realBases);
-    { The FIRST base is a real parent — unless it is a class that is flattened
-      somewhere else in the program, in which case it is flattened HERE too.
-      A class is one thing or the other program-wide: its body is compiled into
-      its hosts, so a host that made it a parent instead would inherit a class
-      with no method bodies. bug-nilpy-multiple-inheritance-does-not-parse }
-    if (realBases = 1) and not PyClsUsedAsMixin[baseCi] then
-      UClsParent[ci] := baseCi
-    else
-    begin
-      { A SECOND (third, ...) base — flattened into this class rather than made
-        a parent. See PyClsHasAncestor's block comment. }
-      if PyMixN > High(PyMixCi) then
-        Error('Nil Python: too many base classes');
-      if (PyClsBodyS[baseCi] < 0) or (PyClsBodyE[baseCi] < 0) then
-        Error('Nil Python: cannot flatten base class ' + CurTok.SVal +
-              ' — its body was not seen. A second base must be a class ' +
-              'defined earlier in this file; an imported or built-in one ' +
-              'cannot be flattened');
-      { `super()` inside a body that is going to be FLATTENED cannot be
-        honoured. CPython routes it along the MRO — from a mixin it reaches the
-        NEXT class in the derived class's linearisation, which is often not the
-        mixin's own parent at all — and a flattened body's `super()` can only
-        mean the derived class's single parent. Silence here is a wrong call at
-        run time, so it is refused. }
-      if PyMixBodyUsesSuper(baseCi) then
-        Error('Nil Python: base class ' + CurTok.SVal + ' calls `super()` and ' +
-              'is flattened into `class ' +
-              PyRawName(UClsNOff[ci], UClsNLen[ci]) +
-              '`. Python resolves that call along the derived class''s MRO, ' +
-              'which a flattened body cannot see — it would silently reach ' +
-              'this class''s own parent instead. Name the intended class''s ' +
-              'method explicitly, or restructure to single inheritance');
-      PyMixCi[PyMixN] := baseCi;
-      Inc(PyMixN);
-    end;
+    { Collected, not decided: WHICH base becomes the parent cannot be settled
+      until the whole list is known (see the choice below). }
+    if realBases > High(baseCiList) + 1 then
+      Error('Nil Python: too many base classes');
+    baseCiList[realBases - 1] := baseCi;
+    baseAtTok[realBases - 1] := TokPos;
     Next;
     end;
     until not Eat(tkComma);
+
+    { WHICH base becomes the Pascal PARENT is a CHOICE, and making it one is
+      what lets the ordinary stdlib mixin idiom compile.
+
+      Everything except the parent is FLATTENED into this class, and flattening
+      REPLAYS the base's body tokens — so a base whose body is not in this file
+      (imported, built-in) can only ever be the parent. Taking the first base
+      unconditionally refused
+
+          class StreamWriter(Codec, codecs.StreamWriter): pass
+
+      which is how every one of CPython's ~100 `encodings/*.py` modules — and
+      webencodings' x_user_defined.py — is written.
+      bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
+
+      It also happens to give the RIGHT resolution order. Python resolves
+      attributes along the C3 linearisation, so in `class D(B, C)` B's members
+      win over C's; a flattened member becomes D's OWN and therefore shadows the
+      parent's. Flattening the LOCAL base and parenting the IMPORTED one is
+      exactly Python's answer for the `(local mixin, imported protocol)` shape.
+
+      Two imported bases have no answer at all here and are refused rather than
+      half-taken — the second one's members would silently go missing. }
+    parentIx := -1;
+    for k := 0 to realBases - 1 do
+      if (PyClsBodyS[baseCiList[k]] < 0) or (PyClsBodyE[baseCiList[k]] < 0) then
+      begin
+        if parentIx >= 0 then
+        begin
+          TokPos := baseAtTok[k];
+          Error('Nil Python: `class ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) +
+                '` names TWO base classes whose bodies are not in this file. ' +
+                'Only one of them can become the parent; every other base is ' +
+                'flattened into this class, and flattening replays the base''s ' +
+                'own body, which an imported or built-in class does not have ' +
+                'here. Restructure to one imported base plus local mixins');
+        end;
+        parentIx := k;
+      end;
+    if parentIx < 0 then
+      { every base is flattenable — keep the historical choice: the FIRST base
+        is the parent, unless it is flattened somewhere else in the program, in
+        which case it is flattened HERE too. A class is one thing or the other
+        program-wide: its body is compiled into its hosts, so a host that made
+        it a parent instead would inherit a class with no method bodies.
+        bug-nilpy-multiple-inheritance-does-not-parse }
+      if (realBases >= 1) and not PyClsUsedAsMixin[baseCiList[0]] then
+        parentIx := 0;
+    if parentIx >= 0 then UClsParent[ci] := baseCiList[parentIx];
+    for k := 0 to realBases - 1 do
+      if k <> parentIx then
+      begin
+        { a base that is not the parent is FLATTENED into this class.
+          See PyClsHasAncestor's block comment. }
+        if PyMixN > High(PyMixCi) then
+          Error('Nil Python: too many base classes');
+        { `super()` inside a body that is going to be FLATTENED cannot be
+          honoured. CPython routes it along the MRO — from a mixin it reaches the
+          NEXT class in the derived class's linearisation, which is often not the
+          mixin's own parent at all — and a flattened body's `super()` can only
+          mean the derived class's single parent. Silence here is a wrong call at
+          run time, so it is refused. }
+        if PyMixBodyUsesSuper(baseCiList[k]) then
+        begin
+          TokPos := baseAtTok[k];
+          Error('Nil Python: base class ' +
+                PyRawName(UClsNOff[baseCiList[k]], UClsNLen[baseCiList[k]]) +
+                ' calls `super()` and is flattened into `class ' +
+                PyRawName(UClsNOff[ci], UClsNLen[ci]) +
+                '`. Python resolves that call along the derived class''s MRO, ' +
+                'which a flattened body cannot see — it would silently reach ' +
+                'this class''s own parent instead. Name the intended class''s ' +
+                'method explicitly, or restructure to single inheritance');
+        end;
+        PyMixCi[PyMixN] := baseCiList[k];
+        PyMixBeforeParent[PyMixN] := (parentIx >= 0) and (k < parentIx);
+        Inc(PyMixN);
+      end;
     { MULTIPLE INHERITANCE — `class D(B, C):`. Refused BY NAME rather than
       accepted-and-ignored: Python resolves attributes by C3 linearisation, so
       `D().who()` must give B's, and with a diamond the order is D, B, C, A.
@@ -30299,7 +30379,8 @@ begin
     replay it — nothing is copied, the tokens stay where they were lexed. }
   PyClsBodyS[ci] := bodyStart; PyClsBodyE[ci] := bodyEnd;
   myMixN := PyMixN;
-  for k := 0 to PyMixN - 1 do myMixCi[k] := PyMixCi[k];
+  for k := 0 to PyMixN - 1 do
+  begin myMixCi[k] := PyMixCi[k]; myMixBP[k] := PyMixBeforeParent[k]; end;
   { A class that exists to be FLATTENED is not compiled here: its methods are
     compiled once per host, against the host's layout, which is the only place
     the members it reads but does not declare exist. Fields are registered so
@@ -30483,7 +30564,8 @@ begin
     if mixK >= myMixN then Break;
     if mixK = 0 then savedTokPos := TokPos;
     PyMixN := myMixN;
-    for k := 0 to myMixN - 1 do PyMixCi[k] := myMixCi[k];
+    for k := 0 to myMixN - 1 do
+    begin PyMixCi[k] := myMixCi[k]; PyMixBeforeParent[k] := myMixBP[k]; end;
     PyMixBuildSkip(ci, bodyStart, bodyEnd, mixK);
     PyMixReplay := True;
     TokPos := PyClsBodyS[myMixCi[mixK]];

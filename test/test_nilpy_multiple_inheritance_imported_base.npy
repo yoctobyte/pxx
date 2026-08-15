@@ -1,0 +1,69 @@
+# Multiple inheritance where one base comes from another module — the ordinary
+# Python mixin idiom, and the shape every CPython `encodings/*.py` module (and
+# webencodings' x_user_defined.py) is written in:
+#
+#     class StreamWriter(Codec, codecs.StreamWriter): pass
+#
+# It used to be refused outright: "cannot flatten base class ... an imported or
+# built-in one cannot be flattened". Everything but the parent is FLATTENED by
+# replaying its body tokens, and an imported class has no body here — so WHICH
+# base becomes the parent has to be a choice, not always the first one.
+#
+# The order it produces is Python's, which is the second half of the fix. C3 is
+# left-to-right: in `class D(B, C)` B's members beat C's. A flattened member
+# becomes D's OWN and shadows the parent's, so flattening the LOCAL base and
+# parenting the IMPORTED one gives exactly CPython's answer — while a mixin
+# written AFTER the parent must lose to the whole parent chain instead.
+#
+# Every expected value here is CPython 3's on the equivalent pure-Python
+# hierarchy (Protocol/Local/Before/After with the same method names).
+import mixinproto
+
+
+class Local:
+    def Kind(self) -> str:
+        return "mixin-wins"
+
+    def label(self) -> str:
+        return "local"
+
+
+# the mixin stands BEFORE the parent: it wins, and it overrides a VIRTUAL
+# method of an imported Pascal class to do it
+class Before(Local, mixinproto.Protocol):
+    pass
+
+
+# the mixin stands AFTER the parent: the parent chain wins
+class After(mixinproto.Protocol, Local):
+    pass
+
+
+# a NON-virtual imported method is beaten just the same — the mixin's
+# definition is the class's own member either way
+class PlainToo(Local, mixinproto.Protocol):
+    def Plain(self) -> str:
+        return "mixin-plain"
+
+
+# the single-imported-base case is untouched
+class Solo(mixinproto.Protocol):
+    def Kind(self) -> str:
+        return "solo"
+
+
+b = Before()
+b.tag = 5
+print("before:", b.Kind(), b.label(), b.Twice(), b.Plain())
+
+a = After()
+a.tag = 6
+print("after: ", a.Kind(), a.label(), a.Twice())
+
+p = PlainToo()
+p.tag = 7
+print("plain: ", p.Kind(), p.Plain(), p.Twice())
+
+s = Solo()
+s.tag = 8
+print("solo:  ", s.Kind(), s.Plain(), s.Twice())

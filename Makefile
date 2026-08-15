@@ -421,6 +421,17 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
+	# how every CPython encodings module is written. WHICH base becomes the Pascal
+	# parent is a choice (only an imported one can be it -- nothing can flatten a body
+	# this compilation does not have), and the resulting order is CPython's C3 order:
+	# a mixin BEFORE the parent beats it, one AFTER it loses to the whole parent chain.
+	# Every value below is CPython 3's on the equivalent pure-Python hierarchy.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_multiple_inheritance_imported_base.npy $(TESTTMP)/test_nilpy_miimp26
+	test "$$($(TESTTMP)/test_nilpy_miimp26)" = "$$(printf 'before: mixin-wins local 10 plain\nafter:  proto local 12\nplain:  mixin-wins mixin-plain 14\nsolo:   solo plain 16')"
+	# TWO imported bases have no answer and are REFUSED, not half-taken
+	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
+	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
 	# -O3 store->reload elimination (feature-opt-accumulator-value-tracker): every
 	# value identical to -O0, AND the pass demonstrably FIRED -- a differential
 	# that passes because the pass never ran asserts nothing.
@@ -6190,6 +6201,17 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
+	# how every CPython encodings module is written. WHICH base becomes the Pascal
+	# parent is a choice (only an imported one can be it -- nothing can flatten a body
+	# this compilation does not have), and the resulting order is CPython's C3 order:
+	# a mixin BEFORE the parent beats it, one AFTER it loses to the whole parent chain.
+	# Every value below is CPython 3's on the equivalent pure-Python hierarchy.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_multiple_inheritance_imported_base.npy $(TESTTMP)/test_nilpy_miimp26
+	test "$$($(TESTTMP)/test_nilpy_miimp26)" = "$$(printf 'before: mixin-wins local 10 plain\nafter:  proto local 12\nplain:  mixin-wins mixin-plain 14\nsolo:   solo plain 16')"
+	# TWO imported bases have no answer and are REFUSED, not half-taken
+	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
+	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
 	# -O3 store->reload elimination (feature-opt-accumulator-value-tracker): every
 	# value identical to -O0, AND the pass demonstrably FIRED -- a differential
 	# that passes because the pass never ran asserts nothing.

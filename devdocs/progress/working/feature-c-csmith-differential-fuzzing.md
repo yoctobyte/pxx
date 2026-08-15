@@ -1,11 +1,12 @@
 ---
 prio: 60
+owner: claude-A-N-nightly
 ---
 
 # C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live
 
 - **Type:** feature / ongoing campaign — Track C (with Track A fixes as they fall out)
-- **Status:** harness LANDED and productive. Paused 2026-07-13 to refocus on Pascal (user).
+- **Status:** working
   Resume by running the one command below; nothing needs rebuilding or rediscovering.
 - **Origin:** step 4 of [[feature-c-corpus-expansion]] ("csmith differential fuzzing").
 
