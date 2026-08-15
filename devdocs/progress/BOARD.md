@@ -37,7 +37,7 @@ _none_
 | feature-b-tkhtmlview-in-nilpy | B | 50→60 | feature | Rewrite lib/pcl/tkhtmlview (398 lines of Pascal that has never compiled) in NilPy, where keyword arguments already exist and the library's own consumers already live. Decided over adding named parameters to the Pascal dialect | bug-nilpy-text-class-name-binds-the-rtl-file-record, feature-nilpy-import-a-py-module-from-the-library-path |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 
-## backlog (208)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -239,8 +239,6 @@ _none_
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-test-asm-compiler | T | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at d2172550a236 (auto-filed by twatch) | — |
-| regression-test-asm-hello | T | 70 | regression | regression: test-asm#src:test/hello.pas red at d2172550a236 (auto-filed by twatch) | — |
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-c-retire-the-crtl-name-dodge-prefixes | C | 50 | task | Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change. | — |
@@ -407,9 +405,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1808)
+## done (1810)
 
-1808 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1810 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -455,8 +453,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-asm-compiler
-- [p 70] [T] regression-test-asm-hello
 - [p 70] [P] regression-test-core-test-conformance-1
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - [p 60] [O] feature-opt-accumulator-value-tracker (unblocks 1)
