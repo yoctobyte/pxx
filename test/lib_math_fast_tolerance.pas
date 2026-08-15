@@ -141,6 +141,33 @@ begin
   CheckUlp(Sinh(1.0), 1.1752011936438014, 2, 'sinh-1');
   CheckUlp(Cosh(1.0), 1.5430806348152437, 2, 'cosh-1');
   CheckUlp(Tanh(1.0), 0.7615941559557649, 2, 'tanh-1');
+
+  { ---- the hyperbolic family ----
+    All six were the textbook identity written out literally, and every one was
+    wrong somewhere: ArcSinh(1e-15) and ArcTanh(1e-15) were 11% off, Sinh(1e-15)
+    5% off, ArcSinh(-94) 1497 ulp, ArcCosh(0.5) answered 0.0 for a DOMAIN ERROR,
+    and Tanh(800) was NaN where the answer is 1. One cause — a small result
+    routed through a quantity near 1 — so the fix was to add expm1/log1p
+    underneath rather than patch six formulas.
+
+    These rows are the ones that were wrong. A tolerance failure here is a
+    rounding question; a row coming back 5% out, or NaN, is the old bug. }
+  CheckUlp(Sinh(1.0e-15), 1e-15, 2, 'sinh-tiny');
+  CheckUlp(Tanh(1.0e-15), 1e-15, 2, 'tanh-tiny');
+  CheckUlp(ArcSinh(1.0e-15), 1e-15, 2, 'asinh-tiny');
+  CheckUlp(ArcTanh(1.0e-15), 1e-15, 2, 'atanh-tiny');
+  CheckUlp(ArcSinh(-94.0), -5.23647025497466, 2, 'asinh-negative');
+  CheckUlp(ArcTanh(0.5), 0.5493061443340548, 2, 'atanh-half');
+  CheckUlp(ArcCosh(1.5), 0.9624236501192069, 2, 'acosh-1p5');
+  CheckUlp(Tanh(16.5), 0.9999999999999907, 2, 'tanh-saturating');
+
+  { premature overflow: sinh/cosh(710) are ORDINARY doubles, but 0.5*Exp(710)
+    evaluates Exp first and hits Inf. Exp(x - ln2) is the same value. }
+  CheckUlp(Sinh(710.0), 1.1169973830808557e+308, 2, 'sinh-710-no-early-overflow');
+  CheckUlp(Cosh(710.0), 1.1169973830808557e+308, 2, 'cosh-710-no-early-overflow');
+  { x*x overflows past 1.3e154, which used to turn asinh/acosh(1e200) into Inf }
+  CheckUlp(ArcSinh(1.0e200), 461.2101657793691, 2, 'asinh-huge-no-x2-overflow');
+  CheckUlp(ArcCosh(1.0e200), 461.2101657793691, 2, 'acosh-huge');
   CheckUlp(Power(1.0001, 10000.0), 2.7181459268249255, 2, 'power-amplified');
 
   { EXACT even in fast mode, and deliberately so: the reductions pull the
@@ -187,6 +214,25 @@ begin
     flush-to-zero would show up right here }
   SayBool('exp-denormal-not-flushed', (Exp(-745.0) > 0.0) and (Exp(-745.0) < 1.0e-322));
   SayBool('ln-denormal-arg', (Ln(5.0e-324) < -744.0) and (Ln(5.0e-324) > -745.0));
+
+  { Tanh saturates to EXACTLY +-1 and must never produce NaN: the old
+    (e^x - e^-x)/(e^x + e^-x) was Inf/Inf for |x| >= 710. }
+  SayBool('tanh-inf-one', Tanh(inf) = 1.0);
+  SayBool('tanh-neginf-minus-one', Tanh(-inf) = -1.0);
+  SayBool('tanh-800-one', Tanh(800.0) = 1.0);
+  SayBool('tanh-neg800', Tanh(-800.0) = -1.0);
+  SayBool('sinh-inf', Sinh(inf) > 1.0e308);
+  SayBool('sinh-neginf', Sinh(-inf) < -1.0e308);
+  SayBool('cosh-inf', Cosh(inf) > 1.0e308);
+  SayBool('cosh-neginf-positive', Cosh(-inf) > 1.0e308);
+  { a DOMAIN ERROR must be NaN, not 0.0 — a caller cannot tell 0.0 from
+    ArcCosh(1.0), which legitimately IS 0.0 }
+  SayBool('acosh-below-one-nan', ArcCosh(0.5) <> ArcCosh(0.5));
+  SayBool('acosh-one-zero', ArcCosh(1.0) = 0.0);
+  SayBool('atanh-above-one-nan', ArcTanh(1.5) <> ArcTanh(1.5));
+  SayBool('atanh-one-inf', ArcTanh(1.0) > 1.0e308);
+  SayBool('atanh-neg-one-neginf', ArcTanh(-1.0) < -1.0e308);
+  SayBool('asinh-inf', ArcSinh(inf) > 1.0e308);
 
   { bounded, not growing: |sin| <= 1 must hold at every magnitude, which is the
     cheap check that catches a reduction that has come apart }

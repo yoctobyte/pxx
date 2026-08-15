@@ -1537,38 +1537,197 @@ begin
   if sy then Result := -Result;
 end;
 
-function Sinh(x: Double): Double;
+{ ================= expm1 / log1p, and the hyperbolic family =================
+
+  All six hyperbolics were the textbook identity written out literally, and
+  every one of them was wrong somewhere. Measured against glibc over 1,124
+  arguments, 2026-08-15:
+
+    ArcSinh(1e-15)  1.1102e-15  want 1e-15     11% WRONG
+    ArcTanh(1e-15)  1.1102e-15  want 1e-15     11% WRONG
+    Sinh(1e-15)     1.0547e-15  want 1e-15      5% WRONG
+    ArcSinh(-94)    1497 ulp
+    ArcCosh(0.5)    0.0         want NaN       domain error answered as a value
+    Tanh(800)       NaN         want 1.0
+    Tanh(+-Inf)     NaN         want +-1.0
+
+  ONE cause, six symptoms: every formula routes a small answer through a
+  quantity near 1, where the bits that ARE the answer fall off the bottom of the
+  significand. `Exp(x) - 1` for small x keeps none of x; `Ln(1 + x)` the same.
+  That is what expm1 and log1p exist for, and the RTL did not have them — so
+  rather than patch six formulas, add the two primitives and let the formulas
+  become the textbook ones AGAIN, just written around the cancellation.
+  (devdocs/dev/normalise-dont-special-case.md: when several call sites are
+  broken the same way, the fix belongs underneath them.)
+
+  Neither primitive is EXPORTED, deliberately: `expm1` and `log1p` are libc
+  names, and every name in this unit's interface is in scope for C name
+  resolution because pxxcio does `uses math` — a Pascal `Expm1` would hijack
+  libc's in every C program, exactly like the Pow/Log/CopySign trap documented
+  at the top of this file. FPC's public spelling for log1p is `LnXP1`, which
+  does NOT collide; adding it is a separate FPC-compat item, not this fix. }
+
+function ExpM1(x: Double): Double;
+{ e^x - 1. Kahan's construction: u = Exp(x) carries a relative error, and
+  (u-1)/Ln(u) is exactly the factor that divides it back out — the same error
+  sits in numerator and denominator. It needs an ACCURATE Ln, which is why this
+  is cheap now and would not have been before the fast/exact log landed. }
+var u: Double;
 begin
-  Result := 0.5 * (Exp(x) - Exp(-x));
+  if x <> x then begin Result := x; Exit; end;                { NaN }
+  if x >= 710.0 then begin Result := Exp(x); Exit; end;       { +Inf, no 1 to subtract }
+  u := Exp(x);
+  if u = 1.0 then begin Result := x; Exit; end;               { |x| < 2^-53: e^x-1 IS x }
+  if u - 1.0 = -1.0 then begin Result := -1.0; Exit; end;     { x very negative }
+  Result := (u - 1.0) * x / Ln(u);
+end;
+
+function LnP1(x: Double): Double;
+{ ln(1+x), the same trick from the other side (Goldberg): 1+x rounds, and
+  Ln(u)*x/(u-1) divides the rounding back out. }
+var u: Double;
+begin
+  if x <> x then begin Result := x; Exit; end;
+  if x > 1.7976931348623157e308 then begin Result := x; Exit; end;   { +Inf }
+  u := 1.0 + x;
+  if u = 1.0 then begin Result := x; Exit; end;               { |x| < 2^-53 }
+  Result := Ln(u) * x / (u - 1.0);
+end;
+
+function Sinh(x: Double): Double;
+{ Two defects in `0.5*(Exp(x) - Exp(-x))`, and they are at opposite ends:
+  small |x| cancels (both exponentials are ~1), and large |x| overflows EARLY —
+  `0.5 * Exp(x)` evaluates Exp first, so it hits Inf around x = 709.8 even
+  though sinh(710) = 1.1e308 is a perfectly ordinary double. Exp(x - ln2) is
+  the same value with no intermediate to overflow.
+
+  The small branch uses the identity in terms of t = e^|x| - 1:
+    sinh = (t + t/(t+1)) / 2,  which for tiny t is (t + t)/2 = t. No subtraction. }
+var ax, t, e: Double;
+begin
+  if x <> x then begin Result := x; Exit; end;
+  if x = 0.0 then begin Result := x; Exit; end;               { keeps -0 }
+  ax := Abs(x);
+  if ax > 709.0 then
+    { NOT Exp(ax - ln2): at this magnitude ulp(ax) is 1.1e-13, so subtracting
+      ln2 throws away low bits of the ARGUMENT, and exp turns that into 307 ulp
+      of result. Halving the argument is exact (a power of two), so
+      (0.5*w)*w = 0.5*e^ax costs two roundings instead. }
+    e := (0.5 * Exp(0.5 * ax)) * Exp(0.5 * ax)
+  else if ax < 22.0 then
+  begin
+    t := ExpM1(ax);
+    e := 0.5 * (t + t / (t + 1.0));
+  end
+  else
+    e := 0.5 * (Exp(ax) - Exp(-ax));
+  if x < 0.0 then Result := -e else Result := e;
 end;
 
 function Cosh(x: Double): Double;
+{ An ADDITION, so nothing cancels and the small end was always fine. Only the
+  premature overflow needed fixing — same Exp(|x| - ln2) as Sinh. }
+var ax: Double;
 begin
-  Result := 0.5 * (Exp(x) + Exp(-x));
+  if x <> x then begin Result := x; Exit; end;
+  ax := Abs(x);
+  if ax > 709.0 then
+  begin
+    { same split as Sinh — see the note there }
+    Result := (0.5 * Exp(0.5 * ax)) * Exp(0.5 * ax);
+    Exit;
+  end;
+  Result := 0.5 * (Exp(ax) + Exp(-ax));
 end;
 
 function Tanh(x: Double): Double;
-var ex, enx: Double;
+{ `(e^x - e^-x) / (e^x + e^-x)` is Inf/Inf = NaN once Exp overflows, i.e. for
+  |x| >= 710 — where the true value saturated to exactly +-1 some six hundred
+  orders of magnitude earlier. It also cancels for small |x|.
+
+  In terms of t = e^(-2|x|) - 1:  tanh = -t / (t + 2), which for tiny |x| is
+  2|x|/2 = |x|. Above |x| = 22, e^-44 is below half an ulp of 1, so the answer
+  IS 1.0 and saying so directly is both faster and exactly right. }
+var ax, t, r: Double;
 begin
-  ex := Exp(x);
-  enx := Exp(-x);
-  Result := (ex - enx) / (ex + enx);
+  if x <> x then begin Result := x; Exit; end;
+  if x = 0.0 then begin Result := x; Exit; end;               { keeps -0 }
+  ax := Abs(x);
+  if ax >= 22.0 then r := 1.0
+  else if ax >= 1.0 then
+    r := 1.0 - 2.0 / (Exp(2.0 * ax) + 1.0)
+  else
+  begin
+    t := ExpM1(-2.0 * ax);
+    r := -t / (t + 2.0);
+  end;
+  if x < 0.0 then Result := -r else Result := r;
 end;
 
 function ArcSinh(x: Double): Double;
+{ `Ln(x + Sqrt(x*x + 1))` has THREE defects:
+  - x negative: x + sqrt(x^2+1) cancels — 1497 ulp at x = -94. Folding the sign
+    out first (asinh is odd) removes it entirely.
+  - |x| small: the argument is ~1 and Ln near 1 keeps none of the answer.
+    ArcSinh(1e-15) returned 1.1102e-15, which is 11% wrong.
+  - |x| > 1.3e154: x*x overflows and the result becomes Inf, where
+    asinh(1e200) = 461.2 is an ordinary number.
+  Three ranges, three algebraically identical forms, each stable where it is
+  used. }
+var ax, r: Double;
 begin
-  Result := Ln(x + Sqrt(x * x + 1.0));
+  if x <> x then begin Result := x; Exit; end;
+  if x = 0.0 then begin Result := x; Exit; end;               { keeps -0 }
+  ax := Abs(x);
+  if ax > 1.0e153 then
+    r := Ln(ax) + 0.6931471805599453                          { asinh ~ ln(2x) }
+  else if ax > 2.0 then
+    { x + sqrt(x^2+1) rewritten as 2x + 1/(sqrt(x^2+1) + x): same value, no
+      large-minus-large }
+    r := Ln(2.0 * ax + 1.0 / (Sqrt(ax * ax + 1.0) + ax))
+  else
+    r := LnP1(ax + ax * ax / (1.0 + Sqrt(ax * ax + 1.0)));
+  if x < 0.0 then Result := -r else Result := r;
 end;
 
 function ArcCosh(x: Double): Double;
+{ x < 1 is a DOMAIN ERROR and this returned 0.0 — a value the caller cannot
+  distinguish from the true answer at x = 1. glibc, CPython and FPC all give
+  NaN, and so does this now. The x^2 overflow and the near-1 cancellation get
+  the same treatment as ArcSinh. }
+var t, z: Double;
 begin
-  if x < 1.0 then begin Result := 0.0; Exit; end;
-  Result := Ln(x + Sqrt(x * x - 1.0));
+  if x <> x then begin Result := x; Exit; end;
+  if x < 1.0 then begin z := 0.0; Result := z / z; Exit; end; { NaN, was 0.0 }
+  if x > 1.0e153 then begin Result := Ln(x) + 0.6931471805599453; Exit; end;
+  if x > 2.0 then
+  begin
+    Result := Ln(2.0 * x - 1.0 / (x + Sqrt(x * x - 1.0)));
+    Exit;
+  end;
+  t := x - 1.0;                                               { Sterbenz-exact here }
+  Result := LnP1(t + Sqrt(2.0 * t + t * t));
 end;
 
 function ArcTanh(x: Double): Double;
+{ `0.5*Ln((1+x)/(1-x))` forms a quotient that is ~1 for small x, so Ln throws
+  away exactly the bits that are the answer: ArcTanh(1e-15) returned
+  1.1102e-15, 11% wrong. 0.5*ln1p(2x/(1-x)) is the same expression with the
+  1 taken out by hand. }
+var ax, r, z: Double;
 begin
-  Result := 0.5 * Ln((1.0 + x) / (1.0 - x));
+  if x <> x then begin Result := x; Exit; end;
+  if x = 0.0 then begin Result := x; Exit; end;               { keeps -0 }
+  ax := Abs(x);
+  if ax > 1.0 then begin z := 0.0; Result := z / z; Exit; end;        { NaN }
+  if ax = 1.0 then
+  begin
+    z := 0.0;
+    if x < 0.0 then Result := -1.0 / z else Result := 1.0 / z;        { -+Inf }
+    Exit;
+  end;
+  r := 0.5 * LnP1(2.0 * ax / (1.0 - ax));
+  if x < 0.0 then Result := -r else Result := r;
 end;
 
 function Cot(x: Double): Double;

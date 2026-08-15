@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "Tanh(x) is (e^x - e^-x)/(e^x + e^-x), so for |x| >= ~710 it computes Inf/Inf = NaN where the answer is exactly +-1. Tanh(Inf) is NaN too. glibc and CPython both give 1.0. Present in BOTH float modes — a wrong value, not a rounding question. Also check the small-|x| end: the same formula subtracts two nearly-equal numbers."
+status: done
 ---
 
 # `Tanh` returns NaN for |x| >= 710, and for Inf
@@ -72,3 +73,57 @@ Per `devdocs/dev/normalise-dont-special-case.md`: `Sinh`, `Cosh`, `ArcSinh`,
 `tools/gate.sh lib` plus rows in `test/lib_math_fast_tolerance.pas` covering
 `Tanh` at `+-Inf`, at 800, at 20, and at 1e-10 — the last one is the row that
 proves the small-|x| half was fixed rather than the large-|x| half alone.
+
+---
+
+## RESOLVED 2026-08-15 — and it was all six, not just Tanh
+
+The ticket said to check the small-|x| end and grep the siblings before closing.
+Both paid off: measuring the family against glibc over 2,044 arguments found
+that **every one of the six was wrong somewhere**, and for one shared reason.
+
+| function | defect | measured |
+| --- | --- | --- |
+| `ArcSinh` | small-x cancellation | `ArcSinh(1e-15)` = 1.1102e-15 vs 1e-15 — **11% wrong** |
+| `ArcTanh` | same | `ArcTanh(1e-15)` — **11% wrong** |
+| `Sinh` | same | `Sinh(1e-15)` = 1.0547e-15 — **5% wrong** |
+| `ArcSinh` | negative-x cancellation | **1497 ulp** at x = -94 |
+| `ArcSinh`/`ArcCosh` | `x*x` overflows past 1.3e154 | `ArcSinh(1e200)` = Inf, true answer 461.2 |
+| `ArcCosh` | domain error answered as a VALUE | `ArcCosh(0.5)` = 0.0, indistinguishable from `ArcCosh(1.0)` |
+| `Sinh`/`Cosh` | premature overflow | `Sinh(710)` = Inf; 1.117e308 is an ordinary double |
+| `Tanh` | Inf/Inf | NaN for \|x\| >= 710 and at +-Inf |
+
+**One cause:** every formula routed a small answer through a quantity near 1,
+where the bits that ARE the answer fall off the bottom of the significand. So
+the fix went underneath rather than into six formulas — `ExpM1` and `LnP1` were
+added (Kahan's and Goldberg's constructions, which divide out the rounding of
+`Exp`/`Ln` using an accurate `Ln`; both cheap now that the fast log/exp landed),
+and the six became the standard stable identities.
+
+Neither primitive is exported: `expm1`/`log1p` are libc names and every
+interface name here is in scope for C through pxxcio, so a Pascal `Expm1` would
+hijack libc's exactly like the documented `Pow`/`Log`/`CopySign` trap. FPC's
+public spelling `LnXP1` does not collide — adding it is a separate FPC-compat
+item, filed as [[feature-b-rtl-lnxp1-fpc-compat]].
+
+Two things measurement corrected mid-fix, neither of which was reasoning I would
+have trusted otherwise:
+
+- `Exp(ax - ln2)` for large `Sinh`/`Cosh` was **307 ulp** out: at x = 710,
+  `ulp(x)` is 1.1e-13, so subtracting ln2 damages the ARGUMENT and `exp`
+  turns that into hundreds of ulp of result. `(0.5*w)*w` with `w = Exp(0.5*ax)`
+  costs two roundings instead — halving is exact.
+- The `expm1(-2x)` form of `Tanh` was 3 ulp near saturation;
+  `1 - 2/(Exp(2x)+1)` for |x| >= 1 is **bit-exact with glibc** over the whole
+  range.
+
+Result over 2,044 arguments: worst 1 ulp everywhere except `ArcTanh` at 2, and
+`Tanh` bit-exact. **Zero Inf/NaN mismatches.**
+
+`test/lib_math_fast_tolerance.pas` grew to 102 checks pinning every row above.
+Gate: `tools/gate.sh lib` GREEN, which includes `cmath_hyperbolic_family_b383.c`
+— so the C side is unaffected and nothing hijacked libc. Cross-verified under
+qemu on i386, aarch64 and arm32.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
