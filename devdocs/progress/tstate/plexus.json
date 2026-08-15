@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T06:02:11Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e994fa16dac16a5f7e5bb67695a2b508333f13d7",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T06:06:44Z",
    "fixed": [],
    "new_red": [],
@@ -496,6 +488,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "d95b6df2985f89dd6deb47c54dfa4c57d094a4a4",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-15T17:56:26Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "f34272f086cc1d57a41fd9d0964611bea00b6381",
    "tier": "native",
    "verdict": "RED"
   }
@@ -2889,6 +2889,7 @@
   "test-smoke#src:compiler/compiler.pas": "native",
   "test-smoke#src:test/quick_canary_c.c": "native",
   "test-smoke#src:test/quick_canary_nilpy.npy": "native",
+  "test-smoke#src:test/quick_canary_uses.pas": "native",
   "test-smoke#src:test/test_ansistring.pas": "native",
   "test-smoke#src:test/test_class_of.pas": "native",
   "test-smoke#src:test/test_const_record_method_prebody.pas": "native",
@@ -5351,6 +5352,7 @@
   "test-smoke#src:compiler/compiler.pas": "pass",
   "test-smoke#src:test/quick_canary_c.c": "pass",
   "test-smoke#src:test/quick_canary_nilpy.npy": "pass",
+  "test-smoke#src:test/quick_canary_uses.pas": "pass",
   "test-smoke#src:test/test_ansistring.pas": "pass",
   "test-smoke#src:test/test_class_of.pas": "pass",
   "test-smoke#src:test/test_const_record_method_prebody.pas": "pass",
@@ -5433,8 +5435,8 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T17:45:53Z",
-  "sha": "d95b6df2985f89dd6deb47c54dfa4c57d094a4a4",
+  "date": "2026-08-15T17:56:26Z",
+  "sha": "f34272f086cc1d57a41fd9d0964611bea00b6381",
   "tier": "native",
   "verdict": "RED",
   "wall": 198.7
