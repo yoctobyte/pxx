@@ -58,3 +58,37 @@ A `.npy` case with `.sort()`, `.sort(reverse=True)`, `.sort(key=lambda...)`,
 and `.sort(key=..., reverse=True)`, diffed against CPython (checking the
 mutation is genuinely in place, not just a return value), gated in
 `test-nilpy` + `--tier quick` + self-host byte-identical.
+
+## 2026-08-15 — the premise is half-outdated; the wall is the CALLABLE SHAPES, not the unit
+
+Re-measured before starting, and two of the three things above have changed:
+
+- **`reverse=` already works.** `TPyList.sort(reverse: Boolean = False)` exists
+  in pylib and `xs.sort(reverse=True)` compiles and sorts. Only `key=` is
+  missing, so the title overstates the gap.
+- **pylib is not blind to callables.** It has `pyvar_callable_ptr` /
+  `pyvar_callee_addr` (a callable VARIANT to a raw code pointer), plus
+  `pyboundfn_callv` and the bound-pair helpers. So "pylib cannot call a key"
+  is no longer true in general, and an in-pylib `sort(const key: Variant)`
+  overload — which the keyword binder would resolve with no frontend change at
+  all — looked like the cheap answer.
+
+**Why that cheap answer is still wrong.** `PyCallKey1` dispatches FOUR callable
+shapes (bound pair, pyeval source closure, pyboundfn, bare code address). Three
+of them are reachable from pylib; the **source closure is pyeval's**, and it is
+the fallback for every lambda the lifter refuses. A pylib-side `sort` would
+therefore work for most `key=lambda ...` and mis-handle exactly the ones that
+fall back — a per-lambda-shape failure, which is worse than the current loud
+"has no parameter named 'key'".
+
+So the ticket's own fix direction stands: **the sort with a key belongs in
+pyeval**, beside `sorted`, which already has all of it. What it costs is the
+frontend wiring the ticket names, and that is the real work:
+`xs.sort(...)` is parsed by the ARITY-DRIVEN method-call loops in `parser.inc`
+(there are several — the local-receiver one and the field-receiver one at
+least), so redirecting one method name to a free function needs a hook each
+place, or a shared "list method that is really a free function" table of the
+kind `PyStrMethodInfo` already is for strings. That table is the right shape
+and does not exist yet for lists.
+
+Nothing applied. Measured with the v327 self-host at HEAD.
