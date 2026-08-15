@@ -134,4 +134,4 @@ Verified at HEAD (c304fca4d + this session's commits), self-hosted build:
 No code change needed. Closing as fixed-elsewhere.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit b347f71cf.
