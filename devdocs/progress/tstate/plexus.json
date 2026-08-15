@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T10:40:12Z",
-   "fixed": [],
-   "new_red": [
-    "test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy"
-   ],
-   "sha": "9c5adbed5933720b035fa4fd6545c822c9ae1014",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T10:45:40Z",
    "fixed": [],
    "new_red": [],
@@ -496,6 +486,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "7cb3dcb6fac776b1a2422c33ddf4bb3defc4d860",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-15T21:56:59Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "be79a3ae14f92dadedd2848f02238c36e704c8c4",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1618,6 +1616,7 @@
   "test-core#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "native",
   "test-core#src:test/test_nilpy_bound_method_in_module.npy": "native",
   "test-core#src:test/test_nilpy_builtin_shadow_slice.npy": "native",
+  "test-core#src:test/test_nilpy_bytes_methods.npy": "native",
   "test-core#src:test/test_nilpy_c_define_const.npy": "native",
   "test-core#src:test/test_nilpy_c_pointer.npy": "native",
   "test-core#src:test/test_nilpy_call_return_infer.npy": "native",
@@ -1643,6 +1642,7 @@
   "test-core#src:test/test_nilpy_fallback_import_mixed.npy": "native",
   "test-core#src:test/test_nilpy_fallback_import_try_wins.npy": "native",
   "test-core#src:test/test_nilpy_field_from_unannotated_param.npy": "native",
+  "test-core#src:test/test_nilpy_float_methods.npy": "native",
   "test-core#src:test/test_nilpy_float_repr_roundtrip.npy": "native",
   "test-core#src:test/test_nilpy_fnvalue_abi.npy": "native",
   "test-core#src:test/test_nilpy_forward_module_global.npy": "native",
@@ -4100,6 +4100,7 @@
   "test-core#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "pass",
   "test-core#src:test/test_nilpy_bound_method_in_module.npy": "pass",
   "test-core#src:test/test_nilpy_builtin_shadow_slice.npy": "pass",
+  "test-core#src:test/test_nilpy_bytes_methods.npy": "pass",
   "test-core#src:test/test_nilpy_c_define_const.npy": "pass",
   "test-core#src:test/test_nilpy_c_pointer.npy": "pass",
   "test-core#src:test/test_nilpy_call_return_infer.npy": "pass",
@@ -4125,6 +4126,7 @@
   "test-core#src:test/test_nilpy_fallback_import_mixed.npy": "pass",
   "test-core#src:test/test_nilpy_fallback_import_try_wins.npy": "pass",
   "test-core#src:test/test_nilpy_field_from_unannotated_param.npy": "pass",
+  "test-core#src:test/test_nilpy_float_methods.npy": "pass",
   "test-core#src:test/test_nilpy_float_repr_roundtrip.npy": "pass",
   "test-core#src:test/test_nilpy_fnvalue_abi.npy": "pass",
   "test-core#src:test/test_nilpy_forward_module_global.npy": "pass",
@@ -5463,11 +5465,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T21:42:01Z",
-  "sha": "7cb3dcb6fac776b1a2422c33ddf4bb3defc4d860",
+  "date": "2026-08-15T21:56:59Z",
+  "sha": "be79a3ae14f92dadedd2848f02238c36e704c8c4",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 209.9
+  "wall": 212.8
  },
  "last_bench": {
   "conf_rows": 550,
