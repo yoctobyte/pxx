@@ -12033,18 +12033,26 @@ begin
           until the `for`) }
         if PyBareGenExprAhead then CurASTNode := PyParseCompExprValue(False)
         else ParseArgExpr;
+        { boxed, and the RUN-TIME entry point: the argument may be a list, a
+          cursor (a genexpr bound to a name is one), a range or a user
+          iterable, and only a cursor must ADVANCE. Picking a TPyList-taking
+          routine statically handed a TPyIter to a list parameter and answered
+          the default — `next((c for c in cs if ...), "none")` said "none" for
+          a match that plainly existed. }
+        CurASTNode := PyForceVariant(CurASTNode);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; ASTRight[argSeq] := -1;
         node := argSeq;
         if CurTok.Kind = tkComma then
         begin
           Next;
           ParseArgExpr;
-          atDflt := AllocNode(AN_ARG); ASTLeft[atDflt] := CurASTNode; ASTRight[atDflt] := -1;
+          atDflt := AllocNode(AN_ARG); ASTLeft[atDflt] := PyForceVariant(CurASTNode);
+          ASTRight[atDflt] := -1;
           ASTRight[argSeq] := atDflt;
-          procIdx := FindProc('pynext_first_or');
+          procIdx := FindProc('pynext_or_v');
         end
         else
-          procIdx := FindProc('pynext_first');
+          procIdx := FindProc('pynext_v');
         if procIdx < 0 then Error('Nil Python: pylib (pynext_first) not loaded');
         Expect(tkRParen, ')');
         CurASTNode := AllocNode(AN_CALL);

@@ -1873,6 +1873,17 @@ function pyrandom_choice(l: TPyList): Variant;
 procedure pyrandom_shuffle(l: TPyList);
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
+{ `next(x)` / `next(x, default)` where x is whatever the argument turned out to
+  be — a CURSOR (which must ADVANCE, so the next call sees the next element), a
+  list, a range, a user iterable. The two above take a TPyList and read element
+  0, which was right while every genexpr materialised into one; once a genexpr
+  bound to a name became a cursor, the same written call handed a TPyIter to a
+  TPyList parameter and answered the default (bug filed with
+  bug-nilpy-a-generator-expression-is-not-consumed-once). One entry point per
+  arity, deciding at run time, rather than a static pick the frontend cannot
+  always make. }
+function pynext_v(const v: Variant): Variant;
+function pynext_or_v(const v: Variant; const dflt: Variant): Variant;
 function sum(l: TPyList): Variant;
 function sum(r: TPyRange): Variant; overload;
 { ...and over a CURSOR, declared after the list forms on purpose — see the note
@@ -6706,6 +6717,40 @@ end;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 begin
   if (l = nil) or (l.count = 0) then pynext_first_or := dflt else pynext_first_or := l.at(0);
+end;
+
+function pynext_v(const v: Variant): Variant;
+var o: TObject;
+begin
+  if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
+  begin
+    o := TObject(pyvarobj(v));
+    { a CURSOR advances — that is the whole difference between next() and
+      "read element 0", and it is what single consumption means }
+    if o is TPyIter then
+    begin
+      if not pyiter_has(TPyIter(o)) then
+        raise StopIteration.Create('next() on an exhausted iterator');
+      pynext_v := pyiter_next(TPyIter(o));
+      Exit;
+    end;
+  end;
+  pynext_v := pynext_first(pylist_v(v));
+end;
+
+function pynext_or_v(const v: Variant; const dflt: Variant): Variant;
+var o: TObject;
+begin
+  if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyIter then
+    begin
+      pynext_or_v := pyiter_next_or(TPyIter(o), dflt);
+      Exit;
+    end;
+  end;
+  pynext_or_v := pynext_first_or(pylist_v(v), dflt);
 end;
 
 { Is every element of this list a plain int/bool/float, with at least one
