@@ -25,3 +25,6 @@ ok: /tmp/testmgr-scratch-1079028/test_asm_dis_self26  [code=6928090B  data=21096
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-15 — auto-closed by the plexus watcher: `test-asm#src:compiler/compiler.pas` passes at d61380078f35 (tier native); it was red at d2172550a236. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
