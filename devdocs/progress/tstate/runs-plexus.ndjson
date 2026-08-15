@@ -896,3 +896,4 @@
 {"date": "2026-08-15T06:44:57Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_nilpy_sorted_pairs.npy"], "sha": "bb845b13ceb3c2f2d94f63dfe35f366489826f04", "tier": "native", "verdict": "RED", "wall": 196.1}
 {"date": "2026-08-15T06:50:31Z", "fixed": [], "full": false, "new_red": [], "sha": "64968aa64a43ea5a1927198ca002dead51f6ac0d", "tier": "native", "verdict": "RED", "wall": 196.4}
 {"date": "2026-08-15T06:56:11Z", "fixed": [], "full": false, "new_red": [], "sha": "4e300065e11674e68c82ad3fd115b89f4c10b766", "tier": "native", "verdict": "RED", "wall": 207.0}
+{"date": "2026-08-15T07:15:11Z", "fixed": [], "full": false, "new_red": [], "sha": "6b272221fa46e21ba3d974a4e8be9686bfd4ceed", "tier": "native", "verdict": "RED", "wall": 208.8}
