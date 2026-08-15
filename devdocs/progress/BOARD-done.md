@@ -1794,6 +1794,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-core#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-re | T | 70 | regression | regression: test-core#src:test/test_nilpy_re.npy red at b9e334fbd649 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-sorted-pairs | T | 70 | regression | regression: test-core#src:test/test_nilpy_sorted_pairs.npy red at bb845b13ceb3 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-star-methods-and-targets | T | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy red at 89dae725b972 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |

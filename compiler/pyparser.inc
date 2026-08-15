@@ -30868,12 +30868,30 @@ end;
   statement itself is still parsed later; the unit is compiled by then, so the
   pull is a no-op and appends nothing.
 
-  EXCEPT inside a `try:`, where an import must stay soft: that is the
-  fallback-import idiom (`try: import reportlab / except ImportError:`), whose
-  whole point is that the module may be absent. Those are decided when the
-  block is parsed. }
+  Inside a `try:` an import must stay SOFT — that is the fallback-import idiom
+  (`try: import reportlab / except ImportError:`), whose whole point is that the
+  module may be absent. It is pulled here all the same, with the resolver in
+  soft mode, so a module that IS present is loaded at MODULE scope like every
+  other import; one that is absent is left entirely to the block parse, which
+  decides the branch (PyParseFallbackImportTry) exactly as before.
+
+  Skipping the pull outright is what made an in-`try` import inside a DEF a
+  compile error. The unit's globals were then allocated inside the def's symbol
+  range, the def's `SymRollbackTo(savedSC)` discarded them, and the pending
+  global initializers the unit had queued outlived their symbols — a dangling
+  IR_LEA in main, reported by the strict-IR verifier as "invalid symbol in lea"
+  and pointing at a symbol index past the end of the table (measured: sym=439,
+  SymCount=400). Loading at module scope puts those globals BELOW every def's
+  savedSC, where every other import already puts them.
+
+  This is the same failure the hoist-queue reset inside PyParseFallbackImportTry
+  already guards against ("a stray IR_LEA of a rolled-back temp"); that fix
+  covered the hoisted STATEMENTS and not the queued INITIALIZERS, which is the
+  other thing an import run leaves behind.
+  regression-test-core-test-nilpy-star-methods-and-targets }
 procedure PyPreScanImports;
 var i, depth, savedTok, tryAt, j: Integer;
+    savedSoft, savedMissed: Boolean;
 begin
   savedTok := TokPos;
   i := PyScanLo;
@@ -30899,15 +30917,21 @@ begin
     end
     else if (Tokens[i].Kind = tkTry) and (tryAt < 0) then
       tryAt := depth
-    else if (tryAt < 0) and
-            ((Tokens[i].Kind = tkUses) or
+    else if ((Tokens[i].Kind = tkUses) or
              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
               (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent))) and
             ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
     begin
       TokPos := i;
       Next;
+      { in a `try:` the module may legitimately be absent — resolve softly and
+        leave the branch decision to the block parse }
+      savedSoft := SoftUnitResolve;
+      savedMissed := SoftUnitMissed;
+      if tryAt >= 0 then SoftUnitResolve := True;
       PyParseImportRun;
+      SoftUnitResolve := savedSoft;
+      SoftUnitMissed := savedMissed;
       i := TokPos - 2;
     end;
     Inc(i);
