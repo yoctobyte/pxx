@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `343a52551808` | 2026-08-15T22:24:30Z | RED (full) | 1133.7s | `343a52551808` RED |
+| plexus | `343a52551808` | 2026-08-15T22:32:10Z | RED (slow) | 447.5s | `343a52551808` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -28,3 +28,4 @@
   - `test-uforth#stringtest`
   - `test-uforth#toolstest`
   </details>
+- **test-uforth#blocktest** (plexus): bad `343a52551808`, last good `c8f5070671be`, 67 commit(s) in range
