@@ -26526,6 +26526,25 @@ begin
   if (procIdx >= 0) and (Procs[procIdx].BodyAddr >= 0) and
      (Procs[procIdx].ParamCount = nparams) then
   begin
+    { SAY SO. Reusing the first def's Proc is what makes the redefinition win,
+      and it also makes it win for the calls written ABOVE it — which CPython
+      binds to the FIRST body, because a `def` is an assignment executed where
+      it stands. That divergence used to be entirely silent, and it is not
+      bounded by "you get the other function's answer": when the two bodies
+      return different TYPES the earlier call site was compiled for the first
+      signature and runs the second body, which printed kilobytes of raw memory
+      in the case that surfaced it.
+
+      A warning is not the fix — the fix is a Proc per def plus positional
+      binding, designed in the ticket and deliberately not attempted here — but
+      it converts a silent wrong value into a message naming both lines, which
+      is the difference between a debuggable program and a haunted one.
+      bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+    if NilPyUserCode and (ProcPyDefTok[procIdx] >= 0) then
+      Warn('Nil Python: `' + name + '` is defined again here; calls written '
+        + 'ABOVE this line will run THIS body, not the earlier one (CPython '
+        + 'binds them to the earlier one). Rename one of the two if that is '
+        + 'not what you meant');
     for i := 0 to nparams - 1 do
     begin
       Procs[procIdx].Params[i].Name := PyHdrPNames[i];

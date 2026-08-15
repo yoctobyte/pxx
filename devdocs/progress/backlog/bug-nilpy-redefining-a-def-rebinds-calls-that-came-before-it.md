@@ -121,3 +121,62 @@ same block also carries a `def len(x)` builtin-shadowing fix).
 in one go: redefinition with calls on both sides, differing arity (the existing
 separate-Proc path, which must keep working), a def shadowing a pylib builtin,
 and a nested def's qualified name.
+
+## 2026-08-16 — the silence is fixed; the binding is designed, not built
+
+Two things, deliberately separated.
+
+### Landed: it now SAYS SO
+
+`PyParseDef`'s same-arity reuse branch warns, naming the redefinition's line:
+
+```
+pascal26:5: warning: Nil Python: `q` is defined again here; calls written ABOVE
+this line will run THIS body, not the earlier one (CPython binds them to the
+earlier one). Rename one of the two if that is not what you meant
+```
+
+Gated on `NilPyUserCode` and on the proc carrying a `ProcPyDefTok` (i.e. it is a
+module-level def the shell pass registered), so a class method and every Pascal
+path are untouched. This does NOT fix the binding — the values are still
+CPython-divergent — but the failure mode was "several kilobytes of raw memory
+with no diagnostic", and a message naming both definitions is the difference
+between a debuggable program and a haunted one. Self-host byte-identical,
+`gate.sh quick` GREEN.
+
+### Designed, NOT built: the actual fix
+
+Worked out far enough to name the hazards, then stopped on this ticket's own
+advice. Three changes, and they only work together:
+
+1. **A Proc per DEF STATEMENT.** `PyRegisterDefShells` currently registers one
+   shell per NAME (`if FindProcInUnit(PyHdrName, -1) < 0`). Register one per def
+   token instead — `ProcPyDefTok` already records where each stands, and the
+   pre-pass already visits each def exactly once.
+2. **`PyParseDef` picks its shell by DEF TOKEN**, not by name. With one Proc per
+   def the same-arity overwrite branch becomes dead for module-level defs and
+   must stay only for the nested/class defs the pre-pass does not register.
+3. **Positional preference in `FindProcInUnit`'s own-scope arm**, split by where
+   the call is: at MODULE level (`CurProc < 0`) prefer the last candidate whose
+   `ProcPyDefTok <= TokPos`; inside a def BODY prefer the highest `ProcPyDefTok`
+   outright — because that body runs later, and CPython binds it then. Today's
+   accidental behaviour is right for the second case and wrong for the first,
+   which is why a naive "first wins" flip re-breaks
+   [[bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs]].
+
+**The two hazards that stopped it**, both in step 3, both in a block whose own
+comments record having broken self-host before:
+
+- `FindProc` returns the *representative* of a same-named set, and
+  `pyparser.inc` reads `Procs[procIdx].RetType` off it to infer expression
+  types. Changing which one is representative is exactly what previously
+  segfaulted `sum(range(i))` and, on the Pascal side, made the compiler fail to
+  compile itself.
+- Multiple same-name Procs are how the DIFFERENT-arity path already works
+  (`def min(a, b, c, d, e)` over the builtin). A positional preference layered
+  over arity matching has to leave that ranking alone.
+
+So it needs the full sibling set green in one go — redefinition with calls on
+both sides, differing arity, a def shadowing a pylib builtin, a nested def's
+qualified name — exactly as the section above already said. Still not a
+between-tasks item; it is now a designed one.
