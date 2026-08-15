@@ -5065,7 +5065,7 @@ function min(l: TPyList; key: Pointer): Variant; overload;
 var i: Integer; bestK, k: Variant;
 begin
   if (l = nil) or (l.count = 0) then
-    raise ValueError.Create('min() arg is an empty sequence');
+    raise ValueError.Create('min() iterable argument is empty');
   Result := l.at(0);
   if key = nil then bestK := Result else bestK := PyCallKey1(key, Result);
   for i := 1 to l.count - 1 do
@@ -5083,7 +5083,7 @@ function max(l: TPyList; key: Pointer): Variant; overload;
 var i: Integer; bestK, k: Variant;
 begin
   if (l = nil) or (l.count = 0) then
-    raise ValueError.Create('max() arg is an empty sequence');
+    raise ValueError.Create('max() iterable argument is empty');
   Result := l.at(0);
   if key = nil then bestK := Result else bestK := PyCallKey1(key, Result);
   for i := 1 to l.count - 1 do

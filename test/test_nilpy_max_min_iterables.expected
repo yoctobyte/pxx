@@ -1,0 +1,15 @@
+z a
+z a
+3 1
+z a
+none none
+b b
+3 1
+c a
+3 0
+99 97
+6 2
+9 2
+[1, 2] [3]
+7 3 2.5 a
+ValueError: max() iterable argument is empty

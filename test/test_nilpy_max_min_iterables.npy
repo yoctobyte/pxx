@@ -1,0 +1,32 @@
+# max()/min() over every iterable shape — bug-nilpy-max-and-min-do-not-iterate-
+# a-dict. A dict yields its KEYS here, as it does for `for`, list() and
+# sorted(). Diffed against CPython.
+
+d = {"b": 2, "a": 1, "z": 3}
+
+# the dict rows this ticket is about
+print(max(d), min(d))
+print(max(d.keys()), min(d.keys()))
+print(max(d.values()), min(d.values()))
+print(max(d, default="none"), min(d, default="none"))
+print(max({}, default="none"), min({}, default="none"))
+print(max(d, key=len), min(d, key=len))
+
+# ...and the shapes that already worked, so the normalisation is pinned as ONE
+# behaviour rather than a dict special case
+print(max([3, 1, 2]), min([3, 1, 2]))
+print(max("bca"), min("bca"))
+print(max(range(4)), min(range(4)))
+print(max(b"abc"), min(b"abc"))
+print(max(x * 2 for x in [1, 3, 2]), min(x * 2 for x in [1, 3, 2]))
+print(max((5, 2, 9)), min((5, 2, 9)))
+print(max([[1, 2], [3]], key=len), min([[1, 2], [3]], key=len))
+
+# the two-argument numeric form is NOT the iterable form and must stay itself
+print(max(3, 7), min(3, 7), max(2.5, 1.5), min("a", "b"))
+
+# an empty sequence with no default still raises, as CPython does
+try:
+    max([])
+except ValueError as e:
+    print("ValueError:", e)
