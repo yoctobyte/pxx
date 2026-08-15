@@ -1,0 +1,59 @@
+---
+track: A
+prio: 55
+type: feature
+blocked-by: []
+summary: "The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers."
+---
+
+# Inline float-returning and record-returning leaf functions
+
+- **Type:** feature (optimizer — **Track O**, file-owned by **Track A**:
+  `compiler/**`, the inline pass). Filed by Track B, which measured it and does
+  not edit the optimizer.
+- Found 2026-08-15 while making `lib/rtl/math.pas`'s transcendentals fast.
+
+## The measurement
+
+One `sin` kernel call, the same arithmetic three ways:
+
+| | time | accuracy |
+| --- | --- | --- |
+| double-double Taylor over the dd primitives | 7.96 us | correctly rounded |
+| **identical arithmetic, hand-inlined by me** | **2.11 us** | correctly rounded, **bit-identical** |
+| plain-double minimax kernel | 0.029 us | ~1 ulp |
+
+Row 2 is the one that matters here. Nothing about the computation changed — same
+operations, same order, same output bits — only the calls went away. **3.8x, for
+free, from a transform the compiler already performs on integer code.**
+
+The dd kernels are the extreme case (a `DdMul` is ~10 float ops behind a call,
+and a Horner loop makes 26 of them), but the shape is everywhere: small leaf
+functions returning `Double` or a two-field record are exactly what numeric
+library code is made of.
+
+## What the inliner does today
+
+It accepts int/ordinal-returning leaves and rejects anything returning a float
+or a record. Worth checking whether that is a deliberate ABI-return-slot
+restriction or just where the implementation stopped — the by-value float return
+path and the record return path both work correctly for ordinary calls, so the
+values themselves are not the obstacle.
+
+## Suggested scope
+
+Leaf functions only, no branches or one branch, returning `Double`/`Single` or a
+record of two such fields — which covers `DdMul`, `Dd2Sum`, `DdFast2Sum`,
+`DdAdd`, `DdMulD`, `DdBits` and their peers, i.e. the whole hot set. That is a
+much smaller change than general float inlining and captures most of the 3.8x.
+
+Per Track O's rule, land behind `-O3` and promote to `-O2` per-pass after the
+full gate.
+
+## Gate
+
+`make test` + self-host byte-identical (the compiler is itself full of small
+leaf functions, so the fixedpoint is a real test of this), plus
+`test/lib_math_correctly_rounded.pas` under `-dPXX_FLOAT_EXACT` producing the
+**same bits** at `-O2` and `-O3` — inlining must not change a result, and this
+test is the sharpest available detector of that.

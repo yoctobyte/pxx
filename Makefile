@@ -9170,8 +9170,18 @@ lib-test: pxx-stable-check
 	# comparison would measure our float formatter as much as the function).
 	# The Log10 cases at the end are ones where GLIBC is the wrong one — verified
 	# against 60-digit arithmetic — so do not "fix" them to match CPython.
-	$(PXX_STABLE) -Fulib/rtl test/lib_math_correctly_rounded.pas $(TESTTMP)/lib_math_correctly_rounded
+	# -dPXX_FLOAT_EXACT is REQUIRED here: this test asserts the last bit, which
+	# only the double-double path delivers. The default path is ~1000x faster
+	# and ~1 ulp, so without the flag five rows fail for a reason that is not a
+	# defect — see devdocs/dev/float-policy.md.
+	$(PXX_STABLE) -dPXX_FLOAT_EXACT -Fulib/rtl test/lib_math_correctly_rounded.pas $(TESTTMP)/lib_math_correctly_rounded
 	test "$$($(TESTTMP)/lib_math_correctly_rounded | tail -n 1)" = "MATHROUND OK"
+	# ...and its companion: the DEFAULT (fast) path, which is what every program
+	# that does not pass the flag actually gets. Accuracy is a 2-ulp TOLERANCE;
+	# behaviour (signed zeros, NaN, Inf, and argument reduction out to 1e100) is
+	# asserted EXACTLY, because those are wrong values rather than rounding.
+	$(PXX_STABLE) -Fulib/rtl test/lib_math_fast_tolerance.pas $(TESTTMP)/lib_math_fast_tolerance
+	test "$$($(TESTTMP)/lib_math_fast_tolerance | tail -n 1)" = "MATHFAST OK"
 	# Canary for a change in ANOTHER lane: a Pascal RTL name that collides with
 	# a libc one silently hijacks it in every C program (pxxcio does `uses math`).
 	# nan(tag): positive quiet NaN carrying the tag as its payload, base 0 —

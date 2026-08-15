@@ -445,6 +445,21 @@ type
     Lo: Double;
   end;
 
+  { sin and cos of one argument, computed together — the reduction and the
+    quadrant fold are shared, so returning both costs almost nothing over one.
+
+    A RECORD rather than two `var sn, cs: Double` out-parameters, and that is
+    load-bearing on i386: any access through a by-reference FLOAT parameter
+    faults there
+    ([[bug-a-i386-var-float-parameter-faults-on-first-access]]), while a record
+    by reference is fine. It also matches SinCosDd, which pairs its two TDds
+    the same way. Revert to plain out-parameters only if that bug is fixed AND
+    the pair reads better, which it does not. }
+  TSinCos = record
+    Sn: Double;
+    Cs: Double;
+  end;
+
 function DdBits(b: Int64): Double;
 begin
   Result := PSqrtDouble(@b)^;
@@ -938,6 +953,56 @@ begin
   Result := q;
 end;
 
+{ ---- the FAST kernels (the DEFAULT) ----
+
+  Minimax polynomials on the reduced argument, plain double, no divisions —
+  fdlibm's __kernel_sin / __kernel_cos shape and coefficients (Sun
+  Microsystems, freely distributable). About 1 ulp, which is libm's own
+  accuracy class, at 0.029 us against the dd kernel's 7.96.
+
+  `y` is the reduced argument's TAIL (r.Lo). Passing it in is what keeps this
+  accurate near a multiple of pi/2, where r.Hi alone has lost most of its
+  significant bits — the reduction stays exact in this mode, only the kernel
+  is approximate. See devdocs/dev/float-policy.md. }
+const
+  KS1 = -1.66666666666666324348e-01;  KS2 =  8.33333333332248946124e-03;
+  KS3 = -1.98412698298579493134e-04;  KS4 =  2.75573137070700676789e-06;
+  KS5 = -2.50507602534068634195e-08;  KS6 =  1.58969099521155010221e-10;
+  KC1 =  4.16666666666666019037e-02;  KC2 = -1.38888888888741095749e-03;
+  KC3 =  2.48015872894767294178e-05;  KC4 = -2.75573143513906633035e-07;
+  KC5 =  2.08757232129817482790e-09;  KC6 = -1.13596475577881948265e-11;
+
+function FastSinK(x, y: Double): Double;
+var z, v, r: Double;
+begin
+  z := x * x;
+  v := z * x;
+  r := KS2 + z * (KS3 + z * (KS4 + z * (KS5 + z * KS6)));
+  { the tail enters as y - (z*(0.5*y - v*r) - v*KS1) rather than as a plain
+    addition: sin(x+y) = sin x + y cos x to first order, and cos x is ~1 here }
+  Result := x - ((z * (0.5 * y - v * r) - y) - v * KS1);
+end;
+
+function FastCosK(x, y: Double): Double;
+var z, r, hz, a, qx, ax: Double;
+begin
+  z := x * x;
+  r := z * (KC1 + z * (KC2 + z * (KC3 + z * (KC4 + z * (KC5 + z * KC6)))));
+  ax := Abs(x);
+  if ax < 0.3 then
+  begin
+    Result := 1.0 - (0.5 * z - (z * r - x * y));
+    Exit;
+  end;
+  { fdlibm's split for the larger half of the range: subtracting a constant qx
+    first keeps `1 - 0.5*z` from cancelling away the polynomial's contribution }
+  if ax > 0.78125 then qx := 0.28125
+  else qx := DdLdexp(ax, -2);
+  hz := 0.5 * z - qx;
+  a := 1.0 - qx;
+  Result := a - (hz - (z * r - x * y));
+end;
+
 { sin/cos of a reduced dd argument, |r| <= ~0.786, by a 13-term dd Taylor in
   Horner form. }
 function SinKernel(r: TDd): TDd;
@@ -967,7 +1032,10 @@ begin
 end;
 
 { sin and cos together — they share the reduction and both kernels, and every
-  caller here wants one or the other of the pair. q selects which. }
+  caller here wants one or the other of the pair. q selects which.
+
+  Used by the EXACT path only; the fast path is SinCosFast below, which shares
+  the same reduction. }
 procedure SinCosDd(x: Double; var sn, cs: TDd);
 var r, a, b: TDd; q: Integer;
 begin
@@ -983,40 +1051,125 @@ begin
   end;
 end;
 
+{ Plain-double Cody-Waite, for the fast path and moderate |x| (n fits 28 bits,
+  i.e. |x| < ~4e8). Same three pi/2 chunks as TrigReduce — nd*chunk is exact for
+  |n| < 2^28 — but the bookkeeping is four flops instead of ten dd CALLS, which
+  is where the time actually went: with the dd reduction the fast kernels cost
+  238 ms per 1M sin+cos pairs and the reduction cost another 770.
+
+  The result is a head plus a tail, exactly what the kernels want. Above the
+  chunk range this is not used and TrigReduce/TrigReduceBig take over, so the
+  huge-argument accuracy is untouched. }
+function FastTrigReduce(x: Double; var r: TDd): Integer;
+var nd, s1, s2, t, lo: Double; n: Int64;
+begin
+  nd := DdRint(x * DdBits($3FE45F306DC9C883));          { x * 2/pi }
+  n := Trunc(nd);
+  if n = 0 then
+  begin
+    r.Hi := x; r.Lo := 0.0;
+    Result := 0;
+    Exit;
+  end;
+  s1 := x  - nd * DdBits($3FF921FB60000000);            { chunk A, exact }
+  s2 := s1 - nd * DdBits($BE6777A5C0000000);            { chunk B, exact }
+  t  := s2 - nd * DdBits($BCDEE59DA0000000);            { chunk C }
+  { the residual of that last subtraction, plus the dd tail term — this is what
+    keeps the answer right when x sits close to a multiple of pi/2 and s2 has
+    cancelled away most of its bits }
+  lo := (s2 - t) - nd * DdBits($BCDEE59DA0000000);
+  lo := lo - nd * DdBits($3B298A2E03707345);
+  r.Hi := t + lo;
+  r.Lo := lo - (r.Hi - t);
+  Result := Integer(n and 3);
+end;
+
+{ Same reduction, fast kernels. The reduction is what makes Sin(1e10) mean
+  anything, so it is identical in both modes — only the kernel differs. }
+procedure SinCosFast(x: Double; var s: TSinCos);
+var r: TDd; a, b: Double; q: Integer;
+begin
+  if Abs(x) < 4.0e8 then
+    q := FastTrigReduce(x, r)
+  else
+  begin
+    { past the Cody-Waite chunks' range the reduction has to be the careful
+      one — this is the path that makes Sin(1e10) mean anything, and it is the
+      same code the exact mode uses }
+    if Abs(x) >= 1.0e8 then q := TrigReduceBig(Abs(x), r)
+    else q := TrigReduce(x, r);
+  end;
+  a := FastSinK(r.Hi, r.Lo);
+  b := FastCosK(r.Hi, r.Lo);
+  case q of
+    0: begin s.Sn := a; s.Cs := b; end;
+    1: begin s.Sn := b; s.Cs := -a; end;
+    2: begin s.Sn := -a; s.Cs := -b; end;
+  else begin s.Sn := -b; s.Cs := a; end;
+  end;
+end;
+
 { sin/cos/tan. The big-argument path reduces |x| and the caller reapplies the
   sign, because sin and tan are ODD and cos is EVEN — folding that into the
   reduction instead would need a second quadrant mapping. }
 function Sin(x: Double): Double;
+{$ifdef PXX_FLOAT_EXACT}
 var sn, cs: TDd;
+{$else}
+var sc: TSinCos;
+{$endif}
 begin
   if x <> x then begin Result := x; Exit; end;                  { NaN }
   if x = 0.0 then begin Result := x; Exit; end;                 { keeps -0 }
   if (x - x) <> 0.0 then begin Result := (x - x) / (x - x); Exit; end;  { Inf -> NaN }
+{$ifdef PXX_FLOAT_EXACT}
   SinCosDd(Abs(x), sn, cs);
   Result := sn.Hi + sn.Lo;
+{$else}
+  SinCosFast(Abs(x), sc);
+  Result := sc.Sn;
+{$endif}
   if x < 0.0 then Result := -Result;
 end;
 function Cos(x: Double): Double;
+{$ifdef PXX_FLOAT_EXACT}
 var sn, cs: TDd;
+{$else}
+var sc: TSinCos;
+{$endif}
 begin
   if x <> x then begin Result := x; Exit; end;
   if (x - x) <> 0.0 then begin Result := (x - x) / (x - x); Exit; end;
+{$ifdef PXX_FLOAT_EXACT}
   SinCosDd(Abs(x), sn, cs);              { cos is even — no sign fixup }
   Result := cs.Hi + cs.Lo;
+{$else}
+  SinCosFast(Abs(x), sc);
+  Result := sc.Cs;
+{$endif}
 end;
 
 function Tan(x: Double): Double;
+{$ifdef PXX_FLOAT_EXACT}
 var sn, cs, t: TDd;
+{$else}
+var sc: TSinCos;
+{$endif}
 begin
   if x <> x then begin Result := x; Exit; end;
   if x = 0.0 then begin Result := x; Exit; end;                 { keeps -0 }
   if (x - x) <> 0.0 then begin Result := (x - x) / (x - x); Exit; end;
+{$ifdef PXX_FLOAT_EXACT}
   { the QUOTIENT is formed in double-double, not from two rounded doubles:
     Sin(x)/Cos(x) rounds twice before dividing, and near an odd multiple of
     pi/2 the divisor's own error is what the answer is made of. }
   SinCosDd(Abs(x), sn, cs);
   t := DdDiv(sn, cs);
   Result := t.Hi + t.Lo;
+{$else}
+  SinCosFast(Abs(x), sc);
+  Result := sc.Sn / sc.Cs;
+{$endif}
   if x < 0.0 then Result := -Result;
 end;
 

@@ -4,6 +4,7 @@ prio: 35
 type: decide
 blocked-by: []
 summary: "lib/rtl/math.pas's transcendentals are correctly rounded and ~1000x slower than libm — MEASURED: Ln+Exp 16,480 ms per 1M pairs against glibc's 13 ms, and the new dd Sin/Cos 29,383 ms against a plain-double 673 ms. That is the SHIPPED standard today, not a proposal. Question: is one correctly-rounded tier the intended answer for a language whose demos draw graphics, or does the RTL want a fast tier alongside it? Three options, recommendation inside."
+status: decided
 ---
 
 # Decide: does the RTL math want a FAST tier next to the correct one?
@@ -87,3 +88,57 @@ Whether the correctness fixes were right — they were, and the same sweep shows
 pxx is now correctly rounded where **glibc is not** (sin 3, cos 2, tan 6 wrong
 out of 337 against 400-digit arithmetic; asin/acos 7 of 3000). This ticket is
 only about whether a second, faster tier should exist beside them.
+
+---
+
+## DECIDED 2026-08-15 — fast by default, exact behind a flag
+
+The user's ruling, verbatim:
+
+> *"i have the belly full of those floating point issues. so here is the plan. we
+> make a mode --strict-float. if that is set, we mimic the exact outcome. default
+> would be like 'fast float' where we really dont care the last insignificant
+> bit(s). this is not the first time, and we are wasting time on hunting
+> something that simply is not an issue. ... so - default is fast floats (as fast
+> as we can). if a testing lib insists on slow(er) but more accurate floats -
+> sure. it would also mean any minor divergion is no longer a bug, just a
+> recorded issue."*
+
+Two clarifications he attached, both worth keeping because both are easy to get
+wrong:
+
+- The accuracy work that produced this question was **not** wasted — it fixed
+  real wrong VALUES. What is dropped is the last-bit *guarantee*, not the fixes.
+- **"Fast" is not `-ffast-math`.** Nothing moves to `Single`, nothing reassociates,
+  nothing flushes to zero. Still IEEE double throughout.
+
+Also settled by measurement, against two pieces of folklore raised in the
+question: there is no usable hardware trig on the targets that matter (x87's
+`fsin` is slower AND less accurate; x86-64 SSE and aarch64 have none), and
+80-bit extended buys 11 bits where double-double buys 53. `sqrtsd`/`fsqrt` IS
+exact hardware and is used.
+
+**The policy now lives in `devdocs/dev/float-policy.md`** — that file, not this
+ticket, is what to read before filing or "fixing" a float-accuracy issue.
+
+### Landed with the decision
+
+- `Sin`/`Cos`/`Tan` fast by default: **261 ms** per 1M sin+cos, down from
+  31,828 ms — 122x — at ~1 ulp (`Tan` 2 ulp) over 8,204 arguments.
+- `-dPXX_FLOAT_EXACT` selects the double-double path.
+  `test/lib_math_correctly_rounded.pas` is built with it in the Makefile.
+- `test/lib_math_fast_tolerance.pas` (new) tests the default path: accuracy as a
+  2-ulp TOLERANCE, behaviour (signed zeros, NaN, Inf, reduction out to 1e100)
+  asserted EXACTLY. Green on x86-64, i386, aarch64, arm32, riscv32.
+
+### Deliberately left open
+
+- **The flag NAME.** The user said "strict float" is probably the wrong name and
+  did not pick a replacement. What exists today is the conditional define
+  `-dPXX_FLOAT_EXACT`; a driver-level spelling (`--float=exact`?) is a Track A
+  change and is not filed yet, on purpose — name it first.
+- **`Ln`/`Exp` are still exact-only**, and they are the *worse* ratio (1270x).
+  [[feature-b-rtl-fast-ln-exp-path]].
+
+## Log
+- 2026-08-15 — decided, commit PENDING-COMMIT.

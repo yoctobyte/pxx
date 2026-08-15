@@ -1,0 +1,158 @@
+program lib_math_fast_tolerance;
+{ The DEFAULT (fast) float path — devdocs/dev/float-policy.md.
+
+  The companion to lib_math_correctly_rounded, which asserts the last bit and
+  is built with -dPXX_FLOAT_EXACT. This one asserts what the default mode
+  actually promises, and the split matters: a test that demands the last bit
+  from the fast path would fail for a reason that is not a defect, and the
+  next agent would "fix" it by making the fast path slow again.
+
+  Two different kinds of assertion here, and the difference is the whole point:
+
+  - ACCURACY is a TOLERANCE. Within 2 ulp of glibc, and that is all. 1-2 ulp is
+    the cost of arithmetic in 53 bits, it is libm's own contract, and it is
+    explicitly NOT a bug.
+  - BEHAVIOUR is EXACT. Signed zeros, infinities, NaN, and the sign and
+    magnitude of a result are asserted bit for bit in BOTH modes, because those
+    are not accuracy — a lost -0 or a NaN where a number belongs is a wrong
+    value at any speed.
+
+  The large-argument rows are the ones worth keeping honest. Sin(1e10) was
+  2.4 BILLION ulp out before the reduction was fixed, and the fast path uses
+  the SAME reduction, so it stays within 2 ulp here. An error that grows with
+  the argument is a bug in either mode. }
+uses math, sysutils;
+
+type
+  PI64 = ^Int64;
+
+var
+  failures: Integer;
+
+function Bits(x: Double): Int64;
+begin
+  Result := PI64(@x)^;
+end;
+
+{ ulp distance between two doubles of the same sign, via the monotone bit
+  pattern. Only meaningful for finite values, which is all this uses it on. }
+function UlpApart(a, b: Double): Int64;
+var ba, bb: Int64;
+begin
+  ba := Bits(a); bb := Bits(b);
+  if ba >= bb then Result := ba - bb else Result := bb - ba;
+end;
+
+{ accuracy: within `tol` ulp of the reference.
+
+  The reference arrives as a DECIMAL LITERAL, not a hex bit pattern: 17
+  significant digits round-trip a double exactly, and the alternative wanted
+  StrToInt64('$BFE1...'), which overflows a signed Int64 the moment the sign
+  bit is set. Values are glibc's, generated rather than typed. }
+procedure CheckUlp(got, want: Double; tol: Int64; const tag: string);
+var d: Int64;
+begin
+  d := UlpApart(got, want);
+  if d <= tol then
+    writeln(tag, '=ok')
+  else
+  begin
+    writeln(tag, '=FAIL got ', IntToHex(Bits(got), 16), ' want ',
+            IntToHex(Bits(want), 16), ' (', d, ' ulp, tolerance ', tol, ')');
+    failures := failures + 1;
+  end;
+end;
+
+{ behaviour: exact, no tolerance. Hex here because the values being asserted
+  ARE bit patterns — a signed zero has no distinguishing decimal form. }
+procedure CheckExact(got: Double; const wantHex: string; const tag: string);
+begin
+  if IntToHex(Bits(got), 16) = wantHex then
+    writeln(tag, '=ok')
+  else
+  begin
+    writeln(tag, '=FAIL got ', IntToHex(Bits(got), 16), ' want ', wantHex);
+    failures := failures + 1;
+  end;
+end;
+
+procedure SayBool(const tag: string; b: Boolean);
+begin
+  if b then writeln(tag, '=ok')
+  else begin writeln(tag, '=FAIL'); failures := failures + 1; end;
+end;
+
+var
+  x, z, inf, nan: Double;
+begin
+  failures := 0;
+  z := 0.0;
+  inf := 1.0 / z;
+  nan := z / z;
+
+  { ---- accuracy: within 2 ulp of glibc, and no more is promised ---- }
+  CheckUlp(Sin(0.5), 0.479425538604203, 2, 'sin-0.5');
+  CheckUlp(Cos(0.5), 0.8775825618903728, 2, 'cos-0.5');
+  CheckUlp(Tan(0.5), 0.5463024898437905, 2, 'tan-0.5');
+  CheckUlp(Sin(3.7), -0.5298361409084934, 2, 'sin-3.7');
+  CheckUlp(Cos(3.7), -0.848100031710408, 2, 'cos-3.7');
+  CheckUlp(Sin(123.456), -0.8039373685728239, 2, 'sin-123');
+  CheckUlp(Cos(123.456), -0.5947139710921574, 2, 'cos-123');
+
+  { LARGE arguments. These are the rows that were 85 / 1,220,648 /
+    2,461,005,116 ulp out before the reduction was fixed. The fast path shares
+    that reduction, so a tolerance of 2 still holds here — and if this ever
+    fails by a LARGE number, the reduction has broken, which IS a bug. }
+  CheckUlp(Sin(100.0), -0.5063656411097588, 2, 'sin-100');
+  CheckUlp(Cos(100.0), 0.8623188722876839, 2, 'cos-100');
+  CheckUlp(Sin(1.0e6), -0.34999350217129294, 2, 'sin-1e6');
+  CheckUlp(Cos(1.0e6), 0.9367521275331447, 2, 'cos-1e6');
+  CheckUlp(Sin(1.0e10), -0.4875060250875107, 2, 'sin-1e10');
+  CheckUlp(Cos(1.0e10), 0.873119622676856, 2, 'cos-1e10');
+  CheckUlp(Sin(1.0e100), -0.3806377310050287, 2, 'sin-1e100');
+  CheckUlp(Cos(1.0e100), 0.9247242387519338, 2, 'cos-1e100');
+
+  { the inverse family, the logs, and Sqrt — which is EXACT even here, because
+    it is one hardware instruction on x86-64 and correctly rounded by IEEE
+    mandate on the others }
+  CheckUlp(ArcSin(0.5), 0.5235987755982989, 2, 'asin-0.5');
+  CheckUlp(ArcCos(0.5), 1.0471975511965979, 2, 'acos-0.5');
+  CheckUlp(ArcTan(2.0), 1.1071487177940904, 2, 'atan-2');
+  CheckUlp(ArcTan2(0.5, 1.0), 0.4636476090008061, 2, 'atan2');
+  CheckUlp(Ln(2.0), 0.6931471805599453, 2, 'ln-2');
+  CheckUlp(Exp(1.0), 2.718281828459045, 2, 'exp-1');
+  CheckUlp(Sqrt(2.0), 1.4142135623730951, 0, 'sqrt-2-exact');
+
+  { ---- behaviour: EXACT in both modes, no tolerance ---- }
+  CheckExact(Sin(0.0),  '0000000000000000', 'sin-plus-zero');
+  CheckExact(Sin(-z),   '8000000000000000', 'sin-minus-zero');
+  CheckExact(Cos(0.0),  '3FF0000000000000', 'cos-plus-zero');
+  CheckExact(Cos(-z),   '3FF0000000000000', 'cos-minus-zero');
+  CheckExact(Tan(-z),   '8000000000000000', 'tan-minus-zero');
+  CheckExact(Sqrt(-z),  '8000000000000000', 'sqrt-minus-zero');
+  CheckExact(ArcTan2(-z, -1.0), 'C00921FB54442D18', 'atan2-minus-zero-neg');
+  CheckExact(ArcTan2(-z,  1.0), '8000000000000000', 'atan2-minus-zero-pos');
+
+  SayBool('sin-inf-nan', Sin(inf) <> Sin(inf));
+  SayBool('cos-inf-nan', Cos(inf) <> Cos(inf));
+  SayBool('tan-inf-nan', Tan(inf) <> Tan(inf));
+  SayBool('sin-nan-nan', Sin(nan) <> Sin(nan));
+  SayBool('sqrt-neg-nan', Sqrt(-1.0) <> Sqrt(-1.0));
+  SayBool('asin-domain-nan', ArcSin(2.0) <> ArcSin(2.0));
+  SayBool('ln-zero-neginf', Ln(0.0) < -1.0e308);
+  SayBool('ln-neg-nan', Ln(-1.0) <> Ln(-1.0));
+
+  { bounded, not growing: |sin| <= 1 must hold at every magnitude, which is the
+    cheap check that catches a reduction that has come apart }
+  SayBool('sin-bounded-1e10',  Abs(Sin(1.0e10))  <= 1.0);
+  SayBool('sin-bounded-1e100', Abs(Sin(1.0e100)) <= 1.0);
+  SayBool('sin-bounded-1e300', Abs(Sin(1.0e300)) <= 1.0);
+  SayBool('cos-bounded-1e300', Abs(Cos(1.0e300)) <= 1.0);
+  SayBool('pythagoras-1e10',
+          Abs(Sin(1.0e10) * Sin(1.0e10) + Cos(1.0e10) * Cos(1.0e10) - 1.0) < 1.0e-15);
+  SayBool('pythagoras-1e100',
+          Abs(Sin(1.0e100) * Sin(1.0e100) + Cos(1.0e100) * Cos(1.0e100) - 1.0) < 1.0e-15);
+
+  if failures = 0 then writeln('MATHFAST OK')
+  else writeln('MATHFAST ', failures, ' FAILURES');
+end.
