@@ -126,4 +126,4 @@ module and tkinter+configparser all still build. The corpora go to Track T with
 the pushed sha — this is a dialect change wide enough to want that sweep.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 74a93c8ee.
