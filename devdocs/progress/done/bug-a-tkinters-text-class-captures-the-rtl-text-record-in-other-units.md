@@ -139,4 +139,4 @@ order, "flat" only bites between units that DO see each other. That decision is
 still worth taking; it is no longer what makes this class of bug reachable.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 8c8a95a69.
