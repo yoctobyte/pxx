@@ -1127,7 +1127,16 @@ class Job:
             # point every invocation at the run's snapshot (see RUN_COMPILER)
             if os.path.exists(RUN_COMPILER):
                 body = COMPILER_PATH_RE.sub(RUN_COMPILER, body)
-            parts.append("{\n%s\n} || exit $?" % body)
+            # SUBSHELL, not a brace group: make gives every recipe line its own
+            # shell, so a line's `cd` cannot reach the next one.  A brace group
+            # let it — test-nilpy's `cd test/nilpy_units/pkgcorpus && ...`
+            # (whose compile hides behind the cd, so COMPILE_RE does not split
+            # a job there) moved the cwd, and the NEXT line's
+            # `diff -u test/test_nilpy_package_imports.expected -` then failed
+            # with "No such file or directory" — reported against the
+            # unrelated test that happened to open the job.
+            # bug-t-a-recipe-lines-cd-leaks-into-the-next-line
+            parts.append("(\n%s\n) || exit $?" % body)
         return "\n".join(parts) + "\n"
 
 
