@@ -9561,6 +9561,17 @@ begin
   begin
     CurASTNode := PyClassCreateExpr;
     LastExprTk := tyClass;
+    { `C(5)[2]` — a SUBSCRIPT applied straight to a construction. `C(5).m()`
+      is picked up downstream, so only the bracket was missing, and it was
+      missing as a PARSE ERROR ("unexpected token") on a shape CPython accepts.
+      Handed to the selector loop, exactly as the Pascal cast arm hands its
+      own result over. }
+    if PyExprMode and (CurTok.Kind = tkLBrack) and
+       (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) then
+    begin
+      CurASTNode := PyParseClassRecordSelectors(CurASTNode,
+                      ResolveNodeRec(CurASTNode), LastExprTk);
+    end;
     Exit;
   end;
   { `set(xs)` in ANY expression position (`return set(...)`, an argument, a

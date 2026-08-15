@@ -31494,6 +31494,75 @@ begin
         CurASTNode := node;
         continue;
       end;
+      { A user class declaring `__getitem__` as the CHAINED base — `mk(5)[2]`,
+        `C(5)[2]`, `obj.child()[k]`. A NAMED receiver has dispatched this since
+        the subscript protocol landed (ParseLValueAST's loop); this loop never
+        did, so the subscript fell to the raw AN_INDEX below — pointer
+        arithmetic on the instance handle — and `mk(5)[2]` PRINTED THE OBJECT
+        POINTER where CPython prints the element. Silent, and only when the
+        receiver was an expression rather than a name, which is the
+        one-concept-two-parsers shape this function's header already records
+        twice (project_nilpy_lvalue_vs_selector_path_must_both_know).
+
+        pylib's OWN classes are excluded: TPyList and friends carry a DEFAULT
+        PROPERTY and are served by the arm below, the same exclusion the named
+        path makes. }
+      if (tk = tyClass) and (recId >= REC_UCLASS_BASE) and
+         (not PyRecIsPylibOwnClass(recId)) and
+         ((FindUMeth(recId - REC_UCLASS_BASE, '__getitem__') >= 0) or
+          (FindUMeth(recId - REC_UCLASS_BASE, '__setitem__') >= 0)) then
+      begin
+        ci := recId - REC_UCLASS_BASE;
+        { WRITE or read? Peek past the balanced [...] for a trailing '=', the
+          same way the default-property write arm below settles the same
+          question. `mk()[k] = v` used to be refused outright ("expected
+          expression"), so the chained spelling could read nothing and write
+          nothing. }
+        isAssign := False;
+        i := TokPos - 1; w := 0;            { TokPos-1 = the '[' }
+        while i < TokCount do
+        begin
+          if Tokens[i].Kind = tkLBrack then Inc(w)
+          else if Tokens[i].Kind = tkRBrack then
+          begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+          Inc(i);
+        end;
+        if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+        Next;                     { consume '[' }
+        PyParseBoolExpr;
+        margIdx := CurASTNode;    { the key }
+        Expect(tkRBrack, ']');
+        if isAssign then
+        begin
+          Expect(tkAssign, '=');
+          PyParseBoolExpr;
+          if FindUMeth(ci, '__setitem__') < 0 then
+          begin
+            node := PyClassErrCallNode('PyNoSetitemError', ci);
+            if node < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
+          end
+          else
+            node := PyCallMeth2(ci, '__setitem__', node, margIdx, CurASTNode);
+          outTk := IntToTypeKind(ASTTk[node]);
+          Result := node;
+          Exit;
+        end;
+        if FindUMeth(ci, '__getitem__') < 0 then
+        begin
+          { declares only __setitem__: a READ has no getter, and CPython raises
+            at RUN time — the same trade the named path makes }
+          node := PyNotSubscriptableNode(ci);
+          if node < 0 then Error('Nil Python: pylib (not-subscriptable) not loaded');
+          tk := tyInt64; recId := REC_NONE;
+          CurASTNode := node;
+          continue;
+        end;
+        node := PyCallMeth1(ci, '__getitem__', node, margIdx);
+        tk := IntToTypeKind(ASTTk[node]);
+        recId := ResolveNodeRec(node);
+        CurASTNode := node;
+        continue;
+      end;
       dfCi := -1;
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;

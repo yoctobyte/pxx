@@ -4348,8 +4348,13 @@ begin
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
 end;
 
+{ Forward: the arity-2 dunder dispatcher, declared far below. A variant-held
+  user object needs it HERE, where the receiver has no static class. }
+function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
+                          const dunder: AnsiString; var res: Variant): Boolean; forward;
+
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
-var o: TObject; ki: Int64; tg: Int64;
+var o: TObject; ki: Int64; tg: Int64; uv: Variant; nilo: TObject;
 begin
   { CHECK THE TAG BEFORE CASTING. This cast to TObject was unconditional, so a
     variant holding a STRING had its character data dereferenced as an object
@@ -4361,6 +4366,7 @@ begin
     pyvar_slice, ten lines below, has always tested `pyvartag(v) = 6` first --
     the same predicate written in two places, and only one of them grew the
     string case (bug-nilpy-indexing-an-unannotated-str-parameter-segfaults). }
+  nilo := nil;                       { the dispatcher's unused `other` operand }
   tg := pyvartag(v);
   if (tg = 6) or (tg = 5) then
   begin
@@ -4392,6 +4398,15 @@ begin
     if ki < 0 then ki := ki + TPyBytes(o).count;
     Result := pyvar_of_int(TPyBytes(o).at(ki));
   end
+  { A USER class arriving as a bare variant handle. A statically-typed receiver
+    dispatches __getitem__ in the frontend; this one has no static class, so
+    `xs[0][3]` over a list of objects raised "not subscriptable" for a class
+    that plainly declares the member. The arity-2 dispatcher already covers
+    every RetKind the frontend emits, and a class without __getitem__ answers
+    False and keeps the TypeError.
+    bug-nilpy-a-chained-subscript-does-not-see-getitem }
+  else if PyUserArithCall1(o, nilo, key, '__getitem__', uv) then
+    Result := uv
   else
     raise TypeError.Create('object is not subscriptable');
 end;

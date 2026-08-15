@@ -1,0 +1,15 @@
+named 7 5
+call 7
+ctor 7
+nested-key 7
+chained-call 2
+arith 9
+in-list 4 5
+in-dict 8
+loop 11
+loop 12
+write-named 1
+write-then-read 2
+write-call-result
+key-call 7
+TEST-OK

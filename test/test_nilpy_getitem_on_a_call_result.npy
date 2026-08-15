@@ -1,0 +1,72 @@
+# The subscript protocol reached from every RECEIVER SHAPE, not just a named
+# one. `mk(5)[2]` printed the object POINTER (the chained selector loop fell to
+# a raw array index over the instance handle), `C(5)[2]` did not parse at all,
+# `mk()[k] = v` was refused, and a user object held in a VARIANT -- `xs[0][3]`
+# over a list of them -- raised "not subscriptable" for a class that declares
+# the member.
+# bug-nilpy-a-chained-subscript-does-not-see-getitem
+
+
+class C:
+    def __init__(self, v):
+        self.v = v
+
+    def __getitem__(self, i):
+        return self.v + i
+
+
+class Box:
+    def __init__(self):
+        self.d = {}
+
+    def __getitem__(self, k):
+        return self.d[k]
+
+    def __setitem__(self, k, v):
+        self.d[k] = v
+
+
+def mk(v):
+    return C(v)
+
+
+def mkbox():
+    return Box()
+
+
+# a NAMED receiver -- the shape that always worked, as the control
+c = C(5)
+print("named", c[2], c[0])
+
+# a call result, and a construction
+print("call", mk(5)[2])
+print("ctor", C(5)[2])
+print("nested-key", mk(5)[C(1)[1]])
+print("chained-call", mk(mk(1)[1])[0])
+
+# arithmetic on two subscripted call results, so neither is re-evaluated wrong
+print("arith", mk(5)[2] + mk(1)[1])
+
+# a user object held in a VARIANT: the element of a list, and a dict value
+xs = [mk(1), mk(2)]
+print("in-list", xs[0][3], xs[1][3])
+d = {"a": mk(7)}
+print("in-dict", d["a"][1])
+
+# a for-loop variable is a variant too
+for o in xs:
+    print("loop", o[10])
+
+# __setitem__ through a call result and through a name
+b = mkbox()
+b["x"] = 1
+print("write-named", b["x"])
+b2 = mkbox()
+b2["y"] = 2
+print("write-then-read", b2["y"])
+mkbox()["z"] = 3
+print("write-call-result")
+
+# the key expression is evaluated once and can itself be a call
+print("key-call", mk(5)[mk(1)[1]])
+print("TEST-OK")
