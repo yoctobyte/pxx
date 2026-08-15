@@ -1,0 +1,51 @@
+# `x ** y` did NOT go through the RTL's Power: pypow_v carried its own
+# hand-rolled series ln/exp, and the comment justifying that said the value was
+# "about to be str()'d through a known-truncated float formatter anyway" — a
+# premise that stopped being true when NilPy's float repr started printing full
+# precision. Measured over 120 (base, exponent) pairs against CPython: 78 exact
+# before, worst error 84 ulp; 104 exact after, worst 1 ulp.
+# bug-a-nilpy-star-star-has-its-own-low-precision-pow
+#
+# The headline row is the compound-interest shape, not a contrived one, and it
+# was wrong in the TWELFTH significant digit: 2.718145926824356.
+
+print(1.0001 ** 10000)
+print(2.718281828459045 ** 250)
+
+# ALL FIVE SPELLINGS, because the static intercept and the runtime hook are two
+# different mechanisms and a fix that reached only one would still pass a
+# single-row test. A loop variable and a list element are VARIANTS, so they
+# reach pypow_v at run time where no static intercept can see them.
+x = 1.0001
+print(x ** 10000)
+
+y = 1.0001
+y **= 10000
+print(y)
+
+for v in [1.0001]:
+    print(v ** 10000)
+
+print([1.0001][0] ** 10000)
+
+# The two REFUSALS the move would otherwise have lost. The RTL's Power answers
+# NaN for a negative base with a fractional exponent and +inf for 0.0 ** -1; a
+# silent wrong number where there used to be a sentence is the wrong trade.
+# CPython answers the first with a COMPLEX, which this language does not have —
+# so ValueError, deliberately, and recorded in nilpy-semantics-divergences.md.
+try:
+    print((-8.0) ** 0.5)
+except ValueError:
+    print("ValueError")
+
+try:
+    print(0.0 ** -1)
+except ZeroDivisionError:
+    print("ZeroDivisionError")
+
+# integer ** stays integer and is untouched by any of this
+print(2 ** 10, 2 ** 0, (-2) ** 3, 2 ** -1)
+
+# a few more rows across the range, all CPython's own values
+print(0.5 ** 3.0, 10.0 ** 100.0, 1.5 ** 2.0, 7.0 ** -2.5)
+print(0.1 ** 0.5, 3.0 ** 0.0, 2.0 ** -1.0, 1.1 ** 250.0)

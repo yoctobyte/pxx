@@ -37,11 +37,10 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (205)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-star-star-has-its-own-low-precision-pow | A | 55 | bug | NilPy's `x ** y` does NOT go through the RTL's Power — pypow_v carries its own hand-rolled series ln/exp in compiler/builtin/pylib.pas. Measured against CPython over 105 pairs: 18 exact, 48 within 16 ulp, 15 worse, worst 1282 ulp (`1.0001 ** 10000` = 2.718145926824356 against 2.7181459268249255). The comment justifying it says the value is 'about to be str()'d through a known-truncated float formatter anyway', and that formatter now prints full precision. | bug-nilpy-import-leaks-the-units-names-into-the-python-namespace |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
@@ -405,9 +404,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1911)
+## done (1912)
 
-1911 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1912 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -462,7 +461,6 @@ _none_
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-a-nilpy-star-star-has-its-own-low-precision-pow
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland

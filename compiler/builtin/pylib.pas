@@ -1936,6 +1936,22 @@ function pymath_dom_nonneg(x: Double): Double;
 function pymath_dom_pos(x: Double): Double;
 function pymath_dom_unit(x: Double): Double;
 function pymath_dom_pow(b: Double; e: Double): Double;
+{ the `**` OPERATOR's guard — a DIFFERENT refusal from math.pow's; see the body }
+function pypow_dom(b: Double; e: Double): Double;
+type
+  { The correctly-rounded pow the FLOAT `**` should use. It lives in
+    lib/rtl/math.pas as `Power`, and pylib is a BUILTIN unit that cannot reach
+    it: `uses math` compiles, and then the RTL's `Abs` overload set hides
+    pylib's own, so `abs(2.5)` stops resolving (measured 2026-08-16). A hook is
+    the way around that wall — the frontend pulls `math` whenever it sees `**`
+    and installs `@Power` here, exactly as builtinheap takes its object
+    finalizer from pylib without being able to name it.
+    nil = nothing installed (no math unit in this program): the series below
+    still answers, as it always did.
+    bug-a-nilpy-star-star-has-its-own-low-precision-pow }
+  TPyPowFn = function(b, e: Double): Double;
+var
+  PyPowHook: TPyPowFn;
 function pymath_modf(x: Double): TPyList;
 function pymath_prod(l: TPyList): Variant;
 function pymath_fsum(l: TPyList): Double;
@@ -6555,6 +6571,29 @@ end;
   the result is complex, and math is the real-only module. Returns the BASE, so
   the frontend wraps argument 0 and the exponent reaches both. 0 ** negative is
   the other refusal and wears the same message. }
+{ The `**` OPERATOR's domain guard, distinct from math.pow's above on purpose.
+  CPython's `(-8.0) ** (1/3)` is a COMPLEX number, not a math domain error, so
+  the refusal has to say what it actually is — the message pypow_v has raised
+  all along, kept verbatim now that the float path goes to the RTL's Power
+  instead (bug-a-nilpy-star-star-has-its-own-low-precision-pow). Dropping this
+  guard would have turned a named refusal into a silent NaN, which is the one
+  direction not worth trading precision for.
+  Complex support is filed as bug-nilpy-no-complex-number-type. }
+function pypow_dom(b: Double; e: Double): Double;
+begin
+  if (b < 0.0) and (e - Int(e) <> 0.0) then
+    raise ValueError.Create(
+      'a negative number raised to a fractional power is complex, '
+      + 'which NilPy does not have');
+  { `0.0 ** -1` is a ZeroDivisionError in CPython, not an infinity — and the
+    RTL's Power answers IEEE's +inf. pypow_v raises it on the dynamic path, so
+    without this line the two spellings of one expression disagreed. }
+  if (b = 0.0) and (e < 0.0) then
+    raise ZeroDivisionError.Create(
+      '0.0 cannot be raised to a negative power');
+  pypow_dom := b;
+end;
+
 function pymath_dom_pow(b: Double; e: Double): Double;
 var t: Double;
 begin
@@ -8219,6 +8258,17 @@ begin
     raise ValueError.Create(
       'a negative number raised to a fractional power is complex, '
       + 'which NilPy does not have');
+  { The RTL's correctly-rounded pow, when the program has it (see PyPowHook).
+    BOTH float paths below are worth replacing, not just the fractional one:
+    the integer-exponent path is repeated squaring in plain doubles, and that
+    is where `1.0001 ** 10000` accumulated 1282 ulp — wrong in the 12th
+    significant digit of the ordinary compound-interest shape. }
+  if PyPowHook <> nil then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := PyPowHook(fbase, fexp);
+    Exit;
+  end;
   if Frac(fexp) = 0.0 then
   begin
     negExp := fexp < 0.0;

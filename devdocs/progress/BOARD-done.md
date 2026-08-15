@@ -82,6 +82,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-nilpy-one-char-literal-through-ctor-str-param | A | 70 | bug | NilPy: a ONE-character literal through a ctor `str` param becomes a char — silent, then segfaults | — |
 | bug-a-nilpy-one-char-string-literal-is-a-char | A | 70 | bug | NilPy: a 1-character string literal was a char, and segfaulted as an argument | — |
 | bug-a-nilpy-print-of-a-list-prints-a-pointer | A | 55 | bug | NilPy: print() of a list prints the handle, not the elements | — |
+| bug-a-nilpy-star-star-has-its-own-low-precision-pow | A | 55 | bug | NilPy's `x ** y` does NOT go through the RTL's Power — pypow_v carries its own hand-rolled series ln/exp in compiler/builtin/pylib.pas. Measured against CPython over 105 pairs: 18 exact, 48 within 16 ulp, 15 worse, worst 1282 ulp (`1.0001 ** 10000` = 2.718145926824356 against 2.7181459268249255). The comment justifying it says the value is 'about to be str()'d through a known-truncated float formatter anyway', and that formatter now prints full precision. | bug-nilpy-import-leaks-the-units-names-into-the-python-namespace |
 | bug-a-nilpy-str-of-string-and-bool | A | 60 | bug | NilPy `str()` prints a string's POINTER and a bool's 1 | — |
 | bug-a-nilpy-str-repeat-local-infers-as-int | A | 55 | bug | NilPy: `s = "x" * 300` infers s as INT, then no overload of len matches | — |
 | bug-a-nilpy-string-repeat-returns-a-pointer | A | 60 | bug | NilPy: `s * n` on a string returns a POINTER, silently | — |
@@ -718,7 +719,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-identifiers-are-case-insensitive | N | 80 | bug | NilPy identifiers are case-INSENSITIVE; Python's are case-sensitive | — |
 | bug-nilpy-immediately-invoked-lambda-is-not-callable | N | 55 | bug | `(lambda a, b: a - b)(9, 4)` raises TypeError: object is not callable, and a zero-arg `(lambda: 7)()` does not even parse. The identical lambda bound to a NAME first is fine | — |
 | bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float | N | 55 | bug | A function with no `return` yields UNINITIALIZED garbage, not None | — |
-| bug-nilpy-import-leaks-the-units-names-into-the-python-namespace | A | 50→55 | bug | NilPy implements `import math` as `ParseUsesUnit('math')`, so every routine lib/rtl/math declares becomes visible UNQUALIFIED in the user's Python namespace and competes with the Python builtin of the same name. `max(1.5, 2)` answers 2.0 instead of 2. Python's `import X` binds only the name `X`. | — |
+| bug-nilpy-import-leaks-the-units-names-into-the-python-namespace | A | 50 | bug | NilPy implements `import math` as `ParseUsesUnit('math')`, so every routine lib/rtl/math declares becomes visible UNQUALIFIED in the user's Python namespace and competes with the Python builtin of the same name. `max(1.5, 2)` answers 2.0 instead of 2. Python's `import X` binds only the name `X`. | — |
 | bug-nilpy-import-lost-after-a-fallback-import-block | N | 70 | bug | A C library's function name shadows a Python module name as a qualifier | — |
 | bug-nilpy-import-name-forces-function-object-abi | N | 70 | bug | `from m import f` makes every def in an imported module use the function-object ABI | — |
 | bug-nilpy-in-on-a-string-segfaults | N | 70 | bug | NilPy: `sub in s` on a STRING segfaults | — |

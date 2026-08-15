@@ -20960,6 +20960,7 @@ end;
   container/scalar powers keep today's behaviour. }
 function PyMakePow(ppBase, ppExp: Integer): Integer;
 var ppPi, ppArgSeq, ppArgSeq2, node: Integer;
+    ppDomPi, ppDomArg, ppDomArg2, ppDomCall: Integer;
 begin
   if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) <> tyClass) then
   begin
@@ -20974,6 +20975,61 @@ begin
     node := PyCallMeth1(ResolveNodeRec(ppBase) - REC_UCLASS_BASE,
                         '__pow__', ppBase, ppExp);
     if node >= 0 then begin PyMakePow := node; Exit; end;
+  end;
+  { A FLOAT power goes to the RTL's `Power`, which is what `math.pow` already
+    resolves to and is measured bit-exact against CPython. pylib's own
+    `pypow_v` carries a hand-rolled series ln/exp — good to a few ulp over most
+    of the domain and 1282 ulp out at `1.0001 ** 10000`, i.e. wrong in the 12th
+    significant digit of the ordinary compound-interest shape, and NilPy's float
+    repr prints full precision so a user sees it.
+
+    Not a second implementation, the OPPOSITE: `math.pow(x, y)` and `x ** y`
+    were two answers to one question, and this makes the float case one.
+    FindProcArityDouble for the same reason math.pow needs it — `Power(Integer,
+    Integer)` is declared first and would give the truncating integer power.
+
+    Only when an operand is STATICALLY float. An int ** int must stay CPython's
+    exact integer power (pypow_v's own path), and a VARIANT receiver has to
+    dispatch at run time — pylib cannot reach `Power` from a builtin unit, which
+    is the wall this route goes around rather than through. Measured while
+    trying to go through it: adding `uses math` to pylib compiles, and then the
+    RTL's `Abs` overload set hides pylib's, so `abs(2.5)` fails to resolve with
+    only `abs(LongInt)` offered. That is a real overload-merge question and it
+    is not this ticket's.
+    bug-a-nilpy-star-star-has-its-own-low-precision-pow }
+  if PyExprMode and
+     (TypeIsFloat(IntToTypeKind(ASTTk[ppBase])) or
+      TypeIsFloat(IntToTypeKind(ASTTk[ppExp]))) then
+  begin
+    ppPi := FindProcArityDouble('Power', 2);
+    ppDomPi := FindProc('pypow_dom');
+    if (ppPi >= 0) and (ppDomPi >= 0) then
+    begin
+      { The base goes through `pypow_dom` first — a negative base with a
+        fractional exponent is a COMPLEX number in CPython, and NilPy's named
+        refusal for it has to survive the move off pypow_v. Without it the RTL's
+        Power answers NaN, which is a silent wrong value where there used to be
+        a sentence. Same argument-wrapping shape math.sqrt/log/pow already use. }
+      ppDomArg2 := AllocNode(AN_ARG);
+      ASTLeft[ppDomArg2] := CloneAST(ppExp); ASTRight[ppDomArg2] := -1;
+      ppDomArg := AllocNode(AN_ARG);
+      ASTLeft[ppDomArg] := ppBase; ASTRight[ppDomArg] := ppDomArg2;
+      ppDomCall := AllocNode(AN_CALL);
+      ASTIVal[ppDomCall] := ppDomPi;
+      ASTTk[ppDomCall] := Ord(tyDouble);
+      ASTLeft[ppDomCall] := ppDomArg;
+      ppBase := ppDomCall;
+      ppArgSeq := AllocNode(AN_ARG); ASTLeft[ppArgSeq] := ppBase;
+      ppArgSeq2 := AllocNode(AN_ARG); ASTLeft[ppArgSeq2] := ppExp; ASTRight[ppArgSeq2] := -1;
+      ASTRight[ppArgSeq] := ppArgSeq2;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := ppPi;
+      ASTLeft[node] := ppArgSeq;
+      ASTTk[node] := Ord(tyDouble);
+      LastExprTk := tyDouble;
+      PyMakePow := node;
+      Exit;
+    end;
   end;
   ppPi := FindProc('pypow_v');
   if ppPi < 0 then Error('Nil Python: pylib (pypow_v) not loaded');
@@ -32111,6 +32167,8 @@ var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin:
     dummyTypes: array[0..3] of TTypeKind;
     impName: AnsiString; isCount: Boolean;
     aStrIdx, realStrIdx: Integer;
+    pyWantsPow: Boolean;
+    powSym, powPi, powAddr, powAsgn: Integer;
 begin
   needsBuiltin := True;
   pyHasExceptions := False;
@@ -32224,6 +32282,49 @@ begin
     most of them, and is what `import json` actually died on. A .npy program has
     no uses clause of its own, so it could not work around it. }
   FixupTVarRecLayout;
+  { NilPy's `**` on a FLOAT operand lowers to the RTL's `Power` — the same
+    routine `math.pow` already resolves to, and measured bit-exact against
+    CPython where pylib's own series pow is 1282 ulp out at `1.0001 ** 10000`
+    (see PyMakePow). So the unit has to be pulled the same on-demand way the
+    Pascal side pulls it for a bare `sqrt(`.
+
+    `**` has no token of its own in this frontend, so the tell is two adjacent
+    tkStar — which also matches `f(**kw)`, paying for the unit with nothing to
+    show. That is a SIZE cost, not a correctness one, and it is the same trade
+    the Pascal scan already makes for a bare `pi`; the alternative is a second
+    place that has to tell a power from an unpacking.
+
+    BEFORE `PyProgramMode := True` on purpose: math.pas is ordinary Pascal and
+    its own `div`/`mod` must keep truncating semantics
+    (project_pyprogrammode_is_program_wide_not_user_code).
+    bug-a-nilpy-star-star-has-its-own-low-precision-pow }
+  pyWantsPow := False;
+  for i := 0 to TokCount - 2 do
+    if (Tokens[i].Kind = tkStar) and (Tokens[i + 1].Kind = tkStar) then
+    begin
+      if not NoDefaultRtl then
+      begin
+        { QUALIFIED-ONLY, exactly as a user's own `import math` is. The program
+          did not ask for this unit at all — the compiler pulled it because the
+          source contains `**` — so publishing its Abs/Min/Max/Round into the
+          Python builtin namespace would be the leak of
+          bug-nilpy-import-leaks-the-units-names-into-the-python-namespace with
+          nobody even able to see the import that caused it. Without this,
+          adding the pull made `max(1.5, 2)` answer 2.0 and reversed the
+          min/max tie, which is what kept this ticket parked twice. }
+        PyImportPending := True;
+        ParseUsesUnit('math');
+        PyImportPending := False;
+        pyWantsPow := True;
+      end;
+      Break;
+    end;
+  { AFTER math on purpose: the LAST unit named wins a name, and math declares
+    Abs/Min/Max/Round of its own. Named last, its integer `Abs` hid pylib's
+    float one and `abs(-1.5)` stopped resolving with only `abs(LongInt)`
+    offered — measured, and it is why the pull sits above this line rather than
+    beside the `Power` intercept that wants it. `Power` is still reachable:
+    FindProcArityDouble scans the proc table, not the visible scope. }
   ParseUsesUnitAmbient('pylib');
   ParseUsesUnitAmbient('pyeval');
   { Only NOW: the units above are ORDINARY PASCAL and their own div/mod must
@@ -32268,6 +32369,29 @@ begin
     the program's too. }
   DbgGlobalScopeBase := SymCount;
   mainNode := -1;
+  { Install the RTL's `Power` as pylib's float-power hook, as the program's
+    first statement. This is what makes the DYNAMIC `**` correct too — a loop
+    variable or a list element is a Variant, so it goes to pypow_v at run time
+    and no static intercept can reach it. pylib cannot name `Power` itself (it
+    is a builtin unit, and `uses math` hides pylib's own `abs` overloads), so
+    the frontend, which just pulled the unit two hundred lines above, hands the
+    address over — the same shape builtinheap uses for its object finalizer.
+    bug-a-nilpy-star-star-has-its-own-low-precision-pow }
+  if pyWantsPow then
+  begin
+    powSym := FindSym('PyPowHook');
+    powPi := FindProcArityDouble('Power', 2);
+    if (powSym >= 0) and (powPi >= 0) then
+    begin
+      powAddr := AllocNode(AN_PROCADDR);
+      ASTIVal[powAddr] := powPi;
+      ASTTk[powAddr] := Ord(tyPointer);
+      powAsgn := AllocNode(AN_ASSIGN);
+      ASTLeft[powAsgn] := PyMakeIdent(powSym);
+      ASTRight[powAsgn] := powAddr;
+      mainNode := PySeqAppend(mainNode, powAsgn);
+    end;
+  end;
   PySkipNewlines;
   { `from mod import NAME as ALIAS` bindings, at the head of the module body —
     before any of its statements, which is where Python runs an import too. }

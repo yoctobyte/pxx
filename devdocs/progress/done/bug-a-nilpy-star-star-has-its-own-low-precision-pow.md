@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: [bug-nilpy-import-leaks-the-units-names-into-the-python-namespace]
 summary: "NilPy's `x ** y` does NOT go through the RTL's Power — pypow_v carries its own hand-rolled series ln/exp in compiler/builtin/pylib.pas. Measured against CPython over 105 pairs: 18 exact, 48 within 16 ulp, 15 worse, worst 1282 ulp (`1.0001 ** 10000` = 2.718145926824356 against 2.7181459268249255). The comment justifying it says the value is 'about to be str()'d through a known-truncated float formatter anyway', and that formatter now prints full precision."
+status: done
+owner: agent-acpn
 ---
 
 # `x ** y` in NilPy is its own pow, and it is ~1e-12 out
@@ -217,3 +219,75 @@ The prototype patch is unchanged and still applies to HEAD
    and `max`, which makes the unpredictability of the rule self-evident.
 
 Parked back to backlog: not stuck on effort, stuck on one named ticket.
+
+## LANDED 2026-08-16 — the prototype, unchanged except for one line
+
+[[bug-nilpy-import-leaks-the-units-names-into-the-python-namespace]] landed, and
+with it the wall this ticket was parked behind twice. The prototype applied to
+HEAD as written; the ONLY addition was making the compiler's own `math` pull
+qualified-only, the same way a user's `import math` now is:
+
+```pascal
+PyImportPending := True;
+ParseUsesUnit('math');
+PyImportPending := False;
+```
+
+Without that line, adding the pull reintroduced exactly the leak — `max(1.5, 2)`
+answering 2.0 and the min/max tie reversed — with nobody even able to see an
+import that caused it, since the compiler injected the unit because the source
+contains `**`. That is a stronger case for qualified-only than a written import,
+not a weaker one.
+
+### Measured, 120 (base, exponent) pairs against CPython
+
+| | exact | within 1 ulp | worst |
+| --- | --- | --- | --- |
+| before | 78 | 98 | **84 ulp** |
+| now | **104** | **113** | **1 ulp** |
+
+The remaining 7 rows are not precision: they are `x ** 10000` overflowing to
+`inf` where CPython raises OverflowError —
+[[bug-nilpy-float-overflow-answers-inf-where-cpython-raises]], filed separately
+and unchanged by this. Excluding them, every row is within 1 ulp.
+
+The headline is exact in ALL FIVE spellings — literal, named, `**=`, loop
+variable, list element:
+
+```
+1.0001 ** 10000  ->  2.7181459268249255      (was 2.718145926824356)
+```
+
+The last three of those are VARIANTS and reach `pypow_v` at run time, which is
+what the `PyPowHook` function pointer is for: pylib is a builtin unit and cannot
+name `Power`, so the frontend installs `@Power` as the program's first
+statement — the shape `builtinheap` already uses for its object finalizer.
+
+### The two refusals survived, and that was the point of pypow_dom
+
+The RTL's `Power` answers NaN for a negative base with a fractional exponent and
+`+inf` for `0.0 ** -1`. CPython answers the first with a COMPLEX (which this
+language does not have) and raises ZeroDivisionError for the second. Both are
+still refused with a sentence rather than answered with a silent wrong number —
+pinned in the test, and the complex divergence is recorded in
+`devdocs/dev/nilpy-semantics-divergences.md`.
+
+### Residual
+
+13 rows were expected to sit 1 ulp below CPython; the count is now 9, and it is
+the RTL `Power`'s own rounding rather than the plumbing —
+[[bug-nilpy-float-pow-loses-a-ulp-vs-libm]]. Note that
+[[bug-b-power-lost-an-ulp-on-a-half-integer-exponent]] (filed the same day
+against Track B's Power rewrite) is now in `**`'s path too: fixing it improves
+both.
+
+### Gate
+
+`make compiler/pascal26` (self-host fixedpoint, byte-identical) + `tools/gate.sh
+quick` GREEN. `test/test_nilpy_pow_matches_cpython.npy` pins all five spellings,
+both refusals, the integer `**` that must not move, and eight more rows across
+the range. The abs/import oracles and uforth.py were re-checked after the pull
+was added.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
