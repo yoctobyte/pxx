@@ -83,6 +83,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-nilpy-subclass-overlays-parent-layout | A | 70 | bug | NilPy: a subclass overlaid the parent's fields and VMT slots | — |
 | bug-a-nilpy-unary-minus-precedence-vs-floordiv | A | 70 | bug | NilPy: unary minus binds LOOSER than `//` and `%` — `-7 // 2` is -3, not -4 | — |
 | bug-a-nilpy-variant-element-not-usable-as-scalar | A | 85 | bug | NilPy: a list/dict ELEMENT cannot be used as a scalar — silent garbage or IR_UNSUPPORTED | — |
+| bug-a-no-full-suite-hook-refuses-make-n-and-misses-half-the-long-tiers | A | 45 | bug | `.claude/hooks/no-full-suite.sh` (1d0e227a8) refuses `make -n`, which is a DRY RUN that executes nothing and is how testmgr and the TESTTMP verification protocol read recipes — and the refusal is bypassable by an unrelated `VAR=value` token. Separately it blocks --tier full\|limited but allows native\|slow\|opt, which are equally long. | — |
 | bug-a-o2-miscompiles-disassembler | A | 70 | bug | -O2 miscompiles the x86-64 disassembler (`WriteDisassemblyX64`) | — |
 | bug-a-o2-resident-param-stale-after-longjmp | A | 90 | bug | bug: -O2 (DEFAULT) resident param reads STALE after exception longjmp | — |
 | bug-a-o3-inline-retention-substitutes-a-global-read-across-a-call | O | 80 | bug | -O3 silently returns the wrong value: the non-leaf inline slice treats a GLOBAL read as re-readable and can evaluate it on the wrong side of the retained body's inner call, which writes it. localtime loses its timezone offset | — |
