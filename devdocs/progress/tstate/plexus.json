@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T04:28:21Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "1b9cd3496c1f3de5a2bba43dff90cbb2cf48a09f",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T04:40:02Z",
    "fixed": [],
    "new_red": [],
@@ -412,6 +404,16 @@
    "sha": "56c7fd568741b6e8e705fdf845d16ca945da8c66",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-15T14:17:56Z",
+   "fixed": [
+    "test-core#src:test/test_nilpy_star_methods_and_targets.npy"
+   ],
+   "new_red": [],
+   "sha": "0d8e7393a09c2c36c8cdb2d2816d037a02ce16a9",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -4060,7 +4062,7 @@
   "test-core#src:test/test_nilpy_sorted_pairs.npy": "pass",
   "test-core#src:test/test_nilpy_star_args.npy": "pass",
   "test-core#src:test/test_nilpy_star_forward.npy": "pass",
-  "test-core#src:test/test_nilpy_star_methods_and_targets.npy": "fail",
+  "test-core#src:test/test_nilpy_star_methods_and_targets.npy": "pass",
   "test-core#src:test/test_nilpy_str_ascii_cache.npy": "pass",
   "test-core#src:test/test_nilpy_str_float.npy": "pass",
   "test-core#src:test/test_nilpy_subclass_unit_base.npy": "pass",
@@ -5349,11 +5351,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T14:12:52Z",
-  "sha": "56c7fd568741b6e8e705fdf845d16ca945da8c66",
+  "date": "2026-08-15T14:17:56Z",
+  "sha": "0d8e7393a09c2c36c8cdb2d2816d037a02ce16a9",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 211.7
+  "verdict": "GREEN",
+  "wall": 201.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5383,17 +5385,6 @@
   "borg"
  ],
  "open_regressions": [
-  {
-   "bad": "dc60b64fb81b36d339c60ef363f612f41e15095e",
-   "good": "e0e6a0759c03dbbdfcc45cc8b0c19e3c4e9278bd",
-   "job": "test-core#src:test/test_nilpy_star_methods_and_targets.npy",
-   "name": "test-core#1107",
-   "opened": "2026-08-15T10:08:47Z",
-   "range": [
-    "dc60b64fb81b36d339c60ef363f612f41e15095e"
-   ],
-   "src": "test/test_nilpy_star_methods_and_targets.npy"
-  },
   {
    "bad": "dc60b64fb81b36d339c60ef363f612f41e15095e",
    "good": "e0e6a0759c03dbbdfcc45cc8b0c19e3c4e9278bd",
