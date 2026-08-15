@@ -194,4 +194,4 @@ plain scalar store, and runs longer than two statements), not about the missing
 scaffold.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit b3d738046.
