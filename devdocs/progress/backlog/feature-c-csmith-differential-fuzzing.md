@@ -248,3 +248,15 @@ from two angles: a struct assignment used as a value, once for how many times it
 RUNS and once for what its VALUE is. That is worth reading as a hint about where
 to look next — the C expression forms that hand-written code has no reason to
 write are where the frontend's coverage actually thins out.
+
+### 2026-08-16 — a CLEAN sweep, which is also data
+
+300 seeds from 92000, run against the fix for seed 91110: **258 agreed with the
+gcc oracle, 42 skipped (gcc itself could not build or run them), no findings.**
+
+Worth recording rather than dropping, because the campaign's value is the RATIO
+and a clean run is half of it. Ten findings came out of the first sitting, then
+one per few hundred programs, and now zero in three hundred. That is the shape
+of a tail, not of a fuzzer that stopped working — the two hits before it were
+both the same construct (a struct assignment used as a value) seen from two
+angles, which is what a thinning frontier looks like.
