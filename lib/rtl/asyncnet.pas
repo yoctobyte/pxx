@@ -19,7 +19,7 @@ unit asyncnet;
 
 interface
 
-uses scheduler, platform;
+uses scheduler, platform, platform_types;
 
 function TcpListen(port: Integer): Integer;
 function TcpAccept(lfd: Integer): Integer;

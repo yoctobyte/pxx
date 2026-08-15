@@ -15,7 +15,7 @@ unit net;
 
 interface
 
-uses platform;
+uses platform, platform_types;
 
 type
   TNetSocket = Integer;

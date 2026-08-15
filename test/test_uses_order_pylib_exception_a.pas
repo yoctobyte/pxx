@@ -29,7 +29,12 @@ program TestUsesOrderPylibExceptionA;
   where FPC resolves it last-match. That divergence is its own ticket
   (bug-pascal-uses-clause-duplicate-name-resolves-first-not-last) and is much
   wider than exceptions. }
-uses sysutils, pylib;
+{ `exceptions` is named here because this program names ExceptionBase, the
+  shared root both trees hang off. sysutils and pylib each `uses exceptions`
+  themselves, but that is in THEIR namespace -- a program does not inherit its
+  imports' imports. Deliberately placed FIRST in both twins so it cannot
+  perturb the sysutils/pylib order this pair exists to test. }
+uses exceptions, sysutils, pylib;
 
 var
   e: sysutils.Exception;

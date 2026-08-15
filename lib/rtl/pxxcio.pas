@@ -14,7 +14,7 @@ unit pxxcio;
 
 interface
 
-uses platform, builtinheap;
+uses platform, platform_types, builtinheap;
 
 function __pxx_write(fd: Integer; buf: Pointer; n: Int64): Int64;
 function __pxx_read(fd: Integer; buf: Pointer; n: Int64): Int64;
