@@ -7090,11 +7090,104 @@ begin
   Result := node;
 end;
 
+{ `"{k}".format(k=3)` — NAMED format fields. The substitution machinery is
+  positional (pystr_format / format2 / formatn over an argument list), and the
+  format string is a LITERAL at essentially every real call site, so the names
+  are resolved HERE: each `{name...}` field becomes `{index...}` over the same
+  argument list, with the keyword values appended after the positional ones in
+  the order they were written.
+
+  Every field comes out EXPLICITLY numbered, including the auto-numbered `{}`
+  ones. CPython forbids mixing automatic and manual numbering in one string,
+  so renumbering only the named fields would have produced exactly the mix the
+  runtime path is not asked to handle; normalising all of them keeps one shape.
+
+  The `!r` / `:spec` tail is preserved untouched — only the NAME part in front
+  of it is rewritten — and `{{` / `}}` escapes are stepped over. }
+function PyFormatRenumber(const fmt: AnsiString; var names: array of AnsiString;
+                          nNames, nPos: Integer): AnsiString;
+var i, j, k, fieldStart, autoIdx: Integer;
+    nm, tail, ob, cb: AnsiString;
+    allDigits, found: Boolean;
+begin
+  { The braces are Chr(123)/Chr(125), never quoted characters: THIS DIALECT
+    NESTS BRACE COMMENTS, so a quoted brace opens one and the file stops
+    parsing hundreds of lines later ("unexpected character"). PyParseSetComp
+    carries the same warning for the same reason. }
+  ob := Chr(123); cb := Chr(125);
+  Result := '';
+  autoIdx := 0;
+  i := 1;
+  while i <= Length(fmt) do
+  begin
+    if (fmt[i] = ob) and (i < Length(fmt)) and (fmt[i + 1] = ob) then
+    begin
+      Result := Result + ob + ob;
+      Inc(i, 2);
+      Continue;
+    end;
+    if (fmt[i] = cb) and (i < Length(fmt)) and (fmt[i + 1] = cb) then
+    begin
+      Result := Result + cb + cb;
+      Inc(i, 2);
+      Continue;
+    end;
+    if fmt[i] <> ob then
+    begin
+      Result := Result + fmt[i];
+      Inc(i);
+      Continue;
+    end;
+    { a FIELD: name, then an optional !conv and :spec }
+    Inc(i);
+    fieldStart := i;
+    while (i <= Length(fmt)) and (fmt[i] <> cb) and (fmt[i] <> '!') and
+          (fmt[i] <> ':') do
+      Inc(i);
+    nm := Copy(fmt, fieldStart, i - fieldStart);
+    tail := '';
+    j := i;
+    while (j <= Length(fmt)) and (fmt[j] <> cb) do Inc(j);
+    tail := Copy(fmt, i, j - i);
+    if j <= Length(fmt) then Inc(j);        { step over the close brace }
+    i := j;
+    if nm = '' then
+    begin
+      Result := Result + ob + AIntToStr(autoIdx) + tail + cb;
+      Inc(autoIdx);
+      Continue;
+    end;
+    allDigits := True;
+    for k := 1 to Length(nm) do
+      if (nm[k] < '0') or (nm[k] > '9') then allDigits := False;
+    if allDigits then
+    begin
+      Result := Result + ob + nm + tail + cb;
+      Continue;
+    end;
+    found := False;
+    for k := 0 to nNames - 1 do
+      if names[k] = nm then
+      begin
+        Result := Result + ob + AIntToStr(nPos + k) + tail + cb;
+        found := True;
+        Break;
+      end;
+    if not found then
+      Error('Nil Python: .format() has no keyword argument named ' + nm);
+  end;
+end;
+
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;
     procIdx, callNode, argNode, lastArg, i, k, wantArgs: Integer;
+    kwNames: array[0..15] of AnsiString;   { `.format(k=3)` field names, in order }
+    kwCount, nPos: Integer;
+    newFmt: AnsiString;
 begin
+  kwCount := 0;
+  nPos := 0;
   if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
     Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
       + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace, '
@@ -7160,6 +7253,36 @@ begin
       Next;
       Next;
     end;
+    { `"{k}".format(k=3)` — a NAMED field. The name is recorded and the `k=`
+      consumed, so the VALUE lands in the positional slot the renumbering below
+      points the field at. Without this the bare `k` was parsed as an
+      expression and the error blamed the caller's own code
+      ("undefined variable (k)") for what is a field name.
+      bug-nilpy-str-format-refuses-keyword-fields }
+    if (wantArgs = -6) and (CurTok.Kind = tkIdent) and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      if kwCount > High(kwNames) then
+        Error('Nil Python: .format() takes at most 16 keyword fields; '
+              + 'use an f-string');
+      kwNames[kwCount] := CurTok.SVal;
+      Inc(kwCount);
+      Next;                              { the name }
+      Next;                              { the '=' }
+    end
+    else if wantArgs = -6 then
+    begin
+      { `.format(**d)` — the keys are a RUN-TIME fact and the renumbering is a
+        compile-time rewrite, so it refuses rather than guessing. Same call the
+        arity ceiling makes. }
+      if CurTok.Kind = tkStar then
+        Error('Nil Python: .format(**mapping) is not supported; '
+              + 'use an f-string or name the fields');
+      if kwCount > 0 then
+        Error('Nil Python: a positional argument after a keyword field in '
+              + '.format() is not valid Python');
+      Inc(nPos);
+    end;
     { A bare generator expression as an argument — `"\n".join(x for x in it)`.
       Detected BEFORE the EXPR is parsed, because the EXPR references the loop
       variable, which is not in scope until the `for`. PyParseCompExprValue
@@ -7178,6 +7301,20 @@ begin
     else Break;
   end;
   Expect(tkRParen, ')');
+  { …and rewrite the LITERAL's named fields to the indices those values landed
+    at. In place on the receiver node, before the call is built, so every arity
+    rung below sees an ordinary positional format string. }
+  if kwCount > 0 then
+  begin
+    if ASTKind[baseNode] <> AN_STR_LIT then
+      Error('Nil Python: .format() with named fields needs a literal format '
+            + 'string (the field names are resolved at compile time); '
+            + 'use an f-string');
+    newFmt := PyFormatRenumber(PyRawName(ASTSOffset[baseNode], ASTSLen[baseNode]),
+                               kwNames, kwCount, nPos);
+    ASTSOffset[baseNode] := PyStoredName(newFmt);
+    ASTSLen[baseNode] := Length(newFmt);
+  end;
   Result := PyStrMethodFinish(mname, argNode, lastArg, i);
 end;
 

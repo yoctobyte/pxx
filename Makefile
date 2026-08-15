@@ -932,6 +932,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_starvariant26 | diff -u test/test_nilpy_star_operand_in_a_variant.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
+	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26
+	$(TESTTMP)/test_nilpy_fmtkw26 | diff -u test/test_nilpy_str_format_keyword_fields.expected -
 	./$(COMPILER) test/test_nilpy_zip_star_and_n_way.npy $(TESTTMP)/test_nilpy_zipstarn26
 	$(TESTTMP)/test_nilpy_zipstarn26 | diff -u test/test_nilpy_zip_star_and_n_way.expected -
 	./$(COMPILER) test/test_nilpy_divmod_dunder.npy $(TESTTMP)/test_nilpy_divmoddunder26

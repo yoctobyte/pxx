@@ -1,0 +1,27 @@
+# `.format()` with NAMED fields. The substitution machinery is positional, and
+# nothing parsed `name=value`, so the bare name was read as an EXPRESSION and
+# the error blamed the caller's own code: "undefined variable (k)" for what is
+# a field name.
+#
+# The format string is a literal at essentially every real call site, so the
+# names are resolved at compile time: each named field becomes an indexed one
+# over the same argument list, with the keyword values appended after the
+# positional ones in written order.
+
+print("{k}".format(k=3))
+print("{a}-{b}".format(a="x", b="y"))
+print("{k}{k}".format(k=1))                      # a repeated field
+print("{n:>8.3f}|".format(n=3.14159))            # a spec on a named field
+print("{v!r} {w!s}".format(v="q", w=12))         # conversions
+print("{}{k}".format(1, k=2))                    # mixed, CPython's numbering
+print("{0}-{1}-{0}".format("a", "b"))            # explicit indices, unchanged
+print("{}".format(7))                            # auto-numbered, unchanged
+print("literal {{braces}} around {k}".format(k=9))
+print("{first} {last} ({first})".format(first="Ada", last="L"))
+print("[{x:^7}]".format(x="mid"))
+n = 4
+print("{w}={v}".format(w="n", v=n * 2))          # an expression as the value
+
+# nested in an f-string's own machinery and in a method chain
+print("{k}".format(k="Q").lower())
+print(" | ".join(["{k}".format(k=i) for i in [1, 2, 3]]))
