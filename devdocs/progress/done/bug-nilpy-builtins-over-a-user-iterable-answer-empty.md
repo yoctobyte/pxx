@@ -176,4 +176,4 @@ list/dict/str/bytes/range/cursor receivers. Byte-identical to CPython.
 `gate.sh quick` GREEN. `compiler/builtin/**` changed, so this is pinned.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit db4778fd5.
