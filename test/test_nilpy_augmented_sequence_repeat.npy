@@ -1,0 +1,64 @@
+# `xs *= 2` on a list and `s *= 2` on a str both produced an EMPTY value,
+# silently: the three augmented-assignment sites build an arithmetic binop,
+# while `x = x * n` is decided by three special arms in ParseTerm none of them
+# consulted. One operation, two spellings, different answers.
+# bug-nilpy-augmented-multiply-on-a-sequence-yields-empty
+
+xs = [1, 2]
+xs *= 2
+print("list", xs)
+
+s = "ab"
+s *= 3
+print("str", s)
+
+b = bytes([65, 66])
+b *= 2
+print("bytes", b)
+
+# the arithmetic forms are untouched
+n = 3
+n *= 2
+f = 1.5
+f *= 2
+print("num", n, f)
+
+# a FIELD target and a SUBSCRIPT target -- the other two augmented sites
+class H:
+    def __init__(self):
+        self.xs = [1]
+        self.s = "a"
+
+
+h = H()
+h.xs *= 2
+h.s *= 2
+print("field", h.xs, h.s)
+
+d = {"k": [1], "s": "a"}
+d["k"] *= 3
+d["s"] *= 3
+print("subscript", d)
+
+# a variable count, and a count of 0 and 1
+k = 2
+ys = [7]
+ys *= k
+print("count-var", ys)
+z0 = [1]
+z0 *= 0
+z1 = [1]
+z1 *= 1
+print("count-edge", z0, z1)
+
+# `x = x * n` still agrees, which is the spelling that was already right
+w = [1, 2]
+w = w * 2
+print("rebind", w)
+
+# += on a list stays the IN-PLACE extend it was, aliases included
+a = [1]
+alias = a
+a += [2]
+print("plus-in-place", a, alias)
+print("TEST-OK")

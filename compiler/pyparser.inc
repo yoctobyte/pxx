@@ -19802,6 +19802,52 @@ begin
   PyMakePow := node;
 end;
 
+{ `x *= n` where x is a SEQUENCE: the REPEAT node, not an arithmetic multiply.
+
+  `xs *= 2` on a list and `s *= 2` on a str both produced an EMPTY value —
+  silently — because the three augmented-assignment sites build an AN_BINOP
+  with the token PyAugBinTok gives, while `x = x * n` is decided by three
+  special arms in ParseTerm (list repeat, bytes repeat, and the str tag) that
+  none of them consult. One operation, two spellings, different answers: the
+  same tell as the `|=`-on-a-set case two hundred lines down, which was found
+  the same way.
+
+  Answers -1 for a pair that really is arithmetic, so every other `*=` keeps
+  its path.
+
+  DIVERGENCE, recorded rather than hidden: CPython's list `*=` mutates in
+  place, so an alias taken beforehand sees the repeat; this rebinds. `+=`
+  already has the in-place form (TPyList.extend) and `*=` has no in-place
+  primitive to call yet — bug-nilpy-augmented-sequence-repeat-rebinds-instead-
+  of-mutating. An empty list was the strictly worse answer.
+  bug-nilpy-augmented-multiply-on-a-sequence-yields-empty }
+function PyAugMulNode(left, right: Integer): Integer;
+var node: Integer;
+begin
+  Result := -1;
+  if (left < 0) or (right < 0) then Exit;
+  if PyListRepeatPair(left, right) then
+  begin
+    Result := PyMakeListRepeat(left, right);
+    Exit;
+  end;
+  if PyBytesRepeatPair(left, right) then
+  begin
+    Result := PyMakeBytesRepeat(left, right);
+    Exit;
+  end;
+  if PyIsStrBaseTk(IntToTypeKind(ASTTk[left])) and
+     (not PyIsStrBaseTk(IntToTypeKind(ASTTk[right]))) then
+  begin
+    node := AllocNode(AN_BINOP);
+    ASTIVal[node] := Ord(tkStar);
+    ASTLeft[node] := left;
+    ASTRight[node] := right;
+    ASTTk[node] := Ord(tyAnsiString);
+    Result := node;
+  end;
+end;
+
 function PyAugBinTok(k: TTokenKind): TTokenKind;
 begin
   case k of
@@ -22252,6 +22298,18 @@ begin
         Result := PyMakeUnsupportedOperand;
         Exit;
       end;
+      { `o.xs *= 2` / `d[k] *= 2` on a SEQUENCE — the repeat, see PyAugMulNode }
+      if augTk = tkStar then
+      begin
+        node := PyAugMulNode(lhsNode, CurASTNode);
+        if node >= 0 then
+        begin
+          Result := AllocNode(AN_ASSIGN);
+          ASTLeft[Result] := CloneAST(lhsNode);
+          ASTRight[Result] := node;
+          Exit;
+        end;
+      end;
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
       ASTLeft[node] := lhsNode; ASTRight[node] := CurASTNode;
       { `l += y` where l's STATIC type is a variant (an unannotated parameter,
@@ -22481,6 +22539,18 @@ begin
     begin
       Result := PyMakeUnsupportedOperand;
       Exit;
+    end;
+    { `xs *= 2` / `s *= 2` on a SEQUENCE — the repeat, see PyAugMulNode }
+    if augTk = tkStar then
+    begin
+      node := PyAugMulNode(PyMakeIdent(symIdx), CurASTNode);
+      if node >= 0 then
+      begin
+        Result := AllocNode(AN_ASSIGN);
+        ASTLeft[Result] := PyMakeIdent(symIdx);
+        ASTRight[Result] := node;
+        Exit;
+      end;
     end;
     { `n = 7; n /= 2` -- unlike a plain rebind (`n = n / 2`), an augmented
       assignment reuses the EXISTING symIdx rather than allocating a fresh

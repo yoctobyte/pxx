@@ -902,6 +902,7 @@ function PyQualifyNested(const name: AnsiString): AnsiString; forward; { Nil Pyt
 function PyNestedDefOutranksSym(const name: AnsiString): Boolean; forward; { Nil Python: a nested def shadows a module global (pyparser.inc) }
 function PyListRepeatPair(a, b: Integer): Boolean; forward;              { Nil Python `xs * n` (pyparser.inc) }
 function PyMakeListRepeat(a, b: Integer): Integer; forward;              { Nil Python `xs * n` (pyparser.inc) }
+function PyAugMulNode(left, right: Integer): Integer; forward;            { Nil Python `x *= n` on a sequence (pyparser.inc) }
 function PyBytesRepeatPair(a, b: Integer): Boolean; forward;             { Nil Python `bytes * n` (pyparser.inc) }
 function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil Python `bytes * n` (pyparser.inc) }
 function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyBytes? (pyparser.inc) }
@@ -11227,7 +11228,17 @@ begin
           intrinsic -- reuse it rather than duplicating its SSE lowering. Every
           other argument type goes to -200, whose lowering handles string
           (parse the text), variant (unbox) and int/bool (identity). }
-        if TypeIsFloat(LastExprTk) then
+        { The NODE's type, not LastExprTk. `int(7/2)` printed
+          4615063718147915776 -- 3.5's BIT PATTERN read as an integer -- because
+          LastExprTk after an operator expression is the last FACTOR's type
+          (tyInteger for the `2`), so the float arm was skipped and the -200
+          intrinsic took the raw payload. The identical `x = 7/2; int(x)` was
+          correct, which is what makes this a side-channel bug rather than an
+          int() one: an ident leaves LastExprTk agreeing with the node.
+          Take the kind from the VALUE, not from a side channel -- the rule
+          project_variant_store_kind_came_from_the_ast_not_the_value records.
+          bug-nilpy-int-of-a-division-reads-the-doubles-bits }
+        if TypeIsFloat(IntToTypeKind(ASTTk[CurASTNode])) or TypeIsFloat(LastExprTk) then
         begin
           ASTIVal[node] := -203; ASTTk[node] := Ord(tyInt64);
         end
@@ -17610,6 +17621,19 @@ begin
     begin
       caRhs := PyCallMeth1(PyNodeListCi(left), 'extend', left, right);
       if caRhs < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+    end;
+    { `o.xs *= 2` / `d[k] *= 2` on a SEQUENCE is the REPEAT, not a multiply —
+      see PyAugMulNode. Unlike the in-place `extend` above, the repeat is a
+      VALUE, so it needs the store built around it. }
+    if (caRhs < 0) and NilPyUserCode and (caBinTk = tkStar) then
+    begin
+      node := PyAugMulNode(left, right);
+      if node >= 0 then
+      begin
+        caRhs := AllocNode(AN_ASSIGN);
+        ASTLeft[caRhs] := left;
+        ASTRight[caRhs] := node;
+      end;
     end;
     if (caRhs < 0) and NilPyUserCode then
       caRhs := PyAugClassDunderNode(left, caBinTk, right);

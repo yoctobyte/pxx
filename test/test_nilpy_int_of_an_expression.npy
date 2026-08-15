@@ -1,0 +1,30 @@
+# int() took the argument's type from LastExprTk -- a side channel that after an
+# OPERATOR expression holds the last FACTOR's type -- so int(7/2) printed
+# 4615063718147915776, which is 3.5's bit pattern. The identical `x = 7/2;
+# int(x)` was correct, because an ident leaves the side channel agreeing with
+# the node.
+# bug-nilpy-int-of-a-division-reads-the-doubles-bits
+
+print("div", int(7 / 2), int(1 / 1), int(7.0 / 2), int(-7 / 2))
+print("named", int(3.5), int(-3.5), int(0.0))
+
+x = 7 / 2
+print("via-name", int(x))
+
+print("mul", int(2.5 * 2), int(1.5 + 1.5), int(3.5 - 1.0))
+print("nested", int(int(7 / 2) / 1))
+print("call", int(float("2.9")), int(abs(-2.7)))
+print("mixed", int(7 // 2), int(7 % 3), int(2 ** 3))
+print("str", int("42"), int("-42"), int("ff", 16))
+print("bool", int(True), int(False))
+print("round-trip", int(round(2.5)), int(round(3.5)))
+
+# a variant argument keeps its own path (arbitrary precision must survive)
+v = 7 / 2
+d = {"k": 3.9}
+print("variant", int(d["k"]))
+print("bignum", int(2 ** 70))
+
+# the value itself was never wrong -- only int() misread it
+print("value", 7 / 2, 1 / 1)
+print("TEST-OK")

@@ -930,6 +930,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_lamcomp26 | diff -u test/test_nilpy_lambda_in_range_comprehension.expected -
 	./$(COMPILER) test/test_nilpy_setattr.npy $(TESTTMP)/test_nilpy_setattr26
 	$(TESTTMP)/test_nilpy_setattr26 | diff -u test/test_nilpy_setattr.expected -
+	./$(COMPILER) test/test_nilpy_int_of_an_expression.npy $(TESTTMP)/test_nilpy_intexpr26
+	$(TESTTMP)/test_nilpy_intexpr26 | diff -u test/test_nilpy_int_of_an_expression.expected -
+	./$(COMPILER) test/test_nilpy_augmented_sequence_repeat.npy $(TESTTMP)/test_nilpy_augrepeat26
+	$(TESTTMP)/test_nilpy_augrepeat26 | diff -u test/test_nilpy_augmented_sequence_repeat.expected -
 	./$(COMPILER) test/test_nilpy_bare_genexpr_arguments.npy $(TESTTMP)/test_nilpy_genexprarg26
 	$(TESTTMP)/test_nilpy_genexprarg26 | diff -u test/test_nilpy_bare_genexpr_arguments.expected -
 	./$(COMPILER) test/test_nilpy_hasattr_getattr_property.npy $(TESTTMP)/test_nilpy_hasprop26
