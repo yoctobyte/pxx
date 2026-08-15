@@ -116,3 +116,24 @@ still is not.
 popitem/`in`/`not in`/`len`/`clear`/dict(d) copy/`{**a, **b}` merge; `set`
 union/intersection/difference/add/discard/remove/issubset/issuperset/`len`/set
 comprehension/`set(s1)` copy. 17 lines, all byte-identical to CPython.
+
+## 2026-08-15 — re-swept, name by name. Most of the table above is now DONE
+
+The 2026-08-15 sweep ran one name per program against CPython, rather than a
+handful of representative calls. `os`, `time` and `math.fabs` — the three
+"absent" rows above — are all present and exact now. What remains is a much
+shorter list, and every entry still fails LOUDLY:
+
+| module | absent |
+| --- | --- |
+| `re` | `split`, `subn`, `finditer` (`match`, `fullmatch`, `search`, `findall`, `sub`, `compile`, `escape`, the `I`/`IGNORECASE` flag all agree) |
+| `os` | `sep`, `linesep`, `listdir` (`path.join/basename/dirname/splitext/exists/isdir/abspath`, `getcwd`, `environ.get` all agree) |
+| `sys` | `maxsize`, `version`, `byteorder` — these do not fail at compile: they raise pxx's own explanatory "this build has no sys.X" exception, which is a designed refusal, not a gap to plug blindly |
+| `math` | twelve names, split by whether they are exact or transcendental — measured separately in [[feature-nilpy-math-module-twelve-absent-names-measured]] |
+
+`json` re-verified exact, including `dumps` of nested containers, `sort_keys=`,
+and `loads` of every scalar type.
+
+`re.split` is the one worth doing first: it is how a script tokenises a line,
+and it is the only absent name here that a small program is likely to reach for
+before anything else on the list.
