@@ -88,4 +88,4 @@ dunder_ordering, list_ordering, sequence_ordering, char_ordering,
 comparison_chaining, dataclass_order, max_min_iterables) re-run green.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit 66d65dbbb.
