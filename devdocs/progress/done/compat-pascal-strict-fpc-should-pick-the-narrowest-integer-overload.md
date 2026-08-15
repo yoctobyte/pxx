@@ -197,4 +197,4 @@ Docs row filed as [[task-d-document-the-strict-overload-width-flag]] —
 `docs/**` is Track D's lane, not Track A's.
 
 ## Log
-- 2026-08-15 — resolved, commit PENDING-COMMIT.
+- 2026-08-15 — resolved, commit d75deb89a.
