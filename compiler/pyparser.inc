@@ -30055,7 +30055,8 @@ end;
 
 procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
-    realBases, baseDepth: Integer;
+    realBases, baseDepth, baseQUnit: Integer;
+    baseQName: AnsiString;
     mixK, sharedCi, myMixN, savedTokPos: Integer;
     myMixCi: array[0..5] of Integer;
     propName: AnsiString;
@@ -30065,7 +30066,8 @@ begin
     this body reaches PyParseClass again — so the header fills the globals, and
     the two consumers below re-publish from this frame's own copy }
   PyMixN := 0;
-  ci := FindUClass(CurTok.SVal); Next;
+  ci := FindUClass(CurTok.SVal);
+  Next;
   if CurTok.Kind = tkLParen then
   begin
     { base class: class Name(Base): — Exception is auto-registered as an
@@ -30087,12 +30089,27 @@ begin
       segment is the class. Without this, subclassing anything imported was
       impossible: the parser took `configparser` as the base name and reported
       it unknown. }
+    { …and the qualifier is RESOLVED, not merely discarded. `class Codec(
+      codecs.Codec)` — a class whose own name equals its base's, which is how
+      EVERY codec module in CPython's stdlib is written — registered `Codec`
+      before parsing the header, so the flat lookup below answered with the
+      class being declared and made it its own parent. The compiler then span
+      forever: no diagnostic, no progress, no partial binary.
+      A qualified base names the module it came from, so the answer can never be
+      the class being declared. ConsumeUnitQualifier handles dotted packages
+      too (`a.b.C`) and leaves CurTok on the member; it consumes nothing when
+      the prefix is not a loaded unit, so the plain loop below still covers a
+      qualifier that is not one.
+      bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler }
+    baseQName := CurTok.SVal;
+    baseQUnit := ConsumeUnitQualifier(baseQName);
     while (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) do
     begin
       Next;                { onto the '.' }
       Next;                { onto the segment after it }
       if CurTok.Kind <> tkIdent then
         Error('Nil Python: expected a class name after . in the base class');
+      baseQUnit := -1;     { a deeper path this resolver did not follow }
     end;
     { `class C(object):` — Python 2's explicit new-style spelling, still all over
       real code (html5lib writes it). In Python 3 every class derives from
@@ -30129,10 +30146,28 @@ begin
     { see the sibling site above: `Exception` resolves by UNIT, not flat. }
     if CaseEqual(CurTok.SVal, 'Exception') then
       baseCi := PyEnsureExceptionClass
+    else if baseQUnit >= 0 then
+    begin
+      { qualified: the named MODULE's class, so a same-named class being
+        declared here cannot be the answer }
+      baseCi := FindUClassInUnit(CurTok.SVal, baseQUnit);
+      if baseCi < 0 then baseCi := FindUClassNonRecord(CurTok.SVal);
+    end
     else
       baseCi := FindUClassNonRecord(CurTok.SVal);
     if baseCi < 0 then
       Error('Nil Python: unknown base class ' + CurTok.SVal);
+    { A CYCLE guard, independent of the lookup fix above: a class can never be
+      its own ancestor, and a resolver that says otherwise must SAY SO rather
+      than spin. A hang is the worst failure mode available — it reads as a slow
+      build, so the first response is to wait longer — and this one had no
+      diagnostic at all. Checked against the whole ancestor chain, not just
+      self, so any future cause reports too.
+      bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler }
+    if (baseCi = ci) or ((ci >= 0) and PyClsHasAncestor(baseCi, ci)) then
+      Error('Nil Python: class ' + CurTok.SVal + ' cannot inherit from itself'
+            + ' — a base class must not be the class being declared, nor one of'
+            + ' its descendants');
     Inc(realBases);
     { The FIRST base is a real parent — unless it is a class that is flattened
       somewhere else in the program, in which case it is flattened HERE too.

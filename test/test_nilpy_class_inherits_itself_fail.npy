@@ -1,0 +1,11 @@
+# A class can never be its own ancestor. Unqualified, `class Loop(Loop)` binds
+# the base to the row the shell pre-pass registered for THIS class — so the
+# resolver answers "yourself", and the ancestor walk used to spin forever with
+# no diagnostic at all (a hang reads as a slow build, which is the worst failure
+# mode available). It must REPORT.
+# bug-nilpy-class-named-after-its-imported-base-hangs-the-compiler
+class Loop(Loop):
+    pass
+
+
+print("unreachable")

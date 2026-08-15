@@ -421,6 +421,15 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# A NilPy class may be NAMED after the imported class it derives from. The
+	# unit's declaration used to fill the forward row the shell pre-pass had
+	# registered for the program's own class -- one row for two classes, so the
+	# class became its own parent and the ancestor walk hung with no diagnostic.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_class_named_after_its_imported_base.npy $(TESTTMP)/test_nilpy_samename26
+	test "$$($(TESTTMP)/test_nilpy_samename26)" = "$$(printf 'override: derived\ninherited: pascal-side\nbase: base pascal-side')"
+	# and the cycle itself REPORTS rather than spinning, whatever caused it
+	! ./$(COMPILER) test/test_nilpy_class_inherits_itself_fail.npy $(TESTTMP)/test_nilpy_selfbase26 > $(TESTTMP)/test_nilpy_selfbase.log 2>&1
+	grep -q 'cannot inherit from itself' $(TESTTMP)/test_nilpy_selfbase.log
 	./$(COMPILER) test/test_nilpy_dict_fromkeys.npy $(TESTTMP)/test_nilpy_fromkeys26
 	test "$$($(TESTTMP)/test_nilpy_fromkeys26)" = "$$(printf 'deduped: 3 b a c\nvalue is None: True\nempty: 0')"
 	./$(COMPILER) test/test_nilpy_tuple_return.npy $(TESTTMP)/test_nilpy_tupret26
@@ -6173,6 +6182,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	# A NilPy class may be NAMED after the imported class it derives from. The
+	# unit's declaration used to fill the forward row the shell pre-pass had
+	# registered for the program's own class -- one row for two classes, so the
+	# class became its own parent and the ancestor walk hung with no diagnostic.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_class_named_after_its_imported_base.npy $(TESTTMP)/test_nilpy_samename26
+	test "$$($(TESTTMP)/test_nilpy_samename26)" = "$$(printf 'override: derived\ninherited: pascal-side\nbase: base pascal-side')"
+	# and the cycle itself REPORTS rather than spinning, whatever caused it
+	! ./$(COMPILER) test/test_nilpy_class_inherits_itself_fail.npy $(TESTTMP)/test_nilpy_selfbase26 > $(TESTTMP)/test_nilpy_selfbase.log 2>&1
+	grep -q 'cannot inherit from itself' $(TESTTMP)/test_nilpy_selfbase.log
 	./$(COMPILER) test/test_nilpy_dict_fromkeys.npy $(TESTTMP)/test_nilpy_fromkeys26
 	test "$$($(TESTTMP)/test_nilpy_fromkeys26)" = "$$(printf 'deduped: 3 b a c\nvalue is None: True\nempty: 0')"
 	./$(COMPILER) test/test_nilpy_tuple_return.npy $(TESTTMP)/test_nilpy_tupret26

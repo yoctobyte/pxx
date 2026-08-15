@@ -1,0 +1,24 @@
+# A NilPy class may carry the SAME NAME as the imported class it derives from —
+# `class Widget(samenamebase.Widget)` — and the qualified base must resolve to
+# the MODULE's class, never to the class being declared.
+#
+# This hung the compiler (no diagnostic, reads as a slow build). Two independent
+# causes, both fixed:
+#   * the imported unit's declaration FILLED the forward row NilPy's shell
+#     pre-pass had registered for the program's own class, merging the two into
+#     one row — so the class really was its own parent;
+#   * nothing checked for that cycle, so the ancestor walk spun forever.
+import samenamebase
+
+
+class Widget(samenamebase.Widget):
+    def Kind(self) -> str:
+        return "derived"
+
+
+w = Widget()
+print("override:", w.Kind())
+print("inherited:", w.FromTheUnit())
+
+b = samenamebase.Widget()
+print("base:", b.Kind(), b.FromTheUnit())

@@ -27251,9 +27251,18 @@ begin
         { A forward stub `TFoo = class;` already minted an entry that `class of`
           aliases and field types point at — the full decl must fill THAT entry.
           Registering a second one shadows it (FindUClass returns the first
-          match), so the base + fields land on an entry no reference sees. }
+          match), so the base + fields land on an entry no reference sees.
+
+          A stub belongs to the unit that WROTE it: filling a stub some OTHER
+          unit registered merges two unrelated classes into one row. NilPy's
+          shell pre-pass registers a forward row per `class X` in the .npy
+          BEFORE any import is parsed, so an imported Pascal unit declaring a
+          class of the same name filled the program's row — the NilPy class and
+          its own intended base became literally the same class, and
+          `class PBase(probeu.PBase)` made the class its own parent and hung the
+          ancestor walk (bug-nilpy-class-named-after-its-imported-base-hangs). }
         ci := FindUClass(tname);
-        if (ci >= 0) and UClsForward[ci] then
+        if (ci >= 0) and UClsForward[ci] and (UClsUnitIdx[ci] = CurrentUnitIdx) then
         begin
           { counts are 0 on a stub; re-anchor the member windows to the current
             tails (other classes may have registered members in between). }

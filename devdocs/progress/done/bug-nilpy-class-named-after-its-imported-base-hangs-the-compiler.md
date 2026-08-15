@@ -4,6 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`class Codec(codecs.Codec): pass` — a NilPy class whose own name equals its imported base's name — makes the compiler LOOP FOREVER. No diagnostic, no progress, no timeout. Four lines reproduce it, and it is the canonical spelling of every codec module in CPython's stdlib."
+status: done
+owner: agent-an-night
 ---
 
 # `class X(mod.X)` hangs the compiler
@@ -71,3 +73,45 @@ The `x_user_defined.py` half of [[feature-b-mimic-codecs-for-nilpy]]'s gate.
 That file also needs multiple inheritance from an imported base
 ([[bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused]]), so it
 needs both before it compiles; `mimic_codecs` itself is unaffected and lands.
+
+## Resolution (2026-08-15)
+
+Root cause was NOT in the base-name lookup — it was in **class registration**,
+one level under it. NilPy's shell pre-pass (`PyRegisterClassShells`) registers a
+FORWARD row per `class X` in the .npy *before any import is parsed*. The Pascal
+class-declaration path then reuses a forward row of the same name — and that
+reuse was **unit-blind**. So the imported unit's `type PBase = class` filled the
+PROGRAM's stub instead of allocating its own row: the NilPy class and its
+intended base were literally one row, `UClsParent[ci] := ci`, and the ancestor
+walk spun.
+
+Measured, not reasoned: a probe over the `UCls` table showed exactly ONE row
+named `PBase` (unit -1) in the colliding case, and TWO rows when the NilPy class
+was renamed `Q` — the imported unit only got a row when the names differed.
+
+Three changes, all needed:
+
+1. `parser.inc` — a forward stub is filled only by its **own** unit:
+   `UClsForward[ci] and (UClsUnitIdx[ci] = CurrentUnitIdx)`. A stub belongs to
+   the unit that wrote it; otherwise two unrelated classes merge into one row.
+   This is the real fix, and it is not NilPy-specific.
+2. `pyparser.inc` — a QUALIFIED base resolves in the named module
+   (`FindUClassInUnit(name, baseQUnit)`), so a same-named class being declared
+   here can never be the answer. `ConsumeUnitQualifier` captures the qualifier
+   before the dotted path is consumed.
+3. `pyparser.inc` — the cycle guard the ticket asked for, independent of both:
+   `baseCi = ci` or `PyClsHasAncestor(baseCi, ci)` now reports
+   "class X cannot inherit from itself" instead of spinning. Checked against the
+   whole ancestor chain so a future cause reports too.
+
+Tests: `test/test_nilpy_class_named_after_its_imported_base.npy` +
+`test/nilpy_units/samenamebase.pas` (override dispatches, the base's own method
+is inherited, and the unit's class is still constructible on its own), and
+`test/test_nilpy_class_inherits_itself_fail.npy` for the guard. Wired into both
+`test-nilpy` and `test-core`.
+
+Gate: `make compiler/pascal26` (fixedpoint) + repro + `tools/gate.sh quick`
+GREEN, FPC seed canary included.
+
+## Log
+- 2026-08-15 — resolved, commit PENDING-COMMIT.
