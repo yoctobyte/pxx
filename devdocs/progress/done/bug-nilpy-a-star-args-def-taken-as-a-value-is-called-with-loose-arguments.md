@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: b4c467a34
 summary: "`k = h` over `def h(*a)` then `k(1, 2, 3)` handed the body three loose Variants where its compiled signature declares ONE TPyList: len(a) answered 1, and richer bodies segfaulted. The star position now rides the {code, recv} pair (pybound_new_star) and the runtime bridge packs."
 ---
 
