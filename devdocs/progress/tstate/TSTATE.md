@@ -47,6 +47,6 @@
 - **test-nilpy#src:test/test_cpyext_hello.npy** — test/test_cpyext_hello.npy (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
 - **test-nilpy#src:test/test_cpyext_markupsafe.npy** — test/test_cpyext_markupsafe.npy test/nilpy_units/vendor/cyadd.pyx (plexus): bad `56a54014384b`, last good `ae1ef2b1ff27`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy** — test/test_nilpy_import_c_header_still_works.npy (plexus): bad `63d1d0de90d3`, last good `7a8480bc3722`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_import_sqlite.npy** — test/test_nilpy_import_sqlite.npy (plexus): bad `63d1d0de90d3`, last good `7643f88f2826`, 4 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_import_sqlite.npy** — test/test_nilpy_import_sqlite.npy (plexus): bad `63d1d0de90d3`, last good `639f0759d75d`, 2 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_sqlite_crud.npy** — test/test_nilpy_sqlite_crud.npy lib/rtl/regex.pas (plexus): bad `36d1bffda39d`, last good `0d8e7393a09c`, 14 commit(s) in range
 - **test-opt#src:test/c_inline_strlit_arg.c** — test/c_inline_strlit_arg.c (plexus): bad `36d1bffda39d`, last good `dbed942785d0`, 52 commit(s) in range
