@@ -189,6 +189,23 @@ begin
   CheckUlp(FMod(1.0e300, 3.0), 0.0, 0, 'fmod-huge-exact');
   CheckUlp(Power(1.0001, 10000.0), 2.7181459268249255, 2, 'power-amplified');
 
+  { The AMPLIFICATION BAND. pow(x,y) = exp(y log x), so an absolute error in
+    log(x) arrives multiplied by |y| — the error therefore GROWS with
+    |y log x|, which the float policy calls a bug where a flat 1-2 ulp is not.
+    The fast path defends against exactly that by handing the job to the
+    double-double log above |y log x| = 16, and these rows are what would
+    notice if that cutover were raised or removed: with it at 64 they measured
+    4 and 6 ulp. Expected values are glibc's.
+    feature-b-rtl-fast-power-needs-a-hi-lo-log }
+  CheckUlp(Power(1.5, 100.0), 4.065611775352152e17, 1, 'power-amp-40');
+  CheckUlp(Power(1.4082, -170.40969462291238), 4.6361259109930434e-26, 1,
+           'power-amp-58-negative');
+  CheckUlp(Power(2.718281828459045, 250.0), 3.7464546145026233e108, 1,
+           'power-amp-250');
+  CheckUlp(Power(3.0, -150.0), 2.702786817554766e-72, 1, 'power-amp-165-negative');
+  CheckUlp(Power(1.0157, 18722.949394336334), 4.669000156075841e126, 1,
+           'power-amp-292');
+
   { EXACT even in fast mode, and deliberately so: the reductions pull the
     exponent out by bit extraction, which is exact, so a power of the base has
     nothing left to round. People read these values off a screen — Log10(1000)

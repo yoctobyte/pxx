@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:209 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1896 rejected:37`
+`unfinished:11 blocked:4 backlog:209 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1897 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -46,6 +46,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` bug-a-bytes-has-almost-none-of-its-python-methods
+- `[p 55] [A]` bug-a-nilpy-star-star-has-its-own-low-precision-pow
 - `[p 55] [N]` bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
 - `[p 55] [T]` bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - `[p 55] [A]` feature-a-declaration-phase
@@ -63,6 +64,5 @@ _none — no lane is locked._
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
-- `[p 50] [P]` feature-p-read-text-into-a-char-arm
 
 _163 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

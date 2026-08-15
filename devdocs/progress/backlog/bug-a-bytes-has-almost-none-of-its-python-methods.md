@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-summary: "`bytes` carries decode/find/endswith/hex/count and essentially nothing else — no lower, upper, startswith, split, strip, replace, join, translate, index. `b.lower()` is what stops webencodings, and every one of these is reachable from ordinary CPython code that has no reason to expect a gap."
+summary: "`bytes` carries decode/find/endswith/hex/count and essentially nothing else; `float` carries NONE of its methods at all — no lower, upper, startswith, split, strip, replace, join, translate, index. `b.lower()` is what stops webencodings, and every one of these is reachable from ordinary CPython code that has no reason to expect a gap."
 ---
 
 # `bytes` is missing almost all of its Python methods
@@ -65,3 +65,23 @@ afternoon and closes the class.
 A `bytes` method that CPython defines and pxx omits is a hard compile error, so
 this failure mode is at least loud. It is still a wall in front of every
 byte-handling Python library, which is most of the parsing ones.
+
+
+## The same hole in `float`, measured at the same time
+
+Checked because the pattern looked type-wide rather than bytes-specific, and it
+is. `hasattr` on a `float`, same binary:
+
+```
+hex False   is_integer False   as_integer_ratio False
+fromhex False   conjugate False   real False   imag False
+```
+
+Not one of them. `x.is_integer()` in particular is ordinary, idiomatic modern
+Python and is what a library reaches for instead of `x == int(x)`.
+
+Kept on this ticket rather than split: it is the same statement (a builtin
+scalar type carrying an ad-hoc subset of its Python methods) about a second
+type, and whoever fixes one is a grep away from the other. `float`'s are even
+smaller than `bytes`'s — `is_integer`, `hex`/`fromhex`, `as_integer_ratio`, and
+`real`/`imag`/`conjugate` are trivia on a double.

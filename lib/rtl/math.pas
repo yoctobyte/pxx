@@ -931,6 +931,124 @@ begin
   Result := DdLdexp(y, k);
 end;
 
+function FastLogHiLo(x: Double): TDd;
+{ ln(x) as a hi/lo PAIR — the same fdlibm kernel as FastLnBits, but keeping the
+  bits that FastLnBits's final compensated sum throws away. About twice the work
+  of FastLnBits, against ~100x for DdLogD's 18-term dd Horner loop over
+  un-inlined dd primitives.
+
+  It exists because two callers cannot use a plain-double log and cannot afford
+  the dd one either (feature-b-rtl-fast-power-needs-a-hi-lo-log):
+
+  - `Power` computes exp(y * log x), so an ABSOLUTE error e in log x arrives as
+    |y|*e in the exponent, i.e. a RELATIVE error of |y|*e in the answer. A
+    1-ulp log is therefore 0.5*|y log x| ulp of result — fine at y log x = 1,
+    hundreds of ulp near the overflow boundary.
+  - `LogN` is a genuine quotient log(x)/log(base) with no exponent trick to hand
+    it the integer part, so every rounding lands in the answer and
+    `LogN(3, 81)` came out 4.0000000000000009.
+
+  fdlibm's own `e_pow.c` does exactly this: it carries its own log2 in a hi/lo
+  t1/t2 split rather than calling __ieee754_log, for this reason.
+
+  x MUST be finite and > 0 — every caller guards NaN/0/negative/Inf first. }
+var
+  b, lowHalf: Int64;
+  hx, ii, k: Integer;
+  f, sred, z, w, t1, t2, rpoly, hh, hl, corr, dk, xx, ln2hi, ln2lo: Double;
+  ff, u, klog: TDd;
+begin
+  ln2hi := DdBits($3FE62E42FEE00000);
+  ln2lo := DdBits($3DEA39EF35793C76);
+  xx := x;
+  b := DdRawBits(xx);
+  hx := Integer(b shr 32);
+  k := 0;
+  if hx < $00100000 then                   { subnormal: scale up by 2^54 first }
+  begin
+    k := -54;
+    xx := xx * DdBits($4350000000000000);
+    b := DdRawBits(xx);
+    hx := Integer(b shr 32);
+  end;
+  k := k + ((hx shr 20) - 1023);
+  hx := hx and $000FFFFF;
+  ii := (hx + $95F64) and $100000;         { which side of sqrt(2) the mantissa is }
+  lowHalf := b and $00000000FFFFFFFF;
+  b := (Int64(hx or (ii xor $3FF00000)) shl 32) or lowHalf;
+  xx := DdBits(b);
+  k := k + (ii shr 20);
+  f := xx - 1.0;
+  dk := Double(k);
+  { k*ln2 as a pair. k*ln2hi is EXACT — that is what ln2hi's zero low 32 bits
+    are for — so the whole reduction error lives in the k*ln2lo term. }
+  klog.Hi := dk * ln2hi;
+  klog.Lo := dk * ln2lo;
+  if f = 0.0 then begin Result := klog; Exit; end;        { the mantissa is 1 }
+  { log(1+f) = f - hfsq + s*(hfsq + R), with s = f/(2+f) and R the minimax
+    polynomial in s^2. No small-|f| shortcut branch: with f*f taken exactly the
+    general form degenerates to `f - f*f/2` there anyway, and one path cannot
+    disagree with another one. }
+  sred := f / (2.0 + f);
+  z := sred * sred;
+  w := z * z;
+  t1 := w * (LG2 + w * (LG4 + w * LG6));
+  t2 := z * (LG1 + w * (LG3 + w * (LG5 + w * LG7)));
+  rpoly := t2 + t1;
+  ff := Dd2Prod(f, f);                     { f*f with its low half kept }
+  hh := 0.5 * ff.Hi;                       { halving is exact }
+  hl := 0.5 * ff.Lo;
+  corr := sred * (hh + rpoly);             { small: O(f^3) }
+  u := Dd2Sum(f, -hh);                     { exact, and this is where the
+                                             cancellation would have been }
+  u.Lo := u.Lo - hl + corr;
+  u := DdFast2Sum(u.Hi, u.Lo);
+  Result := DdAdd(klog, u);
+end;
+
+function FastExpHiLoCore(xh, xl: Double; var kOut: Integer): TDd;
+{ e^(xh+xl) as `2^kOut * result`, with result in [0.7, 1.42] as a hi/lo pair —
+  the fast counterpart of DdExpCore, and the other half of what Power needs.
+
+  FastExpD already builds its reduction as a hi/lo pair internally; the only
+  thing it cannot do is accept an INCOMING low word, which is exactly what
+  y*log(x) hands it. So this is that entry point, not a second kernel.
+
+  The result is returned as a dd rather than a double so that DdScale can do
+  its careful subnormal rounding on the bits below the last one. }
+var hi, lo, t, c, xx, tt, ln2hi, ln2lo: Double; k: Integer;
+begin
+  ln2hi := DdBits($3FE62E42FEE00000);
+  ln2lo := DdBits($3DEA39EF35793C76);
+  k := Trunc(DdRint(DdBits($3FF71547652B82FE) * xh));    { round(x/ln2) }
+  t := Double(k);
+  hi := xh - t * ln2hi;                    { exact: ln2hi's low bits are zero }
+  lo := t * ln2lo - xl;                    { ...so the incoming lo rides here }
+  xx := hi - lo;
+  tt := xx * xx;
+  c := xx - tt * (EP1 + tt * (EP2 + tt * (EP3 + tt * (EP4 + tt * EP5))));
+  kOut := k;
+  { e^r = 1 + (hi - (lo - (r*c)/(2-c))), and Dd2Sum(1, small) is exact }
+  Result := Dd2Sum(1.0, hi - (lo - (xx * c) / (2.0 - c)));
+end;
+
+function FastHiLoQuot(a, b: TDd): Double;
+{ a/b as a correctly-rounded double, for two hi/lo pairs that are themselves
+  good to ~2^-105. One Newton correction on the double quotient: the residual
+  a - q0*b is computed exactly (Dd2Prod), so the correction carries the bits the
+  first division dropped.
+
+  It exists because DdDiv does the same job THREE times over, in full dd
+  arithmetic, to produce a dd result — and LogN throws the low half away on the
+  next line. Measured, that was 1.1 of LogN's 1.8 s per million. }
+var q0, e: Double; pr: TDd;
+begin
+  q0 := a.Hi / b.Hi;
+  pr := Dd2Prod(q0, b.Hi);                 { exact }
+  e := ((a.Hi - pr.Hi) - pr.Lo) - q0 * b.Lo + a.Lo;
+  Result := q0 + e / b.Hi;
+end;
+
 function FastLogSplit(x: Double; var k: Integer): Double;
 { x = 2^kk * m with m in [sqrt(2)/2, sqrt(2)). The exponent comes out by bit
   extraction, so it is EXACT — which is the whole point: a power of two returns
@@ -1811,7 +1929,9 @@ function LogN(base, x: Double): Double;
 { NOTE the argument order — base FIRST, as in FPC. Python's math.log(x, base) is
   the other way round, which is why NilPy needs its own intercept rather than
   binding to this (bug-n-math-trunc-and-log-need-frontend-intercepts). }
+{$ifdef PXX_FLOAT_EXACT}
 var r: TDd;
+{$endif}
 begin
   if (x <> x) or (base <> base) then begin Result := x + base; Exit; end;
   if (x <= 0.0) or (base <= 0.0) or (base = 1.0) then
@@ -1828,11 +1948,17 @@ begin
     and LogN(3,81) = 4.0000000000000009 — test/lib_log_exactness.pas asserts both
     of those are integers, and it is right to.
 
-    The way out is a fast hi/lo log, which Power needs for the same reason:
-    [[feature-b-rtl-fast-power-needs-a-hi-lo-log]]. Until then, correctness wins
-    over speed here — LogN is not an inner-loop function the way Ln/Exp are. }
+    So the log stays EXTRA-PRECISION in both modes; what changed is how much it
+    costs. By default that is FastLogHiLo, which keeps the low word for ~2x the
+    price of FastLnBits instead of DdLogD's ~100x
+    (feature-b-rtl-fast-power-needs-a-hi-lo-log); under -dPXX_FLOAT_EXACT it is
+    still the full dd log. FastLnBits/FastLnBits remains wrong in both. }
+{$ifdef PXX_FLOAT_EXACT}
   r := DdDiv(DdLogD(x), DdLogD(base));
   Result := r.Hi + r.Lo;
+{$else}
+  Result := FastHiLoQuot(FastLogHiLo(x), FastLogHiLo(base));
+{$endif}
 end;
 
 function Hypot(x, y: Double): Double;
@@ -2085,12 +2211,44 @@ begin
     neg := yodd;
     ax := -base;
   end;
-  { the LOG stays double-double even in fast mode, and that is deliberate:
-    y*log(x) is multiplied by the exponent before exp() sees it, so an error in
-    log(x) is AMPLIFIED by |y|. Power(1.0000001, 1e7) would lose most of its
-    significance to a 1-ulp log. Only the final exp is the fast one. }
+  { The log must carry MORE than a double, because y*log(x) is multiplied by the
+    exponent before exp() sees it: an error in log(x) is amplified by |y|, and
+    Power(1.0000001, 1e7) would lose most of its significance to a 1-ulp log.
+    Under -dPXX_FLOAT_EXACT that is the full double-double log; by default it is
+    FastLogHiLo, which carries the same extra precision at ~1/50 the cost.
+    What it must never be is FastLnBits. }
+{$ifdef PXX_FLOAT_EXACT}
   w := DdLogD(ax);
   p := Dd2Prod(w.Hi, exponent);
+{$else}
+  w := FastLogHiLo(ax);
+  p := Dd2Prod(w.Hi, exponent);
+  { FastLogHiLo's floor is the fdlibm POLYNOMIAL, not its rounding: measured
+    against glibc, the log is good to ~2^-58.4 absolute, so the amplified error
+    GROWS with |y log x| — which the float policy calls a bug, unlike a flat
+    1-2 ulp. So the cheap log is used to DECIDE, and the expensive one comes out
+    only where the decision says it matters. `p.Hi` is y*log(x) and is already
+    in hand.
+
+    The threshold is measured, not chosen: 11200 points sweeping |y log x| from
+    0.5 to 700 over 40 bases, both signs, judged against glibc.
+
+      | cutover | worst ulp, by |y log x| band 0-4 / 4-16 / 16-32 / 32-64 / 64+ |
+      | 64      | 1 / 1 / 4 / 6 / 1   |
+      | 32      | 1 / 1 / 4 / 1 / 1   |
+      | 16      | 1 / 1 / 1 / 1 / 1   |
+      |  8      | 1 / 1 / 1 / 1 / 1   |
+
+    16 is the largest cutover that holds 1 ulp everywhere, so it keeps the most
+    of the range on the fast path. Below it nothing improves. Widening the
+    TOLERANCE instead would have been the wrong trade: the amplification is
+    real, and a program computing a probability product sees it. }
+  if Abs(p.Hi) > 16.0 then
+  begin
+    w := DdLogD(ax);
+    p := Dd2Prod(w.Hi, exponent);
+  end;
+{$endif}
   p.Lo := p.Lo + w.Lo * exponent;
   w := DdFast2Sum(p.Hi, p.Lo);
   if w.Hi > 710.0 then
@@ -2105,7 +2263,11 @@ begin
     if neg then Result := -r else Result := r;
     Exit;
   end;
+{$ifdef PXX_FLOAT_EXACT}
   r := DdScale(DdExpCore(w, k), k);
+{$else}
+  r := DdScale(FastExpHiLoCore(w.Hi, w.Lo, k), k);
+{$endif}
   if neg then Result := -r else Result := r;
 end;
 

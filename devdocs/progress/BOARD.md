@@ -41,7 +41,8 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-bytes-has-almost-none-of-its-python-methods | A | 55 | bug | `bytes` carries decode/find/endswith/hex/count and essentially nothing else — no lower, upper, startswith, split, strip, replace, join, translate, index. `b.lower()` is what stops webencodings, and every one of these is reachable from ordinary CPython code that has no reason to expect a gap. | — |
+| bug-a-bytes-has-almost-none-of-its-python-methods | A | 55 | bug | `bytes` carries decode/find/endswith/hex/count and essentially nothing else; `float` carries NONE of its methods at all — no lower, upper, startswith, split, strip, replace, join, translate, index. `b.lower()` is what stops webencodings, and every one of these is reachable from ordinary CPython code that has no reason to expect a gap. | — |
+| bug-a-nilpy-star-star-has-its-own-low-precision-pow | A | 55 | bug | NilPy's `x ** y` does NOT go through the RTL's Power — pypow_v carries its own hand-rolled series ln/exp in compiler/builtin/pylib.pas. Measured against CPython over 105 pairs: 18 exact, 48 within 16 ulp, 15 worse, worst 1282 ulp (`1.0001 ** 10000` = 2.718145926824356 against 2.7181459268249255). The comment justifying it says the value is 'about to be str()'d through a known-truncated float formatter anyway', and that formatter now prints full precision. | — |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
@@ -103,7 +104,6 @@ _none_
 | feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit | A | 50 | feature | Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella. | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
-| feature-b-rtl-fast-power-needs-a-hi-lo-log | B | 45 | feature | Ln/Exp/Log10/Log2 went 66-107x faster on 2026-08-15; Power and LogN did NOT and are now the two slowest functions in the RTL at ~18-19 s per 1M. Both were left on the double-double log DELIBERATELY: Power amplifies the log's error by \|y\|, and LogN is a quotient where each rounding lands in the answer. One fix serves both — a fast extra-precision (hi/lo double) log, which is what fdlibm's pow carries instead of calling log. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1896)
+## done (1897)
 
-1896 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1897 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -469,6 +469,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] bug-a-bytes-has-almost-none-of-its-python-methods
+- [p 55] [A] bug-a-nilpy-star-star-has-its-own-low-precision-pow
 - [p 55] [N] bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
 - [p 55] [T] bug-t-bench-slowdowns-are-quantized-by-cpu-p-state
 - [p 55] [A] feature-a-declaration-phase
@@ -498,7 +499,6 @@ _none_
 - [p 45] [S] bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
-- [p 45] [B] feature-b-rtl-fast-power-needs-a-hi-lo-log
 - [p 45] [C] feature-c-entry-stub-must-run-initializers-for-environ
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
