@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:207 experimental:20 rainy-day:40 done-followup:3 decided:77 done:1954 rejected:38`
+`unfinished:11 blocked:4 backlog:207 experimental:20 rainy-day:40 done-followup:3 decided:77 done:1955 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -54,7 +54,6 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [P]` bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
@@ -64,5 +63,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
+- `[p 48] [P]` feature-pascal-class-management-operators
 
 _162 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

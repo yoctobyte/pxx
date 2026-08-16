@@ -9,9 +9,7 @@ track: P
 
 - **Type:** bug (Pascal frontend — `ParseConstSection` in `compiler/parser.inc`,
   plus symbol-table support). Track P / shared core.
-- **Status:** backlog — **diagnosed, one attempt made and reverted**; the fix
-  needs the C frontend's existing pattern rather than the one I tried. WIP diff
-  parked at the bottom.
+- **Status:** done (2026-08-16, same session that filed it).
 - **Found:** 2026-08-16, Pascal oracle sweep vs `fpc -O- -Mobjfpc` (typed
   constants topic). Confirmed **pre-existing** against the pinned binary, so it
   is not fallout from that day's const-expression work.
@@ -67,6 +65,32 @@ Remaining piece: the string-typed case, which today is not merely mis-scoped
 but undeclared (`undefined variable (s)`) — check whether BSS storage alone
 fixes it or whether the managed-string init path needs the same treatment.
 
+## What landed
+
+The **storage** half of the reverted attempt was fine and was kept:
+`AllocStaticLocal` makes `AllocVar`/`AllocArray` place a routine-local typed
+const in BSS while it keeps its routine BlockId (so it stays visible only inside
+the routine), and a `SymStaticLocal` parallel array exempts it from the
+decl-order gate, which only makes sense for file-scope globals.
+
+The **initialiser** half was replaced with the C frontend's shape: rows are
+tagged `LocalInitStatic`, and `CompilePendingLocalInits` now runs in two passes
+— ungated for `var x: T = init` (which must re-initialise per call, and is the
+control in the test), then the const rows collected into one chain emitted as
+`if guard = 0 then begin guard := 1; <inits> end` over a hidden BSS int. Nothing
+outlives the routine's parse, so `SymRollbackTo` is irrelevant.
+
+## Residuals, both pre-existing and both confirmed at GLOBAL scope too
+
+- A typed **string** const is a read-only string-literal alias with no storage
+  (`ParseConstSection` says so and gives the reason), so `s := s + 'c'` is
+  `undefined variable (s)` — identically for `const s: string[8] = 'ab'` at unit
+  scope. Not local-specific, so not this ticket.
+- A local const whose name matches its own **nested** routine binds the
+  routine's mangled name (`undefined variable (Inner$13)`) — filed as
+  [[bug-p-a-const-named-like-its-nested-routine-binds-the-routine]]. Confirmed
+  identical on the pinned binary.
+
 ## Gate
 
 The table above, as `test/test_local_typed_const_is_static.pas` with FPC's
@@ -74,11 +98,3 @@ column as `.expected`; `gate.sh quick`; self-host fixedpoint (the compiler's
 own sources contain local typed consts, which is what caught the first
 attempt).
 
-## Parked WIP
-
-The reverted attempt is a 164-line diff over `defs.inc` / `symtab.inc` /
-`parser.inc` (the `AllocStaticLocal` + `SymStaticLocal` half is reusable; the
-`PendingInit` half is the part that cannot work). It was left out of the tree
-deliberately rather than parked in `unfinished/`, since a half-applied
-compiler change is exactly what that directory's Track A rule warns about.
-Re-derive from this write-up — it is shorter than the diff.

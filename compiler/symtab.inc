@@ -2894,7 +2894,8 @@ begin
   begin
     if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId)
        and DeclVisible(SymUnitIdx[i])
-       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
+       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
+                and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
       Result := i;
@@ -2910,7 +2911,8 @@ begin
     if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) and
        IsBlockVisible(SymBlockId[i], CurBlockId)
        and DeclVisible(SymUnitIdx[i])
-       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
+       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
+                and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i, ' (ci)');
       Result := i;
@@ -3073,6 +3075,7 @@ begin
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
+  SetLength(SymStaticLocal, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SetLength(SymCellPtr, n);
@@ -3118,6 +3121,7 @@ begin
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
+  SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := tyInteger;
   if tk = tyAnsiString then
@@ -3140,7 +3144,7 @@ begin
   if tk = tyAuto then
   begin
     Syms[SymCount].Offset := 0;
-    if CurProc < 0 then
+    if (CurProc < 0) or AllocStaticLocal then
       Syms[SymCount].Kind := skGlobal
     else
       Syms[SymCount].Kind := skLocal;
@@ -3168,7 +3172,7 @@ begin
     else
       align := TypeAlign(tk);
 
-    if CurProc < 0 then
+    if (CurProc < 0) or AllocStaticLocal then
     begin
       BSSSize := AlignTo(BSSSize, align);
       Syms[SymCount].Kind   := skGlobal;
@@ -3373,6 +3377,7 @@ begin
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
+  SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
@@ -3390,7 +3395,7 @@ begin
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
   end;
 
-  if CurProc < 0 then
+  if (CurProc < 0) or AllocStaticLocal then
   begin
     BSSSize := AlignTo(BSSSize, align);
     Syms[SymCount].Kind   := skGlobal;
@@ -3465,6 +3470,7 @@ begin
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
+  SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;

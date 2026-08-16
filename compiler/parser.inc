@@ -25284,6 +25284,7 @@ begin
 	          LocalInitVal[LocalInitCount]  := ParseInitValTk(tk);
 	          LocalInitTk[LocalInitCount]   := Ord(tk);
 	        end;
+	        LocalInitStatic[LocalInitCount] := False;   { a plain `var x: T = init` re-initialises on every call -- its own correct semantics }
 	        Inc(LocalInitCount);
 	        Eat(tkSemicolon);
 	        Continue;
@@ -25672,6 +25673,7 @@ procedure ParseConstSection(clsCi, clsVis: Integer);
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem, cClassIdx: Integer;
     isLocalConst: Boolean;
+    constIsStatic: Boolean;   { routine-local typed const -> static BSS storage }
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
     cnNDims, cFlatLen, cDi, cDepth: Integer;
     scOff, scLen, si, sci2, cCi, cAi: Integer;
@@ -25706,12 +25708,26 @@ begin
         constants are writable storage with an initial value, so allocate storage
         and reuse the pending-init machinery (same as a `var = init`).
 
-        Two destinations by scope: a GLOBAL typed const records into PendingInit
-        (compiled before `main begin`); a routine-LOCAL one (CurProc >= 0)
-        records into LocalInit, compiled into that routine's prologue so its
-        stack-resident table is re-initialized on each call. AllocArray/AllocVar
-        already place storage at the right scope from CurProc. Ordinal/Char/Int64
-        element types; string/float/record initializers remain a follow-up. }
+        A routine-LOCAL one is STATIC: FPC gives it storage that outlives the
+        call and initialises it once, which is what makes the `const calls:
+        Integer = 0; begin Inc(calls)` counter idiom work. This used to allocate
+        a STACK slot and re-run the initialiser from the prologue, so the counter
+        printed 1 on every call, `const d: Double = 1.5; d := d * 2` printed 3.00
+        forever, and a string-typed one did not compile at all
+        (bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call).
+
+        So force BSS storage (AllocStaticLocal, restored below with stack
+        discipline -- a nested on-demand unit compile can run inside the value)
+        and take the GLOBAL recording path throughout: PendingInit, compiled once
+        before `main begin`. The symbol keeps its routine BlockId, so it is still
+        only visible inside the routine. }
+      { STATIC storage, but the initialiser stays INLINE in the routine, run
+        once behind a guard -- the shape the C frontend already uses for
+        block-scope `static` (CWrapStaticInitOnce, cparser.inc). Recording it
+        into PendingInit instead cannot work: leaving the routine calls
+        SymRollbackTo, so by the time main is compiled the record names a
+        symbol index past SymCount and IR validation rejects it. }
+      constIsStatic := CurProc >= 0;
       isLocalConst := CurProc >= 0;
       Next;
       { A NAMED fixed-array type (`Action0: TLogonActions = (...)`, ftpsend)
@@ -25776,7 +25792,9 @@ begin
           cLo := 0;
         end;
         cHi := cLo + cFlatLen - 1;
+        AllocStaticLocal := constIsStatic;
         cIdx := AllocArray(name, cElemTk, cLo, cHi);
+        AllocStaticLocal := False;
         if cElemTk = tyRecord then
         begin
           Syms[cIdx].ElemRecName := LastTypeRecId;
@@ -25832,6 +25850,7 @@ begin
                 LocalInitKind[LocalInitCount] := 0;
                 LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
                 LocalInitTk[LocalInitCount] := Ord(fTk);
+                LocalInitStatic[LocalInitCount] := constIsStatic;
                 Inc(LocalInitCount);
               end
               else
@@ -25896,6 +25915,7 @@ begin
                 LocalInitVal[LocalInitCount]  := scOff;
                 LocalInitFLen[LocalInitCount] := scLen;
                 LocalInitTk[LocalInitCount]   := Ord(cElemTk);
+                LocalInitStatic[LocalInitCount] := constIsStatic;
                 Inc(LocalInitCount);
               end
               else
@@ -25949,6 +25969,7 @@ begin
                 LocalInitKind[LocalInitCount] := 5;      { AN_CLASSREF }
                 LocalInitVal[LocalInitCount]  := cClassIdx;
                 LocalInitTk[LocalInitCount]   := Ord(tyPointer);
+                LocalInitStatic[LocalInitCount] := constIsStatic;
                 Inc(LocalInitCount);
               end
               else
@@ -25971,6 +25992,7 @@ begin
               LocalInitFOff[LocalInitCount] := -1;
               LocalInitVal[LocalInitCount]  := ParseInitValTk(cElemTk);
               LocalInitTk[LocalInitCount]   := Ord(cElemTk);
+              LocalInitStatic[LocalInitCount] := constIsStatic;
               Inc(LocalInitCount);
             end
             else
@@ -26058,7 +26080,9 @@ begin
         end
         else
         begin
+        AllocStaticLocal := constIsStatic;
         cIdx := AllocVar(name, cTk);
+        AllocStaticLocal := False;
         if cTk = tyPointer then
         begin
           { metaclass / pointer typed const: keep the pointee info so uses
@@ -26086,6 +26110,7 @@ begin
             LocalInitKind[LocalInitCount] := 5;
             LocalInitVal[LocalInitCount]  := cCi;
             LocalInitTk[LocalInitCount]   := Ord(tyPointer);
+            LocalInitStatic[LocalInitCount] := constIsStatic;
             Inc(LocalInitCount);
           end
           else
@@ -26153,6 +26178,7 @@ begin
               LocalInitKind[LocalInitCount] := 0;
               LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
               LocalInitTk[LocalInitCount]   := Ord(fTk);
+              LocalInitStatic[LocalInitCount] := constIsStatic;
               Inc(LocalInitCount);
             end
             else
@@ -26181,6 +26207,7 @@ begin
           LocalInitKind[LocalInitCount] := 0;   { slots are reused; clear a stale kind }
           LocalInitVal[LocalInitCount]  := ParseInitValTk(cTk);
           LocalInitTk[LocalInitCount]   := Ord(cTk);
+          LocalInitStatic[LocalInitCount] := constIsStatic;
           Inc(LocalInitCount);
         end
         else
@@ -29674,6 +29701,8 @@ procedure CompilePendingLocalInits;
   before the body). Mirror of CompilePendingGlobalInits over the LocalInit list;
   the list is reset by the caller at routine entry. }
 var i, identNode, valNode, idxLit, target, assignNode, initTk: Integer;
+    pass, staticChain, staticTail, seqNode, guardSym, savedCurProc: Integer;
+    guardIdent, zeroLit, oneLit, condNode, guardAsn, blkNode, pairNode, ifNode: Integer;
 begin
   { -O2 register-residency: suppress r14/r15 residency assignment for these
     per-initializer CompileAST calls. Each would otherwise re-emit the save+load
@@ -29681,8 +29710,18 @@ begin
     restores a param value over the caller's r14/r15. Residency is assigned once,
     at the main body, after these run. See bug-a-o2-miscompiles-disassembler. }
   RcSuppressAssign := True;
+  staticChain := -1;
+  staticTail := -1;
+  { PASS 0 emits the rows that must re-run on every call (`var x: T = init`);
+    PASS 1 collects the routine-local CONST rows into one chain, emitted below
+    behind a run-once guard. Their storage is static (BSS), so re-running the
+    initialiser would reset the const on every entry -- which is what made
+    `const calls: Integer = 0; Inc(calls)` print 1 forever
+    (bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call). }
+  for pass := 0 to 1 do
   for i := 0 to LocalInitCount - 1 do
   begin
+    if LocalInitStatic[i] <> (pass = 1) then Continue;
     { Value kind, not storage kind — see the same line in
       CompilePendingGlobalInits for why a frozen string[N] element must be
       spelled tyString here. This is that bug's ROUTINE-LOCAL twin. }
@@ -29738,7 +29777,63 @@ begin
     ASTLeft[assignNode] := target;
     ASTRight[assignNode] := valNode;
 
-    CompileAST(assignNode);
+    if pass = 0 then
+    begin
+      CompileAST(assignNode);
+      ASTNodeCount := ASTArenaFloor;
+    end
+    else
+    begin
+      { chain it; the arena must NOT be reset until the whole guarded block is
+        compiled, or the earlier assignments are recycled out from under it }
+      seqNode := AllocNode(AN_SEQ);
+      ASTLeft[seqNode] := assignNode;
+      ASTRight[seqNode] := -1;
+      if staticChain < 0 then staticChain := seqNode else ASTRight[staticTail] := seqNode;
+      staticTail := seqNode;
+    end;
+  end;
+
+  { `if guard = 0 then begin guard := 1; <const inits> end` over a hidden BSS
+    int (zero at load), so the first entry initialises and every later call
+    skips. Exactly the shape the C frontend uses for a block-scope `static`
+    (CWrapStaticInitOnce, cparser.inc) -- and for the same reason it must be
+    inline rather than a PendingInit record: SymRollbackTo drops the routine's
+    symbols on the way out, so nothing that names one can be emitted later. }
+  if staticChain >= 0 then
+  begin
+    savedCurProc := CurProc;
+    CurProc := -1;
+    guardSym := AllocVar('$constinit$' + MangleSuffix(SymCount), tyInteger);
+    CurProc := savedCurProc;
+
+    guardIdent := AllocNode(AN_IDENT);
+    ASTIVal[guardIdent] := guardSym; ASTTk[guardIdent] := Ord(tyInteger);
+    zeroLit := AllocNode(AN_INT_LIT);
+    ASTIVal[zeroLit] := 0; ASTTk[zeroLit] := Ord(tyInteger);
+    condNode := AllocNode(AN_BINOP);
+    ASTIVal[condNode] := Ord(tkEq);
+    ASTLeft[condNode] := guardIdent; ASTRight[condNode] := zeroLit;
+    ASTTk[condNode] := Ord(tyBoolean);
+
+    guardIdent := AllocNode(AN_IDENT);
+    ASTIVal[guardIdent] := guardSym; ASTTk[guardIdent] := Ord(tyInteger);
+    oneLit := AllocNode(AN_INT_LIT);
+    ASTIVal[oneLit] := 1; ASTTk[oneLit] := Ord(tyInteger);
+    guardAsn := AllocNode(AN_ASSIGN);
+    ASTLeft[guardAsn] := guardIdent; ASTRight[guardAsn] := oneLit;
+    ASTTk[guardAsn] := Ord(tyInteger);
+
+    seqNode := AllocNode(AN_SEQ);
+    ASTLeft[seqNode] := guardAsn; ASTRight[seqNode] := staticChain;
+    blkNode := AllocNode(AN_BLOCK);
+    ASTLeft[blkNode] := seqNode;
+    pairNode := AllocNode(AN_PAIR);
+    ASTLeft[pairNode] := blkNode; ASTRight[pairNode] := -1;
+    ifNode := AllocNode(AN_IF);
+    ASTLeft[ifNode] := condNode; ASTRight[ifNode] := pairNode;
+
+    CompileAST(ifNode);
     ASTNodeCount := ASTArenaFloor;
   end;
   RcSuppressAssign := False;

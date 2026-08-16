@@ -61,8 +61,8 @@ _none_
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-class-method-does-not-shadow-a-builtin-of-the-same-name | P | 60 | bug | A class method named after a builtin does not shadow it inside the class's own methods: TFPObjectList.Remove's unqualified `Delete(Result)` binds to the BUILTIN Delete and fails to compile. lib/rtl/contnrs.pas has not compiled since it landed 2026-07-13; FPC compiles and runs the 15-line repro. Found by Track T once the crtl-map failure stopped masking the step behind it. | — |
+| bug-p-a-const-named-like-its-nested-routine-binds-the-routine | P | 30 | bug | a local const whose name matches its own NESTED routine resolves to the routine's mangled name — `procedure Inner; const inner: integer = 0;` fails with `undefined variable (Inner$13)` | — |
 | bug-p-a-nested-class-method-implementation-takes-only-one-qualifier | P | 35 | bug | `function touter.tinner.Tag: string;` — the implementation header of a method belonging to a NESTED class — is a parse error: the header parser takes one qualifier. Declaring and implementing such a method inline works, so this is the out-of-line spelling only. | — |
-| bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call | P | 50 | bug | a routine-local typed const gets a stack slot re-initialised from the prologue, so the `const calls: Integer = 0; Inc(calls)` counter idiom prints 1 forever; string-typed ones do not compile at all. FPC's are static. | — |
 | bug-p-set-literal-elements-are-not-type-checked | P | 60 | bug | A set literal's elements are never checked against the set's element type. `TakesSet(['a', 1])` on a `set of TDay` parameter compiles and answers dTue; `[cGreen]` (a DIFFERENT enum) silently becomes dTue; `[True]` works; `[99]` silently produces the empty set with no diagnostic. FPC rejects every one of them. No overloading needed — one procedure, one set parameter. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1954)
+## done (1955)
 
-1954 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1955 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -478,7 +478,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
-- [p 50] [P] bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call
 - [p 50] [D] docs-cross-language-qualifier-note-is-wrong
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - [p 50] [C] feature-c-vla-via-alloca
@@ -581,6 +580,7 @@ _none_
 - [p 30] [B] bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
+- [p 30] [P] bug-p-a-const-named-like-its-nested-routine-binds-the-routine
 - [p 30] [T] bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form

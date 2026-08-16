@@ -1702,6 +1702,7 @@ var
   SymArrDimLo  : array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
   SymArrDimSpan: array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
   SymRTTIOff  : array of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
+  SymStaticLocal     : array of Boolean; { routine-LOCAL typed const: BSS storage (FPC's local typed consts are static and persist across calls) while staying block-scoped for lookup; exempt from the decl-order gate, which only makes sense for file-scope globals }
   SymIsHiddenArgTemp : array of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
   SymBlockId : array of Integer;
   SymDeclTok : array of Integer; { token index where a global var was declared (decl-order gating); 0 = unstamped/always-visible }
@@ -2644,6 +2645,7 @@ var
     routines are all handled by real source position — no registration-order
     bookkeeping. Types/consts/procs stay forward-visible (legit mutual recursion). }
   CurBodyHdrTok    : Integer;    { token index of the routine body being compiled; high = see all (outside a body) }
+  AllocStaticLocal : Boolean;    { while True, AllocVar/AllocArray place storage in BSS even inside a routine, and mark the symbol SymStaticLocal. Set only around a routine-LOCAL typed const, whose FPC semantics are static-and-persistent, never per-call }
   DeclOrderStrict  : Boolean;    { hide a global var declared after the current body's header }
   LaxDeclOrder     : Boolean;    { user opt-out (--lax-decl-order / {$DECLORDER OFF}): when True, ParseProgram sets DeclOrderStrict := False — restores the old lenient forward-visible-global behavior }
   RequireForward   : Boolean;    { --strict / --require-forward / {$REQUIRE FORWARD ON}: enforce FPC's routine visibility (header above the call: full def / forward; / interface / method) instead of the pre-scan's auto-forward. Default off; --mimic-fpc implies. The FPC-free seed-ordering proxy (feature-require-forward-strict-mode). }
@@ -2802,6 +2804,12 @@ var
   LocalInitTk   : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitFOff : array[0..MAX_LOCAL_INITS-1] of Integer;  { record-field span (SOff=-1 if not a field) }
   LocalInitFLen : array[0..MAX_LOCAL_INITS-1] of Integer;  { field-name length, or (Kind=1) string literal length }
+  { This row belongs to a routine-local typed CONST, whose storage is static
+    (BSS) and whose initialiser must therefore run ONCE, not per call. The
+    prologue emits those rows behind a run-once guard; a plain `var x: T = init`
+    row stays ungated and re-initialises on every entry, which is its own
+    correct semantics. }
+  LocalInitStatic: array[0..MAX_LOCAL_INITS-1] of Boolean;
   LocalInitCount: Integer;
 
   BFixupTargetLines : array[0..255] of Int64;
