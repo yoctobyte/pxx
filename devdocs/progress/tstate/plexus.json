@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-16T01:47:26Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e8dcebe3d049b30623254d31d01c9640023f66b4",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-16T01:53:59Z",
    "fixed": [],
    "new_red": [],
@@ -440,6 +432,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "72f044c4502fd184a5505135529e5fa946d989d0",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T10:49:28Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "096da361dd93823dc6aa56f7a344de5f343127ec",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1862,6 +1862,8 @@
   "test-core#src:test/test_overloading.pas@3": "native",
   "test-core#src:test/test_packed_array_field_b258.pas": "native",
   "test-core#src:test/test_param_array_lowbound.pas": "native",
+  "test-core#src:test/test_paramcount_for_limit.pas@1": "native",
+  "test-core#src:test/test_paramcount_for_limit.pas@2": "native",
   "test-core#src:test/test_paren_expr_class_b297.pas": "native",
   "test-core#src:test/test_pascal_conditional_include.pas": "native",
   "test-core#src:test/test_pascal_define_unit_scope_order1.pas": "native",
@@ -4558,6 +4560,8 @@
   "test-core#src:test/test_overloading.pas@3": "pass",
   "test-core#src:test/test_packed_array_field_b258.pas": "pass",
   "test-core#src:test/test_param_array_lowbound.pas": "pass",
+  "test-core#src:test/test_paramcount_for_limit.pas@1": "pass",
+  "test-core#src:test/test_paramcount_for_limit.pas@2": "pass",
   "test-core#src:test/test_paren_expr_class_b297.pas": "pass",
   "test-core#src:test/test_pascal_conditional_include.pas": "pass",
   "test-core#src:test/test_pascal_define_unit_scope_order1.pas": "pass",
@@ -5834,11 +5838,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T10:37:33Z",
-  "sha": "72f044c4502fd184a5505135529e5fa946d989d0",
+  "date": "2026-08-16T10:49:28Z",
+  "sha": "096da361dd93823dc6aa56f7a344de5f343127ec",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 210.5
+  "wall": 211.3
  },
  "last_bench": {
   "conf_rows": 550,
