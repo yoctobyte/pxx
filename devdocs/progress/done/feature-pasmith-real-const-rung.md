@@ -11,8 +11,9 @@ status: done
 
 - **Type:** feature (fuzz grammar — Track T owns the tool)
 - **Opened / done:** 2026-08-16
-- **Prompted by:** the Track A+C+P+N session, which found the underlying bug by
-  hand in its Pascal oracle sweep and flagged it as "the one worth a rung".
+- **Prompted by:** the sweep behind `8938aed7d`, which found the underlying bug
+  by hand and flagged it as "the one worth a rung". Attributed to the COMMIT
+  rather than to a session -- more than one dev session was in flight.
 
 ## The blind spot
 

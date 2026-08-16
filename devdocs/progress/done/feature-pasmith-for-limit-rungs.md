@@ -11,8 +11,10 @@ status: done
 
 - **Type:** feature (fuzz grammar — Track T owns the tool)
 - **Opened / done:** 2026-08-16
-- **Prompted by:** the Track A+C+P+N session's Pascal oracle sweep, which found
-  both bugs BY HAND and asked whether a rung could reach them. It could not.
+- **Prompted by:** the Pascal oracle sweep behind `dfc3b7449`, which found both
+  bugs BY HAND and asked whether a rung could reach them. It could not.
+  (Attributed to the COMMIT, not to a session: more than one dev session was in
+  flight and an earlier draft of this ticket credited the wrong one.)
 
 ## The blind spot
 

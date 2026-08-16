@@ -10,7 +10,8 @@ summary: "A fuzz rung that has only ever been SILENT is indistinguishable from o
 
 - **Type:** feature (fuzz tooling — Track T owns the tool)
 - **Opened:** 2026-08-16
-- **Origin:** the Track A+C+P+N session, after two rungs in a row were validated
+- **Origin:** a dev session working the Pascal oracle sweep, after two rungs
+  in a row were validated
   *by accident* — both times by running the differential against a compiler
   binary built before the fix the rung targeted, and finding it fired.
 
