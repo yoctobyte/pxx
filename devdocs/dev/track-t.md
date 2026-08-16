@@ -184,6 +184,55 @@ Detaching is not the bug and is not going away: `twatch` checks out arbitrary
 shas to test them, which is why it demands its own clone and refuses a dirty
 one. The defect is only ever in readers that assume the tree reflects now.
 
+## Rule: a coverage claim needs its BOUNDARY checked, not just its result
+
+Track T's product is coverage claims — "the tier is green", "this sweep covered
+those commits", "that guard handles this case". The characteristic way they fail
+is not a wrong result but an unchecked boundary, and it is invisible from the
+inside because the work really was done and really did pass.
+
+Two instances on 2026-08-16, from two different agents, and they are mirrors:
+
+- *"the guard would have caught both false attributions"* — it caught one. The
+  other commit touched `Makefile` and `test/**`, which the rule deliberately
+  keeps in scope.
+- *"native GREEN 1278/1278, covering both follow-up commits"* — true at the sha
+  it ran at, and a third commit had landed 2.5 minutes before the claim was
+  made.
+
+Same error: asserting coverage without checking where it stops. Neither agent
+caught it in themselves — in both cases they had done the work and were
+reporting it, which is exactly the state in which the boundary goes unexamined.
+
+**The cheap discipline, and it is two seconds:**
+
+1. **Name the sha or scope in the claim.** Not for the record — so a reader can
+   falsify it. Naming `5593b04bd8c2` is what let the gap be spotted in seconds.
+2. **Then check that boundary is still true when you make the claim.** Naming
+   the sha makes the error findable; re-checking `git rev-parse HEAD
+   origin/master` makes it not happen.
+
+A green verdict is a statement about a tree, and the tree moves. So does the
+set of cases a rule covers.
+
+### The same shape one level down: a true fact about the wrong subject
+
+Related and worth reading together, because double-checking cannot reach it —
+re-reading the condition CONFIRMS it, since it is true:
+
+- `pgrep -f "systemctl --user restart trackt"` matched a process. It was the
+  waiter's own command line, not a restart. (The fix: read `ActiveEnterTimestamp`
+  — **state, not evidence-of-state**.)
+- A record-constant parser arm keyed on `tkString` because a single-char literal
+  *is* that token — but only the destination field type can decide whether `'Z'`
+  is a string or an ordinal.
+- A pin-built job is immune to `compiler/**` — true, and not sufficient, if the
+  commit also touched the `Makefile`.
+
+Every one is a checkable, correct statement standing in for the deciding one.
+Scrutinising the condition harder does not help; asking *what would distinguish
+the two readings* does.
+
 ## Triage rule: a converged bisect range is not always an accusation
 
 The watcher narrows an open regression to one commit and prints it. That number
