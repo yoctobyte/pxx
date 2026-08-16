@@ -55,4 +55,4 @@ the FPC seed canary, which needed a `CIsCastAhead` forward: the new call site
 sits above its definition and the seed compiles the includes in order.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit d52b0fb3b.
