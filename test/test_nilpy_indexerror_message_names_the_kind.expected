@@ -1,0 +1,7 @@
+empty-pop: pop from empty list
+pop-index: pop index out of range
+tuple-index: tuple index out of range
+list-index: list index out of range
+str-index: string index out of range
+3 1 [2]
+2 2 1

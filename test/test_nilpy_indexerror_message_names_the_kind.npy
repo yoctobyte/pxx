@@ -1,0 +1,38 @@
+# CPython's IndexError message names the SEQUENCE KIND and the OPERATION, and a
+# program prints it:
+#
+#   [].pop()      -> "pop from empty list"      NilPy said "list index out of range"
+#   [1].pop(3)    -> "pop index out of range"   NilPy said "list index out of range"
+#   (1,)[5]       -> "tuple index out of range" NilPy said "list index out of range"
+#
+# NilPy has ONE TPyList behind list, tuple and set, so the kind has to come from
+# FKind — which exists for exactly this reason (it is what stopped a set from
+# printing as a list). Same shape as the OSError message sweep the same night:
+# nothing crashes and no value is wrong, the program just SAYS something
+# different, which only a differential oracle catches.
+# bug-nilpy-indexerror-messages-do-not-name-the-sequence-or-the-operation
+try:
+    [].pop()
+except IndexError as e:
+    print("empty-pop:", e)
+try:
+    [1].pop(3)
+except IndexError as e:
+    print("pop-index:", e)
+try:
+    (1,)[5]
+except IndexError as e:
+    print("tuple-index:", e)
+try:
+    [1][5]
+except IndexError as e:
+    print("list-index:", e)
+try:
+    "ab"[5]
+except IndexError as e:
+    print("str-index:", e)
+
+# the ordinary paths must not move
+l = [1, 2, 3]
+print(l.pop(), l.pop(0), l)
+print((1, 2)[1], (1, 2)[-1], [1, 2][-2])

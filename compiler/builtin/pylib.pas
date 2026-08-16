@@ -4886,6 +4886,21 @@ begin
   raise IndexError.Create('list index out of range');
 end;
 
+{ CPython's IndexError message names the SEQUENCE KIND and the OPERATION, and a
+  program prints it: `(1,)[5]` says "tuple index out of range", `[].pop()` says
+  "pop from empty list", `[1].pop(3)` says "pop index out of range". NilPy has
+  one TPyList behind all three displays, so the kind has to come from FKind —
+  which exists for exactly this reason (it is what stopped a set from printing
+  as a list). Same argument as the OSError message sweep: nothing crashes and
+  no value is wrong, the program just SAYS something different.
+  bug-nilpy-indexerror-messages-do-not-name-the-sequence-or-the-operation }
+procedure PySeqIndexError(l: TPyList);
+begin
+  if (l <> nil) and (l.FKind = PYSEQ_TUPLE) then
+    raise IndexError.Create('tuple index out of range');
+  raise IndexError.Create('list index out of range');
+end;
+
 constructor TPyList.Create;
 begin
   { first construction installs the recursive finalizer (slice 3) }
@@ -4965,7 +4980,7 @@ end;
 function PyListFix(l: TPyList; i: Integer): Integer;
 begin
   if i < 0 then i := i + l.FLen;
-  if (i < 0) or (i >= l.FLen) then PyIndexError;
+  if (i < 0) or (i >= l.FLen) then PySeqIndexError(l);
   Result := i;
 end;
 
@@ -5223,6 +5238,7 @@ end;
   tuple mid-compile (bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element). }
 function TPyList.pop: Variant;
 begin
+  if FLen = 0 then raise IndexError.Create('pop from empty list');
   Result := at(FLen - 1);                  { the caller's +1 }
   PyVarSlotClear(PPyVarRec(NativeInt(FItems) + (FLen - 1) * 16));
   FLen := FLen - 1;
@@ -5237,6 +5253,9 @@ function TPyList.pop_at(i: Integer): Variant;
 var
   k: Integer;
 begin
+  if FLen = 0 then raise IndexError.Create('pop from empty list');
+  if (i >= FLen) or (i < -FLen) then
+    raise IndexError.Create('pop index out of range');
   i := PyListFix(Self, i);
   Result := at(i);                         { the caller's +1 }
   { A COUNTED shift, the same idiom pylist_del_slice uses: put/at retain the
