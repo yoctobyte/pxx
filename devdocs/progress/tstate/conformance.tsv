@@ -92,7 +92,7 @@ skip	tclass12b.pp	tclass	untriaged	accepts-invalid: access control unenforced by
 skip	tclass12c.pp	tclass	gap	class-local const/type/var sections, `type Integer` distinct type, property default
 skip	tclass12d.pp	tclass	gap	nested class const/type sections (class-scoped const SomeValue)
 skip	tclass13a.pp	tclass	gap	nested `type` sections inside classes (nested class overriding parent's)
-fail	tclass13b.pp	tclass	-	compile error
+pass	tclass13b.pp	tclass	-	
 skip	tclass13c.pp	tclass	gap	accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 skip	tclass13d.pp	tclass	gap	`const` section inside a class (class constants / typed class consts)
 skip	tclass13.pp	tclass	wontfix	needs FPC typinfo/RTTI (TypeInfo/GetEnumName) and FPC's nested-class ClassName strings
@@ -319,7 +319,7 @@ pass	tgeneric69.pp	tgeneric	-
 skip	tgeneric6.pp	tgeneric	gap	objfpc generic syntax + nested record/pointer types inside a generic class
 pass	tgeneric70.pp	tgeneric	-	
 pass	tgeneric71.pp	tgeneric	-	
-fail	tgeneric72.pp	tgeneric	-	compile error
+pass	tgeneric72.pp	tgeneric	-	
 pass	tgeneric73.pp	tgeneric	-	
 auto	tgeneric74.pp	tgeneric	-	recompile
 auto	tgeneric75.pp	tgeneric	-	recompile
