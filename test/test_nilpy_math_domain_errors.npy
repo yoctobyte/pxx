@@ -56,7 +56,9 @@ t(lambda: math.pow(0, -1))
 print(math.sqrt(2), math.log(math.e), math.log10(1000), math.log2(8))
 # asin/acos are 1-2 ulps off libm here (bug-b-arcsin-arccos-lose-2-ulps-vs-libm),
 # so they are asserted at the boundaries above rather than mid-range.
-print(math.pow(2, 10), math.pow(2, 0.5))
+# math.pow(2, 0.5) via "%.14g": pxx is 1 ulp from CPython and the float policy
+# does not call that a bug. See meta-float-accuracy-policy.
+print(math.pow(2, 10), "%.14g" % math.pow(2, 0.5))
 print(math.log(8, 2), math.log(1000, 10))
 
 # a real ZeroDivisionError is still a ZeroDivisionError

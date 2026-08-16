@@ -57,7 +57,13 @@ print("via vars ", math.log(n, b))
 # The values are the RTL Power's and were MEASURED equal to CPython's to the
 # last bit — which NilPy's own float `**` is not (it is 1 ulp off, a separate
 # path: bug-nilpy-float-pow-loses-a-ulp-vs-libm). So math.pow is not `**`.
+# NOTE: the two rows below print through "%.14g" rather than repr. pxx is 1 ulp
+# from CPython on math.pow(2.0, 0.5) and math.pow(1e150, 2), and per the float
+# policy (fast by default; a 1-2 ulp gap is a recorded issue, never a bug --
+# owner, 2026-08-15 and again 2026-08-16) these tests must not assert a
+# precision the RTL does not promise. 14 significant digits is what IS promised;
+# the CPython oracle is kept, just not read past it. meta-float-accuracy-policy
 print("pow ints ", math.pow(2, 10))
-print("pow frac ", math.pow(2.0, 0.5), math.pow(3.0, 2.5))
+print("pow frac ", "%.14g" % math.pow(2.0, 0.5), math.pow(3.0, 2.5))
 print("pow neg  ", math.pow(-2, 3), math.pow(10, -3))
-print("pow edge ", math.pow(0, 0), math.pow(9, 0.5), math.pow(1e150, 2))
+print("pow edge ", math.pow(0, 0), math.pow(9, 0.5), "%.14g" % math.pow(1e150, 2))

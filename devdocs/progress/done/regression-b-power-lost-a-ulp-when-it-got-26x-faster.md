@@ -147,3 +147,64 @@ CPython. Since `bug-a-nilpy-star-star-has-its-own-low-precision-pow` routed `**`
 here (6a4fa40ae), one function now has to serve a fast-by-default Pascal RTL and
 a CPython-exact NilPy at the same time. Those are different requirements.
 Collected on [[meta-float-accuracy-policy]] rather than answered here.
+
+---
+
+## CLOSED 2026-08-16 (owner) — not a bug under the float policy; tests relaxed instead
+
+> "this is just the exact-float. i simply don't care about minor float
+> discrepancies and we should stop flagging them." — user
+
+One factual correction that does not change the ruling: this was **not**
+exact-mode-only. `-dPXX_FLOAT_EXACT` is the mode where the value is still
+correct; the DEFAULT path is what moved, which is why it could turn CI red at
+all. The owner's decision applies to the default path knowing that.
+
+### What was actually red, and what was done
+
+Both failing tests reduced to **two values, each 1 ulp from CPython** — no stale
+expectations, no growing error:
+
+| expression | CPython | pxx at HEAD |
+| --- | --- | --- |
+| `math.pow(2.0, 0.5)` | `1.4142135623730951` | `1.414213562373095` |
+| `math.pow(1e150, 2)` | `9.999999999999999e+299` | `1e+300` |
+
+(An earlier note here said the `1e+300` row was "stale in the GOOD direction".
+That applied to `pow(1e300, 1.0)`, which is **not** in either test. Both rows
+above are genuine 1-ulp gaps. Corrected.)
+
+Per the policy — fast by default, a 1-2 ulp gap is a recorded issue and never a
+bug — the defect was in the TESTS, which asserted a precision the RTL does not
+promise. Those three values now print through `"%.14g"`:
+
+- `test/test_nilpy_math_log.npy` — `pow frac` and `pow edge`
+- `test/test_nilpy_math_domain_errors.npy` — the `math.pow(2, 0.5)` row
+
+Both **GREEN**. The `.expected` files were regenerated **from CPython**, not
+from pxx — the oracle is kept, it is simply not read past 14 significant
+digits. Every other row in both files is untouched and still asserts CPython's
+exact output.
+
+14 rather than 15: at 15 significant digits the two `sqrt(2)` values still
+round differently (`1.41421356237309` vs `1.4142135623731`), because pxx's
+double sits just below the tie. 14 is the first width that is stable, and a
+1-ulp double difference is invisible well before it.
+
+### What is NOT closed
+
+The **26x speed win stays** and the accuracy trade is now explicit rather than
+accidental — which was the one thing this ticket legitimately complained about.
+
+The diagnosis stands and is worth keeping: `FastExpHiLoCore` ends with
+`Dd2Sum(1.0, <plain double expression>)`, which splits a 53-bit value into two
+doubles rather than producing a 106-bit approximation, so `DdScale` has no extra
+bits to round with. If anyone ever wants the ulp back, a genuine compensated
+exp kernel is the fix (measured cost: reverting to the exact exp is 0.73s ->
+9.44s per 1M calls, so a real hi/lo exp should land nearer 2-3x, not 13x). Not
+scheduled — recorded so the next person does not re-derive it.
+
+**Standing consequence:** stop filing 1-2 ulp findings as bugs. A test that goes
+red on one is a test asserting more than the RTL promises, and the test is what
+changes. Error that GROWS with the argument is still a bug — that half of the
+policy is unchanged.

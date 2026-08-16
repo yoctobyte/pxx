@@ -1781,6 +1781,7 @@ should not read it to find out what to do. Grep it freely._
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-a-disassembler-cannot-decode-comisd-and-xorpd | A | 60 | regression | the -S disassembler had no comisd or xorpd, so the Trunc/Round saturation sequence printed `db 66 / db 0f / db 2f` and test-asm's no-undecoded-bytes check went red on hello.pas and compiler.pas | — |
+| regression-b-power-lost-a-ulp-when-it-got-26x-faster | B | 65 | regression | `11321a09c lib(B): Power and LogN, 26x each` made lib/rtl/math.pas's Power 1 ulp off CPython — `Power(2.0, 0.5)` and `Power(1e150, 2.0)` both moved. It is what turned test_nilpy_math_log and test_nilpy_math_domain_errors red in Track T's 343a52551808 cascade, and those two are still red at HEAD. | — |
 | regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c | B | 70 | regression | NEW-RED: `--system-libs=c` now links libm — the Floor/Ceil result-type change | — |
 | regression-cascade-25678cbdd57c | T | 90 | regression | regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch) | — |
 | regression-cascade-343a52551808 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 343a52551808 (auto-filed by twatch) | — |

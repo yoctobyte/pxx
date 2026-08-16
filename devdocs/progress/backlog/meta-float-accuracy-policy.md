@@ -71,7 +71,7 @@ Living list; add rows rather than filing float tickets loose.
 
 | ticket | track | prio | note |
 | --- | --- | --- | --- |
-| `regression-b-power-lost-a-ulp-when-it-got-26x-faster` | B | 65 | **NOT exact-mode-only** — default path, two tests red. Diagnosed: `FastExpHiLoCore`, not the log. |
+| `regression-b-power-lost-a-ulp-when-it-got-26x-faster` | B | — | **CLOSED 2026-08-16** not-a-bug per the ruling above; tests relaxed to `%.14g`, both green. Speed win kept. |
 | `bug-nilpy-float-pow-loses-a-ulp-vs-libm` | N | 20 | pylib's own pow; may be closed by 6a4fa40ae — **re-measure before working it** |
 | `bug-b-rtl-fast-power-needs-a-hi-lo-log` (done) | B | — | the change that caused the regression above; context |
 | `bug-a-riscv32-softfloat-has-no-subnormals` | A | 40 | a target-specific accuracy hole |
@@ -101,6 +101,35 @@ Printing is not accuracy; a correctly-rounded value can still print wrong.
 `bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents` (B, 30),
 `feature-opt-float-format-fast-path` (O, 30),
 `feature-b-hardware-sqrt-on-aarch64-and-arm32` (B, 20).
+
+## RULING 2026-08-16 (owner) — the central tension is resolved: policy wins, tests bend
+
+> "i simply don't care about minor float discrepancies and we should stop
+> flagging them." — user, 2026-08-16
+
+That settles "The central tension" above. Of the four sketched options, the one
+taken is **regenerate/relax the assertion where a ulp is all that differs** —
+but in its least destructive form, and the form matters:
+
+- the `.expected` files are still generated **from CPython**, never from pxx;
+- only the specific values that differ by a ulp are widened, via `"%.14g"`;
+- every other row keeps asserting CPython's exact output.
+
+So the oracle is kept and simply not read past 14 significant digits. Worked
+example: [[regression-b-power-lost-a-ulp-when-it-got-26x-faster]], closed as
+not-a-bug with `test_nilpy_math_log` and `test_nilpy_math_domain_errors` green.
+
+**The working rule for everyone, replacing the "collect, do not fix piecemeal"
+caution below for the accuracy rows:** a 1-2 ulp finding is not a bug, is not a
+ticket, and does not get flagged. If a test goes red on one, the TEST is
+asserting more than the RTL promises and the test is what changes. Two things
+are unchanged: error that **grows with the argument** is still a bug, and
+NilPy's upward-compatibility contract still binds everywhere the difference is
+larger than a ulp or two.
+
+This also retires the "one function serving two masters" worry about `**`
+routing to `Power` — it does not need to serve a bit-exact NilPy, because the
+NilPy tests no longer demand bit-exactness at that precision.
 
 ## Correcting the triage assumption that opened this
 
