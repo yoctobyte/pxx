@@ -291,3 +291,25 @@ was added.
 
 ## Log
 - 2026-08-16 — resolved, commit 6a4fa40ae.
+
+## 2026-08-16 — the premise moved after this landed; still the right call
+
+This ticket's argument was "the good implementation exists three directories
+away, and `**` cannot see it", measured as Power being within 1 ulp of glibc
+over an 11,556-point sweep. **That measurement was taken before
+`11321a09c`** — and a regression in that commit costs `Power` a ulp on some
+inputs ([[regression-b-power-lost-a-ulp-when-it-got-26x-faster]], diagnosed to
+`FastExpHiLoCore`, not the log).
+
+The fix here (6a4fa40ae) is **still correct**: 84 ulp worst became 1, and 1 ulp
+is not 1282 ulp. Nothing to undo. But two consequences are worth carrying
+forward:
+
+- The claim in this ticket's write-up that Power is "1-ulp accurate" is now a
+  statement about the *intended* state, not the shipped one, until that
+  regression is fixed.
+- Routing `**` here means **one function now serves two contracts**: a Pascal
+  RTL that is fast-by-default and 1-2-ulp-tolerant, and a NilPy that is
+  upward-compatible with CPython and whose `.expected` files assert bit-exact
+  output. No single implementation satisfies both. That tension is collected on
+  [[meta-float-accuracy-policy]] and is the thing to decide once.

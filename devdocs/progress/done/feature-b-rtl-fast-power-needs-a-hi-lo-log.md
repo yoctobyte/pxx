@@ -195,3 +195,29 @@ modes and on all four targets.
 
 ## Log
 - 2026-08-15 — resolved, commit 11321a09c.
+
+## 2026-08-16 — REGRESSION from this commit: the exp, not the log
+
+`11321a09c` cost `Power` one ulp on some inputs, and two NilPy tests went red:
+[[regression-b-power-lost-a-ulp-when-it-got-26x-faster]].
+
+The write-up above is accurate as far as it goes — "worst 1 ulp over 11,556
+points vs glibc", with the dd baseline at 0 ulp named as "the price". What it did
+**not** do is check whether anything in the tree already asserted the exact
+values. `test/test_nilpy_math_log.npy` and `test_nilpy_math_domain_errors.npy`
+do, because their `.expected` files are CPython's output. Track T's cascade
+found it, which is the system working — but the lesson is cheaper than that:
+**before trading accuracy for speed, grep the suite for tests that assert the
+old values.**
+
+Diagnosis (measured, see the regression ticket): the **fast hi/lo log is
+innocent**; `FastExpHiLoCore` is the cause. Its closing
+`Dd2Sum(1.0, <double expression>)` splits an already-rounded double exactly into
+a pair — a 53-bit value written as two doubles, not a 106-bit approximation of
+e^r — so `DdScale` gets no extra bits to round with. The log carries genuine
+extra precision; the exp only appears to. "An entry point, not a second kernel"
+was the error: accepting an incoming low word is necessary, producing one is
+also necessary.
+
+The cutover analysis and the log kernel stand; the exp needs the same treatment
+the log got.

@@ -189,3 +189,36 @@ when it happens. Anything short of that is a promise nobody checked.
 Cost to note before starting: every existing pxx extension needs a decision
 (gate it, or declare the mode incompatible with it), which is an audit of the
 whole dialect surface — not a flag one afternoon.
+
+
+## 2026-08-16 — set literal vs `array of const` at one overload slot (decided: leave it)
+
+A row for the divergence table, from
+`decide-set-vs-array-of-const-at-the-same-overload-slot` (decided by the owner,
+2026-08-16).
+
+**Divergence:** when an overload set offers both a `set of T` and an
+`array of const` at the same parameter slot, `f([x])` binds differently under pxx
+and FPC — and *both* compilers are order-dependent, so neither is a rule.
+
+- **FPC**: in `para_allowed` a `setdef` parameter rates a bracket literal
+  `te_equal`, and so does `array of const`. Two exact matches is a genuine TIE,
+  broken by candidate collection order (i.e. `uses` order). Verified present
+  verbatim in trunk as well as 3.2.2, so this is FPC's design and not a stable
+  bug awaiting a fix.
+- **pxx**: resolves from the binding candidate's parameter shape, decided at
+  parse time before the brackets are read.
+
+**Decision: leave it.** Don't overload on a set and an `array of const` at one
+slot — give the function a decisive name. A cast-style disambiguator
+(`somefunc((set)[x,y,z])`) was considered and **rejected as non-standard
+Pascal**. `--strict-fpc` has a real target for the bracket shapes where FPC *is*
+consistent (ranges, mixed-type elements, empty) and nothing coherent to match on
+the genuine tie.
+
+**Not covered by that decision, and still open:**
+`bug-p-set-literal-elements-are-not-type-checked` (P, p60) — pxx never checks a
+set literal's elements against the element type, so `[cGreen]` (a different enum)
+silently becomes `dTue` and `[99]` silently yields the empty set. That is a real
+divergence with a silent wrong value, and per the compat escape rule it is a
+`bug-`, not a compat row.

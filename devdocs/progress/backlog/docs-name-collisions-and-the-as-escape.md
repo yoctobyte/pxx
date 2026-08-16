@@ -62,6 +62,15 @@ pages become neighbours, not duplicates.
    not trivially solved in that direction, and a small wrapper is the normal
    answer. Set that expectation rather than leaving a reader to discover it.
 
+7. **One footnote, from a decision next door.** A bracket literal at a slot
+   where one overload takes a `set of T` and another an `array of const` is
+   resolved by the binding candidate; FPC resolves it by candidate collection
+   order; **neither is a rule to rely on, so do not write that overload** — give
+   the two functions distinct names. That is the whole user-facing content of
+   `decide-set-vs-array-of-const-at-the-same-overload-slot`, which was decided
+   2026-08-16 as "leave it, a docs footnote only". One short paragraph; do not
+   reproduce the analysis.
+
 ## Not in scope
 
 - The own-language-first *rule* itself — that is the blocked ticket above.
