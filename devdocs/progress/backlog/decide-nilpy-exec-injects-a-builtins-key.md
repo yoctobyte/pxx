@@ -58,3 +58,102 @@ population is `devdocs/dev/python-libraries.md` §7. If one turns up, option 3.
 
 `devdocs/dev/nilpy-semantics-divergences.md` carries the row, so the difference
 is documented rather than latent.
+
+---
+
+## MEASURED 2026-08-16 — the premise is wrong, and there is a real bug hiding behind the cosmetic question
+
+### 1. CPython injects a DICT, not a module object
+
+The ticket's fork rests on: *"it injects the builtins module object, and NilPy
+has no module objects — so honouring the letter of it means choosing a value
+that is not what CPython has there."* Measured, that is not what happens.
+
+```python
+d = {}; exec("x = 1 + 2", d, d)
+type(d["__builtins__"]).__name__      # 'dict'      <- not 'module'
+d["__builtins__"] is builtins.__dict__ # True       <- by IDENTITY
+len(d["__builtins__"])                 # 157
+d["__builtins__"]["len"]               # <built-in function len>   (subscript WORKS)
+```
+
+Same answer at module level, inside a function, in `__main__`, and in an
+imported module. The *module* form only appears as `__main__`'s own
+`__builtins__` when run as a script — a different object in a different place,
+and not what `exec` puts in a fresh globals dict.
+
+So there is **no module-object obstacle**, and the ticket's stated reason for
+preferring option 1 over option 3 does not exist. NilPy also already has
+first-class builtin values — `f = len; f([1,2,3])` compiles and answers 3 — so
+a name→builtin dict is representable.
+
+### 2. Two behaviours any implementation must match (neither is in the ticket)
+
+- **Globals only, never locals.** `exec("y=1", g, l)` puts `__builtins__` in
+  `g` and leaves `l` as `{'y'}`. pxx today leaves `g` **empty**, which is a
+  sharper visible difference than the ticket's single example: a caller doing
+  `if not g:` branches differently.
+- **Do not overwrite.** `exec("z=1", {"__builtins__": {}}, ...)` leaves the
+  caller's empty dict in place. CPython injects only when the key is absent.
+
+### 3. The finding that matters: restricted exec is silently ignored
+
+That non-overwrite rule exists to serve an idiom people actually write:
+
+```python
+d = {"__builtins__": {}}
+exec("n = len([1,2,3])", d, d)
+```
+
+| | result |
+| --- | --- |
+| CPython | **`NameError`** — `len` is not resolvable |
+| pxx | **`n = 3`** — resolved anyway |
+
+This is not a key-enumeration difference. It is working CPython code taking a
+different path, and in the direction where the author's explicit instruction
+(resolve names against *this* mapping) is silently discarded. Under NilPy's
+upward-compatibility contract that is a **defect**, not a dialect choice — and
+per the compat escape rule, a finding that means silent wrong behaviour is
+promoted to a `bug-` ticket in the owning lane rather than parked as parity
+work. Filed: [[bug-n-exec-ignores-a-caller-supplied-builtins-mapping]].
+
+Stated honestly: CPython's restricted exec is **not** a security boundary
+(`().__class__.__bases__` and friends escape it), so this is not a sandbox-hole
+claim. The point is narrower and still solid — the name-resolution *behaviour*
+is well-defined, observable, and relied on for evaluating config/template
+expressions in a controlled namespace.
+
+## What this does to the fork
+
+The ticket asks one question; the measurement shows it is two, and they separate
+cleanly at very different costs:
+
+- **Producing** a builtins dict when the caller supplied none — the cosmetic
+  half. Needs an enumerable table of the builtin namespace, which is the real
+  work in option 3, and CPython's value being `builtins.__dict__` *by identity*
+  means a faithful copy would make `d["__builtins__"]["len"] = ...` mutate the
+  builtin namespace program-wide. That is a footgun worth NOT importing.
+- **Consulting** a builtins mapping the caller DID supply — the behavioural
+  half. Needs no table at all: only "when `globals['__builtins__']` is present,
+  resolve builtin names through it." This is the half with the real defect
+  behind it, and it is much the cheaper of the two.
+
+The ticket treats these as one option and prices the cheap half at the expensive
+half's cost.
+
+**Revised recommendation:**
+
+- **The cosmetic key: option 1 stands** (leave it out), now on a better reason
+  than the ticket gave. Not "the true value is unrepresentable" — it is — but
+  "the faithful value is a live alias to the builtin namespace, and the only
+  known demand is `sorted(d.keys())` in a probe." A copy would diverge on
+  mutation; the identity would import a footgun. Absence is the honest answer
+  until something needs it. **Option 2 is refused outright**: injecting a key we
+  then ignore is strictly worse than both — it claims conformance in the
+  enumeration while still failing the restricted-exec case.
+- **The behavioural half is not a decision.** It is Track N work under the
+  upward-compatibility rule, and it is now filed as such.
+
+Reclassify this ticket accordingly: it stays open only as the record of the
+cosmetic call, and `decide-` overstates what is left in it.

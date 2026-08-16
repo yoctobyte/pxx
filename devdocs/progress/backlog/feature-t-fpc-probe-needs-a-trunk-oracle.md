@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 45
+prio: 25
 type: feature
 blocked-by: []
 summary: "Every FPC-parity finding we produce is measured against installed FPC 3.2.2, so it inherits 3.2.2's bugs — and that has now twice produced a false 'pxx diverges from FPC' where pxx actually agreed with FPC trunk and only 3.2.2 was wrong. Give the probes a three-way verdict: pxx vs FPC-stable vs FPC-trunk."
@@ -112,3 +112,21 @@ than leaving to whoever is triaging:
 `tools/testmgr.py --tier full` green (T's own gate for tooling changes), plus
 the harness reproducing the worked case above: `for d in [1, 2.5]` classifies as
 row 3 (FPC stable bug, fixed upstream) and not as a pxx divergence.
+
+## Priority calibration (user, 2026-08-16) — dropped 45 → 25
+
+> "don't worry. finding bugs in FPC is quite rare.. and their stable years old.
+> plus, i bet people over there are also using fuzzing and agentic coding to
+> improve the codebase. just, it's not impossible that we do find a new bug
+> since, well, very related project in a way." — user
+
+So the expected yield is low and this is convenience infrastructure, not a
+correctness gate. Two consequences for whoever builds it: keep it **cheap and
+opt-in** (item 2 above is the important one — do not run a third oracle across
+the corpus), and do not let it grow into a standing trunk-tracking obligation.
+The manual recipe below is sufficient for the once-or-twice-a-year case; the
+`FPC=` / `FPC_TRUNK=` overrides (item 1) capture most of the value on their own.
+
+Worth keeping in view, though: pxx and FPC are close enough in problem domain
+that a genuinely NEW upstream bug is plausible, and that is the case where
+reporting it upstream matters.
