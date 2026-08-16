@@ -29562,6 +29562,51 @@ begin
   NestRoutineEndAt := cur;
 end;
 
+function NestRoutineDeclares(startIdx: Integer; const nm: AnsiString): Boolean;
+{ Does the routine declared at startIdx have a param, local, const or type of
+  its own named `nm`? Used to exempt a SIBLING routine from the call-site rename
+  below: inside a routine that declares `helper`, the name means its own
+  declaration, not a sibling routine of that name.
+  bug-p-a-const-named-like-its-nested-routine-binds-the-routine }
+var cur, depth, hdrE, bodyB: Integer; beforeColon: Boolean;
+begin
+  Result := False;
+  depth := 0; cur := startIdx;
+  while cur < TokCount do
+  begin
+    if Tokens[cur].Kind = tkLParen then Inc(depth)
+    else if Tokens[cur].Kind = tkRParen then Dec(depth)
+    else if (Tokens[cur].Kind = tkSemicolon) and (depth = 0) then Break;
+    Inc(cur);
+  end;
+  hdrE := cur;
+  if (startIdx + 2 < TokCount) and (Tokens[startIdx + 2].Kind = tkLParen) then
+  begin
+    beforeColon := True;
+    for cur := startIdx + 3 to hdrE - 1 do
+    begin
+      if Tokens[cur].Kind = tkColon then beforeColon := False
+      else if Tokens[cur].Kind = tkSemicolon then beforeColon := True
+      else if (Tokens[cur].Kind = tkIdent) and beforeColon and
+              CaseEqual(GetTokenStrFromRaw(Tokens[cur].SOffset, Tokens[cur].SLen), nm) then
+      begin Result := True; Exit; end;
+    end;
+  end;
+  bodyB := NestBodyBeginAt(hdrE);
+  beforeColon := True; cur := hdrE + 1;
+  while cur < bodyB do
+  begin
+    if NestIsRoutineDecl(cur) then begin cur := NestRoutineEndAt(cur); beforeColon := True; Continue; end;
+    if (Tokens[cur].Kind = tkColon) or (Tokens[cur].Kind = tkEq) then beforeColon := False
+    else if Tokens[cur].Kind = tkSemicolon then beforeColon := True
+    else if (Tokens[cur].Kind = tkVar) or (Tokens[cur].Kind = tkConst) or (Tokens[cur].Kind = tkType) then beforeColon := True
+    else if (Tokens[cur].Kind = tkIdent) and beforeColon and
+            CaseEqual(GetTokenStrFromRaw(Tokens[cur].SOffset, Tokens[cur].SLen), nm) then
+    begin Result := True; Exit; end;
+    Inc(cur);
+  end;
+end;
+
 procedure NestScanSpans(nestedStart: Integer; var hdrEnd, bodyBegin, finalCur: Integer);
 var cur, depth: Integer;
 begin
@@ -29593,6 +29638,7 @@ end;
 
 procedure ParseNestedRoutine;
 const MAX_NEST_REFS = 4096; MAX_NEST_CAPS = 64; MAX_NEST_DEPTH = 32;
+      MAX_NEST_SKIPS = 64;
 var
   nestedStart, nameTokIdx, hdrEnd, bodyBegin, finalCur, cur, depth, i, j, remCount: Integer;
   parenOpen, parenClose: Integer;
@@ -29634,6 +29680,11 @@ var
   shEnd: array[0..MAX_NEST_DEPTH-1] of Integer;
   shOwn: array[0..MAX_NEST_DEPTH-1] of Integer;
   shTop, ihdrEnd, ibodyBegin: Integer;
+  { spans in the parent's range where a sibling routine declares this routine's
+    name of its own, so the call-site rename must not touch them }
+  skipLo, skipHi: array[0..MAX_NEST_SKIPS-1] of Integer;
+  skipCount, sk: Integer;
+  skipped: Boolean;
 begin
   nestedStart := TokPos - 1;   { the 'procedure'/'function' token (= CurTok) }
   nameTokIdx := nestedStart + 1;
@@ -29762,17 +29813,27 @@ begin
     begin
       if (i > 0) and (Tokens[i-1].Kind = tkDot) then begin Inc(i); Continue; end;
       nm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      { Own params/locals/consts FIRST: a declaration inside the routine shadows
+        the routine's own name, so `procedure Inner; const inner: integer = 0;`
+        means the const in the body, not the routine. This test used to run
+        AFTER the own-name test below, which rewrote every such reference to the
+        mangled routine name and failed with `undefined variable (Inner$13)` —
+        for a const, a var and a parameter alike, and only in a NESTED routine,
+        because the mangle is the one thing the non-nested path does not do.
+        bug-p-a-const-named-like-its-nested-routine-binds-the-routine }
+      isOwnName := False;
+      for j := 0 to ownCount - 1 do
+        if CaseEqual(ownN[j], nm) then begin isOwnName := True; Break; end;
+      if isOwnName then begin Inc(i); Continue; end;
       { the routine's own name in its body = the function-result variable
-        (FuncName := expr) or a recursive self-call; both must follow the mangle. }
+        (FuncName := expr) or a recursive self-call; both must follow the mangle.
+        A function's result variable is NOT in ownN — it is the routine name
+        itself — so reordering above cannot swallow it. }
       if CaseEqual(nm, nestedName) then
       begin
         if nameCnt < MAX_NEST_REFS then begin namePos[nameCnt] := i; Inc(nameCnt); end;
         Inc(i); Continue;
       end;
-      isOwnName := False;
-      for j := 0 to ownCount - 1 do
-        if CaseEqual(ownN[j], nm) then begin isOwnName := True; Break; end;
-      if isOwnName then begin Inc(i); Continue; end;
       if CaseEqual(nm, 'Self') then
       begin
         needSelf := True;
@@ -30041,8 +30102,35 @@ begin
       `a`, both nested in the same `outer`) keeps the unmangled name and fails
       to resolve once this routine's own declaration is rewritten to `forward`
       (bug-nested-proc-sibling-call-unresolved). }
+    { …but a sibling that declares a param/local/const of this routine's name
+      means ITS OWN declaration by that name, not this routine. Renaming there
+      produced `var Helper$357: Integer` — a parse error naming a routine the
+      program never wrote. Collect those spans first (walking token by token
+      also reaches routines nested inside a sibling), then skip them below. Same
+      rule as the own-name test in the free-variable scan, at the one site that
+      rewrites OTHER routines' bodies.
+      bug-p-a-const-named-like-its-nested-routine-binds-the-routine }
+    skipCount := 0;
+    i := finalCur;
+    while i < parentEnd do
+    begin
+      if NestIsRoutineDecl(i) and NestRoutineDeclares(i, nestedName) then
+      begin
+        j := NestRoutineEndAt(i);
+        if skipCount < MAX_NEST_SKIPS then
+        begin skipLo[skipCount] := i; skipHi[skipCount] := j; Inc(skipCount); end;
+        i := j;                { anything nested inside it is shadowed too }
+      end
+      else
+        Inc(i);
+    end;
+
     for i := parentEnd - 1 downto finalCur do
-      if (Tokens[i].Kind = tkIdent) and
+    begin
+      skipped := False;
+      for sk := 0 to skipCount - 1 do
+        if (i >= skipLo[sk]) and (i < skipHi[sk]) then begin skipped := True; Break; end;
+      if (not skipped) and (Tokens[i].Kind = tkIdent) and
          CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nestedName) and
          ((i = 0) or (Tokens[i-1].Kind <> tkDot)) then
       begin
@@ -30078,6 +30166,7 @@ begin
           end;
         end;
       end;
+    end;
   end;
 
   { Stash the (possibly rewritten) full routine [nestedStart, finalCur) for

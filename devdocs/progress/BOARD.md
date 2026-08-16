@@ -34,7 +34,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (212)
+## backlog (211)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +60,6 @@ _none_
 | bug-nilpy-float-power-is-a-ulp-off-the-rtl-already-has-the-fix | B | 20 | bug | NilPy's `**` with a fractional exponent still uses exp(y*ln(x)), so 2**0.5 != math.sqrt(2); lib/rtl/math.pas's Power was fixed with a double-double kernel for exactly these cases and names 2^0.5 in its own comment | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
-| bug-p-a-const-named-like-its-nested-routine-binds-the-routine | P | 30 | bug | a local const whose name matches its own NESTED routine resolves to the routine's mangled name — `procedure Inner; const inner: integer = 0;` fails with `undefined variable (Inner$13)` | — |
 | bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right | P | 25 | bug | `--strict-fpc` answers 2147483644 for `-a shr 1` where FPC — and pxx's own DEFAULT dialect — both say 9223372036854775804: the reproduce-FPC flag is the only mode that gets this row wrong | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | bug-t-twatch-status-false-down | T | 45 | bug | bug(T): `twatch --status` / `trackt health` report DOWN for a watcher that is UP | — |
@@ -414,9 +413,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1967)
+## done (1968)
 
-1967 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1968 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -589,7 +588,6 @@ _none_
 - [p 30] [B] bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
-- [p 30] [P] bug-p-a-const-named-like-its-nested-routine-binds-the-routine
 - [p 30] [T] bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
