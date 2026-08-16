@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-nilpy-float-overflow-answers-inf-where-cpython-raises | N | 25 | bug | `2.0 ** 10000` answers +inf where CPython raises OverflowError, and so does `1e300 * 1e300`. A program that catches OverflowError — the documented way to detect this in Python — silently gets an infinity instead and carries on. | — |
+_none_
 
 ## unfinished (11)
 
@@ -401,9 +399,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1919)
+## done (1920)
 
-1919 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1920 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
