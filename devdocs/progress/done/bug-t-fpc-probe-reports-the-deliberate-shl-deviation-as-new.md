@@ -4,6 +4,7 @@ prio: 25
 type: bug
 blocked-by: []
 summary: "`tools/fpc_diff_probe.sh` reports `shl-shr-neg` as a NEW divergence on every run, but that row is the DELIBERATE native-width shift decision of 2026-08-11. A permanent false NEW trains the reader to skim the one line that is supposed to mean something."
+status: done
 ---
 
 # The FPC probe reports the deliberate `shl` deviation as a new divergence
@@ -156,3 +157,6 @@ covers slightly less and can be believed.
 
 The oracle is usable again: the next `pxx-vs-fpc_*` this fuzzer reports will be
 a real one, arriving as divergence number 1 rather than number 89.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

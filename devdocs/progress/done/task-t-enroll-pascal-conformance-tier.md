@@ -7,7 +7,7 @@ prio: 45
 # Enroll the Pascal FPC-testsuite conformance battery in testmgr
 
 - **Type:** task (Track T — tools & testing; owns testmgr tier composition)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Filed by:** Track B after the conformance burn-down (293 pass / 0 fail /
   223 skip / 34 auto-gated of 550 curated).
@@ -201,3 +201,6 @@ the snapshot and demands byte-identity, so it exercises the moved path harder
 than anything else in the tier. `full` on an idle box remains the real proof,
 and the watcher will supply it on its next full cycle — testmgr is re-executed
 per cycle rather than held in memory, so this needs **no twatch restart**.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

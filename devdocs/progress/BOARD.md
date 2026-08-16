@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (205)
+## backlog (203)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,7 +63,6 @@ _none_
 | bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
 | bug-t-bench-slowdowns-are-quantized-by-cpu-p-state | T | 55 | bug | The bench series' slow rows on xeon/plexus are not a contention continuum — they are QUANTIZED at 1.238x, the E5-2620 v2's 2.6/2.1 GHz boost-to-base ratio, which makes a void row detectable from the number alone | — |
 | bug-t-csmith-harness-reports-slow-as-a-timeout | T | 35 | bug | `tools/csmith_fuzz.py`'s PXX_TIMEOUT bucket fires on a fixed wall-clock limit, so a program that merely runs slower than the limit is filed as a HANG. Seed 90044 sat in that bucket for a run: pxx took 18s where gcc took 6.9s, both finished, and both agreed. The bucket name sends the reader looking for an infinite loop. | — |
-| bug-t-fpc-probe-reports-the-deliberate-shl-deviation-as-new | T | 25 | bug | `tools/fpc_diff_probe.sh` reports `shl-shr-neg` as a NEW divergence on every run, but that row is the DELIBERATE native-width shift decision of 2026-08-11. A permanent false NEW trains the reader to skim the one line that is supposed to mean something. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -245,7 +244,6 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
-| task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
 
 ## experimental (20)
 
@@ -405,9 +403,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1937)
+## done (1939)
 
-1937 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1939 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -518,7 +516,6 @@ _none_
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [A] task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc
 - [p 45] [T] task-t-enroll-libtest-demos-watcher
-- [p 45] [T] task-t-enroll-pascal-conformance-tier
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-nilpy-none-str-sentinel-vs-textstr-kind (unblocks 1)
 - [p 40] [A] bug-a-riscv32-softfloat-has-no-subnormals
@@ -599,7 +596,6 @@ _none_
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
 - [p 25] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
-- [p 25] [T] bug-t-fpc-probe-reports-the-deliberate-shl-deviation-as-new
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
