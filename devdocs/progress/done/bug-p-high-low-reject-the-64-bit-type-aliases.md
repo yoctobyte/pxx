@@ -4,6 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "`High(NativeInt)` / `High(PtrInt)` / `High(SizeInt)` were refused with \"expected an ordinal type name\" while `High(Int64)` folded — the names already mapped to a kind, but OrdinalTypeBound had no row for tyNativeInt and SizeInt had no name mapping at all."
+status: done
 ---
 
 # High/Low reject the 64-bit type aliases
@@ -48,3 +49,6 @@ already worked, and the fold in `const` and array-bound position — prints
 
 `make compiler/pascal26` + the test under both compilers + `tools/gate.sh
 quick` — GREEN.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
