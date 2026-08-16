@@ -185,3 +185,18 @@ its prerequisite is unbuilt, which was not known then — is a reason to re-ask,
 not a licence to substitute a different design quietly.
 
 **blocked-by** that decision.
+
+## RE-MEASURED 2026-08-16 — this is a lowering bug, not a representation bug
+
+Full measurement on [[decide-nilpy-none-str-sentinel-vs-textstr-kind]]. Summary:
+the defect is one arm of the three-way `is None` lowering at
+`pyparser.inc:2549-2580`. Slots the frontend types **Variant** answer correctly
+on every shape measured; slots typed **AnsiString** call `pystr_is_none`, which
+is `Pointer(s) = nil` — true for `""`. Every row in this ticket's repro is an
+AnsiString-typed slot.
+
+So this does **not** need the TEXTSTR block kind and does not need a None
+sentinel. It needs the widen-to-Variant mechanism that already exists (and that
+`Optional[str]` already uses) to cover the two remaining nil-handle sites, after
+which the string arm folds to constant False. Track N's lane and gate, not a
+Track A heap project.
