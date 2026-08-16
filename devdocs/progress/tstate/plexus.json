@@ -6302,17 +6302,18 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-16T08:23:48Z",
+  "date": "2026-08-16T10:08:00Z",
   "red": [
-   "lib-test#00",
+   "lib-test#08",
+   "lib-test#36",
    "test-nilpy#225",
    "test-nilpy#437",
    "test-nilpy#628",
    "test-i386#03"
   ],
-  "sha": "467a4e5dab2d1bd7ad244bb9375c3a2924ba065c",
+  "sha": "4b7c49db4027826d1bee53a1e6a9d2322af8456d",
   "tier": "full",
-  "ver": "v342",
+  "ver": "v343",
   "verdict": "RED"
  },
  "renamed_from": [
