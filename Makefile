@@ -4241,6 +4241,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_generic_class_in_program26)" = "$$(printf '7\nhi')"
 	./$(COMPILER) test/test_nested_proc_sibling_call.pas $(TESTTMP)/test_nested_proc_sibling_call26
 	test "$$($(TESTTMP)/test_nested_proc_sibling_call26)" = "$$(printf 'a\nb-before\na7\nb-after\na7\na42\n3\n2\n1\n0\n15\n10005\n10')"
+	./$(COMPILER) test/test_nested_routine_depth2_capture.pas $(TESTTMP)/test_nested_routine_depth2_capture26
+	$(TESTTMP)/test_nested_routine_depth2_capture26 | diff -u test/test_nested_routine_depth2_capture.expected -
 	./$(COMPILER) test/test_managed_var_param.pas $(TESTTMP)/test_managed_var_param26
 	test "$$($(TESTTMP)/test_managed_var_param26)" = "$$(printf '1\n1\n1\n1\n1\n6')"
 	./$(COMPILER) test/test_managed_setlength_var.pas $(TESTTMP)/test_managed_setlength_var26

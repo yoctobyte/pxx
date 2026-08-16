@@ -29457,6 +29457,76 @@ end;
   starting at nestedStart, after token edits may have shifted positions. (Kept a
   top-level helper, not a nested routine, so the compiler can self-host without
   needing nested-routine capture for its own source.) }
+{ Index-driven mirrors of PreScanSkipRoutineBody (which walks CurTok/Next). The
+  nested-routine lifter rewrites Tokens[] directly, so it must locate a routine's
+  OWN `begin` and its end without being fooled by an INNER routine's begin..end.
+  Taking the first `begin` after the header is what mis-spanned every doubly
+  nested routine — the lifter then cut the enclosing routine in half at the inner
+  one's `end;` (bug-a-two-level-nested-routine-cannot-capture-anything). }
+
+function NestIsRoutineDecl(idx: Integer): Boolean;
+{ True for a routine DECLARATION at idx. A procedural TYPE (`= procedure(x: T)`,
+  `: procedure of object`) never has an identifier straight after the keyword,
+  which is exactly what separates the two here. }
+begin
+  NestIsRoutineDecl := (idx + 1 < TokCount) and
+                       ((Tokens[idx].Kind = tkProcedure) or (Tokens[idx].Kind = tkFunction)) and
+                       (Tokens[idx + 1].Kind = tkIdent);
+end;
+
+function NestRoutineEndAt(startIdx: Integer): Integer; forward;
+
+function NestBodyBeginAt(hdrEnd: Integer): Integer;
+{ hdrEnd = index of the `;` closing a routine header. Returns the index of that
+  routine's own `begin`/`asm`, stepping OVER any inner routine declaration in the
+  declaration part. Returns the `forward` token for a bodyless declaration. }
+var cur: Integer;
+begin
+  cur := hdrEnd;
+  while cur < TokCount do
+  begin
+    if (Tokens[cur].Kind = tkBegin) or (Tokens[cur].Kind = tkAsm) or
+       (Tokens[cur].Kind = tkForward) then Break;
+    if NestIsRoutineDecl(cur) then cur := NestRoutineEndAt(cur) else Inc(cur);
+  end;
+  NestBodyBeginAt := cur;
+end;
+
+function NestRoutineEndAt(startIdx: Integer): Integer;
+{ startIdx = a routine declaration's `procedure`/`function` keyword. Returns the
+  index just past its terminating `;`. Recurses through inner routines. }
+var cur, depth, bb: Integer;
+begin
+  depth := 0; cur := startIdx;
+  while cur < TokCount do
+  begin
+    if Tokens[cur].Kind = tkLParen then Inc(depth)
+    else if Tokens[cur].Kind = tkRParen then Dec(depth)
+    else if (Tokens[cur].Kind = tkSemicolon) and (depth = 0) then Break;
+    Inc(cur);
+  end;
+  bb := NestBodyBeginAt(cur);
+  if bb >= TokCount then begin NestRoutineEndAt := TokCount; Exit; end;
+  if Tokens[bb].Kind = tkForward then
+  begin
+    cur := bb;
+    while (cur < TokCount) and (Tokens[cur].Kind <> tkSemicolon) do Inc(cur);
+    if cur < TokCount then Inc(cur);
+    NestRoutineEndAt := cur;
+    Exit;
+  end;
+  depth := 1; cur := bb + 1;
+  while (cur < TokCount) and (depth > 0) do
+  begin
+    if (Tokens[cur].Kind = tkBegin) or (Tokens[cur].Kind = tkCase) or
+       (Tokens[cur].Kind = tkTry) or (Tokens[cur].Kind = tkAsm) then Inc(depth)
+    else if Tokens[cur].Kind = tkEnd then Dec(depth);
+    Inc(cur);
+  end;
+  if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then Inc(cur);
+  NestRoutineEndAt := cur;
+end;
+
 procedure NestScanSpans(nestedStart: Integer; var hdrEnd, bodyBegin, finalCur: Integer);
 var cur, depth: Integer;
 begin
@@ -29470,14 +29540,15 @@ begin
   end;
   if cur >= TokCount then Error('nested routine: malformed header');
   hdrEnd := cur;
-  cur := hdrEnd;
-  while (cur < TokCount) and (Tokens[cur].Kind <> tkBegin) do Inc(cur);
-  if cur >= TokCount then Error('nested routine: expected begin');
+  cur := NestBodyBeginAt(hdrEnd);
+  if (cur >= TokCount) or (Tokens[cur].Kind = tkForward) then
+    Error('nested routine: expected begin');
   bodyBegin := cur;
   depth := 1; Inc(cur);
   while (cur < TokCount) and (depth > 0) do
   begin
-    if (Tokens[cur].Kind = tkBegin) or (Tokens[cur].Kind = tkCase) then Inc(depth)
+    if (Tokens[cur].Kind = tkBegin) or (Tokens[cur].Kind = tkCase) or
+       (Tokens[cur].Kind = tkTry) or (Tokens[cur].Kind = tkAsm) then Inc(depth)
     else if Tokens[cur].Kind = tkEnd then Dec(depth);
     Inc(cur);
   end;
@@ -29486,7 +29557,7 @@ begin
 end;
 
 procedure ParseNestedRoutine;
-const MAX_NEST_REFS = 4096; MAX_NEST_CAPS = 64;
+const MAX_NEST_REFS = 4096; MAX_NEST_CAPS = 64; MAX_NEST_DEPTH = 32;
 var
   nestedStart, nameTokIdx, hdrEnd, bodyBegin, finalCur, cur, depth, i, j, remCount: Integer;
   parenOpen, parenClose: Integer;
@@ -29522,6 +29593,12 @@ var
   nestSelfOff, nestSelfLen: Integer;
   ins2: array[0..2*MAX_NEST_CAPS+7] of TRawToken;
   ins2Count, rp: Integer;
+  { shadow stack for the transitive free-variable scan: while inside an inner
+    nested routine's span, its own names are appended to ownN and ownCount is
+    rolled back to shOwn[] when the scan leaves at shEnd[] }
+  shEnd: array[0..MAX_NEST_DEPTH-1] of Integer;
+  shOwn: array[0..MAX_NEST_DEPTH-1] of Integer;
+  shTop, ihdrEnd, ibodyBegin: Integer;
 begin
   nestedStart := TokPos - 1;   { the 'procedure'/'function' token (= CurTok) }
   nameTokIdx := nestedStart + 1;
@@ -29564,36 +29641,88 @@ begin
     end;
   end;
   beforeColon := True;
-  for i := hdrEnd + 1 to bodyBegin - 1 do
+  i := hdrEnd + 1;
+  while i < bodyBegin do
   begin
+    { An inner routine's own params/locals are NOT ours — stepping over its whole
+      declaration is what keeps `procedure C(k: Integer)` from making `k` look
+      like a local of ours and silently suppressing our capture of an enclosing
+      `k`. Its own free variables are collected by the scan below instead. }
+    if NestIsRoutineDecl(i) then begin i := NestRoutineEndAt(i); beforeColon := True; Continue; end;
     if (Tokens[i].Kind = tkColon) or (Tokens[i].Kind = tkEq) then beforeColon := False
     else if Tokens[i].Kind = tkSemicolon then beforeColon := True
     else if (Tokens[i].Kind = tkVar) or (Tokens[i].Kind = tkConst) or (Tokens[i].Kind = tkType) then beforeColon := True
     else if (Tokens[i].Kind = tkIdent) and beforeColon and (ownCount < 128) then
     begin ownN[ownCount] := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen); Inc(ownCount); end;
+    Inc(i);
   end;
 
   { Free-variable analysis over the body. Classify each non-selector ident:
     own (skip) / explicit Self (rename) / enclosing local-or-param (capture by
     ref) / implicit Self field-or-method (capture Self) / global-or-other (skip).
-    Inner nested routines are skipped wholesale — their captures are resolved
-    when they are themselves lifted. }
+
+    The scan is TRANSITIVE: an inner nested routine is walked, not skipped, and
+    its free variables become OUR captures too. Nothing else can thread an
+    enclosing frame down to it — when the inner routine is itself lifted (during
+    our own top-level re-parse) the only scope it can reach is ours, so a
+    variable two levels up has to arrive as a parameter of ours first. Skipping
+    inner routines is what made capture at depth 2 impossible in every direction
+    (bug-a-two-level-nested-routine-cannot-capture-anything). Depth 3+ then falls
+    out by construction: each level threads through what the levels below need.
+
+    An inner routine's own name, params and locals shadow ours for the length of
+    its span, pushed on shOwn/shEnd and popped when the scan leaves it. }
   needSelf := False; fieldCnt := 0; selfCnt := 0; capCount := 0; nameCnt := 0;
-  i := bodyBegin;
+  shTop := 0;
+  i := hdrEnd;
   while i < finalCur do
   begin
-    if (Tokens[i].Kind = tkProcedure) or (Tokens[i].Kind = tkFunction) then
+    while (shTop > 0) and (i >= shEnd[shTop - 1]) do
+    begin Dec(shTop); ownCount := shOwn[shTop]; end;
+    if NestIsRoutineDecl(i) then
     begin
-      while (i < finalCur) and (Tokens[i].Kind <> tkBegin) do Inc(i);
-      depth := 1; Inc(i);
-      while (i < finalCur) and (depth > 0) do
+      if shTop >= MAX_NEST_DEPTH then Error('nested routine: nesting too deep');
+      shEnd[shTop] := NestRoutineEndAt(i); shOwn[shTop] := ownCount; Inc(shTop);
+      { the inner routine's own name (its result var inside its own body), then
+        its params, then its declaration-part locals }
+      if ownCount < 128 then
+      begin ownN[ownCount] := GetTokenStrFromRaw(Tokens[i+1].SOffset, Tokens[i+1].SLen); Inc(ownCount); end;
+      depth := 0; ihdrEnd := i;
+      while ihdrEnd < TokCount do
       begin
-        if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
-        else if Tokens[i].Kind = tkEnd then Dec(depth);
-        Inc(i);
+        if Tokens[ihdrEnd].Kind = tkLParen then Inc(depth)
+        else if Tokens[ihdrEnd].Kind = tkRParen then Dec(depth)
+        else if (Tokens[ihdrEnd].Kind = tkSemicolon) and (depth = 0) then Break;
+        Inc(ihdrEnd);
       end;
-      Continue;
+      if Tokens[i + 2].Kind = tkLParen then
+      begin
+        beforeColon := True;
+        for j := i + 3 to ihdrEnd - 1 do
+        begin
+          if Tokens[j].Kind = tkColon then beforeColon := False
+          else if Tokens[j].Kind = tkSemicolon then beforeColon := True
+          else if (Tokens[j].Kind = tkIdent) and beforeColon and (ownCount < 128) then
+          begin ownN[ownCount] := GetTokenStrFromRaw(Tokens[j].SOffset, Tokens[j].SLen); Inc(ownCount); end;
+        end;
+      end;
+      ibodyBegin := NestBodyBeginAt(ihdrEnd);
+      beforeColon := True; j := ihdrEnd + 1;
+      while j < ibodyBegin do
+      begin
+        if NestIsRoutineDecl(j) then begin j := NestRoutineEndAt(j); beforeColon := True; Continue; end;
+        if (Tokens[j].Kind = tkColon) or (Tokens[j].Kind = tkEq) then beforeColon := False
+        else if Tokens[j].Kind = tkSemicolon then beforeColon := True
+        else if (Tokens[j].Kind = tkVar) or (Tokens[j].Kind = tkConst) or (Tokens[j].Kind = tkType) then beforeColon := True
+        else if (Tokens[j].Kind = tkIdent) and beforeColon and (ownCount < 128) then
+        begin ownN[ownCount] := GetTokenStrFromRaw(Tokens[j].SOffset, Tokens[j].SLen); Inc(ownCount); end;
+        Inc(j);
+      end;
+      Inc(i); Continue;
     end;
+    { our own declaration part carries no references to classify — only the
+      inner routines inside it (handled above) and our body do }
+    if (i < bodyBegin) and (shTop = 0) then begin Inc(i); Continue; end;
     if Tokens[i].Kind = tkIdent then
     begin
       if (i > 0) and (Tokens[i-1].Kind = tkDot) then begin Inc(i); Continue; end;
@@ -29855,17 +29984,7 @@ begin
   i := finalCur; parentBegin := -1;
   while i < TokCount do
   begin
-    if (Tokens[i].Kind = tkProcedure) or (Tokens[i].Kind = tkFunction) then
-    begin
-      while (i < TokCount) and (Tokens[i].Kind <> tkBegin) do Inc(i);
-      depth := 1; Inc(i);
-      while (i < TokCount) and (depth > 0) do
-      begin
-        if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
-        else if Tokens[i].Kind = tkEnd then Dec(depth);
-        Inc(i);
-      end;
-    end
+    if NestIsRoutineDecl(i) then i := NestRoutineEndAt(i)
     else if Tokens[i].Kind = tkBegin then begin parentBegin := i; Break; end
     else Inc(i);
   end;
@@ -29874,7 +29993,8 @@ begin
     depth := 1; i := parentBegin + 1;
     while (i < TokCount) and (depth > 0) do
     begin
-      if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
+      if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) or
+         (Tokens[i].Kind = tkTry) or (Tokens[i].Kind = tkAsm) then Inc(depth)
       else if Tokens[i].Kind = tkEnd then Dec(depth);
       Inc(i);
     end;

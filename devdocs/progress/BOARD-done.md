@@ -129,6 +129,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units | A | 60 | bug | `uses tkinter, configparser;` no longer compiles: lib/pcl's `Text = class(Widget)` wins the `Text` lookup inside lib/rtl/configparser.pas, whose own `var f: Text` means the RTL FILE record. Five lines of Pascal, no NilPy involved — the class-over-record preference reaches Pascal declarations in units that never named tkinter. | — |
 | bug-a-token-growth-test-is-slow-and-times-out | A | 45 | bug | `test-core` token-growth job takes 77s and gets killed under load | — |
 | bug-a-trunc-and-round-of-an-out-of-range-double-return-int64-min-silently | A | 25 | bug | Trunc(1e30), Round(1e30) and Trunc(Inf) all return -9223372036854775808 — the x86 integer indefinite value that cvttsd2si produces when the conversion is invalid. FPC raises EInvalidOp for every one of them. These are compiler BUILTINS lowered straight to the conversion op, so the RTL cannot guard them the way Floor/Ceil now are; the check belongs at the lowering or in the FPU mode. | — |
+| bug-a-two-level-nested-routine-cannot-capture-anything | A | 45 | bug | bug(A): a doubly-nested routine cannot capture ANY enclosing variable, and the error blames the call site | — |
 | bug-a-unary-minus-binds-looser-than-and-shr | A | 60 | bug | Unary minus binds looser than `and`/`shr` — `-x and 12` was `-(x and 12)` | — |
 | bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path | A | 45 | bug | `uses sysutils\|baseunix\|unix` degrades to a SILENT no-op when the unit is not on the search path, so a build outside the repo root reports `undefined variable (Format)` instead of naming the missing RTL | — |
 | bug-a-variant-class-boxing-missing-on-i386-aarch64 | A | 70 | bug | Storing a class into a Variant did not build on i386 or aarch64 | — |
@@ -1794,6 +1795,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-fpc-seed-drift-b1976-stale | A | 55 | regression | FPC can no longer compile compiler.pas — 8 errors of accumulated seed drift | — |
 | regression-lib-test-crtl-reachability | C | 70 | regression | compiler/crtl_names.inc is a GENERATED file left stale by d9c71b8b3 (313 -> 323 functions). The red is the crtl-map step, NOT the crtl-reachability step the job is named after. Fix: python3 tools/gen_crtl_map.py. | — |
 | regression-lib-test-lib-classes-tthread | T | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas red at 459e96f985d1 (auto-filed by twatch) | — |
+| regression-lib-test-lib-tls | T | 70 | regression | regression: lib-test#src:test/lib_tls.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
 | regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
