@@ -3,7 +3,7 @@ track: C
 prio: 25
 type: bug
 summary: "`(float)i` for ANY integer i keeps double precision unless the result is stored into a float lvalue: `(double)(float)16777217` gives 16777217 where C requires 16777216. Silently wrong values, not a crash; found by gcc_diff_probe, which has been reporting it as a NEW divergence with nobody filing it."
-status: working
+status: done
 owner: agent-acpn
 ---
 
@@ -101,3 +101,6 @@ below stands — this is a ranking decision, not a downgrade of the finding. Sam
 judgement the user already applied to float PERFORMANCE work in
 `feature-opt-float-register-temporaries` (prio 20, 2026-07-19), now extended from
 speed to accuracy.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
