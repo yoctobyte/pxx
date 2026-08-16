@@ -2038,6 +2038,7 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # track unset does exactly that.
         guessed = (None if j.get("status") == "timeout"
                    else guess_track(j.get("src")))
+        refusals = refusal_markers(clone, j.get("src"))
         body = ("""---
 prio: %d
 %s---
@@ -2064,11 +2065,18 @@ prio: %d
 takes it from the repro line.*
 """ % (40 if job in advisory else 70,
                 "track: %s\n" % guessed if guessed else "",
-                ("> **Track guessed as %s** from the test source. The ranker "
-                 "reads frontmatter, so an unset track parks a stub in Track "
-                 "T's queue regardless of what the body says -- correct the "
-                 "`track:` line if this is wrong.\n\n" % guessed)
-                if guessed else "",
+                (("> **Track guessed as %s** from the test source. The "
+                  "ranker reads frontmatter, so an unset track parks a stub in "
+                  "Track T's queue regardless of what the body says -- correct "
+                  "the `track:` line if this is wrong.\n\n" % guessed)
+                 if guessed else "")
+                + (("> **This expectation records a REFUSAL** (%s). Before "
+                    "treating a converged bisect range as an accusation, check "
+                    "whether the named commit IMPLEMENTED the thing being "
+                    "refused -- a feature landing makes its own refusal test go "
+                    "red, and the bisect converges on it correctly. Not a "
+                    "verdict; the tool cannot decide this one.\n\n"
+                    % ", ".join(sorted(refusals)[:4])) if refusals else ""),
                 staleness_note(clone, sha, parent),
                 "advisory" if job in advisory else "regression",
                 job, sha[:12], kind, host, utcnow(),
@@ -2110,6 +2118,51 @@ TRACK_BY_SRC = (
     ("lib/rtl", "B"), ("lib/pcl", "B"), ("lib_", "B"), ("examples/", "B"),
     ("test/pascal-conformance", "P"), (".pas", "P"),
 )
+
+
+# A REFUSAL expectation -- one that records an error rather than a value --
+# changes meaning when a feature lands, not only when something breaks. If a
+# test asserts `ValueError` and a commit implements the thing being refused, the
+# test goes red and the bisect converges CORRECTLY on that commit, which is not
+# a fault. That is a third bisect outcome, distinct from a real first-failure
+# and from the timeout case, and the bisect alone cannot tell them apart because
+# it is right in all three.
+#
+# It cannot be decided mechanically, so this does not try. It flags the one
+# thing that IS mechanical: that the expectation which changed was a refusal, so
+# the reader should check whether the commit implemented it before treating the
+# range as an accusation.
+#
+# Motivating case, and it matches exactly: test_nilpy_pow_matches_cpython's
+# .expected carried `ValueError` at ba5a9d9878fa~1 and does not today -- the
+# commit added Python's complex type, retiring a divergence recorded when NilPy
+# had none. Measured frequency across the tree: 45 of 300 .expected files carry
+# such a marker, so this stays quiet on the large majority of reds.
+REFUSAL_RE = re.compile(r"\b(\w*(?:Error|Exception))\b")
+
+
+def refusal_markers(clone, src):
+    """Refusal markers in the expectations of `src`, or an empty set.
+
+    Reads the clone AS CHECKED OUT, which at stub-filing time is the sha where
+    the job is red -- the state whose expectation is the one in question.
+    """
+    out = set()
+    for one in (src or "").split():
+        base = os.path.join(clone.path, one)
+        if "{%FAIL}" in one or "_fail" in os.path.basename(one):
+            out.add("a *_fail / {%FAIL} test")
+        for cand in (os.path.splitext(base)[0] + ".expected", base):
+            try:
+                with open(cand, errors="replace") as f:
+                    text = f.read(20000)
+            except OSError:
+                continue
+            if cand.endswith(".expected"):
+                out |= set(REFUSAL_RE.findall(text))
+            elif "{%FAIL}" in text:
+                out.add("{%FAIL}")
+    return out
 
 
 def guess_track(src):
