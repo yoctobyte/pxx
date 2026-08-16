@@ -1108,6 +1108,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-rtl-floattostr-caps-at-six-decimals-and-zeroes-small-values | B | 35 | bug | `FloatToStr` keeps SIX decimal places, so it loses 9 digits FPC keeps — and returns `0` below 5e-7 | — |
 | bug-rtl-log10-is-inexact-for-powers-of-ten | B | 55 | bug | `Log10` is inexact for powers of ten — `int(log10(n))` is off by one | — |
 | bug-rtti-offset-static-array | A | 50 | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
+| bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-selfhost-multifn-ifelse-miscompile | R | 50 | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | 50 | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-setlength-array-element | A | 50 | bug | bug: SetLength rejects an indexed array element as target | — |

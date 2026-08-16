@@ -3,7 +3,7 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: claude-acpn
 ---
 
@@ -110,3 +110,63 @@ rows of the capability table and the xtensa arm never has to ask which chip.
 half — booting under `qemu-system-xtensa -M esp32s3` with UART output matching
 the x86-64 oracle, wired into `make test-esp-bare` beside the esp32c3 run.
 Plus `make test` + self-host fixedpoint.
+
+## ANSWERED and LANDED 2026-08-16 — neither the region nor the emulator
+
+The two-instruction `.S` this ticket asked for was the right next step, and it
+settled the question in one run. Built with `xtensa-esp32s3-elf-gcc`, linked at
+0x40379000, booted under the same `qemu-system-xtensa -M esp32s3`: it printed
+`A` (UART works), `7` (a plain `s32i`/`l32i` on the target word works), and
+then **nothing** — the real toolchain's own `s32c1i` faults identically. So it
+was never our sequence.
+
+But it is not the region either, and not a qemu gap: adding **one**
+`wsr.atomctl` before it makes the same program print `A7B79` — s32c1i survived,
+returned the original word (7), and memory now holds 9.
+
+**ATOMCTL (special register 99) is the whole story.** Bits [1:0] write-back
+cacheable, [3:2] write-through, [5:4] bypass; each field 0 = raise an
+exception, 1 = RCW transaction, 2 = internal operation. Reset value is 0, so
+every S32C1I traps — into the ROM vector loop, before any output, which is
+precisely why it read as an unimplemented instruction and why `-d unimp` said
+nothing while `-d int` showed the vector loop at 0x400003c0.
+
+Measured, one field at a time, on esp32s3 under qemu:
+
+| ATOMCTL | result |
+| --- | --- |
+| 0x00 | fault |
+| 0x28 (BY=2, WT=2, WB=0) | **fault** |
+| 0x01, 0x02 (WB=1 or 2) | ok |
+| 0x04, 0x08, 0x10, 0x20 | fault |
+| 0x2A, 0x15, 0x3F | ok |
+
+So this model consults ONLY the write-back-cacheable field for internal SRAM,
+and it does so identically at 0x3FC90000, 0x3FCA0000 and 0x4037F000 — the
+I/D-alias hypothesis in the section above is dead, and the address made no
+difference at all.
+
+The bare entry now writes **0x2A** (internal operation for all three classes —
+the one value that works whichever class a part files internal SRAM under),
+beside the CPENABLE line that exists for exactly the same reason. **ESP-IDF
+never writes ATOMCTL anywhere** (checked across `components/`), so on silicon
+the reset value evidently already permits it; this is a bare-boot need only,
+and under the IDF profile we emit no entry to put it in.
+
+With that, the codegen is what this ticket already described, and both traps it
+warned about were real: `xtensa_bne`'s offset is **-12** (measured from the
+branch itself), and **IR_ATOMIC had to join the statement-level skip list** or
+the read-modify-write runs twice — riscv32 and arm32 had each paid for that
+one already.
+
+**Gate met:** `test/test_esp_bare_atomic.pas` boots under
+`qemu-system-xtensa -M esp32s3` and its UART output matches the x86-64 oracle
+byte for byte (inc/dec/xchg/add, a CAS that hits, a CAS that misses and leaves
+the value alone). Wired into the esp-bare make target beside the esp32c3 run.
+The other bare images (hello, large-frame, arg64, inline-asm) are unchanged,
+self-host is byte-identical, `gate.sh quick` green.
+
+Scope is as planned: the 32-bit ops only; `*64` keeps the honest refusal.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
