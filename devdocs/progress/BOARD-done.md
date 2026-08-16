@@ -723,6 +723,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-nilpy-function-level-import-drops-body | N | 70 | bug | An import inside a function body — and the fix that silently emptied the body | — |
 | bug-nilpy-function-local-assignment-clobbers-module-global | N | 80 | bug | A function-local assignment WRITES the module global of the same name | — |
 | bug-nilpy-function-value-call-gaps | N | 55 | bug | Two function-value shapes that do not COMPILE | — |
+| bug-nilpy-g-format-spec-is-str-not-percent-g | N | 45 | bug | `{v:g}` in an f-string called FloatToStr instead of the correct PyFmtG that the `%g` operator already used — 1e-5 printed 0.00001, 1e16 printed 10000000000000000.0, 123456.789 printed 123456.789000000004307 | — |
 | bug-nilpy-getattr-dunder-not-supported | N | 30 | bug | `__getattr__` (dynamic attribute fallback) is not supported | — |
 | bug-nilpy-global-named-like-a-ctor-param-breaks-a-bound-method-value | N | 45 | bug | A bound-method VALUE off a module-level global raises AttributeError as soon as ANY def in the module READS that global by name — `gb = b.hit` fails while the direct call `b.hit(3)` works. (The original title blamed a name collision; that was wrong, see the 2026-08-07 re-narrowing.) | — |
 | bug-nilpy-global-shadowed-by-method-param-name-loses-class-type | N | 75 | bug | NilPy: a module-level variable whose NAME matches any method parameter loses its class type at operator-dispatch sites — every dunder silently stops dispatching, while attribute access on the same variable still works | — |

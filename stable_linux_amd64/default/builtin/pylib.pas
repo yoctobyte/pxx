@@ -14771,7 +14771,12 @@ begin
     form, not fixed-point with 6 decimals: `"{:,}".format(1234.5)` is `1,234.5`,
     not `1,234.500000`. Only reachable once a spec exists but names no type,
     which before the `,` flag could not happen for a float. }
-  if (not hasKind) and (not hasPrec) then kind := 'g';
+  { No explicit TYPE means Python's GENERAL form whether or not a precision was
+    given: `{v:,}` is str()-shaped and `{v:.3}` is `{v:.3g}` ('1.23e+05'), which
+    the 'g' arm below tells apart by hasKind/hasPrec. It used to leave the
+    precision-only spec on the initial 'f', so `{123456.789:.3}` printed
+    123456.789 where CPython prints 1.23e+05. }
+  if not hasKind then kind := 'g';
   if (kind = 'f') or (kind = 'F') then body := PyFmtFixed(d, prec)
   else if (kind = 'e') or (kind = 'E') then body := PyFmtExp(d, prec, kind = 'E')
   else if kind = '%' then
@@ -14779,8 +14784,25 @@ begin
       precision (6 by default, as for `f`), append the sign. `{x:.0%}` is how a
       confidence or agreement ratio is spelled everywhere. }
     body := PyFmtFixed(d * 100.0, prec) + '%'
-  else if (kind = 'g') or (kind = 'G') then body := FloatToStr(d)
-  else if kind = 's' then body := FloatToStr(d)
+  else if (kind = 'g') or (kind = 'G') then
+    { `g` is NOT FloatToStr. PyFmtG -- the correct %g, already used by the
+      printf-style `%` operator -- rounds to `prec` SIGNIFICANT digits and
+      switches to the exponential form when the exponent leaves [-4, prec).
+      FloatToStr is str()'s shortest-round-trip form instead, so `{1e-5:g}`
+      printed 0.00001 for CPython's 1e-05, `{1e16:g}` printed
+      10000000000000000.0 for 1e+16, and `{123456.789:g}` printed
+      123456.789000000004307 for 123457. One concept, two sites, and the
+      second one stayed wrong (devdocs/dev/normalise-dont-special-case.md).
+      bug-nilpy-g-format-spec-is-str-not-percent-g
+
+      Only when the TYPE CHAR is present: a spec that names no type -- `{v}`,
+      `{v:,}`, `{v:10}` -- is str()'s form in CPython (`format(123456.789, '')`
+      is '123456.789', not '123457'), which is what FloatToStr gives. A spec
+      with a PRECISION but no type IS general format (`{v:.3}` -> '1.23e+05'),
+      and reaches here because the default kind was set to 'g' above. }
+    if hasKind or hasPrec then body := PyFmtG(d, prec, kind = 'G')
+    else body := PyFloatStr(d)
+  else if kind = 's' then body := PyFloatStr(d)
   else
     raise ValueError.Create('unsupported format spec "' + spec + '"');
   { group only the INTEGER part: 1234.5 -> 1,234.5 }

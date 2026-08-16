@@ -1,0 +1,15 @@
+# `{v:g}` is C's %g -- round to `prec` SIGNIFICANT digits, exponential form
+# when the exponent leaves [-4, prec) -- and NOT str()'s shortest round-trip.
+# The correct PyFmtG already existed for the printf-style `%` operator; the
+# f-string/format() spec path called FloatToStr instead, so 1e-5 printed
+# 0.00001, 1e16 printed 10000000000000000.0 and 123456.789 printed
+# 123456.789000000004307.  bug-nilpy-g-format-spec-is-str-not-percent-g
+# Every value below is CPython 3's.
+v = 123456.789
+for spec in ['', 'g', '.3', '.3g', ',', '10', '.0g', 'G', '.10g']:
+    print(repr(spec), '->', repr(format(v, spec)))
+for v2 in [1e-3, 1e-4, 1e-5, 1e-7, 1e16, 1e17, 123456.789, 0.000123456, 0.0, -2.5, 1.5]:
+    print(f"{v2:g}|{v2:G}|{v2:e}|{v2}|{v2:.3g}|{v2:12.4g}|")
+# a spec that names no type stays str()-shaped, precision or not
+print(f"{1234.5:,}|{0.1:10}|{2.0:g}|{100.0:g}|{0.0:g}|")
+print(format(float('nan'), 'g'), format(1e-5, ''), format(1e16, ''))
