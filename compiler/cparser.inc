@@ -4340,6 +4340,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
     wcp, wnb, wsoff, wslen: Integer;
     curElemIdx, rangeHi, maxElemIdx, dk: Integer;
+    strRowEnd, strLit, strK: Integer;    { a string literal filling a char ROW }
     hadArrDesig: Boolean;
     arrElems: array[0..255] of Integer;
     arrElemIdx: array[0..255] of Integer;
@@ -4705,6 +4706,59 @@ begin
           end
           else if CurTok.Kind = tkComma then
             Next
+          else if (CurTok.Kind = tkString) and (declTk <> tyPointer) and
+                  TypeIsOrdinal(declTk) and (TypeSize(declTk) = 1) then
+          begin
+            { A string literal standing for a whole char ROW — `char names[2][8]
+              = {"ab", "cd"}`. ParseCExpr would read it as the literal's
+              ADDRESS and store the low byte of that into the row's first char,
+              silently: row 0 was one garbage byte and row 1 was empty. The
+              global path has the same shape (CInitFillCharFlat).
+              bug-c-a-string-literal-row-of-a-2d-char-array-stores-its-address }
+            beBelow := 1;
+            for di := brDepth to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+            if beBelow < 1 then beBelow := 1;
+            if (beBelow = 1) and (brDepth >= 2) then
+            begin
+              { the row was braced (`{{"ab"}, {"cd"}}`), so we are one level
+                below the row: the sub-aggregate that opened at beStack is it }
+              beBelow := 1;
+              for di := brDepth - 1 to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+              if beBelow < 1 then beBelow := 1;
+              if (brDepth - 1) < MAX_ARR_DIMS then beFlat := beStack[brDepth - 1];
+            end;
+            strRowEnd := beFlat + beBelow;
+            while CurTok.Kind = tkString do
+            begin
+              wsoff := Tokens[TokPos - 1].SOffset;
+              wslen := Tokens[TokPos - 1].SLen;
+              for strK := 0 to wslen - 1 do
+                if (nArrElems <= 255) and (beFlat < strRowEnd) then
+                begin
+                  strLit := AllocNode(AN_INT_LIT);
+                  ASTIVal[strLit] := Ord(TokChars[wsoff + strK]);
+                  ASTTk[strLit] := Ord(declTk);
+                  arrElems[nArrElems] := strLit;
+                  arrElemIdx[nArrElems] := beFlat;
+                  Inc(nArrElems);
+                  Inc(beFlat);
+                end;
+              Next;
+            end;
+            { the terminating NUL, and then the rest of the row is left alone
+              (zero, like every other short initializer here) }
+            if (nArrElems <= 255) and (beFlat < strRowEnd) then
+            begin
+              strLit := AllocNode(AN_INT_LIT);
+              ASTIVal[strLit] := 0;
+              ASTTk[strLit] := Ord(declTk);
+              arrElems[nArrElems] := strLit;
+              arrElemIdx[nArrElems] := beFlat;
+              Inc(nArrElems);
+            end;
+            beFlat := strRowEnd;
+            hadArrDesig := True;   { the flat positions above are explicit }
+          end
           else
           begin
             if nArrElems > 255 then Error('too many C array initializer elements');
@@ -6281,6 +6335,52 @@ begin
   end;
 end;
 
+{ The same string-literal fill for an ARRAY row, addressed by FLAT element index
+  rather than by the member path — `char names[2][8] = {"ab", "cd"}`, a table
+  every C program of any size has. The row is not a scalar, so CInitLeaf's
+  ParseCExpr read the literal as its ADDRESS and stored the low byte of it into
+  the row's first char: `names[0]` was one garbage byte and `names[1]` was
+  empty, silently, and strcmp/printf("%s") read whatever followed.
+  bug-c-a-string-literal-row-of-a-2d-char-array-stores-its-address }
+procedure CInitFillCharFlat(elemTkOrd, flatBase, capacity: Integer; emit: Boolean);
+var ei, k, sOff, sLen, target, lit, asn: Integer;
+begin
+  ei := 0;
+  while CurTok.Kind = tkString do
+  begin
+    sOff := Tokens[TokPos - 1].SOffset;
+    sLen := Tokens[TokPos - 1].SLen;
+    for k := 0 to sLen - 1 do
+    begin
+      if emit and ((capacity < 0) or (ei < capacity)) then
+      begin
+        CInitPathPush(0, flatBase + ei, elemTkOrd);
+        target := CInitBuildTarget;
+        Dec(CInitPathDepth);
+        lit := AllocNode(AN_INT_LIT);
+        ASTIVal[lit] := Ord(TokChars[sOff + k]);
+        ASTTk[lit] := elemTkOrd;
+        asn := AllocNode(AN_ASSIGN);
+        ASTLeft[asn] := target; ASTRight[asn] := lit;
+        ASTTk[asn] := elemTkOrd;
+        CInitEmitAssign(asn);
+      end;
+      Inc(ei);
+    end;
+    Next;
+  end;
+end;
+
+{ Is this array's ELEMENT a character — i.e. can a string literal stand for a
+  whole row of it? Byte-sized and ordinal: a pointer array takes its own path
+  (there the literal's address IS the element). }
+function CInitElemIsChar(elemTkOrd: Integer): Boolean;
+var tk: TTypeKind;
+begin
+  tk := IntToTypeKind(elemTkOrd);
+  Result := (tk <> tyPointer) and TypeIsOrdinal(tk) and (TypeSize(tk) = 1);
+end;
+
 { One record member: descend aggregates (braced = bounded, unbraced = elided
   flat fill), else a scalar leaf. }
 procedure CInitWalkMember(fi: Integer; emit: Boolean);
@@ -6564,7 +6664,19 @@ begin
       end
       else Break;
     end;
-    if dimLevel < nDims - 1 then
+    if (CurTok.Kind = tkString) and CInitElemIsChar(elemTkOrd) then
+    begin
+      { a string literal standing for a whole ROW (`{"ab", "cd"}`), or for the
+        remainder of one when the row was braced (`{{"ab"}, {"cd"}}`) — both
+        reach here, at the outer and the inner level respectively. }
+      if dimLevel < nDims - 1 then
+        CInitFillCharFlat(elemTkOrd, baseFlat + i * elemsBelow, elemsBelow, emit)
+      else if count >= 0 then
+        CInitFillCharFlat(elemTkOrd, baseFlat + i, count - i, emit)
+      else
+        CInitFillCharFlat(elemTkOrd, baseFlat + i, -1, emit);
+    end
+    else if dimLevel < nDims - 1 then
     begin
       spanN := CInitDimSpanAt(symIdx, fldIdx, dimLevel + 1);
       if spanN < 1 then spanN := 1;
