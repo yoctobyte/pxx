@@ -200,3 +200,31 @@ since twatch re-executes testmgr every cycle.
 
 ## Log
 - 2026-08-16 — resolved, commit 8e20d7372.
+
+## 2026-08-16, later — a controlled measurement of the co-tenancy effect
+
+The `wall` argument above rests on a series taken while the box was busy, which
+invites the obvious objection: maybe the tier really is slow. Two runs later in
+the day answer it, and they are a genuine control — **same tier, same box, same
+day, one variable**:
+
+| native tier run | box | wall |
+| --- | --- | --- |
+| sweep 1 | quiet | **403.1s** |
+| sweep 2 | watcher running its own cycles alongside | **791.6s** |
+
+Nearly 2x from co-tenancy alone. That puts the full tier's 1141-1145s series
+comfortably inside what a busy box explains, with no slow tier required.
+
+**Be precise about what this establishes, because it is not quite the ticket's
+claim.** Both datapoints come from a box where one of the two parties measuring
+was itself the contention. So what is established is that **co-tenancy dominates
+this measurement** — a strong result, and enough to make bisecting a timeout
+unsound, which is what the fix rests on. What is NOT established is the absence
+of slow-creep underneath: a signal smaller than a 2x swing is invisible to
+anything run today.
+
+That residual is what the `NEAR BUDGET (Ns of Ns)` annotation added by this
+ticket exists to catch, and it will answer the question the only way it can be
+answered — by accumulating, on runs nobody is perturbing, rather than by another
+argument about a wall number.
