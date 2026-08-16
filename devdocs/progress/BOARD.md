@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (205)
+## backlog (206)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -199,6 +199,7 @@ _none_
 | feature-pascal-initialize-finalize-intrinsics | A | 50 | feature | `Initialize()` / `Finalize()` standard procedures (managed-type intrinsics) | — |
 | feature-pascal-set-symmetric-difference-operator | P | 35 | feature | The set symmetric-difference operator `><` is not parsed | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
+| feature-pascal-typed-and-untyped-files | P | 35 | feature | `file of T` and untyped `file` are refused outright — only TextFile works. Blocks the classic Pascal record-file idiom (Assign/Rewrite/Write/Seek/FileSize/BlockRead). | — |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-pcl-tk-windows-compat | M | 25 | feature | NilPy tk on Windows — quarantine the Tcl/Tk-DLL-swarm problem behind a {$ifdef WINDOWS} include in tk.pas; emulate/wrap, stub now fill later. Linux keeps the real embed | feature-port-windows-pe |
 | feature-pcl-win32-widgetset | M | 25→30 | feature | PCL: native Win32 widgetset — a 2nd TWidgetSet subclass over user32/gdi32, zero-dep (no GTK bundle). Best-effort, UN-GATED (no Windows box, Wine-smoke only) | feature-pcl-seam-seal, feature-port-windows-pe |
@@ -570,6 +571,7 @@ _none_
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 35] [P] feature-pascal-set-symmetric-difference-operator
+- [p 35] [P] feature-pascal-typed-and-untyped-files
 - [p 35] [T] feature-t-pasmith-rung-selftest
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
