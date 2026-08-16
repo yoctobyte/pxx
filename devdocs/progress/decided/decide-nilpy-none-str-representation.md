@@ -378,6 +378,17 @@ Sequencing note: `PXX_KIND_TEXTSTR` is stamped but not yet semantically live —
 count characters. These two are the same kind gaining two properties, and doing
 them in one pass is likely cheaper than twice; that is the builder's call.
 
+> **CORRECTION 2026-08-16 — it is not stamped at all.** Measured at HEAD:
+> `PXX_KIND_TEXTSTR = 2` is declared (`builtinheap.pas:178`) and a grep
+> excluding the declaration finds **zero writes anywhere in `compiler/`**;
+> `PXXStrMeta` (:391, :393) writes `PXX_KIND_LEGACY` unconditionally from both
+> constructors. `feature-nilpy-text-string-kind` reached character-counting via
+> three frontend-typed helpers, so the header half was never built. So the
+> implementation's FIRST step is the stamping itself, and "one pass" stops
+> being the builder's call — there is only one pass available. Nothing else in
+> this decision changes. Full measurement:
+> [[decide-nilpy-none-str-sentinel-vs-textstr-kind]] (closed as already-decided).
+
 ## Consequences for the work tickets
 
 - [[bug-nilpy-empty-str-and-none-are-the-same-value]] (N, 40) is **unblocked** —
