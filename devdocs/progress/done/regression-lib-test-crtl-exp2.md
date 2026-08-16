@@ -47,3 +47,6 @@ prevent. The remedy is T's — make the job cheaper, or make its budget honest.
 Related: [[chore-t-split-lib-test-into-jobs-that-name-what-failed]] (so the key
 names the step that actually failed), and the parent ticket, which stopped the
 bisect from naming an innocent commit.
+
+## Log
+- 2026-08-16 — auto-closed by the plexus watcher: `lib-test#src:test/crtl_exp2.c` passes at d91b82d6516b (tier full); it was red at 096da361dd93. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
