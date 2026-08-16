@@ -118,3 +118,91 @@ Pascal overloads `Self` — the instance in a method, the class in a `class
 function` — where Python splits it into `self` and `cls`. So the lowering target
 for `cls` is the class-function `Self`, not the instance one, and the two are
 distinguished by the kind of method rather than by the identifier.
+
+---
+
+# MEASURED 2026-08-16 — the measurement was done; the ticket dissolves
+
+This ticket said: *"What would settle it — one measurement, not an argument […]
+if the runtime class arrives, option 2 is not a trade-off at all and this ticket
+dissolves."* Done, four ways. **The runtime class arrives.**
+
+## 1. The dispatch already passes the RUNTIME class — in the source, not inferred
+
+`compiler/parser.inc:6900-6907`, the arm taken when a `UMthIsStatic` method is
+reached through an instance:
+
+```pascal
+if UMthIsStatic[mmi] then
+begin
+  { A CLASS method reached through an INSTANCE: `obj.ClassMethod(...)`. FPC
+    allows it, and Self is the instance's RUNTIME class -- not the static type
+    of the variable -- so it comes from __pxxRttiOf(obj), not a fixed
+    AN_CLASSREF. }
+  mselfArg := GenMakeRttiOfCall(node);
+```
+
+`__pxxRttiOf(obj)` is the instance's runtime class by construction. This is
+exactly the `b.make()` case the ticket could not settle, and it was already
+handled — deliberately, with the reasoning written at the site.
+
+So **option 2 is simply correct**, on the ticket's own terms, and options 1 and
+3 are refusing a problem that does not exist.
+
+## 2. NilPy already resolves the runtime class through an inherited method
+
+```python
+class Base:
+    def who(self):  return type(self).__name__
+class Derived(Base): pass
+Derived().who()      # pxx: 'Derived'   CPython: 'Derived'
+Base().who()         # pxx: 'Base'      CPython: 'Base'
+```
+
+`self.__class__.__name__` agrees. The capability is not hypothetical in NilPy
+either — it is the same shape `cls` needs, already working.
+
+## 3. `cls()` — polymorphic construction — already works
+
+The ticket flags this as an independent blocker: *"a `cls` that binds correctly
+but cannot be called is a classmethod that only works for `cls.CONSTANT`."*
+Measured, both forms construct:
+
+```python
+k = type(self); k()        # -> Derived     (class value from type())
+k = Derived;    k()        # -> Derived     (bare type NAME as a value)
+```
+
+## 4. The blocker cited for that is CLOSED
+
+[[bug-n-a-type-name-is-not-a-first-class-value]] is referenced here as
+"unfinished". It is in **`done/`**, and the measurement above confirms it: `A =
+B` then `A()` was its headline failing row and it now works. That reference is
+stale and is the only thing that made the second half look open.
+
+## Disposition
+
+**Closed as measured, not decided.** There was never a semantic fork — the note
+already in this ticket established that Pascal `class function` and Python
+`@classmethod` agree on binding to the class the call was made *on*, and the
+remaining question was only what our dispatch passes. It passes the right thing.
+
+What is left is ordinary **Track N** work on
+[[feature-nilpy-staticmethod-and-classmethod]]: name the slot-0 parameter `cls`
+instead of the hidden `$clsrecv`, and lift the by-name refusal. The two-pass
+agreement warning at `pyparser.inc:28884` applies unchanged — both passes inject
+the parameter and a disagreement is a silent ABI mismatch, so the named form
+must be injected in both places exactly as the hidden one is.
+
+One check left for the implementer, not a blocker: `__pxxRttiOf(obj)` yields the
+runtime class as an RTTI value, and §3 shows a class value from `type()`
+constructs — so `cls()` inside an instance-reached classmethod is strongly
+indicated to work, but confirm it directly rather than on this inference.
+
+### Method note
+
+Three of the four facts above were readable from the tree in minutes, and the
+decisive one is a comment sitting at the call site describing precisely the
+scenario the ticket called unmeasured. The ticket was filed correctly under
+escalate-don't-guess — but escalation is for questions the *code* cannot answer,
+and this one could. Read the dispatch before filing the fork.

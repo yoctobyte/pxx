@@ -142,3 +142,33 @@ question is WHICH class arrives for an inherited classmethod reached through an
 INSTANCE, and that is one measurement away from either dissolving the question
 or confirming the silent-subclass hazard. Do not guess it; measure it.
 
+
+## UNBLOCKED 2026-08-16 — the `cls` semantics question is answered; this is ordinary work now
+
+[[decide-nilpy-classmethod-cls-binding]] is closed as measured rather than
+decided. Summary of what it establishes, so this ticket does not have to
+re-derive it:
+
+- **Slot 0 already carries the RUNTIME class**, including the hard case (a
+  classmethod reached through an instance whose static type is the base).
+  `parser.inc:6900-6907` takes it from `__pxxRttiOf(obj)`, with the reasoning
+  written at the site. No new machinery, no semantic fork — Pascal
+  `class function` and Python `@classmethod` already agree on binding to the
+  class the call was made *on*.
+- **`cls()` will construct.** Both `k = type(self); k()` and `k = Derived; k()`
+  produce a `Derived` today, so the "a `cls` that cannot be called" worry is
+  gone. [[bug-n-a-type-name-is-not-a-first-class-value]], cited as the blocker,
+  is in `done/`.
+
+So the remaining work is: **name the injected slot-0 parameter `cls` instead of
+the hidden `$clsrecv`, and lift the by-name refusal** of `@classmethod`.
+
+Carry the existing warning across unchanged: `pyparser.inc:28884` injects
+`$clsrecv` in **both** passes and says a disagreement between them is a silent
+ABI mismatch rather than an error — which is why `PyIsStaticMethodAt` is one
+function asked twice. The named form must be injected in both places on exactly
+the same condition.
+
+Suggested gate: the four-way call — `Base.make()`, `Derived.make()`,
+`Derived().make()` through a `Base`-typed name, and a variant receiver — each
+answering the class the call was made on, diffed against CPython.
