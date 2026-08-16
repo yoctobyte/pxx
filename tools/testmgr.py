@@ -2832,6 +2832,54 @@ def _cpu_freq(cpu):
         return None
 
 
+def _running_pid(pid):
+    """The pid in `pid`'s tree that is actually ON a CPU right now.
+
+    Following the pid we spawned is not the same as following the WORK. `fpc`
+    is a driver: it forks `ppcx64` and then blocks in wait(). A blocked task
+    keeps the CPU field of wherever it last ran, so sampling it reads an IDLE
+    core's clock -- and idle cores sit at the governor's floor.
+
+    Measured on plexus, and the signature is unmistakable: of 101 long-workload
+    bench rows carrying a task clock, every single row below 1700 MHz was
+    `selfcompile fpc` and no other workload EVER recorded below 2000. Those
+    rows claim 1285-1661 MHz while their runtimes sit in a 6333-6686 ms band --
+    a 2x clock spread with a 5% time spread, which is impossible if the clock
+    were the one doing the work. Verified directly: `fpc` pid 958366 forks
+    `ppcx64` pid 958373, and ppcx64 is the process that compiles.
+
+    Same failure family as the box-mean bug this replaced -- a number that
+    looked entirely reasonable (low clocks on a busy box) while describing the
+    wrong thing. Prefer a descendant in state R, breaking ties on accumulated
+    CPU time; fall back to `pid` itself when nothing is running, which is the
+    honest answer for a workload that really is blocked.
+    """
+    best, best_cpu_t = None, -1
+    stack, seen = [pid], set()
+    while stack:
+        p = stack.pop()
+        if p in seen:
+            continue
+        seen.add(p)
+        try:
+            with open("/proc/%d/task/%d/children" % (p, p)) as f:
+                stack.extend(int(k) for k in f.read().split())
+        except (OSError, ValueError):
+            pass
+        try:
+            with open("/proc/%d/stat" % p) as f:
+                after = f.read()
+            after = after[after.rindex(")") + 2:].split()
+            if after[0] != "R":
+                continue
+            cpu_t = int(after[11]) + int(after[12])   # utime + stime
+        except (OSError, ValueError, IndexError):
+            continue
+        if cpu_t > best_cpu_t:
+            best, best_cpu_t = p, cpu_t
+    return best if best is not None else pid
+
+
 class TaskClock(threading.Thread):
     """Sample the clock of the CPU the CHILD is actually running on.
 
@@ -2857,7 +2905,7 @@ class TaskClock(threading.Thread):
 
     def run(self):
         while not self._stop.is_set():
-            cpu = _cpu_of(self.pid)
+            cpu = _cpu_of(_running_pid(self.pid))
             if cpu is not None:
                 mhz = _cpu_freq(cpu)
                 if mhz is not None:

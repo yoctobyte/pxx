@@ -300,3 +300,4 @@
 2026-08-16T04:21:01Z	plexus	selfcompile	-O2	2576	2543	2576	1511
 2026-08-16T04:21:01Z	plexus	selfcompile	-O3	2549	2549	2554	1389
 2026-08-16T04:21:01Z	plexus	selfcompile	fpc	1311	1311	1590	1479
+# 2026-08-16 MEASUREMENT BASIS CHANGED — `mhz` for the `selfcompile fpc` rows above this line is the clock of the core running the **fpc DRIVER**, which forks ppcx64 and then blocks in wait(): a blocked task keeps the CPU field of wherever it last ran, so those rows read an IDLE core at the governor's floor. Signature: every row below 1700 MHz in the whole file is `selfcompile fpc`, claiming 1285-1661 MHz while its runtimes sit in a 6333-6686 ms band — a 2x clock spread with a 5% time spread. Below this line TaskClock follows the RUNNING descendant (testmgr._running_pid), so the number is the core that did the work. Every other workload is single-process and is unaffected either side of this line. Do not compare selfcompile-fpc clocks across it.

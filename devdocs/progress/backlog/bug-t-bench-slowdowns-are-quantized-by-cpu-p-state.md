@@ -358,3 +358,109 @@ plexus rows carrying a task clock — the 30 rows above are one batch, all taken
 under a load I created, which is the right way to see contention and the wrong
 way to characterise a series. The old-basis rows cannot contribute. Re-run the
 analysis once the watcher's own idle benches have accumulated.
+
+## 2026-08-16 — the Gate's analysis, run. The two-state model HOLDS, per row.
+
+270 plexus rows now carry a corrected task clock (101 of them long-workload,
+>=1s, joinable to `bench.tsv`). That is the "few hundred rows" the Gate asked
+for, so here is the analysis it asked for.
+
+### First: the recipe in this ticket is BROKEN by a real optimization
+
+Before any conclusion, a trap this ticket set for itself. Its analysis
+normalises "each row to its own workload's fastest observed time" — and
+`raytracer -O3` went from a rock-steady **13300 ms** (2026-08-11 through 08-13)
+to **4676 ms** on 08-15 and **3639 ms** on 08-16. A genuine ~3.6x speedup
+landed.
+
+Normalising against the all-time best therefore measures every pre-speedup row
+against a post-speedup baseline and calls the difference contention:
+
+| normalisation | rows >= 1.20x |
+| --- | --- |
+| workload's all-time best (this ticket's recipe) | **58 of 101** |
+| workload's best WITHIN THE SAME DAY | **9 of 101** |
+
+Forty-nine of those fifty-eight were the optimization, not the box. **A third
+independent reason to reject option 1 (void by ratio):** a ratio threshold
+cannot tell "the box was slow" from "the compiler got fast", and it fires
+hardest exactly when the project succeeds. Everything below therefore
+normalises within a day, so a step change cannot leak across it.
+
+### The result: 8 of the 9 inflated rows are the clock, to 0.5%
+
+| | n | median task clock |
+| --- | --- | --- |
+| clean rows (ratio < 1.20) | 92 | **2542 MHz** |
+| inflated rows (ratio >= 1.20) | 9 | **2090 MHz** |
+
+- Ratio between the two states: **2542 / 2090 = 1.217**
+- Median inflation actually observed on those rows: **1.223**
+- Agreement: **0.5%**
+
+`corr(ratio, task_mhz) = -0.317` — negative, which is the right sign and the
+sign the box-mean instrument could never produce.
+
+Eight of the nine sit at 2057-2093 MHz, i.e. **the 2.1 GHz base clock**, against
+a clean population at ~2542 and a maximum observed of **2576 MHz**. So the
+answer to the Gate — *is the >=1.20 population fully labelled?* — is **yes for 8
+of 9, by the clock alone**, exactly as the original hypothesis predicted. All
+nine came from one window on 08-15; 08-13 (33 rows) and 08-16 (11 rows) have
+**zero**. "Arrives in batches" holds too.
+
+### Retract the "the two-point model is too simple" section above
+
+That section concluded 2600 "was never observed" and that 2394 was a middle bin
+the model lacked. Both were artefacts: it was measuring with the box-mean
+instrument and with *unpinned* spinners that migrate. The corrected per-task
+clock reaches **2576 MHz** — the datasheet 2.6 GHz boost — and the inflated rows
+sit at the 2.1 GHz base. The base/boost two-state story is the right one after
+all, and 2600/2100 = 1.238 remains the number to expect.
+
+### The 9th row was the instrument again, and it is now fixed
+
+The one inflated row the model does not explain is `selfcompile fpc`
+(ratio 1.243 at a claimed 1661 MHz). Pulling that thread found a second
+instrument defect of exactly the same family as the box-mean one:
+
+**Every row below 1700 MHz in the entire file is `selfcompile fpc`, and no other
+workload ever recorded below 2000.** Those rows claim 1285-1661 MHz while their
+runtimes sit in a 6333-6686 ms band — a 2x clock spread against a 5% time
+spread, which is impossible if the clock were the one doing the work.
+
+Cause: `TaskClock` follows the pid testmgr spawned, and for this row that pid is
+the **`fpc` driver**, which forks `ppcx64` and then blocks in `wait()`. A blocked
+task keeps the CPU field of wherever it last ran, so the sampler read an *idle*
+core at the governor's floor. Verified directly — `fpc` pid 958366 forks
+`ppcx64` pid 958373, and ppcx64 is what compiles.
+
+Fixed: `_running_pid()` walks the process tree and samples the descendant that
+is actually in state R (ties broken on accumulated CPU time), falling back to
+the spawned pid when nothing is running — the honest answer for a workload that
+really is blocked. Measured after the fix: the same fpc compile samples
+**2394 MHz** instead of 1285-1661. Single-process workloads are unaffected,
+confirmed 20/20 samples resolving to themselves, so no other row's meaning
+moves. `bench-clock.tsv` carries a MEASUREMENT BASIS CHANGED line.
+
+Same lesson as last time, worth stating because it has now happened twice in
+one ticket: **a clock number that looks plausible is not a clock number that is
+right.** Low clocks on a busy box is exactly what one expects to see, which is
+why neither defect was caught by reading the value.
+
+### Caveat on provenance
+
+The 08-15 and 08-16 rows overlap a session that ran testmgr jobs on this box, so
+their *contention* is partly self-inflicted and they should not be used to
+characterise how often the series is contended. The finding above is unaffected:
+it is about whether the recorded clock explains the inflation, not about who
+caused it — and the 33 rows from 08-13 predate that session entirely and show
+the same clean structure (0 of 33 inflated, median task 2548 MHz).
+
+### Status
+
+The Gate is met: the >=1.20 population is labelled by the recorded clock. What
+remains open is unchanged and needs no more measurement — **option 3 (pin the
+clock) is a Track U call**, since `intel_pstate/no_turbo` is root-only and
+changes the box for everything the user runs. Recommendation stands: leave turbo
+on, rely on the recorded clock. Option 1 (void by ratio) is now rejected for
+three independent reasons.
