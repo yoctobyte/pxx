@@ -1,0 +1,6 @@
+open missing -> FileNotFoundError | [Errno 2] No such file or directory: '/nonexistent/f.txt'
+os.remove missing -> FileNotFoundError | [Errno 2] No such file or directory: '/nonexistent/f'
+os.stat missing -> FileNotFoundError | [Errno 2] No such file or directory: '/nonexistent/f'
+os.rename missing -> FileNotFoundError | [Errno 2] No such file or directory: '/nonexistent/a' -> '/tmp/b'
+open a directory for write -> IsADirectoryError | [Errno 21] Is a directory: '/tmp'
+caught by IOError: [Errno 2] No such file or directory: '/nonexistent/f.txt'

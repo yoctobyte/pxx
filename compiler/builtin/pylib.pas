@@ -483,11 +483,17 @@ type
   NotImplementedError = class(RuntimeError) end;
   StopIteration     = class(Exception) end;
   OverflowError     = class(Exception) end;
-  { CPython 3 makes IOError and EnvironmentError aliases of OSError, and
+  { CPython 3 makes IOError and EnvironmentError ALIASES of OSError, and
     FileNotFoundError / PermissionError subclasses of it. Real code catches
-    them by name — songformatter has `except IOError:` around a file read. }
-  IOError           = class(OSError) end;
-  EnvironmentError  = class(OSError) end;
+    them by name — songformatter has `except IOError:` around a file read.
+
+    ALIAS, not subclass, and the distinction is the whole bug: declaring
+    `IOError = class(OSError)` made it a SIBLING of FileNotFoundError, so
+    `except IOError:` did not catch a missing file — the single most common
+    spelling of exactly that guard. In CPython `IOError is OSError` is True.
+    bug-nilpy-ioerror-is-a-sibling-of-filenotfounderror-not-an-alias }
+  IOError           = OSError;
+  EnvironmentError  = OSError;
   FileNotFoundError = class(OSError) end;
   PermissionError   = class(OSError) end;
   FileExistsError   = class(OSError) end;
@@ -1136,6 +1142,9 @@ function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
 { os.remove / os.rename: unlink / rename via syscall, returning 0 (Python returns
   None; the value is unused). os.stat: a stubbed TPyStat — see the class note. }
+{ Raise CPython's OSError for a failed syscall: the right SUBCLASS for the
+  errno, wearing CPython's own message. See the body. }
+procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
@@ -11871,6 +11880,46 @@ begin
     for i := 0 to nread - 1 do Result := Result + buf[i];
 end;
 
+{ Every failed file syscall in CPython raises an OSError SUBCLASS chosen by
+  errno, and its str() is `[Errno N] <strerror>: '<path>'` — with `-> '<dst>'`
+  appended for the two-path calls. Both halves are load-bearing:
+
+  - the CLASS, because `except FileNotFoundError:` and `except PermissionError:`
+    are how real code tells "not there" from "not allowed", and answering
+    FileNotFoundError for every failure makes the second one silently take the
+    first's branch;
+  - the MESSAGE, because it is what a program PRINTS. Found by the uforth
+    corpus, which is diffed against CPython byte for byte: a missing include
+    printed the bare path where CPython prints the whole sentence.
+
+  __pxxrawsyscall hands back the raw kernel return, so a failure is -errno and
+  the mapping is direct. An errno with no dedicated class is a plain OSError,
+  which is also what CPython does.
+  bug-nilpy-a-failed-file-syscall-loses-both-its-class-and-its-message }
+procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
+var e: Int64; txt, msg: AnsiString;
+begin
+  e := err;
+  if e < 0 then e := -e;
+  if e = 2 then txt := 'No such file or directory'
+  else if e = 13 then txt := 'Permission denied'
+  else if e = 17 then txt := 'File exists'
+  else if e = 20 then txt := 'Not a directory'
+  else if e = 21 then txt := 'Is a directory'
+  else if e = 4 then txt := 'Interrupted system call'
+  else if e = 9 then txt := 'Bad file descriptor'
+  else txt := 'OS error';
+  msg := '[Errno ' + StrInt(e, 0) + '] ' + txt + ': ''' + path + '''';
+  if path2 <> '' then msg := msg + ' -> ''' + path2 + '''';
+  if e = 2 then raise FileNotFoundError.Create(msg);
+  if e = 13 then raise PermissionError.Create(msg);
+  if e = 17 then raise FileExistsError.Create(msg);
+  if e = 20 then raise NotADirectoryError.Create(msg);
+  if e = 21 then raise IsADirectoryError.Create(msg);
+  if e = 4 then raise InterruptedError.Create(msg);
+  raise OSError.Create(msg);
+end;
+
 function pyos_remove(const path: AnsiString): Integer;
 var cs: AnsiString; r: Int64;
 begin
@@ -11881,7 +11930,7 @@ begin
   { CPython os.remove RAISES on failure (deleting a missing file must be a
     catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
   if r < 0 then
-    raise FileNotFoundError.Create(path);
+    pyos_raise_ioerror(r, path, '');
   Result := Integer(r);
 end;
 
@@ -11894,7 +11943,7 @@ begin
   r := PyPalRename(@cs[1], @cd[1]);
   { CPython os.rename raises on failure, same as os.remove above }
   if r < 0 then
-    raise FileNotFoundError.Create(src);
+    pyos_raise_ioerror(r, src, dst);
   Result := Integer(r);
 end;
 
@@ -11910,7 +11959,7 @@ begin
   FillChar(buf[0], SizeOf(buf), 0);
   r := PyPalStat(@cs[1], @buf[0]);
   if r < 0 then
-    raise FileNotFoundError.Create(path);
+    pyos_raise_ioerror(r, path, '');
   Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
   Result.st_size := PInt64(@buf[48])^;
 {$endif}
@@ -16367,7 +16416,7 @@ begin
     { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
       call in try/except and turns it into a nonzero ior — the Forth-2012
       DELETE-FILE test reopens a deleted file expecting failure, not a halt). }
-    raise FileNotFoundError.Create(path);
+    pyos_raise_ioerror(fd, path, '');
   Result := TPyFile.Create;
   Result.FFd := fd;
   { 'b' anywhere in the mode is CPython's own test for a binary stream }

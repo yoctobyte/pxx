@@ -1,0 +1,33 @@
+# A failed file syscall lost BOTH halves of what CPython raises: the wrong
+# CLASS (always FileNotFoundError) and a bare path where CPython prints
+# `[Errno 2] No such file or directory: '<path>'`.
+#
+# Found in the uforth corpus, which is diffed against CPython byte for byte: a
+# missing INCLUDE printed the path alone. That is the kind of divergence only a
+# differential corpus finds — nothing crashed and no value was wrong, the
+# program just SAID something different.
+#
+# The class half is the sharper one. `IOError` was declared `class(OSError)`,
+# which makes it a SIBLING of FileNotFoundError, so `except IOError:` — the
+# single most common spelling of "guard a file read" — did not catch a missing
+# file at all. In CPython `IOError is OSError` is True, so it catches every
+# subclass; the fix is an ALIAS, not a subclass.
+# bug-nilpy-a-failed-file-syscall-loses-both-its-class-and-its-message
+# bug-nilpy-ioerror-is-a-sibling-of-filenotfounderror-not-an-alias
+import os
+def t(label, fn):
+    try:
+        fn()
+        print(label, "-> no error")
+    except Exception as e:
+        print(label, "->", type(e).__name__, "|", str(e))
+
+t("open missing", lambda: open("/nonexistent/f.txt"))
+t("os.remove missing", lambda: os.remove("/nonexistent/f"))
+t("os.stat missing", lambda: os.stat("/nonexistent/f"))
+t("os.rename missing", lambda: os.rename("/nonexistent/a", "/tmp/b"))
+t("open a directory for write", lambda: open("/tmp", "w"))
+try:
+    open("/nonexistent/f.txt")
+except IOError as e:
+    print("caught by IOError:", str(e))
