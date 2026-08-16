@@ -203,4 +203,4 @@ and the watcher will supply it on its next full cycle — testmgr is re-executed
 per cycle rather than held in memory, so this needs **no twatch restart**.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit c7d8d1f54.

@@ -212,4 +212,4 @@ methods declared *and implemented* inline are unaffected;
 - `tools/gate.sh quick` GREEN, self-host byte-identical, FPC seed canary green.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 0ad0bdd04.

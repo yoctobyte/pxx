@@ -159,4 +159,4 @@ The oracle is usable again: the next `pxx-vs-fpc_*` this fuzzer reports will be
 a real one, arriving as divergence number 1 rather than number 89.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit c7d8d1f54.

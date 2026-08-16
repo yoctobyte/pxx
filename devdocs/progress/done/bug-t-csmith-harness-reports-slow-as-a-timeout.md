@@ -106,4 +106,4 @@ The 2.6x itself remains unfiled, per this ticket's own closing note: one
 pathological program is not a measurement of anything.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 2c71d3846.

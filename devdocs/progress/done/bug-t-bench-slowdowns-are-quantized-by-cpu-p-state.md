@@ -477,4 +477,4 @@ Filing note for the next agent, since it cost a duplicate here: a settled
 `decide-` lives in `rejected/`, not only in `decided/`.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 8c6b4a5d9.
