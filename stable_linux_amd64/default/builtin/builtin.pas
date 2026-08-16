@@ -1223,7 +1223,7 @@ end;
 
 procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 var
-  i, len: Integer;
+  i, len, base, dv: Integer;
   neg, started: Boolean;
   n: Int64;
   c: Char;
@@ -1242,12 +1242,33 @@ begin
     neg := s[i] = '-';
     Inc(i);
   end;
+  { FPC's RADIX PREFIXES, which this accepted none of: `$ff`, `xFF`, `0xFF`
+    (hex), `&17` (octal), `%1011` (binary). Val('$ff', v, code) answered 0 with
+    code=1 where FPC answers 255 — and `$`-prefixed constants are how Pascal
+    source spells hex, so a config parser reading them got a silent 0 and a
+    code its caller usually ignores. A bare prefix with no digits keeps FPC's
+    answer too: code = the position after it.
+    bug-p-val-rejects-the-radix-prefixes }
+  base := 10;
+  if i <= len then
+  begin
+    if s[i] = '$' then begin base := 16; Inc(i); end
+    else if (s[i] = 'x') or (s[i] = 'X') then begin base := 16; Inc(i); end
+    else if s[i] = '&' then begin base := 8; Inc(i); end
+    else if s[i] = '%' then begin base := 2; Inc(i); end
+    else if (s[i] = '0') and (i < len) and ((s[i + 1] = 'x') or (s[i + 1] = 'X')) then
+    begin base := 16; Inc(i, 2); end;
+  end;
   while i <= len do
   begin
     c := s[i];
-    if (c >= '0') and (c <= '9') then
+    dv := -1;
+    if (c >= '0') and (c <= '9') then dv := Ord(c) - Ord('0')
+    else if (c >= 'a') and (c <= 'f') then dv := Ord(c) - Ord('a') + 10
+    else if (c >= 'A') and (c <= 'F') then dv := Ord(c) - Ord('A') + 10;
+    if (dv >= 0) and (dv < base) then
     begin
-      n := n * 10 + (Ord(c) - Ord('0'));
+      n := n * base + dv;
       started := True;
       Inc(i);
     end

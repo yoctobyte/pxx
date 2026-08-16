@@ -483,11 +483,17 @@ type
   NotImplementedError = class(RuntimeError) end;
   StopIteration     = class(Exception) end;
   OverflowError     = class(Exception) end;
-  { CPython 3 makes IOError and EnvironmentError aliases of OSError, and
+  { CPython 3 makes IOError and EnvironmentError ALIASES of OSError, and
     FileNotFoundError / PermissionError subclasses of it. Real code catches
-    them by name — songformatter has `except IOError:` around a file read. }
-  IOError           = class(OSError) end;
-  EnvironmentError  = class(OSError) end;
+    them by name — songformatter has `except IOError:` around a file read.
+
+    ALIAS, not subclass, and the distinction is the whole bug: declaring
+    `IOError = class(OSError)` made it a SIBLING of FileNotFoundError, so
+    `except IOError:` did not catch a missing file — the single most common
+    spelling of exactly that guard. In CPython `IOError is OSError` is True.
+    bug-nilpy-ioerror-is-a-sibling-of-filenotfounderror-not-an-alias }
+  IOError           = OSError;
+  EnvironmentError  = OSError;
   FileNotFoundError = class(OSError) end;
   PermissionError   = class(OSError) end;
   FileExistsError   = class(OSError) end;
@@ -572,6 +578,62 @@ type
     function decode(const encoding: AnsiString; const errors: AnsiString): AnsiString; overload;
     { bytes.endswith(suffix) — the READ-LINE CR/LF trim }
     function endswith(sfx: TPyBytes): Boolean;
+    { ---- the rest of the ASCII-shaped `bytes` contract ----------------------
+
+      Added as a SET, not one at a time. This class grew a method whenever
+      something needed one, which is how it ended up carrying `endswith` and
+      not `startswith` — and a bytes method CPython defines and pxx omits is a
+      hard compile error, so every missing one is a wall in front of an
+      ordinary Python library (`webencodings`'s label normaliser is
+      `s.encode('utf8').lower().decode('utf8')`, and `_detect_bom` needs
+      `startswith` on the next line).
+      bug-a-bytes-has-almost-none-of-its-python-methods
+
+      ASCII-only where CPython is ASCII-only: `b'\xc3\xa9'.lower()` is
+      unchanged in CPython too, because a bytes object has no encoding to case
+      map through. That is the whole of what could have been subtle here.
+
+      Every method that BUILDS a buffer carries FIsByteArray across, or the
+      bytes/bytearray tag is lost at the first transformation — the same rule
+      pybytes_slice already states. }
+    function startswith(pfx: TPyBytes): Boolean;
+    function lower: TPyBytes;
+    function upper: TPyBytes;
+    function title: TPyBytes;
+    function capitalize: TPyBytes;
+    function swapcase: TPyBytes;
+    { .strip() with no argument strips ASCII WHITESPACE; with a bytes argument
+      it strips any byte in that SET (not a prefix), exactly as CPython does. }
+    function strip: TPyBytes; overload;
+    function strip(chars: TPyBytes): TPyBytes; overload;
+    function lstrip: TPyBytes; overload;
+    function lstrip(chars: TPyBytes): TPyBytes; overload;
+    function rstrip: TPyBytes; overload;
+    function rstrip(chars: TPyBytes): TPyBytes; overload;
+    function replace(old_, new_: TPyBytes): TPyBytes;
+    { .index is .find that RAISES instead of answering -1 — CPython's own
+      distinction, and the reason both exist. }
+    function index(sub: TPyBytes): Integer;
+    function rfind(sub: TPyBytes): Integer;
+    function rindex(sub: TPyBytes): Integer;
+    { .split() with no argument splits on RUNS of whitespace and drops empty
+      fields; with a separator it keeps them. Same split as str's, which is why
+      the two rules are described the same way in pystr_split_ws/_sep. }
+    function split: TPyList; overload;
+    function split(sep: TPyBytes): TPyList; overload;
+    function rsplit: TPyList; overload;
+    function splitlines: TPyList;
+    { b'-'.join([b'a', b'b']) — Self is the SEPARATOR, as for str. }
+    function join(parts: TPyList): TPyBytes;
+    { .translate(table): table is 256 bytes mapping each byte value. A table of
+      any other length is a ValueError in CPython. }
+    function translate(table: TPyBytes): TPyBytes;
+    function isdigit: Boolean;
+    function isalpha: Boolean;
+    function isalnum: Boolean;
+    function isspace: Boolean;
+    function isupper: Boolean;
+    function islower: Boolean;
     property Items[i: Integer]: Integer read at write put; default;
   end;
 
@@ -990,6 +1052,12 @@ procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant
   frontend REJECTS anything else rather than silently ignoring it. }
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
+{ The BIG-endian half of both, as one reversal rather than a second conversion:
+  to_bytes(..., 'big') is the little-endian image reversed, and from_bytes(b,
+  'big') is from_bytes(reverse(b), 'little'). Two byte orders, one extra
+  routine, and the conversions above stay the single source of the arithmetic.
+  bug-nilpy-to-bytes-refuses-big-endian-and-demands-the-signed-keyword }
+function pybytes_reversed(b: TPyBytes): TPyBytes;
 { `n.bit_length()` / `n.bit_count()`. Both are defined on the MAGNITUDE — the
   sign is ignored, so (-8) answers as 8 — and both take a Variant rather than
   an Int64 so an arbitrary-precision receiver stays exact: `(2**70)` is outside
@@ -1016,6 +1084,19 @@ function pyfloat_parse(const s: AnsiString): Double;
   code. }
 function pyfloat_any(const v: Variant): Double;
 function pyfloat_ofint(v: Int64): Double;
+{ float's own methods — see the implementations for the formats. }
+function pyfloat_is_integer(x: Double): Boolean;
+function pyfloat_conjugate(x: Double): Double;
+function pyfloat_hex(x: Double): AnsiString;
+function pyfloat_as_integer_ratio(x: Double): TPyList;
+{ int's three methods of the same NAMES. An int is not a float here: CPython's
+  (3).as_integer_ratio() is (3, 1) and (3).conjugate() is 3 — ints, not 3.0 —
+  so routing an int receiver through the float versions would answer a wrong
+  TYPE rather than a missing method. int has no .hex(); that name belongs to
+  float and bytes only. }
+function pyint_is_integer(x: Int64): Boolean;
+function pyint_conjugate(x: Int64): Int64;
+function pyint_as_integer_ratio(x: Int64): TPyList;
 { os.path / os / sys shims. Reached by NAME from the frontend's stdlib table
   (`os.path.join(...)` -> pyos_path_join), because `os` and `sys` are deferred
   imports and never become symbols.
@@ -1067,6 +1148,9 @@ function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
 { os.remove / os.rename: unlink / rename via syscall, returning 0 (Python returns
   None; the value is unused). os.stat: a stubbed TPyStat — see the class note. }
+{ Raise CPython's OSError for a failed syscall: the right SUBCLASS for the
+  errno, wearing CPython's own message. See the body. }
+procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
@@ -1205,6 +1289,25 @@ function pyiter_drain(it: TPyIter): TPyList;
   anything non-iterable raises — one normalisation, every star path.
   bug-nilpy-a-star-operand-in-a-variant-is-cast-not-converted }
 function pystar_as_list(const v: Variant): TPyList;
+{ The iterable `max(*xs)` / `min(*xs)` actually compares. The frontend rewrites
+  those two to the single-argument iterable form, which is right for two or
+  more elements — comparing the elements IS comparing the list — but wrong for
+  exactly ONE: `max(*[[4, 9, 2]])` is CPython's `max([4, 9, 2])` = 9, over the
+  element's CONTENTS, and the rewrite compared a one-element list of lists and
+  answered `[4, 9, 2]`. The count is a run-time fact, so the choice lives here.
+  bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload }
+function pystar_iterable(l: TPyList): TPyList;
+{ `g(*xs)` where g declares fixed parameters BEFORE its *args: the operand has
+  to cover them, and how many it covers is a run-time fact. Raises CPython's
+  wording when it is too short, rather than reading past the end.
+  bug-nilpy-star-unpack-that-would-fill-a-fixed-parameter }
+procedure pystar_check_min(l: TPyList; lo: Integer; const fname: AnsiString;
+                           const pnames: AnsiString);
+{ Was element i supplied? The positional half of pystar_has, without the
+  kwargs dict — the reach-back distribution has no dict to pass, and
+  synthesising a nil one as an argument node is exactly the kind of
+  hand-built literal that goes wrong quietly. }
+function pystar_has1(l: TPyList; i: Integer): Boolean;
 { True when the variant holds a cursor — the run-time half of the static
   `is TPyIter` test, for the consumption sites that take a Variant. }
 function pyiter_is(const v: Variant): Boolean;
@@ -1721,8 +1824,14 @@ function dict(l: TPyList): TPyDict; overload;
 
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
   preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
-function pydict_fromkeys(l: TPyList): TPyDict;
-function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
+{ The parameter is a VARIANT, not a TPyList, and that is the fix rather than a
+  style choice: the stdlib call site builds this call BY NAME and cannot
+  resolve overloads by type, so `dict.fromkeys("ab")` handed a str straight
+  into a TPyList parameter and SEGFAULTED. pylist_v is the one bridge that
+  turns any Python iterable into a list, so it belongs here.
+  bug-nilpy-dict-fromkeys-of-a-str-segfaults }
+function pydict_fromkeys(const src: Variant): TPyDict;
+function pydict_fromkeys(const src: Variant; const v: Variant): TPyDict; overload;
 { `set(iterable)` — Python's set constructor. A set is a TPyList here (see
   PyAnnTypeAt and TPyList.add), so this is "copy, skipping duplicates". The
   iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
@@ -1848,9 +1957,34 @@ function pymath_dom_nonneg(x: Double): Double;
 function pymath_dom_pos(x: Double): Double;
 function pymath_dom_unit(x: Double): Double;
 function pymath_dom_pow(b: Double; e: Double): Double;
+{ the `**` OPERATOR's guard — a DIFFERENT refusal from math.pow's; see the body }
+function pymath_range(v: Double; a: Double; b: Double): Double;
+function pypow_range(v: Double; a: Double; b: Double): Double;
+function pymath_range1(v: Double; a: Double): Double;
+function pypow_dom(b: Double; e: Double): Double;
+type
+  { The correctly-rounded pow the FLOAT `**` should use. It lives in
+    lib/rtl/math.pas as `Power`, and pylib is a BUILTIN unit that cannot reach
+    it: `uses math` compiles, and then the RTL's `Abs` overload set hides
+    pylib's own, so `abs(2.5)` stops resolving (measured 2026-08-16). A hook is
+    the way around that wall — the frontend pulls `math` whenever it sees `**`
+    and installs `@Power` here, exactly as builtinheap takes its object
+    finalizer from pylib without being able to name it.
+    nil = nothing installed (no math unit in this program): the series below
+    still answers, as it always did.
+    bug-a-nilpy-star-star-has-its-own-low-precision-pow }
+  TPyPowFn = function(b, e: Double): Double;
+var
+  PyPowHook: TPyPowFn;
 function pymath_modf(x: Double): TPyList;
-function pymath_prod(l: TPyList): Variant;
-function pymath_fsum(l: TPyList): Double;
+{ VARIANT parameters, not TPyList, for the reason dict.fromkeys carries: the
+  stdlib call site builds these BY NAME and cannot resolve by type, so a str
+  argument went straight into a TPyList slot and was dereferenced as an object.
+  pylist_v is the one bridge from any Python iterable to a list, and it raises a
+  named TypeError for anything else.
+  bug-nilpy-a-str-into-a-by-name-pylib-list-parameter-segfaults }
+function pymath_prod(const src: Variant): Variant;
+function pymath_fsum(const src: Variant): Double;
 function pymath_perm(n, k: Int64): Int64;
 { ---- random ------------------------------------------------------------
   `import random` had nothing behind it at all — `random.random()` was
@@ -1869,8 +2003,8 @@ function pyrandom_random: Double;
 function pyrandom_randint(a, b: Int64): Int64;
 function pyrandom_randrange(n: Int64): Int64;
 function pyrandom_uniform(a, b: Double): Double;
-function pyrandom_choice(l: TPyList): Variant;
-procedure pyrandom_shuffle(l: TPyList);
+function pyrandom_choice(const src: Variant): Variant;
+procedure pyrandom_shuffle(const src: Variant);
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 { `next(x)` / `next(x, default)` where x is whatever the argument turned out to
@@ -3751,6 +3885,14 @@ begin
     which was true of the bare address and not of the pair:
     `sorted(xs, key=obj.method)` was refused for a shape the dispatcher on the
     other side already handled (bug-nilpy-map-over-a-bound-method-segfaults). }
+  { A builtin TYPE value's payload is a small CODE, not an address — handing it
+    over would jump to 5. The frontend rewrites the callable types to their
+    one-argument conversion routine (PyBuiltinTypeCallbackProc); the ones it
+    has no routine for arrive here, and a named refusal is what they get.
+    bug-nilpy-a-builtin-type-passed-to-map-or-filter-segfaults }
+  if PPyVarRec(@v)^.VType = 13 then                    { VT_BTYPE }
+    raise TypeError.Create(nm + ': calling ' + pybtype_name(pybtype_code(v))
+      + '() through a type held as a value is not supported yet');
   Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
     raise TypeError.Create(nm + ' is not callable — the value '
@@ -4437,6 +4579,30 @@ begin
   Result := pyvartag(v) in [5, 6];
 end;
 
+{ True iff v holds a FLOAT (VT_DOUBLE, tag 3) — the twin of pyvar_is_strtag,
+  and used the same way: the runtime method dispatcher widens its objtag guard
+  by this and grows a float arm, so `for v in [2.0, 0.1]: v.hex()` reaches
+  pyfloat_hex instead of raising AttributeError. Deliberately tag 3 ALONE and
+  not "any number": an int receiver's is_integer/as_integer_ratio/conjugate
+  answer INT-flavoured values in CPython ((3, 1), 3 — not 3.0), so routing an
+  int through the float arm would be a wrong answer rather than a missing one.
+  bug-nilpy-float-methods-are-invisible-to-the-runtime-dispatcher }
+function pyvar_is_floattag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) = 3;
+end;
+
+{ True iff v holds an INT (VT_INT / VT_INT64). Its partner: the three methods
+  int and float SHARE — is_integer, conjugate, as_integer_ratio — pick their
+  implementation between the two at RUN time, because only the tag says which
+  the variant holds. Bools are excluded on purpose (VT_BOOL is its own tag);
+  CPython does answer True.is_integer(), but a bool receiver is not what any of
+  this was filed for and guessing at it here would be inventing behaviour. }
+function pyvar_is_inttag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) in [1, 2];
+end;
+
 { True iff v's payload is a real object pointer (VT_OBJECT, tag 7) -- the only
   tag pyvarobj's raw payload may safely be dereferenced/cast for. Any other
   tag (None/int/float/str/bool) is scalar bits or a null placeholder
@@ -4495,9 +4661,14 @@ begin
   if (tg = 6) or (tg = 5) then
   begin
     ki := PPyVarRec(@key)^.Payload;
-    { pystr_at applies Python's negative-index rule and raises IndexError out
-      of range, so this arm inherits both }
-    Result := pystr_ofchar(pystr_at(pystr_of(v), ki));
+    { pystr_charat, NOT pystr_at: both apply Python's negative-index rule and
+      raise IndexError out of range, but pystr_at returns a Char — the
+      character's LEAD BYTE — so `s[i]` on an unannotated parameter handed back
+      one byte of a multi-byte character and printed as mojibake. The typed
+      `s: str` path has used pystr_charat since text strings landed; this was
+      the variant arm of the same question left behind.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    Result := pystr_charat(pystr_of(v), ki);
     Exit;
   end;
   if tg <> 7 then
@@ -4723,6 +4894,21 @@ begin
   raise IndexError.Create('list index out of range');
 end;
 
+{ CPython's IndexError message names the SEQUENCE KIND and the OPERATION, and a
+  program prints it: `(1,)[5]` says "tuple index out of range", `[].pop()` says
+  "pop from empty list", `[1].pop(3)` says "pop index out of range". NilPy has
+  one TPyList behind all three displays, so the kind has to come from FKind —
+  which exists for exactly this reason (it is what stopped a set from printing
+  as a list). Same argument as the OSError message sweep: nothing crashes and
+  no value is wrong, the program just SAYS something different.
+  bug-nilpy-indexerror-messages-do-not-name-the-sequence-or-the-operation }
+procedure PySeqIndexError(l: TPyList);
+begin
+  if (l <> nil) and (l.FKind = PYSEQ_TUPLE) then
+    raise IndexError.Create('tuple index out of range');
+  raise IndexError.Create('list index out of range');
+end;
+
 constructor TPyList.Create;
 begin
   { first construction installs the recursive finalizer (slice 3) }
@@ -4802,7 +4988,7 @@ end;
 function PyListFix(l: TPyList; i: Integer): Integer;
 begin
   if i < 0 then i := i + l.FLen;
-  if (i < 0) or (i >= l.FLen) then PyIndexError;
+  if (i < 0) or (i >= l.FLen) then PySeqIndexError(l);
   Result := i;
 end;
 
@@ -5060,6 +5246,7 @@ end;
   tuple mid-compile (bug-nilpy-list-pop-index-destroys-a-surviving-tuple-element). }
 function TPyList.pop: Variant;
 begin
+  if FLen = 0 then raise IndexError.Create('pop from empty list');
   Result := at(FLen - 1);                  { the caller's +1 }
   PyVarSlotClear(PPyVarRec(NativeInt(FItems) + (FLen - 1) * 16));
   FLen := FLen - 1;
@@ -5074,6 +5261,9 @@ function TPyList.pop_at(i: Integer): Variant;
 var
   k: Integer;
 begin
+  if FLen = 0 then raise IndexError.Create('pop from empty list');
+  if (i >= FLen) or (i < -FLen) then
+    raise IndexError.Create('pop index out of range');
   i := PyListFix(Self, i);
   Result := at(i);                         { the caller's +1 }
   { A COUNTED shift, the same idiom pylist_del_slice uses: put/at retain the
@@ -6438,6 +6628,29 @@ end;
   the result is complex, and math is the real-only module. Returns the BASE, so
   the frontend wraps argument 0 and the exponent reaches both. 0 ** negative is
   the other refusal and wears the same message. }
+{ The `**` OPERATOR's domain guard, distinct from math.pow's above on purpose.
+  CPython's `(-8.0) ** (1/3)` is a COMPLEX number, not a math domain error, so
+  the refusal has to say what it actually is — the message pypow_v has raised
+  all along, kept verbatim now that the float path goes to the RTL's Power
+  instead (bug-a-nilpy-star-star-has-its-own-low-precision-pow). Dropping this
+  guard would have turned a named refusal into a silent NaN, which is the one
+  direction not worth trading precision for.
+  Complex support is filed as bug-nilpy-no-complex-number-type. }
+function pypow_dom(b: Double; e: Double): Double;
+begin
+  if (b < 0.0) and (e - Int(e) <> 0.0) then
+    raise ValueError.Create(
+      'a negative number raised to a fractional power is complex, '
+      + 'which NilPy does not have');
+  { `0.0 ** -1` is a ZeroDivisionError in CPython, not an infinity — and the
+    RTL's Power answers IEEE's +inf. pypow_v raises it on the dynamic path, so
+    without this line the two spellings of one expression disagreed. }
+  if (b = 0.0) and (e < 0.0) then
+    raise ZeroDivisionError.Create(
+      '0.0 cannot be raised to a negative power');
+  pypow_dom := b;
+end;
+
 function pymath_dom_pow(b: Double; e: Double): Double;
 var t: Double;
 begin
@@ -6448,6 +6661,54 @@ begin
   end;
   if (b = 0.0) and (e < 0.0) then raise ValueError.Create('math domain error');
   pymath_dom_pow := b;
+end;
+
+{ OVERFLOW, which in CPython is a per-CALL rule and not a per-OPERATION one.
+  `1e300 * 1e300` is `inf` in CPython exactly as it is here — IEEE, no error —
+  but `2.0 ** 10000`, `math.exp(1000)` and `math.pow(10, 400)` all raise
+  OverflowError, because CPython checks errno/ERANGE on the C library calls it
+  wraps and on float pow. So the guard belongs on the RESULT of those calls and
+  nowhere near `*`, `/` or `+`.
+
+  Both operands are passed because an INFINITE input is not an overflow:
+  `math.exp(float('inf'))` is `inf` in CPython, and `float('inf') ** 2` is too.
+  Only a finite input producing an infinite result is the error. Underflow is
+  NOT an error on either side — `2.0 ** -10000` is 0.0 in both.
+
+  Two spellings of the message because CPython has two: the math module says
+  `math range error`, float pow reports the raw errno.
+  bug-nilpy-float-overflow-answers-inf-where-cpython-raises }
+function pyfloat_isinf(x: Double): Boolean;
+begin
+  pyfloat_isinf := (x > 1.7e308) or (x < -1.7e308);
+end;
+
+function pyfloat_range_overflowed(v: Double; a: Double; b: Double): Boolean;
+begin
+  pyfloat_range_overflowed := False;
+  if not pyfloat_isinf(v) then Exit;
+  if pyfloat_isinf(a) or pyfloat_isinf(b) then Exit;
+  pyfloat_range_overflowed := True;
+end;
+
+function pymath_range(v: Double; a: Double; b: Double): Double;
+begin
+  if pyfloat_range_overflowed(v, a, b) then
+    raise OverflowError.Create('math range error');
+  pymath_range := v;
+end;
+
+function pypow_range(v: Double; a: Double; b: Double): Double;
+begin
+  if pyfloat_range_overflowed(v, a, b) then
+    raise OverflowError.Create('(34, ''Numerical result out of range'')');
+  pypow_range := v;
+end;
+
+function pymath_range1(v: Double; a: Double): Double;
+{ the one-argument shape (math.exp / sinh / cosh): the same argument twice }
+begin
+  pymath_range1 := pymath_range(v, a, a);
 end;
 
 function pymath_modf(x: Double): TPyList;
@@ -6468,10 +6729,11 @@ end;
 { math.prod — the product, and an INT when every element is an int (CPython
   keeps the type: prod([2, 3]) is 6, not 6.0). The variant arithmetic already
   carries that rule, so this is a plain fold over it. }
-function pymath_prod(l: TPyList): Variant;
-var i: Integer; acc: Variant;
+function pymath_prod(const src: Variant): Variant;
+var i: Integer; acc: Variant; l: TPyList;
 begin
   acc := 1;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do acc := acc * l.at(i);
   Result := acc;
@@ -6482,11 +6744,12 @@ end;
   Same algorithm bug-nilpy-sum-of-floats-has-no-compensated-summation wants for
   sum(); when that lands the two should share THIS routine rather than grow a
   second copy of it. }
-function pymath_fsum(l: TPyList): Double;
-var i: Integer; sum, c, t, v: Double;
+function pymath_fsum(const src: Variant): Double;
+var i: Integer; sum, c, t, v: Double; l: TPyList;
 begin
   sum := 0.0;
   c := 0.0;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do
     begin
@@ -6574,8 +6837,10 @@ begin
   Result := a + (b - a) * pyrandom_random;
 end;
 
-function pyrandom_choice(l: TPyList): Variant;
+function pyrandom_choice(const src: Variant): Variant;
+var l: TPyList;
 begin
+  l := pylist_v(src);
   if (l = nil) or (l.count = 0) then
     raise IndexError.Create('Cannot choose from an empty sequence');
   Result := l.at(Integer(pyrandom_randint(0, l.count - 1)));
@@ -6583,10 +6848,22 @@ end;
 
 { Fisher-Yates, in place — `random.shuffle(xs)` returns None and mutates, which
   is the half of the contract a caller most often gets wrong. }
-procedure pyrandom_shuffle(l: TPyList);
-var i, j: Integer; tmp: Variant;
+procedure pyrandom_shuffle(const src: Variant);
+var i, j: Integer; tmp: Variant; o: TObject; l: TPyList;
 begin
-  if l = nil then Exit;
+  { NOT pylist_v here, and that is the whole difference from choice/prod/fsum:
+    pylist_v COPIES, and shuffle's contract is to mutate in place — a copy
+    would shuffle nothing the caller can see. So the real TPyList is taken
+    directly, and everything else is refused by name the way CPython does
+    (`random.shuffle("abc")` is a TypeError there, not a silent no-op). }
+  l := nil;
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if o is TPyList then l := TPyList(o);
+  end;
+  if l = nil then
+    raise TypeError.Create('object does not support item assignment');
   for i := l.count - 1 downto 1 do
   begin
     j := Integer(pyrandom_randint(0, i));
@@ -6852,12 +7129,23 @@ end;
   byte-string model everywhere else (bug-nilpy-non-ascii-string-surface-
   measured). feature-nilpy-min-max-over-a-string. }
 function max(const s: AnsiString): AnsiString;
-var i: Integer; best: Char;
+var i, n: Integer; best, c: AnsiString;
 begin
-  if Length(s) = 0 then raise ValueError.Create('max() iterable argument is empty');
-  best := s[1];
-  for i := 2 to Length(s) do
-    if s[i] > best then best := s[i];
+  { CHARACTERS, not bytes: iterating a str is `for c in s`, which yields whole
+    characters everywhere else, so this walked a different sequence than the
+    rest of the language and answered a lone lead byte for a non-ASCII winner
+    (`max("cafÃ© â¢")` printed one third of the bullet). Comparing the UTF-8
+    substrings directly is the right order too — UTF-8 sorts byte-lexicographically
+    exactly as its code points sort.
+    bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+  n := PyStrCharLen(s);
+  if n = 0 then raise ValueError.Create('max() iterable argument is empty');
+  best := pystr_charat(s, 0);
+  for i := 1 to n - 1 do
+  begin
+    c := pystr_charat(s, i);
+    if c > best then best := c;
+  end;
   Result := best;
 end;
 { max()/min() over ANY iterable. The element walk is the whole of these; what
@@ -6906,12 +7194,23 @@ end;
 
 
 function min(const s: AnsiString): AnsiString;
-var i: Integer; best: Char;
+var i, n: Integer; best, c: AnsiString;
 begin
-  if Length(s) = 0 then raise ValueError.Create('min() iterable argument is empty');
-  best := s[1];
-  for i := 2 to Length(s) do
-    if s[i] < best then best := s[i];
+  { CHARACTERS, not bytes: iterating a str is `for c in s`, which yields whole
+    characters everywhere else, so this walked a different sequence than the
+    rest of the language and answered a lone lead byte for a non-ASCII winner
+    (`min("cafÃ© â¢")` printed one third of the bullet). Comparing the UTF-8
+    substrings directly is the right order too — UTF-8 sorts byte-lexicographically
+    exactly as its code points sort.
+    bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+  n := PyStrCharLen(s);
+  if n = 0 then raise ValueError.Create('min() iterable argument is empty');
+  best := pystr_charat(s, 0);
+  for i := 1 to n - 1 do
+  begin
+    c := pystr_charat(s, i);
+    if c < best then best := c;
+  end;
   Result := best;
 end;
 
@@ -6988,10 +7287,11 @@ begin
   raise TypeError.Create('set() argument must be iterable');
 end;
 
-function pydict_fromkeys(l: TPyList): TPyDict;
-var d: TPyDict; i: Integer;
+function pydict_fromkeys(const src: Variant): TPyDict;
+var d: TPyDict; l: TPyList; i: Integer;
 begin
   d := TPyDict.Create;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do
       d.store(l.at(i), pynone());
@@ -7007,10 +7307,11 @@ end;
   Note CPython shares ONE value object across all the keys — it does not copy
   it — so a mutable fill is aliased by every key. Storing the same variant is
   exactly that behaviour, not a shortcut. }
-function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
-var d: TPyDict; i: Integer;
+function pydict_fromkeys(const src: Variant; const v: Variant): TPyDict; overload;
+var d: TPyDict; l: TPyList; i: Integer;
 begin
   d := TPyDict.Create;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do
       d.store(l.at(i), v);
@@ -7736,16 +8037,14 @@ begin
   if p^.VType = 5 then
     Result := p^.Payload and $FF
   else if p^.VType = 6 then
-  begin
-    t := PPyAnsiString(@p^.Payload)^;
-    if Length(t) <> 1 then
-    begin
-      PyTypeError(p^.VType, 'a str of length 1');
-      Result := 0;
-    end
-    else
-      Result := Ord(t[1]);
-  end
+    { pyord_s, not a byte read: it counts in CHARACTERS and decodes the UTF-8
+      lead byte, so ord() of a str reaching here as a VARIANT — an unannotated
+      parameter, a for-loop variable, an element out of a container — answers
+      8226 for a bullet rather than 226, its first byte, and rather than a
+      TypeError about "a str of length 1" for a string Python calls length 1.
+      The typed arm has answered this way since text strings landed.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    Result := pyord_s(PPyAnsiString(@p^.Payload)^)
   else
   begin
     PyTypeError(p^.VType, 'a str of length 1');
@@ -7760,7 +8059,15 @@ var
 begin
   p := PPyVarRec(@v);
   if p^.VType = 6 then
-    Result := Length(PPyAnsiString(@p^.Payload)^)
+    { CHARACTERS, not bytes. This is the helper `len(x)` on an UNANNOTATED
+      parameter actually reaches — ir.inc rewrites len(<variant>) to pylen_v —
+      so it answered the UTF-8 BYTE count while `s[i]` on the same value was
+      bounds-checked in characters. `while i < len(s): out += s[i]` over any
+      text with an accent then raised IndexError, and a program that only asked
+      len(s) got a plausible number silently too large. `s: str` and a local
+      were right all along, which is why it survived.
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+    Result := PyStrCharLen(PPyAnsiString(@p^.Payload)^)
   else if p^.VType = 5 then
     Result := 1                    { a one-char literal is a str of length 1 }
   else if p^.VType = 7 then
@@ -8074,6 +8381,22 @@ begin
     raise ValueError.Create(
       'a negative number raised to a fractional power is complex, '
       + 'which NilPy does not have');
+  { The RTL's correctly-rounded pow, when the program has it (see PyPowHook).
+    BOTH float paths below are worth replacing, not just the fractional one:
+    the integer-exponent path is repeated squaring in plain doubles, and that
+    is where `1.0001 ** 10000` accumulated 1282 ulp — wrong in the 12th
+    significant digit of the ordinary compound-interest shape. }
+  { OVERFLOW: CPython raises OverflowError for float `**`, and this is the
+    DYNAMIC path — a variant receiver, a loop variable, a list element — so it
+    needs the same guard the static route applies at the call site or the two
+    spellings of one expression disagree again.
+    bug-nilpy-float-overflow-answers-inf-where-cpython-raises }
+  if PyPowHook <> nil then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := pypow_range(PyPowHook(fbase, fexp), fbase, fexp);
+    Exit;
+  end;
   if Frac(fexp) = 0.0 then
   begin
     negExp := fexp < 0.0;
@@ -8090,7 +8413,7 @@ begin
   else
     fr := PyMathExp(fexp * PyMathLn(fbase));
   r^.VType := 3;
-  PPyDouble(@r^.Payload)^ := fr;
+  PPyDouble(@r^.Payload)^ := pypow_range(fr, fbase, fexp);
 end;
 
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
@@ -10001,6 +10324,20 @@ begin
   end;
 end;
 
+function pybytes_reversed(b: TPyBytes): TPyBytes;
+var k, n: Integer; src, dst: PByte;
+begin
+  if b = nil then n := 0 else n := b.FLen;
+  Result := TPyBytes.Create(n);
+  if b <> nil then Result.FIsByteArray := b.FIsByteArray;
+  for k := 0 to n - 1 do
+  begin
+    src := PByte(NativeInt(b.FData) + k);
+    dst := PByte(NativeInt(Result.FData) + (n - 1 - k));
+    dst^ := src^;
+  end;
+end;
+
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
 var k: Integer; p: PByte; acc: Int64;
 begin
@@ -10708,6 +11045,175 @@ end;
 function pyfloat_ofint(v: Int64): Double;
 begin
   Result := v;
+end;
+
+{ ---- float's own methods ------------------------------------------------
+  A `float` carried NONE of them: not is_integer, not hex, not
+  as_integer_ratio, not conjugate. `x.is_integer()` in particular is ordinary
+  modern Python and is what a library reaches for instead of `x == int(x)` —
+  and it did not fail at COMPILE time, it built a call to None and raised
+  "object is not callable" at run time, which is worse.
+  bug-a-bytes-has-almost-none-of-its-python-methods }
+
+function pyfloat_is_integer(x: Double): Boolean;
+begin
+  { Infinity and NaN are not integral, and Int() of either is not either — but
+    Int(inf) = inf compares equal to inf, so the class has to be excluded
+    explicitly rather than left to the comparison. }
+  Result := False;
+  if x <> x then Exit;                                  { NaN }
+  if (x > 1.7e308) or (x < -1.7e308) then Exit;         { +-inf }
+  Result := Int(x) = x;
+end;
+
+function pyfloat_conjugate(x: Double): Double;
+{ A real number is its own conjugate. Present because CPython's float has it
+  (the numeric tower's `complex` interface), and a library that walks that
+  interface calls it on real values. }
+begin
+  Result := x;
+end;
+
+function PyHexDigitOf(v: Int64): Char;
+begin
+  if v < 10 then PyHexDigitOf := Chr(48 + v) else PyHexDigitOf := Chr(87 + v);
+end;
+
+function pyfloat_hex(x: Double): AnsiString;
+{ CPython's float.hex(): the EXACT value, `[-]0x1.<13 hex digits>p<+|->exp`.
+  Exact because a double's mantissa is 52 bits = 13 hex digits with nothing
+  left over, which is the whole point of the format — it round-trips where
+  decimal does not.
+
+  Three shapes, from the exponent field:
+    2047        -> 'inf' / '-inf' / 'nan' (CPython prints these unprefixed)
+    0, mant 0   -> '0x0.0p+0' — the ONE case with a single fraction digit
+    0, mant<>0  -> subnormal: leading digit 0 and the exponent PINNED at -1022,
+                   not the -1023 the raw field would suggest
+    otherwise   -> leading digit 1, exponent = field - 1023
+  No trailing-zero stripping: (2.0).hex() is '0x1.0000000000000p+1'. }
+var bits, expo, mant, e, d: Int64; neg: Boolean; k: Integer; lead: Char;
+begin
+  bits := PyExDecDoubleToBits(x);
+  neg := bits < 0;
+  expo := (bits shr 52) and 2047;
+  mant := bits and $000FFFFFFFFFFFFF;
+  if expo = 2047 then
+  begin
+    if mant <> 0 then begin Result := 'nan'; Exit; end;
+    if neg then Result := '-inf' else Result := 'inf';
+    Exit;
+  end;
+  if (expo = 0) and (mant = 0) then
+  begin
+    if neg then Result := '-0x0.0p+0' else Result := '0x0.0p+0';
+    Exit;
+  end;
+  if expo = 0 then begin lead := '0'; e := -1022; end
+  else begin lead := '1'; e := expo - 1023; end;
+  Result := '';
+  if neg then Result := '-';
+  Result := Result + '0x' + lead + '.';
+  for k := 12 downto 0 do
+  begin
+    d := (mant shr (k * 4)) and 15;
+    Result := Result + PyHexDigitOf(d);
+  end;
+  Result := Result + 'p';
+  if e < 0 then begin Result := Result + '-'; e := -e; end
+  else Result := Result + '+';
+  Result := Result + pystr_of(e);
+end;
+
+function pyfloat_as_integer_ratio(x: Double): TPyList;
+{ The EXACT rational the double stands for, in lowest terms — the denominator
+  is always a power of two, so "lowest terms" just means shifting until the
+  numerator is odd.
+
+  NilPy's ints are 64-bit, and CPython's are not, so a value whose exact
+  numerator does not fit — |x| >= 2^63, and every subnormal, whose denominator
+  is 2^1074 — RAISES rather than answering a truncated pair. A silently wrong
+  ratio is the outcome worth avoiding here; the range that does fit is exactly
+  the range NilPy's ints describe anyway. }
+var num, den, bits, expo, mant: Int64; neg: Boolean;
+begin
+  bits := PyExDecDoubleToBits(x);
+  neg := bits < 0;
+  expo := (bits shr 52) and 2047;
+  mant := bits and $000FFFFFFFFFFFFF;
+  if expo = 2047 then
+  begin
+    if mant <> 0 then
+      raise ValueError.Create('cannot convert NaN to integer ratio');
+    raise OverflowError.Create('cannot convert Infinity to integer ratio');
+  end;
+  if (expo = 0) and (mant = 0) then
+  begin
+    Result := TPyList.Create;
+    Result.FKind := PYSEQ_TUPLE;
+    Result.append(Int64(0));
+    Result.append(Int64(1));
+    Exit;
+  end;
+  if expo = 0 then
+    raise OverflowError.Create(
+      'as_integer_ratio: a subnormal needs a denominator of 2^1074, which does'
+      + ' not fit a 64-bit int');
+  { value = (2^52 + mant) * 2^(expo-1023-52) }
+  num := Int64($0010000000000000) + mant;
+  expo := expo - 1023 - 52;
+  den := 1;
+  { shift the numerator UP while the exponent is positive — overflowing here is
+    exactly the |x| >= 2^63 case }
+  while expo > 0 do
+  begin
+    if num > $3FFFFFFFFFFFFFFF then
+      raise OverflowError.Create(
+        'as_integer_ratio: the exact numerator does not fit a 64-bit int');
+    num := num * 2;
+    expo := expo - 1;
+  end;
+  { ...and reduce: a trailing zero bit in the numerator halves both sides }
+  while (expo < 0) and ((num and 1) = 0) do
+  begin
+    num := num div 2;
+    expo := expo + 1;
+  end;
+  while expo < 0 do
+  begin
+    if den > $3FFFFFFFFFFFFFFF then
+      raise OverflowError.Create(
+        'as_integer_ratio: the exact denominator does not fit a 64-bit int');
+    den := den * 2;
+    expo := expo + 1;
+  end;
+  if neg then num := -num;
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(num);
+  Result.append(den);
+end;
+
+{ int's three. Trivial by definition — an int IS an integer, its complex
+  conjugate is itself, and its exact ratio is n/1 — but they have to exist as
+  entry points because the frontend intercepts the NAME, and because their
+  results are int-flavoured where float's are not. }
+function pyint_is_integer(x: Int64): Boolean;
+begin
+  Result := True;
+end;
+
+function pyint_conjugate(x: Int64): Int64;
+begin
+  Result := x;
+end;
+
+function pyint_as_integer_ratio(x: Int64): TPyList;
+begin
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(x);
+  Result.append(Int64(1));
 end;
 
 function pyfloat_parse(const s: AnsiString): Double;
@@ -11451,6 +11957,46 @@ begin
     for i := 0 to nread - 1 do Result := Result + buf[i];
 end;
 
+{ Every failed file syscall in CPython raises an OSError SUBCLASS chosen by
+  errno, and its str() is `[Errno N] <strerror>: '<path>'` — with `-> '<dst>'`
+  appended for the two-path calls. Both halves are load-bearing:
+
+  - the CLASS, because `except FileNotFoundError:` and `except PermissionError:`
+    are how real code tells "not there" from "not allowed", and answering
+    FileNotFoundError for every failure makes the second one silently take the
+    first's branch;
+  - the MESSAGE, because it is what a program PRINTS. Found by the uforth
+    corpus, which is diffed against CPython byte for byte: a missing include
+    printed the bare path where CPython prints the whole sentence.
+
+  __pxxrawsyscall hands back the raw kernel return, so a failure is -errno and
+  the mapping is direct. An errno with no dedicated class is a plain OSError,
+  which is also what CPython does.
+  bug-nilpy-a-failed-file-syscall-loses-both-its-class-and-its-message }
+procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
+var e: Int64; txt, msg: AnsiString;
+begin
+  e := err;
+  if e < 0 then e := -e;
+  if e = 2 then txt := 'No such file or directory'
+  else if e = 13 then txt := 'Permission denied'
+  else if e = 17 then txt := 'File exists'
+  else if e = 20 then txt := 'Not a directory'
+  else if e = 21 then txt := 'Is a directory'
+  else if e = 4 then txt := 'Interrupted system call'
+  else if e = 9 then txt := 'Bad file descriptor'
+  else txt := 'OS error';
+  msg := '[Errno ' + StrInt(e, 0) + '] ' + txt + ': ''' + path + '''';
+  if path2 <> '' then msg := msg + ' -> ''' + path2 + '''';
+  if e = 2 then raise FileNotFoundError.Create(msg);
+  if e = 13 then raise PermissionError.Create(msg);
+  if e = 17 then raise FileExistsError.Create(msg);
+  if e = 20 then raise NotADirectoryError.Create(msg);
+  if e = 21 then raise IsADirectoryError.Create(msg);
+  if e = 4 then raise InterruptedError.Create(msg);
+  raise OSError.Create(msg);
+end;
+
 function pyos_remove(const path: AnsiString): Integer;
 var cs: AnsiString; r: Int64;
 begin
@@ -11461,7 +12007,7 @@ begin
   { CPython os.remove RAISES on failure (deleting a missing file must be a
     catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
   if r < 0 then
-    raise FileNotFoundError.Create(path);
+    pyos_raise_ioerror(r, path, '');
   Result := Integer(r);
 end;
 
@@ -11474,7 +12020,7 @@ begin
   r := PyPalRename(@cs[1], @cd[1]);
   { CPython os.rename raises on failure, same as os.remove above }
   if r < 0 then
-    raise FileNotFoundError.Create(src);
+    pyos_raise_ioerror(r, src, dst);
   Result := Integer(r);
 end;
 
@@ -11490,7 +12036,7 @@ begin
   FillChar(buf[0], SizeOf(buf), 0);
   r := PyPalStat(@cs[1], @buf[0]);
   if r < 0 then
-    raise FileNotFoundError.Create(path);
+    pyos_raise_ioerror(r, path, '');
   Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
   Result.st_size := PInt64(@buf[48])^;
 {$endif}
@@ -11781,6 +12327,7 @@ end;
 function pyiter_has(it: TPyIter): Boolean;
 var l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
+    b0, b1: Integer;                { the str cursors' UTF-8 character span }
 begin
   Result := False;
   if it = nil then Exit;
@@ -11800,9 +12347,17 @@ begin
   end;
   if it.FKind = PYITER_STR then
   begin
+    { FPos stays a BYTE cursor and steps over a whole UTF-8 character, so this
+      yields what `for c in s` and `list(s)` yield — one CHARACTER — instead of
+      one byte, and stays linear (a character-index cursor would rescan the
+      string per step, which is how string work here goes quadratic).
+      bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
     if it.FPos >= Length(it.FStr) then begin it.FEnd := True; Exit; end;
-    Inc(it.FPos);
-    it.FBox.put(0, pystr_ofchar(it.FStr[it.FPos]));
+    b0 := it.FPos + 1;
+    b1 := b0 + 1;
+    while (b1 <= Length(it.FStr)) and ((Ord(it.FStr[b1]) and $C0) = $80) do Inc(b1);
+    it.FBox.put(0, Copy(it.FStr, b0, b1 - b0));
+    it.FPos := b1 - 1;
     it.FHas := True;
     Result := True;
     Exit;
@@ -11822,9 +12377,14 @@ begin
   end;
   if it.FKind = PYITER_REVSTR then
   begin
+    { …and backwards, over the same character span: `reversed("aÃ©â¢z")` handed
+      back the bytes of the multi-byte characters one at a time. }
     if it.FPos < 1 then begin it.FEnd := True; Exit; end;
-    it.FBox.put(0, pystr_ofchar(it.FStr[it.FPos]));
-    Dec(it.FPos);
+    b1 := it.FPos;
+    b0 := b1;
+    while (b0 > 1) and ((Ord(it.FStr[b0]) and $C0) = $80) do Dec(b0);
+    it.FBox.put(0, Copy(it.FStr, b0, b1 - b0 + 1));
+    it.FPos := b0 - 1;
     it.FHas := True;
     Result := True;
     Exit;
@@ -12047,6 +12607,60 @@ begin
     if o is TPyList then begin pystar_as_list := TPyList(o); Exit; end;
   end;
   pystar_as_list := pyiter_drain(pyiter_v(v));
+end;
+
+function pystar_iterable(l: TPyList): TPyList;
+begin
+  pystar_iterable := l;
+  if (l <> nil) and (l.count = 1) then
+    { ONE starred element: the star supplies it as the sole argument, so the
+      comparison runs over ITS contents. pystar_as_list, not a cast — the
+      element may be a str (`max(*["abc"])` is CPython's max("abc") = 'c'),
+      a dict, or any other iterable. }
+    pystar_iterable := pystar_as_list(l.at(0));
+end;
+
+procedure pystar_check_min(l: TPyList; lo: Integer; const fname: AnsiString;
+                           const pnames: AnsiString);
+var n, miss, i, j, start, shown: Integer;
+    names: AnsiString; msg: AnsiString; one: AnsiString;
+begin
+  n := 0;
+  if l <> nil then n := l.count;
+  if n >= lo then Exit;
+  miss := lo - n;
+  { CPython names them: "g() missing 1 required positional argument: 'x'" and
+    "h() missing 2 required positional arguments: 'a' and 'b'". pnames is the
+    required slots' names in order, '|'-separated, so the missing ones are the
+    tail from index n. }
+  names := '';
+  shown := 0;
+  start := 1;
+  j := 0;
+  for i := 1 to Length(pnames) + 1 do
+    if (i > Length(pnames)) or (pnames[i] = '|') then
+    begin
+      if j >= n then
+      begin
+        one := '''' + Copy(pnames, start, i - start) + '''';
+        if shown = 0 then names := one
+        else if j = lo - 1 then names := names + ' and ' + one
+        else names := names + ', ' + one;
+        Inc(shown);
+      end;
+      Inc(j);
+      start := i + 1;
+    end;
+  if miss = 1 then msg := fname + '() missing 1 required positional argument'
+  else msg := fname + '() missing ' + pystr_of(Int64(miss)) +
+              ' required positional arguments';
+  if names <> '' then msg := msg + ': ' + names;
+  raise TypeError.Create(msg);
+end;
+
+function pystar_has1(l: TPyList; i: Integer): Boolean;
+begin
+  pystar_has1 := (l <> nil) and (i >= 0) and (i < l.count);
 end;
 
 constructor TPyRange.Create;
@@ -13167,7 +13781,16 @@ function len(const v: Variant): Integer; overload;
 var o: TObject; t: Int64;
 begin
   t := pyvartag(v);
-  if (t = 5) or (t = 6) then begin Result := Length(VariantToStr(v)); Exit; end;
+  { CHARACTERS, not bytes — the same question `len(const s: AnsiString)` above
+    answers with PyStrCharLen, and the LAST byte-flavoured `len` left in pylib.
+    A str reaching len as a VARIANT is the ordinary shape of an UNANNOTATED
+    parameter (`def f(s): return len(s)`), so `len` answered the UTF-8 byte
+    count there while `s[i]` was still bounds-checked in characters — the
+    canonical `while i < len(s): out += s[i]` scan then raised IndexError on any
+    text with an accent, and a program that only asked len(s) got a plausible
+    number silently too large.
+    bug-nilpy-len-of-a-str-parameter-counts-bytes-not-characters }
+  if (t = 5) or (t = 6) then begin Result := 777; Exit; end;
   if t = 7 then
   begin
     o := TObject(pyvarobj(v));
@@ -15368,6 +15991,475 @@ begin
   Result := True;
 end;
 
+{ ---- the rest of the ASCII-shaped `bytes` contract ------------------------
+  See the block comment on the class declaration for why these land as a SET.
+  All of them are byte-wise loops; the only rule worth stating twice is that a
+  method BUILDING a buffer copies FIsByteArray, or `bytearray(...).lower()`
+  silently becomes a `bytes`. }
+
+{ A new buffer OF THE SAME PYTHON TYPE as `src` — the tag-carrying Create every
+  transformation below goes through, so the rule lives in one place instead of
+  in fifteen. }
+function PyBytesLike(src: TPyBytes; n: Integer): TPyBytes;
+begin
+  Result := TPyBytes.Create(n);
+  if src <> nil then Result.FIsByteArray := src.FIsByteArray;
+end;
+
+{ Store one byte at an ABSOLUTE index. Deliberately NOT named PyBytesPut: that
+  name is taken by the ENCODER's cursor-advancing form
+  `PyBytesPut(b; var at: Integer; v: Int64)`, and a same-named three-argument
+  overload beside it silently won the encoder's own call sites — every byte of
+  `"hi".encode("latin-1")` landed at the same index and the string came back as
+  `b'i\x00'`. Pascal overload resolution had two plausible candidates and no
+  reason to prefer the right one. }
+procedure PyBytesSet(b: TPyBytes; i: Integer; v: Integer);
+var p: PByte;
+begin
+  p := PByte(NativeInt(b.FData) + i);
+  p^ := v;
+end;
+
+{ CPython's bytes whitespace set: space, tab, newline, CR, vertical tab, form
+  feed. NOT locale-dependent and NOT the Unicode set — a bytes object has no
+  encoding to consult. }
+function PyByteIsSpace(v: Integer): Boolean;
+begin
+  PyByteIsSpace := (v = 32) or (v = 9) or (v = 10) or (v = 13) or (v = 11) or (v = 12);
+end;
+
+function PyByteLower(v: Integer): Integer;
+begin
+  PyByteLower := v;
+  if (v >= 65) and (v <= 90) then PyByteLower := v + 32;
+end;
+
+function PyByteUpper(v: Integer): Integer;
+begin
+  PyByteUpper := v;
+  if (v >= 97) and (v <= 122) then PyByteUpper := v - 32;
+end;
+
+function PyByteIsAlpha(v: Integer): Boolean;
+begin
+  PyByteIsAlpha := ((v >= 65) and (v <= 90)) or ((v >= 97) and (v <= 122));
+end;
+
+function PyByteIsDigit(v: Integer): Boolean;
+begin
+  PyByteIsDigit := (v >= 48) and (v <= 57);
+end;
+
+function TPyBytes.startswith(pfx: TPyBytes): Boolean;
+var i, m: Integer;
+begin
+  Result := False;
+  if pfx = nil then begin Result := True; Exit; end;
+  m := pfx.count;
+  if m > count then Exit;
+  for i := 0 to m - 1 do
+    if at(i) <> pfx.at(i) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.lower: TPyBytes;
+var i: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do PyBytesSet(Result, i, PyByteLower(at(i)));
+end;
+
+function TPyBytes.upper: TPyBytes;
+var i: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do PyBytesSet(Result, i, PyByteUpper(at(i)));
+end;
+
+{ CPython's title(): every RUN of letters gets an upper-case first byte and
+  lower-case rest, and a non-letter (including a digit or an apostrophe) ends
+  the run — b"they're".title() is b"They'Re". }
+function TPyBytes.title: TPyBytes;
+var i, v: Integer; inWord: Boolean;
+begin
+  Result := PyBytesLike(Self, FLen);
+  inWord := False;
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if PyByteIsAlpha(v) then
+    begin
+      if inWord then v := PyByteLower(v) else v := PyByteUpper(v);
+      inWord := True;
+    end
+    else
+      inWord := False;
+    PyBytesSet(Result, i, v);
+  end;
+end;
+
+{ CPython's capitalize(): first byte upper, EVERY other byte lower — not
+  title()'s per-word rule. }
+function TPyBytes.capitalize: TPyBytes;
+var i, v: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if i = 0 then v := PyByteUpper(v) else v := PyByteLower(v);
+    PyBytesSet(Result, i, v);
+  end;
+end;
+
+function TPyBytes.swapcase: TPyBytes;
+var i, v: Integer;
+begin
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if (v >= 65) and (v <= 90) then v := v + 32
+    else if (v >= 97) and (v <= 122) then v := v - 32;
+    PyBytesSet(Result, i, v);
+  end;
+end;
+
+{ Is byte value v in the strip SET? `chars = nil` means the no-argument form,
+  i.e. whitespace. CPython's strip argument is a SET of bytes, not a prefix —
+  b"xyxhixy".strip(b"xy") is b"hi". }
+function PyBytesInSet(chars: TPyBytes; v: Integer): Boolean;
+var k: Integer;
+begin
+  if chars = nil then begin PyBytesInSet := PyByteIsSpace(v); Exit; end;
+  PyBytesInSet := False;
+  for k := 0 to chars.FLen - 1 do
+    if chars.at(k) = v then begin PyBytesInSet := True; Exit; end;
+end;
+
+function PyBytesStrip(b: TPyBytes; chars: TPyBytes; doL, doR: Boolean): TPyBytes;
+var lo, hi, i: Integer;
+begin
+  lo := 0;
+  hi := b.FLen;
+  if doL then
+    while (lo < hi) and PyBytesInSet(chars, b.at(lo)) do Inc(lo);
+  if doR then
+    while (hi > lo) and PyBytesInSet(chars, b.at(hi - 1)) do Dec(hi);
+  Result := PyBytesLike(b, hi - lo);
+  for i := 0 to (hi - lo) - 1 do PyBytesSet(Result, i, b.at(lo + i));
+end;
+
+{ The no-argument forms want a NIL `chars`, which a bare `nil` literal cannot
+  carry into a class-typed parameter through overload resolution — so the nil
+  is named once here rather than cast at six call sites. }
+function PyBytesStripWS(b: TPyBytes; doL, doR: Boolean): TPyBytes;
+var none: TPyBytes;
+begin
+  none := nil;
+  Result := PyBytesStrip(b, none, doL, doR);
+end;
+
+function TPyBytes.strip: TPyBytes; overload;
+begin
+  Result := PyBytesStripWS(Self, True, True);
+end;
+
+function TPyBytes.strip(chars: TPyBytes): TPyBytes; overload;
+begin
+  Result := PyBytesStrip(Self, chars, True, True);
+end;
+
+function TPyBytes.lstrip: TPyBytes; overload;
+begin
+  Result := PyBytesStripWS(Self, True, False);
+end;
+
+function TPyBytes.lstrip(chars: TPyBytes): TPyBytes; overload;
+begin
+  Result := PyBytesStrip(Self, chars, True, False);
+end;
+
+function TPyBytes.rstrip: TPyBytes; overload;
+begin
+  Result := PyBytesStripWS(Self, False, True);
+end;
+
+function TPyBytes.rstrip(chars: TPyBytes): TPyBytes; overload;
+begin
+  Result := PyBytesStrip(Self, chars, False, True);
+end;
+
+{ CPython replaces EVERY occurrence, left to right, and never rescans what the
+  replacement produced: b"aaa".replace(b"aa", b"a") is b"aa", not b"a". }
+function TPyBytes.replace(old_, new_: TPyBytes): TPyBytes;
+var i, k, n, hits, outLen, w: Integer;
+begin
+  if (old_ = nil) or (old_.FLen = 0) then begin Result := PyBytesLike(Self, FLen);
+    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i)); Exit; end;
+  n := old_.FLen;
+  hits := 0;
+  i := 0;
+  while i + n <= FLen do
+    if pybytes_find(Self, old_, i) = i then begin Inc(hits); i := i + n; end
+    else Inc(i);
+  if hits = 0 then
+  begin
+    Result := PyBytesLike(Self, FLen);
+    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i));
+    Exit;
+  end;
+  outLen := FLen - hits * n;
+  if new_ <> nil then outLen := outLen + hits * new_.FLen;
+  Result := PyBytesLike(Self, outLen);
+  i := 0;
+  w := 0;
+  while i < FLen do
+  begin
+    if (i + n <= FLen) and (pybytes_find(Self, old_, i) = i) then
+    begin
+      if new_ <> nil then
+        for k := 0 to new_.FLen - 1 do begin PyBytesSet(Result, w, new_.at(k)); Inc(w); end;
+      i := i + n;
+    end
+    else
+    begin
+      PyBytesSet(Result, w, at(i));
+      Inc(w);
+      Inc(i);
+    end;
+  end;
+end;
+
+function TPyBytes.index(sub: TPyBytes): Integer;
+begin
+  Result := pybytes_find(Self, sub, 0);
+  if Result < 0 then raise ValueError.Create('subsection not found');
+end;
+
+function TPyBytes.rfind(sub: TPyBytes): Integer;
+var i, j, m: Integer; hit: Boolean;
+begin
+  Result := -1;
+  if sub = nil then Exit;
+  m := sub.FLen;
+  if m = 0 then begin Result := FLen; Exit; end;
+  i := FLen - m;
+  while i >= 0 do
+  begin
+    hit := True;
+    for j := 0 to m - 1 do
+      if at(i + j) <> sub.at(j) then begin hit := False; Break; end;
+    if hit then begin Result := i; Exit; end;
+    Dec(i);
+  end;
+end;
+
+function TPyBytes.rindex(sub: TPyBytes): Integer;
+begin
+  Result := rfind(sub);
+  if Result < 0 then raise ValueError.Create('subsection not found');
+end;
+
+function PyBytesSlice(b: TPyBytes; lo, hi: Integer): TPyBytes;
+var i: Integer;
+begin
+  if hi < lo then hi := lo;
+  Result := PyBytesLike(b, hi - lo);
+  for i := 0 to (hi - lo) - 1 do PyBytesSet(Result, i, b.at(lo + i));
+end;
+
+{ .split() with no separator: split on RUNS of whitespace and DROP the empty
+  fields, so b"  a  b ".split() is [b"a", b"b"] and b"".split() is []. }
+function PyBytesSplitWS(b: TPyBytes): TPyList;
+var i, st: Integer;
+begin
+  Result := TPyList.Create;
+  i := 0;
+  while i < b.FLen do
+  begin
+    while (i < b.FLen) and PyByteIsSpace(b.at(i)) do Inc(i);
+    if i >= b.FLen then Break;
+    st := i;
+    while (i < b.FLen) and not PyByteIsSpace(b.at(i)) do Inc(i);
+    Result.append(PyBytesSlice(b, st, i));
+  end;
+end;
+
+function TPyBytes.split: TPyList; overload;
+begin
+  Result := PyBytesSplitWS(Self);
+end;
+
+{ .split(sep): an EXACT separator, KEEPING empty fields — b"a,,b".split(b",")
+  is [b"a", b"", b"b"] and b"".split(b",") is [b""]. Contrast the no-argument
+  form above. An empty separator is a ValueError in CPython. }
+function TPyBytes.split(sep: TPyBytes): TPyList; overload;
+var i, st, hit: Integer;
+begin
+  if (sep = nil) or (sep.FLen = 0) then
+    raise ValueError.Create('empty separator');
+  Result := TPyList.Create;
+  st := 0;
+  i := 0;
+  while i + sep.FLen <= FLen do
+  begin
+    hit := pybytes_find(Self, sep, i);
+    if (hit < 0) then Break;
+    Result.append(PyBytesSlice(Self, st, hit));
+    i := hit + sep.FLen;
+    st := i;
+  end;
+  Result.append(PyBytesSlice(Self, st, FLen));
+end;
+
+{ rsplit() with no argument is split() with no argument: whitespace runs, empty
+  fields dropped, and the result is the same list read either way. The
+  separator and maxsplit forms are where the two differ, and neither is
+  implemented here rather than answered wrongly. }
+function TPyBytes.rsplit: TPyList;
+begin
+  Result := PyBytesSplitWS(Self);
+end;
+
+{ .splitlines(): breaks on \n, \r and \r\n, DROPS the terminator, and does NOT
+  produce a trailing empty field for a final newline — the three ways it
+  differs from split(b'\n'). }
+function TPyBytes.splitlines: TPyList;
+var i, st, v: Integer;
+begin
+  Result := TPyList.Create;
+  i := 0;
+  st := 0;
+  while i < FLen do
+  begin
+    v := at(i);
+    if (v = 10) or (v = 13) then
+    begin
+      Result.append(PyBytesSlice(Self, st, i));
+      if (v = 13) and (i + 1 < FLen) and (at(i + 1) = 10) then Inc(i);
+      Inc(i);
+      st := i;
+    end
+    else
+      Inc(i);
+  end;
+  if st < FLen then Result.append(PyBytesSlice(Self, st, FLen));
+end;
+
+{ b'-'.join(parts) — Self is the SEPARATOR, as for str.join. }
+function TPyBytes.join(parts: TPyList): TPyBytes;
+var i, k, w, total: Integer; part: TPyBytes; o: TObject;
+begin
+  if (parts = nil) or (parts.count = 0) then begin Result := PyBytesLike(Self, 0); Exit; end;
+  total := 0;
+  for i := 0 to parts.count - 1 do
+  begin
+    o := TObject(pyvarobj(parts.at(i)));
+    if not (o is TPyBytes) then
+      raise TypeError.Create('sequence item: expected a bytes-like object');
+    total := total + TPyBytes(o).FLen;
+  end;
+  total := total + FLen * (parts.count - 1);
+  Result := PyBytesLike(Self, total);
+  w := 0;
+  for i := 0 to parts.count - 1 do
+  begin
+    if i > 0 then
+      for k := 0 to FLen - 1 do begin PyBytesSet(Result, w, at(k)); Inc(w); end;
+    part := TPyBytes(TObject(pyvarobj(parts.at(i))));
+    for k := 0 to part.FLen - 1 do begin PyBytesSet(Result, w, part.at(k)); Inc(w); end;
+  end;
+end;
+
+function TPyBytes.translate(table: TPyBytes): TPyBytes;
+var i: Integer;
+begin
+  { CPython accepts None for "no mapping" (the delete-only form); a table of
+    any length other than 256 is a ValueError. }
+  if table = nil then
+  begin
+    Result := PyBytesLike(Self, FLen);
+    for i := 0 to FLen - 1 do PyBytesSet(Result, i, at(i));
+    Exit;
+  end;
+  if table.FLen <> 256 then
+    raise ValueError.Create('translation table must be 256 characters long');
+  Result := PyBytesLike(Self, FLen);
+  for i := 0 to FLen - 1 do PyBytesSet(Result, i, table.at(at(i)));
+end;
+
+{ The is* predicates are all FALSE on an empty bytes in CPython — "at least one
+  byte, and every byte qualifies". isupper/islower additionally need at least
+  one CASED byte, so b"123".isupper() is False while b"A1".isupper() is True. }
+function TPyBytes.isdigit: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not PyByteIsDigit(at(i)) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isalpha: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not PyByteIsAlpha(at(i)) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isalnum: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not (PyByteIsAlpha(at(i)) or PyByteIsDigit(at(i))) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isspace: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if FLen = 0 then Exit;
+  for i := 0 to FLen - 1 do
+    if not PyByteIsSpace(at(i)) then Exit;
+  Result := True;
+end;
+
+function TPyBytes.isupper: Boolean;
+var i, v: Integer; cased: Boolean;
+begin
+  Result := False;
+  cased := False;
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if (v >= 97) and (v <= 122) then Exit;
+    if (v >= 65) and (v <= 90) then cased := True;
+  end;
+  Result := cased;
+end;
+
+function TPyBytes.islower: Boolean;
+var i, v: Integer; cased: Boolean;
+begin
+  Result := False;
+  cased := False;
+  for i := 0 to FLen - 1 do
+  begin
+    v := at(i);
+    if (v >= 65) and (v <= 90) then Exit;
+    if (v >= 97) and (v <= 122) then cased := True;
+  end;
+  Result := cased;
+end;
+
 { ---- TPyFile: raw-syscall file handles (x86-64) ---- }
 
 constructor TPyFile.Create;
@@ -15401,7 +16493,7 @@ begin
     { CPython open() raises a CATCHABLE OSError (uforth's OPEN-FILE wraps the
       call in try/except and turns it into a nonzero ior — the Forth-2012
       DELETE-FILE test reopens a deleted file expecting failure, not a halt). }
-    raise FileNotFoundError.Create(path);
+    pyos_raise_ioerror(fd, path, '');
   Result := TPyFile.Create;
   Result.FFd := fd;
   { 'b' anywhere in the mode is CPython's own test for a binary stream }
