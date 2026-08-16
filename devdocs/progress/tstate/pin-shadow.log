@@ -99,3 +99,4 @@
 2026-08-16T14:41:49Z	plexus	ce2ac81770a1f9ea4d8ed48d642a87da3dba54a7	would NOT pin ce2ac81770a1 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy
 2026-08-16T16:22:25Z	plexus	d378698226501ff2024d43bea1394fddea60e8ec	would NOT pin d37869822650 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy
 2026-08-16T17:35:35Z	plexus	b156e9c145fd512af303eb3ef5dcfeb38256f678	would NOT pin b156e9c145fd — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, lib-test#src:test/lib_tls.pas
+2026-08-16T18:42:27Z	plexus	d91b82d6516b8c77ee5e50205dba84901c235fb0	would-pin PENDING d91b82d6516b — qualifies, streak 1/2
