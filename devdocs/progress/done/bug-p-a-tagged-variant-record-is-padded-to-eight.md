@@ -63,4 +63,4 @@ it deliberately).
 quick` — GREEN.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 1a2db4cfc.
