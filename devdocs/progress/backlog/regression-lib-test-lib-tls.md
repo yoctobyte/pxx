@@ -24,3 +24,16 @@ ok: /tmp/testmgr-scratch-1497482/lib_tls  [code=252676B  data=11228B  bss=43836B
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage 2026-08-16 — NOT REPRODUCIBLE natively at HEAD (Track A/P pass)
+
+Built and ran at 341dbf99f on this box: compiles clean and prints all 14 `=ok`
+lines, exit 0. The watcher's own log tail shows a clean `ok:` compile line and
+no failing assertion, so the job failed at RUN time, not compile time.
+
+`lib_tls.pas` carries a real loopback socket round-trip (bind/connect on a live
+port), which makes it the one test in this pair that can fail for reasons that
+are not the compiler — a busy port or a sandboxed network on the watcher host.
+Left open rather than resolved: needs a re-run on plexus (the failing host) to
+say transient vs host-specific. If it comes back green there, close it; if it
+stays red only on plexus, it is a Track T environment item, not a compiler bug.
