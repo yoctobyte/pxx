@@ -1,0 +1,14 @@
+sum=6 calls=1
+emptybody-calls=1
+iters=3
+itersdown=3
+char=256
+byte=256
+shortint=256
+bytedown=256
+word=65536
+int=3
+after-to=5
+after-down=1
+after-byte=254
+after-break=3

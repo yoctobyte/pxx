@@ -4927,6 +4927,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     foldStr: AnsiString;
     down: Boolean;
     varIdx, varIdx2: Integer;
+    forLimTmp: Integer;   { AN_FOR: hidden temp holding the once-evaluated limit }
     initValNode, storeNode, limitValNode, cmpNode, condJmpNode, bodyIRNode: Integer;
     loadVarNode2, constOneNode, stepNode, storeStepNode, jmpNode: Integer;
     hiddenArgSym: Integer; argIsManagedTemp: Boolean;
@@ -10057,24 +10058,46 @@ begin
       
       initValNode := IRLowerAST(initNode);
       storeNode := IRAppend(IR_STORE_SYM, varIdx, initValNode, -1, 0, ASTTk[lhsNode]);
-      
+
       limitValNode := IRLowerAST(limitNode);
-      
+
+      { EVALUATE THE LIMIT EXACTLY ONCE (Pascal requires it; FPC does it).
+
+        A value node is not a register, it is a subtree the backend re-EMITS at
+        every use -- and the limit's only use used to be the test at the TOP of
+        the loop, i.e. inside it. So `for i := 1 to Limit do` called Limit once
+        per iteration plus once for the failing test (4 calls for 3 iterations),
+        and `for i := 1 to n do begin ...; n := 0; end` ran ONE iteration where
+        FPC runs three. Same defect the case selector had, same fix: materialise
+        into a temp and test the temp. A constant is free to re-emit, and that
+        exemption is what keeps the ordinary `for i := 1 to 10` byte-identical. }
+      if IRKind[limitValNode] <> IR_CONST_INT then
+      begin
+        forLimTmp := AllocVar('', IntToTypeKind(IRTk[limitValNode]));
+        IRAppend(IR_STORE_SYM, forLimTmp, limitValNode, -1, 0, IRTk[limitValNode]);
+        limitValNode := IRAppend(IR_LOAD_SYM, forLimTmp, -1, -1, 0, IRTk[limitValNode]);
+      end;
+
       startLabel := IRNewLabel;
       endLabel := IRNewLabel;
       continueLabel := IRNewLabel;
-      
-      startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
-      
+
+      { ENTRY TEST -- once, before the first iteration. The per-iteration test
+        moved to the BOTTOM (below) because a top test cannot survive a limit at
+        the counter type's maximum: `i := i + 1` wraps to the minimum and
+        `i <= limit` is true again, so `for c := #0 to #255`, `for b := 0 to 255`
+        and `for i := 2147483645 to 2147483647` all looped FOREVER. }
       condNode := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[lhsNode]);
-      
+
       if down then
         cmpNode := IRAppend(IR_BINOP, condNode, limitValNode, Ord(tkGe), 0, Ord(tyBoolean))
       else
         cmpNode := IRAppend(IR_BINOP, condNode, limitValNode, Ord(tkLe), 0, Ord(tyBoolean));
-        
+
       condJmpNode := IRAppend(IR_JUMP_IF_FALSE, endLabel, cmpNode, -1, 0, 0);
-      
+
+      startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
+
       if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
       IRLoopStackBreak[IRLoopStackDepth] := endLabel;
       IRLoopStackContinue[IRLoopStackDepth] := continueLabel;
@@ -10087,17 +10110,25 @@ begin
       Dec(IRLoopStackDepth);
       
       continueLabelNode := IRAppend(IR_LABEL, -1, -1, -1, continueLabel, 0);
-      
+
+      { BOTTOM TEST: leave when the counter has REACHED the limit, so the
+        increment below never runs on the last iteration and can never overflow.
+        This is also what leaves the counter at the limit after a normal exit
+        (FPC's observable value: `for i := 1 to 5` ends with i = 5, not 6). }
+      loadVarNode2 := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[lhsNode]);
+      cmpNode := IRAppend(IR_BINOP, loadVarNode2, limitValNode, Ord(tkNeq), 0, Ord(tyBoolean));
+      IRAppend(IR_JUMP_IF_FALSE, endLabel, cmpNode, -1, 0, 0);
+
       loadVarNode2 := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[lhsNode]);
       constOneNode := IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger));
-      
+
       if down then
         stepNode := IRAppend(IR_BINOP, loadVarNode2, constOneNode, Ord(tkMinus), 0, ASTTk[lhsNode])
       else
         stepNode := IRAppend(IR_BINOP, loadVarNode2, constOneNode, Ord(tkPlus), 0, ASTTk[lhsNode]);
-        
+
       storeStepNode := IRAppend(IR_STORE_SYM, varIdx, stepNode, -1, 0, ASTTk[lhsNode]);
-      
+
       jmpNode := IRAppend(IR_JUMP, startLabel, -1, -1, 0, 0);
       
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
