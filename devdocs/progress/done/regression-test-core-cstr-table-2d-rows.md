@@ -38,4 +38,4 @@ Fixed in `62d3fecb2` by splitting out `IRArrayElemStride` (the pre-decay
 answer) for a fully indexed base, and `test/carr2d_decay_stride.c` now carries
 the pointer-difference assertions itself rather than relying on a sibling test
 to make one.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit b6519b905.
