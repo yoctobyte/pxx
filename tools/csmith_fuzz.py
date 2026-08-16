@@ -21,7 +21,11 @@ Buckets, worst first:
   MISCOMPILE_OPT      two pxx -O levels printed different checksums
   PXX_CRASH           pxx's binary died (signal / non-zero exit)
   PXX_COMPILE_FAIL    pxx could not compile it (a frontend or codegen gap)
-  PXX_TIMEOUT         pxx's binary hung
+  PXX_TIMEOUT         pxx's binary did not finish even at a limit scaled off
+                      the oracle's own runtime -- i.e. it really is hung
+  PXX_SLOW            pxx's binary FINISHED and agreed with gcc, but took more
+                      than SLOW_FACTOR x the oracle. A hint for Track O, not a
+                      defect: a csmith program is pathological by construction.
   (gcc failures and gcc timeouts are discarded -- that seed is simply skipped)
 """
 
@@ -32,6 +36,7 @@ import random
 import shutil
 import subprocess
 import sys
+import time
 import tempfile
 from pathlib import Path
 
@@ -50,15 +55,38 @@ def find_csmith_include():
 
 
 def run(cmd, timeout, cwd=None):
-    """-> (rc, stdout+stderr). rc is None on timeout."""
+    """-> (rc, stdout+stderr, elapsed_seconds). rc is None on timeout.
+
+    The elapsed time is returned for EVERY run, not just the ones we time on
+    purpose, because the oracle's runtime is what the pxx limit is scaled off
+    (see fuzz_one) and it is free to measure.
+    """
+    t0 = time.monotonic()
     try:
         p = subprocess.run(cmd, cwd=cwd, timeout=timeout,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        return p.returncode, p.stdout.decode("utf-8", "replace")
+        return (p.returncode, p.stdout.decode("utf-8", "replace"),
+                time.monotonic() - t0)
     except subprocess.TimeoutExpired:
-        return None, "<timeout>"
+        return None, "<timeout>", time.monotonic() - t0
     except FileNotFoundError as e:
         sys.exit(f"missing tool: {e}")
+
+
+# A fixed wall-clock limit cannot tell "hung" from "slower than the limit", and
+# the difference is a reader's afternoon: a hang means a control-flow bug and
+# gets chased like one. Seed 90044 sat in PXX_TIMEOUT for a run while pxx took
+# 18.2s against gcc -O0's 6.9s -- both finished, both agreed.
+#
+# So scale the limit off the ORACLE, which the harness has already run and
+# therefore already knows the cost of, and keep the fixed limit as a FLOOR so a
+# millisecond-fast oracle cannot squeeze the budget to nothing.
+TIMEOUT_FACTOR = 20      # beyond this multiple of the oracle, call it hung
+SLOW_FACTOR = 4          # finished, agreed, but this much slower -> PXX_SLOW
+# Ratios computed against a very short oracle are timer noise, not information:
+# a 5 ms oracle makes an ordinary 200 ms run look 40x slow. Require the pxx side
+# to be slow in ABSOLUTE terms too before the ratio is allowed to mean anything.
+SLOW_MIN_SEC = 1.0
 
 
 class Finding:
@@ -87,39 +115,47 @@ SKIP = "skip"   # the seed told us nothing (gcc could not build or run it)
 
 def fuzz_one(seed, inc, pxx, opts, timeout, workdir, csmith_args):
     src = workdir / "t.c"
-    rc, out = run(["csmith", "--seed", str(seed), "--output", str(src)] + csmith_args, 120)
+    rc, out, _ = run(["csmith", "--seed", str(seed), "--output", str(src)] + csmith_args, 120)
     if rc != 0 or not src.is_file():
         return SKIP  # generator hiccup
 
     # ---- the oracle -------------------------------------------------------
     gcc_bin = workdir / "g"
-    rc, out = run(["gcc", "-O0", f"-I{inc}", "-w", str(src), "-o", str(gcc_bin)], 180)
+    rc, out, _ = run(["gcc", "-O0", f"-I{inc}", "-w", str(src), "-o", str(gcc_bin)], 180)
     if rc != 0:
         return SKIP  # gcc won't build it -> not our problem
-    rc, gcc_out = run([str(gcc_bin)], timeout)
+    rc, gcc_out, gcc_sec = run([str(gcc_bin)], timeout)
     if rc != 0 or "checksum" not in gcc_out:
         return SKIP  # gcc's own binary misbehaved or hung
 
+    # Now that the oracle's cost is known, give pxx a budget proportional to it
+    # rather than the flat one that misfiled seed 90044 as a hang.
+    run_limit = max(timeout, TIMEOUT_FACTOR * gcc_sec)
+
     # ---- pxx, at each -O level -------------------------------------------
-    results = {}
+    results, secs = {}, {}
     for opt in opts:
         pbin = workdir / f"p{opt}"
         cmd = [str(pxx)]
         if opt != "default":
             cmd.append(f"-O{opt}")
         cmd += [f"-I{inc}", str(src), str(pbin)]   # pxx wants -Ipath joined, not -I path
-        rc, cout = run(cmd, 300)
+        rc, cout, _ = run(cmd, 300)
         if rc != 0:
             return Finding("PXX_COMPILE_FAIL", seed,
                            f"-O{opt}\n{cout}", f"O{opt}:{first_error_line(cout)}")
 
-        rc, rout = run([str(pbin)], timeout)
+        rc, rout, sec = run([str(pbin)], run_limit)
         if rc is None:
-            return Finding("PXX_TIMEOUT", seed, f"-O{opt} hung", f"O{opt}:timeout")
+            return Finding("PXX_TIMEOUT", seed,
+                           f"-O{opt} did not finish in {run_limit:.1f}s "
+                           f"({TIMEOUT_FACTOR}x the gcc oracle's {gcc_sec:.1f}s)",
+                           f"O{opt}:timeout")
         if rc != 0 or "checksum" not in rout:
             return Finding("PXX_CRASH", seed,
                            f"-O{opt} exit={rc}\n{rout}", f"O{opt}:exit{rc}")
         results[opt] = rout.strip()
+        secs[opt] = sec
 
     # ---- compare ----------------------------------------------------------
     gcc_sum = gcc_out.strip()
@@ -134,6 +170,24 @@ def fuzz_one(seed, inc, pxx, opts, timeout, workdir, csmith_args):
         detail = "\n".join(f"  -O{o}: {v}" for o, v in sorted(results.items()))
         return Finding("MISCOMPILE_OPT", seed, "pxx disagrees with itself:\n" + detail,
                        "opt-levels-disagree")
+
+    # Only now, with every checksum agreeing, is "slow" the interesting fact.
+    # Deliberately after the comparisons: a wrong answer beats a slow one, and a
+    # miscompile must never be filed as a performance note.
+    slow = {o: s for o, s in secs.items()
+            if s >= SLOW_MIN_SEC and gcc_sec > 0 and s > SLOW_FACTOR * gcc_sec}
+    if slow:
+        detail = "\n".join(f"  -O{o}: {s:.1f}s  ({s / gcc_sec:.1f}x)"
+                           for o, s in sorted(slow.items()))
+        worst = max(slow, key=slow.get)
+        return Finding("PXX_SLOW", seed,
+                       f"finished and AGREED with gcc, but slow.\n"
+                       f"  gcc -O0: {gcc_sec:.1f}s\n{detail}\n\n"
+                       f"Not a defect: a csmith program is pathological by "
+                       f"construction, so this is a Track O hint, not a "
+                       f"regression. Filed because the reproduction is worth "
+                       f"keeping either way.",
+                       f"O{worst}:slow")
     return None
 
 
@@ -186,6 +240,11 @@ def main():
                 print(f"  [{i}/{len(seeds)}] seed {seed}: ok", flush=True)
                 continue
 
+            # PXX_SLOW is a finding that AGREED -- that is its definition -- so
+            # it must still count toward the oracle-agreement line, or adding
+            # the bucket would silently make the harness look less correct.
+            if f.bucket == "PXX_SLOW":
+                agreed += 1
             counts[f.bucket] = counts.get(f.bucket, 0) + 1
             dedup = f"{f.bucket}|{f.key}"
             if dedup in seen:
@@ -218,7 +277,7 @@ def main():
         print("  no findings")
         return 0
     for bucket in ("MISCOMPILE_VS_GCC", "MISCOMPILE_OPT", "PXX_CRASH",
-                   "PXX_COMPILE_FAIL", "PXX_TIMEOUT"):
+                   "PXX_COMPILE_FAIL", "PXX_TIMEOUT", "PXX_SLOW"):
         if bucket in counts:
             uniq = sum(1 for k in seen if k.startswith(bucket + "|"))
             print(f"  {bucket:20s} {counts[bucket]:4d} hit(s), {uniq} distinct")
