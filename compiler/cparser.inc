@@ -1732,6 +1732,23 @@ begin
     Result := Ord(tyChar);
     Exit;
   end;
+  { A DECAYED ARRAY ROW — the raw byte add the partial index and the
+    pointer-to-array deref both build. Its element type is the array's, and
+    nothing about the node itself says so, so the default tyInteger loaded four
+    bytes: `*s[1]` on a `char[2][8]` came back 25699 instead of 'c'.
+    bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying }
+  if CProgramMode and (ASTKind[node] = AN_BINOP) then
+  begin
+    inner := node;
+    while (inner >= 0) and (ASTKind[inner] = AN_BINOP) do inner := ASTLeft[inner];
+    if (inner >= 0) and (ASTKind[inner] = AN_IDENT) and
+       Syms[ASTIVal[inner]].IsArray and (Syms[ASTIVal[inner]].ArrLen <> -1) and
+       (SymArrNDims[ASTIVal[inner]] > 1) then
+    begin
+      Result := Ord(Syms[ASTIVal[inner]].ElemType);
+      Exit;
+    end;
+  end;
   if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
      (ASTKind[ASTLeft[node]] = AN_ADDR) then
   begin
@@ -2624,6 +2641,79 @@ begin
   ASTLeft[Result] := node; ASTTk[Result] := Ord(tk);
 end;
 
+{ `*x` where x is a POINTER-TO-ARRAY: what the result steps by, or 0 when this
+  is an ordinary dereference. C says dereferencing a pointer-to-array yields
+  the array, which decays straight back to the same address — a no-op, not a
+  memory read. pxx emitted the read, so `**m` on `int m[3][4]` did not compile
+  and `*(s+1)` on a `char[2][8]` loaded the row's first eight bytes as an
+  address.
+
+  The level matters, not just the type: `m` is at dimension level 0, and a
+  pointer-arith chain over it (`m + 1`) stays there — but a PARTIAL INDEX has
+  already stepped down one dimension, and the builder stamps ASTSLen when it
+  does. So a stamp anywhere in the chain means this really is a load, and the
+  scan bails. That is what keeps `*(m[1]+1)` reading an int.
+  bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying }
+function CDerefDecayStride(node: Integer): Integer;
+var base, si, k, lvl, stamp, elemSz, suffK, suffNext, d: Integer;
+begin
+  Result := 0;
+  base := node;
+  stamp := 0;
+  while (base >= 0) and (ASTKind[base] = AN_BINOP) do
+  begin
+    { the OUTERMOST stamp is the level: arithmetic above it does not move,
+      and an inner one belongs to a dimension already stepped through }
+    if (ASTSLen[base] > 0) and (stamp = 0) then stamp := ASTSLen[base];
+    base := ASTLeft[base];
+  end;
+  if (base < 0) or (ASTKind[base] <> AN_IDENT) then Exit;
+  si := ASTIVal[base];
+  if Syms[si].IsArray and (Syms[si].ArrLen <> -1) then
+  begin
+    if SymArrNDims[si] < 2 then Exit;    { a 1-D array's `*a` IS a load }
+    if Syms[si].ElemType = tyRecord then elemSz := RecSize(Syms[si].ElemRecName)
+    else elemSz := TypeSize(Syms[si].ElemType);
+    { The stride AT LEVEL k is elemSz * the product of the dims below k. Level
+      0 is the whole array; level nDims-1 points at elements, and dereferencing
+      THAT is a real load. Find the level from the stamp, then answer the next
+      one down. }
+    lvl := 0;
+    if stamp > 0 then
+    begin
+      suffK := elemSz;
+      for k := SymArrNDims[si] - 1 downto 0 do
+      begin
+        if suffK = stamp then begin lvl := k; Break; end;
+        d := SymArrDimSpan[si * MAX_ARR_DIMS + k];
+        if d > 0 then suffK := suffK * d;
+      end;
+      if lvl = 0 then Exit;      { the stamp matched nothing — leave the load }
+    end;
+    if lvl >= SymArrNDims[si] - 1 then Exit;   { pointing at elements: a load }
+    suffNext := elemSz;
+    for k := lvl + 2 to SymArrNDims[si] - 1 do
+      if SymArrDimSpan[si * MAX_ARR_DIMS + k] > 0 then
+        suffNext := suffNext * SymArrDimSpan[si * MAX_ARR_DIMS + k];
+    Result := suffNext;
+    Exit;
+  end;
+  { `int (*r)[4]` — the pointee is an array, so *r is a pointer to its first
+    element (and one dimension further in for a multi-dim pointee). Arithmetic
+    over the pointer stays at that level, exactly as it does for an array, so
+    `*(r+2)` is the same answer; a STAMP means a dimension was already stepped
+    through and the deref is then a real load. }
+  if (stamp = 0) and (Syms[si].TypeKind = tyPointer) and
+     (SymPtrElemArrLen[si] > 0) then
+  begin
+    Result := TypeSize(Syms[si].PtrElemTk);
+    if Syms[si].PtrElemTk = tyRecord then Result := RecSize(Syms[si].PtrElemRec);
+    for k := 1 to SymPtrElemNDims[si] - 1 do
+      if SymArrDimSpan[si * MAX_ARR_DIMS + k] > 0 then
+        Result := Result * SymArrDimSpan[si * MAX_ARR_DIMS + k];
+  end;
+end;
+
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
@@ -2846,6 +2936,25 @@ begin
     begin
       Next;
       operand := ParseCUnary();
+      if CProgramMode then
+      begin
+        arrCastLen := CDerefDecayStride(operand);
+        if arrCastLen > 0 then
+        begin
+          { the no-op deref: same address, one dimension further in. Built as
+            the raw byte add the partial index uses, so one shape carries a
+            decayed row everywhere. }
+          if ASTKind[operand] = AN_IDENT then ASTTk[operand] := Ord(tyInt64);
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := 0; ASTTk[node] := Ord(tyInt64);
+          Result := AllocNode(AN_BINOP);
+          ASTIVal[Result] := Ord(tkPlus);
+          ASTLeft[Result] := operand; ASTRight[Result] := node;
+          ASTTk[Result] := Ord(tyPointer);
+          ASTSLen[Result] := arrCastLen;
+          Exit;
+        end;
+      end;
       node := AllocNode(AN_DEREF);
       ASTLeft[node] := operand;
       ASTTk[node] := CNodePointeeTk(operand);

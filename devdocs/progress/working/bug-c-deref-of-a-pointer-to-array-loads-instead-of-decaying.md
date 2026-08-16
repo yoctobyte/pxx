@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`*m` on `int m[3][4]` (and `*(t[1]+2)` on a 3-D one) emits a LOAD. In C, dereferencing a pointer-to-array yields the array, which decays right back to the same address — a no-op. `**m` fails to compile and `*(*(t[1]+2)+3)` segfaults."
+status: working
+owner: claude-acpn
 ---
 
 # Dereferencing a pointer-to-array loads instead of decaying
@@ -46,3 +48,26 @@ today, which is the ready-made normal form to reuse rather than a second path.
 
 `test/carr2d_decay_stride.c` extended with `**m`, `*(*(t[1]+2)+3)` and
 `*(s+1)` on a `char[2][8]`, diffed against gcc; `tools/gate.sh quick`.
+
+## Fixed 2026-08-16 (same session, right after the stride ticket)
+
+Three pieces, because the level is what decides and nothing carried it:
+
+1. **`CDerefDecayStride`** answers what `*x` steps by, or 0 for an ordinary
+   load. It walks the pointer-arith chain to its base identifier and reads the
+   LEVEL off the outermost `ASTSLen` stamp: no stamp = the whole array, a stamp
+   = however many dimensions have been stepped through. At the last level the
+   answer is 0 and the deref stays a real load, which is what keeps
+   `*(m[1]+1)` reading an int.
+2. **`CNodePointeeTk`** types that load: a decayed row is a raw byte add with
+   nothing on it that says `char`, so the default `tyInteger` made `*s[1]` come
+   back 25699 instead of `'c'`.
+3. **`IRPointerStride`** steps a pointer-to-array variable by its whole pointee
+   (`int (*r)[4]`, `r + 2` is 32 bytes) — the same rule the decayed array
+   already obeys. `r[i][j]` is unaffected: that path flattens the subscripts
+   itself.
+
+`test/carr2d_decay_stride.c` grew twelve assertions covering `**m`, `*m[2]`,
+`**s`, `*s[1]`, `***t`, `*(*(t[1]+2)+3)`, `*(*(*(t+1)+2)+3)`, the row as a
+string, and the three pointer-to-array forms; it returns 42 under both gcc and
+pxx.

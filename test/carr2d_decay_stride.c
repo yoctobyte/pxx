@@ -63,6 +63,28 @@ int main(void)
     chk("diff-chars",   (int)(&s[1][0] - &s[0][0]), 8);
     chk("diff-within",  (int)(&m[0][3] - &m[0][1]), 2);
 
+    /* DEREFERENCING a pointer-to-array is a no-op in C: the result is the
+       array, which decays right back to the same address. pxx emitted a LOAD,
+       so `**m` did not compile and `*(s+1)` read the row's first eight bytes
+       as an address. The level is what decides: `m` and `m+1` are at the whole
+       -array level, `m[1]` has already stepped down one, and only the last
+       level is a real load. */
+    chk("star-star-m",   **m,                 0);
+    chk("star-m-1",      *(*(m + 1) + 2),     6);
+    chk("star-m2",       *m[2],               8);
+    chk("star-star-s",   **s,                 'a');
+    chk("star-s1",       *s[1],               'c');
+    chk("s-row-str",     strcmp(*(s + 1), "cd"), 0);
+    chk("triple-t",      ***t,                0);
+    chk("t-partial",     *(*(t[1] + 2) + 3),  9);
+    chk("t-all-star",    *(*(*(t + 1) + 2) + 3), 9);
+
+    /* and a pointer-to-array variable steps by the whole pointee */
+    r = m;
+    chk("ptr-arr-deref", **r,                 0);
+    chk("ptr-arr-step",  *(*(r + 2) + 1),     9);
+    chk("ptr-arr-index", r[2][1],             9);
+
     /* one dimension is untouched by any of it */
     chk("1d-plus",    *(a + 3), 3);
     chk("1d-index",   a[1] + 1, 2);

@@ -1887,6 +1887,19 @@ begin
     begin
       elemTk := Syms[ASTIVal[node]].PtrElemTk;
       recId := Syms[ASTIVal[node]].PtrElemRec;
+      { A POINTER-TO-ARRAY steps by the whole pointee: `int (*r)[4]`, `r + 2`
+        is 32 bytes, the same rule the decayed array above obeys. It stepped
+        one element, so `*(r+2)` read m[0][2]. `r[i][j]` is unaffected — that
+        path flattens the subscripts itself and multiplies by the element size
+        explicitly. bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying }
+      if CProgramMode and (SymPtrElemArrLen[ASTIVal[node]] > 0) then
+      begin
+        if elemTk = tyRecord then Result := RecSize(recId)
+        else if elemTk = tyUnknown then Result := 1
+        else Result := TypeSize(elemTk);
+        Result := Result * SymPtrElemArrLen[ASTIVal[node]];
+        Exit;
+      end;
     end;
   end
   else if ASTKind[node] = AN_FIELD then
