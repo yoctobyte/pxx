@@ -184,6 +184,47 @@ Detaching is not the bug and is not going away: `twatch` checks out arbitrary
 shas to test them, which is why it demands its own clone and refuses a dirty
 one. The defect is only ever in readers that assume the tree reflects now.
 
+## Triage rule: a converged bisect range is not always an accusation
+
+The watcher narrows an open regression to one commit and prints it. That number
+reads as a culprit, and four times out of five it is. The other cases cost real
+time on 2026-08-16 — two agents, several messages each — so they are written
+down here with the guard that now handles each.
+
+| the bisect result is | because | guard |
+| --- | --- | --- |
+| a **real** first failure | the ordinary case | none needed |
+| an **innocent** commit | the signal was a TIMEOUT, which depends on box load as well as the tree, so the search converges on whichever commit straddled the budget | `bisect_step` refuses to bisect a `timeout` |
+| a commit that **cannot** be causal | the job builds only with `$(PXX_STABLE)` and the commit moved no pinned binary — the bytes that compiled it did not change | `pin_immune()`; testmgr publishes `pin_built` per job |
+| a **correct** commit that is not a fault | a feature retired a recorded divergence and its expectation was left behind — the range is *right*, the commit is not a defect | not decidable; the stub flags a REFUSAL expectation and asks the reader to check |
+
+The three guards sit in descending order of confidence, and it is worth keeping
+them distinguishable rather than blurring them into "the watcher is unsure":
+
+1. **Decidable** — pin provenance. Arithmetic, not judgement. If the compiler
+   bytes did not move, the commit cannot have changed the output.
+2. **A judgement about signal kind** — a timeout is a duration, and durations
+   are not functions of the tree alone.
+3. **Undecidable, and says so** — a refusal expectation (`ValueError`,
+   `{%FAIL}`, a `*_fail` test) changes meaning when a feature lands. Only a
+   human reading the expectation can tell "the answer changed because we fixed
+   something" from "because we broke something". The stub flags it and declines
+   to rule.
+
+**Do not loosen the pin-provenance prefix list.** It exonerates only when EVERY
+changed path is under `compiler/`, `tools/`, `devdocs/` or `docs/`. A commit
+that also touches `Makefile`, `lib/**`, `test/**` or `examples/**` stays in
+scope, because a pin-built job reads those. The costs are asymmetric: a wrong
+exoneration hides a real regression silently, a missed one costs one message —
+and this rule runs unattended.
+
+**A fifth case exists and is deliberately unhandled: a FLAPPING job**, red and
+green at the same tree. It shares the timeout case's consequence (the commit is
+arbitrary) but not its cause. Not automated, because both observed instances
+were on a box simultaneously running a dev session's compiles and the watcher
+itself — so the property is "flaps under contention", and a harness that is part
+of the contention cannot measure it. One loaded day is a sample of one.
+
 ## Triage rule: green on dev, red on the watcher ⇒ suspect HOST COUPLING first
 
 The boxes run different distros on purpose (dev Ubuntu 24.04, `xeon` 26.04,
