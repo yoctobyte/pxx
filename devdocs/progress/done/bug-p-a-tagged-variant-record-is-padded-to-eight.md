@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`record case k: Integer of 0: (i: Integer) end` measured 12 bytes where FPC says 8: the variant part was always aligned to 8, charging the tag's own padding twice. Values were right (the branches do overlay) — the LAYOUT was not, so SizeOf, an array's stride, and any record shared with a file or a C library disagreed with FPC."
+status: done
 ---
 
 # A tagged variant record is padded to eight
@@ -60,3 +61,6 @@ it deliberately).
 
 `make compiler/pascal26` + the test under both compilers + `tools/gate.sh
 quick` — GREEN.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
