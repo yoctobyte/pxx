@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T19:34:23Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d0d9f50119837db04e5fb65feb09ec97bd7adb7d",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-15T19:38:57Z",
    "fixed": [],
    "new_red": [],
@@ -456,6 +448,16 @@
    "sha": "b225834a364869361174b5ef6964db82316abbae",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T03:13:24Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_val_builtin.pas"
+   ],
+   "sha": "7462448a21bd6d106d58b6b07faf6d240f188a1b",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -1905,6 +1907,7 @@
   "test-core#src:test/test_uses_order_pylib_exception_b.pas": "native",
   "test-core#src:test/test_uses_sysutils.pas": "native",
   "test-core#src:test/test_val_builtin.pas": "native",
+  "test-core#src:test/test_val_radix_and_optional_code.pas": "native",
   "test-core#src:test/test_var_array_of_string.pas": "native",
   "test-core#src:test/test_var_before_method_impl.pas": "native",
   "test-core#src:test/test_var_nd_array_string_init.pas": "native",
@@ -4420,7 +4423,8 @@
   "test-core#src:test/test_uses_order_pylib_exception_a.pas": "pass",
   "test-core#src:test/test_uses_order_pylib_exception_b.pas": "pass",
   "test-core#src:test/test_uses_sysutils.pas": "pass",
-  "test-core#src:test/test_val_builtin.pas": "pass",
+  "test-core#src:test/test_val_builtin.pas": "fail",
+  "test-core#src:test/test_val_radix_and_optional_code.pas": "pass",
   "test-core#src:test/test_var_array_of_string.pas": "pass",
   "test-core#src:test/test_var_before_method_impl.pas": "pass",
   "test-core#src:test/test_var_nd_array_string_init.pas": "pass",
@@ -5488,11 +5492,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T03:08:38Z",
-  "sha": "b225834a364869361174b5ef6964db82316abbae",
+  "date": "2026-08-16T03:13:24Z",
+  "sha": "7462448a21bd6d106d58b6b07faf6d240f188a1b",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 226.9
+  "verdict": "RED",
+  "wall": 216.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5617,6 +5621,20 @@
     "343a52551808e14463db6ff315dc6d79b8624bfd"
    ],
    "src": ""
+  },
+  {
+   "bad": "7462448a21bd6d106d58b6b07faf6d240f188a1b",
+   "good": "b225834a364869361174b5ef6964db82316abbae",
+   "job": "test-core#src:test/test_val_builtin.pas",
+   "name": "test-core#270",
+   "opened": "2026-08-16T03:13:24Z",
+   "range": [
+    "a7ef6755972d21bb2b5be97283cc502553d43054",
+    "a11ceeea5a277bbfa48908dd21ce911c9fd5985c",
+    "b4eb7c682fa462851855f61faea728ade853950a",
+    "7462448a21bd6d106d58b6b07faf6d240f188a1b"
+   ],
+   "src": "test/test_val_builtin.pas"
   }
  ],
  "pin_shadow": {
