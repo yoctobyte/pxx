@@ -1,30 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-16T02:28:54Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_encode.npy",
-    "test-nilpy#src:test/test_nilpy_encode_decode_codecs.npy",
-    "test-nilpy#src:test/test_nilpy_intrinsic_result_chain.npy",
-    "test-uforth#core",
-    "test-uforth#coreexttest",
-    "test-uforth#coreplustest",
-    "test-uforth#doubletest",
-    "test-uforth#exceptiontest",
-    "test-uforth#facilitytest",
-    "test-uforth#filetest",
-    "test-uforth#localstest",
-    "test-uforth#memorytest",
-    "test-uforth#searchordertest",
-    "test-uforth#stringtest",
-    "test-uforth#toolstest"
-   ],
-   "new_red": [],
-   "sha": "abe33f68d59b2e064366b20718dc63a320f74f43",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-16T02:33:36Z",
    "fixed": [
     "test-uforth#blocktest"
@@ -451,6 +427,14 @@
    "new_red": [],
    "sha": "096da361dd93823dc6aa56f7a344de5f343127ec",
    "tier": "slow",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T11:19:21Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "096da361dd93823dc6aa56f7a344de5f343127ec",
+   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -5850,11 +5834,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T11:14:03Z",
+  "date": "2026-08-16T11:19:21Z",
   "sha": "096da361dd93823dc6aa56f7a344de5f343127ec",
-  "tier": "slow",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 270.8
+  "wall": 307.3
  },
  "last_bench": {
   "conf_rows": 550,
