@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T19:02:34Z",
-   "fixed": [
-    "test-opt#src:test/c_inline_strlit_arg.c"
-   ],
-   "new_red": [],
-   "sha": "c8f5070671bec5a125a793077cdb0f990aa28cd1",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-15T19:34:23Z",
    "fixed": [],
    "new_red": [],
@@ -456,6 +446,14 @@
    ],
    "new_red": [],
    "sha": "212f869e8ef704190b554ecb13ae055c336b57dc",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T03:08:38Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b225834a364869361174b5ef6964db82316abbae",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1435,6 +1433,7 @@
   "test-core#src:test/test_heap.pas@1": "native",
   "test-core#src:test/test_hex_char_code.pas": "native",
   "test-core#src:test/test_high_low_const_expr.pas": "native",
+  "test-core#src:test/test_high_low_word_aliases.pas": "native",
   "test-core#src:test/test_hilo_swap.pas": "native",
   "test-core#src:test/test_hint_sizeof.pas": "native",
   "test-core#src:test/test_i386_int64_high_half.pas": "native",
@@ -3951,6 +3950,7 @@
   "test-core#src:test/test_heap.pas@1": "pass",
   "test-core#src:test/test_hex_char_code.pas": "pass",
   "test-core#src:test/test_high_low_const_expr.pas": "pass",
+  "test-core#src:test/test_high_low_word_aliases.pas": "pass",
   "test-core#src:test/test_hilo_swap.pas": "pass",
   "test-core#src:test/test_hint_sizeof.pas": "pass",
   "test-core#src:test/test_i386_int64_high_half.pas": "pass",
@@ -5488,11 +5488,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T03:03:41Z",
-  "sha": "212f869e8ef704190b554ecb13ae055c336b57dc",
+  "date": "2026-08-16T03:08:38Z",
+  "sha": "b225834a364869361174b5ef6964db82316abbae",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 228.0
+  "wall": 226.9
  },
  "last_bench": {
   "conf_rows": 550,
