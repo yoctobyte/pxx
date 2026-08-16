@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-16T07:11:28Z",
-   "fixed": [
-    "test-core#src:test/test_strict_overload_width.pas@1"
-   ],
-   "new_red": [],
-   "sha": "c1b4fa782263337a65be24127c76015cc7ea327a",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-16T07:15:49Z",
    "fixed": [],
    "new_red": [],
@@ -426,6 +416,16 @@
    "sha": "17f6715332344490644f67192ee0fdf25bb70cbb",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T18:02:19Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_typed_const_record.pas"
+   ],
+   "sha": "406a40dfaffa9dbea2077cd1319605670801233f",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -922,11 +922,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#134": "native",
   "test-core#135": "native",
   "test-core#136": "native",
   "test-core#137": "native",
   "test-core#138": "native",
+  "test-core#139": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1902,6 +1902,7 @@
   "test-core#src:test/test_record_alignment.pas": "native",
   "test-core#src:test/test_record_byvalue_managed_small.pas": "native",
   "test-core#src:test/test_record_cast_field_offset.pas": "native",
+  "test-core#src:test/test_record_const_addr_field.pas": "native",
   "test-core#src:test/test_record_const_array_field.pas": "native",
   "test-core#src:test/test_record_copy.pas": "native",
   "test-core#src:test/test_record_ctor_expr_tails_b333.pas": "native",
@@ -3627,11 +3628,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#134": "pass",
   "test-core#135": "pass",
   "test-core#136": "pass",
   "test-core#137": "pass",
   "test-core#138": "pass",
+  "test-core#139": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4605,6 +4606,7 @@
   "test-core#src:test/test_record_alignment.pas": "pass",
   "test-core#src:test/test_record_byvalue_managed_small.pas": "pass",
   "test-core#src:test/test_record_cast_field_offset.pas": "pass",
+  "test-core#src:test/test_record_const_addr_field.pas": "pass",
   "test-core#src:test/test_record_const_array_field.pas": "pass",
   "test-core#src:test/test_record_copy.pas": "pass",
   "test-core#src:test/test_record_ctor_expr_tails_b333.pas": "pass",
@@ -4730,7 +4732,7 @@
   "test-core#src:test/test_tobject_param_b243.pas": "pass",
   "test-core#src:test/test_type_helper_for_spelling.pas": "pass",
   "test-core#src:test/test_type_runtime.pas": "pass",
-  "test-core#src:test/test_typed_const_record.pas": "pass",
+  "test-core#src:test/test_typed_const_record.pas": "fail",
   "test-core#src:test/test_typed_metaclass_b278.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "pass",
@@ -5832,11 +5834,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T17:47:31Z",
-  "sha": "17f6715332344490644f67192ee0fdf25bb70cbb",
+  "date": "2026-08-16T18:02:19Z",
+  "sha": "406a40dfaffa9dbea2077cd1319605670801233f",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 213.1
+  "verdict": "RED",
+  "wall": 254.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5902,6 +5904,20 @@
    ],
    "src": "test/lib_tls.pas",
    "status": "timeout"
+  },
+  {
+   "bad": "406a40dfaffa9dbea2077cd1319605670801233f",
+   "good": "17f6715332344490644f67192ee0fdf25bb70cbb",
+   "job": "test-core#src:test/test_typed_const_record.pas",
+   "name": "test-core#758",
+   "opened": "2026-08-16T18:02:19Z",
+   "range": [
+    "cab1a641bb0b9f4c957b574b8ced33b91de11f1c",
+    "5d45db0d7665e64a05a6d55546c82302d9dd82d9",
+    "406a40dfaffa9dbea2077cd1319605670801233f"
+   ],
+   "src": "test/test_typed_const_record.pas",
+   "status": "fail"
   }
  ],
  "pin_shadow": {
