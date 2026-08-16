@@ -103,4 +103,4 @@ judgement the user already applied to float PERFORMANCE work in
 speed to accuracy.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 8c76492d7.
