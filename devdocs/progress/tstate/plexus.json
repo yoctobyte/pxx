@@ -5868,15 +5868,11 @@
  "open_regressions": [
   {
    "bad": "096da361dd93823dc6aa56f7a344de5f343127ec",
-   "good": "b2c371d9879cd1aa5903b26333786b6b2bc0ed12",
+   "good": "875e004e51b889eaf19634ff6d15a9c20c8698e0",
    "job": "lib-test#src:test/crtl_exp2.c",
    "name": "lib-test#36",
    "opened": "2026-08-16T11:09:17Z",
    "range": [
-    "d70425ced18fb127fb137f4fafc91bfe52a82588",
-    "ddc93f5acabce31aa6701f59aaab78568a8eb1b9",
-    "cfde1716ba680edb742ac77d0ce1ba4dc5ad2dd4",
-    "875e004e51b889eaf19634ff6d15a9c20c8698e0",
     "72f044c4502fd184a5505135529e5fa946d989d0",
     "4d94948e30d6d91219dfbeb5cfe848fc18b68dfd",
     "45bc7a43d67ccc6b948b703db6020e08b4ce48d0",
