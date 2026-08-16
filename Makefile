@@ -5318,8 +5318,17 @@ test-core: $(COMPILER)
 	# the flag exists precisely because the two answers differ, and the unflagged
 	# row is the guarantee that the default did not move.
 	# compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload
+	#
+	# The Integer / literal / MyInt / hex rows of the DEFAULT column moved to
+	# longint on 2026-08-16 and that is not the flag leaking: Integer and LongInt
+	# are the SAME 4-byte signed type (FPC declares one as the other's alias),
+	# so the LongInt overload is an EXACT match, not a narrowing one, and the
+	# exact phase now sees it. Nothing was ranked. What the user settled on
+	# 2026-08-14 was ranking BETWEEN DIFFERENT widths, which the default still
+	# declines to do -- SmallInt, Byte and Cardinal still widen to Int64 here.
+	# bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching
 	./$(COMPILER) test/test_strict_overload_width.pas $(TESTTMP)/test_sow_default26
-	test "$$($(TESTTMP)/test_sow_default26)" = "$$(printf 'Integer  int64\nLongInt  longint\nSmallInt int64\nCardinal int64\nByte     int64\nliteral  int64\nMyInt    int64\nuByte    qword\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFFFFFFFFFF')"
+	test "$$($(TESTTMP)/test_sow_default26)" = "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt int64\nCardinal int64\nByte     int64\nliteral  longint\nMyInt    longint\nuByte    qword\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
 	./$(COMPILER) --strict-overload-width test/test_strict_overload_width.pas $(TESTTMP)/test_sow_strict26
 	test "$$($(TESTTMP)/test_sow_strict26)" = "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt longint\nCardinal int64\nByte     longint\nliteral  longint\nMyInt    longint\nuByte    word\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_trsat26

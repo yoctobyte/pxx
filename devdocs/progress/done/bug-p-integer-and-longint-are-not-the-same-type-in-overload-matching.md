@@ -54,6 +54,24 @@ are untouched.
   narrower literal-typing question — not this ticket, and filed nowhere yet
   because it needs a decision on when the negation folds.
 
+## The default column of test_strict_overload_width moved — deliberately
+
+Track T filed a NEW-RED on this commit within the hour
+(`test-core#src:test/test_strict_overload_width.pas@1`), and it was a real
+expectation change, not a flake. That test asserts BOTH columns from one
+source; four rows of the **default** column moved (`Integer`, `literal`,
+`MyInt` -> `longint`, and `hex` -> `FFFFFFFF`) and the `--strict-overload-width`
+column did not move at all.
+
+That is not the flag leaking into the default. Nothing is being *ranked*:
+Integer and LongInt are one type, so the LongInt overload is an EXACT match.
+What the user settled on 2026-08-14 was ranking between DIFFERENT widths, and
+the default still declines to do it — `SmallInt`, `Byte` and `Cardinal` still
+widen to `Int64` in the unflagged column. The four rows that moved all moved
+TOWARD FPC, which is the standing default (reference behaviour by default,
+deviations behind `--strict-*`). Makefile expectation updated with that
+reasoning inline.
+
 ## Gate
 
 `make compiler/pascal26` fixedpoint; `tools/gate.sh quick` GREEN;
