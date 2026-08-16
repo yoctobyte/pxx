@@ -56,4 +56,4 @@ Records and arrays already re-exported correctly through the qualified form
 
 Gate: `make compiler/pascal26` + `tools/gate.sh quick` GREEN; the test builds
 and prints CLASSESTHREAD OK with both the directive and the flag.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit ae630bce2.
