@@ -4126,6 +4126,9 @@ test-core: $(COMPILER)
 	# FPC-compat: High/Low of the 64-bit machine-word aliases (NativeInt/PtrInt/SizeInt)
 	./$(COMPILER) test/test_high_low_word_aliases.pas $(TESTTMP)/test_high_low_aliases26
 	test "$$($(TESTTMP)/test_high_low_aliases26 | tail -1)" = "total ok 12 / 12"
+	# FPC-compat: Val's radix prefixes ($ff/xFF/0xFF/&17/%1011) and its optional code arg
+	./$(COMPILER) test/test_val_radix_and_optional_code.pas $(TESTTMP)/test_val_radix26
+	test "$$($(TESTTMP)/test_val_radix26 | tail -1)" = "total ok 23 / 23"
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas $(TESTTMP)/test_generic_class_methods26
 	test "$$($(TESTTMP)/test_generic_class_methods26 | tail -1)" = "total ok 5 / 5"

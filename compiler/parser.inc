@@ -23206,10 +23206,25 @@ begin
         if CurTok.Kind <> tkIdent then Error('Val: expected destination variable');
         idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);        { dest value }
-        Expect(tkComma, ',');
-        if CurTok.Kind <> tkIdent then Error('Val: expected code variable');
-        si := FindSym(CurTok.SVal); argIdx := TokPos - 1; Next;
-        stepsNode := ParseLValueAST(si, argIdx);            { code }
+        { `code` is OPTIONAL in FPC — `Val(s, i)` is ordinary code, and it was
+          refused here with "Expected: ,". Measured against FPC 3.2.2: the
+          two-argument form behaves exactly like the three-argument one with
+          the code thrown away (a failed conversion leaves the destination 0
+          and raises nothing), so a hidden temp is the whole of it.
+          bug-p-val-rejects-the-radix-prefixes }
+        if CurTok.Kind = tkComma then
+        begin
+          Next;
+          if CurTok.Kind <> tkIdent then Error('Val: expected code variable');
+          si := FindSym(CurTok.SVal); argIdx := TokPos - 1; Next;
+          stepsNode := ParseLValueAST(si, argIdx);          { code }
+        end
+        else
+        begin
+          stepsNode := AllocNode(AN_IDENT);
+          ASTIVal[stepsNode] := AllocVar('', tyInteger);
+          ASTTk[stepsNode] := Ord(tyInteger);
+        end;
         Expect(tkRParen, ')');
 
         if (idx >= 0) and TypeIsFloat(Syms[idx].TypeKind) then procIdx := FindProc('ValFloat')
