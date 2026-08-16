@@ -66,4 +66,4 @@ and runtime step), a negative step, range comprehensions, and variable bounds.
 Fixed in b77240880. `test_nilpy_int_promotion_default` output is now
 byte-identical to its `.expected`. Gate: `make compiler/pascal26` +
 `tools/gate.sh quick` GREEN.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit b2c371d98.
