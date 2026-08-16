@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1941 rejected:37`
+`unfinished:11 blocked:4 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1942 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -43,7 +43,6 @@ _none — no lane is locked._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [A]` bug-a-duplicate-class-name-check-is-scope-blind
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
@@ -64,5 +63,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-release-checksums-repro
 - `[p 48] [P]` feature-pascal-class-management-operators
 - `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
+- `[p 45] [A]` feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 
 _155 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

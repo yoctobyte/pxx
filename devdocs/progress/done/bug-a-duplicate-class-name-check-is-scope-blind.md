@@ -10,7 +10,7 @@ owner: claude-acpn
 # `duplicate class name` is scope-blind: nested classes collide across enclosing scopes
 
 - **Type:** bug (duplicate-declaration detection) — **Track A**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-08-14
 - **Filed by:** Track T, from `task-t-enroll-pascal-conformance-tier`. T owns the
   tool, never the bug — this is the owning lane's.
@@ -210,3 +210,6 @@ methods declared *and implemented* inline are unaffected;
   original commit added, and the distinctness of the two instances — `total ok
   5 / 5` under both FPC 3.2.2 and pxx.
 - `tools/gate.sh quick` GREEN, self-host byte-identical, FPC seed canary green.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
