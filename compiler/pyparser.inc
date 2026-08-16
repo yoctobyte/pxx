@@ -9956,31 +9956,76 @@ begin
             (tk = tyUInt32) or (tk = tyUInt64) or TypeIsPromoInt(tk);
 end;
 
-{ Parses the shared tail `, "little", signed=<expr> )` and returns the node for
-  the signed flag. CurTok is the comma before the byte order. }
-function PyParseByteOrderAndSigned: Integer;
+{ Parses the shared tail `[, "little"|"big"] [, signed=<expr>] )` and returns
+  the node for the signed flag, setting bigEnd. CurTok is the ')' or the comma
+  before the byte order.
+
+  Both tail parts are OPTIONAL because they are optional in CPython, and
+  demanding them refused working programs: `signed` defaults to False and
+  almost nobody writes it, and since 3.11 `byteorder` defaults to 'big'. The
+  original shape ("exactly the one the corpus uses") was a fair trade while
+  keywords did not exist here — but a missing `signed=` was an ERROR, so
+  `(258).to_bytes(2, "big")` — ordinary network code — did not compile.
+
+  'big' is now the reversal of the little-endian image (see pybytes_reversed),
+  not a second conversion.
+  bug-nilpy-to-bytes-refuses-big-endian-and-demands-the-signed-keyword }
+function PyParseByteOrderAndSigned(var bigEnd: Boolean): Integer;
 var ordText: AnsiString;
 begin
-  Expect(tkComma, ',');
-  if CurTok.Kind <> tkString then
-    Error('Nil Python: to_bytes/from_bytes needs a literal byte order, "little"');
-  ordText := CurTok.SVal;
-  if ordText <> 'little' then
-    Error('Nil Python: only the "little" byte order is supported, got "'
-          + ordText + '"');
-  Next;
-  Expect(tkComma, ',');
-  if (CurTok.Kind <> tkIdent) or (LowerCase(CurTok.SVal) <> 'signed') then
-    Error('Nil Python: to_bytes/from_bytes needs the signed= keyword argument');
-  Next;
-  Expect(tkAssign, '=');
-  PyParseBoolExpr;
-  Result := CurASTNode;
+  bigEnd := True;            { CPython 3.11+ default }
+  Result := -1;
+  if CurTok.Kind = tkComma then
+  begin
+    Next;
+    if CurTok.Kind <> tkString then
+      Error('Nil Python: to_bytes/from_bytes needs a literal byte order, "little" or "big"');
+    ordText := CurTok.SVal;
+    if ordText = 'little' then bigEnd := False
+    else if ordText = 'big' then bigEnd := True
+    else
+      Error('Nil Python: byte order must be "little" or "big", got "'
+            + ordText + '"');
+    Next;
+  end;
+  if CurTok.Kind = tkComma then
+  begin
+    Next;
+    if (CurTok.Kind <> tkIdent) or (LowerCase(CurTok.SVal) <> 'signed') then
+      Error('Nil Python: to_bytes/from_bytes takes only the signed= keyword after the byte order');
+    Next;
+    Expect(tkAssign, '=');
+    PyParseBoolExpr;
+    Result := CurASTNode;
+  end;
+  if Result < 0 then
+  begin
+    { signed=False, the CPython default }
+    Result := AllocNode(AN_BOOL_LIT);
+    ASTIVal[Result] := 0;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+end;
+
+{ Wrap a TPyBytes-valued node in pybytes_reversed — the big-endian half. }
+function PyMakeBytesReversed(node: Integer): Integer;
+var procIdx, callNode, a0: Integer;
+begin
+  procIdx := FindProc('pybytes_reversed');
+  if procIdx < 0 then Error('Nil Python: pylib (pybytes_reversed) not loaded');
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := node; ASTRight[a0] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyClass);
+  ASTRight[callNode] := ProcRetRecId[procIdx];
+  ASTLeft[callNode] := a0;
+  PyMakeBytesReversed := callNode;
 end;
 
 { `<int>.to_bytes(...)`; CurTok is the '(' . }
 function PyParseToBytes(baseNode: Integer): Integer;
 var procIdx, callNode, a0, a1, a2, nNode, sNode, unboxPi: Integer;
+    bigEnd: Boolean;
 begin
   procIdx := FindProc('pyint_to_bytes');
   if procIdx < 0 then Error('Nil Python: pylib (pyint_to_bytes) not loaded');
@@ -9998,9 +10043,17 @@ begin
     baseNode := callNode;
   end;
   Expect(tkLParen, '(');
-  PyParseBoolExpr;
-  nNode := CurASTNode;
-  sNode := PyParseByteOrderAndSigned;
+  if CurTok.Kind = tkRParen then
+  begin
+    { `to_bytes()` — CPython 3.11+ defaults length to 1 }
+    nNode := AllocNode(AN_INT_LIT); ASTIVal[nNode] := 1; ASTTk[nNode] := Ord(tyInt64);
+  end
+  else
+  begin
+    PyParseBoolExpr;
+    nNode := CurASTNode;
+  end;
+  sNode := PyParseByteOrderAndSigned(bigEnd);
   Expect(tkRParen, ')');
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := baseNode;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := nNode;
@@ -10011,6 +10064,7 @@ begin
   ASTTk[callNode] := Ord(tyClass);
   ASTRight[callNode] := ProcRetRecId[procIdx];   { TPyBytes identity }
   ASTLeft[callNode] := a0;
+  if bigEnd then callNode := PyMakeBytesReversed(callNode);
   LastExprTk := tyClass;
   Result := callNode;
 end;
@@ -10018,14 +10072,16 @@ end;
 { `int.from_bytes(...)`; CurTok is the '(' . }
 function PyParseFromBytes: Integer;
 var procIdx, callNode, a0, a1, bNode, sNode: Integer;
+    bigEnd: Boolean;
 begin
   procIdx := FindProc('pyint_from_bytes');
   if procIdx < 0 then Error('Nil Python: pylib (pyint_from_bytes) not loaded');
   Expect(tkLParen, '(');
   PyParseBoolExpr;
   bNode := CurASTNode;
-  sNode := PyParseByteOrderAndSigned;
+  sNode := PyParseByteOrderAndSigned(bigEnd);
   Expect(tkRParen, ')');
+  if bigEnd then bNode := PyMakeBytesReversed(bNode);
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := bNode;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := sNode;
   ASTRight[a0] := a1; ASTRight[a1] := -1;

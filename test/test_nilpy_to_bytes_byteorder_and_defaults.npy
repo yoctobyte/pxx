@@ -1,0 +1,29 @@
+# `(258).to_bytes(2, "big")` — ordinary network code — did not compile: the
+# intrinsic REQUIRED a `signed=` keyword and refused every byte order but
+# "little". Both refusals were deliberate ("the shape the corpus uses") and both
+# reject programs CPython accepts and runs, which is the one direction the
+# compatibility promise does not allow.
+#
+# `signed` defaults to False in CPython and almost nobody writes it; `byteorder`
+# has defaulted to "big" since 3.11, and `to_bytes()` with no arguments at all is
+# a 1-byte big-endian conversion. All three are accepted here now.
+#
+# "big" is the little-endian image REVERSED (pybytes_reversed), not a second
+# conversion — one routine for two byte orders in both directions, so the
+# arithmetic above it stays the single source.
+# bug-nilpy-to-bytes-refuses-big-endian-and-demands-the-signed-keyword
+#
+# Every value below is CPython 3's on this same source.
+print((258).to_bytes(2, "little"))
+print((258).to_bytes(2, "big"))
+print((258).to_bytes(4, "big"))
+print((258).to_bytes(2, "little", signed=True))
+print((-2).to_bytes(2, "big", signed=True))
+print((-2).to_bytes(2, "little", signed=True))
+print((7).to_bytes())
+print((7).to_bytes(1))
+print(int.from_bytes(b"\x01\x02", "big"))
+print(int.from_bytes(b"\x01\x02", "little"))
+print(int.from_bytes(b"\xff\xfe", "big", signed=True))
+print(int.from_bytes(b"\xff\xfe", "little", signed=True))
+print(int.from_bytes(b"\x01\x02"))

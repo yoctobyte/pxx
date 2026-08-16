@@ -1052,6 +1052,12 @@ procedure pyvar_setslice(const dst: Variant; lo, hi: Integer; const src: Variant
   frontend REJECTS anything else rather than silently ignoring it. }
 function pyint_to_bytes(v: Int64; n: Integer; signed: Boolean): TPyBytes;
 function pyint_from_bytes(b: TPyBytes; signed: Boolean): Int64;
+{ The BIG-endian half of both, as one reversal rather than a second conversion:
+  to_bytes(..., 'big') is the little-endian image reversed, and from_bytes(b,
+  'big') is from_bytes(reverse(b), 'little'). Two byte orders, one extra
+  routine, and the conversions above stay the single source of the arithmetic.
+  bug-nilpy-to-bytes-refuses-big-endian-and-demands-the-signed-keyword }
+function pybytes_reversed(b: TPyBytes): TPyBytes;
 { `n.bit_length()` / `n.bit_count()`. Both are defined on the MAGNITUDE — the
   sign is ignored, so (-8) answers as 8 — and both take a Variant rather than
   an Int64 so an arbitrary-precision receiver stays exact: `(2**70)` is outside
@@ -10258,6 +10264,20 @@ begin
     p^ := u and 255;
     u := u shr 8;   { arithmetic shift: sign bits fill, which is what two's
                       complement little-endian wants for a negative value }
+  end;
+end;
+
+function pybytes_reversed(b: TPyBytes): TPyBytes;
+var k, n: Integer; src, dst: PByte;
+begin
+  if b = nil then n := 0 else n := b.FLen;
+  Result := TPyBytes.Create(n);
+  if b <> nil then Result.FIsByteArray := b.FIsByteArray;
+  for k := 0 to n - 1 do
+  begin
+    src := PByte(NativeInt(b.FData) + k);
+    dst := PByte(NativeInt(Result.FData) + (n - 1 - k));
+    dst^ := src^;
   end;
 end;
 
