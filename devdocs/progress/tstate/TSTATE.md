@@ -3,32 +3,9 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `096da361dd93` | 2026-08-16T10:49:28Z | GREEN (native) | 211.3s | `459e96f985d1` RED |
+| plexus | `096da361dd93` | 2026-08-16T11:09:17Z | RED (full) | 1141.9s | `096da361dd93` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **CASCADE 17 jobs** (plexus): bad `343a52551808`, last good `c8f5070671be`, 67 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-nilpy#src:test/test_nilpy_encode.npy`
-  - `test-nilpy#src:test/test_nilpy_encode_decode_codecs.npy`
-  - `test-nilpy#src:test/test_nilpy_intrinsic_result_chain.npy`
-  - `test-nilpy#src:test/test_nilpy_math_domain_errors.npy`
-  - `test-nilpy#src:test/test_nilpy_math_log.npy`
-  - `test-uforth#core`
-  - `test-uforth#coreexttest`
-  - `test-uforth#coreplustest`
-  - `test-uforth#doubletest`
-  - `test-uforth#exceptiontest`
-  - `test-uforth#facilitytest`
-  - `test-uforth#filetest`
-  - `test-uforth#localstest`
-  - `test-uforth#memorytest`
-  - `test-uforth#searchordertest`
-  - `test-uforth#stringtest`
-  - `test-uforth#toolstest`
-  </details>
-- **lib-test#src:test/lib_classes_tthread.pas** — test/lib_classes_tthread.pas (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
-- **lib-test#src:test/lib_tls.pas** — test/lib_tls.pas (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
-- **test-i386#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_int_promotion_default.npy** — test/test_nilpy_int_promotion_default.npy test/test_nilpy_int_promotion_default.expected (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
+- **lib-test#src:test/crtl_exp2.c** — test/crtl_exp2.c examples/tk/hello.npy +5 (plexus): bad `096da361dd93`, last good `459e96f985d1`, 32 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy** — test/test_nilpy_pow_matches_cpython.npy test/test_nilpy_pow_matches_cpython.expected (plexus): bad `096da361dd93`, last good `459e96f985d1`, 32 commit(s) in range
