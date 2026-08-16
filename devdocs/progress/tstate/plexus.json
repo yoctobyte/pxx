@@ -5876,7 +5876,7 @@
    "src": "test/crtl_exp2.c examples/tk/hello.npy +5"
   },
   {
-   "bad": "f43bf1298c43f7459fdcf434bf0b336d00841ec4",
+   "bad": "35249274c6fe28898f321f798d76356f82ffe589",
    "good": "1d40d64fa6bf008a8f878c3e0c06ca6ab7b4aa9b",
    "job": "test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy",
    "name": "test-nilpy#504",
@@ -5885,11 +5885,7 @@
     "79e21ae86b61064b6fc5dad66b0f14a7973a8cee",
     "ba5a9d9878fab51c0e9711b65c49944669a0effb",
     "2ea8863f09fb185f67347e9b7324aa5b66e69c60",
-    "35249274c6fe28898f321f798d76356f82ffe589",
-    "a60f0dbd75d6c916ed00a709b879af68936831de",
-    "2f9ea39523a3ba9e83e823c873eb22dfb9dfdbad",
-    "f4af2c60b6b2e28ca5f8bc12ff27eccc38efe022",
-    "f43bf1298c43f7459fdcf434bf0b336d00841ec4"
+    "35249274c6fe28898f321f798d76356f82ffe589"
    ],
    "src": "test/test_nilpy_pow_matches_cpython.npy test/test_nilpy_pow_matches_cpython.expected"
   }
