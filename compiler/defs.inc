@@ -1791,6 +1791,7 @@ var
   ProcRetPtrElemRec : array[0..MAX_PROCS-1] of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
   ProcParamPtrDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { C interop: pointer depth for parameters }
   ProcParamRecId : array[0..MAX_PARAM_DEPTHS-1] of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }
+  ProcParamSetEnumId : array[0..MAX_PARAM_DEPTHS-1] of Integer; { `set of TEnum` param: the element enum type index, -1 otherwise. A PARALLEL ARRAY rather than a TParam field, and durable for the same reason ProcParamRecId is: RegisterProc leaves Params[].SymIdx = -1 and a param symbol does not outlive the callee's scope, so a CALLER parsing `f([...])` cannot ask the symbol what the set's element type is. Read by the set-literal element check. }
   ProcParamDynDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { named dynamic-array param: dyn nesting depth (>0); 0 = not a named dynarray param. Persists because param syms are reused across procs. Distinguishes a resizable `TDynArr=array of T` param from an open `array of T` param at the call site. }
   ProcParamIsConst : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared `const` (read-only by-ref). Persists because param syms are reused across procs. At a call site, a `const` record param may bind a non-lvalue temporary (FPC behaviour) — the temp is materialized into a hidden local and its address passed; a `var`/`out` param still requires a true lvalue for write-back. }
   ProcParamExplicitByRef : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param was EXPLICITLY declared by-ref (`var`/`out`/`const`) at the source level, before the >8-byte record ABI forces IsRef. Lets a call site tell a genuine `var`/`out` record param (needs a real lvalue for write-back) from a plain by-value record passed by-ref only for ABI (a temporary is fine — the callee copies). const records carry their own ProcParamIsConst flag. }
@@ -3162,6 +3163,17 @@ var
   ClassVarCount   : Integer;
   LastTypeEnumId  : Integer;  { set by ParseTypeKind: enum type index or -1 }
   LastTypeSetEnumId : Integer;  { set by ParseTypeKind for set types: element enum index or -1 }
+  { Set-literal element accounting, filled while `[...]` is parsed and read once
+    at the `]`. A set literal folds every element to a bare ordinal, which throws
+    away the only evidence of WHICH enum minted it — so the identity is tallied
+    here instead. SetLitEnumId = the one enum every constant enum-member element
+    came from (-1 = none seen); SetLitMixed = two DIFFERENT enums appeared;
+    SetLitHasPlain = a constant element that is not an enum member at all (an
+    integer, a char, True). Saved/restored around a nested literal parse.
+    bug-p-set-literal-elements-are-not-type-checked }
+  SetLitEnumId   : Integer;
+  SetLitMixed    : Boolean;
+  SetLitHasPlain : Boolean;
   LastTypeSetElemTk : Integer;  { set by ParseTypeKind for set types: element TTypeKind ordinal }
 
   { Named type aliases. Phase 2: pointer aliases (PFoo = ^TFoo) carry an element

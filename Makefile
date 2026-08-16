@@ -3802,6 +3802,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_inline_array_field_const_bound26)" = "$$(printf '0\n70\n6\n103')"
 	./$(COMPILER) test/test_symslot_stale_ndims.pas $(TESTTMP)/test_symslot_stale_ndims26
 	test "$$($(TESTTMP)/test_symslot_stale_ndims26)" = "136"
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_set_literal_element_types.pas $(TESTTMP)/test_setlitelem26
+	test "$$($(TESTTMP)/test_setlitelem26)" = "$$(cat test/test_set_literal_element_types.expected)"
+	# ...and the two shapes the element check must REJECT. The .expected above is
+	# FPC's own output, so the positive half pins that tightening the check did
+	# not cost a single legal literal.
+	! ./$(COMPILER) test/test_set_literal_wrong_enum_fail.pas $(TESTTMP)/test_slwe26 > $(TESTTMP)/test_slwe.log 2>&1
+	grep -q "set of TColor element in a set of TDay" $(TESTTMP)/test_slwe.log
+	! ./$(COMPILER) test/test_set_literal_plain_ordinal_fail.pas $(TESTTMP)/test_slpo26 > $(TESTTMP)/test_slpo.log 2>&1
+	grep -q "set element is not a member of TDay" $(TESTTMP)/test_slpo.log
 	! ./$(COMPILER) test/test_array_member_fail.pas $(TESTTMP)/test_amf26 > $(TESTTMP)/test_amf.log 2>&1
 	grep -q "an array variable has no members" $(TESTTMP)/test_amf.log
 	! ./$(COMPILER) test/test_undefined_field_fail.pas $(TESTTMP)/test_udf26 > $(TESTTMP)/test_udf.log 2>&1

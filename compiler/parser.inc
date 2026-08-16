@@ -1350,18 +1350,103 @@ begin
   end;
 end;
 
+function EnumTypeNameOf(eid: Integer): AnsiString;
+begin
+  if (eid >= 0) and (eid < EnumTypeCount) then
+    Result := GetTokenStrFromRaw(EnumTypeNOff[eid], EnumTypeNLen[eid])
+  else
+    Result := '<anonymous enum>';
+end;
+
+procedure SetLitBegin;
+{ Open a fresh element tally for one `[...]`. Callers save/restore the three
+  globals around it, so a set literal nested inside an element expression
+  cannot corrupt the enclosing one's tally. }
+begin
+  SetLitEnumId := -1;
+  SetLitMixed := False;
+  SetLitHasPlain := False;
+end;
+
+procedure SetLitNoteEnum(eid: Integer);
+{ Tally one element known to be a member of enum `eid`. }
+begin
+  if SetLitEnumId < 0 then SetLitEnumId := eid
+  else if SetLitEnumId <> eid then SetLitMixed := True;
+end;
+
+procedure SetLitNoteElem(symIdx: Integer);
+{ Tally one CONSTANT element by the symbol it came from (-1 = a literal integer
+  or char, which is never an enum member). Runtime elements are not tallied:
+  their ordinal type is not knowable here, and being lenient there costs a
+  diagnostic rather than producing a wrong value. }
+var eid: Integer;
+begin
+  eid := -1;
+  if symIdx >= 0 then eid := SymEnumId[symIdx];
+  if eid < 0 then SetLitHasPlain := True else SetLitNoteEnum(eid);
+end;
+
+procedure SetLitCheckAgainst(targetEnumId: Integer);
+{ The one rule, at the one place the target type is known: in a literal bound to
+  a `set of TEnum`, every constant element must be a member of THAT enum.
+
+  It subsumes the whole reported surface -- a plain integer, a char, True and an
+  out-of-range ordinal are all "not a member of TEnum", and so is a member of a
+  DIFFERENT enum with the same ordinal, which was the sharpest case: `[cGreen]`
+  silently answered dTue, so swapping one enum for another could not be caught
+  anywhere a set literal was involved.
+
+  `[]` is always legal (nothing to check), and a set whose element type is not
+  an enum (`set of Char`, `set of Byte`, `set of 0..7`) is left alone entirely.
+  bug-p-set-literal-elements-are-not-type-checked }
+begin
+  if SetLitMixed then
+    Error('set literal mixes elements from two different enum types');
+  if targetEnumId < 0 then Exit;
+  if SetLitHasPlain then
+    Error('set element is not a member of ' + EnumTypeNameOf(targetEnumId));
+  if (SetLitEnumId >= 0) and (SetLitEnumId <> targetEnumId) then
+    Error('set of ' + EnumTypeNameOf(SetLitEnumId) +
+          ' element in a set of ' + EnumTypeNameOf(targetEnumId));
+end;
+
+procedure SetLitCheckArg(node, procIdx, slot: Integer);
+{ The call-argument arm. `node` must be the literal just parsed — the tally the
+  check reads is the one left in the globals by its `]`, so anything else would
+  be reading a previous literal's.
+
+  Skipped for an OVERLOADED routine: `procIdx` here is the candidate the name
+  resolved to first, not necessarily the one the call will bind, so its element
+  type is not yet knowable. (A literal that mixes two enums is still rejected —
+  that needs no target at all.) }
+begin
+  if (node < 0) or (ASTKind[node] <> AN_SET_LIT) then Exit;
+  if (procIdx < 0) or (slot < 0) or (slot >= MAX_PROC_PARAMS) then Exit;
+  if slot >= Procs[procIdx].ParamCount then Exit;
+  if ProcOverloadDirective[procIdx] then
+  begin
+    if SetLitMixed then
+      Error('set literal mixes elements from two different enum types');
+    Exit;
+  end;
+  SetLitCheckAgainst(ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + slot]);
+end;
+
 function ParseSetConst: Int64;
 var idx: Integer;
 begin
   if CurTok.Kind = tkInteger then
   begin
     Result := CurTok.IVal;
+    SetLitNoteElem(-1);
     Next;
   end
   else if CurTok.Kind = tkString then
   begin
     if Length(CurTok.SVal) <> 1 then Error('set item must be one character');
     Result := Ord(CurTok.SVal[1]);
+    SetLitNoteElem(-1);
     Next;
   end
   else if CurTok.Kind = tkIdent then
@@ -1369,6 +1454,7 @@ begin
     idx := FindSym(CurTok.SVal);
     if (idx < 0) or (Syms[idx].Kind <> skConst) then Error('set item must be constant');
     Result := Syms[idx].ConstVal;
+    SetLitNoteElem(idx);
     Next;
   end
   else Error('expected set item');
@@ -1436,6 +1522,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
+function NodeEnumIdOf(node: Integer): Integer; forward;
 function ParseVarRecLiteralAST: Integer; forward;
 function ParseArrayCtorAST(elemTk: TTypeKind; rowLen, rowLo: Integer): Integer; forward;
 function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer; forward;
@@ -3384,6 +3471,7 @@ begin
       begin
         ParseExpr; exprNode := CurASTNode;
       end;
+      SetLitCheckArg(exprNode, mpi, ai);
       argSeq := AllocNode(AN_ARG);
       ASTLeft[argSeq] := exprNode;
       ASTIVal[argSeq] := mkw;
@@ -6949,6 +7037,7 @@ begin
               begin
                 ParseArgExpr; mexprNode := CurASTNode;
               end;
+              SetLitCheckArg(mexprNode, mpi, mslot);
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
               ASTIVal[margSeq] := mkw;
               ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
@@ -7291,6 +7380,9 @@ begin
     ASTLeft[node] := leftExpr;
     ASTRight[node] := ParseSetLiteralAST;
     ASTTk[node] := Ord(tyBoolean);
+    { `x in [...]`: the target element type is the LEFT operand's, which is
+      already known here — no plumbing needed for this arm. }
+    SetLitCheckAgainst(NodeEnumIdOf(leftExpr));
     Result := node;
     Exit;
   end;
@@ -7311,6 +7403,7 @@ begin
   lastArg := argNode;
 
   Expect(tkLBrack, '[');
+  SetLitBegin;
   if CurTok.Kind <> tkRBrack then
   begin
     done := False;
@@ -7341,6 +7434,7 @@ begin
     end;
   end;
   Expect(tkRBrack, ']');
+  SetLitCheckAgainst(NodeEnumIdOf(leftExpr));
   LastExprTk := tyBoolean;
   Result := node;
 end;
@@ -7352,30 +7446,50 @@ function ParseSetElementAST: Integer;
   Anything else (a variable, a computed expression) is parsed as a full
   expression for a runtime element; the lowering then builds the set at runtime
   with Include/range loops. }
-var n, sci: Integer;
+var n, sci, savEnum: Integer; savMixed, savPlain: Boolean;
 begin
   if CurTok.Kind = tkInteger then
   begin
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := CurTok.IVal; ASTTk[n] := Ord(tyInteger); Next;
+    SetLitNoteElem(-1);
     Result := n;
   end
   else if CurTok.Kind = tkString then
   begin
     if Length(CurTok.SVal) <> 1 then Error('set item must be one character');
     n := AllocNode(AN_INT_LIT); ASTIVal[n] := Ord(CurTok.SVal[1]); ASTTk[n] := Ord(tyChar); Next;
+    SetLitNoteElem(-1);
     Result := n;
   end
   else if (CurTok.Kind = tkIdent) and (FindSym(CurTok.SVal) >= 0) and
           (Syms[FindSym(CurTok.SVal)].Kind = skConst) then
   begin
     sci := FindSym(CurTok.SVal);
-    n := AllocNode(AN_INT_LIT); ASTIVal[n] := Syms[sci].ConstVal; ASTTk[n] := Ord(Syms[sci].TypeKind); Next;
+    n := AllocNode(AN_INT_LIT); ASTIVal[n] := Syms[sci].ConstVal; ASTTk[n] := Ord(Syms[sci].TypeKind);
+    ASTEnumId[n] := SymEnumId[sci];
+    Next;
+    SetLitNoteElem(sci);
     Result := n;
   end
   else
   begin
-    { Runtime element: a variable or an arbitrary expression. }
+    { Runtime element: a variable or an arbitrary expression. The expression may
+      itself contain a `[...]`, whose tally must not overwrite ours. }
+    savEnum := SetLitEnumId; savMixed := SetLitMixed; savPlain := SetLitHasPlain;
     ParseExpr;
+    SetLitEnumId := savEnum; SetLitMixed := savMixed; SetLitHasPlain := savPlain;
+    { An enum-typed expression carries its identity on the symbol, so it can be
+      tallied exactly. A BOOLEAN one can be tallied as plain: an enum-typed
+      variable is tyInteger here, never tyBoolean, so this cannot mistake one
+      for the other -- and `True` reaches this branch rather than the const-ident
+      one above, which is why it was the row that still slipped through.
+      Anything else stays untallied: a bare ordinal variable is indistinguishable
+      from an enum-typed one at this level, and a missed diagnostic is a smaller
+      failure than a wrong one. }
+    if NodeEnumIdOf(CurASTNode) >= 0 then
+      SetLitNoteEnum(NodeEnumIdOf(CurASTNode))
+    else if (CurASTNode >= 0) and (IntToTypeKind(ASTTk[CurASTNode]) = tyBoolean) then
+      SetLitHasPlain := True;
     Result := CurASTNode;
   end;
 end;
@@ -7389,6 +7503,7 @@ begin
   lastArg := -1;
 
   Expect(tkLBrack, '[');
+  SetLitBegin;
   if CurTok.Kind <> tkRBrack then
   begin
     done := False;
@@ -7418,6 +7533,11 @@ begin
     end;
   end;
   Expect(tkRBrack, ']');
+  { Needs no target, so it fires HERE rather than at a binding site -- which is
+    what makes it reach the contexts the target-driven check cannot, notably an
+    assignment to a set variable. }
+  if SetLitMixed then
+    Error('set literal mixes elements from two different enum types');
   Result := node;
 end;
 
@@ -10354,6 +10474,7 @@ begin
                   end;
                 end
                 else begin ParseArgExpr; mexprNode := CurASTNode; end;
+                SetLitCheckArg(mexprNode, mpi, mai);
                 margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
                 if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
                 else ASTRight[mlastArg] := margSeq;
@@ -15703,6 +15824,7 @@ begin
             node := TryDelphiBareProcArg;
             if node >= 0 then CurASTNode := node else ParseArgExpr;
           end;
+          SetLitCheckArg(CurASTNode, procIdx, slotIdx);
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := CurASTNode;
           ASTIVal[argSeq] := kwIdx;
@@ -23677,6 +23799,7 @@ begin
               node := TryDelphiBareProcArg;
               if node >= 0 then CurASTNode := node else ParseArgExpr;
             end;
+            SetLitCheckArg(CurASTNode, procIdx, slotIdx);
             argSeq := AllocNode(AN_ARG);
             ASTLeft[argSeq] := CurASTNode;
             ASTIVal[argSeq] := kwIdx;
@@ -29861,6 +29984,7 @@ var
   pnames    : array[0..MAX_PROC_PARAMS-1] of AnsiString;
   ptypes    : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesRec : array[0..MAX_PROC_PARAMS-1] of Integer;
+  ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
   ptypesPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesPtrElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   ptypesProcSig : array[0..MAX_PROC_PARAMS-1] of Integer;  { proc-typed param: signature index, -1 otherwise }
@@ -30020,6 +30144,9 @@ begin
   end;
 
   nparams := 0; retType := tyInteger; retRecId := REC_NONE;
+  { A local array is stack garbage until written, and the Self/capture insertion
+    paths below fill some slots without going through the typed-param branch. }
+  for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetEnum[i] := -1;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
   retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
@@ -30187,6 +30314,10 @@ begin
         ptypes[i] := tk;
         puntyped[i] := isUntyped;
         ptypesRec[i] := LastTypeRecId;
+        { LastTypeSetEnumId is only meaningful when the type just parsed WAS a
+          set — it is not cleared for other kinds. }
+        if tk = tySet then ptypesSetEnum[i] := LastTypeSetEnumId
+        else ptypesSetEnum[i] := -1;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
         ptypesProcSig[i] := LastTypeProcSig;
@@ -30495,6 +30626,8 @@ begin
       Procs[procIdx].Params[i].IsRef := pbyref[i];
       if (i < MAX_PROC_PARAMS) and ((ptypes[i] = tyClass) or (ptypes[i] = tyRecord)) then
         ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
+      if (i < MAX_PROC_PARAMS) and (ptypes[i] = tySet) then
+        ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
     end;
     Procs[procIdx].BodyAddr := -1;
     ProcExternal[procIdx] := True;
@@ -30530,6 +30663,7 @@ begin
       pnames[i] := pnames[i-1];
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
+      ptypesSetEnum[i] := ptypesSetEnum[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       ptypesProcSig[i] := ptypesProcSig[i-1];
@@ -30655,6 +30789,7 @@ begin
       pnames[i] := pnames[i-1];
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
+      ptypesSetEnum[i] := ptypesSetEnum[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       ptypesProcSig[i] := ptypesProcSig[i-1];
@@ -30777,6 +30912,8 @@ begin
             ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
             if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
               ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
+            if ptypes[i] = tySet then
+              ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
           end;
         end;
       end
@@ -31042,6 +31179,8 @@ begin
     begin
       ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + i] := pElemRowLen[i];
       ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + i] := pElemRowLo[i];
+      if ptypes[i] = tySet then
+        ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
     end;
     if (pFixedLen[i] > 0) and (pDynDepth[i] = 0) then
     begin

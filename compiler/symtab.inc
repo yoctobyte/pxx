@@ -6702,6 +6702,7 @@ begin
     ProcParamDefaultSym[ProcCount * MAX_PROC_PARAMS + i] := -1;
     ProcParamDefaultIsBool[ProcCount * MAX_PROC_PARAMS + i] := False;
     ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
+    ProcParamSetEnumId[ProcCount * MAX_PROC_PARAMS + i] := -1;
     ProcParamDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemRowLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemRowLo[ProcCount * MAX_PROC_PARAMS + i] := 0;
