@@ -339,3 +339,4 @@
 2026-08-15T07:31:31Z  v339  795b428863b2e6700f51979fa9ee11b49d36f30a7dbda0999c698f7406c6ce4e  f11e0ed9816edc1d57ef8ee6e6ab0e5b9885db6c  fix(N): *= on a variant-typed target mutates a list in place
 2026-08-16T03:08:56Z  v340  f091f83dabebce0d37fdb3261cd0e5c09ef66fad4513df2e10e892cbb6a5eff4  b4eb7c682fa462851855f61faea728ade853950a  docs(progress): record the shas the resolves landed as
 2026-08-16T07:13:13Z  v341  fcf011d76990a729836e83096f6d695c85edc3e60aa6d43b8ebdce41f6af1418  e27438770f53fcf679fef63717c965a31309e162  ticket(P): a routine-local typed const is re-initialised on every call
+2026-08-16T07:55:43Z  v342  dc6f0aa6985af6798cebb5d787bebdc37b709dd83b6275c2fc174777c74256d2  467a4e5dab2d1bd7ad244bb9375c3a2924ba065c  fix(P): a static local const survives the rollback and the inliner
