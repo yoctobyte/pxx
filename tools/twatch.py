@@ -1507,6 +1507,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # signal, not a behaviour one, and bisect_step must be able to tell the
     # difference -- see the guard there.
     statmap = {job_key(j): j["status"] for j in report["jobs"]}
+    pinmap = {job_key(j): bool(j.get("pin_built")) for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]
     # PER-JOB RANGE FALLBACK. The parent-based range answers "since this host
     # last tested anything", which is empty exactly when the two-phase watcher
@@ -1554,7 +1555,8 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             regs.append({"job": name, "name": namemap.get(name, ""),
                          "src": srcmap.get(name, ""), "bad": sha,
                          "good": good, "range": rng, "opened": utcnow(),
-                         "status": statmap.get(name, "fail")})
+                         "status": statmap.get(name, "fail"),
+                         "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 
     changed = bool(new_red or fixed)
@@ -1790,6 +1792,64 @@ def staleness_note(clone, sha, parent):
                 "tagged to the sha that was tested, which may no longer be the "
                 "state of the tree.\n" % behind)
     return ""
+
+
+# PIN PROVENANCE: a decidable non-causality check, unlike the refusal hint.
+#
+# Track B's targets build everything with $(PXX_STABLE) -- the PINNED binary --
+# never with a compiler built at HEAD. So for such a job, a commit that changes
+# only `compiler/**` or `tools/**` and does NOT move `stable_linux_amd64/**`
+# cannot possibly change its behaviour. Not "is unlikely to": cannot. The bytes
+# that compiled it are the same bytes.
+#
+# This is worth automating because it caught nothing and cost two people real
+# time twice in one day, 2026-08-16:
+#
+#   lib-test#src:test/lib_tls.pas   NEW-RED at b156e9c145fd (tools/ only)
+#
+# -- a stub accusing the watcher's own source file of breaking a Pascal TLS
+# test, reported with the same confidence as a real first failure.
+#
+# It does NOT catch the day's other false attribution
+# (lib-test#src:test/crtl_exp2.c -> 096da361dd93), and that is deliberate rather
+# than a gap: that commit touches `Makefile` and `test/**`, which a pin-built job
+# DOES read, so exonerating it would need per-target Makefile-hunk analysis --
+# fragile, and unnecessary, because that job is a TIMEOUT and the timeout guard
+# already refuses to bisect it. Two guards, two causes, no overlap needed. Do
+# not "improve" this by loosening the prefix list: a wrong exoneration hides a
+# real regression, while a missed one costs a message.
+#
+# Deliberately narrow. It answers "could this commit have changed what this job
+# compiles?" and nothing else: a job that ALSO invokes ./compiler/pascal26 is
+# out of scope (the check returns False), and a commit touching lib/**, test/**,
+# examples/** or the Makefile is out of scope, because those a pin-built job
+# does read.
+PIN_BUILT_RE = re.compile(r"stable_[A-Za-z0-9_]+/[A-Za-z0-9_.-]+/(?:pinned|latest)")
+HEAD_COMPILER_RE = re.compile(r"\./?compiler/pascal26(?![-\w])")
+# Paths a pin-built job CANNOT be affected by. Everything else is assumed
+# relevant -- the safe direction, since a missed exoneration costs a message and
+# a wrong one costs a real regression going unbisected.
+PIN_IMMUNE_PREFIXES = ("compiler/", "tools/", "devdocs/", "docs/")
+
+
+def pin_immune(clone, reg):
+    """True when `reg`'s job builds ONLY with the pin and `reg["bad"]` could not
+    have moved what it builds with.
+
+    `reg["pin_built"]` comes from testmgr, which is the only thing holding the
+    expanded recipe; re-deriving it here would mean another `make -n`.
+    """
+    if not reg.get("pin_built"):
+        return False
+    bad = reg.get("bad")
+    if not bad:
+        return False
+    changed = sh(["git", "show", "--name-only", "--format=", bad],
+                 cwd=clone.path, check=False)
+    paths = [q for q in (changed or "").split("\n") if q.strip()]
+    if not paths:
+        return False            # cannot tell -> say nothing
+    return all(q.startswith(PIN_IMMUNE_PREFIXES) for q in paths)
 
 
 def range_note(reg):
@@ -2039,6 +2099,7 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         guessed = (None if j.get("status") == "timeout"
                    else guess_track(j.get("src")))
         refusals = refusal_markers(clone, j.get("src"))
+        immune = pin_immune(clone, dict(reg or {}, pin_built=j.get("pin_built")))
         body = ("""---
 prio: %d
 %s---
@@ -2070,6 +2131,12 @@ takes it from the repro line.*
                   "Track T's queue regardless of what the body says -- correct "
                   "the `track:` line if this is wrong.\n\n" % guessed)
                  if guessed else "")
+                + (("> **This commit CANNOT be the cause.** The job builds "
+                    "only with `$(PXX_STABLE)`, and this commit moved no "
+                    "`stable_linux_amd64/**` — so the bytes that compiled it "
+                    "are unchanged. Look at flakiness or box load, not at the "
+                    "named sha; the bisect is unsound here and has been "
+                    "skipped.\n\n") if immune else "")
                 + (("> **This expectation records a REFUSAL** (%s). Before "
                     "treating a converged bisect range as an accusation, check "
                     "whether the named commit IMPLEMENTED the thing being "
@@ -3049,6 +3116,19 @@ def bisect_step(clone, host, st, tier):
             # "cascade@<sha>" is a synthetic key matching no job, so a
             # midpoint gate would select nothing and read as a pass. A
             # cascade needs root-cause triage (face 2), not a bisect.
+            continue
+        if pin_immune(clone, reg):
+            # DECIDABLE non-causality, unlike the timeout case below (which is a
+            # judgement about signal kind) and unlike the refusal hint (which
+            # cannot be decided at all). This job builds only with the pinned
+            # binary, and the accused commit did not move it -- so the bytes
+            # that compiled the job are unchanged and the commit cannot be the
+            # cause. Bisecting further would just narrow onto another commit
+            # that also cannot be the cause.
+            print("twatch: not bisecting %s — it builds only with the pin, and "
+                  "%s moved no pinned binary, so that commit cannot be causal; "
+                  "the range is unsound (see the stub's pin-provenance note)"
+                  % (reg["job"], (reg.get("bad") or "?")[:12]), flush=True)
             continue
         if reg.get("status") == "timeout":
             # A TIMEOUT IS NOT BISECTABLE, and bisecting it anyway produces a

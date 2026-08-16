@@ -1064,6 +1064,10 @@ RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
 RUN_COMPILER = os.path.join(RUN_TMP, "compiler", "pascal26")
 # `./compiler/pascal26` but never `./compiler/pascal26-managed` / `-debug`.
 COMPILER_PATH_RE = re.compile(r"\./compiler/pascal26(?![-\w])")
+# A recipe line invoking the PINNED stable binary (as opposed to a
+# HEAD-built one). Paired with COMPILER_PATH_RE to decide Job.pin_built.
+PINNED_INVOKE_RE = re.compile(
+    r"stable_[A-Za-z0-9_]+/[A-Za-z0-9_.-]+/(?:pinned|latest)")
 # How long a finished run's per-job log dir survives for post-mortem. Reports
 # cite these paths, so they outlive the run — but not indefinitely (see
 # sweep_orphan_tmp; /tmp is a tmpfs on the watcher box).
@@ -1143,6 +1147,12 @@ class Job:
         self.attempts = 0         # launch count; retriable classes may re-run
         self.flaky = False        # failed at least once, then passed on retry
         self.sel = None           # stable selector; set by assign_selectors()
+        # Builds ONLY with $(PXX_STABLE), never with a HEAD-built compiler.
+        # Such a job is immune to compiler/** changes until the pin moves --
+        # see the report JSON's pin_built and twatch.pin_immune().
+        body = "\n".join(lines)
+        self.pin_built = bool(PINNED_INVOKE_RE.search(body)
+                              and not COMPILER_PATH_RE.search(body))
         # advisory: reported, ticketed by twatch, but NOT part of the gate —
         # its failure does not turn the run RED or change the exit code.  For
         # coverage of paths nothing day-to-day depends on (the FPC cold-start
@@ -3903,6 +3913,15 @@ def main():
                # this run never attempted.
                "jobs": [{"name": j.name, "cls": j.cls, "src": j.src,
                          "sel": j.sel or j.name,
+                         # Does this job build EXCLUSIVELY with the pinned
+                         # binary? testmgr is the only thing that knows -- it
+                         # has the expanded recipe -- and a consumer that has
+                         # to re-derive it would have to re-run `make -n`.
+                         # twatch uses it to refute a bisect: a pin-built job
+                         # cannot be broken by a commit that only touches
+                         # compiler/** or tools/**, because the bytes that
+                         # compiled it did not move.
+                         "pin_built": j.pin_built,
                          "advisory": j.advisory,
                          "status": j.status,
                          "flaky": j.flaky,
