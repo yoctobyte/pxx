@@ -115,4 +115,4 @@ Related: [[feature-pasmith-qplus-rplus-rungs]],
 - `pasmith_run.py --seeds 200-280 --wide`: **81 programs, 0 divergences.**
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 3f6d5ca85.
