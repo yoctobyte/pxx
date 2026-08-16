@@ -21092,14 +21092,23 @@ begin
     Exit;
   end;
 
+  { tyInt64, not tyInteger — the LIMIT is the third 64-bit cell this lowering
+    needs, beside the visible counter and the variant path's hidden one, and it
+    was the one left 32-bit. `stop - 1` computed in a 4-byte cell wraps for any
+    stop at or past 2^31: `range(0, 3000000000)` got a limit of -1294967297, so
+    the AN_FOR guard failed on the first test and the loop ran ZERO times —
+    the mirror image of the never-terminates bug the counter's own note
+    describes, and just as silent. `list(range(...))` stayed correct throughout,
+    which is again what pins it to the counted-loop lowering.
+    bug-nilpy-for-range-limit-is-32-bit-and-yields-an-empty-loop }
   oneNode := AllocNode(AN_INT_LIT);
   ASTIVal[oneNode] := 1;
-  ASTTk[oneNode] := Ord(tyInteger);
+  ASTTk[oneNode] := Ord(tyInt64);
   limitNode := AllocNode(AN_BINOP);
   ASTIVal[limitNode] := Ord(tkMinus);
   ASTLeft[limitNode] := stopNode;
   ASTRight[limitNode] := oneNode;
-  ASTTk[limitNode] := Ord(tyInteger);
+  ASTTk[limitNode] := Ord(tyInt64);
   lhsNode := PyMakeIdent(symIdx);
   pair1 := AllocNode(AN_PAIR);
   ASTLeft[pair1] := startNode;
