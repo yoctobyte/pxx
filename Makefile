@@ -4879,6 +4879,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cfloat_cast_int_narrow26; test "$$?" = "42"
 	./$(COMPILER) test/cstr_table_2d_rows.c $(TESTTMP)/cstr_table_2d_rows26
 	$(TESTTMP)/cstr_table_2d_rows26; test "$$?" = "42"
+	./$(COMPILER) test/carr2d_param_row_length.c $(TESTTMP)/carr2d_param_row_length26
+	$(TESTTMP)/carr2d_param_row_length26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log2_expm1_family_b382.c $(TESTTMP)/cmath_log2_expm1_family_b38226
 	$(TESTTMP)/cmath_log2_expm1_family_b38226; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_hyperbolic_family_b383.c $(TESTTMP)/cmath_hyperbolic_family_b38326

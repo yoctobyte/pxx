@@ -8958,6 +8958,8 @@ var
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
   xnI: Integer; xnBad: Boolean;   { cross-namespace float-class check }
+  apDims: array[0..MAX_ARR_DIMS-1] of Integer;   { `T name[][A][B]` param: the bracket dims }
+  apN, apK, apProd: Integer;
 begin
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -9117,14 +9119,45 @@ begin
             dimension(s) and retype the param as pointer-to-element. }
           if CurTok.Kind = tkLBrack then
           begin
+            apN := 0;
             while CurTok.Kind = tkLBrack do
             begin
+              { Record a dimension the caller's shape depends on. `int a[][4]`
+                is `int (*a)[4]`, and skipping the brackets blind lost the 4:
+                `a[1][2]` then flattened as 1+2 and read a[0][3] — a wrong
+                VALUE, not a refusal, for the ordinary way a 2-D array is
+                passed to a function. Only a plain integer bound is taken; a
+                VLA / macro bound leaves the dim unknown, exactly as before.
+                bug-c-a-2d-array-parameter-loses-its-row-length }
+              if apN < MAX_ARR_DIMS then
+              begin
+                apDims[apN] := 0;
+                if (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkInteger) and
+                   (Tokens[TokPos + 1].Kind = tkRBrack) then
+                  apDims[apN] := Integer(Tokens[TokPos].IVal);
+                Inc(apN);
+              end;
               sz := 0;   { reuse as bracket depth }
               repeat
                 if CurTok.Kind = tkLBrack then Inc(sz)
                 else if CurTok.Kind = tkRBrack then Dec(sz);
                 Next;
               until (sz = 0) or (CurTok.Kind = tkEOF);
+            end;
+            { the FIRST dimension decays away; the rest are the pointee's shape }
+            if (apN >= 2) and (pdepths[nparams] = 0) then
+            begin
+              apProd := 1;
+              for apK := 1 to apN - 1 do
+                if apDims[apK] > 0 then apProd := apProd * apDims[apK] else apProd := 0;
+              if apProd > 0 then
+              begin
+                pptrarrlen[nparams] := apProd;
+                pptrndims[nparams] := apN - 1;
+                if apN - 1 > 1 then
+                  for apK := 1 to apN - 1 do
+                    pptrdims[nparams * MAX_ARR_DIMS + (apK - 1)] := apDims[apK];
+              end;
             end;
             if pdepths[nparams] = 0 then
             begin
