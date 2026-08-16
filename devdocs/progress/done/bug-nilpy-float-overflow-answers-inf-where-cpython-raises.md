@@ -108,4 +108,4 @@ fails them identically, so that is [[bug-nilpy-float-pow-loses-a-ulp-vs-libm]]
 and not this change.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 5b48bee7f.
