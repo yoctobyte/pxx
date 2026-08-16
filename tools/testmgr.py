@@ -3797,9 +3797,19 @@ def main():
             first_fail = j
     npass = sum(1 for j in jobs if j.status == "pass")
     flaky = [j.name for j in jobs if j.flaky]
-    print("  %d/%d pass%s%s" % (npass, len(jobs) - nskip,
-                                ", %d skip (corpus absent)" % nskip if nskip else "",
-                                ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
+    # Jobs that never ran because a job they DEPEND on failed are counted and
+    # named separately. Without this the summary read "0/167 pass" for a run
+    # where exactly ONE job failed and 166 were never attempted -- literally
+    # true, and it invites the reader to go looking for 167 broken tests.
+    # Measured on the lib-test target, whose 166 jobs all carry
+    # deps:lib-test#00. The per-job lines already said SKIPPED; only the
+    # headline lied by omission.
+    nblocked = sum(1 for j in jobs if j.status == "skipped")
+    print("  %d/%d pass%s%s%s" % (npass, len(jobs) - nskip,
+                                  ", %d skip (corpus absent)" % nskip if nskip else "",
+                                  ", %d not run (a job they depend on failed)"
+                                  % nblocked if nblocked else "",
+                                  ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
     if flaky:
         print("  flaky (recovered on retry, NOT red): %s" % " ".join(flaky))
     print_est_mem_accuracy(jobs)
