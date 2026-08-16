@@ -204,3 +204,27 @@ per cycle rather than held in memory, so this needs **no twatch restart**.
 
 ## Log
 - 2026-08-16 — resolved, commit c7d8d1f54.
+
+## 2026-08-16 — the two reds are GONE; all six shards green
+
+[[bug-a-duplicate-class-name-check-is-scope-blind]] was fixed and pushed the
+same day (`0ad0bdd04`, Track A). Re-ran the whole battery against it:
+
+```
+  PASS  test-pascal-conformance#shard0/6   40.6s
+  PASS  test-pascal-conformance#shard1/6   38.9s
+  PASS  test-pascal-conformance#shard2/6   31.4s
+  PASS  test-pascal-conformance#shard3/6   35.7s
+  PASS  test-pascal-conformance#shard4/6   37.3s
+  PASS  test-pascal-conformance#shard5/6   35.2s
+```
+
+**No `pxx.skip` entries were needed**, so the "known cost" recorded above never
+had to be paid: the battery is at 0 fail, every shard keeps its NEW-RED signal,
+and a red from here is a genuine regression — which is what enrolling was for.
+
+Worth recording as the argument for enrolling red rather than holding: the
+sequence was *enrol -> find a 4480-commit-old regression on the first run ->
+file it into the owning lane -> fixed within hours -> green*. Holding the
+enrolment until the tier was clean would have kept the bug invisible, because
+nothing else was going to run this battery.
