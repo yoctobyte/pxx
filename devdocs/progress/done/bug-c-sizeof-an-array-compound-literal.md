@@ -4,6 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`sizeof((int[]){1,2,3})` answered 8 — the pointer size — for every array compound literal, so the NARGS idiom `sizeof((int[]){__VA_ARGS__})/sizeof(int)` counted 2 for any argument list, silently."
+status: done
 ---
 
 # sizeof of an array compound literal is the pointer size
@@ -52,3 +53,6 @@ both gcc and pxx.
 `make compiler/pascal26` + the test + `tools/gate.sh quick` — GREEN, including
 the FPC seed canary, which needed a `CIsCastAhead` forward: the new call site
 sits above its definition and the seed compiles the includes in order.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
