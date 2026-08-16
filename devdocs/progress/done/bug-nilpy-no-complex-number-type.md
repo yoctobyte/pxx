@@ -144,4 +144,4 @@ regression), `tools/gate.sh quick` GREEN, and a re-pin since
 `compiler/builtin` changed.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit ba5a9d987.
