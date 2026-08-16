@@ -122,4 +122,4 @@ rung: corrupting `kc0: double = 30` to `= 0` changes the checksum, so the fold
 demonstrably sees the value.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit c2806f0ea.
