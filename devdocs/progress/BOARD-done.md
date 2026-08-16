@@ -50,6 +50,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-fixed-array-function-result-faults-on-i386-and-arm32 | A | 45 | bug | A fixed-array function result faults on i386 and arm32 | — |
 | bug-a-float-literal-lexer-is-not-correctly-rounded | A | 65 | bug | A float LITERAL is up to 1 ULP away from the nearest double — `1e-292` in source is not the same number as `float(\"1e-292\")` in the same program. 23 of 490 sampled literals are wrong. Affects every frontend | — |
 | bug-a-for-in-refuses-a-set-constructor-and-a-string-literal | A | 35 | bug | `for x in [...]` and `for c in 'literal'` are refused | — |
+| bug-a-for-loop-limit-reevaluated-and-overflows-at-type-max | A | 65 | bug | Pascal `for` lowering had three defects in one shape: the limit expression was re-evaluated every iteration, a limit at the counter type's maximum looped forever, and the counter was left at limit+/-1 instead of FPC's limit | — |
 | bug-a-fpc-seed-drift-emitasmx64-forward | A | 60 | bug | FPC seed drift #4 in three days, now in Track A's own files: symtab.inc calls EmitAsmX64, defined in asmtext.inc five includes later. Verified one-line fix | — |
 | bug-a-fpc-seed-drift-pymaketruthy-forward-wrong-file | A | 60 | bug | FPC cold-start broken again: PyMakeTruthy is used in parser.inc but forward-declared in pyparser.inc, which is included 14 lines later. Verified one-line-move fix. | — |
 | bug-a-i386-int64-arg-high-half-uninitialized | A | 75 | bug | i386: widening a 32-bit value into an Int64 argument leaves the HIGH half uninitialized — silent garbage, and the garbage changes with surrounding code | — |
@@ -1779,6 +1780,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-fpc-bootstrap-canary-forwards-b310 | A | 40 | regression | advisory: fpc-bootstrap canary red at 603cf2bd — forwards drift + enum-arg from b310 | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-fpc-seed-drift-b1976-stale | A | 55 | regression | FPC can no longer compile compiler.pas — 8 errors of accumulated seed drift | — |
+| regression-lib-test-crtl-reachability | C | 70 | regression | compiler/crtl_names.inc is a GENERATED file left stale by d9c71b8b3 (313 -> 323 functions). The red is the crtl-map step, NOT the crtl-reachability step the job is named after. Fix: python3 tools/gen_crtl_map.py. | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
 | regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |

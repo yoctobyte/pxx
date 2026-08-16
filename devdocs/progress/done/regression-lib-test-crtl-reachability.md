@@ -3,6 +3,7 @@ prio: 70
 track: C
 type: regression
 summary: "compiler/crtl_names.inc is a GENERATED file left stale by d9c71b8b3 (313 -> 323 functions). The red is the crtl-map step, NOT the crtl-reachability step the job is named after. Fix: python3 tools/gen_crtl_map.py."
+status: done
 ---
 
 > **origin/master has advanced 6 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -88,3 +89,17 @@ only when a B agent typed it, so a stale generated file could sit unnoticed
 indefinitely — the esptimer case that filed the enrolment ticket, recurring in a
 different file. **This is the first red the enrolment produced, and it is a true
 one**, attributed to its exact source rather than to an opaque `lib-test#00`.
+
+## RESOLVED 2026-08-16 (Track C) — regenerated
+
+`python3 tools/gen_crtl_map.py`: 313 -> 323 functions, 22 headers, 25 insertions
+/ 23 deletions, all of the `cos:math.h cosh:math.h exp:math.h`-shaped drift
+`d9c71b8b3` left behind when it retired the ten `__crtl_` dodge-prefixes without
+re-running the generator. `--check` now clean. Verified the newly mapped names
+work end to end (`cos`/`cosh`/`exp` from a C program match gcc to 4 decimals),
+self-host fixedpoint converged, `gate.sh quick` GREEN.
+
+T's triage was right on both counts and saved the search: the failing step is
+`crtl-map`, not the `crtl_reachability` the job is named after (that step passes),
+and the cause was the generated file, not the headers.
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

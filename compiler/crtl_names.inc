@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  313 functions across 22 headers. }
+  323 functions across 22 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -26,11 +26,12 @@ begin
     'c': Result :=
       ' calloc:stdlib.h cbrt:math.h ceil:math.h ceilf:math.h chdir:unistd.h chmod:sys/stat.h ' +
       ' clearerr:stdio.h clock:time.h clock_gettime:time.h close:unistd.h connect:sys/socket.h ' +
-      ' copysign:math.h cosf:math.h creat:fcntl.h ctime:time.h ctime_r:time.h ';
+      ' copysign:math.h cos:math.h cosf:math.h cosh:math.h creat:fcntl.h ctime:time.h ' +
+      ' ctime_r:time.h ';
     'd': Result :=
       ' difftime:time.h div:stdlib.h dup:unistd.h dup2:unistd.h ';
     'e': Result :=
-      ' execvp:unistd.h exit:stdlib.h exp2:math.h expf:math.h expm1:math.h ';
+      ' execvp:unistd.h exit:stdlib.h exp:math.h exp2:math.h expf:math.h expm1:math.h ';
     'f': Result :=
       ' fabs:math.h fabsf:math.h fchmod:sys/stat.h fchown:unistd.h fclose:stdio.h fcntl:fcntl.h ' +
       ' fdopen:stdio.h feof:stdio.h ferror:stdio.h fflush:stdio.h fgetc:stdio.h fgets:stdio.h ' +
@@ -46,7 +47,7 @@ begin
       ' getsockname:sys/socket.h getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h ' +
       ' gmtime:time.h gmtime_r:time.h ';
     'h': Result :=
-      ' htonl:netinet/in.h htons:netinet/in.h ';
+      ' htonl:netinet/in.h htons:netinet/in.h hypot:math.h ';
     'i': Result :=
       ' imaxabs:inttypes.h imaxdiv:inttypes.h inet_addr:arpa/inet.h inet_aton:arpa/inet.h ' +
       ' inet_ntop:arpa/inet.h inet_pton:arpa/inet.h ioctl:sys/ioctl.h isalnum:ctype.h ' +
@@ -62,8 +63,8 @@ begin
     'l': Result :=
       ' labs:stdlib.h ldexp:math.h ldexpl:math.h ldiv:stdlib.h link:unistd.h listen:sys/socket.h ' +
       ' llabs:stdlib.h lldiv:stdlib.h llrint:math.h llround:math.h localeconv:locale.h ' +
-      ' localtime:time.h localtime_r:time.h log:math.h log1p:math.h log2f:math.h logf:math.h ' +
-      ' lrint:math.h lround:math.h lseek:unistd.h lstat:sys/stat.h ';
+      ' localtime:time.h localtime_r:time.h log:math.h log10:math.h log1p:math.h log2:math.h ' +
+      ' log2f:math.h logf:math.h lrint:math.h lround:math.h lseek:unistd.h lstat:sys/stat.h ';
     'm': Result :=
       ' malloc:stdlib.h memccpy:string.h memchr:string.h memcmp:string.h memcpy:string.h ' +
       ' memmove:string.h memrchr:string.h memset:string.h mkdir:sys/stat.h mktime:time.h ' +
@@ -89,20 +90,21 @@ begin
       ' setenv:stdlib.h setlocale:locale.h setsockopt:sys/socket.h setvbuf:stdio.h ' +
       ' shutdown:sys/socket.h sigaction:signal.h sigaddset:signal.h sigaltstack:signal.h ' +
       ' sigdelset:signal.h sigemptyset:signal.h sigfillset:signal.h sigismember:signal.h ' +
-      ' signal:signal.h signbit:math.h sigprocmask:signal.h sinf:math.h sleep:unistd.h ' +
-      ' snprintf:stdio.h socket:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h ' +
-      ' srand:stdlib.h sscanf:stdio.h stat:sys/stat.h stpcpy:string.h strcasestr:string.h ' +
-      ' strcat:string.h strchr:string.h strcmp:string.h strcoll:string.h strcpy:string.h ' +
-      ' strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h strftime:time.h ' +
-      ' strlen:string.h strncat:string.h strncmp:string.h strncpy:string.h strndup:stdlib.h ' +
-      ' strnlen:string.h strpbrk:string.h strptime:time.h strrchr:string.h strsep:string.h ' +
-      ' strspn:string.h strstr:string.h strtod:stdlib.h strtoimax:inttypes.h strtok:string.h ' +
-      ' strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h ' +
-      ' strtoull:stdlib.h strtoumax:inttypes.h strxfrm:string.h symlink:unistd.h ' +
-      ' sysconf:unistd.h system:stdlib.h ';
+      ' signal:signal.h signbit:math.h sigprocmask:signal.h sin:math.h sinf:math.h sinh:math.h ' +
+      ' sleep:unistd.h snprintf:stdio.h socket:sys/socket.h sprintf:stdio.h sqrt:math.h ' +
+      ' sqrtf:math.h srand:stdlib.h sscanf:stdio.h stat:sys/stat.h stpcpy:string.h ' +
+      ' strcasestr:string.h strcat:string.h strchr:string.h strcmp:string.h strcoll:string.h ' +
+      ' strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h ' +
+      ' strftime:time.h strlen:string.h strncat:string.h strncmp:string.h strncpy:string.h ' +
+      ' strndup:stdlib.h strnlen:string.h strpbrk:string.h strptime:time.h strrchr:string.h ' +
+      ' strsep:string.h strspn:string.h strstr:string.h strtod:stdlib.h strtoimax:inttypes.h ' +
+      ' strtok:string.h strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h ' +
+      ' strtoul:stdlib.h strtoull:stdlib.h strtoumax:inttypes.h strxfrm:string.h ' +
+      ' symlink:unistd.h sysconf:unistd.h system:stdlib.h ';
     't': Result :=
-      ' tanf:math.h timegm:time.h tmpfile:stdio.h tmpnam:stdio.h tolower:ctype.h toupper:ctype.h ' +
-      ' towlower:wchar.h towupper:wchar.h trunc:math.h truncf:math.h ';
+      ' tan:math.h tanf:math.h tanh:math.h timegm:time.h tmpfile:stdio.h tmpnam:stdio.h ' +
+      ' tolower:ctype.h toupper:ctype.h towlower:wchar.h towupper:wchar.h trunc:math.h ' +
+      ' truncf:math.h ';
     'u': Result :=
       ' umask:sys/stat.h ungetc:stdio.h unlink:unistd.h unsetenv:stdlib.h usleep:unistd.h ' +
       ' utimes:sys/time.h ';
@@ -126,9 +128,9 @@ begin
     '_': Result := 32;
     'a': Result := 760;
     'b': Result := 144;
-    'c': Result := 8688;
+    'c': Result := 8696;
     'd': Result := 280;
-    'e': Result := 112;
+    'e': Result := 120;
     'f': Result := 4848;
     'g': Result := 15824;
     'h': Result := 32;
@@ -141,8 +143,8 @@ begin
     'p': Result := 248;
     'q': Result := 32;
     'r': Result := 5104;
-    's': Result := 4080;
-    't': Result := 496;
+    's': Result := 4088;
+    't': Result := 504;
     'u': Result := 352;
     'v': Result := 896;
     'w': Result := 96;
