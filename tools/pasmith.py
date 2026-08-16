@@ -69,6 +69,12 @@ BOOL = Ty("boolean", 8, False, "bool")
 CHAR = Ty("char", 8, False, "char")
 ALL_TYPES = INT_TYPES + [BOOL, CHAR]
 
+# Same width, opposite signedness. Used by the shift rung to reinterpret a
+# signed operand before `shr` -- see expr()'s shift branch for why that is what
+# makes FPC an oracle for shifts at all.
+UNSIGNED_SIBLING = {"shortint": "byte", "smallint": "word",
+                    "longint": "longword", "int64": "qword"}
+
 BIN_INT_OPS = ["+", "-", "*", "and", "or", "xor"]
 CMP_OPS = ["=", "<>", "<", "<=", ">", ">="]
 BOOL_OPS = ["and", "or", "xor"]
@@ -364,11 +370,46 @@ class Gen:
         if k < 0.78:
             # shift, count masked to the operand width: never >= bits, which
             # is where C and Pascal alike stop promising anything.
+            #
+            # `shr` additionally shifts the UNSIGNED sibling of the operand
+            # type, and that is what keeps FPC usable as an oracle here.
+            # pxx computes shifts at NATIVE width and does not truncate to the
+            # declared type (deliberate, 2026-08-11); FPC promotes to 32 bits.
+            # For a SIGNED operand the two disagree, because the sign bit that
+            # gets extended differs between a 32- and a 64-bit promotion and a
+            # logical right shift then pulls those bits down into the result.
+            #
+            # Measured, one variable per type, count masked, negative/large
+            # value, every width -- exactly ONE cell of the 16 diverges:
+            #
+            #   longint shr   fpc=2147483644   pxx=-4
+            #
+            # The narrower signed types (shortint, smallint) agree because
+            # truncating back to 8/16 bits discards the differing high bits,
+            # and int64 agrees because 64 bits IS the native width. So this is
+            # not a general shift problem, it is signed `shr` at exactly the
+            # width where the two promotions differ.
+            #
+            # Reinterpreting through the unsigned sibling makes the operation
+            # what Pascal's `shr` actually specifies -- a LOGICAL shift, which
+            # only has an unambiguous meaning on an unsigned value -- so both
+            # compilers agree at every width. Applied uniformly rather than
+            # only to longint: a rule with one width carved out is the kind of
+            # second path that quietly stays broken.
+            #
+            # This costs the FPC oracle no coverage it ever had (it could never
+            # judge signed shr), and costs the pxx-vs-pxx O-level oracle only
+            # the signed-shr codegen path, which bug-t-fpc-probe-reports-the-
+            # deliberate-shl-deviation-as-new records as the accepted trade for
+            # an FPC oracle that works at all. `shl` is untouched -- it agrees
+            # at every width, because it shifts bits UP and out.
             a = self.expr(ty, scope, depth - 1)
             b = self.expr(ty, scope, depth - 1)
             op = rnd.choice(["shl", "shr"])
+            # .get(): already-unsigned types are their own sibling.
+            sty = UNSIGNED_SIBLING.get(ty.name, ty.name) if op == "shr" else ty.name
             return "%s(%s(%s) %s (%s(%s) and %d))" % (
-                ty.name, ty.name, a, op, ty.name, b, ty.bits - 1)
+                ty.name, sty, a, op, ty.name, b, ty.bits - 1)
         if k < 0.84 and ty.signed:
             return "%s(-%s)" % (ty.name, self.expr(ty, scope, depth - 1))
         if k < 0.90:

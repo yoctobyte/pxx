@@ -5,10 +5,25 @@
 # FPC-parity bugs (this harness found bug-writeln-boolean-format,
 # bug-writeln-real-format, bug-length-rejects-non-variable).
 #
-# Output: one DIFF line per divergence. Known/filed divergences are tagged
-# [known] so a clean run shows only NEW ones. A pxx compile failure on code FPC
-# accepts is itself a divergence (often a missing intrinsic or an "expects a
-# variable" gap) and is reported.
+# Output: one DIFF line per divergence, in three flavours, because "we differ
+# from FPC" is three different facts and collapsing them is what breaks this
+# tool:
+#
+#   DIFF             a NEW divergence -- the only thing that should need action
+#   DIFF [known]     a filed bug we have not fixed yet; it will one day go away
+#   DIFF [by design] a DELIBERATE dialect decision; it will never go away, and
+#                    the reason is printed on the line
+#
+# The third tag exists because tagging a permanent decision `known` is a lie
+# with a cost: `known` promises the row is temporary, so the list is read as a
+# backlog. A row that can never leave it makes the count meaningless in the
+# other direction — see bug-t-fpc-probe-reports-the-deliberate-shl-deviation-as-new,
+# where the deviation instead went UNtagged and pinned `new divergences` at a
+# permanent 1, training the reader to skim the one line that must mean
+# something.
+#
+# A pxx compile failure on code FPC accepts is itself a divergence (often a
+# missing intrinsic or an "expects a variable" gap) and is reported.
 #
 # Usage: tools/fpc_diff_probe.sh
 set -u
@@ -18,6 +33,7 @@ command -v fpc >/dev/null || { echo "fpc not found"; exit 2; }
 
 new=0
 known=0
+bydesign=0
 skipped=0
 
 # Make invisible bytes visible. Applied to both sides of every reported
@@ -27,10 +43,18 @@ skipped=0
 # byte that is not being compared.
 vis() { sed -e 's/\r/<CR>/g' -e 's/\t/<TAB>/g' | awk 'NR>1{printf "<LF>"}{printf "%s", $0}'; }
 
-# probe NAME [known] -- full program on stdin
+# probe NAME [known | bydesign "<why>"] -- full program on stdin
+#
+# `bydesign` REQUIRES a reason and refuses without one. The reason is the whole
+# point: a permanent deviation has to carry the decision that made it permanent,
+# or the next reader has no way to tell it from a bug someone forgot to file.
 probe() {
-  local name="$1"; local tag=""
-  if [ "${2:-}" = "known" ]; then tag="known"; fi
+  local name="$1"; local tag="" why=""
+  case "${2:-}" in
+    known)    tag="known" ;;
+    bydesign) tag="bydesign"; why="${3:-}"
+              [ -n "$why" ] || { echo "probe $name: bydesign needs a reason" >&2; exit 2; } ;;
+  esac
   { echo 'program fdp;'; cat; } > /tmp/fdp.pas   # pxx requires a program header; FPC tolerates either
   local fr pr
   if fpc -Mobjfpc -vw -o/tmp/fdp_f /tmp/fdp.pas >/dev/null 2>&1; then
@@ -55,6 +79,9 @@ probe() {
   frv="$(printf '%s' "$fr" | vis)"; prv="$(printf '%s' "$pr" | vis)"
   if [ "$tag" = "known" ]; then
     printf 'DIFF [known] %-22s fpc=[%s] pxx=[%s]\n' "$name" "$frv" "$prv"; known=$((known+1))
+  elif [ "$tag" = "bydesign" ]; then
+    printf 'DIFF [by design] %-22s fpc=[%s] pxx=[%s]\n           ^ %s\n' \
+           "$name" "$frv" "$prv" "$why"; bydesign=$((bydesign+1))
   else
     printf 'DIFF        %-22s fpc=[%s] pxx=[%s]\n' "$name" "$frv" "$prv"; new=$((new+1))
   fi
@@ -831,7 +858,8 @@ P
 probe int-div-by-neg <<'P'
 begin writeln(7 div (-2),'|',(-7) div (-2),'|',(-8) div 2); end.
 P
-probe shl-shr-neg    <<'P'
+probe shl-shr-neg bydesign \
+  'shl/shr compute at NATIVE width and never truncate to the declared type (decided 2026-08-11). FPC narrows -8 shr 1 back to 32 bits and prints 2147483644; pxx keeps the 64-bit 9223372036854775804. Permanent -- do NOT "fix" it to match.' <<'P'
 var i: Integer; begin i := -8; writeln(i shr 1,'|',i shl 1); end.
 P
 probe int64-shift    <<'P'
@@ -2094,7 +2122,7 @@ end.
 P
 
 echo "---"
-echo "new divergences: $new   known/filed: $known   no-oracle skips: $skipped"
+echo "new divergences: $new   known/filed: $known   by design: $bydesign   no-oracle skips: $skipped"
 # A skip is not a pass. It is a case that silently compared nothing, so it is
 # worth the same attention as a divergence until it is either fixed or removed.
 [ "$skipped" -gt 0 ] && echo "(a SKIP is not a pass -- fix the case or drop it)"
