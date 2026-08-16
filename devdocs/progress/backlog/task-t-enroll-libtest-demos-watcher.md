@@ -162,3 +162,52 @@ Unchanged from the analysis above: `make demos` prints FAIL without exiting
 nonzero, so it needs a gating mode or output parsing, and that is a **Makefile**
 change — not Track T's ground. Filing it into Track B is the right move; this
 ticket stays in backlog until that happens, since its title covers both.
+
+## 2026-08-16 — the pin-lag caveat fires for real, and the SAME red changes category
+
+This ticket opened with a design point: a `lib-test` red has two causes, (a) a
+lib/examples regression and (b) a pin stale relative to lib/'s expectations,
+and they route to different tracks. That has now happened to a single red,
+which is worth recording because it is the case the caveat was written for.
+
+`lib/rtl/contnrs.pas` failed to compile
+([[bug-p-a-class-method-does-not-shadow-a-builtin-of-the-same-name]] — a class
+method named `Delete` did not shadow the builtin). At the time it was
+unambiguously **(a)**, verified by running both compilers:
+
+```
+pin v341  -> FAIL contnrs
+HEAD      -> FAIL contnrs      identical, so not pin lag
+```
+
+Track P fixed it in `12c078883`. Re-run immediately after, with the compiler
+rebuilt:
+
+```
+pin v341  -> FAIL contnrs                              <- unchanged
+HEAD      -> lib-units: 139 units compile              <- fixed
+```
+
+**The same job, the same error text, now means the opposite thing.** It is no
+longer a Pascal-frontend bug for Track P; it is a stale pin, and the action is a
+**re-pin by Track A** (`make stabilize-fast && make pin`). No amount of Track B
+or P work will clear it, and `lib-test` stays RED — taking its other 166 jobs
+with it — until the pin moves.
+
+That is exactly why `report_pin_identity()` prints the pin on the banner:
+
+```
+testmgr: pin=341 sha256=fcf011d76990a729 (lib-test and demos build with THIS, not HEAD)
+```
+
+**The rule, for whoever triages the next one:** run the failing lib step against
+BOTH `$(PXX_STABLE)` and `compiler/pascal26` before filing. Same failure = a
+real lib/frontend bug. Fails on the pin, passes on HEAD = the fix has landed and
+the pin has not, so file nothing and ask Track A to re-pin. It costs two
+commands and it is the difference between a ticket and a no-op.
+
+Worth noting the window is structural, not a mistake: Track A pins deliberately
+rather than continuously (`stabilize-fast` blocks other tracks while it runs),
+so every frontend fix that lib/ depends on has a period where HEAD is green and
+the pin is not. Track T's job is to label that period correctly, not to shorten
+it.
