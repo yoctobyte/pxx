@@ -146,4 +146,4 @@ method, one via an ancestor, the unit-routine control, and the builtins still
 working outside a class) matches `fpc -O- -Mobjfpc` byte for byte.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 12c078883.
