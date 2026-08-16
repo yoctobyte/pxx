@@ -1854,6 +1854,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-fortran-skeleton | T | 70 | regression | regression: test-core#src:test/test_fortran_skeleton.f90 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch2 | T | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas red at f6bcbe6c1237 (auto-filed by twatch) | — |
 | regression-test-core-test-interface-mainbody-ascast-temp | T | 70 | regression | regression: test-core#src:test/test_interface_mainbody_ascast_temp.pas red at daf8d692af04 (auto-filed by twatch) | — |
+| regression-test-core-test-local-typed-const | T | 70 | regression | regression: test-core#src:test/test_local_typed_const.pas red at 88b863e7c731 (auto-filed by twatch) | — |
 | regression-test-core-test-managed-block-meta | T | 70 | regression | regression: test-core#src:test/test_managed_block_meta.pas red at 86da0606d916 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
