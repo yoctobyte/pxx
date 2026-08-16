@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T18:52:41Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy",
-    "test-nilpy#src:test/test_nilpy_import_sqlite.npy",
-    "test-nilpy#src:test/test_nilpy_sqlite_crud.npy"
-   ],
-   "new_red": [],
-   "sha": "c8f5070671bec5a125a793077cdb0f990aa28cd1",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T18:57:21Z",
    "fixed": [],
    "new_red": [],
@@ -458,6 +446,16 @@
    "sha": "d10ded42926943953cb8678bf344a63a8fd9fc06",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T02:52:50Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/cstr_table_2d_rows.c"
+   ],
+   "sha": "7eef29e052d2e2610fd0033cd9ac02e5607b2494",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -813,6 +811,7 @@
   "test-core#src:test/canon_member_designated_init_b221.c": "native",
   "test-core#src:test/canon_struct_union_members_b165.c": "native",
   "test-core#src:test/carch_predefines.c": "native",
+  "test-core#src:test/carr2d_decay_stride.c": "native",
   "test-core#src:test/carr2d_param_row_length.c": "native",
   "test-core#src:test/carray_compound_literal_b226.c": "native",
   "test-core#src:test/carray_designated_init_b211.c": "native",
@@ -3328,6 +3327,7 @@
   "test-core#src:test/canon_member_designated_init_b221.c": "pass",
   "test-core#src:test/canon_struct_union_members_b165.c": "pass",
   "test-core#src:test/carch_predefines.c": "pass",
+  "test-core#src:test/carr2d_decay_stride.c": "pass",
   "test-core#src:test/carr2d_param_row_length.c": "pass",
   "test-core#src:test/carray_compound_literal_b226.c": "pass",
   "test-core#src:test/carray_designated_init_b211.c": "pass",
@@ -3575,7 +3575,7 @@
   "test-core#src:test/cstmt_c.c": "pass",
   "test-core#src:test/cstr_concat_b18.c": "pass",
   "test-core#src:test/cstr_literal_binop_b163.c": "pass",
-  "test-core#src:test/cstr_table_2d_rows.c": "pass",
+  "test-core#src:test/cstr_table_2d_rows.c": "fail",
   "test-core#src:test/cstr_to_ptr_b19.c": "pass",
   "test-core#src:test/cstrlit_index_b174.c": "pass",
   "test-core#src:test/cstrtok_b181.c": "pass",
@@ -5484,11 +5484,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T02:46:34Z",
-  "sha": "d10ded42926943953cb8678bf344a63a8fd9fc06",
+  "date": "2026-08-16T02:52:50Z",
+  "sha": "7eef29e052d2e2610fd0033cd9ac02e5607b2494",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 216.1
+  "verdict": "RED",
+  "wall": 227.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5613,6 +5613,20 @@
     "343a52551808e14463db6ff315dc6d79b8624bfd"
    ],
    "src": ""
+  },
+  {
+   "bad": "7eef29e052d2e2610fd0033cd9ac02e5607b2494",
+   "good": "d10ded42926943953cb8678bf344a63a8fd9fc06",
+   "job": "test-core#src:test/cstr_table_2d_rows.c",
+   "name": "test-core#539",
+   "opened": "2026-08-16T02:52:50Z",
+   "range": [
+    "9a64fd7429463afe33054cf317fb23b38d7d4755",
+    "3dc1d0e9143dac07b63c81e0a1a48dc135fa3171",
+    "d9c3224b7c0aca6940de312b87f55a1f6f185a66",
+    "7eef29e052d2e2610fd0033cd9ac02e5607b2494"
+   ],
+   "src": "test/cstr_table_2d_rows.c"
   }
  ],
  "pin_shadow": {
