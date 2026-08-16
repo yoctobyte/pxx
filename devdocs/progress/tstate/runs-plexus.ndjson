@@ -1066,3 +1066,4 @@
 {"date": "2026-08-16T17:16:19Z", "fixed": [], "full": false, "new_red": [], "sha": "b156e9c145fd512af303eb3ef5dcfeb38256f678", "still_red": [], "tier": "native", "verdict": "GREEN", "wall": 217.2}
 {"date": "2026-08-16T17:35:35Z", "fixed": ["test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy"], "full": true, "new_red": ["lib-test#src:test/lib_tls.pas"], "sha": "b156e9c145fd512af303eb3ef5dcfeb38256f678", "still_red": ["lib-test#src:test/crtl_exp2.c"], "tier": "full", "verdict": "RED", "wall": 1144.4}
 {"date": "2026-08-16T17:40:42Z", "fixed": [], "full": false, "new_red": [], "sha": "b156e9c145fd512af303eb3ef5dcfeb38256f678", "still_red": [], "tier": "slow", "verdict": "GREEN", "wall": 300.1}
+{"date": "2026-08-16T17:47:31Z", "fixed": [], "full": false, "new_red": [], "sha": "17f6715332344490644f67192ee0fdf25bb70cbb", "still_red": [], "tier": "native", "verdict": "GREEN", "wall": 213.1}
