@@ -139,4 +139,4 @@ ambiguous.
 quick` GREEN, FPC seed canary included.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit c78227809.
