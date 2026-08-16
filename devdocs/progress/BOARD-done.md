@@ -1918,6 +1918,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-function-values | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_function_values.npy red at 082e5175beba (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy red at 36d1bffda39d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-int-promotion-default | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_int_promotion_default.npy red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-lambda-in-range-comprehension | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-list-mutators-return-none | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_list_mutators_return_none.npy red at 9294bce2c800 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
