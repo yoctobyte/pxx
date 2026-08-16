@@ -3885,6 +3885,14 @@ begin
     which was true of the bare address and not of the pair:
     `sorted(xs, key=obj.method)` was refused for a shape the dispatcher on the
     other side already handled (bug-nilpy-map-over-a-bound-method-segfaults). }
+  { A builtin TYPE value's payload is a small CODE, not an address — handing it
+    over would jump to 5. The frontend rewrites the callable types to their
+    one-argument conversion routine (PyBuiltinTypeCallbackProc); the ones it
+    has no routine for arrive here, and a named refusal is what they get.
+    bug-nilpy-a-builtin-type-passed-to-map-or-filter-segfaults }
+  if PPyVarRec(@v)^.VType = 13 then                    { VT_BTYPE }
+    raise TypeError.Create(nm + ': calling ' + pybtype_name(pybtype_code(v))
+      + '() through a type held as a value is not supported yet');
   Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
     raise TypeError.Create(nm + ' is not callable — the value '

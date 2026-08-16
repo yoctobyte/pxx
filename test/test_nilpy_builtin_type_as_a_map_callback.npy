@@ -1,0 +1,21 @@
+# A builtin TYPE handed to map()/filter() as the function — `map(bool, xs)`.
+# It is the `pybtype(<code>)` variant, whose payload is a small CODE; the
+# callable-pointer unwrap handed that payload to the dispatcher as an address
+# and the program jumped to 4. `sorted(xs, key=bool)` never crashed, because
+# the ordinary call path already rewrites the argument to the type's
+# one-argument conversion routine — map/filter build their callable through
+# PyMakeCallablePtrArg instead and never saw that rewrite. Same rewrite, second
+# site. bug-nilpy-a-builtin-type-passed-to-map-or-filter-segfaults
+print(list(filter(bool, [0, 1, 2])))
+print(list(filter(str, ["", "a"])))
+print(list(map(bool, [0, 1])))
+print(list(map(int, ["3", "4"])))
+print(list(map(float, [1, 2])))
+print(list(map(str, [1, 2])))
+print(list(map(list, [[1], [2, 3]])))
+# the shapes that already worked, so a fix here cannot quietly cost them
+print(list(filter(len, ["", "a"])))
+print(list(filter(None, [0, 1])))
+print(sorted([1, 0], key=bool))
+f = bool
+print(f(0), f(2))

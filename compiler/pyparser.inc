@@ -22353,10 +22353,37 @@ end;
   hand and so must do it themselves.
   bug-nilpy-map-over-a-bound-method-segfaults }
 function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer;
-var procIdx, a0, a1, nameNode: Integer;
+var procIdx, a0, a1, nameNode, btPi, argN, code, wrapPi: Integer;
 begin
   Result := node;
   if IntToTypeKind(ASTTk[node]) <> tyVariant then Exit;
+  { A builtin TYPE as the callable — `map(bool, xs)`, `filter(str, xs)`. It is
+    the `pybtype(<code>)` variant, whose payload is a small CODE, and the
+    unwrap below hands a payload straight to the dispatcher as an address: the
+    program jumped to 4 and died with no diagnostic. `sorted(xs, key=bool)`
+    never did, because the ordinary call path rewrites the argument in
+    PyFixCallableTypeArgs — and map/filter build their callable here instead,
+    so they never saw that rewrite. Same rewrite, at the second site, rather
+    than a second mechanism (devdocs/dev/normalise-dont-special-case.md).
+    bug-nilpy-a-builtin-type-passed-to-map-or-filter-segfaults }
+  btPi := FindProc('pybtype');
+  if (btPi >= 0) and (ASTKind[node] = AN_CALL) and (ASTIVal[node] = btPi) then
+  begin
+    argN := ASTLeft[node];
+    if (argN >= 0) and (ASTLeft[argN] >= 0) and
+       (ASTKind[ASTLeft[argN]] = AN_INT_LIT) then
+    begin
+      code := Integer(ASTIVal[ASTLeft[argN]]);
+      wrapPi := PyBuiltinTypeCallbackProc(code);
+      if wrapPi >= 0 then
+      begin
+        Result := AllocNode(AN_PROCADDR);
+        ASTIVal[Result] := wrapPi;
+        ASTTk[Result] := Ord(tyPointer);
+        Exit;
+      end;
+    end;
+  end;
   procIdx := FindProc('pyvar_callable_ptr');
   if procIdx < 0 then Exit;
   nameNode := AllocNode(AN_STR_LIT);
