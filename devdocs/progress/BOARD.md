@@ -62,10 +62,10 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 30 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
-| bug-t-a-timeout-bisects-to-an-innocent-commit | T | 45 | bug | `lib-test#src:test/crtl_exp2.c` has been STILL-RED since 096da361dd93 with a `(timeout)` verdict, and the bisect named that commit — which touches nothing the job builds (the job uses the PINNED compiler; the commit's Makefile lines went to test-core). Every step of the job runs clean standalone in seconds. A timeout is a DURATION signal, so bisecting it converges on whichever commit happened to straddle the budget, and the report presents that with the same confidence as a real first-failure. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | bug-t-twatch-status-false-down | T | 45 | bug | bug(T): `twatch --status` / `trackt health` report DOWN for a watcher that is UP | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
+| chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 35 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc | P | 40 | compat | `string[N]` is a word-prefix tyFixedString, so any record holding one is a different SIZE and LAYOUT than FPC's: `record s: string[10] end` is 24 bytes where FPC says 11. Values are all right; the bytes are not. | — |
@@ -415,9 +415,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1969)
+## done (1970)
 
-1969 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1970 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -496,7 +496,6 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
-- [p 45] [T] bug-t-a-timeout-bisects-to-an-innocent-commit
 - [p 45] [T] bug-t-twatch-status-false-down
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [D] docs-name-collisions-and-the-as-escape
@@ -567,6 +566,7 @@ _none_
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
+- [p 35] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups

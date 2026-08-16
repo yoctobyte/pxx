@@ -4,6 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`lib-test#src:test/crtl_exp2.c` has been STILL-RED since 096da361dd93 with a `(timeout)` verdict, and the bisect named that commit — which touches nothing the job builds (the job uses the PINNED compiler; the commit's Makefile lines went to test-core). Every step of the job runs clean standalone in seconds. A timeout is a DURATION signal, so bisecting it converges on whichever commit happened to straddle the budget, and the report presents that with the same confidence as a real first-failure."
+status: done
 ---
 
 # A timeout bisects to an innocent commit, and the report does not say so
@@ -172,3 +173,30 @@ own ticket.
 daemon restarts** — twatch reads code once at process start; only `interval` /
 `autoticket` / `no_bisect` reload live. The testmgr half is live immediately,
 since twatch re-executes testmgr per cycle.
+
+### Correction to the "NOT done" note above
+
+That note said splitting `lib-test` "renumbers 167 jobs, migrating every key in
+tstate". Overstated: `job_key` returns `sel` (`<target>#src:<first source>`),
+not the positional name, so a split migrates only the jobs whose FIRST source
+changes, and `gone_keys` closes those loudly as GONE rather than silently. Split
+out with the corrected reasoning and a recorded baseline as
+[[chore-t-split-lib-test-into-jobs-that-name-what-failed]].
+
+### Resolved with one operational step outstanding
+
+Resolving rather than leaving this in `backlog/`: the fix is landed and tested,
+and a ticket whose fix has shipped but which still sits in the ready queue is
+the shape that gets picked up twice.
+
+The outstanding step is not ticket work: **the twatch half needs a daemon
+restart** to take effect. The watcher clone has already pulled the code
+(`6a276ff63`); the restart is gated on an idle window per the restart protocol —
+no children and an attached HEAD, confirmed twice — because a SIGKILL mid-test
+is what left the clone wedged on 2026-08-04. Until then twatch keeps bisecting
+the timeout, so expect possibly one more innocent-commit range before it stops.
+The testmgr half (NEAR BUDGET, the budget on a timeout) is live immediately,
+since twatch re-executes testmgr every cycle.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

@@ -1,0 +1,103 @@
+---
+track: T
+prio: 35
+type: chore
+blocked-by: []
+summary: "One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here."
+---
+
+# Split `lib-test` so a job's key names what actually failed
+
+- **Type:** chore (job composition) — **Track T**
+- **Opened:** 2026-08-16
+- **Split out of** [[bug-t-a-timeout-bisects-to-an-innocent-commit]], whose
+  suggestion 3 this is. That ticket fixed the timeout half; this is the
+  "the name misdescribes what failed" half, deliberately not folded in.
+
+## The problem
+
+`lib-test#src:test/crtl_exp2.c` sounds like a C math test. Its actual sources
+are:
+
+```
+test/crtl_exp2.c examples/tk/hello.npy +5
+```
+
+Seven sources in one job. `job_key` names a job by `sel`, which testmgr builds
+from its **first** source — so a failure anywhere in those seven reads as
+`crtl_exp2.c`. The timeout that prompted the parent ticket was measured to cut
+right after `tk-nilpy: ok`, i.e. in a *different* source from the one the key
+names, and it duly read to two separate readers as a C/math regression.
+
+That is a real cost per incident: a triager starts in the wrong file, and the
+auto-filed stub carries the wrong name into a ticket title.
+
+## Correcting the parent ticket's stated reason for deferring
+
+The deferral there said splitting "renumbers `lib-test`'s 167 jobs, migrating
+every key in tstate". **That is overstated, and the correction matters because
+it makes this job smaller than it was made to sound.**
+
+Identity is NOT positional. `job_key` returns `j["sel"]` — `<target>#src:<first
+source>` — precisely so that inserting a step does not renumber everything
+([[bug-t-optdiff-positional-sharding-migrates-job-identity]] is about the
+positional case, and `sel` is the fix for it). So:
+
+- a job whose first source is unchanged keeps its key across a split;
+- a job whose first source changes gets a **new** key, and the old one is closed
+  by `gone_keys` as **GONE** — which twatch prints loudly and does not confuse
+  with FIXED.
+
+So the migration is bounded, visible, and already modelled. It is still worth
+doing while green, but for the ordinary reason (no red should migrate, and no
+phantom NEW-RED/FIXED pair should be manufactured), not because the whole
+keyspace churns.
+
+Evidence that the composition drifts on its own anyway: `lib-test` yielded
+**166** jobs on 2026-08-14 and **169** today, without anybody splitting
+anything. The keyspace is not static and treating it as precious is what has
+deferred this twice.
+
+## The baseline, recorded while it is fresh
+
+This is the perishable part, and the reason the ticket exists now rather than
+later:
+
+| | |
+| --- | --- |
+| `lib-test` standalone | **167/167 pass**, 2 corpus skips, 1 flaky-on-retry |
+| pin | **v344**, sha256 `47836e63248f1404` |
+| recorded at | `be8844b95` |
+
+**That green is the standalone kind.** The full tier is still RED on this same
+job with a `(timeout)`, which is the parent ticket. So the precondition here is
+"every lib-test job passes when given the box", which is what a renumbering
+needs — not "the tier is green".
+
+It is also not durable: the next change under `lib/**` can take it away, and the
+job count has already moved three times this week. Renumber against this
+baseline, or re-establish one first.
+
+## Shape
+
+Cut `lib-test` on the same boundary the other targets use — `COMPILE_RE`, which
+already knows both `./compiler/pascal26` and the pinned spellings. The seven-source
+jobs exist because several steps run between two compiler invocations, so the
+question is whether those steps deserve their own boundary (a shell step that
+runs a built binary, a python oracle beside it) or whether the recipe should
+emit a compile per assertion. Prefer the former: it is a testmgr change and
+stays in T's lane, where the latter is a Makefile change and is not.
+
+## Done when
+
+A `lib-test` failure's tstate key names the source that failed. Concretely: the
+job that timed out after `tk-nilpy: ok` should be keyed on the tk step, not on
+`crtl_exp2.c`.
+
+## Gate
+
+`tools/testmgr.py --tier full --job 'lib-test#*'` green before AND after, with
+the job list diffed by key so every changed key is accounted for as an
+intentional rename rather than discovered in tstate afterwards — the same
+before/after comparison the enrolment used
+([[task-t-enroll-libtest-demos-watcher]]: 5528 -> 5700, 0 reclassified).
