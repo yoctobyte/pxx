@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `a9fd2018ac4a` | 2026-08-16T07:52:50Z | RED (native) | 237.9s | `137a182ad46a` RED |
+| plexus | `467a4e5dab2d` | 2026-08-16T08:00:18Z | GREEN (native) | 215.3s | `137a182ad46a` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -29,4 +29,3 @@
   - `test-uforth#toolstest`
   </details>
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +2 (plexus): bad `137a182ad46a`, last good `e01894e6b1ed`, 24 commit(s) in range
-- **test-core#src:test/test_local_typed_const.pas** — test/test_local_typed_const.pas (plexus): bad `88b863e7c731`, last good `6891a4d56494`, 2 commit(s) in range

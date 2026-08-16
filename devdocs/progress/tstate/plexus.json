@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T23:45:01Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:examples/tk/tkinter_facade.npy"
-   ],
-   "sha": "f8b8a7eb5ed266fce811c26e44fbe82d1a56faf3",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T23:49:51Z",
    "fixed": [],
    "new_red": [
@@ -439,6 +429,16 @@
    "sha": "a9fd2018ac4a6512a3203c1ca6c7c7629d7f7718",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-16T08:00:18Z",
+   "fixed": [
+    "test-core#src:test/test_local_typed_const.pas"
+   ],
+   "new_red": [],
+   "sha": "467a4e5dab2d1bd7ad244bb9375c3a2924ba065c",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -4014,7 +4014,7 @@
   "test-core#src:test/test_local_const_classref_array_b317.pas": "pass",
   "test-core#src:test/test_local_shadows_func.pas": "pass",
   "test-core#src:test/test_local_shadows_method_assign.pas": "pass",
-  "test-core#src:test/test_local_typed_const.pas": "fail",
+  "test-core#src:test/test_local_typed_const.pas": "pass",
   "test-core#src:test/test_local_var_beats_string_const_b313.pas": "pass",
   "test-core#src:test/test_lolcode_skeleton.lol": "pass",
   "test-core#src:test/test_loop_control.pas": "pass",
@@ -5495,11 +5495,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T07:52:50Z",
-  "sha": "a9fd2018ac4a6512a3203c1ca6c7c7629d7f7718",
+  "date": "2026-08-16T08:00:18Z",
+  "sha": "467a4e5dab2d1bd7ad244bb9375c3a2924ba065c",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 237.9
+  "verdict": "GREEN",
+  "wall": 215.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5658,18 +5658,6 @@
     "137a182ad46aef8f5890771d223573832747c033"
    ],
    "src": "tools/crtl_reachability.py tools/gen_crtl_map.py +2"
-  },
-  {
-   "bad": "88b863e7c7311d5f1da708ba3ce7bcfe172e09b3",
-   "good": "6891a4d56494ce1d35f9d6c1f7e06b1f53329eb6",
-   "job": "test-core#src:test/test_local_typed_const.pas",
-   "name": "test-core#748",
-   "opened": "2026-08-16T07:47:30Z",
-   "range": [
-    "3ed3e2653908a7143ec38220cf5033ed64a63ef6",
-    "88b863e7c7311d5f1da708ba3ce7bcfe172e09b3"
-   ],
-   "src": "test/test_local_typed_const.pas"
   }
  ],
  "pin_shadow": {
