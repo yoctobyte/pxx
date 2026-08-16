@@ -4859,6 +4859,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cmath_pow_correct_round_b38026; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_cast_narrow_b381.c $(TESTTMP)/cfloat_cast_narrow_b38126
 	$(TESTTMP)/cfloat_cast_narrow_b38126; test "$$?" = "42"
+	./$(COMPILER) test/cfloat_cast_int_narrow.c $(TESTTMP)/cfloat_cast_int_narrow26
+	$(TESTTMP)/cfloat_cast_int_narrow26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log2_expm1_family_b382.c $(TESTTMP)/cmath_log2_expm1_family_b38226
 	$(TESTTMP)/cmath_log2_expm1_family_b38226; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_hyperbolic_family_b383.c $(TESTTMP)/cmath_hyperbolic_family_b38326

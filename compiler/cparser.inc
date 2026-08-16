@@ -2761,9 +2761,32 @@ begin
     begin
       node := AllocNode(AN_CALL); ASTIVal[node] := -206;   { Int: int -> float }
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := operand;
-      ASTLeft[node] := argSeq; ASTTk[node] := Ord(castTk);
-      if clScalar then node := CScalarLitLValue(node, castTk);
-      Result := node; Exit;
+      ASTLeft[node] := argSeq;
+      { `(float)i` must ROUND TO SINGLE, not merely be tagged tySingle. The
+        int->float conversion produces a double; tagging that node tySingle
+        left the value at double precision unless it was then stored into a
+        float lvalue, so `(double)(float)16777217` answered 16777217 where C
+        requires 16777216 — the smallest integer a float cannot represent.
+        Only the low bits are wrong, which is why gcc_diff_probe reported it as
+        the one live x86-64 divergence and nobody saw it in a test.
+
+        Do NOT add a third conversion: hand the double on to the tySingle
+        round-trip immediately below, which is the same anonymous-temp narrowing
+        the `(float)someDouble` cast already uses on every backend.
+        normalise-dont-special-case.md
+        bug-c-cast-to-float-in-value-position-does-not-round-to-single }
+      if castTk = tySingle then
+      begin
+        ASTTk[node] := Ord(tyDouble);
+        operand := node;
+        opTk := tyDouble;
+      end
+      else
+      begin
+        ASTTk[node] := Ord(castTk);
+        if clScalar then node := CScalarLitLValue(node, castTk);
+        Result := node; Exit;
+      end;
     end;
     { A `(float)` cast of a DOUBLE value must actually narrow to single
       precision (C 6.3.1.5), even when the result is immediately widened
