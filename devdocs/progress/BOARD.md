@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-nilpy-float-overflow-answers-inf-where-cpython-raises | N | 25 | bug | `2.0 ** 10000` answers +inf where CPython raises OverflowError, and so does `1e300 * 1e300`. A program that catches OverflowError — the documented way to detect this in Python — silently gets an infinity instead and carries on. | — |
 
 ## unfinished (11)
 
@@ -37,7 +39,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (200)
+## backlog (199)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +54,6 @@ _none_
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 15 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
-| bug-nilpy-float-overflow-answers-inf-where-cpython-raises | N | 25 | bug | `2.0 ** 10000` answers +inf where CPython raises OverflowError, and so does `1e300 * 1e300`. A program that catches OverflowError — the documented way to detect this in Python — silently gets an infinity instead and carries on. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
@@ -400,9 +401,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1918)
+## done (1919)
 
-1918 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1919 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (37)
 
@@ -589,7 +590,6 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
 - [p 25] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
-- [p 25] [N] bug-nilpy-float-overflow-answers-inf-where-cpython-raises
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
