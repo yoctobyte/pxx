@@ -5,8 +5,8 @@ prio: 60  # auto
 # Inline asm blocks on xtensa (last leg of the multi-arch rollout)
 
 - **Type:** feature — Track A
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** claude-acpn
 - **Opened:** 2026-07-03
 - **Relation:** Split out of [[feature-inline-asm-multi-arch]] when that ticket
   landed its riscv32/aarch64/arm32/i386 legs (2026-07-03). Deliberately low
@@ -51,3 +51,39 @@ dedicated target.
 
 ## Log
 - 2026-07-03 — Filed on split from [[feature-inline-asm-multi-arch]].
+
+## Done 2026-08-16
+
+All three engine gaps closed, and none of them needed a new mechanism.
+
+1. **Relocations.** The engine now takes `la <reg>, @fp|@glob|@data` plus an
+   offset hole and calls the BACKEND's `EmitFrameAddrXtensa` /
+   `EmitLoadGlobAddrXtensa` / `EmitLoadDataRefXtensa` — the L32R literal-pool
+   sugar the header listed as deferred already existed inside
+   ir_codegen_xtensa.inc, so the fix was to reach it (two forwards in
+   symtab.inc) rather than to write it again.
+2. **Locals as an operand.** Confirmed impossible as the ticket says, so it is
+   a DIAGNOSTIC, not a silent wrong offset: a variable is legal only as the
+   memory operand of a load/store (`l32i a4, n`, which lowers to "address into
+   a8, access at offset 0") or after `la`. Anywhere else the error names both
+   legal spellings. a8 is refused as the value register of such an access,
+   where a store would overwrite its own address.
+3. **Frame pointer.** Never spelled in the engine at all — `EmitFrameAddrXtensa`
+   is what knows it is a7 under windowed and a15 under Call0, and what falls
+   back to the literal pool past ADDI's ±128. Calling it instead of copying it
+   is what made gap 3 disappear along with gap 1.
+
+Also folded the eight load/store arms into one table (`AsmXtensaIsLoadStore` /
+`AsmXtensaEmitLoadStore`) that both the plain and the variable-operand path
+call, and split `EmitAsmXtensa` into the BlockBegin/ProcessLine/BlockResolve
+shape its five siblings already had, so the inline replay shares their label
+and forward-branch bookkeeping.
+
+**Acceptance:** `test/test_esp_bare_asm.pas` — params, a local, labels with a
+backward jump and a conditional branch (xtensa has no zero register, so the
+loop sentinel is materialized), a global via `la`, a global as a direct load
+operand, and a 1KB frame that forces the literal-pool address. Boots on
+esp32s3 under Espressif qemu; UART output matches the x86-64 oracle byte for
+byte (42/55/42/43/263). The windowed ABI is checked to lower. Wired into the
+esp-bare make target.
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
