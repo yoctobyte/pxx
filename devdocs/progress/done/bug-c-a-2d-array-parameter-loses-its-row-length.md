@@ -52,4 +52,4 @@ stay untouched — returns 42 under both gcc and pxx.
 `make compiler/pascal26` + the test + `tools/gate.sh quick` — GREEN.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 862871ac1.
