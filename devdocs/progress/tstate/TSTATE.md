@@ -8,4 +8,4 @@
 
 ## Open regressions
 - **lib-test#src:test/crtl_exp2.c** — test/crtl_exp2.c examples/tk/hello.npy +5 (plexus): bad `096da361dd93`, last good `45bc7a43d67c`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy** — test/test_nilpy_pow_matches_cpython.npy test/test_nilpy_pow_matches_cpython.expected (plexus): bad `096da361dd93`, last good `459e96f985d1`, 32 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy** — test/test_nilpy_pow_matches_cpython.npy test/test_nilpy_pow_matches_cpython.expected (plexus): bad `f43bf1298c43`, last good `459e96f985d1`, 16 commit(s) in range
