@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:3 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1973 rejected:38`
+`working:1 unfinished:8 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1973 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -28,7 +28,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 199, ranked
+## Ready — top 30 of 200, ranked
 
 - `[p 70] [T]` regression-lib-test-crtl-exp2
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -49,6 +49,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
+- `[p 50] [P]` bug-p-a-generic-and-a-non-generic-class-cannot-share-a-name
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
@@ -59,6 +60,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
 - `[p 48] [P]` feature-pascal-class-management-operators
-- `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
 
-_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -295,15 +295,29 @@ the idiom useful, since it is how a VMT is built by hand.
 the failing member was `Single`, not the `Int8` the ticket's own inventory would
 have led me to fix — `Int8` already worked.
 
-### The current wall (525)
+### The current wall (525) — measured, and NOT what the message says
 
 ```
 error: base type not found: THashService$TDelphiHashFactory
   near: TDelphiHashFactory class >>> THashService$TDelphiHashFactory private
 ```
 
-A class NESTED inside a class, used as a base type. Different territory from the
-constant-initializer family above and not started.
+First read as "a class nested inside a class, used as a base type". That is
+wrong, and worth recording as a misread rather than quietly corrected: `$` is
+pxx's SPECIALIZATION mangling, not nesting. The construct is
+`THashService<T: THashFactory> = class(THashService)` — a generic class whose
+base is the same-named NON-generic class.
+
+Narrowed with controls: a constrained parameter works, generic inheritance from
+a differently-named base works, and the pair fails with **no inheritance at
+all**. So the wall is that a generic and a non-generic class cannot share a
+name — pxx keys a class by name with no arity component, so one row overwrites
+the other. Filed as
+[[bug-p-a-generic-and-a-non-generic-class-cannot-share-a-name]] (p50), with the
+scope note that the real shape is arity-overloaded class names (FPC's
+`TDictionary` / `TDictionary<K,V>`), not a guard for this one pair.
+
+Not started.
 
 ### Side finding, filed separately
 
