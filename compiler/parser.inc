@@ -27430,6 +27430,59 @@ begin
   Expect(tkEnd, 'end');
 end;
 
+function QualClassAliasCi: Integer;
+{ `T = someunit.TClass;` — the class row someunit declares, or -1 when the shape
+  ahead is not a unit-qualified class alias. Pure lookahead: consumes nothing.
+
+  The UNQUALIFIED alias branch in ParseTypeSection cannot answer this. Its
+  lookahead requires a semicolon immediately after the first identifier, so a
+  qualified target fell through to the plain-type-alias path and no UClass alias
+  row was ever registered — `TThread = palthreadobj.TThread;` in classes.pas was
+  a no-op, and `uses Classes` never got TThread. Invisible for as long as `uses`
+  was transitive, because the importer then found palthreadobj's row directly
+  through the leak; closing the leak (2026-08-15, VisibilityAllows) is what made
+  the dead re-export observable.
+
+  Requires the qualifier to name a real UNIT. `TOuter.TInner` is a NESTED type,
+  not a re-export, and aliasing it to the flat first match of `TInner` is the
+  bind-to-the-wrong-class failure the duplicate-class work exists to prevent —
+  so an unresolvable qualifier declines here and the general-alias path keeps it.
+  bug-p-unit-qualified-class-alias-is-never-registered }
+var ti, u: Integer; qn, mem: AnsiString;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
+  qn := CurTok.SVal;
+  mem := '';
+  ti := TokPos;                       { points at the first '.' }
+  { Split the dotted name: every `.ident` with a further `.ident` behind it
+    belongs to the unit name (`System.Generics.Collections.TList`); the last one
+    is the member. }
+  while (ti + 1 < TokCount) and (Tokens[ti].Kind = tkDot) and
+        (Tokens[ti + 1].Kind = tkIdent) do
+  begin
+    if (ti + 3 < TokCount) and (Tokens[ti + 2].Kind = tkDot) and
+       (Tokens[ti + 3].Kind = tkIdent) then
+    begin
+      AppendChar(qn, '.');
+      AppendString(qn, GetTokenStr(ti + 1));
+      ti := ti + 2;
+    end
+    else
+    begin
+      mem := GetTokenStr(ti + 1);
+      ti := ti + 2;
+      Break;
+    end;
+  end;
+  if mem = '' then Exit;
+  if (ti >= TokCount) or (Tokens[ti].Kind <> tkSemicolon) then Exit;
+  u := PyFindUnitDotted(qn);
+  if u < 0 then Exit;
+  Result := FindUClassInUnit(mem, u);
+end;
+
 procedure ParseTypeSection;
 { Handles enum types, record/class type declarations }
 var
@@ -29234,6 +29287,22 @@ begin
         ci := FindUClass(CurTok.SVal);
         RegisterUClassAlias(tnOff, tnLen, ci);
         Next;
+      end
+      else if QualClassAliasCi >= 0 then
+      begin
+        { Unit-QUALIFIED class alias: `TThread = palthreadobj.TThread;` — the
+          re-export a unit writes so its own importers can name a class it got
+          from elsewhere, which pxx's non-transitive `uses` makes mandatory
+          rather than a convenience. Same UClass alias row as the unqualified
+          form above; only the lookahead differs. See QualClassAliasCi. }
+        ci := QualClassAliasCi;
+        RegisterUClassAlias(tnOff, tnLen, ci);
+        Next;                        { the unit name }
+        while CurTok.Kind = tkDot do
+        begin
+          Next;                      { '.' }
+          Next;                      { the next name component }
+        end;
       end
       else
       begin

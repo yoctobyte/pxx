@@ -1617,6 +1617,18 @@ begin
            and (not ThreadSafeMode) then
           Error('{$threadsafe on} on i386/aarch64/arm32 must be the --threadsafe flag: the softlock define is applied before lexing');
         ThreadSafeMode := True;
+        { …and the DEFINE that goes with the mode. PasApplyTargetDefines sets
+          PXX_THREADSAFE from the --threadsafe FLAG, and runs at option-parse
+          time — long before this directive is lexed — so the directive form set
+          the mode and left the define unset. An RTL unit gating a DECLARATION on
+          it (classes.pas's TThread re-export, which is the whole reason the
+          define exists) therefore saw nothing, and `{$threadsafe on}` +
+          `uses Classes` could not name TThread while `--threadsafe` could.
+          Safe here because the directive is only legal at x86-64 top-of-source:
+          the units it must reach are all lexed after it.
+          bug-p-threadsafe-directive-does-not-define-pxx-threadsafe }
+        name := 'PXX_THREADSAFE';
+        PasDefine(name);
       end
       else if CaseEqual(name, 'off') then ThreadSafeMode := False
       else Error('threadsafe requires on or off');
