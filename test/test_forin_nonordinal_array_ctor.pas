@@ -17,7 +17,8 @@
   bug-p-for-in-over-a-float-array-constructor-iterates-once-with-zero
 
   Every expected value below was taken from FPC 3.2.2 on this same source,
-  except the one row noted as a deliberate divergence. }
+  except the mixed-constructor row at the end, where 3.2.2 is buggy and FPC
+  trunk agrees with pxx. }
 program test_forin_nonordinal_array_ctor;
 var
   d: Double;
@@ -59,10 +60,21 @@ begin
   SetLength(a, 3); a[0] := 1.5; a[1] := 2.5; a[2] := 3.5;
   Write('dynarr: '); for d in a do Write(d:0:2, ' '); WriteLn;
 
-  { DELIBERATE DIVERGENCE. FPC 3.2.2 prints `1.00 0.00` here: its mixed
-    integer/float constructor drops the 2.5. pxx answers 2.50. Not copied —
-    losing a written value is a defect, not a semantic choice, and the whole
-    point of this ticket was a constructor that silently answered zero.
-    Recorded rather than hidden: decide-forin-mixed-int-float-ctor-vs-fpc. }
+  { NOT a divergence — an FPC 3.2.2 BUG that pxx does not have, and that FPC
+    fixed upstream. 3.2.2 prints `1.00 0.00`; FPC trunk 3.3.1 (built and run
+    2026-08-16, tip 6c61f17e04) prints `1.00 2.50`, exactly as pxx does.
+
+    3.2.2 does not "drop the 2.5" either: it reads uninitialised memory. Put
+    `for d in [1.5, 2, 3]` after a loop over `[9.25, 8.25, 7.25, 6.25]` and
+    3.2.2 prints `1.50 9.25 8.25` — values from the PREVIOUS array. Root cause
+    is that FPC types a bracket literal from the target type and for..in gives
+    it none; hand the same literal to an `array of Double` parameter and 3.2.2
+    is correct.
+
+    So there is nothing here for --strict-fpc to reproduce: strict mode exists
+    to compile valid programs that rely on FPC's behaviour, not on FPC's bugs
+    (user, 2026-08-16). Full measurement, and the rule:
+    decide-forin-mixed-int-float-ctor-vs-fpc,
+    meta-dialect-extensions-and-fpc-strict. }
   Write('mixed : '); for d in [1, 2.5] do Write(d:0:2, ' '); WriteLn;
 end.

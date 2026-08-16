@@ -168,3 +168,78 @@ Unrelated gap confirmed already tracked while measuring: `TDA.Create(1.0, 2.5)`
 (Delphi dynamic-array constructor) is rejected by pxx and is already recorded as
 a conformance gap — `tstate/conformance.tsv:22`, `tarrconstr1.pp`. Not filed
 again.
+
+---
+
+## RESOLVED 2026-08-16 — decided by the user, and FPC trunk already agrees with us
+
+### The decision
+
+> "no, we will not strictly emulate obvious bugs. that'd be wrong. strict mode
+> is to compile valid programs that rely on FPC's behaviour, not on FPC's bugs."
+> — user, 2026-08-16
+
+**Option 1 confirmed. Option 2 is struck on principle as well as on
+practicality** — it was already unimplementable (see the measurement above), and
+it is now also refused as a matter of policy. The general rule this establishes
+is recorded on the compat charter,
+[[meta-dialect-extensions-and-fpc-strict]] § "The BOUNDARY of aim 2": the strict
+family targets *the set of valid FPC programs and the behaviour they legitimately
+depend on*, not the observable output of the FPC binary. The separating test is
+**can a program depend on it** — deterministic and derivable from source is
+behaviour and strict owes it; undefined or dependent on state the program never
+wrote is a bug and strict must not reproduce it.
+
+### Trunk was tested, not inferred — and it is FIXED
+
+The earlier note in this ticket said "no fix found in `origin/main`, not
+verified by building trunk." That was too weak a check, and it was **wrong**.
+Built and ran it:
+
+- fetched `gitlab.com/freepascal.org/fpc/source` `main` — tip `6c61f17e04`,
+  committed **2026-08-15** (247 commits ahead of the stale local mirror the
+  earlier note read);
+- built the compiler (`make -C compiler ppcx64 FPC=/usr/bin/ppcx64`) → **FPC
+  3.3.1**, then the matching RTL (`make -C rtl PP=.../ppcx64` — note `PP=`, not
+  `FPC=`; the latter silently builds the RTL with the *installed* 3.2.2 and the
+  ppu version mismatch is the only symptom);
+- ran all ten rows.
+
+| row | 3.2.2 | **trunk 3.3.1** | pxx |
+| --- | --- | --- | --- |
+| `[1, 2.5]` | `1.00 0.00` | **`1.00 2.50`** | `1.00 2.50` |
+| `[2.5, 1]` | `2.50 2.50` | **`2.50 1.00`** | `2.50 1.00` |
+| `[1, 2.5, 3]` | `1.00 0.00 3.00` | **`1.00 2.50 3.00`** | same |
+| `[1, 2.5, 3, 4.5, 5]` | `1.00 0.00 3.00 0.00 5.00` | **all correct** | same |
+| `[1.5, 2, 3.5, 4, 5.5]` | `1.50 0.00 3.50 0.00 5.50` | **all correct** | same |
+| `[1, 2, 3.5]` | `1.00 2.00 0.00` | **all correct** | same |
+| `[1.5, 2, 3]` after a 4-float loop | `1.50 9.25 8.25` (leak) | **`1.50 2.00 3.00`** | same |
+
+**Trunk matches pxx on all ten rows.** The stale-memory leak is gone.
+
+### Consequences
+
+1. **No upstream bug report.** The user's instruction was to file one with FPC
+   *if it still existed in nightly*; it does not. Nothing to report.
+2. **pxx is not diverging from FPC at all** — it agrees with current FPC and
+   disagrees only with 3.2.2. So this is not a compat item, not a divergence,
+   and not a decision: it is a **footnote about the current stable release**,
+   which is exactly the disposition the user predicted for the FPC-side finding
+   in [[decide-set-vs-array-of-const-at-the-same-overload-slot]].
+3. `test/test_forin_nonordinal_array_ctor.pas` asserts the correct values and
+   needs no change. Its comment should say "FPC 3.2.2 got this wrong; fixed in
+   trunk" rather than implying a standing divergence.
+
+Not pinned: **which** commit fixed it. `create_array_for_in_loop`'s dispatch
+block is textually identical between `release_3_2_2` and trunk, so the fix is
+in the type-unification path (`nset.pas` / `htypechk.pas`, both heavily
+rewritten since 3.2.2). Bisecting thousands of commits at ~2 min a build buys a
+citation and changes no conclusion, so it was not done.
+
+### The method note worth keeping
+
+Reading the upstream diff said "no fix found." Building and running it said
+"fixed." The diff was read against a mirror 2.5 months stale, and the fix was
+not where the symptom pointed. **Build the oracle; do not infer it from its
+source.** Same lesson as `debugging-playbook.md`'s "measure, do not reason",
+one level out — the oracle itself is a thing to measure.
