@@ -471,6 +471,56 @@ class Gen:
                 return ["%s%s := %s;" % (pad, name, self.expr(ty, scope, 2))]
             self.loopvars.append(lv)
             inner = scope + [(lv, INT_TYPES[4])]     # longint, readable only
+            # Two loop shapes the literal-bounds form structurally cannot
+            # express, both of which were REAL pxx bugs found by hand in the
+            # 2026-08-16 Pascal oracle sweep (dfc3b7449) and neither of which
+            # this generator could have produced:
+            #
+            #  1. A limit that is a VARIABLE the body mutates. The limit must be
+            #     evaluated ONCE, before the loop. pxx re-emitted the limit
+            #     subtree per iteration -- the same value-node defect as the
+            #     case selector -- so the trip count changed under the body.
+            #  2. A limit at the counter type's MAXIMUM. `for i := 2147483645 to
+            #     2147483647` never terminated: the bottom test incremented past
+            #     the limit and wrapped.
+            #
+            # Both are cheap to generate and impossible to express with literal
+            # bounds, which is why the grammar had a blind spot exactly where a
+            # bug lived.
+            lim_pick = rnd.random()
+            lims = [n for (n, t) in assignable if t.name == "longint"]
+            if lim_pick < 0.15 and lims:
+                # Shape 1. The limit is SEEDED to a small literal immediately
+                # before the loop: an unseeded global could hold anything, and
+                # `for lv := 0 to <two billion>` is not a test, it is a hang.
+                lim = rnd.choice(lims)
+                body = self.block(inner, depth - 1, ind + 1, assignable)
+                out = ["%s%s := %d;" % (pad, lim, rnd.randint(2, 4)),
+                       "%sfor %s := 0 to %s do" % (pad, lv, lim),
+                       "%sbegin" % pad]
+                out += body
+                # DECREMENT, never increment. Under the correct semantics the
+                # limit is fixed and this is inert; under the re-evaluation bug
+                # the trip count SHRINKS, so a regression still terminates and
+                # reports as a divergence rather than as a timeout.
+                out += ["%s  %s := %s - 1;" % (pad, lim, lim),
+                        "%send;" % pad]
+                self.loopvars.pop()
+                return self.tagged("forvarlimit", out)
+            if lim_pick < 0.22:
+                # Shape 2. longint's maximum, so it needs no new declaration --
+                # the loop variables are already longint. Three iterations when
+                # correct; a non-terminating loop if the bottom test regresses,
+                # which pasmith_run reports as pxx-timeout. That is the RIGHT
+                # verdict here and not the csmith slow-vs-hung confusion: these
+                # programs are bounded by construction, so a timeout can only
+                # mean a hang.
+                out = ["%sfor %s := 2147483645 to 2147483647 do" % (pad, lv),
+                       "%sbegin" % pad]
+                out += self.block(inner, depth - 1, ind + 1, assignable)
+                out += ["%send;" % pad]
+                self.loopvars.pop()
+                return self.tagged("formaxlimit", out)
             out = ["%sfor %s := %d to %d do" % (pad, lv, lo, hi), "%sbegin" % pad]
             out += self.block(inner, depth - 1, ind + 1, assignable)
             out += ["%send;" % pad]
