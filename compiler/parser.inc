@@ -175,6 +175,7 @@ begin
   SetLength(ASTKind, n);       SetLength(ASTIVal, n);      SetLength(ASTSOffset, n);
   SetLength(ASTSLen, n);       SetLength(ASTCLongRank, n); SetLength(ASTLeft, n);
   SetLength(ASTRight, n);      SetLength(ASTTk, n);        SetLength(ASTLiftedVar, n);
+  SetLength(ASTCallParenless, n);
   SetLength(ASTEnumId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
   SetLength(ASTFile, n);
   SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
@@ -194,6 +195,7 @@ begin
   ASTRight[ASTNodeCount]   := -1;
   ASTTk[ASTNodeCount]      := 0;
   ASTLiftedVar[ASTNodeCount] := -1;
+  ASTCallParenless[ASTNodeCount] := False;
   ASTEnumId[ASTNodeCount]  := -1;
   ASTQChk[ASTNodeCount]    := False;
   { AN_ASSIGN carries its {$R+} region state from birth — one central tag
@@ -242,6 +244,7 @@ begin
   ASTSLen[Result]     := ASTSLen[node];
   ASTTk[Result]       := ASTTk[node];
   ASTLiftedVar[Result] := ASTLiftedVar[node];
+  ASTCallParenless[Result] := ASTCallParenless[node];
   ASTLine[Result]     := ASTLine[node];
   ASTFile[Result]     := ASTFile[node];
   ASTQChk[Result]     := ASTQChk[node];
@@ -8716,7 +8719,18 @@ begin
   if FindSym(CurTok.SVal) >= 0 then Exit;
   pi := FindProc(CurTok.SVal);
   if pi < 0 then Exit;
+  { …and an ALL-DEFAULTED function is paramless AT THE CALL SITE, so it is a
+    value-producing call here too and belongs in the same fall-back: FPC prints
+    6 for `Chk('x', F, 6)` under {$MODE DELPHI} with `F(k: Integer = 3)`, while
+    taking the address unconditionally passed a POINTER into an Integer sink and
+    printed 4247470 — a silent wrong value, measured against FPC. It reaches
+    @F through MatchCallDelphiProcAddr's retry when the sink really is
+    procedural, which is exactly how a paramless function already gets there.
+    Defaults are trailing in Pascal, so parameter 0 having one means all do.
+    bug-p-bare-all-defaulted-routine-refused-in-argument-position }
   if Procs[pi].IsFunc and (Procs[pi].ParamCount = 0) then Exit;
+  if Procs[pi].IsFunc and (Procs[pi].ParamCount > 0) and
+     ProcParamHasDefault[pi * MAX_PROC_PARAMS] then Exit;
   node := AllocNode(AN_PROCADDR);
   ASTIVal[node] := pi;
   ASTTk[node] := Ord(tyPointer);
@@ -8925,9 +8939,15 @@ begin
     for i := 0 to nArgs-1 do
     begin
       exprNode := ASTLeft[currArg];
-      procCand[i] := (ASTKind[exprNode] = AN_CALL) and (ASTLeft[exprNode] = -1) and
-                     (ASTIVal[exprNode] >= 0) and
-                     (Procs[ASTIVal[exprNode]].ParamCount = 0);
+      { A PARENLESS all-defaulted call is a candidate too — `Apply(F, 5)` where
+        `F(k: Integer = 3)` and Apply takes a procedural. Its arguments are
+        compiler-filled, so ASTLeft is not -1 and ParamCount is not 0; the
+        ASTCallParenless flag is what separates it from a written `F(2)`, which
+        must NOT be silently turned into an address. }
+      procCand[i] := (ASTKind[exprNode] = AN_CALL) and (ASTIVal[exprNode] >= 0) and
+                     (((ASTLeft[exprNode] = -1) and
+                       (Procs[ASTIVal[exprNode]].ParamCount = 0)) or
+                      ASTCallParenless[exprNode]);
       if procCand[i] then hasCand := True;
       currArg := ASTRight[currArg];
     end;
@@ -9136,8 +9156,19 @@ begin
   if match0 >= 0 then
     for i := 0 to nArgs-1 do
     begin
+      { ProcParamProcSig, not the param SYMBOL's SymProcSig: RegisterProc leaves
+        Params[].SymIdx pointing at a symbol that does NOT outlive the callee's
+        scope, so in a program with enough symbols to recycle it the test
+        silently answered "not procedural" and the spurious numeric match stood.
+        Measured: `C2(Apply(F, 5), 10)` passed F's RESULT (6) where the callee
+        called it as a function pointer and jumped to address 6, while the same
+        `Apply(F, 5)` at statement level was fine — the parallel array is the
+        one that answers from a caller, and its own comment in defs.inc says so.
+        bug-p-bare-all-defaulted-routine-refused-in-argument-position }
       sidx := Procs[match0].Params[i].SymIdx;
-      if procCand[i] and (sidx >= 0) and (SymProcSig[sidx] >= 0) then needAddr := True;
+      if procCand[i] and
+         ((ProcParamProcSig[match0 * MAX_PROC_PARAMS + i] >= 0) or
+          ((sidx >= 0) and (SymProcSig[sidx] >= 0))) then needAddr := True;
     end;
   if not needAddr then Exit;
 
@@ -9155,6 +9186,7 @@ begin
     sidx := Procs[pi].Params[i].SymIdx;
     if procCand[i] and
        ((Procs[pi].Params[i].TypeKind = tyPointer) or
+        (ProcParamProcSig[pi * MAX_PROC_PARAMS + i] >= 0) or
         ((sidx >= 0) and (SymProcSig[sidx] >= 0))) then
     begin
       { Replace the call node with a fresh AN_PROCADDR (a clean node, like the
@@ -16006,6 +16038,9 @@ begin
           argSeq := -1;
           FillDefaultArgs(procIdx, 0, node, argSeq);
         end;
+        { …and record that the arguments are all compiler-filled, so Delphi
+          mode's @-optional retry can tell this from a written `F(2)`. }
+        ASTCallParenless[node] := True;
         ASTTk[node] := Ord(Procs[procIdx].RetType);
         ApplyCallResultPtrSuffix(node, procIdx);  { f()^ / ^.field / [i] }
         Exit;
@@ -23535,6 +23570,8 @@ begin
             lastArg := -1;
             FillDefaultArgs(procIdx, 0, node, lastArg);
           end;
+          { the twin of the expression site's marker — see ASTCallParenless }
+          ASTCallParenless[node] := True;
         end;
 
         if node = -1 then

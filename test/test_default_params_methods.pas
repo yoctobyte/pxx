@@ -201,12 +201,22 @@ begin
   PL2(7);             Check('parenless-two-partial', seenPL, 75);
   PLs;                Check('parenless-string-default', Ord(seenPLs = 'dflt'), 1);
   FreeF;              Check('parenless-float-default', Round(seenF * 100), 525);
-  { assigned to a local first, deliberately: bare `FR` in ARGUMENT position is a
-    third site and a genuinely ambiguous one — there it could equally be a
-    procedural-type reference — so it is left alone rather than guessed at. }
+  { assigned to a local first, which is how these rows were originally written
+    when argument position was left alone as "genuinely ambiguous". It is not
+    ambiguous in the DEFAULT mode — a procedural reference requires `@F` there —
+    and argument position works in both modes now; see
+    test_delphi_bare_alldefaulted_arg.pas for the delphi half, where the sink's
+    type decides. The local-first rows stay because they pin expression
+    position, which is a different site.
+    bug-p-bare-all-defaulted-routine-refused-in-argument-position }
   plA := PlSelfRes;   Check('parenless-expr-selfresult', plA, 6);
   plA := PlResVar;    Check('parenless-expr-result-var', plA, 6);
   plA := PlSelfRes(10); Check('parenless-expr-explicit', plA, 20);
+  { ...and the same names in ARGUMENT position, which is what that comment used
+    to say was left alone }
+  Check('parenless-ARG-selfresult', PlSelfRes, 6);
+  Check('parenless-ARG-result-var', PlResVar, 6);
+  Check('parenless-ARG-explicit', PlSelfRes(10), 20);
 
   writeln('total ok ', okc, ' / ', total);
 end.

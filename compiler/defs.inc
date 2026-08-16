@@ -2825,6 +2825,13 @@ var
   ASTRight   : array of Integer;
   ASTTk      : array of Integer;  { TTypeKind of expression }
   ASTLiftedVar : array of Integer; { symbol index of compiler-lifted variable, or -1 }
+  { True on an AN_CALL the parser built from a BARE, PARENLESS name whose
+    arguments are all compiler-filled defaults — `F` where `F(k: Integer = 3)`.
+    Delphi mode's @-optional retry needs to tell that call apart from a written
+    `F(2)`: the first may legitimately become @F when the sink is procedural,
+    the second may not. Nothing else reads it.
+    bug-p-bare-all-defaulted-routine-refused-in-argument-position }
+  ASTCallParenless : array of Boolean;
   ASTEnumId : array of Integer; { enum type of an ENUM-MEMBER literal, else -1. A member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from. Kept here so cross-enum assignment stays diagnosable. }
   ASTLine    : array of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
   ASTFile    : array of Integer; { .debug_line file index for that line (1 = main file); see DbgFileOfTok }

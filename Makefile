@@ -4097,7 +4097,13 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_hint_sizeof26)" = "total ok 8 / 8"
 	# FPC-compat: default parameter values on class/interface methods + constructors (fgl's TFPSList.Create shape)
 	./$(COMPILER) test/test_default_params_methods.pas $(TESTTMP)/test_default_params_methods26
-	test "$$($(TESTTMP)/test_default_params_methods26 | tail -1)" = "total ok 31 / 31"
+	test "$$($(TESTTMP)/test_default_params_methods26 | tail -1)" = "total ok 34 / 34"
+	# ...and the ARGUMENT-position half, under delphi mode where a bare name may
+	# also mean the address: an Integer sink got a POINTER (4247470), and a call
+	# nested one level deeper jumped to address 6 — the callee's own result,
+	# called as a function pointer. Both agree with FPC -Mdelphi now.
+	./$(COMPILER) test/test_delphi_bare_alldefaulted_arg.pas $(TESTTMP)/test_delphi_bda26
+	test "$$($(TESTTMP)/test_delphi_bda26 | tail -1)" = "total ok 8 / 8"
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas $(TESTTMP)/test_generic_class_methods26
 	test "$$($(TESTTMP)/test_generic_class_methods26 | tail -1)" = "total ok 5 / 5"
