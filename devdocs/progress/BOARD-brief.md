@@ -34,7 +34,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 186, ranked
 
-- `[p 70] [T]` regression-lib-test-crtl-reachability
+- `[p 70] [C]` regression-lib-test-crtl-reachability
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
