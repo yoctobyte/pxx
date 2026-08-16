@@ -4,7 +4,7 @@ prio: 50
 type: task
 blocked-by: []
 summary: "Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change."
-status: working
+status: done
 owner: claude-acpn
 ---
 
@@ -75,3 +75,42 @@ Background for all of it: `devdocs/dev/math-implemented-twice.md`.
 
 C tests green, the corpus unchanged in OUTPUT (not merely in exit status), plus
 self-host byte-identical since nothing in `compiler/**` should move.
+
+## Done 2026-08-16 — a pure deletion, and the feared case measured
+
+All ten de-prefixed; the ten `#define`s deleted from `lib/crtl/include/math.h`
+(the `NAN` union kept — different mechanism). No compiler change was needed, as
+the ticket predicted.
+
+**The one thing worth recording is the case the source comment kept them alive
+for.** `lib/crtl/src/math.c`'s header said the prefixes "must stay" because
+*"while pxxcio no longer imports math, a user program that does `uses math`
+itself would resurrect exactly that"*. That is a testable claim and it is false:
+
+```pascal
+program mixed;
+uses math, './cm.c';        { BOTH an `exp` and an `Exp` are visible }
+begin
+  writeln(cexp2x(1.0):0:15);   { the C exp  -> 2.718281828459045 }
+  writeln(Exp(1.0):0:15);      { the Pascal -> 2.718281828459045 }
+end.
+```
+
+Both sides answer correctly. So the collision is closed in the C-to-Pascal
+direction by pxxcio dropping `uses math`, not merely hidden by the prefixes.
+
+**Verified by RESULTS, not exit codes**, since a silent binding change is the
+failure mode: `gcc_diff_probe.sh` at 0 NEW divergences on x86-64, and all
+eighteen `cmath_*` tests plus `crtl_trig_huge` pass — including the four
+correctly-rounded suites whose expectations are 80-digit decimal references, so
+a wrongly-bound call could not pass them by luck.
+
+Test files and the three docs that described the dodge (`lib/crtl/src/README.md`,
+`devdocs/dev/math-implemented-twice.md`, the `math.c` header) are updated with
+the change rather than left to rot, and each says what to do if it regresses:
+record it on [[feature-a-own-language-first-symbol-resolution]], do not
+re-prefix silently. That ticket is unaffected — it is needed for the
+Pascal-to-C direction, which is still open.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
