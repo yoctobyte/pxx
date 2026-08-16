@@ -4892,6 +4892,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/carr2d_param_row_length26; test "$$?" = "42"
 	./$(COMPILER) test/carr2d_decay_stride.c $(TESTTMP)/carr2d_decay_stride26
 	$(TESTTMP)/carr2d_decay_stride26; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_compound_literal.c $(TESTTMP)/csizeof_compound_literal26
+	$(TESTTMP)/csizeof_compound_literal26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log2_expm1_family_b382.c $(TESTTMP)/cmath_log2_expm1_family_b38226
 	$(TESTTMP)/cmath_log2_expm1_family_b38226; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_hyperbolic_family_b383.c $(TESTTMP)/cmath_hyperbolic_family_b38326

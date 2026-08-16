@@ -2047,6 +2047,12 @@ begin
   end;
 end;
 
+{ Defined below (with the cast parsing it peeks for), and called from
+  ParseCSizeof above it — the FPC seed compiles these includes in order, so the
+  forward is what keeps the seed build working. See
+  bug-a-fpc-seed-drift-emitasmx64-forward for the same shape. }
+function CIsCastAhead: Boolean; forward;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen: Integer;
     cNDims, cDim, cSpanSym: Integer;
@@ -2059,6 +2065,59 @@ begin
   begin
     Next;
     savedPos := TokPos;
+    { `sizeof((int[]){1,2,3})` — an ARRAY COMPOUND LITERAL. It is an OBJECT of
+      array type; only its USE decays to a pointer, and sizeof is not a use. It
+      fell through to the general-expression arm, which sizes by the result
+      type — a pointer — so every one of them answered 8. That is what the
+      NARGS idiom `sizeof((int[]){__VA_ARGS__})/sizeof(int)` counts with, so it
+      answered 2 for any argument list. bug-c-sizeof-an-array-compound-literal }
+    if (CurTok.Kind = tkLParen) and CIsCastAhead then
+    begin
+      Next;                                   { the inner '(' }
+      cTk := ParseCDeclType;
+      cArrLen := -99;
+      if (CTypePtrDepth = 0) and (CurTok.Kind = tkLBrack) then
+      begin
+        Next;
+        if CurTok.Kind = tkRBrack then cArrLen := -1   { `[]` — count the init }
+        else cArrLen := CEvalConstExpr;
+        Expect(tkRBrack, ']');
+      end;
+      cOK := False;
+      if (cArrLen <> -99) and (CurTok.Kind = tkRParen) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkBegin) then
+      begin
+        { counted from the OPENING BRACE's token index, which is TokPos while
+          CurTok is still the ')' — after the Next it is one past it }
+        if cArrLen = -1 then cArrLen := CBraceTopLevelInitCountAt(TokPos);
+        Next;                                 { ')' }
+        if cArrLen < 0 then cArrLen := 0;
+        sz := cArrLen * CTypeSizeBytes(cTk);
+        cOK := True;
+      end;
+      if not cOK then begin TokPos := savedPos - 1; Next; end   { rewind: not one }
+      else
+      begin
+        { consume the initializer braces and the sizeof's own ')' }
+        depth := 0;
+        while CurTok.Kind <> tkEOF do
+        begin
+          if CurTok.Kind = tkBegin then Inc(depth)
+          else if CurTok.Kind = tkEnd then
+          begin
+            Dec(depth);
+            if depth = 0 then begin Next; Break; end;
+          end;
+          Next;
+        end;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := sz;
+        ASTTk[node] := Ord(tyInt64);
+        Result := node;
+        Exit;
+      end;
+    end;
     if IsCTypeTok then
     begin
       tk := ParseCDeclType;
