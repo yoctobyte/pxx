@@ -3816,6 +3816,14 @@ test-core: $(COMPILER)
 	grep -q "set element is not a member of TDay" $(TESTTMP)/test_slpo.log
 	! ./$(COMPILER) test/test_array_member_fail.pas $(TESTTMP)/test_amf26 > $(TESTTMP)/test_amf.log 2>&1
 	grep -q "an array variable has no members" $(TESTTMP)/test_amf.log
+	# ...and the same refusal for a memberless SCALAR, which the array check's own
+	# note assumed was covered and which nothing checked: `s.Length` on a string
+	# compiled and printed the four bytes of 'Hell' as an Int32. Two tests, one per
+	# arm of the diagnostic -- the string arm names the missing Delphi helpers.
+	! ./$(COMPILER) test/test_scalar_member_fail.pas $(TESTTMP)/test_smf26 > $(TESTTMP)/test_smf.log 2>&1
+	grep -q "a string has no members here" $(TESTTMP)/test_smf.log
+	! ./$(COMPILER) test/test_scalar_member_int_fail.pas $(TESTTMP)/test_smi26 > $(TESTTMP)/test_smi.log 2>&1
+	grep -q "a value of this type has no members" $(TESTTMP)/test_smi.log
 	! ./$(COMPILER) test/test_undefined_field_fail.pas $(TESTTMP)/test_udf26 > $(TESTTMP)/test_udf.log 2>&1
 	grep -q "no such member on this record/class" $(TESTTMP)/test_udf.log
 	# A `procedure` method has no result and cannot be read as a value. It used to

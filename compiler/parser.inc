@@ -5915,6 +5915,53 @@ begin
          Syms[ASTIVal[node]].IsArray and
          not (Syms[ASTIVal[node]].TypeKind in [tyRecord, tyClass]) then
         Error('an array variable has no members (use SetLength / index it)');
+      { …and the same refusal for every other memberless SCALAR, which the array
+        check's own note assumed was already covered ("strings take Length()
+        style intrinsics") and which nothing actually checked. The fall-through
+        built a field access at offset 0 and READ THE VALUE'S OWN BYTES: on a
+        string, `s.Length` for s='Hello' printed 1819043144 — the four bytes of
+        'Hell' as an Int32 — and so did `s.NoSuchMember`, with no diagnostic
+        either way. Ints, floats and booleans answered with themselves.
+
+        Delphi's TStringHelper surface (`s.Length`, `s.ToUpper`, `s.Trim`,
+        `s.Substring`) is exactly what modern Pascal writes, and FPC compiles it
+        under {$modeswitch typehelpers}; we do not implement it yet. Refusing is
+        the honest answer until we do, and the message says which it is so the
+        reader is not left hunting a wrong number. Arrays and pointers already
+        errored here — those are the shape this follows.
+
+        NilPy is excluded: `s.upper()`, `n.bit_length()` and the dynamic-attribute
+        fallback below are the ordinary Python spelling and resolve further down.
+        tyRecord / tyClass / tyInterface / tyVariant / tyPointer / tyAuto /
+        tyUnknown and the promotable-int family are all absent from the set on
+        purpose — each has a real member path.
+
+        Keyed on the RECEIVER SYMBOL's declared type, exactly like the array
+        check above it, and NOT on the expression's `tk`. `tk` is wrong for a
+        cast-then-deref receiver: `PPyVarRec(@v)^.Payload` (lib/rtl/atexit, ast,
+        configparser) arrives here as a scalar with no record id, and a `tk`-keyed
+        version of this check refused three working example programs. Requiring a
+        plain declared variable keeps the refusal to the shape actually proved
+        broken and leaves every computed receiver on its existing path.
+        bug-p-a-member-on-a-scalar-silently-reads-the-values-own-bytes }
+      if (not isNilPy) and (recName = REC_NONE) and
+         (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+         not Syms[ASTIVal[node]].IsArray and
+         (Syms[ASTIVal[node]].TypeKind in
+                [tyInteger, tyBoolean, tyChar, tyString, tyInt8, tyUInt8,
+                 tyInt16, tyUInt16, tyInt32, tyUInt32, tyInt64, tyUInt64,
+                 tyNativeInt, tyNativeUInt, tySingle, tyDouble, tyExtended,
+                 tySet, tyAnsiString, tyShortString, tyFixedString]) then
+      begin
+        if Syms[ASTIVal[node]].TypeKind in
+             [tyString, tyAnsiString, tyShortString, tyFixedString] then
+          Error('a string has no members here: pxx does not implement Delphi''s ' +
+                'string helpers (s.Length, s.ToUpper, s.Trim, s.Substring) — ' +
+                'use the intrinsics Length(s), UpperCase(s), Trim(s), Copy(s, i, n)')
+        else
+          Error('a value of this type has no members (only records, classes, ' +
+                'interfaces and variants do)');
+      end;
       Next;
       if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then Error('expected field name');
       prevTok := TokPos - 1;
