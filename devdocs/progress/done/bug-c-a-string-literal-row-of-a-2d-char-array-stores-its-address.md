@@ -4,6 +4,7 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`char names[2][8] = {\"ab\", \"cd\"}` stored the low byte of the LITERAL'S ADDRESS into each row's first character instead of copying the string. Row 0 was one garbage byte, row 1 was empty, and strcmp/printf(\"%s\") read past them — silently, on a string table, which every C program of any size has."
+status: done
 ---
 
 # A string-literal row of a 2-D char array stored its address
@@ -68,3 +69,6 @@ and pxx.
 ## Gate
 
 `make compiler/pascal26` + the test + `tools/gate.sh quick` — GREEN.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
