@@ -3610,6 +3610,9 @@ test-core: $(COMPILER)
 	# array-valued field in a typed record constant (TGuid D4 shape)
 	./$(COMPILER) --mimic-fpc test/test_record_const_array_field.pas $(TESTTMP)/test_rcaf26
 	test "$$($(TESTTMP)/test_rcaf26)" = "$$(printf '132096 192 70')"
+	# string / @var / @proc field values in a typed record constant (global + local)
+	./$(COMPILER) --mimic-fpc test/test_record_const_addr_field.pas $(TESTTMP)/test_rcaddr26
+	test "$$($(TESTTMP)/test_rcaddr26)" = "$$(printf 'hello 42 7\ncalled\nlocal 42 9')"
 	# builtin TGuid (System type) resolves without a uses
 	./$(COMPILER) --mimic-fpc test/test_builtin_tguid.pas $(TESTTMP)/test_tguid26
 	test "$$($(TESTTMP)/test_tguid26)" = "$$(printf '132096 192 70 16')"

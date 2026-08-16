@@ -1,12 +1,13 @@
 ---
 prio: 55
+owner: claude-AP
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].

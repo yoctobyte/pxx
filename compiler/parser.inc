@@ -18828,6 +18828,61 @@ begin
   else ParseInitValTk := ParseInitVal;
 end;
 
+{ Recognise the constant-initializer value forms that are NOT plain ordinals, so
+  a record-constant field can carry them: a string literal, `@proc`, and `@var`.
+  ConstEval cannot evaluate any of these -- and, crucially, does not CONSUME them
+  either, so letting one reach ParseInitValTk desyncs the field loop and the next
+  iteration reports `expected field name in record constant` pointing at the
+  value rather than at the real gap (that misleading message is what this exists
+  to prevent).
+
+  The three shapes map onto init kinds the emitter ALREADY implements -- 1 =
+  AN_STR_LIT, 2 = AN_PROCADDR, 4 = AN_ADDR of an ident -- which the C frontend
+  has been producing for struct initializers all along; only the Pascal side was
+  never wired to them. Kinds 1/2/4 leave FOff untouched, so they compose with the
+  record-field target the emitter builds when FOff >= 0.
+
+  Returns True and sets kind/val/aux with the tokens consumed; returns False with
+  NOTHING consumed, so the caller falls through to the ordinal path unchanged. }
+function TryParseInitValForm(var kind: Integer; var val: Int64; var aux: Integer): Boolean;
+var pi, si: Integer;
+begin
+  TryParseInitValForm := False;
+  kind := 0; val := 0; aux := 0;
+
+  if CurTok.Kind = tkString then
+  begin
+    kind := 1;
+    val  := Tokens[TokPos - 1].SOffset;
+    aux  := Tokens[TokPos - 1].SLen;
+    Next;
+    TryParseInitValForm := True;
+    Exit;
+  end;
+
+  { `@name` -- a link-time address. A routine wins over a variable of the same
+    name here for the same reason MatchEligBase does: `@F` names the routine. }
+  if (CurTok.Kind = tkAt) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
+  begin
+    pi := FindProc(GetTokenStr(TokPos));
+    if pi >= 0 then
+    begin
+      kind := 2; val := pi;
+      Next; Next;
+      TryParseInitValForm := True;
+      Exit;
+    end;
+    si := FindSym(GetTokenStr(TokPos));
+    if si >= 0 then
+    begin
+      kind := 4; val := si;
+      Next; Next;
+      TryParseInitValForm := True;
+      Exit;
+    end;
+  end;
+end;
+
 { ===== Statement parser ===== }
 
 procedure ParseStatement; forward;
@@ -25965,6 +26020,7 @@ var name: AnsiString; v: Int64;
     isLocalConst: Boolean;
     constIsStatic: Boolean;   { routine-local typed const -> static BSS storage }
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
+    fvKind, fvAux: Integer; fvVal: Int64;   { non-ordinal record-field init form }
     cnNDims, cFlatLen, cDi, cDepth: Integer;
     scOff, scLen, si, sci2, cCi, cAi: Integer;
     savedCCi, savedCVis: Integer;
@@ -26460,8 +26516,24 @@ begin
               LocalInitElem[LocalInitCount] := -1;
               LocalInitFOff[LocalInitCount] := fNameOff;
               LocalInitFLen[LocalInitCount] := fNameLen;
-              LocalInitKind[LocalInitCount] := 0;
-              LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
+              if TryParseInitValForm(fvKind, fvVal, fvAux) then
+              begin
+                { A LOCAL record const has no ValAux slot, and FLen is already
+                  spoken for by the field NAME span the FIELD target reads. A
+                  string value would have to overwrite it, so refuse rather than
+                  corrupt the target -- the same call, and the same wording, the
+                  array-of-record path above already makes. `@proc` / `@var`
+                  carry everything in Val and are fine. }
+                if fvKind = 1 then
+                  Error('record constant with string fields must be global');
+                LocalInitKind[LocalInitCount] := fvKind;
+                LocalInitVal[LocalInitCount]  := fvVal;
+              end
+              else
+              begin
+                LocalInitKind[LocalInitCount] := 0;
+                LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
+              end;
               LocalInitTk[LocalInitCount]   := Ord(fTk);
               Inc(LocalInitCount);
             end
@@ -26472,8 +26544,17 @@ begin
               PendingInitElem[PendingInitCount] := -1;
               PendingInitFOff[PendingInitCount] := fNameOff;
               PendingInitFLen[PendingInitCount] := fNameLen;
-              PendingInitKind[PendingInitCount] := 0;
-              PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
+              if TryParseInitValForm(fvKind, fvVal, fvAux) then
+              begin
+                PendingInitKind[PendingInitCount]   := fvKind;
+                PendingInitVal[PendingInitCount]    := fvVal;
+                PendingInitValAux[PendingInitCount] := fvAux;
+              end
+              else
+              begin
+                PendingInitKind[PendingInitCount] := 0;
+                PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
+              end;
               PendingInitTk[PendingInitCount]   := Ord(fTk);
               Inc(PendingInitCount);
             end;
@@ -30262,6 +30343,7 @@ procedure CompilePendingLocalInits;
   before the body). Mirror of CompilePendingGlobalInits over the LocalInit list;
   the list is reset by the caller at routine entry. }
 var i, identNode, valNode, idxLit, target, assignNode, initTk: Integer;
+    innerAddr: Integer;
 begin
   { -O2 register-residency: suppress r14/r15 residency assignment for these
     per-initializer CompileAST calls. Each would otherwise re-emit the save+load
@@ -30314,6 +30396,25 @@ begin
       valNode := AllocNode(AN_CLASSREF);
       ASTIVal[valNode] := LocalInitVal[i];
       ASTTk[valNode] := Ord(tyPointer);
+    end
+    else if LocalInitKind[i] = 2 then
+    begin
+      { `@proc` -- Val is the PROC index (same encoding as the global path's
+        kind 2, deliberately: the two emitters must not drift). }
+      valNode := AllocNode(AN_PROCADDR);
+      ASTIVal[valNode] := LocalInitVal[i];
+      ASTTk[valNode] := Ord(tyPointer);
+    end
+    else if LocalInitKind[i] = 4 then
+    begin
+      { `@var` -- Val is the SYM index; address-of that ident. }
+      valNode := AllocNode(AN_IDENT);
+      ASTIVal[valNode] := LocalInitVal[i];
+      ASTTk[valNode] := Ord(Syms[LocalInitVal[i]].TypeKind);
+      innerAddr := AllocNode(AN_ADDR);
+      ASTLeft[innerAddr] := valNode;
+      ASTTk[innerAddr] := Ord(tyPointer);
+      valNode := innerAddr;
     end
     else
     begin
