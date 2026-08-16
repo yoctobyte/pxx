@@ -1009,13 +1009,28 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red)
     # stable key -> source file(s), so a reader sees WHICH test without
     # mapping job numbers back to Makefile lines (numbers shift with edits)
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
+    statmap = {job_key(j): j["status"] for j in report["jobs"]}
     def label(n):
         return "%s — %s" % (n, srcmap[n]) if srcmap.get(n) else n
+
+    def listed(n):
+        """`label` plus the failure KIND, for the NEW-RED / STILL-RED lists.
+
+        A timeout means something categorically different from a failed
+        assertion -- it may be the box rather than the tree -- and a reader
+        scanning the list should not have to reach the `first failure:` line to
+        find that out. It is also why such an entry carries no bisect range
+        (see bisect_step). Not folded into `label` itself: the first-failure
+        line already prints the status in its own parenthetical, and would
+        otherwise read "**TIMED OUT** (timeout)".
+        """
+        return (label(n) + "  **TIMED OUT**"
+                if statmap.get(n) == "timeout" else label(n))
     for title, names in (("NEW-RED", new_red), ("FIXED", fixed),
                          ("STILL-RED", still_red)):
         if names:
             lines.append("## %s" % title)
-            lines += ["- %s" % label(n) for n in names]
+            lines += ["- %s" % listed(n) for n in names]
             lines.append("")
     first = next((j for j in report["jobs"]
                   if j["status"] not in ("pass", "skip")), None)
@@ -1488,6 +1503,10 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                    if not reg_open(r, authoritative, gone)]
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
+    # The FAILURE KIND, carried onto the ledger entry. A `timeout` is a DURATION
+    # signal, not a behaviour one, and bisect_step must be able to tell the
+    # difference -- see the guard there.
+    statmap = {job_key(j): j["status"] for j in report["jobs"]}
     rng = clone.commits_between(parent, sha) if parent else [sha]
     # PER-JOB RANGE FALLBACK. The parent-based range answers "since this host
     # last tested anything", which is empty exactly when the two-phase watcher
@@ -1534,7 +1553,8 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             # commits, never as identity (see job_key).
             regs.append({"job": name, "name": namemap.get(name, ""),
                          "src": srcmap.get(name, ""), "bad": sha,
-                         "good": good, "range": rng, "opened": utcnow()})
+                         "good": good, "range": rng, "opened": utcnow(),
+                         "status": statmap.get(name, "fail")})
     st["open_regressions"] = regs
 
     changed = bool(new_red or fixed)
@@ -1611,7 +1631,16 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             "tier": report["tier"], "full": full,
                             "verdict": report["verdict"],
                             "wall": report["wall"], "new_red": new_red,
-                            "fixed": fixed}, sort_keys=True) + "\n")
+                            "fixed": fixed,
+                            # still_red too, not just the transitions. Without
+                            # it a RED row with no transitions -- which is the
+                            # STEADY STATE of any long-lived red -- says only
+                            # "RED" and names nothing, so the machine-readable
+                            # archive cannot answer "what was red at this sha?"
+                            # without replaying every row before it. Four
+                            # consecutive full runs on 2026-08-16 looked exactly
+                            # like that while their reports each listed two.
+                            "still_red": still_red}, sort_keys=True) + "\n")
     record_host_epoch(clone, host)
     regen_index(clone)
     msg = "tstate(%s): %s %s (%s)" % (host, sha[:12], report["verdict"],
@@ -2918,6 +2947,38 @@ def bisect_step(clone, host, st, tier):
             # "cascade@<sha>" is a synthetic key matching no job, so a
             # midpoint gate would select nothing and read as a pass. A
             # cascade needs root-cause triage (face 2), not a bisect.
+            continue
+        if reg.get("status") == "timeout":
+            # A TIMEOUT IS NOT BISECTABLE, and bisecting it anyway produces a
+            # confident accusation of an innocent commit.
+            #
+            # Bisect assumes the signal is a function of the tree: test the
+            # midpoint, and which side it falls tells you where the change is.
+            # A timeout is a function of the tree AND the box -- how loaded it
+            # was, what else was compiling. So the search converges on whichever
+            # commit happened to straddle the budget on the day, and the report
+            # then presents that with exactly the same confidence as a genuine
+            # first failure.
+            #
+            # Measured (bug-t-a-timeout-bisects-to-an-innocent-commit):
+            # lib-test#src:test/crtl_exp2.c bisected to 096da361dd93, a commit
+            # that cannot affect it -- lib-test builds with the PINNED compiler,
+            # which that commit does not move, and its Makefile lines land in
+            # test-core. Every step of the job runs clean standalone in seconds,
+            # and `wall` sat at 1141-1145s across four consecutive full runs at
+            # four different shas: the shape of a cap being hit, not of a
+            # failure reproducing.
+            #
+            # Skipped rather than marked advisory: an advisory range still gets
+            # read, and a wrong sha in a ticket costs more than an absent one.
+            # The job stays open in the ledger and still reports as RED; it just
+            # does not manufacture a culprit. Fixing it means making the job
+            # faster or its budget honest, which is work, not a search.
+            print("twatch: not bisecting %s — its failure is a TIMEOUT, a "
+                  "duration signal that depends on box load as well as the "
+                  "tree, so a midpoint search would name whichever commit "
+                  "straddled the budget (bug-t-a-timeout-bisects-to-an-"
+                  "innocent-commit)" % reg["job"], flush=True)
             continue
         mid = rng[len(rng) // 2 - 1] if len(rng) > 2 else rng[0]
         # skip the known-bad tip

@@ -3783,6 +3783,19 @@ def main():
         if j.exp_dur and j.status == "pass" and dur > max(5.0, j.exp_dur * 4):
             note = "  SLOW (expected %.1fs)" % j.exp_dur
             slow.append(j.name)
+        # A job that PASSED while eating most of its budget is the interesting
+        # case, and nothing said so before: it becomes a red on the next slow
+        # day, and that red then looks like a regression at whatever commit
+        # happened to be under test. Naming the headroom while it is still green
+        # is the only cheap moment to notice
+        # (bug-t-a-timeout-bisects-to-an-innocent-commit).
+        if j.status == "pass" and j.timeout and dur > 0.8 * j.timeout:
+            note += "  NEAR BUDGET (%.0fs of %.0fs)" % (dur, j.timeout)
+        # And on an actual timeout, say what the budget WAS. "(timeout)" alone
+        # sends the reader looking for a hang; the number distinguishes a job
+        # that overran a 90s budget by a hair from one that is genuinely stuck.
+        if j.status == "timeout" and j.timeout:
+            note += "  budget was %.0fs" % j.timeout
         # advisory reds are reported, but they are a NOTICE for the owning
         # track — not part of the gate, and not "the first failure"
         state = ("NOTICE" if j.advisory and j.status != "pass"
