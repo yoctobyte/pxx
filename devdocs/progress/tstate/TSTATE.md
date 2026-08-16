@@ -7,5 +7,5 @@
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **lib-test#src:test/crtl_exp2.c** — test/crtl_exp2.c examples/tk/hello.npy +5 (plexus): bad `096da361dd93`, last good `4d94948e30d6`, 2 commit(s) in range
+- **lib-test#src:test/crtl_exp2.c** — test/crtl_exp2.c examples/tk/hello.npy +5 (plexus): bad `096da361dd93`, last good `45bc7a43d67c`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy** — test/test_nilpy_pow_matches_cpython.npy test/test_nilpy_pow_matches_cpython.expected (plexus): bad `096da361dd93`, last good `459e96f985d1`, 32 commit(s) in range
