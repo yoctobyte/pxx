@@ -1,44 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T14:48:12Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_basic_comprehensive.bas",
-    "test-core#src:test/test_c_cross_ns_arity_fail.pas",
-    "test-core#src:test/test_c_crypt.pas",
-    "test-core#src:test/test_c_define_const.pas",
-    "test-core#src:test/test_c_dlopen.pas",
-    "test-core#src:test/test_c_enum.pas",
-    "test-core#src:test/test_c_gtk_call.pas",
-    "test-core#src:test/test_c_gtk_types.pas",
-    "test-core#src:test/test_c_gtk_window.pas",
-    "test-core#src:test/test_c_header_case_sensitive_import.pas",
-    "test-core#src:test/test_c_import.pas",
-    "test-core#src:test/test_c_macro_soup.pas",
-    "test-core#src:test/test_c_packed_aligned.pas",
-    "test-core#src:test/test_c_preprocess.pas@1",
-    "test-core#src:test/test_c_preprocess.pas@2",
-    "test-core#src:test/test_c_slicea.pas",
-    "test-core#src:test/test_c_struct_fields.pas",
-    "test-core#src:test/test_c_struct_many.pas",
-    "test-core#src:test/test_c_struct_tags.pas",
-    "test-core#src:test/test_c_typedef.pas",
-    "test-core#src:test/test_exception_unhandled.pas@3",
-    "test-core#src:test/test_math_unit.pas@1",
-    "test-core#src:test/test_nilpy_c_define_const.npy",
-    "test-core#src:test/test_nilpy_c_pointer.npy",
-    "test-core#src:test/test_shared_object.pas",
-    "test-core#src:test/test_sqlite_crud.pas",
-    "test-core#src:test/test_sqlite_crud_autotyped.pas",
-    "test-core#src:test/test_sqlite_crud_lazy.pas",
-    "test-core#src:test/test_string_to_pchar_auto.pas"
-   ],
-   "sha": "63d1d0de90d3c135e6cc32dc6cb9f6fdfd1fa65c",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T14:56:57Z",
    "fixed": [],
    "new_red": [],
@@ -525,6 +487,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "059131f2490b6e63aaf7e89c89ee8a807ddbc829",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T00:59:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2e25e1a1c3feebcc780d1df70de5f6ce1158a20c",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -5525,11 +5495,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T00:53:03Z",
-  "sha": "059131f2490b6e63aaf7e89c89ee8a807ddbc829",
+  "date": "2026-08-16T00:59:56Z",
+  "sha": "2e25e1a1c3feebcc780d1df70de5f6ce1158a20c",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 215.8
+  "wall": 216.5
  },
  "last_bench": {
   "conf_rows": 550,
