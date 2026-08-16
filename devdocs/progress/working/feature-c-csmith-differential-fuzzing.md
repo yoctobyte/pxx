@@ -1,6 +1,6 @@
 ---
 prio: 60
-owner: agent-acpn
+owner: claude-acpn
 ---
 
 # C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live
@@ -260,3 +260,27 @@ one per few hundred programs, and now zero in three hundred. That is the shape
 of a tail, not of a fuzzer that stopped working — the two hits before it were
 both the same construct (a struct assignment used as a value) seen from two
 angles, which is what a thinning frontier looks like.
+
+### 2026-08-16 — a second clean sweep (400 seeds), and the axis that is left
+
+400 seeds from 94000: **354 agreed with the gcc oracle, 46 skipped, no
+findings.** Seven hundred programs in a row now with nothing, against the same
+default csmith flags that produced ten bugs in the first sitting and one per few
+hundred after that. Read that as the default-shape space being worked out, not
+as the fuzzer being finished — a fuzzer only ever finds what its generator's
+flags can express.
+
+So the next findings have to come from a NEW AXIS, and the ticket has been
+listing three of them since July:
+
+1. **`--opts 0,2,3`** — the harness has only ever run `-O0,-O2` in anger, so
+   Track O's `-O3` passes have never been pointed at this oracle. Free: the
+   cross-check between our own -O levels needs no gcc at all, and a
+   disagreement there is a miscompile we own outright. Running now, seeds 95000+.
+2. **Cross targets** under qemu — the same programs against aarch64 / arm32 /
+   i386 / riscv32 codegen. Needs a `--target` pass-through and
+   `tools/run_target.sh`.
+3. **csmith flags the defaults leave off** — the two bugs this campaign found in
+   August were both "a struct assignment used as a value", a form hand-written
+   code has no reason to write. That is the tell: coverage thins where the
+   GENERATOR is shy, not where the corpus is.
