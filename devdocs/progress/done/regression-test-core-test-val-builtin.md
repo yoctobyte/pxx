@@ -37,4 +37,4 @@ Measured on FPC before changing it (the whole point of the fix), so the test
 and its Makefile line now assert FPC's answer, with the reason written into the
 test beside the line. The prefixes themselves are covered by
 `test/test_val_radix_and_optional_code.pas`.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 1559f66d2.
