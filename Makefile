@@ -3441,6 +3441,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_selector_after_property_b289.pas $(TESTTMP)/test_selector_after_property_b28926
 	test "$$($(TESTTMP)/test_selector_after_property_b28926)" = "$$(printf 'took 100\ntook 200\ntook 300\ntook 400\nchained: 200')"
 	# TypeInfo(TEnum) + TypInfo enum reflection (GetEnumName / GetEnumValue)
+	# TypeInfo(T) WIDENED beyond enums -- scalars, strings, classes, records, and a
+	# generic parameter at specialization time (EmitTypeInfoHeaders in
+	# rtti_emit.inc + lib/rtl/typinfo.pas's PTypeInfo facade). The test is
+	# self-checking: it Halts 1 on the first wrong Kind and prints OK otherwise.
+	# It was committed with the feature in 95007e237 but wired into NO target, so
+	# nothing ran it for two weeks -- a test file in test/ is not gated until a
+	# line here runs it. feature-pascal-corpus-generics
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_widen.pas $(TESTTMP)/test_typeinfo_widen26
+	test "$$($(TESTTMP)/test_typeinfo_widen26)" = "test_typeinfo_widen: OK"
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_enum_b288.pas $(TESTTMP)/test_typeinfo_enum_b28826
 	test "$$($(TESTTMP)/test_typeinfo_enum_b28826)" = "$$(printf 'count: 3\n  0 = Red\n  1 = Green\n  2 = Blue\nvalue of Green: 1\nvalue of green (ci): 1\nvalue of nope: -1\nout of range: []\n--- a second enum type:\njtUnknown jtNumber jtString jtBoolean jtNull jtArray jtObject ')"
 	# bug-pascal-array-of-pointer-deref-loses-the-record-type: `arr[i]^.Field`

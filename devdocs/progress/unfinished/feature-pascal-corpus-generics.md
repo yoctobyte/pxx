@@ -217,3 +217,24 @@ mistake (reasoning instead of measuring) isn't repeated.
   argument + the regression check in the smoke test, not a fresh fpjson run.
   Track T's watcher (or the next session, if it re-stages fcl-json) should
   confirm.
+
+
+## 2026-08-16 — the ungated claim is now gated
+
+The "Known gaps" entry above said the widen test was never checked in. Half
+right, and the wrong half was the dangerous one: the file **was** committed with
+the feature (`95007e237`) — it was wired into **no target**, so nothing had run
+it for two weeks. A file in `test/` is not gated until a line in the Makefile
+runs it; `test-core` enumerates its tests explicitly, it does not glob them.
+
+Wired into `test-core` beside its enum sibling (`test_typeinfo_enum_b288`), same
+`-Fulib/rtl -Fulib/rtl/platform/posix` flags. The test is self-checking — it
+`Halt(1)`s on the first wrong `Kind` and prints `test_typeinfo_widen: OK`
+otherwise — so the assertion is one line. Verified green under both HEAD and the
+pinned binary; `gate.sh quick` GREEN.
+
+So the widening claim now rests on a gated test rather than on an
+unchanged-codepath argument. **`test-fpjson` is still SKIPped on this box** (no
+fcl-json tree staged), which is the remaining half of that gap — it needs
+`tools/install_lib_candidates.sh fcl-json` re-run here, or Track T's watcher to
+confirm it elsewhere.
