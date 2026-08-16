@@ -2309,6 +2309,11 @@ begin
          else CurTok.Kind := tkLt;
     '>': if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
            begin Inc(SrcPos); CurTok.Kind := tkGe; end
+         else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '<') then
+           { `><` = set symmetric difference (FPC/Delphi). No other Pascal
+             construct puts `<` immediately after `>`: a generic close is `>>`,
+             and `<` never begins an operand. }
+           begin Inc(SrcPos); CurTok.Kind := tkSymDiff; end
          else CurTok.Kind := tkGt;
     else Error('unexpected character');
   end;

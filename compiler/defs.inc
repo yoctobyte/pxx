@@ -1039,7 +1039,12 @@ type
       already exists and pylexer already emits it; only the augmented spelling
       has to lex as one token, or `a @= b` reads as `a @ (= b)`
       (bug-nilpy-matmul-operator-does-not-parse). }
-    tkAtEq
+    tkAtEq,
+    { Pascal `><` (set symmetric difference, FPC/Delphi). Appended at the tail
+      for the same frozen-ordinal reason as tkPowEq/tkAtEq. It has to lex as ONE
+      token: `a >< b` otherwise reads as `a > (< b)` and dies on "expected
+      expression" (bug-p-set-symmetric-difference-operator-not-supported). }
+    tkSymDiff
   );
 
   TToken = record

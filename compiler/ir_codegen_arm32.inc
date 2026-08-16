@@ -3476,7 +3476,8 @@ begin
           EmitI32($E5925000 or (i * 4));         { ldr r5, [r2, #i*4] }
           if IntToTokenKind(IRC[node]) = tkPlus then EmitI32($E1844005)   { orr r4,r4,r5 }
           else if IntToTokenKind(IRC[node]) = tkStar then EmitI32($E0044005) { and r4,r4,r5 }
-          else if IntToTokenKind(IRC[node]) = tkMinus then EmitI32($E1C44005); { bic r4,r4,r5 }
+          else if IntToTokenKind(IRC[node]) = tkMinus then EmitI32($E1C44005) { bic r4,r4,r5 }
+          else if IntToTokenKind(IRC[node]) = tkSymDiff then EmitI32($E0244005); { eor r4,r4,r5 (`><`) }
           EmitI32($E5834000 or (i * 4));         { str r4, [r3, #i*4] }
         end;
         EmitI32($E1A00003);                      { mov r0, r3 (result addr) }

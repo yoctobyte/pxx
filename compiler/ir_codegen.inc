@@ -6463,6 +6463,7 @@ begin
           case IntToTokenKind(IRC[node]) of
             tkPlus: EmitB($48); { prefix for or below }
             tkStar: EmitB($48); { prefix for and below }
+            tkSymDiff: EmitB($48); { prefix for xor below }
             tkMinus:
               begin
                 EmitB($48); EmitB($F7); EmitB($D1);        { not rcx }
@@ -6472,7 +6473,9 @@ begin
           if IntToTokenKind(IRC[node]) = tkPlus then
             begin EmitB($09); EmitB($C8); end               { or rax, rcx }
           else if IntToTokenKind(IRC[node]) = tkStar then
-            begin EmitB($21); EmitB($C8); end;              { and rax, rcx }
+            begin EmitB($21); EmitB($C8); end               { and rax, rcx }
+          else if IntToTokenKind(IRC[node]) = tkSymDiff then
+            begin EmitB($31); EmitB($C8); end;              { xor rax, rcx  (`><`) }
           EmitB($48); EmitB($89); EmitB($47); EmitB(i * 8); { mov [rdi+off], rax }
         end;
         EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(IRIVal[node]); { lea rax, scratch }

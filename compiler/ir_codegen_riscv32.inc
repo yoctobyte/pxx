@@ -2922,7 +2922,9 @@ begin
           begin
             rv32_xori(reg_t1, reg_t1, -1);       { not rhs }
             rv32_and(reg_t0, reg_t0, reg_t1);
-          end;
+          end
+          else if IntToTokenKind(IRC[node]) = tkSymDiff then
+            rv32_xor(reg_t0, reg_t0, reg_t1);    { `><` }
           rv32_sw(reg_t0, reg_a2, i * 4);
         end;
         rv32_addi(reg_a0, reg_a2, 0);            { result addr }

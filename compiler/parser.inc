@@ -17318,7 +17318,10 @@ begin
   begin
     node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; ASTTk[node] := ASTTk[CurASTNode]; CurASTNode := node;
   end;
-  while (CurTok.Kind in [tkPlus, tkMinus, tkOr, tkXor]) and
+  { tkSymDiff (`><`, set symmetric difference) rides the ADDITIVE level, which is
+    where FPC puts it alongside set `+` and `-`. Only the Pascal lexer produces
+    the token, so no frontend gate is needed. }
+  while (CurTok.Kind in [tkPlus, tkMinus, tkOr, tkXor, tkSymDiff]) and
         not (PyExprMode and (CurTok.Kind in [tkOr, tkXor])) do
   begin
     op := CurTok.Kind; Next;

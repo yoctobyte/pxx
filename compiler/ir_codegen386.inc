@@ -4004,7 +4004,9 @@ begin
           else if IntToTokenKind(IRC[node]) = tkPlus then
             begin EmitB($09); EmitB($C8); end        { or eax, ecx }
           else if IntToTokenKind(IRC[node]) = tkStar then
-            begin EmitB($21); EmitB($C8); end;       { and eax, ecx }
+            begin EmitB($21); EmitB($C8); end        { and eax, ecx }
+          else if IntToTokenKind(IRC[node]) = tkSymDiff then
+            begin EmitB($31); EmitB($C8); end;       { xor eax, ecx  (`><`) }
           EmitB($89); EmitB($47); EmitB(i * 4);      { mov [edi+i*4], eax }
         end;
         EmitB($B8); EmitGlobRef(IRIVal[node]);       { mov eax, scratch (result addr) }
