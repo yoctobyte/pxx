@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-16T00:11:51Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "9e99986456ab57567e6be98aee110662e76c0901",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-16T00:26:33Z",
    "fixed": [],
    "new_red": [],
@@ -433,6 +425,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "932dfc618f27c32ea386f04de31ff381b5a862a8",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T08:48:05Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ec4cc67b776a72f988ab99e0a7f96801b16817b4",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1780,6 +1780,7 @@
   "test-core#src:test/test_selector_after_property_b289.pas": "native",
   "test-core#src:test/test_set_const_expr_b281.pas": "native",
   "test-core#src:test/test_set_default_param_b282.pas": "native",
+  "test-core#src:test/test_set_literal_element_types.pas": "native",
   "test-core#src:test/test_set_of_char_const.pas": "native",
   "test-core#src:test/test_set_runtime.pas": "native",
   "test-core#src:test/test_set_shapes.pas": "native",
@@ -4309,6 +4310,7 @@
   "test-core#src:test/test_selector_after_property_b289.pas": "pass",
   "test-core#src:test/test_set_const_expr_b281.pas": "pass",
   "test-core#src:test/test_set_default_param_b282.pas": "pass",
+  "test-core#src:test/test_set_literal_element_types.pas": "pass",
   "test-core#src:test/test_set_of_char_const.pas": "pass",
   "test-core#src:test/test_set_runtime.pas": "pass",
   "test-core#src:test/test_set_shapes.pas": "pass",
@@ -5493,11 +5495,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T08:32:37Z",
-  "sha": "932dfc618f27c32ea386f04de31ff381b5a862a8",
+  "date": "2026-08-16T08:48:05Z",
+  "sha": "ec4cc67b776a72f988ab99e0a7f96801b16817b4",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 210.1
+  "wall": 209.9
  },
  "last_bench": {
   "conf_rows": 550,
