@@ -71,4 +71,4 @@ and pxx.
 `make compiler/pascal26` + the test + `tools/gate.sh quick` — GREEN.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit ad2354351.
