@@ -4123,6 +4123,9 @@ test-core: $(COMPILER)
 	# FPC-compat: a tagged variant part starts at the BRANCHES' alignment, not always 8
 	./$(COMPILER) test/test_variant_record_tag_padding.pas $(TESTTMP)/test_variant_rec_pad26
 	test "$$($(TESTTMP)/test_variant_rec_pad26 | tail -1)" = "total ok 14 / 14"
+	# FPC-compat: High/Low of the 64-bit machine-word aliases (NativeInt/PtrInt/SizeInt)
+	./$(COMPILER) test/test_high_low_word_aliases.pas $(TESTTMP)/test_high_low_aliases26
+	test "$$($(TESTTMP)/test_high_low_aliases26 | tail -1)" = "total ok 12 / 12"
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas $(TESTTMP)/test_generic_class_methods26
 	test "$$($(TESTTMP)/test_generic_class_methods26 | tail -1)" = "total ok 5 / 5"

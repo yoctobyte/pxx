@@ -9217,6 +9217,14 @@ begin
     tyInt32:   if wantHigh then v := 2147483647 else v := -2147483647 - 1;
     tyInteger: if wantHigh then v := 2147483647 else v := -2147483647 - 1;
     tyInt64:   if wantHigh then v := 9223372036854775807 else v := -9223372036854775807 - 1;
+    { The 64-bit ALIASES answered nothing at all, so `High(NativeInt)` and
+      `High(PtrInt)` — the idiomatic way FPC code spells a machine-word bound —
+      were rejected with "expected an ordinal type name" while `High(Int64)`
+      was fine. The unsigned 64-bit names (QWord/UInt64/NativeUInt/PtrUInt)
+      stay out on purpose: their High is 2^64-1, which this evaluator's Int64
+      cannot carry, and answering -1 would turn a refusal into a wrong value.
+      bug-p-high-low-reject-the-64-bit-type-aliases }
+    tyNativeInt: if wantHigh then v := 9223372036854775807 else v := -9223372036854775807 - 1;
     tyBoolean: if wantHigh then v := 1 else v := 0;
     tyChar:    if wantHigh then v := 255 else v := 0;
   else
@@ -9295,7 +9303,8 @@ begin
        or CaseEqual(nm, 'dword') then Result := tyUInt32
   else if CaseEqual(nm, 'int64') then Result := tyInt64
   else if CaseEqual(nm, 'qword') or CaseEqual(nm, 'uint64') then Result := tyUInt64
-  else if CaseEqual(nm, 'nativeint') or CaseEqual(nm, 'ptrint') then Result := tyNativeInt
+  else if CaseEqual(nm, 'nativeint') or CaseEqual(nm, 'ptrint')
+       or CaseEqual(nm, 'sizeint') then Result := tyNativeInt
   else if CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint') then Result := tyNativeUInt
   else if CaseEqual(nm, 'boolean') then Result := tyBoolean
   else if CaseEqual(nm, 'char') or CaseEqual(nm, 'ansichar') then Result := tyChar
