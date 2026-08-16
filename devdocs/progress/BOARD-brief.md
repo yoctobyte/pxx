@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:203 experimental:20 rainy-day:40 done-followup:3 decided:76 done:1951 rejected:37`
+`unfinished:11 blocked:4 backlog:204 experimental:20 rainy-day:40 done-followup:3 decided:76 done:1951 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 187, ranked
+## Ready — top 30 of 188, ranked
 
 - `[p 70] [T]` regression-test-core-test-strict-overload-width
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
@@ -54,6 +54,7 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
+- `[p 50] [P]` bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
@@ -63,6 +64,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
-- `[p 48] [P]` feature-pascal-class-management-operators
 
-_157 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_158 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

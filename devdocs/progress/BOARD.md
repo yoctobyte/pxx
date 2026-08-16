@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (203)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -61,6 +61,7 @@ _none_
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-nested-class-method-implementation-takes-only-one-qualifier | P | 35 | bug | `function touter.tinner.Tag: string;` — the implementation header of a method belonging to a NESTED class — is a parse error: the header parser takes one qualifier. Declaring and implementing such a method inline works, so this is the out-of-line spelling only. | — |
+| bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call | P | 50 | bug | a routine-local typed const gets a stack slot re-initialised from the prologue, so the `const calls: Integer = 0; Inc(calls)` counter idiom prints 1 forever; string-typed ones do not compile at all. FPC's are static. | — |
 | bug-p-set-literal-elements-are-not-type-checked | P | 60 | bug | A set literal's elements are never checked against the set's element type. `TakesSet(['a', 1])` on a `set of TDay` parameter compiles and answers dTue; `[cGreen]` (a DIFFERENT enum) silently becomes dTue; `[True]` works; `[99]` silently produces the empty set with no diagnostic. FPC rejects every one of them. No overloading needed — one procedure, one set parameter. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -472,6 +473,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [P] bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call
 - [p 50] [D] docs-cross-language-qualifier-note-is-wrong
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - [p 50] [C] feature-c-vla-via-alloca
