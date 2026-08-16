@@ -89,6 +89,30 @@ So the mode has two kinds of check, and each rung declares which it uses:
 
 Both answer the same question and neither needs an old compiler.
 
+### The rule for choosing between them
+
+Generalised from the two cases above, and it is the whole design in one line:
+
+> **A rung whose bug is about WHAT VALUE something holds takes a `value`
+> mutation. A rung whose bug is about WHEN something is evaluated takes a
+> `twin`.**
+
+`consts` is a what-value bug — the evaluator stored `0.00` — so corrupting the
+literal reproduces it exactly. `forvarlimit` is a when-evaluated bug — the value
+is right every time it is read, the defect is that it is read at all — and no
+corruption of a value can express that, because a correct compiler and a buggy
+one agree about every value in the program. Only a second program that spells
+out the other evaluation order can separate them.
+
+Applying the rule to the rungs that exist today:
+
+| rung | bug is about | kind |
+| --- | --- | --- |
+| `consts` | what value the evaluator stored | `value` |
+| `checked` | whether the check fired at all | `value` (corrupt the operand so it cannot overflow) |
+| `forvarlimit` | when the limit is evaluated | `twin` |
+| `formaxlimit` | when the loop stops | `twin` |
+
 ## Also worth having: the cheap structural check
 
 The commonest rot is simply that a rung stops emitting. That needs no compiling
@@ -114,3 +138,23 @@ Related: [[feature-pasmith-real-const-rung]], [[feature-pasmith-for-limit-rungs]
 [[feature-pasmith-divergence-signature-granularity]] (the same theme one level
 up: a signature that names the wrong thing is a finding you cannot act on; a
 rung that observes nothing is coverage you do not have).
+
+## Considered and DECLINED as a rung: `2 ** 0.5` vs `math.sqrt(2)`
+
+Raised alongside this ticket, so recording the decision rather than leaving it
+to be re-proposed. NilPy's fractional-exponent arm is still `exp(y*ln(x))` while
+`lib/rtl/math.pas`'s `Power` was fixed for that exact case with a double-double
+kernel, so the two disagree by about one ulp. It is filed as a Track B bug.
+
+**It is a poor fuzz target and should not become a rung.** Detecting a one-ulp
+difference requires an exact-equality fold, and this generator's standing rule is
+that a fold must not be able to manufacture a divergence nobody owns. Exact
+float equality is the most hair-trigger fold available: it fires on any
+legitimate libm variation, any formatting choice, any reassociation a backend is
+entitled to make. That is the same trap [[feature-pasmith-real-const-rung]]
+sidesteps by folding real constants through a COMPARISON BRACKET rather than by
+value — and a bracket, by construction, cannot see one ulp.
+
+So the property that makes the bug interesting is exactly the property that
+makes it unfuzzable here. A targeted unit test with a recorded expected value is
+the right instrument; a differential generator is not.
