@@ -4,7 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`*m` on `int m[3][4]` (and `*(t[1]+2)` on a 3-D one) emits a LOAD. In C, dereferencing a pointer-to-array yields the array, which decays right back to the same address — a no-op. `**m` fails to compile and `*(*(t[1]+2)+3)` segfaults."
-status: working
+status: done
 owner: claude-acpn
 ---
 
@@ -71,3 +71,6 @@ Three pieces, because the level is what decides and nothing carried it:
 `**s`, `*s[1]`, `***t`, `*(*(t[1]+2)+3)`, `*(*(*(t+1)+2)+3)`, the row as a
 string, and the three pointer-to-array forms; it returns 42 under both gcc and
 pxx.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
