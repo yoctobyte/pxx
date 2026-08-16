@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:3 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1971 rejected:38`
+`unfinished:9 blocked:3 backlog:213 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1972 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -29,10 +29,9 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 199, ranked
+## Ready — top 30 of 198, ranked
 
 - `[p 70] [T]` regression-lib-test-crtl-exp2
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-pow-matches-cpython
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
@@ -61,5 +60,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
 - `[p 48] [P]` feature-pascal-class-management-operators
+- `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
 
-_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
