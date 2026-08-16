@@ -1854,6 +1854,8 @@ begin
     Result := CNodeDecaysToPointer(node);
 end;
 
+function IRArrayElemStride(node: Integer): Integer; forward;
+
 function IRPointerStride(node: Integer): Integer;
 var elemTk: TTypeKind; recId, aliasIdx: Integer; fieldName: AnsiString;
 begin
@@ -1990,7 +1992,11 @@ begin
       Other &-forms have no array element and keep the size-1 default. }
     if ASTKind[ASTLeft[node]] = AN_INDEX then
     begin
-      Result := IRPointerStride(ASTLeft[ASTLeft[node]]);
+      { the ELEMENT, deliberately: `&g[1][0] - &g[0][0]` on `char g[2][8]` is 8
+        elements, and asking the plain stride would answer the ROW stride the
+        multi-dim decay arm above returns — 8 — making that difference 1.
+        A full index has already spent every dimension. }
+      Result := IRArrayElemStride(ASTLeft[ASTLeft[node]]);
       Exit;
     end;
   end;
@@ -2000,6 +2006,30 @@ begin
     Result := 1
   else
     Result := TypeSize(elemTk);
+end;
+
+{ The ELEMENT stride of an INDEXED base — the pre-decay answer. Split out
+  because IRPointerStride's array arm now answers what the array steps by when
+  it DECAYS (a row, for a multi-dim one), and a fully indexed base wants the
+  element instead. bug-c-a-multidim-array-decays-with-the-element-stride }
+function IRArrayElemStride(node: Integer): Integer;
+var symIdx: Integer;
+begin
+  if (node >= 0) and (ASTKind[node] = AN_IDENT) then
+  begin
+    symIdx := ASTIVal[node];
+    if Syms[symIdx].IsArray and (Syms[symIdx].ArrLen <> -1) then
+    begin
+      if Syms[symIdx].ElemType = tyRecord then
+        Result := RecSize(Syms[symIdx].ElemRecName)
+      else if Syms[symIdx].ElemType = tyUnknown then
+        Result := 1
+      else
+        Result := TypeSize(Syms[symIdx].ElemType);
+      Exit;
+    end;
+  end;
+  Result := IRPointerStride(node);
 end;
 
 function IsNodePChar(node: Integer): Boolean;

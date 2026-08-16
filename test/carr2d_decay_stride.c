@@ -55,6 +55,14 @@ int main(void)
     r = t[1];
     chk("3d-row",     r[2][3], 9);
 
+    /* POINTER DIFFERENCE counts ELEMENTS, and a full index has already spent
+       every dimension — so this must not see the row stride the decay uses.
+       Answering the row stride here made &g[1][0] - &g[0][0] come out as 1
+       (Track T caught it in cstr_table_2d_rows.c one commit later). */
+    chk("diff-elems",   (int)(&m[1][0] - &m[0][0]), 4);
+    chk("diff-chars",   (int)(&s[1][0] - &s[0][0]), 8);
+    chk("diff-within",  (int)(&m[0][3] - &m[0][1]), 2);
+
     /* one dimension is untouched by any of it */
     chk("1d-plus",    *(a + 3), 3);
     chk("1d-index",   a[1] + 1, 2);
