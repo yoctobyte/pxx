@@ -113,4 +113,4 @@ re-prefix silently. That ticket is unaffected — it is needed for the
 Pascal-to-C direction, which is still open.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 615b4b5ab.
