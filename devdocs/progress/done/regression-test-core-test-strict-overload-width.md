@@ -24,3 +24,6 @@ ok: /tmp/testmgr-scratch-1184201/test_sow_default26  [code=236664B  data=9140B  
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-16 — auto-closed by the plexus watcher: `test-core#src:test/test_strict_overload_width.pas@1` passes at c1b4fa782263 (tier native); it was red at fea1f33d2f30. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
