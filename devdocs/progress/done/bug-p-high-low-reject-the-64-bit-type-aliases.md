@@ -51,4 +51,4 @@ already worked, and the fold in `const` and array-bound position — prints
 quick` — GREEN.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 6bc4333d0.
