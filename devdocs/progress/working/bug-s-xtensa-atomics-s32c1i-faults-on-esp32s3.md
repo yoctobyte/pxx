@@ -3,6 +3,8 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
+status: working
+owner: claude-acpn
 ---
 
 # xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3

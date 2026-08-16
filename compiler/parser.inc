@@ -34358,6 +34358,23 @@ begin
       XtSpillDepth := XT_OUTARG_REGION;
       XtSpillMax := XtSpillDepth;
     end;
+    { Same shape as CPENABLE below, for the same reason: bare metal leaves
+      ATOMCTL at its reset value 0, and 0 means "raise an exception" for EVERY
+      memory class, so the first S32C1I traps into the ROM vector loop before
+      the program prints anything. 0x2A = "internal operation" for all three
+      classes (write-back / write-through / bypass), which is the one value
+      that works whichever class the part files internal SRAM under — measured:
+      under qemu -M esp32s3 only the write-back field is consulted, so 0x28
+      (the value that leaves it 0) still faults while 0x01 already suffices.
+      ESP-IDF never writes ATOMCTL, so this is a bare-boot need only; an IDF
+      image is entered by IDF's own startup and we emit no entry there.
+      bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 }
+    if EspBareBoot and SocHasAtomicISA(TargetSoc) then
+    begin
+      EmitLoadConstXtensa(reg_xtensa_a8, $2A);
+      xtensa_wsr_atomctl(reg_xtensa_a8);
+      xtensa_rsync;
+    end;
     { Enable the FP coprocessor before any add.s/mul.s (bare metal leaves CPENABLE
       clear -> FP would trap). Enable all CPs (harmless: no context switching). }
     if XtensaHasFpu then

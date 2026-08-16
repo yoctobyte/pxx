@@ -99,6 +99,19 @@ begin
   EmitB($03);       { RSR }
 end;
 
+{ ATOMCTL (special register 99) selects what S32C1I DOES per memory class:
+  bits [1:0] write-back cacheable, [3:2] write-through, [5:4] bypass; each
+  0 = raise an exception, 1 = RCW bus transaction, 2 = internal operation.
+  Reset value 0 therefore makes every S32C1I trap, which is exactly what an
+  esp32s3 image that sets up its own world sees.
+  Bytes verified against xtensa-esp32s3-elf-as: `wsr.atomctl a3` = 30 63 13. }
+procedure xtensa_wsr_atomctl(t: Integer);
+begin
+  EmitB(t shl 4);
+  EmitB(99);
+  EmitB($13);       { WSR }
+end;
+
 procedure xtensa_memw;
 { full memory barrier — `memw` = C0 20 00 }
 begin

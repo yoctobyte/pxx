@@ -2065,6 +2065,73 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_ATOMIC:
+      begin
+        { Atomic read-modify-write on addr^, answering the OLD value.
+
+          S32C1I is the whole ISA here: it stores only if the word still equals
+          SCOMPARE1, and hands back the word it FOUND. So ADD and XCHG retry
+          until what they read is what they replaced, and CAS is a single
+          attempt by definition — a miss is a legal outcome, not a retry.
+
+          Two things make this work that are not in the sequence:
+
+          - ATOMCTL. Its reset value is 0, which means "raise an exception" for
+            every memory class, so the first S32C1I traps into the ROM vector
+            loop with no output at all. The bare entry now programs it (0x2A,
+            internal operation for all three classes) beside CPENABLE — see
+            parser.inc. This is what made the instruction look unimplemented:
+            an assembler-built two-instruction .S faults identically, and one
+            `wsr.atomctl` makes both run.
+          - The branch offset. `xtensa_bne(s, t, off)` measures off from the
+            BRANCH itself (EncodeXtensaBranch subtracts the 4 the ISA adds), so
+            a retry over four 3-byte instructions is -12; -15 walks back into
+            the pop sequence and spins forever.
+
+          bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 }
+        if (IRIVal[node] = ATOMIC_XCHG64) or (IRIVal[node] = ATOMIC_CAS64) or
+           (IRIVal[node] = ATOMIC_ADD64) then
+          Error('target xtensa: __pxxatomic_*64 not supported (32-bit target)');
+        if not SocHasAtomicISA(TargetSoc) then
+          Error('target xtensa: this SoC has no atomic ISA');
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeXtensa(IRA[argNode]);
+          XtensaPushA2;
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        xtensa_memw;
+        if IRIVal[node] = ATOMIC_CAS then
+        begin
+          XtensaPopA3; xtensa_mov(reg_xtensa_a4, reg_xtensa_a3);   { newval }
+          XtensaPopA3; xtensa_mov(reg_xtensa_a6, reg_xtensa_a3);   { expected }
+          XtensaPopA3; xtensa_mov(reg_xtensa_a5, reg_xtensa_a3);   { addr }
+          xtensa_wsr_scompare1(reg_xtensa_a6);
+          xtensa_s32c1i(reg_xtensa_a4, reg_xtensa_a5, 0);
+          xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);                { the word found }
+        end
+        else
+        begin
+          XtensaPopA3; xtensa_mov(reg_xtensa_a6, reg_xtensa_a3);   { val / delta }
+          XtensaPopA3; xtensa_mov(reg_xtensa_a5, reg_xtensa_a3);   { addr }
+          { retry: }
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a5, 0);            { old }
+          xtensa_wsr_scompare1(reg_xtensa_a2);
+          if IRIVal[node] = ATOMIC_ADD then
+            xtensa_add(reg_xtensa_a4, reg_xtensa_a2, reg_xtensa_a6)
+          else
+            xtensa_mov(reg_xtensa_a4, reg_xtensa_a6);
+          xtensa_s32c1i(reg_xtensa_a4, reg_xtensa_a5, 0);
+          xtensa_bne(reg_xtensa_a4, reg_xtensa_a2, -12);           { lost the race }
+        end;
+        xtensa_memw;
+        { the intrinsic is typed Int64 (a2:a3) — sign-extend the 32-bit old
+          value into the high word, the same way Trunc/Round do }
+        EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .p', 'movi a3, -1', '.p:']);
+      end;
+
     IR_ASM:
       begin
         { Inline asm block: replay the parse-time-captured text lines
@@ -2421,6 +2488,10 @@ begin
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK, IR_CONST_DATA,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
+      { IR_ATOMIC is a value node consumed by its parent store, like
+        IR_SYSCALL. Emitting it at statement level TOO runs the
+        read-modify-write twice — riscv32 and arm32 both paid for this one. }
+      IR_ATOMIC: ;
 
       else
         IREmitNodeXtensa(i);
