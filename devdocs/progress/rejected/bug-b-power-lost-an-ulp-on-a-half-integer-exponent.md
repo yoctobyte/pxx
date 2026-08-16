@@ -3,7 +3,7 @@ track: B
 prio: 40
 type: bug
 blocked-by: []
-summary: "The 26x Power/LogN rewrite (11321a09c) traded one ulp on a half-integer exponent: math.pow(2.0, 0.5) answers 1.414213562373095 where CPython and the correctly-rounded sqrt give 1.4142135623730951. It also FIXED math.pow(1e300, 1.0) (was 9.999999999999999e+299, now the exact 1e+300), so two frozen .expected rows in the nilpy suite are now stale in the good direction."
+summary: "DUPLICATE of regression-b-power-lost-a-ulp-when-it-got-26x-faster (merged 2026-08-16; its 1e300-is-stale-good finding folded in). The 26x Power/LogN rewrite (11321a09c) traded one ulp on a half-integer exponent: math.pow(2.0, 0.5) answers 1.414213562373095 where CPython and the correctly-rounded sqrt give 1.4142135623730951. It also FIXED math.pow(1e300, 1.0) (was 9.999999999999999e+299, now the exact 1e+300), so two frozen .expected rows in the nilpy suite are now stale in the good direction."
 ---
 
 # Power lost an ulp on a half-integer exponent
@@ -46,3 +46,21 @@ one step rather than through a half-green state.
 Related: [[feedback_float_handling_bugs_are_low_prio_track_b]] — accuracy work is
 mechanical Track B, hence prio 40 rather than higher, even though it is currently
 holding two suite rows red.
+
+## DUPLICATE 2026-08-16 — merged into the regression ticket
+
+Same regression, same cause, same commit (`11321a09c`), filed the same day by a
+second triage session out of the same Track T cascade. Consolidated into
+[[regression-b-power-lost-a-ulp-when-it-got-26x-faster]] (B, p65), which carries
+the measured diagnosis.
+
+This ticket's unique and correct contribution is folded in there: **the
+`math.pow(1e300, 1.0)` row is stale in the GOOD direction** — it was
+`9.999999999999999e+299` before the rewrite and is the exact `1e+300` now, so
+that `.expected` records the old wrong value and must not be "fixed" back.
+
+Worth noting for the next triage: the suspect both tickets named (the fast hi/lo
+log) is not the cause. Isolation showed it is `FastExpHiLoCore`; see the other
+ticket.
+
+Closed as duplicate, not resolved — the defect is still open over there.

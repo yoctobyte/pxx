@@ -84,3 +84,7 @@ below stands — this is a ranking decision, not a downgrade of the finding. Sam
 judgement the user already applied to float PERFORMANCE work in
 `feature-opt-float-register-temporaries` (prio 20, 2026-07-19), now extended from
 speed to accuracy.
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.

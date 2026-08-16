@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:204 experimental:20 rainy-day:40 done-followup:3 decided:76 done:1951 rejected:37`
+`unfinished:11 blocked:4 backlog:203 experimental:20 rainy-day:40 done-followup:3 decided:77 done:1951 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -36,7 +36,7 @@ _none — no lane is locked._
 
 - `[p 70] [T]` regression-test-core-test-strict-overload-width
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
-- `[p 60] [P]` bug-p-set-literal-elements-are-not-type-checked (unblocks 1)
+- `[p 60] [P]` bug-p-set-literal-elements-are-not-type-checked
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite

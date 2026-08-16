@@ -71,3 +71,7 @@ With the flag off, every row of the current behaviour is unchanged and
 is reproduced. `make test` + self-host fixedpoint; the corpora `--strict-fpc`
 already compiles stay green, whether or not the flag is enrolled in the
 umbrella.
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.

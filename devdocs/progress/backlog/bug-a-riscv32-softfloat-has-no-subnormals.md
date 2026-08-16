@@ -57,3 +57,7 @@ failing points at multiply/scale rather than at conversion.
 `qemu-riscv32-static` matching what arm32 prints, plus
 `test/lib_math_fast_tolerance.pas` cross-built for riscv32 reaching
 `MATHFAST OK`.
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.

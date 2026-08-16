@@ -174,3 +174,7 @@ lands in both or neither.
 
 Sibling the decision also unblocks, already in `backlog/`:
 [[bug-a-write-fixed-fraction-digits-past-16-are-invented]].
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.

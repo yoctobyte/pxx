@@ -37,14 +37,13 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (204)
+## backlog (203)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
-| bug-b-power-lost-an-ulp-on-a-half-integer-exponent | B | 40 | bug | The 26x Power/LogN rewrite (11321a09c) traded one ulp on a half-integer exponent: math.pow(2.0, 0.5) answers 1.414213562373095 where CPython and the correctly-rounded sqrt give 1.4142135623730951. It also FIXED math.pow(1e300, 1.0) (was 9.999999999999999e+299, now the exact 1e+300), so two frozen .expected rows in the nilpy suite are now stale in the good direction. | — |
 | bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents | B | 30 | bug | StrToFloat costs 2.6-2.9 ms per value for small-exponent input ('1.2e-320') against 0.72 us in CPython — a ~3600x gap — and 116 us even mid-range. The answer is right; the slow path is a 63-step bit-pattern search whose every step expands a candidate to its EXACT ~1080-digit decimal. Correct by construction and priced accordingly. Found timing a float differential harness, where parsing 121k values took ~60 s and the arithmetic under test took none of it. | — |
 | bug-b-write-of-a-real-ignores-the-field-width-without-decimals | B | 20 | bug | write(r:W) with a width but no decimals ignores W entirely — pxx always prints the full 16-decimal scientific form where FPC sizes the mantissa to the field | — |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
@@ -84,7 +83,6 @@ _none_
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-nilpy-none-str-sentinel-vs-textstr-kind | U | 40 | decide | Re-ask of decide-nilpy-none-str-representation: the chosen fix (a NilPy string kind whose blocks may be zero length) rests on a block kind that nothing in the tree ever stamps, so it is a Track A representation project rather than a bugfix. A None SENTINEL closes the reported bug at a fraction of the cost — but closes less. | — |
-| decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | RE-SCOPED 2026-08-16 after re-measurement: the original table was wrong (pxx is NOT order-independent — it flips on all four bracket shapes, FPC only on the genuinely ambiguous one). Most of the difference is bug-p-set-literal-elements-are-not-type-checked, filed separately; fix that and content disambiguates as it does in FPC. What is left to decide is the true tie only: `[dTue]`, `[dMon, dWed]`, `[]`. | bug-p-set-literal-elements-are-not-type-checked |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
 | docs-cross-language-qualifier-note-is-wrong | D | 50 | docs | NOT A COMPILER BUG — re-aimed at docs 2026-08-16. The cross-language qualifier exists and always did: `uses './mymath.c' as cmath;` then `cmath.cube(3)`. This ticket only ever measured the UNALIASED form. What is left is the docs fix: docs/language/name-resolution.md ships a Current-status note saying the escape does not exist. | — |
@@ -231,6 +229,7 @@ _none_
 | idea-public-status-page | D | 30 | idea | Publish a live compatibility/corpus status report on the website — the static docs/reference/status.md page exists; wire it to the already-generated tstate reports (twatch_web conformance.html/bench.html/dashboard.html) so public numbers stay current instead of hand-maintained | — |
 | meta-constant-normalisation | A | 45 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
+| meta-float-accuracy-policy | U | 40 | meta | Standing index for the float-accuracy category the owner asked for on 2026-08-16: collect every float/exact-float ticket in one place, do NOT fix them piecemeal, and decide once how the fast/exact split should work — because the shipped policy (fast by default, 1-2 ulp never a bug) and the shipped TESTS (bit-exact CPython .expected) currently contradict each other. | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 40 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
@@ -324,7 +323,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (76)
+## decided (77)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -394,6 +393,7 @@ _none_
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | decide-runtime-primitive-layering | U | 70 | decide | Where does a runtime primitive live? — DECIDED: a PAL per language | — |
 | decide-scope-hiding-vs-flat-overload-set | U | 60 | decide | One rule explains four separate symptoms: a declaration should HIDE a same-named one from an outer/earlier scope unless marked `overload`. pxx behaves as if everything were `overload` — one flat set, first-in-chain wins. Decide whether to adopt hiding, and which marker carries it: any {$mode}, --strict-overload/{$MIMIC FPC}, or the default | — |
+| decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | DECIDED 2026-08-16 (user): leave it — don't overload on a set and an array of const at one slot, give the function a decisive name; a cast-style `(set)[...]` was considered and rejected as non-standard Pascal. Docs footnote only. The separate bug-p-set-literal-elements-are-not-type-checked STAYS OPEN and is the real defect. Background: RE-SCOPED 2026-08-16 after re-measurement: the original table was wrong (pxx is NOT order-independent — it flips on all four bracket shapes, FPC only on the genuinely ambiguous one). Most of the difference is bug-p-set-literal-elements-are-not-type-checked, filed separately; fix that and content disambiguates as it does in FPC. What is left to decide is the true tie only: `[dTue]`, `[dMon, dWed]`, `[]`. | — |
 | decide-shift-operator-promotion-width | U | 45 | decide | Decide: what width do `shl` / `shr` happen at for a 32-bit operand? | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
 | decide-t-notification-transport-poll-not-webhooks | U | 60 | decide | How Track T's findings reach an agent or a human: polling, never webhooks. 60s is the baseline; adaptive backoff is allowed but the daemon must not grow a time-based one. | — |
@@ -409,13 +409,14 @@ _none_
 
 1951 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (37)
+## rejected (38)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-elf-so-missing-pt-gnu-stack | A | 60 | bug | pxx-emitted .so has no PT_GNU_STACK, so glibc >= 2.41 refuses to dlopen it: cannot enable executable stack | — |
 | bug-a-nilpy-subscript-of-a-string-literal | A | 40 | bug | NilPy: subscripting a string LITERAL is a parse error | — |
 | bug-a-threadsafe-heap-parallel-for-managed-string-race | A | 70 | bug | REJECTED — not a heap bug: was a shared captured-variable data race | — |
+| bug-b-power-lost-an-ulp-on-a-half-integer-exponent | B | 40 | bug | DUPLICATE of regression-b-power-lost-a-ulp-when-it-got-26x-faster (merged 2026-08-16; its 1e300-is-stale-good finding folded in). The 26x Power/LogN rewrite (11321a09c) traded one ulp on a half-integer exponent: math.pow(2.0, 0.5) answers 1.414213562373095 where CPython and the correctly-rounded sqrt give 1.4142135623730951. It also FIXED math.pow(1e300, 1.0) (was 9.999999999999999e+299, now the exact 1e+300), so two frozen .expected rows in the nilpy suite are now stale in the good direction. | — |
 | bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have | B | 60 | bug | lib/pcl/tkhtmlview.pas has never compiled: line 171 uses Python-style NAMED ARGUMENTS (`configure(yscrollcommand := bar.set_)`), which this dialect does not have, and calls `bar.set_` where tkinter declares plain `set`. Any NilPy app importing tkhtmlview fails to build — songformatter does | — |
 | bug-c-invalid-symbol-in-lea-sqlite | C | 50 | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
 | bug-compiler-uses-unit-interactions | A | 50 | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
@@ -455,7 +456,7 @@ _none_
 
 - [p 70] [T] regression-test-core-test-strict-overload-width
 - [p 65] [B] regression-b-power-lost-a-ulp-when-it-got-26x-faster
-- [p 60] [P] bug-p-set-literal-elements-are-not-type-checked (unblocks 1)
+- [p 60] [P] bug-p-set-literal-elements-are-not-type-checked
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
@@ -524,7 +525,6 @@ _none_
 - [p 40] [U] decide-nilpy-none-str-sentinel-vs-textstr-kind (unblocks 1)
 - [p 40] [A] bug-a-riscv32-softfloat-has-no-subnormals
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
-- [p 40] [B] bug-b-power-lost-an-ulp-on-a-half-integer-exponent
 - [p 40] [N] bug-nilpy-a-dict-cannot-be-unpacked-into-a-call
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
@@ -546,6 +546,7 @@ _none_
 - [p 40] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
+- [p 40] [U] meta-float-accuracy-policy
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
@@ -647,7 +648,6 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-p-set-literal-elements-are-not-type-checked
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy

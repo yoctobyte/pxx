@@ -66,3 +66,7 @@ divergence just moves to the cross targets (`devdocs/dev/normalise-dont-special-
 A probe sweeping `writeln(d:i)` for `i` in 1..26 against `fpc -O- -Mobjfpc`,
 for `single` and `double`, matches byte for byte; `gate.sh quick` GREEN. Add it
 as `test/test_write_real_width.pas` with FPC's output as `.expected`.
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.

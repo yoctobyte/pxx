@@ -62,3 +62,7 @@ be real rather than Double's rendered wider.
 `SizeOf(Extended) = 10` on x86-64 and `= 8` elsewhere; the 1/3 row matching FPC
 to 20 significant digits; a record containing an `Extended` field laying out with
 FPC-compatible offsets; `make test` + self-host byte-identical + cross.
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.

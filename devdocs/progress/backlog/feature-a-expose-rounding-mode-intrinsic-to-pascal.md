@@ -66,3 +66,7 @@ the stub real there is writing a control register, not reimplementing rounding.
 value changing with the mode on each target that claims support — literal
 arguments get constant-folded and appear mode-insensitive, which is how this
 would otherwise pass while doing nothing.
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.

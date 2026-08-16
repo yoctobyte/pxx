@@ -2,8 +2,9 @@
 track: U
 prio: 30
 type: decide
-blocked-by: [bug-p-set-literal-elements-are-not-type-checked]
-summary: "RE-SCOPED 2026-08-16 after re-measurement: the original table was wrong (pxx is NOT order-independent — it flips on all four bracket shapes, FPC only on the genuinely ambiguous one). Most of the difference is bug-p-set-literal-elements-are-not-type-checked, filed separately; fix that and content disambiguates as it does in FPC. What is left to decide is the true tie only: `[dTue]`, `[dMon, dWed]`, `[]`."
+blocked-by: []
+status: decided
+summary: "DECIDED 2026-08-16 (user): leave it — don't overload on a set and an array of const at one slot, give the function a decisive name; a cast-style `(set)[...]` was considered and rejected as non-standard Pascal. Docs footnote only. The separate bug-p-set-literal-elements-are-not-type-checked STAYS OPEN and is the real defect. Background: RE-SCOPED 2026-08-16 after re-measurement: the original table was wrong (pxx is NOT order-independent — it flips on all four bracket shapes, FPC only on the genuinely ambiguous one). Most of the difference is bug-p-set-literal-elements-are-not-type-checked, filed separately; fix that and content disambiguates as it does in FPC. What is left to decide is the true tie only: `[dTue]`, `[dMon, dWed]`, `[]`."
 ---
 
 # `[x]` where one overload takes a set and another takes `array of const`
@@ -178,3 +179,45 @@ because there is no fixed FPC behaviour to be faithful to.
 
 **Parked behind the P bug**: deciding the residual before the element check
 lands would be deciding it against the wrong ambiguity set.
+
+## DECIDED 2026-08-16 (user) — leave it; don't overload, name the function
+
+**Closed. Not a compiler bug — a syntactic flaw, and a small one.** The owner's
+words: *"spijkers op laag water"* (nitpicking). The residual after
+[[bug-p-set-literal-elements-are-not-type-checked]] lands is `[dTue]`,
+`[dMon, dWed]` and `[]`, and for those:
+
+**The fix is on the caller's side: don't overload a function on a set and an
+`array of const` at the same slot — give it a decisive name.** Overloading on
+ambiguous parameters is bad programming, and the language does not owe it a
+tie-break rule.
+
+### Considered and rejected: a cast-style disambiguator
+
+`somefunc((set)[x, y, z])` / `somefunc((array)[x, y, z])` — borrowed from
+typecasting, which would make the reading explicit at the call site. **Rejected
+because it is not standard Pascal**, and the dialect does not grow syntax for a
+corner with no known user. Recorded so it is visibly a decision rather than
+something nobody thought of.
+
+### What this does NOT close
+
+[[bug-p-set-literal-elements-are-not-type-checked]] **stays open at prio 60.**
+That one is a real compiler bug and is independent of overloading: a lone
+`TakesSet(['a', 1])` against a plain `set of TDay` parameter compiles and
+answers `dTue`, and `[cGreen]` — a different enum entirely — silently becomes
+`dTue`. Checking that the elements are actually of the set's type is what the
+owner asked for, and it "fixes a lot" on its own.
+
+Two of the four rows in the re-measured table stop being wrong the moment that
+lands (the mixed-type row becomes an error, the range row stops being a parse
+error once content can be consulted). Only the true tie is left, and the answer
+to the true tie is above.
+
+### Left to do
+
+A **footnote in the docs** — no more than that. It belongs in
+[[docs-name-collisions-and-the-as-escape]] or the dialect notes: a bracket
+literal at a slot where one overload takes a set and another `array of const` is
+resolved by the binding candidate, FPC resolves it by candidate collection
+order, neither is a rule worth relying on, so don't write that overload.

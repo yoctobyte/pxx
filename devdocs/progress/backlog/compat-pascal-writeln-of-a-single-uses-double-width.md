@@ -86,3 +86,7 @@ so should keep the 17-digit form.
 The table above matches FPC on every row, the Double rows are unchanged, `make
 test` + self-host fixedpoint, and cross — the float writer is per-backend, so a
 cross check is not optional here.
+
+<!-- float category -->
+Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
+Collect, do not fix piecemeal; see the working rule there.
