@@ -47,6 +47,55 @@ Any feature that diverges from standard FPC/Delphi-classic MUST:
 A new dialect ticket should state, up front, *which switch guards it* and *what
 strict does*.
 
+## The BOUNDARY of aim 2 — strict emulates FPC's behaviour, never FPC's bugs
+
+**Decided by the user, 2026-08-16.** The rule above ("a strict compile is
+FPC-faithful") has a limit that was never written down, and an agent walking
+`decide-forin-mixed-int-float-ctor-vs-fpc` read the rule literally and
+recommended reproducing an FPC defect for parity.
+
+> "no, we will not strictly emulate obvious bugs. that'd be wrong. strict mode
+> is to compile valid programs that rely on FPC's behaviour, not on FPC's bugs."
+> — user
+
+So the target of the strict family is **the set of valid FPC programs and the
+FPC behaviour they legitimately depend on** — not the observable output of the
+FPC binary in every case. When those two come apart, the program wins.
+
+### How to tell a behaviour from a bug (the test that actually separates them)
+
+The distinguishing question is **can a program depend on it?**
+
+- **Behaviour → emulate under strict.** Deterministic and derivable from the
+  source: evaluation order, overload-resolution ties, integer promotion rules,
+  default float formatting. Working code can and does rely on these, so a strict
+  compile must reproduce them even where pxx's own default is nicer.
+- **Bug → never emulate, and do not put the correct answer behind a flag.**
+  Undefined, non-deterministic, or dependent on state the program did not write
+  — uninitialised memory, a value that changes with the preceding statement, a
+  silently dropped write. No valid program can rely on it, so there is nothing
+  for strict mode to preserve, and "matching" it is not implementable anyway.
+
+The worked example is `decide-forin-mixed-int-float-ctor-vs-fpc`: FPC 3.2.2's
+`for d in [1.5, 2, 3]` prints values left over from the *previous* statement's
+array. That is the bug side of the line — it is not a semantics, it is a read of
+memory nobody wrote.
+
+### Consequences for filing
+
+- A pxx/FPC difference where **pxx is correct and FPC is defective** is NOT a
+  deliberate divergence and must not go in that index. It belongs in the compat
+  notes as an FPC bug pxx does not reproduce. The two lists answer different
+  questions for someone judging whether their FPC code will port, and conflating
+  them makes pxx look like it wanders from the reference when it does not.
+- Where the FPC defect is confirmed **still present in current trunk**, the
+  courteous and useful step is to **report it upstream** (user, same date) rather
+  than only recording it locally. Check trunk before assuming; a bug fixed
+  upstream is a footnote about current FPC stable, not a divergence at all.
+- This cuts the other way too: it is **not** licence to call an inconvenient FPC
+  behaviour a bug. If a valid program can observe it deterministically, it is
+  behaviour, and strict mode owes it — however ugly.
+
 ## Index — dialect extensions (the lax aim)
 
 **Strict-flag family additions (2026-07-14/15 night):**
