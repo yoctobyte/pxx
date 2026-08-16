@@ -26286,6 +26286,19 @@ begin
                   PendingInitValAux[PendingInitCount] := Tokens[TokPos-1].SLen;
                   Next;
                 end
+                { The scalar record-constant path's @proc / @var / @TClass.Method
+                  forms, for an ARRAY-of-record element. This is that path's
+                  sibling and the two must know the same value forms:
+                  rtl-generics' ComparerInstances is `array[TTypeKind] of
+                  TInstance` with `@TComparerService.SelectBinaryComparer` in a
+                  field. (The string case is handled just above, so the arm is
+                  only reached for non-string fields.) }
+                else if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
+                begin
+                  PendingInitKind[PendingInitCount]   := fvKind;
+                  PendingInitVal[PendingInitCount]    := fvVal;
+                  PendingInitValAux[PendingInitCount] := fvAux;
+                end
                 else
                 begin
                   PendingInitKind[PendingInitCount] := 0;
@@ -26653,8 +26666,23 @@ begin
           PendingInitSym[PendingInitCount]  := cIdx;
           PendingInitElem[PendingInitCount] := -1;
           PendingInitFOff[PendingInitCount] := -1;
-          PendingInitKind[PendingInitCount] := 0;
-          PendingInitVal[PendingInitCount]  := ParseInitValTk(cTk);
+          { Same non-ordinal value forms the record-field path takes, for a
+            SCALAR typed const: `const P: Pointer = @Something`. The string arm
+            cannot fire here -- a string-typed const is handled well above this
+            point -- but @proc / @var / @TClass.Method all reach it.
+            rtl-generics publishes its comparer instances this way
+            (`Comparer_Int8_Instance: Pointer = @Comparer_Int8_VMT`). }
+          if TryParseInitValForm(cTk, fvKind, fvVal, fvAux) then
+          begin
+            PendingInitKind[PendingInitCount]   := fvKind;
+            PendingInitVal[PendingInitCount]    := fvVal;
+            PendingInitValAux[PendingInitCount] := fvAux;
+          end
+          else
+          begin
+            PendingInitKind[PendingInitCount] := 0;
+            PendingInitVal[PendingInitCount]  := ParseInitValTk(cTk);
+          end;
           PendingInitTk[PendingInitCount]   := Ord(cTk);
           Inc(PendingInitCount);
         end;

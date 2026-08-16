@@ -3612,7 +3612,7 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_rcaf26)" = "$$(printf '132096 192 70')"
 	# string / @var / @proc field values in a typed record constant (global + local)
 	./$(COMPILER) --mimic-fpc test/test_record_const_addr_field.pas $(TESTTMP)/test_rcaddr26
-	test "$$($(TESTTMP)/test_rcaddr26)" = "$$(printf 'hello 42 7\nchar Z str Z len 1\ncalled\nlocal 42 9')"
+	test "$$($(TESTTMP)/test_rcaddr26)" = "$$(printf 'hello 42 7\nchar Z str Z len 1\ncalled\nscalar 42 TRUE\narr TRUE 42 FALSE TRUE\nlocal 42 9')"
 	# @TClass.Method — method code address via the type name (expression + record const)
 	./$(COMPILER) --mimic-fpc test/test_class_method_addr.pas $(TESTTMP)/test_cma26
 	test "$$($(TESTTMP)/test_cma26)" = "$$(printf 'inst 11\nvirt 22\ndvirt 33\nconst-inst 11\nconst-dvirt 33\nn 99')"

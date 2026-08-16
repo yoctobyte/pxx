@@ -42,8 +42,23 @@ begin
   writeln('called');
 end;
 
+type
+  TEnt = record Sel: Boolean; P: Pointer; end;
+
 const
   V: TRec = (S: 'hello'; A: @g; F: @Foo; N: 7; C: 'Z'; S1: 'Z');
+
+  { SCALAR typed const taking an address -- `Comparer_Int8_Instance: Pointer =
+    @Comparer_Int8_VMT` in rtl-generics. }
+  PG: Pointer = @g;
+  PF: Pointer = @Foo;
+
+  { ARRAY-of-record const with @ field values -- the sibling of the scalar
+    record path above; rtl-generics' ComparerInstances is exactly this shape. }
+  ENTS: array[0..1] of TEnt = (
+    (Sel: True;  P: @g),
+    (Sel: False; P: @Foo)
+  );
 
 procedure LocalConst;
 type
@@ -58,5 +73,8 @@ begin
   writeln(V.S, ' ', PInteger(V.A)^, ' ', V.N);
   writeln('char ', V.C, ' str ', V.S1, ' len ', Length(V.S1));
   V.F();
+  writeln('scalar ', PInteger(PG)^, ' ', PtrUInt(PF) = PtrUInt(V.F));
+  writeln('arr ', ENTS[0].Sel, ' ', PInteger(ENTS[0].P)^, ' ', ENTS[1].Sel, ' ',
+          PtrUInt(ENTS[1].P) = PtrUInt(V.F));
   LocalConst;
 end.
