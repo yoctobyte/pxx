@@ -239,3 +239,80 @@ unchanged-codepath argument. **`test-fpjson` is still SKIPped on this box** (no
 fcl-json tree staged), which is the remaining half of that gap — it needs
 `tools/install_lib_candidates.sh fcl-json` re-run here, or Track T's watcher to
 confirm it elsewhere.
+
+## 2026-08-16 — recon round 4: generics.defaults, four constant-initializer walls cleared
+
+Re-staged rtl-generics (symlinked from the local FPC checkout; the script has no
+rtl-generics target — it comes from `/home/rene/src/fpc-source`) and drove
+`uses generics.defaults` until the wall moved. It moved four times.
+
+**The ticket's stated wall was wrong, and cheaply so.** It named `{$MACRO ON}`
+text macros as what generics.defaults dies on. The macros expand correctly. A
+13-line repro with no macros in it fails identically — the real wall was that a
+typed record constant accepted ordinals and `nil` and nothing else.
+
+The misleading part is the diagnostic. `expected field name in record constant`
+points at the VALUE, one field past the actual gap, because ConstEval can neither
+evaluate nor CONSUME a string literal or an `@`, so the field loop desyncs by one
+and blames whatever token it lands on. It reads as a bug in the field-list parser
+and is nothing of the kind.
+
+### Cleared (landed, each with a differential test vs fpc 3.2.2)
+
+| # | wall | commit |
+| --- | --- | --- |
+| 14 | string / `@var` / `@proc` as a record-constant field value | `406a40dfa` |
+| 15 | `@TClass.Method` — method code address via the type name | `6e87c872e` |
+| 16 | (regression from 14) string arm must key on the field TYPE | `9cf91cf8d` |
+| 17 | `@` forms in a SCALAR const and an ARRAY-of-record element | `a43bd4d21` |
+
+Line 379 → 388 → 411 → 445 → 525.
+
+**Item 14's real content: the emitter was never the gap.** Init kinds 1
+(AN_STR_LIT), 2 (AN_PROCADDR) and 4 (AN_ADDR of an ident) were already
+implemented and already exercised — by `cparser.inc`, for C struct initializers.
+Same shared emitter, one frontend wired to it and the other not, so C could put a
+function address in a struct initializer while Pascal could not put one in a
+record constant. The fix was parser-side only.
+
+**And it is FOUR parse paths, not one.** Scalar record field, array-of-record
+field, scalar typed const, plus the routine-local twins — each had to be told
+separately, and fixing the first did not make the others work. The corpus found
+each by moving the wall; I did not predict any of them. All four now route
+through one `TryParseInitValForm`, so the next value form is added once.
+
+**Item 15** was refused as `cannot call non-static method on class type
+directly` — a CALL error on an expression that never asked to call. A class type
+is not in the sym table, so `@TB.Method` fell past every arm of the `@` handler
+into the lvalue path; the `@` was still on the stack, unexamined. With no object
+there is nothing to dispatch on, so it yields the static address of that class's
+own body even for a virtual method, matching FPC — which is precisely what makes
+the idiom useful, since it is how a VMT is built by hand.
+
+**Method names that are type keywords** (`@TCompare.Single`) needed
+`IsMethodNameTokAt`, an index-addressed lookahead form of the existing
+`IsMethodNameTok` sharing its token set. Note the measurement mattered here:
+the failing member was `Single`, not the `Int8` the ticket's own inventory would
+have led me to fix — `Int8` already worked.
+
+### The current wall (525)
+
+```
+error: base type not found: THashService$TDelphiHashFactory
+  near: TDelphiHashFactory class >>> THashService$TDelphiHashFactory private
+```
+
+A class NESTED inside a class, used as a base type. Different territory from the
+constant-initializer family above and not started.
+
+### Side finding, filed separately
+
+Calling straight through a procedural-type cast — `TSelfFn(V.Field)(o)` — is
+`unexpected token`; assigning the cast to a variable first works. Hit twice while
+writing these repros. Not folded in; see
+[[bug-p-cannot-call-directly-through-a-procedural-type-cast]].
+
+### Note on the fpcunit/fpjson claim
+
+Untouched by this session and still resting on the argument recorded above, not
+a fresh run: `test-fpjson` is still SKIPped on this box (no fcl-json staged).

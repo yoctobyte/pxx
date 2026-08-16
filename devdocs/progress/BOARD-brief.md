@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:9 blocked:3 backlog:213 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1972 rejected:38`
+`working:1 unfinished:8 blocked:3 backlog:214 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1973 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-pascal-corpus-generics` [P] — owner: claude-AP
 
-## unfinished (9) — parked mid-flight; re-claim, do not duplicate
+## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -21,7 +21,6 @@ _none — no lane is locked._
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
-- `feature-pascal-corpus-generics` [P]
 
 ## blocked (3) — has an unmet blocker; do not claim
 
@@ -29,7 +28,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 198, ranked
+## Ready — top 30 of 199, ranked
 
 - `[p 70] [T]` regression-lib-test-crtl-exp2
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -62,4 +61,4 @@ _none — no lane is locked._
 - `[p 48] [P]` feature-pascal-class-management-operators
 - `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
 
-_168 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_169 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
