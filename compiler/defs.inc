@@ -2804,12 +2804,6 @@ var
   LocalInitTk   : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitFOff : array[0..MAX_LOCAL_INITS-1] of Integer;  { record-field span (SOff=-1 if not a field) }
   LocalInitFLen : array[0..MAX_LOCAL_INITS-1] of Integer;  { field-name length, or (Kind=1) string literal length }
-  { This row belongs to a routine-local typed CONST, whose storage is static
-    (BSS) and whose initialiser must therefore run ONCE, not per call. The
-    prologue emits those rows behind a run-once guard; a plain `var x: T = init`
-    row stays ungated and re-initialises on every entry, which is its own
-    correct semantics. }
-  LocalInitStatic: array[0..MAX_LOCAL_INITS-1] of Boolean;
   LocalInitCount: Integer;
 
   BFixupTargetLines : array[0..255] of Int64;

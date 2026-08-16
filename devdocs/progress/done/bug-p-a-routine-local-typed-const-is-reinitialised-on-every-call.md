@@ -65,6 +65,39 @@ Remaining piece: the string-typed case, which today is not merely mis-scoped
 but undeclared (`undefined variable (s)`) — check whether BSS storage alone
 fixes it or whether the managed-string init path needs the same treatment.
 
+## Correction 2026-08-16 — the first fix regressed `test_local_typed_const.pas`
+
+Track T filed it within the hour (`test-core#src:test/test_local_typed_const.pas`,
+`invalid IR symbol reference in load_sym`). Two things were wrong, and the second
+only appeared once the first was fixed:
+
+1. **The symbol index does not die with the routine.** `SymRollbackTo` handed the
+   const's index back, and the **-O2 inliner** then copied the body into the
+   caller, where the copy still loads that symbol — verified after the rollback,
+   so it read one past the end. Measured, not guessed: a probe in `IRVerify`
+   printed `idx=84 SymCount=83 name=K`, and `-O0`/`-O1` were clean while
+   `-O2`/`-O3` failed, which named the inliner directly.
+2. **A prologue guard cannot survive inlining either.** With the index fixed, the
+   run-once guard compiled fine and produced the WRONG VALUE at -O2 (`7` became
+   `0`): the inlined copy skips the callee's prologue, so the guarded
+   initialisation never ran and the BSS slot stayed zero. A guard in the callee is
+   invisible to a caller that pasted the body.
+
+So the design flipped back to the one this ticket had recorded as impossible:
+`SymRollbackTo` now keeps the high-water mark above a static-local symbol (still
+unhashing it, so it stays invisible — visibility is by hash chain, not by index),
+which makes the index permanent and lets the initialiser be an ordinary
+`PendingInit` row emitted once before `main begin`. That is FPC's load-time
+semantics, needs no guard, and is inlining-proof because there is nothing in the
+prologue to skip. The earlier failure was never about PendingInit; it was about
+the rollback, one level down.
+
+**Method note for the next reader:** the ticket's own recorded diagnosis
+("PendingInit cannot work") was right about the symptom and wrong about the
+cause, exactly as `devdocs/dev/root-cause-over-microfix.md` warns. What settled
+it was a five-line probe printing the offending index and symbol name, after
+reasoning had already produced one plausible-and-wrong answer.
+
 ## What landed
 
 The **storage** half of the reverted attempt was fine and was kept:
@@ -73,12 +106,15 @@ const in BSS while it keeps its routine BlockId (so it stays visible only inside
 the routine), and a `SymStaticLocal` parallel array exempts it from the
 decl-order gate, which only makes sense for file-scope globals.
 
-The **initialiser** half was replaced with the C frontend's shape: rows are
-tagged `LocalInitStatic`, and `CompilePendingLocalInits` now runs in two passes
-— ungated for `var x: T = init` (which must re-initialise per call, and is the
-control in the test), then the const rows collected into one chain emitted as
-`if guard = 0 then begin guard := 1; <inits> end` over a hidden BSS int. Nothing
-outlives the routine's parse, so `SymRollbackTo` is irrelevant.
+The **initialiser** is an ordinary `PendingInit` row — the same path a unit-scope
+typed const takes — compiled once before `main begin`. A plain `var x: T = init`
+still records into `LocalInit` and re-initialises on every call, which is its own
+correct semantics and is the control in the test.
+
+`SymRollbackTo` keeps its high-water mark above any `SymStaticLocal` symbol so
+the index can never be reused, while still unhashing it like every other local.
+That one change is what makes both the PendingInit record and an inlined body's
+reference valid after the routine's parse ends.
 
 ## Residuals, both pre-existing and both confirmed at GLOBAL scope too
 

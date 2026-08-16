@@ -2869,13 +2869,27 @@ end;
   exits — a bare truncation would leave dead heads pointing at slots the next
   scope re-registers under different names. }
 procedure SymRollbackTo(newCount: Integer);
-var i: Integer;
+{ Leaving a routine: unhash every symbol it declared, so none of them stays
+  visible, and hand the indices back.
+
+  EXCEPT a routine-local typed CONST (and its run-once init guard). Those have
+  BSS storage, and their symbol INDEX outlives the routine's parse because the
+  -O2 inliner copies the body into every caller -- the copy is verified when
+  SymCount has already come back down, so a reused index reads as "invalid IR
+  symbol reference in load_sym", one past the end. Unhash them like everything
+  else (visibility is by hash chain, and they must not stay visible), but keep
+  the high-water mark above them so nothing else is ever allocated there.
+  Costs a few dead slots in a routine that has one.
+  bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call }
+var i, keepTo: Integer;
 begin
+  keepTo := newCount;
   for i := SymCount - 1 downto newCount do
   begin
     SymHashHead[SymNameFoldHash(Syms[i].Name)] := SymHashPrev[i];
+    if SymStaticLocal[i] and (i >= keepTo) then keepTo := i + 1;
   end;
-  SymCount := newCount;
+  SymCount := keepTo;
 end;
 
 function FindSym(const name: AnsiString): Integer;
