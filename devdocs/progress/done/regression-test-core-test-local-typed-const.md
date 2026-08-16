@@ -50,4 +50,4 @@ emitted once before `main begin` — no prologue for the inliner to skip.
 Verified: this test and `test_local_typed_const_is_static.pas` both pass at
 -O0/-O1/-O2/-O3 and match `fpc -O- -Mobjfpc`. Full write-up in
 [[bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call]].
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit d594272ef.
