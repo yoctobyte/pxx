@@ -14,7 +14,15 @@ program test_nested_class_type_scoping;
   registry. That registry is also what makes the qualified spelling MEAN
   something: before it, `var b: tother.tinner` silently bound to touter's, and
   the wrong one simply lacked the fields.
-  bug-a-duplicate-class-name-check-is-scope-blind }
+  bug-a-duplicate-class-name-check-is-scope-blind
+
+  Extended 2026-08-16 with the OUT-OF-LINE method implementation header
+  (`function touter.tinner.Tag: string;`), which took exactly one qualifier and
+  was a parse error, and with a doubly-nested class, which the type-reference
+  and constructor paths also handled to only one level. Each nested class
+  returns its OWN tag: that is what proves the qualifier picks the right class
+  rather than merely parsing.
+  bug-p-a-nested-class-method-implementation-takes-only-one-qualifier }
 {$mode delphi}
 
 type
@@ -22,6 +30,7 @@ type
   type
     tinner = class
       x: Integer;
+      function Tag: string;
     end;
   end;
 
@@ -30,6 +39,19 @@ type
     tinner = class
       w: Integer;
       v: Integer;
+      function Tag: string;
+    end;
+  end;
+
+  { two levels of nesting: every qualifier but the last is a scope }
+  tthree = class
+  type
+    tmid = class
+    type
+      tleaf = class
+        n: Integer;
+        function Tag: string;
+      end;
     end;
   end;
 
@@ -43,11 +65,25 @@ type
     end;
   end;
 
+{ the spelling this ticket is about — resolved against the nested registry, not
+  a flat namespace, so the two `tinner` bodies stay distinct }
+function touter.tinner.Tag: string; begin Result := 'outer'; end;
+function tother.tinner.Tag: string; begin Result := 'other'; end;
+function tthree.tmid.tleaf.Tag: string; begin Result := 'leaf'; end;
+
 var
   okc, total: Integer;
   a: touter.tinner;
   b: tother.tinner;
   f: tfwd.tstub;
+  g: tthree.tmid.tleaf;
+
+procedure ChkS(const nm, got, want: string);
+begin
+  Inc(total);
+  if got = want then begin Inc(okc); WriteLn('ok ', nm); end
+  else WriteLn('FAIL ', nm, ' got ', got, ' want ', want);
+end;
 
 procedure Chk(const nm: string; got, want: Integer);
 begin
@@ -76,6 +112,17 @@ begin
   { they are distinct types, so the instances are distinct objects }
   Chk('distinct', Ord(TObject(a) = TObject(b)), 0);
 
-  a.Free; b.Free; f.Free;
+  { the out-of-line bodies land on the right class — same method name, two
+    same-named nested classes, each must answer with its own tag }
+  ChkS('outer-tag', a.Tag, 'outer');
+  ChkS('other-tag', b.Tag, 'other');
+
+  { and the whole chain works two levels down }
+  g := tthree.tmid.tleaf.Create;
+  g.n := 55;
+  Chk('leaf-field', g.n, 55);
+  ChkS('leaf-tag', g.Tag, 'leaf');
+
+  a.Free; b.Free; f.Free; g.Free;
   WriteLn('total ok ', okc, ' / ', total);
 end.

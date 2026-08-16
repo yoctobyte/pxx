@@ -9897,6 +9897,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
+    nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
@@ -15378,16 +15379,38 @@ begin
         registered first. bug-a-duplicate-class-name-check-is-scope-blind }
       nestCtorCi := -1;
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
-         (CurTok.Kind = tkIdent) and (TokPos + 3 < TokCount) and
+         (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
-         (Tokens[TokPos+2].Kind = tkDot) and (Tokens[TokPos+3].Kind = tkIdent) and
-         ((GetTokenStr(TokPos+3) = 'Create') or (GetTokenStr(TokPos+3) = 'create')) then
+         (FindNestedType(FindUClass(name), GetTokenStr(TokPos+1)) >= 0) then
       begin
-        nestCtorCi := FindNestedType(FindUClass(name), GetTokenStr(TokPos+1));
-        if nestCtorCi >= 0 then
+        { Walk the whole `. nested . nested ...` run, then require `Create` after
+          it. This was a FIXED three-token lookahead, so exactly one level of
+          nesting could be constructed and `tthree.tmid.tleaf.Create` reported
+          "class method not found: Create". Scanning before consuming keeps the
+          non-constructor spellings untouched: nothing is eaten unless the run
+          really does end in Create.
+          bug-p-a-nested-class-method-implementation-takes-only-one-qualifier }
+        nestScanCi := FindUClass(name);
+        nestScanPos := TokPos;          { at the '.' after the outermost name }
+        nestDepth := 0;
+        while (nestScanPos + 1 < TokCount) and (Tokens[nestScanPos].Kind = tkDot) and
+              (Tokens[nestScanPos+1].Kind = tkIdent) and
+              (FindNestedType(nestScanCi, GetTokenStr(nestScanPos+1)) >= 0) do
         begin
-          Next;   { the owning class name }
-          Next;   { '.' — CurTok is now the nested type name }
+          nestScanCi := FindNestedType(nestScanCi, GetTokenStr(nestScanPos+1));
+          Inc(nestDepth);
+          nestScanPos := nestScanPos + 2;
+        end;
+        if (nestDepth > 0) and (nestScanPos + 1 < TokCount) and
+           (Tokens[nestScanPos].Kind = tkDot) and (Tokens[nestScanPos+1].Kind = tkIdent) and
+           ((GetTokenStr(nestScanPos+1) = 'Create') or (GetTokenStr(nestScanPos+1) = 'create')) then
+        begin
+          nestCtorCi := nestScanCi;
+          for nestI := 1 to nestDepth do
+          begin
+            Next;   { the enclosing class name }
+            Next;   { '.' — CurTok is now the next nested type name }
+          end;
           name := GetTokenStr(TokPos - 1);
         end;
       end;
@@ -24759,6 +24782,25 @@ begin
         qtNested := FindNestedType(qtOuter, lo);
         if qtNested >= 0 then
           lo := GetTokenStrFromRaw(UClsNOff[qtNested], UClsNLen[qtNested]);
+        { `tthree.tmid.tleaf` — nesting goes deeper than one level, and this
+          consumed exactly one qualifier, so a doubly-nested type could be
+          declared and implemented but never NAMED ("unknown type"). Keep
+          descending while the next qualifier is itself a nested type of the one
+          just resolved; a non-nested member stops the walk and is left to the
+          paths below, so an ordinary `TClass.TMember` is unaffected.
+          bug-p-a-nested-class-method-implementation-takes-only-one-qualifier }
+        while (qtNested >= 0) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+              (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) and
+              (FindNestedType(qtNested, GetTokenStr(TokPos + 1)) >= 0) do
+        begin
+          qtOuter := qtNested;
+          Next;               { past the nested type name — CurTok is now '.' }
+          Next;               { past '.' — CurTok is the next nested type name }
+          lo := CurTok.SVal;
+          qtNested := FindNestedType(qtOuter, lo);
+          lo := GetTokenStrFromRaw(UClsNOff[qtNested], UClsNLen[qtNested]);
+        end;
       end;
       if CaseEqual(lo, 'set') then
       begin
@@ -30435,10 +30477,32 @@ begin
         methName := GetTokenStr(TokPos - 1);   { keyword-token names carry no SVal }
         methSNOff := Tokens[TokPos-1].SOffset;
         methSNLen := Tokens[TokPos-1].SLen;
+        Next; { consume method name }
+        { `function touter.tinner.Tag: string;` — every qualifier before the last
+          names a nested TYPE, i.e. a SCOPE, not a member, so descend through it
+          and keep reading. This parser took exactly one qualifier and stopped,
+          which made the out-of-line implementation of a nested class's method a
+          parse error even though declaring it inline, naming the type and
+          constructing it all worked. Loops, because nesting does; mirrors the
+          `TOuter.TInner.Create` walk on the expression path.
+          bug-p-a-nested-class-method-implementation-takes-only-one-qualifier }
+        while (CurTok.Kind = tkDot) and (FindNestedType(methOwnerCi, methName) >= 0) do
+        begin
+          methOwnerCi := FindNestedType(methOwnerCi, methName);
+          methOwnerRec := REC_UCLASS_BASE + methOwnerCi;
+          AppendChar(name, '.');
+          i := 1;
+          while i <= Length(methName) do begin AppendChar(name, methName[i]); Inc(i); end;
+          Next; { consume dot }
+          if not IsMethodNameTok then Error('expected method name');
+          methName := GetTokenStr(TokPos - 1);
+          methSNOff := Tokens[TokPos-1].SOffset;
+          methSNLen := Tokens[TokPos-1].SLen;
+          Next; { consume method name }
+        end;
         AppendChar(name, '.');
         i := 1;
         while i <= Length(methName) do begin AppendChar(name, methName[i]); Inc(i); end;
-        Next; { consume method name }
       end;
   end;
 

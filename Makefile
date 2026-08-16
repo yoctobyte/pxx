@@ -4161,7 +4161,7 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_variant_rec_pad26 | tail -1)" = "total ok 14 / 14"
 	# FPC-compat: a type declared in a class body is scoped to that class (tclass13b/tgeneric72)
 	./$(COMPILER) test/test_nested_class_type_scoping.pas $(TESTTMP)/test_nested_cls_type26
-	test "$$($(TESTTMP)/test_nested_cls_type26 | tail -1)" = "total ok 5 / 5"
+	test "$$($(TESTTMP)/test_nested_cls_type26 | tail -1)" = "total ok 9 / 9"
 	# FPC-compat: High/Low of the 64-bit machine-word aliases (NativeInt/PtrInt/SizeInt)
 	./$(COMPILER) test/test_high_low_word_aliases.pas $(TESTTMP)/test_high_low_aliases26
 	test "$$($(TESTTMP)/test_high_low_aliases26 | tail -1)" = "total ok 12 / 12"
