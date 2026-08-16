@@ -91,3 +91,68 @@ Related and still open on its own terms:
 [[bug-t-bench-slowdowns-are-quantized-by-cpu-p-state]] holds the analysis, and
 is parked waiting for a few hundred plexus rows on the corrected task-clock
 basis — that accumulation is unaffected by this rejection.
+
+## 2026-08-16 — the revisit condition was tested, and it CONFIRMS the rejection
+
+This ticket's own recommendation named the one thing that would reopen it:
+
+> *"Revisit only if the recorded `mhz` column turns out **not** to separate the
+> populations cleanly once a few hundred plexus rows have accumulated."*
+
+Those rows have accumulated (270 on the corrected task-clock basis, 101 of them
+long-workload). It separates them cleanly:
+
+| | n | median task clock |
+| --- | --- | --- |
+| clean rows (< 1.20x their day's best) | 92 | 2542 MHz |
+| inflated rows (>= 1.20x) | 9 | 2090 MHz |
+
+Ratio between the two states 1.217; median inflation actually observed on those
+rows 1.223 — agreement to **0.5%**, and `corr(ratio, task_mhz) = -0.317`. Eight
+of the nine inflated rows are labelled by the clock alone; the ninth was an
+instrument bug, now fixed (below). So the condition for reopening is not met,
+and the rejection stands on measurement rather than on plausibility.
+
+**Correction to this ticket's own measurement section.** It records that "2600
+MHz was never observed" and that the two-point base/boost model does not
+describe the box. That was the *box-mean* instrument plus unpinned spinners,
+which migrate. The corrected per-task clock reaches **2576 MHz** — the datasheet
+2.6 GHz boost — and the inflated rows sit at ~2090, the 2.1 GHz base. The
+two-point model is right after all, so option B ("pin to base, well below where
+real load sits") would cost more than this ticket estimated, not less.
+
+**And one instrument bug this surfaced**, since it affects any future revisit:
+`TaskClock` followed the pid testmgr spawns, which for the `selfcompile fpc` row
+is the **`fpc` driver** — it forks `ppcx64` and then blocks in `wait()`, so the
+sampler read an idle core at the governor's floor. Every row below 1700 MHz in
+the whole file was that one workload, claiming 1285-1661 MHz against a 6333-6686
+ms runtime band. Fixed (`testmgr._running_pid`); `bench-clock.tsv` carries a
+MEASUREMENT BASIS CHANGED line. The clock column keeps accumulating, as this
+ticket promised, and is now trustworthy for every workload.
+
+## Reconfirmed 2026-08-16 by the user, and the recipe for when it IS relevant
+
+> *"i think the decide bench box clock ticket was decided iirc — as not relevant
+> until we need precise measurements when we start working on optimization
+> tickets. but if it's easy fixed, sure."*
+
+Recalled correctly; this is that decision, unchanged. Recorded here rather than
+in a new ticket because a Track T agent re-filed it as a duplicate on 2026-08-16
+having searched `decided/` and `done/` but **not `rejected/`** — worth noting for
+the next agent, since a rejected `decide-` is exactly where a settled question
+lives.
+
+It *is* easy, checked on plexus: `sudo -n` is passwordless,
+`intel_pstate/no_turbo` reads `0`, governor `schedutil` with `performance`
+available. So when optimisation work needs comparable absolute numbers:
+
+```sh
+echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo   # pin to base
+echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo   # restore
+```
+
+Neither survives a reboot, which is the right default. **Pin for the RUN, not
+for the box** — a standing pin taxes the watcher's full matrix continuously to
+buy comparability only a handful of measurements consume. Keep recording the
+clock either way: a row at boost on a supposedly pinned box is a silently
+reverted sysfs write.

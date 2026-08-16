@@ -465,9 +465,16 @@ changes the box for everything the user runs. Recommendation stands: leave turbo
 on, rely on the recorded clock. Option 1 (void by ratio) is now rejected for
 three independent reasons.
 
-Option 3 is split out as [[decide-pin-the-bench-box-clock]] (Track U) so this
-ticket can close on its Gate rather than idling on a call T does not get to
-make. Nothing waits on that decision.
+Option 3 needs no split: [[decide-pin-the-bench-box-clock]] already exists and
+was **REJECTED by the user on 2026-08-14** ("not relevant at this point"),
+reconfirmed 2026-08-16 — pin only when optimisation work needs comparable
+absolute numbers, and pin for the RUN rather than the box. The measurements
+above are appended there too, because they test the exact condition that ticket
+named for reopening ("revisit only if the recorded mhz column turns out NOT to
+separate the populations cleanly") and they confirm the rejection instead.
+
+Filing note for the next agent, since it cost a duplicate here: a settled
+`decide-` lives in `rejected/`, not only in `decided/`.
 
 ## Log
 - 2026-08-16 — resolved, commit PENDING-COMMIT.
