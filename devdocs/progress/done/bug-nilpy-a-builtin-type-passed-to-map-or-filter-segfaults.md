@@ -4,6 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`map(bool, xs)` / `filter(str, xs)` segfaulted: the callable-pointer unwrap handed a VT_BTYPE variant's payload (a small type CODE) to the dispatcher as a code address. `sorted(xs, key=bool)` never crashed, because the ordinary call path rewrites the argument — map/filter build their callable elsewhere and never saw that rewrite."
+status: done
 ---
 
 # A builtin type passed to `map`/`filter` segfaults
@@ -61,3 +62,6 @@ diffs clean against CPython's output.
 
 `make compiler/pascal26` + the test above + `tools/gate.sh quick`. pylib is not
 linked by the compiler, so no re-pin.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
