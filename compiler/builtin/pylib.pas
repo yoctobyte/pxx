@@ -1937,6 +1937,9 @@ function pymath_dom_pos(x: Double): Double;
 function pymath_dom_unit(x: Double): Double;
 function pymath_dom_pow(b: Double; e: Double): Double;
 { the `**` OPERATOR's guard — a DIFFERENT refusal from math.pow's; see the body }
+function pymath_range(v: Double; a: Double; b: Double): Double;
+function pypow_range(v: Double; a: Double; b: Double): Double;
+function pymath_range1(v: Double; a: Double): Double;
 function pypow_dom(b: Double; e: Double): Double;
 type
   { The correctly-rounded pow the FLOAT `**` should use. It lives in
@@ -6606,6 +6609,54 @@ begin
   pymath_dom_pow := b;
 end;
 
+{ OVERFLOW, which in CPython is a per-CALL rule and not a per-OPERATION one.
+  `1e300 * 1e300` is `inf` in CPython exactly as it is here — IEEE, no error —
+  but `2.0 ** 10000`, `math.exp(1000)` and `math.pow(10, 400)` all raise
+  OverflowError, because CPython checks errno/ERANGE on the C library calls it
+  wraps and on float pow. So the guard belongs on the RESULT of those calls and
+  nowhere near `*`, `/` or `+`.
+
+  Both operands are passed because an INFINITE input is not an overflow:
+  `math.exp(float('inf'))` is `inf` in CPython, and `float('inf') ** 2` is too.
+  Only a finite input producing an infinite result is the error. Underflow is
+  NOT an error on either side — `2.0 ** -10000` is 0.0 in both.
+
+  Two spellings of the message because CPython has two: the math module says
+  `math range error`, float pow reports the raw errno.
+  bug-nilpy-float-overflow-answers-inf-where-cpython-raises }
+function pyfloat_isinf(x: Double): Boolean;
+begin
+  pyfloat_isinf := (x > 1.7e308) or (x < -1.7e308);
+end;
+
+function pyfloat_range_overflowed(v: Double; a: Double; b: Double): Boolean;
+begin
+  pyfloat_range_overflowed := False;
+  if not pyfloat_isinf(v) then Exit;
+  if pyfloat_isinf(a) or pyfloat_isinf(b) then Exit;
+  pyfloat_range_overflowed := True;
+end;
+
+function pymath_range(v: Double; a: Double; b: Double): Double;
+begin
+  if pyfloat_range_overflowed(v, a, b) then
+    raise OverflowError.Create('math range error');
+  pymath_range := v;
+end;
+
+function pypow_range(v: Double; a: Double; b: Double): Double;
+begin
+  if pyfloat_range_overflowed(v, a, b) then
+    raise OverflowError.Create('(34, ''Numerical result out of range'')');
+  pypow_range := v;
+end;
+
+function pymath_range1(v: Double; a: Double): Double;
+{ the one-argument shape (math.exp / sinh / cosh): the same argument twice }
+begin
+  pymath_range1 := pymath_range(v, a, a);
+end;
+
 function pymath_modf(x: Double): TPyList;
 var ip: Double; pb: PInt64;
 begin
@@ -8263,10 +8314,15 @@ begin
     the integer-exponent path is repeated squaring in plain doubles, and that
     is where `1.0001 ** 10000` accumulated 1282 ulp — wrong in the 12th
     significant digit of the ordinary compound-interest shape. }
+  { OVERFLOW: CPython raises OverflowError for float `**`, and this is the
+    DYNAMIC path — a variant receiver, a loop variable, a list element — so it
+    needs the same guard the static route applies at the call site or the two
+    spellings of one expression disagree again.
+    bug-nilpy-float-overflow-answers-inf-where-cpython-raises }
   if PyPowHook <> nil then
   begin
     r^.VType := 3;
-    PPyDouble(@r^.Payload)^ := PyPowHook(fbase, fexp);
+    PPyDouble(@r^.Payload)^ := pypow_range(PyPowHook(fbase, fexp), fbase, fexp);
     Exit;
   end;
   if Frac(fexp) = 0.0 then
@@ -8285,7 +8341,7 @@ begin
   else
     fr := PyMathExp(fexp * PyMathLn(fbase));
   r^.VType := 3;
-  PPyDouble(@r^.Payload)^ := fr;
+  PPyDouble(@r^.Payload)^ := pypow_range(fr, fbase, fexp);
 end;
 
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;

@@ -1,0 +1,104 @@
+# CPython raises OverflowError where IEEE answers inf — but only for CALLS, and
+# the ticket's own second row was wrong about that: `1e300 * 1e300` really is
+# `inf` in CPython, exactly as it is here. Measured against CPython 3, one row
+# at a time:
+#
+#   arithmetic operators (* / +)   ->  inf, no error, BOTH sides
+#   float `**`                     ->  OverflowError
+#   math.exp / pow / sinh / cosh   ->  OverflowError
+#
+# So this is a per-call rule (CPython checks errno/ERANGE on the C library calls
+# it wraps and on float pow), not the "per-operation check on every float
+# multiply" the ticket feared — which is what removed the design question it
+# wanted a decide- ticket for.
+#
+# An INFINITE INPUT is not an overflow, and that is the half a result-only check
+# would get wrong: math.exp(inf) is inf in CPython too. Underflow is not an error
+# on either side.
+# bug-nilpy-float-overflow-answers-inf-where-cpython-raises
+import math
+
+def show(label, v):
+    print(label, "->", repr(v))
+
+# the operators, which must NOT raise
+show("1e300 * 1e300", 1e300 * 1e300)
+show("1e300 / 1e-300", 1e300 / 1e-300)
+show("1e300 + 1e300", 1e300 + 1e300)
+
+# float ** — the static route (an operand is statically float)
+try:
+    show("2.0 ** 10000", 2.0 ** 10000)
+except OverflowError:
+    print("2.0 ** 10000 -> OverflowError")
+try:
+    show("1e300 ** 2", 1e300 ** 2)
+except OverflowError:
+    print("1e300 ** 2 -> OverflowError")
+try:
+    show("(-2.0) ** 10001", (-2.0) ** 10001)
+except OverflowError:
+    print("(-2.0) ** 10001 -> OverflowError")
+
+# ...and the DYNAMIC route: a loop variable and a list element are variants, so
+# they reach pypow_v at run time where no call-site guard can see them.
+try:
+    for v in [2.0]:
+        show("variant ** 10000", v ** 10000)
+except OverflowError:
+    print("variant ** 10000 -> OverflowError")
+try:
+    show("[2.0][0] ** 10000", [2.0][0] ** 10000)
+except OverflowError:
+    print("[2.0][0] ** 10000 -> OverflowError")
+try:
+    y = 2.0
+    y **= 10000
+    show("augmented **=", y)
+except OverflowError:
+    print("augmented **= -> OverflowError")
+
+# the math module
+try:
+    show("math.exp(1000)", math.exp(1000.0))
+except OverflowError:
+    print("math.exp(1000) -> OverflowError")
+try:
+    show("math.pow(10, 400)", math.pow(10.0, 400.0))
+except OverflowError:
+    print("math.pow(10, 400) -> OverflowError")
+try:
+    show("math.sinh(1000)", math.sinh(1000.0))
+except OverflowError:
+    print("math.sinh(1000) -> OverflowError")
+try:
+    show("math.cosh(1000)", math.cosh(1000.0))
+except OverflowError:
+    print("math.cosh(1000) -> OverflowError")
+
+# an infinite INPUT is not an overflow
+try:
+    show("inf ** 2", float("inf") ** 2)
+except OverflowError:
+    print("inf ** 2 -> OverflowError")
+try:
+    show("math.exp(inf)", math.exp(float("inf")))
+except OverflowError:
+    print("math.exp(inf) -> OverflowError")
+try:
+    show("math.pow(inf, 2)", math.pow(float("inf"), 2.0))
+except OverflowError:
+    print("math.pow(inf, 2) -> OverflowError")
+
+# underflow is not an error on either side
+show("2.0 ** -10000", 2.0 ** -10000)
+show("math.exp(-1000)", math.exp(-1000.0))
+
+# ordinary values are untouched, and the guard must not eat a call's side effect
+n = 0
+def f():
+    global n
+    n = n + 1
+    return 2.0
+show("2.0 ** 3.0", 2.0 ** 3.0)
+print("calls:", n, repr(3.0 ** f()), n)

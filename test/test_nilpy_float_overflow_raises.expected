@@ -1,0 +1,20 @@
+1e300 * 1e300 -> inf
+1e300 / 1e-300 -> inf
+1e300 + 1e300 -> 2e+300
+2.0 ** 10000 -> OverflowError
+1e300 ** 2 -> OverflowError
+(-2.0) ** 10001 -> OverflowError
+variant ** 10000 -> OverflowError
+[2.0][0] ** 10000 -> OverflowError
+augmented **= -> OverflowError
+math.exp(1000) -> OverflowError
+math.pow(10, 400) -> OverflowError
+math.sinh(1000) -> OverflowError
+math.cosh(1000) -> OverflowError
+inf ** 2 -> inf
+math.exp(inf) -> inf
+math.pow(inf, 2) -> inf
+2.0 ** -10000 -> 0.0
+math.exp(-1000) -> 0.0
+2.0 ** 3.0 -> 8.0
+calls: 0 9.0 1

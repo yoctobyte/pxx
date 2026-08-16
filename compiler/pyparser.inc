@@ -10419,6 +10419,14 @@ begin
     not on this table.
     bug-n-math-trunc-and-log-need-frontend-intercepts }
   else if dotted = 'math.pow' then Result := 'Power'
+  { exp/sinh/cosh are pure NAME matches — `import math` already reached the
+    RTL's own Exp/Sinh/Cosh. They are listed anyway so the call is BUILT here,
+    which is where the overflow guard can wrap the result: CPython raises
+    OverflowError for `math.exp(1000)` where IEEE (and so the RTL) answers inf.
+    bug-nilpy-float-overflow-answers-inf-where-cpython-raises }
+  else if dotted = 'math.exp' then Result := 'Exp'
+  else if dotted = 'math.sinh' then Result := 'Sinh'
+  else if dotted = 'math.cosh' then Result := 'Cosh'
   else Result := '';
 end;
 
@@ -10456,6 +10464,8 @@ var procIdx, callNode, argNode, lastArg, i, nArgs: Integer;
     lnA, lnB, lnArg, divNode: Integer;   { math.log(x, base) — see below }
     domPi, domArg, domArg2, domCall: Integer;   { math domain guard — see below }
     domName: AnsiString;
+    rngA, rngB, rngPi, rngArg, rngArg2, rngArg3, rngCall: Integer;  { overflow guard }
+    rngName: AnsiString;
 begin
   nArgs := 0;
   { Python's math module is FLOAT-ONLY, so when the shim name has an all-Double
@@ -10473,6 +10483,10 @@ begin
     bug-nilpy-import-leaks-the-units-names-into-the-python-namespace }
   QualNameLookup := True;
   if pname = 'Power' then procIdx := FindProcArityDouble(pname, 2);
+  { same reason as Power: each of these has a Single overload too, and Python's
+    math module is float-only. }
+  if (pname = 'Exp') or (pname = 'Sinh') or (pname = 'Cosh') then
+    procIdx := FindProcArityDouble(pname, 1);
   if procIdx < 0 then procIdx := FindProc(pname);
   QualNameLookup := False;
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
@@ -10530,6 +10544,29 @@ begin
     reason math.log is lowered here — a BUILTIN unit cannot reach the RTL's
     transcendentals at all.
     bug-n-math-pow-domain-error-raises-the-wrong-exception }
+  { OVERFLOW guard, prepared HERE and applied at the end: CPython's math module
+    raises OverflowError where IEEE answers inf (`math.exp(1000)`,
+    `math.pow(10, 400)`), while the ARITHMETIC operators do not — `1e300 *
+    1e300` is inf on both sides. So it is a per-CALL rule, and it wants the
+    ARGUMENTS as well as the result, because an infinite input is not an
+    overflow: `math.exp(float('inf'))` is inf in CPython too.
+    Naming an argument twice means parking it in a temp first — the domain
+    guard below also rewrites argument 0 in place, and a node referenced twice
+    is EMITTED twice.
+    bug-nilpy-float-overflow-answers-inf-where-cpython-raises }
+  rngA := -1; rngB := -1;
+  if ((pname = 'Power') and (nArgs = 2)) or
+     (((pname = 'Exp') or (pname = 'Sinh') or (pname = 'Cosh')) and (nArgs = 1)) then
+  begin
+    ASTLeft[ASTLeft[callNode]] := PyEvalOnce(ASTLeft[ASTLeft[callNode]]);
+    rngA := ASTLeft[ASTLeft[callNode]];
+    if nArgs = 2 then
+    begin
+      ASTLeft[ASTRight[ASTLeft[callNode]]] :=
+        PyEvalOnce(ASTLeft[ASTRight[ASTLeft[callNode]]]);
+      rngB := ASTLeft[ASTRight[ASTLeft[callNode]]];
+    end;
+  end;
   if (nArgs >= 1) and (ASTLeft[callNode] >= 0) then
   begin
     domName := '';
@@ -10627,6 +10664,30 @@ begin
     else if nArgs > Procs[procIdx].ParamCount then
       Error('Nil Python: ' + pname + ' takes ' +
             'fewer arguments than were given');
+  end;
+  { the overflow guard prepared above — wraps the finished call }
+  if rngA >= 0 then
+  begin
+    if rngB >= 0 then rngName := 'pymath_range' else rngName := 'pymath_range1';
+    rngPi := FindProc(rngName);
+    if rngPi < 0 then Error('Nil Python: pylib (' + rngName + ') not loaded');
+    rngArg3 := -1;
+    if rngB >= 0 then
+    begin
+      rngArg3 := AllocNode(AN_ARG);
+      ASTLeft[rngArg3] := CloneAST(rngB); ASTRight[rngArg3] := -1;
+    end;
+    rngArg2 := AllocNode(AN_ARG);
+    ASTLeft[rngArg2] := CloneAST(rngA); ASTRight[rngArg2] := rngArg3;
+    rngArg := AllocNode(AN_ARG);
+    ASTLeft[rngArg] := callNode; ASTRight[rngArg] := rngArg2;
+    rngCall := AllocNode(AN_CALL);
+    ASTIVal[rngCall] := rngPi;
+    ASTTk[rngCall] := Ord(tyDouble);
+    ASTLeft[rngCall] := rngArg;
+    LastExprTk := tyDouble;
+    Result := rngCall;
+    Exit;
   end;
   LastExprTk := IntToTypeKind(ASTTk[callNode]);
   Result := callNode;
@@ -20960,7 +21021,8 @@ end;
   container/scalar powers keep today's behaviour. }
 function PyMakePow(ppBase, ppExp: Integer): Integer;
 var ppPi, ppArgSeq, ppArgSeq2, node: Integer;
-    ppDomPi, ppDomArg, ppDomArg2, ppDomCall: Integer;
+    ppDomPi, ppDomArg, ppDomArg2, ppDomCall, ppBaseVal: Integer;
+    ppRngPi, ppRngArg, ppRngArg2, ppRngArg3, ppRngCall: Integer;
 begin
   if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) <> tyClass) then
   begin
@@ -21019,6 +21081,8 @@ begin
         a second call.
         bug-nilpy-the-float-power-operator-evaluates-its-exponent-twice }
       ppExp := PyEvalOnce(ppExp);
+      ppBase := PyEvalOnce(ppBase);
+      ppBaseVal := ppBase;
       ppDomArg2 := AllocNode(AN_ARG);
       ASTLeft[ppDomArg2] := CloneAST(ppExp); ASTRight[ppDomArg2] := -1;
       ppDomArg := AllocNode(AN_ARG);
@@ -21035,6 +21099,27 @@ begin
       ASTIVal[node] := ppPi;
       ASTLeft[node] := ppArgSeq;
       ASTTk[node] := Ord(tyDouble);
+      { OVERFLOW: `2.0 ** 10000` is an OverflowError in CPython, not `inf`.
+        On the RESULT, with both operands along, because an infinite INPUT is
+        not an overflow (`float('inf') ** 2` is inf on both sides) and because
+        `1e300 * 1e300` — an operator, not a call — really is inf in CPython
+        too. Both operands are already temps by now, so naming them again is
+        free. bug-nilpy-float-overflow-answers-inf-where-cpython-raises }
+      ppRngPi := FindProc('pypow_range');
+      if ppRngPi >= 0 then
+      begin
+        ppRngArg3 := AllocNode(AN_ARG);
+        ASTLeft[ppRngArg3] := CloneAST(ppExp); ASTRight[ppRngArg3] := -1;
+        ppRngArg2 := AllocNode(AN_ARG);
+        ASTLeft[ppRngArg2] := CloneAST(ppBaseVal); ASTRight[ppRngArg2] := ppRngArg3;
+        ppRngArg := AllocNode(AN_ARG);
+        ASTLeft[ppRngArg] := node; ASTRight[ppRngArg] := ppRngArg2;
+        ppRngCall := AllocNode(AN_CALL);
+        ASTIVal[ppRngCall] := ppRngPi;
+        ASTTk[ppRngCall] := Ord(tyDouble);
+        ASTLeft[ppRngCall] := ppRngArg;
+        node := ppRngCall;
+      end;
       LastExprTk := tyDouble;
       PyMakePow := node;
       Exit;

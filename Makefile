@@ -2007,6 +2007,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_pow26 | diff -u test/test_nilpy_pow_matches_cpython.expected -
 	./$(COMPILER) test/test_nilpy_pow_evaluates_operands_once.npy $(TESTTMP)/test_nilpy_pow_once26
 	$(TESTTMP)/test_nilpy_pow_once26 | diff -u test/test_nilpy_pow_evaluates_operands_once.expected -
+	./$(COMPILER) test/test_nilpy_float_overflow_raises.npy $(TESTTMP)/test_nilpy_ovf26
+	$(TESTTMP)/test_nilpy_ovf26 | diff -u test/test_nilpy_float_overflow_raises.expected -
 	@# float formatting rounds ties to EVEN: "%.0f" % 7.5 is 8, not 7 — it used
 	@# to round the FRACTION alone, which loses the parity half-even needs
 	./$(COMPILER) test/test_nilpy_format_half_even.npy $(TESTTMP)/test_nilpy_halfeven26
