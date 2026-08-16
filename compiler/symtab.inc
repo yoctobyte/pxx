@@ -5554,6 +5554,31 @@ begin
   Result := False;
 end;
 
+function IntrinsicShadowedByMember(const nm: AnsiString): Boolean;
+{ True when an unqualified call to `nm` inside a method body must bind to a
+  MEMBER of the enclosing class (or an ancestor) rather than to the builtin of
+  that name.
+
+  The soft intrinsics -- Delete, Insert, SetLength, New, Dispose, ReallocMem,
+  Str, SetSignalHandler -- each guard themselves with `FindProc(nm) < 0`, which
+  lets a plain routine of the same name shadow them. A class METHOD is not
+  registered under its bare name, so FindProc missed it and the builtin won:
+  TFPObjectList.Remove's own `Delete(Result)` bound the builtin, whose argument
+  check then rejected an Integer and produced a diagnostic about dynamic arrays
+  -- true of the builtin, and nothing to do with the program. lib/rtl/contnrs.pas
+  had not compiled since it landed because of it
+  (bug-p-a-class-method-does-not-shadow-a-builtin-of-the-same-name).
+
+  Together with the existing FindProc test this gives the resolution order
+  FPC has: enclosing class (own methods, then ancestors) -> unit scope ->
+  builtins. Methods only -- a FIELD or PROPERTY of the name is a different
+  collision and is not what any of these intrinsics can be confused with. }
+begin
+  IntrinsicShadowedByMember :=
+    (CurProc >= 0) and (CurMethClass >= REC_UCLASS_BASE) and
+    (FindUMeth(CurMethClass - REC_UCLASS_BASE, nm) >= 0);
+end;
+
 function FindUMethArity(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { Overload-aware method lookup: first name match (walking the parent chain)
   whose proc accepts the call's EXPLICIT arg count (self added per entry;

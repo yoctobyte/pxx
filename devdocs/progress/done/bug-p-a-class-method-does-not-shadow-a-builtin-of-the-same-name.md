@@ -9,7 +9,7 @@ summary: "A class method named after a builtin does not shadow it inside the cla
 # A class method does not shadow a builtin of the same name
 
 - **Type:** bug (Pascal frontend — name resolution) — **Track P**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-16
 - **Filed by:** Track T. T owns the tool, never the bug.
 
@@ -107,3 +107,43 @@ Related: [[bug-p-scope-hiding-covers-routines-but-not-types-and-classes]] (the
 same "flat resolution ignores the enclosing scope" theme one layer up, for
 `uses` order), [[bug-a-duplicate-class-name-check-is-scope-blind]] (ditto, for
 declarations).
+
+
+## RESOLVED 2026-08-16 (Track P) — all eight soft intrinsics, not just Delete
+
+`IntrinsicShadowedByMember(nm)` (symtab.inc, beside `FindUMeth`): true when we
+are inside a method body and the enclosing class or an ancestor has a member of
+that name. Every soft intrinsic that guarded itself with `FindProc(nm) < 0` now
+also carries it — **Delete, Insert, SetLength, New, Dispose, ReallocMem, Str,
+SetSignalHandler**. Fixing only the reported one would have left seven siblings
+in exactly the state `devdocs/dev/normalise-dont-special-case.md` describes.
+
+Together with the existing `FindProc` test this gives FPC's order: enclosing
+class (own methods, then ancestors) -> unit scope -> builtins.
+
+Verified: T's 15-line repro prints `method Delete 7` / `7`, matching FPC.
+**`lib/rtl/contnrs.pas` compiles and runs** (a `TFPObjectList.Create(True)`
+program builds and prints its Count).
+
+### The siblings T asked to check, measured
+
+- **unit-level routine** shadowing a builtin: already worked, kept as the
+  control in the new test.
+- **ancestor's method**: works (the test asserts `ancestor Insert 7`), because
+  `FindUMeth` walks parents.
+- **`System.`-qualified call**: **broken, and pre-existing** — with a unit-level
+  `Dispose` in scope, `System.Dispose(p)` binds the USER routine. Identical on
+  the pinned binary, so not fallout from this fix. Filed as
+  [[bug-p-a-system-qualified-call-binds-a-same-named-user-routine]]. It matters
+  more than it looks: `System.X` is the documented escape hatch for exactly the
+  shadowing this ticket introduces more of.
+- **field/property of the same name**: out of scope — `FindUMeth` is methods
+  only, and none of these intrinsics can be confused with a field read.
+
+Gate: `make compiler/pascal26` fixedpoint; `tools/gate.sh quick` GREEN;
+`test/test_method_shadows_builtin.pas` (five shadowed intrinsics inside a
+method, one via an ancestor, the unit-routine control, and the builtins still
+working outside a class) matches `fpc -O- -Mobjfpc` byte for byte.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

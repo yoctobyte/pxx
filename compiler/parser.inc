@@ -23052,6 +23052,7 @@ begin
         ASTRight[node] := opNode;
       end
       else if CaseEqual(name, 'SetSignalHandler') and (FindProc('SetSignalHandler') < 0) and
+              not IntrinsicShadowedByMember('SetSignalHandler') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { SetSignalHandler(sig, @proc): register a parameterless proc as the
@@ -23069,6 +23070,7 @@ begin
         ASTLeft[node] := opNode; ASTRight[node] := valNode;
       end
       else if CaseEqual(name, 'Delete') and (FindProc('Delete') < 0) and
+              not IntrinsicShadowedByMember('Delete') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Delete(s, index, count): in-place string delete, lowered to the
@@ -23131,6 +23133,7 @@ begin
         end;
       end
       else if CaseEqual(name, 'Insert') and (FindProc('Insert') < 0) and
+              not IntrinsicShadowedByMember('Insert') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Insert(src, s, index): in-place string insert, lowered to __pxxStrInsert.
@@ -23191,6 +23194,7 @@ begin
         end;
       end
       else if CaseEqual(name, 'SetLength') and (FindProc('SetLength') < 0) and
+              not IntrinsicShadowedByMember('SetLength') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Guarded like New/Insert/Delete/Str above: a user proc named
@@ -23266,6 +23270,7 @@ begin
         node := BuildMultiSetLen(valNode, slIsArrTarget);
       end
       else if CaseEqual(name, 'New') and (FindProc('New') < 0) and
+              not IntrinsicShadowedByMember('New') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { New(p): allocate SizeOf(p^) and store the block into the pointer p.
@@ -23293,6 +23298,7 @@ begin
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
       else if CaseEqual(name, 'Dispose') and (FindProc('Dispose') < 0) and
+              not IntrinsicShadowedByMember('Dispose') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Dispose(p): return the block to the free list (= FreeMem(p)).
@@ -23306,6 +23312,7 @@ begin
         ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
       end
       else if CaseEqual(name, 'ReallocMem') and (FindProc('ReallocMem') < 0) and
+              not IntrinsicShadowedByMember('ReallocMem') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { ReallocMem(p, newsize): resize the block p points at, preserving
@@ -23342,6 +23349,7 @@ begin
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
       else if CaseEqual(name, 'Str') and (FindProc('Str') < 0) and
+              not IntrinsicShadowedByMember('Str') and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Str(x[:w[:d]], s): format integer x into string s, right-justified to
