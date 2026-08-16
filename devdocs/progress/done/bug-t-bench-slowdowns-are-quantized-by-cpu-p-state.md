@@ -9,7 +9,7 @@ prio: 55
 
 - **Type:** bug (measurement validity) — Track T (`tools/twatch.py`, `run_bench_idle`,
   `devdocs/progress/tstate/bench.tsv`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Hypothesis from:** the user, from eyeballing the series — *"pretty 'discrete'
   25% peaks… its xeons run at 2.1GHz with a boost of 2.6GHz, which is almost
@@ -464,3 +464,10 @@ clock) is a Track U call**, since `intel_pstate/no_turbo` is root-only and
 changes the box for everything the user runs. Recommendation stands: leave turbo
 on, rely on the recorded clock. Option 1 (void by ratio) is now rejected for
 three independent reasons.
+
+Option 3 is split out as [[decide-pin-the-bench-box-clock]] (Track U) so this
+ticket can close on its Gate rather than idling on a call T does not get to
+make. Nothing waits on that decision.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
