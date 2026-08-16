@@ -37,3 +37,6 @@ are not the compiler — a busy port or a sandboxed network on the watcher host.
 Left open rather than resolved: needs a re-run on plexus (the failing host) to
 say transient vs host-specific. If it comes back green there, close it; if it
 stays red only on plexus, it is a Track T environment item, not a compiler bug.
+
+## Log
+- 2026-08-16 — auto-closed by the plexus watcher: `lib-test#src:test/lib_tls.pas` passes at 096da361dd93 (tier full); it was red at 459e96f985d1. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
