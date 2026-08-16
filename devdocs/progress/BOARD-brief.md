@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:203 experimental:20 rainy-day:40 done-followup:3 decided:77 done:1951 rejected:38`
+`unfinished:11 blocked:4 backlog:204 experimental:20 rainy-day:40 done-followup:3 decided:77 done:1952 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 188, ranked
+## Ready — top 30 of 189, ranked
 
 - `[p 70] [T]` regression-test-core-test-strict-overload-width
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
@@ -65,4 +65,4 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
 
-_158 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_159 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

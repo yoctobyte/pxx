@@ -1647,6 +1647,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-pascal-program-generator | T | 70 | feature | pasmith — Csmith-style random Object Pascal generator, FPC as differential oracle | — |
 | feature-pasmith-qplus-rplus-rungs | T | 30 | feature | pasmith rungs for {$Q+}/{$R+}: generate checked regions + try/except EIntOverflow/ERangeError harnesses, differential vs FPC | — |
+| feature-pasmith-real-const-rung | T | 35 | feature | pasmith is integer/bool/char/string throughout, which left the constant evaluator's REAL path entirely unfuzzed — and that path was silently wrong until 8938aed7d (a const aliased to a real const yielded its IEEE bits as an integer; `const C: double = 3` stored 0.00; `= -3` stored Nan). Adds a const section in those shapes, folded by COMPARISON so no float formatting enters the oracle. | — |
 | feature-pasmith-widen-grammar | T | 65 | feature | pasmith is too NARROW: 527 divergences, one bug. Csmith found dozens. | — |
 | feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 | feature-pcl-input-events | B | 50 | feature | PCL: mouse-coordinate + keyboard input events | — |

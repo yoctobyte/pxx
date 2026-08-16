@@ -561,7 +561,7 @@ def check(nseeds, args):
 
 GEN_FLAGS = ["vars", "funcs", "stmts", "depth", "classes", "objs", "strs",
              "recs", "arrs", "enums", "shorts", "excepts", "modeprocs", "intfs",
-             "hier", "mptrs", "props", "exdtor", "clsm", "checks"]
+             "hier", "mptrs", "props", "exdtor", "clsm", "checks", "consts"]
 
 
 def gen_args_for(a, seed):
@@ -608,7 +608,7 @@ def generate(gen_args, workdir, seed):
 # (--intfs N) until that bug is fixed; then add it back here.
 WIDE_DEFAULTS = {"recs": 2, "arrs": 2, "enums": 2, "shorts": 2, "excepts": 3,
                  "modeprocs": 2, "strs": 3, "classes": 3, "hier": 4, "props": 3,
-                 "exdtor": 3, "clsm": 3, "checks": 1}
+                 "exdtor": 3, "clsm": 3, "checks": 1, "consts": 1}
 
 
 def add_gen_flags(ap):

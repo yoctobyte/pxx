@@ -135,7 +135,7 @@ class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
                  nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0,
-                 nhier=0, nmptrs=0, nprops=0, nexdtor=0, nclsm=0, nchecks=0):
+                 nhier=0, nmptrs=0, nprops=0, nexdtor=0, nclsm=0, nchecks=0, nconsts=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -150,6 +150,8 @@ class Gen:
         self.nexcepts = nexcepts
         self.nmodeprocs = nmodeprocs
         self.nchecks = nchecks     # {$Q+}/{$R+} checked regions per program
+        self.nconsts = nconsts     # real-typed const groups (gen_consts)
+        self.constfolds = []
         self.wide_p = wide_p       # P(a statement is one of the widened kinds)
         self.recs = []
         self.arrs = []
@@ -1670,6 +1672,55 @@ class Gen:
     # only the exit fold sees is state a trace checkpoint cannot localise, and the
     # divergence then shows up as "the last statement", wherever it really was.
 
+    def gen_consts(self):
+        """A `const` section exercising the REAL-typed constant evaluator.
+
+        Every other rung in this generator is integer/bool/char/string, and that
+        left the constant evaluator's real path entirely unfuzzed. It was
+        integer-only, and recognised a real const only as a bare literal token,
+        so all three of these were SILENTLY wrong (fixed 2026-08-16, 8938aed7d):
+
+            const A = 3.14; B = A;    B printed the IEEE bits as an integer
+            const C: double = 3;      stored 0.00
+            const D: double = -3;     stored Nan
+
+        Silent and reachable from ordinary code, which is the worst combination
+        and exactly what a differential generator is for.
+
+        FOLDED BY COMPARISON, NEVER BY FORMATTING. `Mix(ord(X > lo) + 2*ord(X <
+        hi))` with a tight bracket around the expected value. Printing a double
+        would drag in decimal formatting, where the two implementations may
+        legitimately differ in digits -- a divergence nobody owns, which is the
+        one thing that makes a fuzzer worthless. A comparison against a bracket
+        answers the only question that matters (is the stored value right?) and
+        cannot manufacture that argument.
+
+        The Nan case falls out for free: `Nan > lo` and `Nan < hi` are both
+        false, so a Nan folds 0 where a correct value folds 3.
+        """
+        rnd = self.rnd
+        L = ["const"]
+        self.constfolds = []
+        for i in range(self.nconsts):
+            # Halves, so the literal is exact in binary and the bracket cannot
+            # be defeated by a representation argument -- the point here is the
+            # EVALUATOR, not float formatting.
+            v = rnd.randrange(1, 40) / 2.0
+            n = rnd.randrange(1, 40)
+            L.append("  ka%d = %.1f;" % (i, v))
+            L.append("  kb%d = ka%d;" % (i, i))          # const aliased to const
+            L.append("  kc%d: double = %d;" % (i, n))    # real-typed from integer
+            L.append("  kd%d: double = -%d;" % (i, n))   # ...and negative
+            L.append("  ke%d = %d;" % (i, n))
+            L.append("  kf%d: double = ke%d;" % (i, i))  # real-typed from int const
+            for name, want in (("ka%d" % i, v), ("kb%d" % i, v),
+                               ("kc%d" % i, n), ("kd%d" % i, -n),
+                               ("kf%d" % i, n)):
+                self.constfolds.append(
+                    "ord(%s > %.4f) + 2*ord(%s < %.4f)"
+                    % (name, want - 0.01, name, want + 0.01))
+        return L
+
     def teardown_ckpt(self, L, kind):
         """A trace checkpoint for one END-OF-PROGRAM phase.
 
@@ -1773,6 +1824,7 @@ class Gen:
                 ("--hier", self.nhier), ("--mptrs", self.nmptrs),
                 ("--props", self.nprops), ("--exdtor", self.nexdtor),
                 ("--clsm", self.nclsm), ("--checks", self.nchecks),
+                ("--consts", self.nconsts),
                 ("--wide-p", self.wide_p))) + " }")
         L.append("{$mode objfpc}")
         if self.nexcepts or self.nexdtor:
@@ -1799,6 +1851,8 @@ class Gen:
             L += self.gen_exdtor()
         if self.nclsm:
             L += self.gen_clsm()
+        if self.nconsts:
+            L += self.gen_consts()
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
@@ -2032,6 +2086,8 @@ class Gen:
         L.append("")
         L.append("  { fold ALL live state into one number: the sole output }")
         for e in self.scalar_folds():
+            L.append("  Mix(%s);" % e)
+        for e in self.constfolds:
             L.append("  Mix(%s);" % e)
         for n in self.str_folds():
             L.append("  MixStr(%s);" % n)
@@ -2444,6 +2500,11 @@ def main():
                          "b339 shape. Every raise is caught by construction.")
     ap.add_argument("--modeprocs", type=int, default=None,
                     help="procedures with var/const/out params, called as statements")
+    ap.add_argument("--consts", type=int, default=None,
+                    help="real-typed const groups: a real const aliased to "
+                         "another const, and double consts initialised from "
+                         "integer literals/consts. Folded by COMPARISON, never "
+                         "by formatting (feature-pasmith-real-const-rung)")
     ap.add_argument("--checks", type=int, default=None,
                     help="enable {$Q+}/{$R+} checked regions: arithmetic that may "
                          "overflow and array reads that may go out of range, each "
@@ -2495,18 +2556,18 @@ def main():
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
                      ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
                      ("hier", 4), ("props", 3), ("exdtor", 3), ("clsm", 3),
-                     ("checks", 1)):
+                     ("checks", 1), ("consts", 1)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
               "strs", "classes", "intfs", "hier", "mptrs", "props", "exdtor",
-              "clsm", "checks"):
+              "clsm", "checks", "consts"):
         if getattr(a, f) is None:
             setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
               a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier, a.mptrs,
-              a.props, a.exdtor, a.clsm, a.checks).gen()
+              a.props, a.exdtor, a.clsm, a.checks, a.consts).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)
