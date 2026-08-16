@@ -4,6 +4,7 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "`int f(int a[][4])` lost the 4: the parameter declarator's brackets were consumed by a blind balanced skip, so `a[1][2]` flattened to 1+2 and read a[0][3]. The equivalent `int (*a)[4]` spelling was right, so the two spellings of one C type disagreed — silently, on the ordinary way a 2-D array is passed."
+status: done
 ---
 
 # A 2-D array parameter loses its row length
@@ -49,3 +50,6 @@ stay untouched — returns 42 under both gcc and pxx.
 ## Gate
 
 `make compiler/pascal26` + the test + `tools/gate.sh quick` — GREEN.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
