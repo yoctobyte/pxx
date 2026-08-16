@@ -169,4 +169,4 @@ self-host is byte-identical, `gate.sh quick` green.
 Scope is as planned: the 32-bit ops only; `*64` keeps the honest refusal.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit ceebd798c.
