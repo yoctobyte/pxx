@@ -147,12 +147,19 @@ The user's retrospective is the sharpest statement of the rule:
 > there are more differences. the choice for 'oh, and C can just use pascal's
 > math library' was a wrong one, in retrospect."*
 
-**2. The names still carry scar tissue.** Ten functions in `lib/crtl/src/math.c`
-are still named `__crtl_exp`, `__crtl_log2`, `__crtl_sin`, … purely to dodge the
-case-insensitive collision, reached through `#define`s in crtl's `math.h`.
-Measured 2026-08-14: that collision no longer fires (the Pascal RTL is not in
-scope for a C program at all now), so they are probably deletable —
-`task-c-retire-the-crtl-name-dodge-prefixes`.
+**2. The name scars are gone (2026-08-16).** Ten functions in
+`lib/crtl/src/math.c` were named `__crtl_exp`, `__crtl_log2`, `__crtl_sin`, …
+purely to dodge the case-insensitive collision, reached through `#define`s in
+crtl's `math.h`. The collision stopped firing when `pxxcio.pas` dropped
+`uses math` — the Pascal RTL is not in scope for an ordinary C program — and
+`task-c-retire-the-crtl-name-dodge-prefixes` de-prefixed all ten. The case that
+kept them alive was measured, not assumed: a Pascal program that does
+`uses math` AND `uses './x.c'` gets the right answer from `exp(1.0)` in C and
+`Exp(1.0)` in Pascal, both.
+
+That does NOT retire the rule below — it closes the C-to-Pascal direction only.
+A Pascal program that `uses './math.c'` still loses its own `Exp`, which is what
+`feature-a-own-language-first-symbol-resolution` is for.
 
 ## Consequences for name resolution
 

@@ -32,6 +32,9 @@ and an earlier attempt to have C borrow Pascal's math made `pow(2,10)` return 1
 with nothing to see at either call site. **`devdocs/dev/math-implemented-twice.md`**
 has the measurements and the rule.
 
-Ten functions here are still named `__crtl_exp`, `__crtl_sin`, … to dodge a
-case-insensitive collision with Pascal's `Exp`/`Sin` that no longer fires;
-retiring those prefixes is `task-c-retire-the-crtl-name-dodge-prefixes`.
+Ten functions here used to be named `__crtl_exp`, `__crtl_sin`, … to dodge a
+case-insensitive collision with Pascal's `Exp`/`Sin`. That collision stopped
+firing when `pxxcio.pas` dropped `uses math`, and the prefixes were retired
+2026-08-16 (`task-c-retire-the-crtl-name-dodge-prefixes`) — including the case
+the old note feared, a Pascal program that does `uses math` AND `uses './x.c'`,
+which was measured rather than assumed and answers correctly on both sides.

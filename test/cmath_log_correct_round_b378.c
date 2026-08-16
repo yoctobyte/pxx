@@ -10,7 +10,7 @@
 #include "stdio.c"
 #include "math.c"
 #include "locale.c"
-#include <math.h>   /* the exp->__crtl_exp macro — plain `exp` binds to Pascal Exp */
+#include <math.h>
 static int ck(double v, const char *want, int code) {
     char b[64];
     snprintf(b, sizeof b, "%.17g", v);

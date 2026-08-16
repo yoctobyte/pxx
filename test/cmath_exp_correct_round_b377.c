@@ -1,8 +1,9 @@
 /* Correctly-rounded crtl exp (b377, feature-crtl-libm-correctly-rounded-
    transcendentals). Two prior failure shapes:
    1. Defining a C `exp` next to Pascal Exp broke the call binding (the
-      argument never arrived — exp returned e^<stale xmm0>); crtl now routes
-      exp through the __crtl_exp macro in math.h.
+      argument never arrived — exp returned e^<stale xmm0>). That hazard is
+      gone (pxxcio no longer `uses math`) and the __crtl_exp dodge-name was
+      retired 2026-08-16 — `exp` is an ordinary C function again.
    2. The subnormal-result path double-rounded (53-bit round-to-odd has no
       margin in the top subnormal binade): exp(-708.9142446693706) came out
       one subnormal-ulp low.
@@ -17,7 +18,7 @@
 #include "stdio.c"
 #include "math.c"
 #include "locale.c"
-#include <math.h>   /* the exp->__crtl_exp macro — plain `exp` binds to Pascal Exp */
+#include <math.h>
 static int ck(double v, const char *want, int code) {
     char b[64];
     snprintf(b, sizeof b, "%.17g", v);

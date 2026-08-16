@@ -61,42 +61,21 @@ extern double atan2(double y, double x);
 extern double sinh(double x);
 extern double cosh(double x);
 extern double tanh(double x);
+/* exp / log2 / log10 / sin / cos / tan / sinh / cosh / tanh / hypot were
+   defined under `__crtl_`-prefixed names and reached through function-like
+   macros here, because the C name collided CASE-INSENSITIVELY with the Pascal
+   RTL's Exp/Log2/Sin/... when the two were linked side by side: with two
+   visible definitions the call bound to the wrong one and the arguments never
+   arrived. That hazard is gone — `pxxcio.pas` no longer `uses math`, so the
+   Pascal RTL is not in scope for an ordinary C program at all, and each of the
+   ten now binds its own C body (measured per name, 2026-08-14 and again on the
+   de-prefixing, 2026-08-16). They are ordinary C functions again.
+   task-c-retire-the-crtl-name-dodge-prefixes */
 extern double exp(double x);
-/* The C name `exp` collides case-insensitively with Pascal Exp when the RTL
-   is linked next to crtl; with TWO visible definitions the call binding
-   silently picks the wrong convention (arguments never arrive). The
-   correctly-rounded implementation therefore lives under __crtl_exp and C
-   callers reach it through this function-like macro — variables named `exp`
-   and struct fields stay untouched. */
-extern double __crtl_exp(double x);
-#define exp(x) __crtl_exp(x)
 extern double exp2(double x);
 extern double log(double x);
 extern double log2(double x);
 extern double log10(double x);
-/* Same collision story as exp/Exp above: Pascal Log2/Log10 are linked next
-   to crtl, so the C implementations live under __crtl_ names and calls come
-   through these function-like macros (variables named log2 stay untouched). */
-extern double __crtl_log2(double x);
-extern double __crtl_log10(double x);
-#define log2(x) __crtl_log2(x)
-#define log10(x) __crtl_log10(x)
-/* ...and Pascal Sinh/Cosh/Tanh for the hyperbolics. */
-extern double __crtl_sinh(double x);
-extern double __crtl_cosh(double x);
-extern double __crtl_tanh(double x);
-#define sinh(x) __crtl_sinh(x)
-#define cosh(x) __crtl_cosh(x)
-#define tanh(x) __crtl_tanh(x)
-extern double __crtl_hypot(double x, double y);
-#define hypot(x, y) __crtl_hypot(x, y)
-/* ...and Pascal Sin/Cos/Tan for the forward trig. */
-extern double __crtl_sin(double x);
-extern double __crtl_cos(double x);
-extern double __crtl_tan(double x);
-#define sin(x) __crtl_sin(x)
-#define cos(x) __crtl_cos(x)
-#define tan(x) __crtl_tan(x)
 extern double pow(double x, double y);
 extern double fmod(double x, double y);
 extern double frexp(double x, int *e);

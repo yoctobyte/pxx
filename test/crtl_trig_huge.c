@@ -71,10 +71,10 @@ static unsigned long long bits(double d) {
 int main(void) {
   int i, n = (int)(sizeof(sin_cases)/sizeof(sin_cases[0]));
   for (i = 0; i < n; i++)
-    if (bits(__crtl_sin(sin_cases[i].x)) != sin_cases[i].want) return 100 + i;
+    if (bits(sin(sin_cases[i].x)) != sin_cases[i].want) return 100 + i;
   for (i = 0; i < n; i++)
-    if (bits(__crtl_cos(cos_cases[i].x)) != cos_cases[i].want) return 200 + i;
+    if (bits(cos(cos_cases[i].x)) != cos_cases[i].want) return 200 + i;
   for (i = 0; i < n; i++)
-    if (bits(__crtl_tan(tan_cases[i].x)) != tan_cases[i].want) return 300 + i;
+    if (bits(tan(tan_cases[i].x)) != tan_cases[i].want) return 300 + i;
   return 42;
 }

@@ -4,6 +4,8 @@ prio: 50
 type: task
 blocked-by: []
 summary: "Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change."
+status: working
+owner: claude-acpn
 ---
 
 # Retire the `__crtl_*` dodge-prefixes in crtl math

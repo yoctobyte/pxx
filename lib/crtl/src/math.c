@@ -25,13 +25,20 @@
  * bit). Shared code is reached only through explicitly prefixed `__pxx_*` PAL
  * entry points, never by accidental name collision.
  *
- * Two naming scars remain from the collision era and must stay:
- *   - `exp`, `log2`, `log10`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`,
- *     `hypot` are defined under `__crtl_`-prefixed names and reached through
- *     function-like macros in <math.h>. A same-name DEFINITION next to a
- *     visible Pascal twin silently breaks the call binding — the argument never
- *     arrives (b377) — and while pxxcio no longer imports `math`, a user program
- *     that does `uses math` itself would resurrect exactly that.
+ * One naming scar remains from the collision era, and one has been retired:
+ *   - RETIRED 2026-08-16 (task-c-retire-the-crtl-name-dodge-prefixes): `exp`,
+ *     `log2`, `log10`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh` and `hypot`
+ *     used to be defined under `__crtl_`-prefixed names and reached through
+ *     function-like macros in <math.h>, because a same-name DEFINITION next to
+ *     a visible Pascal twin silently broke the call binding — the argument
+ *     never arrived (b377). `pxxcio.pas` no longer `uses math`, so the Pascal
+ *     RTL is not in scope for an ordinary C program, and the case the old
+ *     comment feared was MEASURED rather than assumed: a Pascal program that
+ *     does `uses math` AND `uses './x.c'` now gets the right answer from both
+ *     `exp(1.0)` in C and `Exp(1.0)` in Pascal. They are ordinary C functions
+ *     again. If this ever regresses, that is evidence for
+ *     feature-a-own-language-first-symbol-resolution — say so there rather
+ *     than re-prefixing silently.
  *   - never write a wrapper that calls the Pascal twin from its C namesake
  *     (`double sqrt(double x){ return Sqrt(x); }`): `Sqrt` binds
  *     case-insensitively back to the C `sqrt` and recurses forever.
@@ -253,9 +260,8 @@ static double crtl_exp_dd(crtl_dd a) {
    large |x|. Exact powers of two are answered directly: 2^k must be EXACT for
    integral k, and routing those through the series would round.
 
-   Note the file's naming rule does not bite here: `exp2` does not collide with
-   any Pascal identifier the way bare `exp` does, so this is a plain
-   definition rather than a __crtl_ name plus a macro. */
+   (`exp2` never needed the retired `__crtl_` dodge either: it does not collide
+   with any Pascal identifier the way bare `exp` used to.) */
 double exp2(double x) {
   crtl_dd a, ln2;
   double k;
@@ -272,8 +278,8 @@ double exp2(double x) {
 
 /* NOT named `exp`: that name collides case-insensitively with Pascal Exp
    (two definitions -> silently broken call binding). C callers reach this
-   through `#define exp(x) __crtl_exp(x)` in crtl math.h. */
-double __crtl_exp(double x) {
+   through `#define exp(x) exp(x)` in crtl math.h. */
+double exp(double x) {
   crtl_dd a;
   if (x != x) return x;                 /* NaN */
   if (x > 1000.0)  return x * crtl_bits2d(0x7FE0000000000000ull); /* +inf */
@@ -347,7 +353,7 @@ double log(double x) {
    NOT named log2/log10: those collide case-insensitively with Pascal
    Log2/Log10 (same silently-broken binding as exp/Exp, b377) — C callers
    come through the math.h function-like macros. */
-double __crtl_log2(double x) {
+double log2(double x) {
   crtl_dd r, c;
   if (x != x) return x;
   if (x == 0.0) return -1.0 / (x * x);
@@ -359,7 +365,7 @@ double __crtl_log2(double x) {
   return r.hi + r.lo;
 }
 
-double __crtl_log10(double x) {
+double log10(double x) {
   crtl_dd r, c;
   if (x != x) return x;
   if (x == 0.0) return -1.0 / (x * x);
@@ -635,7 +641,7 @@ static void crtl_sincos_big(double ax, crtl_dd *sn, crtl_dd *cs) {
 
 /* NOT named sin/cos/tan: Pascal Sin/Cos/Tan collide (b377 landmine) —
    C callers come through the math.h function-like macros. */
-double __crtl_sin(double x) {
+double sin(double x) {
   crtl_dd sn, cs;
   if (x != x || x == 0.0) return x;
   if (isinf(x)) return (x - x) / (x - x);
@@ -647,7 +653,7 @@ double __crtl_sin(double x) {
   return sn.hi + sn.lo;
 }
 
-double __crtl_cos(double x) {
+double cos(double x) {
   crtl_dd sn, cs;
   if (x != x) return x;
   if (isinf(x)) return (x - x) / (x - x);
@@ -659,7 +665,7 @@ double __crtl_cos(double x) {
   return cs.hi + cs.lo;
 }
 
-double __crtl_tan(double x) {
+double tan(double x) {
   crtl_dd sn, cs, t;
   if (x != x || x == 0.0) return x;
   if (isinf(x)) return (x - x) / (x - x);
@@ -1069,9 +1075,9 @@ double ldexpl(double x, int e) { return ldexp(x, e); }
    Relies on the cdecl float-return ABI fix (bug-c-float-single-return-zero). */
 float fabsf(float x)  { return (float)fabs((double)x); }
 float sqrtf(float x)  { return (float)sqrt((double)x); }
-float sinf(float x)   { return (float)__crtl_sin((double)x); }
-float cosf(float x)   { return (float)__crtl_cos((double)x); }
-float tanf(float x)   { return (float)__crtl_tan((double)x); }
+float sinf(float x)   { return (float)sin((double)x); }
+float cosf(float x)   { return (float)cos((double)x); }
+float tanf(float x)   { return (float)tan((double)x); }
 float asinf(float x)  { return (float)asin((double)x); }
 float acosf(float x)  { return (float)acos((double)x); }
 float atanf(float x)  { return (float)atan((double)x); }
@@ -1080,9 +1086,9 @@ float floorf(float x) { return (float)floor((double)x); }
 float ceilf(float x)  { return (float)ceil((double)x); }
 float fmodf(float x, float y)  { return (float)fmod((double)x, (double)y); }
 float powf(float b, float e)   { return (float)pow((double)b, (double)e); }
-float expf(float x)   { return (float)__crtl_exp((double)x); }
+float expf(float x)   { return (float)exp((double)x); }
 float logf(float x)   { return (float)log((double)x); }
-float log2f(float x)  { return (float)__crtl_log2((double)x); }
+float log2f(float x)  { return (float)log2((double)x); }
 float truncf(float x) { return (float)trunc((double)x); }
 float roundf(float x) { return (float)round((double)x); }
 float fminf(float a, float b) { return a < b ? a : b; }
@@ -1186,7 +1192,7 @@ double expm1(double x) {
   crtl_dd a, r, s, v;
   int k, i;
   if (x != x) return x;
-  if (x > 710.0)  return __crtl_exp(x);           /* +inf */
+  if (x > 710.0)  return exp(x);           /* +inf */
   if (x < -80.0)  return -1.0;                    /* e^x < 2^-115 */
   if (x >= -0.35 && x <= 0.35) {
     /* sum_{k>=1} x^k/k! = x * (1 + x/2 * (1 + x/3 * (...))) in dd */
@@ -1300,7 +1306,7 @@ static crtl_dd crtl_cosh_dd(double ax) {
 /* NOT named sinh/cosh/tanh: those collide case-insensitively with the
    Pascal routines (the b377 broken-binding landmine) — C callers come
    through the math.h function-like macros. */
-double __crtl_sinh(double x) {
+double sinh(double x) {
   double ax = fabs(x), r;
   crtl_dd s;
   int k;
@@ -1318,7 +1324,7 @@ double __crtl_sinh(double x) {
   return x < 0.0 ? -r : r;
 }
 
-double __crtl_cosh(double x) {
+double cosh(double x) {
   double ax = fabs(x), r;
   crtl_dd s;
   int k;
@@ -1337,7 +1343,7 @@ double __crtl_cosh(double x) {
   return r;
 }
 
-double __crtl_tanh(double x) {
+double tanh(double x) {
   double ax = fabs(x), r;
   crtl_dd s;
   if (x != x || x == 0.0) return x;
@@ -1383,7 +1389,7 @@ double asinh(double x) {
 /* Correctly-rounded hypot: scale by the larger magnitude's exponent, sum
    the exact squared dds, dd sqrt, scale back. NOT named hypot: Pascal
    Hypot (overloaded) collides — math.h maps it (the b377 landmine). */
-double __crtl_hypot(double x, double y) {
+double hypot(double x, double y) {
   double ax = fabs(x), ay = fabs(y), t;
   unsigned long long b;
   int e;
