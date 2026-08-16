@@ -18400,25 +18400,161 @@ begin
   Result := r;
 end;
 
+{ ===== REAL-valued constant expressions =====
+
+  ConstEval above is integer-only, and for a long time the only real a const
+  section could hold was a bare literal token recognised by its FIRST token.
+  Everything else went to the integer evaluator, which produced four distinct
+  wrongs from the one gap (bug-p-const-expressions-are-integer-only):
+
+    const A = 3.14; B = A;        -> B printed 4614253070214989087 (the IEEE
+                                     bits, read as an integer). SILENT.
+    const A: double = 3;          -> 0.00  (integer 3 stored where bits go)
+    const A: double = -3;         -> Nan
+    const TwoPi = 3.14 * 2;       -> "unexpected token" at the `*`
+
+  So: a parallel evaluator over Double, entered only when the expression is
+  provably real (ConstExprIsFloat). When it is not, the integer path runs
+  exactly as before -- which is what keeps every existing const byte-identical. }
+
+function ConstEvalF: Double; forward;
+
+function ConstSymIsFloat(idx: Integer): Boolean;
+begin
+  ConstSymIsFloat := (idx >= 0) and (Syms[idx].Kind = skConst) and
+                     ((Syms[idx].TypeKind = tyDouble) or
+                      (Syms[idx].TypeKind = tySingle) or
+                      (Syms[idx].TypeKind = tyExtended));
+end;
+
+function ConstExprIsFloat: Boolean;
+{ Lookahead from the CURRENT token over one const expression: is a real
+  involved? A real literal, a `/` (real division always yields a real, so
+  `6 / 3` is 2.0 and not 2), or a bare name that already resolves to a real
+  const. Stops at the expression's terminator at paren depth 0.
+
+  Deliberately conservative: a false answer costs nothing (the integer path is
+  unchanged), a true answer only routes to an evaluator that also handles pure
+  integers. Bare names only -- a qualified `unit.RealConst` falls through to the
+  integer path and its old behaviour rather than resolving units in lookahead. }
+var i, depth: Integer; k: TTokenKind;
+begin
+  ConstExprIsFloat := False;
+  i := TokPos - 1;   { CurTok is Tokens[TokPos-1] }
+  depth := 0;
+  while i < TokCount do
+  begin
+    k := Tokens[i].Kind;
+    if (k = tkLParen) or (k = tkLBrack) then Inc(depth)
+    else if (k = tkRParen) or (k = tkRBrack) then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end
+    else if depth = 0 then
+    begin
+      if (k = tkSemicolon) or (k = tkComma) or (k = tkEq) then Exit;
+    end;
+    if k = tkFloat then begin ConstExprIsFloat := True; Exit; end;
+    if k = tkSlash then begin ConstExprIsFloat := True; Exit; end;
+    if (k = tkIdent) and
+       ConstSymIsFloat(FindSym(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen))) then
+      begin ConstExprIsFloat := True; Exit; end;
+    Inc(i);
+  end;
+end;
+
+function ConstEvalFFactor: Double;
+{ Primary of a real const expression: unary +/-, a real or integer literal, a
+  named const (real -> its bits decoded, integer -> widened), parens. }
+var r: Double; idx: Integer;
+begin
+  r := 0;
+  { NB: the parens on the recursive call are required -- a bare own function
+    name reads the Result var instead of recursing (project note:
+    bare-funcname-is-Result). }
+  if CurTok.Kind = tkMinus then begin Next; ConstEvalFFactor := -ConstEvalFFactor(); Exit; end;
+  if CurTok.Kind = tkPlus  then begin Next; ConstEvalFFactor :=  ConstEvalFFactor(); Exit; end;
+  if CurTok.Kind = tkFloat then
+  begin
+    r := ExDecBitsToDouble(CurTok.IVal); Next;
+  end
+  else if CurTok.Kind = tkInteger then
+  begin
+    r := CurTok.IVal; Next;
+  end
+  else if CurTok.Kind = tkLParen then
+  begin
+    Next; r := ConstEvalF(); Expect(tkRParen, ')');
+  end
+  else if (CurTok.Kind = tkIdent) and ConstSymIsFloat(FindSym(CurTok.SVal)) then
+  begin
+    idx := FindSym(CurTok.SVal);
+    r := ExDecBitsToDouble(Syms[idx].ConstVal);
+    Next;
+  end
+  else
+    { Anything this evaluator does not model itself -- SizeOf, Ord/Chr/Succ, an
+      integer typecast, an enum member, a unit-qualified or class const -- is an
+      INTEGER factor, so hand the same token to the integer evaluator and widen
+      its result. ConstEvalFactor and not ConstEval: a factor keeps the
+      precedence, where a full expression would swallow the `* 2.5` after it. }
+    r := ConstEvalFactor;
+  ConstEvalFFactor := r;
+end;
+
+function ConstEvalFTerm: Double;
+{ Multiplicative level: `*` and `/`. `div`/`mod` are integer operators and are
+  deliberately absent -- an expression containing one is not routed here. }
+var r, v: Double; op: TTokenKind;
+begin
+  r := ConstEvalFFactor;
+  while (CurTok.Kind = tkStar) or (CurTok.Kind = tkSlash) do
+  begin
+    op := CurTok.Kind; Next; v := ConstEvalFFactor;
+    if op = tkStar then r := r * v
+    else
+    begin
+      if v = 0 then Error('division by zero in a constant expression');
+      r := r / v;
+    end;
+  end;
+  ConstEvalFTerm := r;
+end;
+
+function ConstEvalF: Double;
+{ Additive level: + and -, left-associative. }
+var r, v: Double; op: TTokenKind;
+begin
+  r := ConstEvalFTerm;
+  while (CurTok.Kind = tkPlus) or (CurTok.Kind = tkMinus) do
+  begin
+    op := CurTok.Kind; Next; v := ConstEvalFTerm;
+    if op = tkPlus then r := r + v else r := r - v;
+  end;
+  ConstEvalF := r;
+end;
+
 { Parse one constant initializer value (scalar). A float literal yields its IEEE
   754 bit pattern (carried as Int64, same as AN_FLOAT_LIT); everything else goes
   through the integer ConstEval. Lets a `Double` initializer like 3.14 work. }
 function ParseInitVal: Int64;
-var neg: Boolean; signMask: Int64;
 begin
-  { A leading unary +/- on a float literal: the lexer emits the sign as a
-    separate operator token, so a typed `const A: Double = -2.5` would otherwise
-    fall to the integer ConstEval and be rejected. Flip the IEEE-754 sign bit
-    (bit 63) for a minus. }
-  neg := False;
-  if (CurTok.Kind = tkMinus) and (Tokens[TokPos].Kind = tkFloat) then begin neg := True; Next; end
-  else if (CurTok.Kind = tkPlus) and (Tokens[TokPos].Kind = tkFloat) then Next;
-  if CurTok.Kind = tkFloat then
-  begin
-    Result := CurTok.IVal; Next;
-    if neg then begin signMask := 1; signMask := signMask shl 63; Result := Result xor signMask; end;
-  end
+  { Anything real -- a bare literal, a signed literal (the lexer emits the sign
+    as its own token), or a whole expression like `3.14 * 2`, `1 / 3` or an
+    alias of a real const -- goes through the real evaluator and yields IEEE
+    bits. One path, so `= -2.5` and `= 2.5 * -1` cannot disagree. }
+  if ConstExprIsFloat then Result := ExDecDoubleToBits(ConstEvalF())
   else Result := ConstEval;
+end;
+
+function ParseInitValTk(tk: TTypeKind): Int64;
+{ ParseInitVal where the DESTINATION type is known. A real destination always
+  yields IEEE bits, so `const A: Double = 3` stores 3.0 rather than the integer
+  3 -- which read back as 0.00, and as Nan for `= -3`. }
+begin
+  if TypeIsFloat(tk) then ParseInitValTk := ExDecDoubleToBits(ConstEvalF())
+  else ParseInitValTk := ParseInitVal;
 end;
 
 { ===== Statement parser ===== }
@@ -25145,7 +25281,7 @@ begin
 	        else
 	        begin
 	          LocalInitKind[LocalInitCount] := 0;
-	          LocalInitVal[LocalInitCount]  := ParseInitVal;
+	          LocalInitVal[LocalInitCount]  := ParseInitValTk(tk);
 	          LocalInitTk[LocalInitCount]   := Ord(tk);
 	        end;
 	        Inc(LocalInitCount);
@@ -25216,7 +25352,7 @@ begin
 	            end
 	            else
 	            begin
-	              initVal := ParseInitVal;
+	              initVal := ParseInitValTk(tk);
 	              PendingInitSym[PendingInitCount]  := idx;
 	              PendingInitElem[PendingInitCount] := arrLo + initElem;
 	              PendingInitFOff[PendingInitCount] := -1;
@@ -25259,7 +25395,7 @@ begin
 	        end
 	        else
 	        begin
-	          initVal := ParseInitVal;
+	          initVal := ParseInitValTk(tk);
 	          PendingInitKind[PendingInitCount] := 0;
 	          PendingInitTk[PendingInitCount]   := Ord(tk);
 	        end;
@@ -25694,7 +25830,7 @@ begin
                 LocalInitFOff[LocalInitCount] := fNameOff;
                 LocalInitFLen[LocalInitCount] := fNameLen;
                 LocalInitKind[LocalInitCount] := 0;
-                LocalInitVal[LocalInitCount]  := ParseInitVal;
+                LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
                 LocalInitTk[LocalInitCount] := Ord(fTk);
                 Inc(LocalInitCount);
               end
@@ -25716,7 +25852,7 @@ begin
                 else
                 begin
                   PendingInitKind[PendingInitCount] := 0;
-                  PendingInitVal[PendingInitCount]  := ParseInitVal;
+                  PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
                 end;
                 PendingInitTk[PendingInitCount] := Ord(fTk);
                 Inc(PendingInitCount);
@@ -25833,7 +25969,7 @@ begin
               LocalInitSym[LocalInitCount]  := cIdx;
               LocalInitElem[LocalInitCount] := cLo + cElem;
               LocalInitFOff[LocalInitCount] := -1;
-              LocalInitVal[LocalInitCount]  := ParseInitVal;
+              LocalInitVal[LocalInitCount]  := ParseInitValTk(cElemTk);
               LocalInitTk[LocalInitCount]   := Ord(cElemTk);
               Inc(LocalInitCount);
             end
@@ -25843,7 +25979,7 @@ begin
               PendingInitSym[PendingInitCount]  := cIdx;
               PendingInitElem[PendingInitCount] := cLo + cElem;
               PendingInitFOff[PendingInitCount] := -1;
-              PendingInitVal[PendingInitCount]  := ParseInitVal;
+              PendingInitVal[PendingInitCount]  := ParseInitValTk(cElemTk);
               PendingInitTk[PendingInitCount]   := Ord(cElemTk);
               Inc(PendingInitCount);
             end;
@@ -25999,7 +26135,7 @@ begin
                 PendingInitFLen[PendingInitCount] := fNameLen;
                 PendingInitKind[PendingInitCount] := 7;
                 PendingInitValAux[PendingInitCount] := cElem;
-                PendingInitVal[PendingInitCount]  := ParseInitVal;
+                PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
                 PendingInitTk[PendingInitCount]   := Ord(fTk);
                 Inc(PendingInitCount);
                 Inc(cElem);
@@ -26015,7 +26151,7 @@ begin
               LocalInitFOff[LocalInitCount] := fNameOff;
               LocalInitFLen[LocalInitCount] := fNameLen;
               LocalInitKind[LocalInitCount] := 0;
-              LocalInitVal[LocalInitCount]  := ParseInitVal;
+              LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
               LocalInitTk[LocalInitCount]   := Ord(fTk);
               Inc(LocalInitCount);
             end
@@ -26027,7 +26163,7 @@ begin
               PendingInitFOff[PendingInitCount] := fNameOff;
               PendingInitFLen[PendingInitCount] := fNameLen;
               PendingInitKind[PendingInitCount] := 0;
-              PendingInitVal[PendingInitCount]  := ParseInitVal;
+              PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
               PendingInitTk[PendingInitCount]   := Ord(fTk);
               Inc(PendingInitCount);
             end;
@@ -26043,7 +26179,7 @@ begin
           LocalInitElem[LocalInitCount] := -1;
           LocalInitFOff[LocalInitCount] := -1;
           LocalInitKind[LocalInitCount] := 0;   { slots are reused; clear a stale kind }
-          LocalInitVal[LocalInitCount]  := ParseInitVal;
+          LocalInitVal[LocalInitCount]  := ParseInitValTk(cTk);
           LocalInitTk[LocalInitCount]   := Ord(cTk);
           Inc(LocalInitCount);
         end
@@ -26054,7 +26190,7 @@ begin
           PendingInitElem[PendingInitCount] := -1;
           PendingInitFOff[PendingInitCount] := -1;
           PendingInitKind[PendingInitCount] := 0;
-          PendingInitVal[PendingInitCount]  := ParseInitVal;
+          PendingInitVal[PendingInitCount]  := ParseInitValTk(cTk);
           PendingInitTk[PendingInitCount]   := Ord(cTk);
           Inc(PendingInitCount);
         end;
@@ -26204,7 +26340,8 @@ begin
       end
       else if (CurTok.Kind = tkFloat) or
               ((CurTok.Kind = tkMinus) and (Tokens[TokPos].Kind = tkFloat)) or
-              ((CurTok.Kind = tkPlus) and (Tokens[TokPos].Kind = tkFloat)) then
+              ((CurTok.Kind = tkPlus) and (Tokens[TokPos].Kind = tkFloat)) or
+              ConstExprIsFloat then
       begin
         { Untyped real constant (`const EPS = 0.001;` / `= -2.5` / `= 1e-9`). FPC
           infers a real-typed const. Store the IEEE-754 double bits tagged
