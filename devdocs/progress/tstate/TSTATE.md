@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `459e96f985d1` | 2026-08-16T08:54:16Z | GREEN (native) | 209.9s | `137a182ad46a` RED |
+| plexus | `459e96f985d1` | 2026-08-16T09:13:21Z | RED (full) | 1132.9s | `459e96f985d1` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -28,4 +28,7 @@
   - `test-uforth#stringtest`
   - `test-uforth#toolstest`
   </details>
-- **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +2 (plexus): bad `137a182ad46a`, last good `e01894e6b1ed`, 24 commit(s) in range
+- **lib-test#src:test/lib_classes_tthread.pas** — test/lib_classes_tthread.pas (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
+- **lib-test#src:test/lib_tls.pas** — test/lib_tls.pas (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
+- **test-i386#src:examples/net/httpdemo.pas** — examples/net/httpdemo.pas (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_int_promotion_default.npy** — test/test_nilpy_int_promotion_default.npy test/test_nilpy_int_promotion_default.expected (plexus): bad `459e96f985d1`, last good `137a182ad46a`, 70 commit(s) in range
