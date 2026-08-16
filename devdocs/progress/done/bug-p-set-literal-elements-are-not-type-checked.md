@@ -210,4 +210,4 @@ repro in both forms, the FPC differential on the positive test, and
 `tools/gate.sh quick` — GREEN.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit af588ad66.
