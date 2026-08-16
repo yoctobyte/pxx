@@ -14005,8 +14005,9 @@ begin
       { Ord(x)/Chr(x): soft-keyword intrinsics (same recipe as Length below —
         plain idents, name dispatch, user proc / in-scope symbol shadows,
         must be followed by '('). }
-      if (CaseEqual(name, 'Ord') or CaseEqual(name, 'Chr')) and (procIdx < 0) and
-         (FindSym(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      if (CaseEqual(name, 'Ord') or CaseEqual(name, 'Chr')) and
+         ((qUnit = -2) or ((procIdx < 0) and (FindSym(name) < 0))) and
+         (Tokens[TokPos].Kind = tkLParen) then
       begin
         if CaseEqual(name, 'Chr') then
         begin op := Ord(tkChr); LastExprTk := tyChar; end
@@ -14191,8 +14192,8 @@ begin
         bug-hard-keyword-intrinsics-block-identifier-use). A user routine of
         the same name shadows it, and a plain `length` not followed by `(`
         resolves as an ordinary identifier via the normal paths below. }
-      if CaseEqual(name, 'Length') and (procIdx < 0) and
-         ((qUnit = -2) or (FindSym(name) < 0)) and
+      if CaseEqual(name, 'Length') and
+         ((qUnit = -2) or ((procIdx < 0) and (FindSym(name) < 0))) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
@@ -14691,7 +14692,7 @@ begin
         case, and Copy(dynarray) shadowed by a string Copy, are handled at the
         no-overload-match point below). Lowered into a fresh element-type-aware
         `array of T` via AN_DYN_COPY. }
-      if CaseEqual(name, 'Copy') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      if CaseEqual(name, 'Copy') and ((qUnit = -2) or (procIdx < 0)) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;            { source array }
@@ -22916,7 +22917,7 @@ begin
       if (qUnit < 0) and (CaseEqual(name, 'Move') or CaseEqual(name, 'FillChar') or
           CaseEqual(name, 'FillByte') or CaseEqual(name, 'FillDWord')) and
          (Tokens[TokPos].Kind = tkLParen) and
-         (FindProc(name) < 0) and (FindSym(name) < 0) and
+         SoftIntrinsicOpenSym(name, qUnit) and
          ((qUnit = -2) or (CurSelfClass < REC_UCLASS_BASE) or
           (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) and
          (FindProc('__pxxMove') >= 0) then
@@ -23069,7 +23070,7 @@ begin
         ASTLeft[node] := argSeq;
       end
       else if (CaseEqual(name, 'Include') or CaseEqual(name, 'Exclude')) and
-              (FindProc(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
+              ((qUnit = -2) or (FindProc(name) < 0)) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Include(s, v) / Exclude(s, v): set/clear bit v in set s at runtime.
           Left = set lvalue, Right = value expr (lowered via IRLowerSetBitMutate).
@@ -23175,7 +23176,7 @@ begin
         Expect(tkRParen, ')');
       end
       else if (CaseEqual(name, 'Inc') or CaseEqual(name, 'Dec')) and
-              (FindProc(name) < 0) and (FindSym(name) < 0) and
+              SoftIntrinsicOpenSym(name, qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Inc(x[,step]) / Dec(x[,step]): soft-keyword statements lowered to
@@ -23246,8 +23247,8 @@ begin
         ASTRight[node] := opNode;
         end;
       end
-      else if CaseEqual(name, 'FreeMem') and (FindProc(name) < 0) and
-              (FindSym(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      else if CaseEqual(name, 'FreeMem') and SoftIntrinsicOpenSym(name, qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
       begin
         { FreeMem(p) or FreeMem(p, size): return the block to the free list. The
           size argument (FPC's two-arg form) is accepted and ignored — the block's
@@ -23266,8 +23267,8 @@ begin
         ASTLeft[node] := argSeq;
         ASTTk[node] := Ord(tyInteger);
       end
-      else if CaseEqual(name, 'GetMem') and (FindProc(name) < 0) and
-              (FindSym(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      else if CaseEqual(name, 'GetMem') and SoftIntrinsicOpenSym(name, qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Two-argument procedure form GetMem(dest, size): allocate `size` bytes and
           store the pointer into the lvalue `dest`. (The function form
@@ -23290,8 +23291,7 @@ begin
         ASTLeft[node] := valNode;
         ASTRight[node] := opNode;
       end
-      else if CaseEqual(name, 'SetSignalHandler') and (FindProc('SetSignalHandler') < 0) and
-              not IntrinsicShadowedByMember('SetSignalHandler') and
+      else if CaseEqual(name, 'SetSignalHandler') and SoftIntrinsicOpen('SetSignalHandler', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { SetSignalHandler(sig, @proc): register a parameterless proc as the
@@ -23308,8 +23308,7 @@ begin
         node := AllocNode(AN_SET_SIGNAL);
         ASTLeft[node] := opNode; ASTRight[node] := valNode;
       end
-      else if CaseEqual(name, 'Delete') and (FindProc('Delete') < 0) and
-              not IntrinsicShadowedByMember('Delete') and
+      else if CaseEqual(name, 'Delete') and SoftIntrinsicOpen('Delete', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Delete(s, index, count): in-place string delete, lowered to the
@@ -23371,8 +23370,7 @@ begin
         ASTLeft[node] := argSeq;
         end;
       end
-      else if CaseEqual(name, 'Insert') and (FindProc('Insert') < 0) and
-              not IntrinsicShadowedByMember('Insert') and
+      else if CaseEqual(name, 'Insert') and SoftIntrinsicOpen('Insert', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Insert(src, s, index): in-place string insert, lowered to __pxxStrInsert.
@@ -23432,8 +23430,7 @@ begin
         ASTLeft[node] := argSeq;
         end;
       end
-      else if CaseEqual(name, 'SetLength') and (FindProc('SetLength') < 0) and
-              not IntrinsicShadowedByMember('SetLength') and
+      else if CaseEqual(name, 'SetLength') and SoftIntrinsicOpen('SetLength', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Guarded like New/Insert/Delete/Str above: a user proc named
@@ -23508,8 +23505,7 @@ begin
         end;
         node := BuildMultiSetLen(valNode, slIsArrTarget);
       end
-      else if CaseEqual(name, 'New') and (FindProc('New') < 0) and
-              not IntrinsicShadowedByMember('New') and
+      else if CaseEqual(name, 'New') and SoftIntrinsicOpen('New', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { New(p): allocate SizeOf(p^) and store the block into the pointer p.
@@ -23536,8 +23532,7 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
-      else if CaseEqual(name, 'Dispose') and (FindProc('Dispose') < 0) and
-              not IntrinsicShadowedByMember('Dispose') and
+      else if CaseEqual(name, 'Dispose') and SoftIntrinsicOpen('Dispose', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Dispose(p): return the block to the free list (= FreeMem(p)).
@@ -23550,8 +23545,7 @@ begin
         ASTIVal[node] := -Ord(tkFreeMem);
         ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
       end
-      else if CaseEqual(name, 'ReallocMem') and (FindProc('ReallocMem') < 0) and
-              not IntrinsicShadowedByMember('ReallocMem') and
+      else if CaseEqual(name, 'ReallocMem') and SoftIntrinsicOpen('ReallocMem', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { ReallocMem(p, newsize): resize the block p points at, preserving
@@ -23587,8 +23581,7 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
-      else if CaseEqual(name, 'Str') and (FindProc('Str') < 0) and
-              not IntrinsicShadowedByMember('Str') and
+      else if CaseEqual(name, 'Str') and SoftIntrinsicOpen('Str', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Str(x[:w[:d]], s): format integer x into string s, right-justified to

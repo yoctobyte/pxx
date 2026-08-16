@@ -1,0 +1,26 @@
+user Delete 7
+user Insert 7
+user SetLength 7
+user Str 7
+user Inc 7
+user Move 7
+user Dispose 7
+user Length 7
+99
+user Copy 7
+98
+user Ord z
+97
+Delete    -> aef
+Insert    -> aXYbcdef
+SetLength -> abc
+Str       -> 42
+Inc       -> 6
+Move      -> 7
+New       -> 3
+Dispose   -> freed
+Length    -> 6
+Copy      -> bcd
+Ord       -> 65
+method Delete 4
+in-method s = aef

@@ -5593,6 +5593,35 @@ begin
     (FindUMeth(CurMethClass - REC_UCLASS_BASE, nm) >= 0);
 end;
 
+{ The soft intrinsics' shadow test, in one place, plus the escape FPC gives.
+
+  `System.X` is THE documented way to shadow an intrinsic deliberately and still
+  reach the original, and FPC code uses it routinely. Every soft intrinsic wrote
+  its own `FindProc(nm) < 0` guard and none of them consulted the qualifier, so
+  the escape hatch did not escape: `System.Delete(s,2,3)` with a unit-level
+  `Delete` in scope bound the user routine (error, or — for Inc/Dispose/Ord —
+  SILENTLY called it and skipped the intrinsic's effect entirely).
+  bug-p-a-system-qualified-call-binds-a-same-named-user-routine
+
+  qUnit is ConsumeUnitQualifier's result: -2 = `System.`, -1 = unqualified,
+  >= 0 = a named unit. Only the System marker opens a shadowed intrinsic — a
+  unit-qualified call asks for THAT unit's routine by construction. }
+function SoftIntrinsicOpen(const nm: AnsiString; qUnit: Integer): Boolean;
+{ For the intrinsics that let a routine OR an enclosing class's method shadow
+  them (Delete, Insert, SetLength, New, Dispose, ReallocMem, Str, ...). }
+begin
+  SoftIntrinsicOpen := (qUnit = -2) or
+    ((FindProc(nm) < 0) and not IntrinsicShadowedByMember(nm));
+end;
+
+function SoftIntrinsicOpenSym(const nm: AnsiString; qUnit: Integer): Boolean;
+{ For the older guards, which test an in-scope SYMBOL rather than a method
+  (Inc, Dec, GetMem, FreeMem, Break, Continue, Move/FillChar, ...). }
+begin
+  SoftIntrinsicOpenSym := (qUnit = -2) or
+    ((FindProc(nm) < 0) and (FindSym(nm) < 0));
+end;
+
 function FindUMethArity(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { Overload-aware method lookup: first name match (walking the parent chain)
   whose proc accepts the call's EXPLICIT arg count (self added per entry;
