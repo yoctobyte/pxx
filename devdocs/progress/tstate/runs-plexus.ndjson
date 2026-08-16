@@ -975,3 +975,4 @@
 {"date": "2026-08-15T23:59:43Z", "fixed": ["test-core#src:examples/tk/tkinter_facade.npy"], "full": false, "new_red": [], "sha": "3b66d2be1f26ed436832bffe185d102a730cc26b", "tier": "native", "verdict": "GREEN", "wall": 225.9}
 {"date": "2026-08-16T00:11:51Z", "fixed": [], "full": false, "new_red": [], "sha": "9e99986456ab57567e6be98aee110662e76c0901", "tier": "native", "verdict": "GREEN", "wall": 215.0}
 {"date": "2026-08-16T00:26:33Z", "fixed": [], "full": false, "new_red": [], "sha": "78d00a0336345e1c724be8e9eb983c5499869e07", "tier": "native", "verdict": "GREEN", "wall": 214.5}
+{"date": "2026-08-16T00:40:35Z", "fixed": [], "full": false, "new_red": [], "sha": "bd39f4b2f93a13d1529b393bfd25a64ad241c15b", "tier": "native", "verdict": "GREEN", "wall": 216.0}
