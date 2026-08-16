@@ -86,4 +86,4 @@ operand, and a 1KB frame that forces the literal-pool address. Boots on
 esp32s3 under Espressif qemu; UART output matches the x86-64 oracle byte for
 byte (42/55/42/43/263). The windowed ABI is checked to lower. Wired into the
 esp-bare make target.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit d3eaa189e.
