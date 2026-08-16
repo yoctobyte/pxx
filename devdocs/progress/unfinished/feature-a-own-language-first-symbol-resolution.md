@@ -310,3 +310,30 @@ would either break the documented override or leave the rule toothless.
   independent of this fork.
 - If the rule is built, it still needs a real `ProcLang` parallel array;
   `ProcCdecl` remains the wrong instrument.
+
+## 2026-08-16 (Track U) — the missing spelling EXISTS: `uses '...' as cm`
+
+The fork above says hard precedence "needs a spelling (qualified `cm.exp(...)`?)
+to stay honest", and treats its absence as the reason the option cannot be
+taken. **That spelling is real and shipped 2026-06-30**
+([[feature-uses-alias-as]]). Verified on pinned:
+
+```pascal
+uses './mymath.c' as cmath;
+WriteLn(Cube(3));        { 27   — Pascal's }
+WriteLn(cmath.cube(3));  { 1027 — C's      }
+```
+
+So both arms of the fork are now live, and the argument that decided it changes:
+**hard precedence no longer makes an imported C symbol unreachable.** It makes
+it reachable only by name, which is the ticket's own stated intent ("nothing
+becomes unreachable, it just has to be asked for by name").
+
+This does not re-decide anything by itself — `decide-own-language-first-...`
+already picked its direction and that call is the owner's. It removes the one
+factual obstacle that was recorded against the other arm, and the acceptance
+test named here (the ten `__crtl_*` `#define`s going back to their real
+spellings) now has a working escape for the collision it deliberately creates.
+
+Full reasoning, the four measured forms, and the deliberate decision that bare
+`uses './x.c'` stays unbound: [[decide-cross-language-qualifier-syntax]].

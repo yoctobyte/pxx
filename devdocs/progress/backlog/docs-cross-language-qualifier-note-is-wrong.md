@@ -1,9 +1,9 @@
 ---
-track: A
+track: D
 prio: 50
 type: bug
-blocked-by: [decide-cross-language-qualifier-syntax]   # the three options below reserve a name or change what `uses` binds; escalated 2026-08-15
-summary: "Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14."
+blocked-by: []   # decided 2026-08-16: not a compiler bug, see the resolution at the bottom
+summary: "NOT A COMPILER BUG — re-aimed at docs 2026-08-16. The cross-language qualifier exists and always did: `uses './mymath.c' as cmath;` then `cmath.cube(3)`. This ticket only ever measured the UNALIASED form. What is left is the docs fix: docs/language/name-resolution.md ships a Current-status note saying the escape does not exist."
 ---
 
 # No qualified syntax for a cross-language import
@@ -111,3 +111,53 @@ options list was missing: **nothing in `lib/**` declares a unit named `C`, but
 it). So option 2 must resolve `C` only in QUALIFIER position, never as a
 reserved word — otherwise it breaks existing Pascal, which decides the
 implementation shape before anyone starts it.
+
+
+## RESOLVED-AS-NOT-A-BUG 2026-08-16 (user, Track U) — the escape existed the whole time
+
+[[decide-cross-language-qualifier-syntax]] is decided, and the answer is none of
+the three options above. It is the alias clause:
+
+```pascal
+uses './mymath.c' as cmath;
+WriteLn(Cube(3));        { 27   — Pascal's }
+WriteLn(cmath.cube(3));  { 1027 — C's      }
+```
+
+Verified on the same pinned binary this ticket measured against.
+[[feature-uses-alias-as]] landed **2026-06-30**, six weeks before this was
+filed. It works across the language boundary because the alias maps to the
+**real unit's `Strs[]` index** rather than registering a namespace of its own —
+so the C file's symbols, which are already tagged with that index, are reachable
+through it.
+
+### The methodological miss, worth more than the ticket
+
+The measurement here was correct and the conclusion drawn from it was not. The
+repro exercised `uses './mymath.c';` — the bare form — found no qualifier, and
+generalised to "a `uses './x.c'` binds no qualifier name for the file, so there
+is no phrase that means C's `cube`". The bare form indeed binds nothing. The
+*aliased* form was never tried, and it is the one the dialect documents as the
+answer to unqualifiable unit names — its own ticket opens with `uses
+'wayland-client' as wayland;` for exactly this reason: a quoted unit name has no
+usable qualifier until you give it one.
+
+One negative result, generalised past what it measured, produced a Track A bug,
+a Track U escalation, and a three-option language-design debate. **Try the
+existing escape before concluding the escape does not exist** — and when a
+feature's own ticket says it solves "quoted unit names cannot be qualified",
+that is the same sentence as this bug's title.
+
+### What is left, and it is Track D only
+
+`docs/language/name-resolution.md` ships this under **Current status**:
+
+> "Qualification has no syntax for a cross-language import. Distinguish those by
+> case, or rename."
+
+That is published, user-facing, and wrong. Replace it with the alias form.
+`devdocs/dev/name-resolution.md` §2.4 is already amended (the unqualified
+"qualification always works" sentence that started this).
+
+Retracked A -> D. No `compiler/**` change is needed or wanted.
+Fold into [[docs-name-collisions-and-the-as-escape]] if that lands first.

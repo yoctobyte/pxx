@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1943 rejected:37`
+`unfinished:11 blocked:4 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:76 done:1943 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,7 +32,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 185, ranked
+## Ready — top 30 of 186, ranked
 
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -50,9 +50,9 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
-- `[p 50] [U]` decide-cross-language-qualifier-syntax (unblocks 1)
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
+- `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
@@ -65,4 +65,4 @@ _none — no lane is locked._
 - `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
 - `[p 45] [A]` feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 
-_155 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_156 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -76,7 +76,8 @@ SET rather than one rule:
    and it closes the entire known collision class by itself, since every Pascal
    spelling is capitalised and every C name lowercase;
 3. **warn** where a genuine ambiguity survives, naming what was picked;
-   qualification (§2.4) is the escape.
+   qualification (§2.4) is the escape — for a foreign file, via `uses '...' as
+   <alias>`, which is what gives it a scope to qualify with.
 
 The fork was "explicit import cannot be the safety valve in a case-insensitive
 language, because `uses './math.c'` REPLACES `Exp` instead of adding `exp`".
@@ -168,6 +169,23 @@ outranks it. A qualified call has already named its scope; hiding only answers
 Qualified *class* references are a separate story and were flat until recently —
 see `feature-a-one-exception-class-in-a-shared-unit` for the constructor and
 type-position fixes.
+
+**A qualifier exists whenever the import NAMES a scope — which for a foreign
+file means `as`.** This page used to say qualification "always works", full
+stop, and a Track D pass read that, measured `uses './mymath.c';` +
+`mymath.cube(...)`, got `undefined variable (mymath)`, and filed it as a hole in
+the language. It is not one: the escape is `uses './mymath.c' as cmath;`, and
+`cmath.cube(3)` then reaches C's routine while a same-named Pascal `Cube` keeps
+the bare name. Verified on pinned; `feature-uses-alias-as` landed 2026-06-30 and
+maps the alias to the **real** unit's `Strs[]` index, so the qualifier reaches
+foreign symbols exactly as it reaches Pascal ones.
+
+A bare `uses './mymath.c';` binds no scope, deliberately — the file's full name
+is `mymath.c`, and a second dot in `mymath.c.cube` is worse than requiring the
+alias. Pascal's `uses` has never bound a name; NilPy's `import` always has, so
+`import mymath` DOES bind there, and that asymmetry follows each language's own
+rule rather than being an inconsistency to fix.
+See `decide-cross-language-qualifier-syntax`.
 
 ---
 

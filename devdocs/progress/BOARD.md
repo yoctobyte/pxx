@@ -59,7 +59,6 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
-| bug-no-qualified-syntax-for-a-cross-language-import | A | 50 | bug | Qualification is the documented escape from scope hiding — `pu.Cube` reaches a shadowed Pascal unit's routine — but there is NO equivalent for a cross-language import: a `uses './mymath.c'` binds no qualifier, so `mymath.cube` is `undefined variable (mymath)`. Once a Pascal `Cube` is in scope, C's `cube` becomes unreachable. Measured against pinned, 2026-08-14. | decide-cross-language-qualifier-syntax |
 | bug-p-a-nested-class-method-implementation-takes-only-one-qualifier | P | 35 | bug | `function touter.tinner.Tag: string;` — the implementation header of a method belonging to a NESTED class — is a parse error: the header parser takes one qualifier. Declaring and implementing such a method inline works, so this is the out-of-line spelling only. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -78,7 +77,6 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
-| decide-cross-language-qualifier-syntax | U | 50 | decide | There is no way to say \"C's cube\" once a Pascal Cube is in scope — qualification, the documented universal escape, has no cross-language form. Pick the syntax: file basename as a scope, a reserved language tag (C.cube), or rename in the source. Blocks the own-language-first rule, whose own acceptance test recreates the collision on purpose. | — |
 | decide-forin-mixed-int-float-ctor-vs-fpc | U | 20 | decide | `for d in [1, 2.5]` — FPC 3.2.2 prints `1.00 0.00`, dropping the 2.5; pxx prints `1.00 2.50`. Shipped as the correct answer rather than copied, because losing a written value is a defect and not a semantic choice. Confirm, or put FPC's answer behind --strict-fpc. | — |
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
@@ -86,6 +84,8 @@ _none_
 | decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | When an overload set has both a `set of T` and an `array of const` parameter at the SAME slot, what should `f([x])` mean? Measured: FPC 3.2.2 is itself uses-order dependent and flips answer, and pxx flips on a different order — so there is no reference behaviour to copy. Rare, and nothing in the tree hits it; filed because the fix next door made the question visible, not because anything is broken. | — |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
+| docs-cross-language-qualifier-note-is-wrong | D | 50 | docs | NOT A COMPILER BUG — re-aimed at docs 2026-08-16. The cross-language qualifier exists and always did: `uses './mymath.c' as cmath;` then `cmath.cube(3)`. This ticket only ever measured the UNALIASED form. What is left is the docs fix: docs/language/name-resolution.md ships a Current-status note saying the escape does not exist. | — |
+| docs-name-collisions-and-the-as-escape | D | 45 | docs | The user-facing 'how do I deal with a name collision' page. Two languages in one program will both declare `cube`, and the answer — `uses './mymath.c' as cmath;` then `cmath.cube(...)`, or `import mymath as cmath` from NilPy — is true TODAY and documented nowhere. Not blocked, unlike the own-language-first doc ticket: this describes behaviour that already ships. | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
@@ -321,7 +321,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (75)
+## decided (76)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -331,6 +331,7 @@ _none_
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
 | decide-class-namespace-scoping | U | 65 | decide | Decide: how should two libraries be allowed to export the same class name? | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
+| decide-cross-language-qualifier-syntax | U | 50 | decide | DECIDED 2026-08-16: none of the three proposed syntaxes. The escape is `uses './mymath.c' as cmath;` + `cmath.cube(...)`, which feature-uses-alias-as shipped 2026-06-30 and which reaches foreign symbols because the alias maps to the REAL unit's Strs[] index. Verified on pinned. Bare `uses './x.c'` stays unbound deliberately. The originating bug is a docs fix, not a compiler one. | — |
 | decide-crtl-libm-glibc-bit-parity | A | 50 | decide |  | — |
 | decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
 | decide-dynamic-array-value-vs-reference-semantics | U | 55 | decide | dynamic arrays: pxx gives b := a VALUE semantics (a copy), FPC/Delphi give REFERENCE semantics (an alias) — is ours deliberate? | — |
@@ -465,9 +466,9 @@ _none_
 - [p 55] [A] feature-signal-siginfo-ucontext
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
-- [p 50] [U] decide-cross-language-qualifier-syntax (unblocks 1)
 - [p 50] [N] feature-nilpy-tkinter-facade (unblocks 1)
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [D] docs-cross-language-qualifier-note-is-wrong
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
@@ -480,6 +481,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
+- [p 45] [D] docs-name-collisions-and-the-as-escape
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 45] [C] feature-c-entry-stub-must-run-initializers-for-environ
 - [p 45] [C] feature-c-gtk3-header-final-wiring
@@ -640,7 +642,6 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
-- **1** — decide-cross-language-qualifier-syntax
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
