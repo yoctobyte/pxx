@@ -693,6 +693,9 @@ test-nilpy: $(COMPILER)
 	# defs and methods, every arity, plus a written None
 	./$(COMPILER) test/test_nilpy_default_arguments.npy $(TESTTMP)/test_nilpy_dfl26
 	test "$$($(TESTTMP)/test_nilpy_dfl26)" = "$$(python3 test/test_nilpy_default_arguments.npy)"
+	# complex: the 1j literal, complex(), .real/.imag, repr, arithmetic, **
+	./$(COMPILER) test/test_nilpy_complex.npy $(TESTTMP)/test_nilpy_complex26
+	test "$$($(TESTTMP)/test_nilpy_complex26)" = "$$(python3 test/test_nilpy_complex.npy)"
 	# a def reading a module global assigned further down the file
 	./$(COMPILER) test/test_nilpy_forward_module_global.npy $(TESTTMP)/test_nilpy_fwdglob26
 	test "$$($(TESTTMP)/test_nilpy_fwdglob26)" = "$$(python3 test/test_nilpy_forward_module_global.npy)"

@@ -40,6 +40,10 @@ function PyNodeIsUserIterable(node: Integer): Boolean; forward;
 function PyMakeIterOf(node: Integer): Integer; forward;
 { One-argument call to a plain pylib function; PyMakeIterOf sits above it. }
 function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer; forward;
+function PyRecIsComplex(recId: Integer): Boolean; forward;
+function PyNodeIsComplex(n: Integer): Boolean; forward;
+function PyComplexCoerce(n: Integer): Integer; forward;
+function PyMakeComplexBinop(op: TTokenKind; a, b: Integer): Integer; forward;
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer; forward;
 procedure PyParseDefHeader; forward;

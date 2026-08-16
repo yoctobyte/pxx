@@ -1,0 +1,45 @@
+# Python's complex type: the 1j literal, the complex() constructor, .real/.imag,
+# all three repr shapes, arithmetic (complex/complex and mixed with int/float,
+# both operand orders), abs, ==, and ** .
+# Diffed live against CPython by the Makefile rule, so every line below is an
+# EXACT agreement, not a recorded approximation.
+# bug-nilpy-no-complex-number-type
+a = 1j
+b = complex(1, 2)
+c = complex(3, -4)
+print(a)
+print(b)
+print(c)
+print(complex(5))
+print(complex(0, 0))
+print(1.5j)
+print(3 + 4j)
+print(b.real, b.imag)
+print(c.real, c.imag)
+print(b + c)
+print(b - c)
+print(b * c)
+print(b / c)
+print(-b)
+print(b + 1)
+print(1 + b)
+print(b * 2)
+print(2 * b)
+print(b - 1.5)
+print(2 - b)
+print(abs(c))
+print(abs(complex(0, 0)))
+print(b == complex(1, 2))
+print(b == c)
+print(b != c)
+print(1j * 1j)
+print(2j ** 2)
+print(complex(2, 0) ** 3)
+print(type(b).__name__)
+# `j` is still an ordinary identifier, and a radix literal never takes the
+# suffix -- CPython rejects 0x1j.
+j = 7
+print(j)
+print(0x1f)
+for j in range(3):
+    print(j)

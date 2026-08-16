@@ -16818,6 +16818,73 @@ begin
   ASTLeft[Result] := arg0;
 end;
 
+{ Is this node a COMPLEX value? }
+function PyNodeIsComplex(n: Integer): Boolean;
+begin
+  Result := (n >= 0) and (IntToTypeKind(ASTTk[n]) = tyClass) and
+            PyRecIsComplex(ResolveNodeRec(n));
+end;
+
+{ Coerce one operand of a mixed complex expression. A real becomes re+0j, which
+  is what Python's numeric tower does before it applies the operator; a complex
+  is returned untouched. }
+function PyComplexCoerce(n: Integer): Integer;
+begin
+  if PyNodeIsComplex(n) then Result := n
+  else Result := PyCallProc1('pycomplex_of_real', n);
+end;
+
+{ `z + w`, `z * 2`, `1 - z`, `z == w` — complex arithmetic, built as DIRECT
+  calls rather than left to operator overloading or dunder dispatch.
+
+  Not dunder dispatch, because complex is a pylib class and every dunder arm
+  excludes those by design. Not Pascal `operator` overloads either, and that is
+  the interesting half: they are keyed on the LEFT operand and matched on the
+  right one only as a preference, so `z + 1` with an Int64 right operand would
+  MISS the (TPyComplex, Double) entry, fall back to the first `+` registered for
+  TPyComplex, and pass the integer where a TPyComplex pointer was expected --
+  silently, since both are one machine word. Coercing both sides here and naming
+  the routine outright has no such failure mode.
+  bug-nilpy-no-complex-number-type }
+function PyMakeComplexBinop(op: TTokenKind; a, b: Integer): Integer;
+var pname: AnsiString; procIdx, arg0, arg1: Integer;
+begin
+  Result := -1;
+  if op = tkPlus then pname := 'pycomplex_add'
+  else if op = tkMinus then pname := 'pycomplex_sub'
+  else if op = tkStar then pname := 'pycomplex_mul'
+  else if op = tkSlash then pname := 'pycomplex_div'
+  else if op = tkEq then pname := 'pycomplex_eq'
+  else if op = tkNeq then pname := 'pycomplex_eq'
+  else Exit;
+  procIdx := FindProc(pname);
+  if procIdx < 0 then Exit;
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := PyComplexCoerce(a);
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := PyComplexCoerce(b);
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTLeft[Result] := arg0;
+  if (op = tkEq) or (op = tkNeq) then
+  begin
+    ASTTk[Result] := Ord(tyBoolean);
+    { `!=` is `not (a == b)` — one comparison routine, negated here, so the two
+      spellings cannot drift apart. }
+    if op = tkNeq then
+    begin
+      arg0 := Result;
+      Result := AllocNode(AN_NOT);
+      ASTLeft[Result] := arg0;
+      ASTTk[Result] := Ord(tyBoolean);
+    end;
+  end
+  else
+  begin
+    ASTTk[Result] := Ord(tyClass);
+    ASTRight[Result] := ProcRetRecId[procIdx];
+  end;
+end;
+
 { `<str> % <args>` — Python's printf-style interpolation, lowered to the pylib
   formatter. The argument travels as a VARIANT, which is what lets one helper
   take both shapes Python allows: a single value, or the TPyList a written tuple
@@ -21075,11 +21142,50 @@ end;
   tried FIRST, and only when the BASE is not itself a user class, so a class
   base keeps left-operand priority. pylib's own rows are excluded so
   container/scalar powers keep today's behaviour. }
+{ Is this node a compile-time constant whose value is a whole number? `2`,
+  `2.0`, `-3` are; `1/3` and any variable are not. Drives the one decision the
+  float `**` path cannot defer: an integral exponent is real for every base. }
+function PyNodeIsIntegralConst(n: Integer): Boolean;
+var d: Double;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if ASTKind[n] = AN_NEG then begin Result := PyNodeIsIntegralConst(ASTLeft[n]); Exit; end;
+  if ASTKind[n] = AN_FLOAT_LIT then
+  begin
+    d := ExDecBitsToDouble(ASTIVal[n]);
+    Result := d = Int(d);
+    Exit;
+  end;
+  Result := (ASTKind[n] = AN_INT_LIT) and TypeIsOrdinal(IntToTypeKind(ASTTk[n]));
+end;
+
 function PyMakePow(ppBase, ppExp: Integer): Integer;
 var ppPi, ppArgSeq, ppArgSeq2, node: Integer;
     ppDomPi, ppDomArg, ppDomArg2, ppDomCall, ppBaseVal: Integer;
     ppRngPi, ppRngArg, ppRngArg2, ppRngArg3, ppRngCall: Integer;
 begin
+  { `z ** w`, `2j ** 2`, `2 ** 1j` — either operand complex. First, because
+    complex is a pylib class and every dunder arm below excludes those. }
+  if PyExprMode and (PyNodeIsComplex(ppBase) or PyNodeIsComplex(ppExp)) then
+  begin
+    ppPi := FindProc('pycomplex_pow');
+    if ppPi >= 0 then
+    begin
+      ppArgSeq := AllocNode(AN_ARG);
+      ASTLeft[ppArgSeq] := PyComplexCoerce(ppBase);
+      ppArgSeq2 := AllocNode(AN_ARG);
+      ASTLeft[ppArgSeq2] := PyComplexCoerce(ppExp);
+      ASTRight[ppArgSeq] := ppArgSeq2;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := ppPi;
+      ASTTk[node] := Ord(tyClass);
+      ASTRight[node] := ProcRetRecId[ppPi];
+      ASTLeft[node] := ppArgSeq;
+      PyMakePow := node;
+      Exit;
+    end;
+  end;
   if PyExprMode and (IntToTypeKind(ASTTk[ppBase]) <> tyClass) then
   begin
     node := PyReflectedDunder('__rpow__', ppBase, ppExp);
@@ -21115,6 +21221,35 @@ begin
     only `abs(LongInt)` offered. That is a real overload-merge question and it
     is not this ticket's.
     bug-a-nilpy-star-star-has-its-own-low-precision-pow }
+  { A float power whose exponent is not a known integer cannot be TYPED here:
+    CPython answers a float for a non-negative base and a COMPLEX for a negative
+    one, and which it is depends on the VALUES. So it becomes one variant-
+    returning call, and the decision moves to run time where it belongs.
+
+    Gated on the exponent, not on the base, and that is the whole point of the
+    gate: an integral exponent is real for every base (`x ** 2`), so the common
+    shape keeps its Double typing, its direct RTL `Power` call and its static
+    overflow guard. Only the genuinely value-dependent case widens.
+    bug-nilpy-no-complex-number-type }
+  if PyExprMode and
+     (TypeIsFloat(IntToTypeKind(ASTTk[ppBase])) or
+      TypeIsFloat(IntToTypeKind(ASTTk[ppExp]))) and
+     not PyNodeIsIntegralConst(ppExp) then
+  begin
+    ppPi := FindProc('pypow_cx');
+    if ppPi >= 0 then
+    begin
+      ppArgSeq := AllocNode(AN_ARG); ASTLeft[ppArgSeq] := ppBase;
+      ppArgSeq2 := AllocNode(AN_ARG); ASTLeft[ppArgSeq2] := ppExp;
+      ASTRight[ppArgSeq] := ppArgSeq2;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := ppPi;
+      ASTTk[node] := Ord(tyVariant);
+      ASTLeft[node] := ppArgSeq;
+      PyMakePow := node;
+      Exit;
+    end;
+  end;
   if PyExprMode and
      (TypeIsFloat(IntToTypeKind(ASTTk[ppBase])) or
       TypeIsFloat(IntToTypeKind(ASTTk[ppExp]))) then
@@ -22525,8 +22660,34 @@ end;
   PyUnpackTargetStore below, needed once a target may continue into a subscript
   (`self.grid[i], self.grid[j] = ...`).
   bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
+{ `z.real` / `z.imag` on a complex. The Python attribute names cannot BE the
+  pylib field names: `real` lexes as a TYPE token in the Pascal lexer, so a
+  field so named is unreachable from inside pylib itself (`z.real` there is
+  "no such member"). NilPy has its own lexer where `real` is an ordinary
+  identifier, so the two names are mapped onto the fields here — at the one
+  place attribute reads resolve. bug-nilpy-no-complex-number-type }
+{ Is this record id pylib's TPyComplex? Complex is a pylib class, and pylib
+  classes are deliberately excluded from every dunder-dispatch arm, so each
+  place that would have dispatched `__abs__` / `__add__` / ... needs to name
+  complex explicitly. bug-nilpy-no-complex-number-type }
+function PyRecIsComplex(recId: Integer): Boolean;
+begin
+  Result := (recId >= REC_UCLASS_BASE) and
+            CaseEqual(PyRawName(UClsNOff[recId - REC_UCLASS_BASE],
+                                UClsNLen[recId - REC_UCLASS_BASE]), 'TPyComplex');
+end;
+
+function PyComplexFieldName(ci: Integer; const fld: AnsiString): AnsiString;
+begin
+  Result := fld;
+  if ci < 0 then Exit;
+  if not CaseEqual(PyRawName(UClsNOff[ci], UClsNLen[ci]), 'TPyComplex') then Exit;
+  if CaseEqual(fld, 'real') then Result := 'FRe'
+  else if CaseEqual(fld, 'imag') then Result := 'FIm';
+end;
+
 function PyMakeAttrLoad(baseNode: Integer; const fld: AnsiString): Integer;
-var ci, fi, node: Integer;
+var ci, fi, node: Integer; rfld: AnsiString;
 begin
   ci := -1;
   if IntToTypeKind(ASTTk[baseNode]) = tyClass then
@@ -22534,8 +22695,9 @@ begin
     fi := ResolveNodeRec(baseNode);
     if fi >= REC_UCLASS_BASE then ci := fi - REC_UCLASS_BASE;
   end;
+  rfld := PyComplexFieldName(ci, fld);
   fi := -1;
-  if ci >= 0 then fi := FindUField(ci, fld);
+  if ci >= 0 then fi := FindUField(ci, rfld);
   if fi < 0 then
   begin
     PyMakeAttrLoad := PyMakeDynAttrGet(baseNode, fld);
@@ -22543,8 +22705,8 @@ begin
   end;
   node := AllocNode(AN_FIELD);
   ASTLeft[node] := baseNode;
-  ASTSOffset[node] := PyStoredName(fld);
-  ASTSLen[node] := Length(fld);
+  ASTSOffset[node] := PyStoredName(rfld);
+  ASTSLen[node] := Length(rfld);
   ASTTk[node] := UFldTk[fi];
   ASTRight[node] := UFldRec_[fi];
   PyMakeAttrLoad := node;

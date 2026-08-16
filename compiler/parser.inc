@@ -10656,7 +10656,14 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      if PyExprMode and (IntToTypeKind(ASTTk[left]) = tyClass) and
+      if PyExprMode and PyNodeIsComplex(left) then
+      begin
+        { `-z` on a complex negates both components. Its own arm because
+          complex is a pylib class and the user-class arm below excludes those,
+          which would leave it in the AN_NEG path negating the object HANDLE. }
+        node := PyCallProc1('pycomplex_neg', left);
+      end
+      else if PyExprMode and (IntToTypeKind(ASTTk[left]) = tyClass) and
          (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
       begin
         { `-n` on a user class's own `__neg__` dunder — same silent-garbage
@@ -14496,6 +14503,17 @@ begin
           HANDLE as a number (measured: 140450157559832 where CPython printed
           5) — silent, no error.
           bug-nilpy-unary-numeric-dunders-return-raw-handle. }
+        { `abs(z)` on a COMPLEX is its modulus. A pylib class, so the
+          user-class arm below excludes it by design and it would otherwise hit
+          exactly the handle-as-a-number bug that arm was written for. }
+        if PyExprMode and CaseEqual(name, 'Abs') and
+           (IntToTypeKind(ASTTk[node]) = tyClass) and
+           PyRecIsComplex(ResolveNodeRec(node)) then
+        begin
+          CurASTNode := PyCallProc1('pycomplex_abs', node);
+          LastExprTk := tyDouble;
+          Exit;
+        end;
         if PyExprMode and CaseEqual(name, 'Abs') and
            (IntToTypeKind(ASTTk[node]) = tyClass) and
            (ResolveNodeRec(node) >= REC_UCLASS_BASE) and
@@ -17220,6 +17238,18 @@ begin
       multiply happens to handle a list on the LEFT, which is why `u * [7]`
       failed while `[7] * u` passed.
       bug-nilpy-sequence-repeat-with-a-variant-count-falls-through-to-arithmetic }
+    { complex `*` and `/`, either operand order, mixed with int/float. Before
+      every arm below: complex is a pylib class, so the dunder arms exclude it
+      and it would otherwise reach the generic arithmetic and compute on the
+      object HANDLE. }
+    else if PyExprMode and (op in [tkStar, tkSlash]) and
+            (PyNodeIsComplex(left) or PyNodeIsComplex(right)) then
+    begin
+      node := PyMakeComplexBinop(op, left, right);
+      if node < 0 then node := PyMakeUnsupportedOperand;
+      CurASTNode := node;
+      continue;
+    end
     else if PyExprMode and (op = tkStar) and PyListRepeatPair(left, right) then
     begin
       node := PyMakeListRepeat(left, right);
@@ -17563,6 +17593,16 @@ begin
       CurASTNode := PyMakeUnsupportedOperand;
       continue;
     end
+    { complex `+` and `-`, either operand order, mixed with int/float — before
+      the reflected and user-class arms, both of which exclude pylib classes. }
+    else if PyExprMode and (op in [tkPlus, tkMinus]) and
+            (PyNodeIsComplex(left) or PyNodeIsComplex(right)) then
+    begin
+      node := PyMakeComplexBinop(op, left, right);
+      if node < 0 then node := PyMakeUnsupportedOperand;
+      CurASTNode := node;
+      continue;
+    end
     else if PyExprMode and (op in [tkPlus, tkMinus]) and
             (IntToTypeKind(ASTTk[left]) <> tyClass) and
             (PyReflectedDunder(PyReflName(op), left, right) >= 0) then
@@ -17899,6 +17939,21 @@ begin
       negates-eq). The auto-derived case below stays: with only `__eq__`
       declared, CPython DOES derive `!=` as its negation, and that already
       matched. }
+    { complex `==` / `!=` compares the two components. Without this the pair
+      fell through to a reference compare, so `complex(1,2) == complex(1,2)`
+      answered False -- two equal numbers by every Python rule, unequal here
+      only because they were separate allocations. Either operand may be a
+      real: `complex(2,0) == 2` is True in CPython. }
+    if PyExprMode and (op in [tkEq, tkNeq]) and
+       (PyNodeIsComplex(left) or PyNodeIsComplex(right)) then
+    begin
+      node := PyMakeComplexBinop(op, left, right);
+      if node >= 0 then
+      begin
+        CurASTNode := node;
+        Exit;
+      end;
+    end;
     if PyExprMode and (op = tkNeq) and
        (IntToTypeKind(ASTTk[left]) = tyClass) and
        (IntToTypeKind(ASTTk[right]) = tyClass) and

@@ -96,6 +96,35 @@ begin
   Inc(TokCount); EnsureTokCapacity(TokCount+1);
 end;
 
+{ `1j` / `2.5J` — Python's imaginary literal. CPython has no integer complex,
+  so the imaginary PART is a double whichever way the digits were written.
+
+  Consumes the suffix and emits the token sequence for
+  `pycomplex_make(0.0, <value>)`, so the literal needs no new token kind, no
+  parser arm and no constant folding of its own -- it IS a call from the moment
+  it is lexed, which is also what makes `1j` usable in every expression
+  position for free. The RADIX path deliberately does not call this: CPython
+  rejects `0x1j`. bug-nilpy-no-complex-number-type }
+function PyImaginarySuffix(var P: Integer): Boolean;
+begin
+  Result := (P <= Length(Source)) and ((Source[P] = 'j') or (Source[P] = 'J'));
+  { A suffix must END the literal -- `1jj` and `1john` are not imaginaries. }
+  if Result and (P < Length(Source)) and
+     (Source[P+1] in ['a'..'z','A'..'Z','0'..'9','_']) then
+    Result := False;
+  if Result then Inc(P);
+end;
+
+procedure PyEmitImaginary(bits: Int64; line: Integer);
+begin
+  PyEmitToken(tkIdent, 0, line, 'pycomplex_make');
+  PyEmitToken(tkLParen, 0, line, '');
+  PyEmitToken(tkFloat, StrToDoubleBits('0.0'), line, '');
+  PyEmitToken(tkComma, 0, line, '');
+  PyEmitToken(tkFloat, bits, line, '');
+  PyEmitToken(tkRParen, 0, line, '');
+end;
+
 { dec := dec*base + digit, on a decimal digit string (`''` = 0). Carries the
   exact value of a radix literal (0x/0o/0b) wider than Int64: the promotable-int
   runtime takes DECIMAL text (PXXPromoFromStr), so the base conversion happens
@@ -1025,8 +1054,15 @@ begin
             if Source[fpos] <> '_' then AppendChar(s, Source[fpos]);
             Inc(fpos);
           end;
-          PyEmitToken(tkFloat, StrToDoubleBits(s), SrcLine, '');
+          if PyImaginarySuffix(P) then
+            PyEmitImaginary(StrToDoubleBits(s), SrcLine)
+          else
+            PyEmitToken(tkFloat, StrToDoubleBits(s), SrcLine, '');
         end
+        else if PyImaginarySuffix(P) then
+          { `2j` — an INTEGER with the imaginary suffix. CPython has no integer
+            complex, so the part is a float either way. }
+          PyEmitImaginary(StrToDoubleBits(decText), SrcLine)
         else if DecDigitsExceed(decText, '9223372036854775807') then
           { decimal wider than Int64: carry the exact digits (promo lowering) }
           PyEmitToken(tkInteger, n, SrcLine, decText)

@@ -784,6 +784,24 @@ type
     property Items[i: Int64]: Int64 read at; default;
   end;
 
+{ Python's `complex`. A CLASS rather than a new variant tag: a tag would need a
+  heap payload anyway (two doubles do not fit one variant slot), and that means
+  touching all four object-tag sites plus the aarch64 clear/retain pair, which
+  is a cross-target leak surface. As a class it is an ordinary tag-7 object and
+  every one of those already works.
+
+  The fields cannot be spelled `real`/`imag`: `real` lexes as a TYPE token in
+  the Pascal lexer, so `z.real` inside pylib is "no such member". NilPy has its
+  own lexer where `real` is an ordinary identifier, so the Python attribute
+  names are mapped onto these two in the frontend's attribute path.
+  bug-nilpy-no-complex-number-type }
+  TPyComplex = class
+  public
+    FRe: Double;
+    FIm: Double;
+    constructor Create;
+  end;
+
 { Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
   spelling, which is the whole point: the shared str() intrinsic lowers every
   argument through StrInt/FloatToStr/VariantToStr and therefore prints a
@@ -1337,6 +1355,44 @@ function pyrange_slice(r: TPyRange; lo: Int64; hi: Int64; step: Int64): TPyRange
   range(2, 2, 3) and range(0, 3, 2) equals range(0, 4, 2). CPython's rule. }
 function pyrange_eq(a: TPyRange; b: TPyRange): Boolean;
 function pyrange_repr(r: TPyRange): AnsiString;
+
+{ ===== complex ===== bug-nilpy-no-complex-number-type }
+{ The Python constructor. NilPy resolves it by NAME through ordinary overload
+  resolution, the same route `bytes(...)` takes — no parser intrinsic. }
+function complex(re, im: Double): TPyComplex;
+function complex(re: Double): TPyComplex; overload;
+function complex: TPyComplex; overload;
+{ The internal spelling, for lowerings that must not depend on overload
+  resolution (the `1j` literal expands to a call of THIS). }
+function pycomplex_make(re, im: Double): TPyComplex;
+{ CPython's repr, which is NOT str(re) + '+' + str(im) + 'j':
+
+    (1+2j)    parenthesised whenever the real part is shown
+    1j        bare when the real part is a POSITIVE zero
+    (5+0j)    parts formatted WITHOUT the trailing `.0` a float repr adds
+    (1-0j)    the sign comes from copysign, not from `im < 0`
+
+  str() and repr() agree for complex, so both render through this. }
+function pycomplex_repr(z: TPyComplex): AnsiString;
+function pycomplex_add(a, b: TPyComplex): TPyComplex;
+function pycomplex_sub(a, b: TPyComplex): TPyComplex;
+function pycomplex_mul(a, b: TPyComplex): TPyComplex;
+function pycomplex_div(a, b: TPyComplex): TPyComplex;
+function pycomplex_neg(a: TPyComplex): TPyComplex;
+function pycomplex_eq(a, b: TPyComplex): Boolean;
+function pycomplex_abs(a: TPyComplex): Double;
+{ `(-8) ** (1/3)` — the case that used to raise ValueError. Principal branch,
+  exp(w * ln z), which is what CPython computes. }
+function pycomplex_pow(a, b: TPyComplex): TPyComplex;
+{ Coercion for the mixed forms (`z + 1`, `2 * z`): a real becomes re+0j. }
+function pycomplex_of_real(d: Double): TPyComplex;
+function pycomplex_is(const v: Variant): Boolean;
+{ `x ** y` on floats where y is not a known integer: the answer is a float for a
+  non-negative base and a COMPLEX for a negative one, and which it is depends on
+  the VALUES, so no static type can express it. Returns a Variant for exactly
+  that reason. bug-nilpy-no-complex-number-type }
+function pypow_cx(b: Double; e: Double): Variant;
+
 { Iterating one yields a CURSOR — a fresh one each time, which is what makes a
   range re-iterable where a cursor is not. }
 function pyiter_of_range(r: TPyRange): TPyIter;
@@ -4196,6 +4252,19 @@ function PyDeclaredAttrGet(obj: Pointer; const name: AnsiString;
   bug-nilpy-a-bare-attribute-on-a-call-result-is-refused }
 var cls: PClassRTTI; fi: PFieldInfo; a: Pointer; k: Int64;
 begin
+  { `z.real` / `z.imag` on a complex, answered at RUN time on purpose. The
+    Python names cannot BE the pylib field names — `real` lexes as a type token
+    in the Pascal lexer, so pylib cannot name its own field that — and mapping
+    them in the frontend would have to be repeated at every attribute site,
+    of which NilPy has five, split by receiver shape. That split is the one this
+    repo keeps re-fixing, so the mapping goes where BOTH getters already meet:
+    pydynattr_get and pydynattr_get_v each call this first.
+    bug-nilpy-no-complex-number-type }
+  if TObject(obj) is TPyComplex then
+  begin
+    if name = 'real' then begin found := True; Result := TPyComplex(obj).FRe; Exit; end;
+    if name = 'imag' then begin found := True; Result := TPyComplex(obj).FIm; Exit; end;
+  end;
   found := False;
   if obj = nil then Exit;
   cls := GetInstanceRTTI(obj);
@@ -4566,6 +4635,7 @@ begin
     from the kind, not from ClassName (which would answer 'TPyIter'). }
   else if o is TPyIter then Result := pyiter_typename(TPyIter(o))
   else if o is TPyRange then Result := 'range'
+  else if o is TPyComplex then Result := 'complex'
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -12811,6 +12881,322 @@ begin
   Result := Result + ')';
 end;
 
+{ ===== complex ===== bug-nilpy-no-complex-number-type }
+
+constructor TPyComplex.Create;
+begin
+  PXXObjFinalizeHook := @PyObjFinalize;
+  FRe := 0.0;
+  FIm := 0.0;
+end;
+
+function pycomplex_make(re, im: Double): TPyComplex;
+begin
+  Result := TPyComplex.Create;
+  Result.FRe := re;
+  Result.FIm := im;
+end;
+
+function complex(re, im: Double): TPyComplex;
+begin
+  Result := pycomplex_make(re, im);
+end;
+
+function complex(re: Double): TPyComplex;
+begin
+  Result := pycomplex_make(re, 0.0);
+end;
+
+function complex: TPyComplex;
+begin
+  Result := pycomplex_make(0.0, 0.0);
+end;
+
+function pycomplex_of_real(d: Double): TPyComplex;
+begin
+  Result := pycomplex_make(d, 0.0);
+end;
+
+function pycomplex_is(const v: Variant): Boolean;
+var o: TObject;
+begin
+  Result := False;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  Result := (o <> nil) and (o is TPyComplex);
+end;
+
+{ One part of a complex repr: Python's float spelling with the trailing `.0`
+  removed. `repr(5.0)` is '5.0' but `repr(complex(5))` is '(5+0j)' -- CPython
+  formats complex parts without the flag that forces a decimal point. Exponent
+  and inf/nan forms are untouched ('1e+16', 'inf'), since neither ends in '.0'. }
+function PyComplexPart(d: Double): AnsiString;
+var n: Integer;
+begin
+  Result := PyFloatStr(d);
+  n := Length(Result);
+  if (n > 2) and (Result[n-1] = '.') and (Result[n] = '0') then
+    Result := Copy(Result, 1, n - 2);
+end;
+
+function pycomplex_repr(z: TPyComplex): AnsiString;
+var rs, ims: AnsiString;
+begin
+  if z = nil then begin Result := 'None'; Exit; end;
+  rs := PyComplexPart(z.FRe);
+  ims := PyComplexPart(z.FIm);
+  { The sign is read off the FORMATTED text, not from `FIm < 0`, so negative
+    zero keeps its sign the way CPython does: complex(1, -0.0) is '(1-0j)'.
+    The same trick decides the bare form -- a POSITIVE zero real part prints
+    '0', a negative one prints '-0' and stays parenthesised. }
+  if rs = '0' then
+  begin
+    Result := ims + 'j';
+    Exit;
+  end;
+  if (Length(ims) > 0) and (ims[1] = '-') then
+    Result := '(' + rs + ims + 'j)'
+  else
+    Result := '(' + rs + '+' + ims + 'j)';
+end;
+
+function pycomplex_add(a, b: TPyComplex): TPyComplex;
+begin
+  Result := pycomplex_make(a.FRe + b.FRe, a.FIm + b.FIm);
+end;
+
+function pycomplex_sub(a, b: TPyComplex): TPyComplex;
+begin
+  Result := pycomplex_make(a.FRe - b.FRe, a.FIm - b.FIm);
+end;
+
+function pycomplex_mul(a, b: TPyComplex): TPyComplex;
+begin
+  Result := pycomplex_make(a.FRe * b.FRe - a.FIm * b.FIm,
+                           a.FRe * b.FIm + a.FIm * b.FRe);
+end;
+
+function pycomplex_div(a, b: TPyComplex): TPyComplex;
+var den: Double;
+begin
+  den := b.FRe * b.FRe + b.FIm * b.FIm;
+  if den = 0.0 then
+    raise ZeroDivisionError.Create('complex division by zero');
+  Result := pycomplex_make((a.FRe * b.FRe + a.FIm * b.FIm) / den,
+                           (a.FIm * b.FRe - a.FRe * b.FIm) / den);
+end;
+
+function pycomplex_neg(a: TPyComplex): TPyComplex;
+begin
+  Result := pycomplex_make(-a.FRe, -a.FIm);
+end;
+
+function pycomplex_eq(a, b: TPyComplex): Boolean;
+begin
+  Result := (a.FRe = b.FRe) and (a.FIm = b.FIm);
+end;
+
+{ sqrt / cos / sin / atan2, hand-rolled for the same reason PyMathLn and
+  PyMathExp are: pylib is a BUILTIN unit and cannot `uses math` (the RTL's Abs
+  overload set would hide pylib's own, measured 2026-08-16 — see the note beside
+  PyPowHook). The hook trick `**` uses is not worth four more hooks for a type
+  this rare, so complex stays self-contained. Last-ulp agreement with CPython is
+  therefore not claimed; see the ticket's accuracy note. }
+
+function PyCxSqrt(x: Double): Double;
+var e, i: Integer; m, r: Double;
+begin
+  if x < 0.0 then raise ValueError.Create('math domain error');
+  if x = 0.0 then begin Result := 0.0; Exit; end;
+  { x = m * 4^e with m in [1,4), so sqrt(x) = sqrt(m) * 2^e and the scaling
+    back is exact — powers of two never round. }
+  e := 0; m := x;
+  while m >= 4.0 do begin m := m / 4.0; Inc(e); end;
+  while m < 1.0 do begin m := m * 4.0; Dec(e); end;
+  r := (m + 1.0) * 0.5;
+  for i := 1 to 8 do r := 0.5 * (r + m / r);   { Newton; converges by ~5 }
+  while e > 0 do begin r := r * 2.0; Dec(e); end;
+  while e < 0 do begin r := r * 0.5; Inc(e); end;
+  Result := r;
+end;
+
+function PyCxCosSin(x: Double; wantSin: Boolean): Double;
+const PyTwoPi  = 6.283185307179586;
+      PyPi     = 3.141592653589793;
+      PyHalfPi = 1.5707963267948966;
+var t, term, sum, xx, sn, cs: Double; i, n, q: Integer; neg: Boolean;
+begin
+  { Reduce to [-pi, pi], then to a QUADRANT: the Taylor series is accurate to
+    about a ulp on [-pi/4, pi/4] and drifts several ulp by pi/3, which is
+    exactly where `(-8) ** (1/3)` lands. So fold into the octant and put the
+    quadrant back with the sin/cos identities. }
+  t := x;
+  while t > PyPi do t := t - PyTwoPi;
+  while t < -PyPi do t := t + PyTwoPi;
+  neg := False;
+  if t < 0.0 then begin t := -t; neg := True; end;   { sin is odd, cos is even }
+  q := Trunc(t / PyHalfPi + 0.5);                     { nearest quadrant }
+  t := t - q * PyHalfPi;
+  q := q and 3;
+
+  { one series each for sin and cos of the reduced angle }
+  xx := t * t;
+  sum := t; term := t; n := 1;
+  for i := 1 to 12 do
+  begin
+    term := -term * xx / ((n + 1) * (n + 2));
+    sum := sum + term;
+    n := n + 2;
+  end;
+  sn := sum;
+  sum := 1.0; term := 1.0; n := 0;
+  for i := 1 to 12 do
+  begin
+    term := -term * xx / ((n + 1) * (n + 2));
+    sum := sum + term;
+    n := n + 2;
+  end;
+  cs := sum;
+
+  if wantSin then
+  begin
+    if q = 0 then Result := sn
+    else if q = 1 then Result := cs
+    else if q = 2 then Result := -sn
+    else Result := -cs;
+    if neg then Result := -Result;
+  end
+  else
+  begin
+    if q = 0 then Result := cs
+    else if q = 1 then Result := -sn
+    else if q = 2 then Result := -cs
+    else Result := sn;
+  end;
+end;
+
+function PyCxArcTan(x: Double): Double;
+var t, xx, term, sum: Double; i, halvings: Integer; neg: Boolean;
+begin
+  neg := x < 0.0;
+  t := x;
+  if neg then t := -t;
+  { atan(t) = 2*atan(t / (1 + sqrt(1 + t*t))) — halve until t is small enough
+    that the series converges fast, then undo the halvings. }
+  halvings := 0;
+  while t > 0.2 do
+  begin
+    t := t / (1.0 + PyCxSqrt(1.0 + t * t));
+    Inc(halvings);
+    if halvings > 40 then Break;
+  end;
+  xx := t * t;
+  sum := t; term := t;
+  for i := 1 to 30 do
+  begin
+    term := -term * xx;
+    sum := sum + term / (2 * i + 1);
+  end;
+  while halvings > 0 do begin sum := sum * 2.0; Dec(halvings); end;
+  if neg then sum := -sum;
+  Result := sum;
+end;
+
+function pycomplex_abs(a: TPyComplex): Double;
+begin
+  Result := PyCxSqrt(a.FRe * a.FRe + a.FIm * a.FIm);
+end;
+
+{ atan2's quadrant fix-up over the half-plane arctangent above. }
+function PyComplexArg(y, x: Double): Double;
+const PyPi = 3.141592653589793;
+begin
+  if x > 0.0 then Result := PyCxArcTan(y / x)
+  else if x < 0.0 then
+  begin
+    if y >= 0.0 then Result := PyCxArcTan(y / x) + PyPi
+    else Result := PyCxArcTan(y / x) - PyPi;
+  end
+  else
+  begin
+    if y > 0.0 then Result := PyPi / 2.0
+    else if y < 0.0 then Result := -PyPi / 2.0
+    else Result := 0.0;
+  end;
+end;
+
+function pypow_cx(b: Double; e: Double): Variant;
+begin
+  { The one case the real path cannot answer. CPython's (-8) ** (1/3) is
+    1.0000000000000002+1.7320508075688772j; this used to be a named ValueError
+    saying NilPy had no complex type, which it now does. }
+  if (b < 0.0) and (Frac(e) <> 0.0) then
+  begin
+    Result := pycomplex_pow(pycomplex_make(b, 0.0), pycomplex_make(e, 0.0));
+    Exit;
+  end;
+  if (b = 0.0) and (e < 0.0) then
+    raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+  { Same accuracy as the static route: the RTL's Power through the hook the
+    frontend installs whenever it sees `**` at all. }
+  if PyPowHook <> nil then
+    Result := pypow_range(PyPowHook(b, e), b, e)
+  else
+    Result := pypow_range(PyMathExp(e * PyMathLn(b)), b, e);
+end;
+
+function pycomplex_pow(a, b: TPyComplex): TPyComplex;
+var lnr, arg, xr, xi, m: Double; n: Integer; negExp: Boolean;
+    accR, accI, baseR, baseI, t: Double;
+begin
+  { A small INTEGER exponent is repeated multiplication, not exp(w ln z) --
+    CPython does the same, and the difference is visible: `2j ** 2` is exactly
+    (-4+0j) that way and (-4.000000000000001+9.916242614452138e-16j) through
+    the logarithm. The bound matches CPython's own (|n| <= 100). }
+  if (b.FIm = 0.0) and (b.FRe = Int(b.FRe)) and
+     (b.FRe >= -100.0) and (b.FRe <= 100.0) and
+     not ((a.FRe = 0.0) and (a.FIm = 0.0)) then
+  begin
+    negExp := b.FRe < 0.0;
+    n := Trunc(Abs(b.FRe));
+    accR := 1.0; accI := 0.0;
+    baseR := a.FRe; baseI := a.FIm;
+    while n > 0 do
+    begin
+      if (n and 1) = 1 then
+      begin
+        t := accR * baseR - accI * baseI;
+        accI := accR * baseI + accI * baseR;
+        accR := t;
+      end;
+      t := baseR * baseR - baseI * baseI;
+      baseI := 2.0 * baseR * baseI;
+      baseR := t;
+      n := n shr 1;
+    end;
+    Result := pycomplex_make(accR, accI);
+    if negExp then
+      Result := pycomplex_div(pycomplex_make(1.0, 0.0), Result);
+    Exit;
+  end;
+  if (a.FRe = 0.0) and (a.FIm = 0.0) then
+  begin
+    if (b.FRe = 0.0) and (b.FIm = 0.0) then
+      Result := pycomplex_make(1.0, 0.0)
+    else
+      Result := pycomplex_make(0.0, 0.0);
+    Exit;
+  end;
+  { z**w = exp(w * ln z), ln z = ln|z| + i*arg z -- the principal branch, which
+    is what CPython computes. }
+  lnr := PyMathLn(PyCxSqrt(a.FRe * a.FRe + a.FIm * a.FIm));
+  arg := PyComplexArg(a.FIm, a.FRe);
+  xr := b.FRe * lnr - b.FIm * arg;
+  xi := b.FRe * arg + b.FIm * lnr;
+  m := PyMathExp(xr);
+  Result := pycomplex_make(m * PyCxCosSin(xi, False), m * PyCxCosSin(xi, True));
+end;
+
 { `for x in obj` over a USER class that implements the iterator protocol.
   CPython calls `__iter__` once and then `__next__` per step; so does this. The
   object `__iter__` answers is what gets stepped — the ordinary `return self`
@@ -17784,6 +18170,8 @@ begin
     { a range reprs as `range(0, 3)` — it does NOT print its values, which is
       the visible half of being lazy }
     if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
+    { str() and repr() agree for a complex, so both rendering paths land here }
+    if o is TPyComplex then begin Result := pycomplex_repr(TPyComplex(o)); Exit; end;
     if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
   { the scalar/string tail, INLINE rather than delegating to pyrepr_of. The two
@@ -17819,6 +18207,7 @@ begin
     if o is TPyBytes then begin Result := pybytes_repr(TPyBytes(o)); Exit; end;
     if o is TPyIter then begin Result := pyiter_repr(TPyIter(o)); Exit; end;
     if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
+    if o is TPyComplex then begin Result := pycomplex_repr(TPyComplex(o)); Exit; end;
     { a bare print() of an instance prefers __str__, like CPython's str() }
     if PyUserObjStr(o, False, us) then begin Result := us; Exit; end;
   end;

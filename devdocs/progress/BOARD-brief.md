@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:8 blocked:3 backlog:211 experimental:20 rainy-day:40 done-followup:3 decided:78 done:1959 rejected:38`
+`unfinished:8 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:78 done:1960 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -28,8 +28,11 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 196, ranked
+## Ready — top 30 of 200, ranked
 
+- `[p 70] [T]` regression-lib-test-lib-classes-tthread
+- `[p 70] [T]` regression-lib-test-lib-tls
+- `[p 70] [T]` regression-test-nilpy-test-nilpy-int-promotion-default
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -57,8 +60,5 @@ _none — no lane is locked._
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
-- `[p 50] [A]` feature-release-checksums-repro
-- `[p 48] [P]` feature-pascal-class-management-operators
-- `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
 
-_166 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_170 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
