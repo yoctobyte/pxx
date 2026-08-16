@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (200)
+## backlog (201)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,6 +60,7 @@ _none_
 | bug-nilpy-no-complex-number-type | N | 15 | bug | NilPy has no complex number type | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-nested-class-method-implementation-takes-only-one-qualifier | P | 35 | bug | `function touter.tinner.Tag: string;` — the implementation header of a method belonging to a NESTED class — is a parse error: the header parser takes one qualifier. Declaring and implementing such a method inline works, so this is the out-of-line spelling only. | — |
+| bug-p-set-literal-elements-are-not-type-checked | P | 60 | bug | A set literal's elements are never checked against the set's element type. `TakesSet(['a', 1])` on a `set of TDay` parameter compiles and answers dTue; `[cGreen]` (a DIFFERENT enum) silently becomes dTue; `[True]` works; `[99]` silently produces the empty set with no diagnostic. FPC rejects every one of them. No overloading needed — one procedure, one set parameter. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
@@ -81,7 +82,7 @@ _none_
 | decide-nilpy-classmethod-cls-binding | U | 40 | decide | @classmethod is refused by name. The machinery is closer than its ticket says — @staticmethod already injects a hidden $clsrecv at slot 0 and the dispatch already passes A class there — so the only open question is WHICH class that is at run time for an inherited method reached through an instance, and whether a `cls` that is the statically-known class is acceptable or must be refused until it is the runtime one. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-nilpy-none-str-sentinel-vs-textstr-kind | U | 40 | decide | Re-ask of decide-nilpy-none-str-representation: the chosen fix (a NilPy string kind whose blocks may be zero length) rests on a block kind that nothing in the tree ever stamps, so it is a Track A representation project rather than a bugfix. A None SENTINEL closes the reported bug at a fraction of the cost — but closes less. | — |
-| decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | When an overload set has both a `set of T` and an `array of const` parameter at the SAME slot, what should `f([x])` mean? Measured: FPC 3.2.2 is itself uses-order dependent and flips answer, and pxx flips on a different order — so there is no reference behaviour to copy. Rare, and nothing in the tree hits it; filed because the fix next door made the question visible, not because anything is broken. | — |
+| decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | RE-SCOPED 2026-08-16 after re-measurement: the original table was wrong (pxx is NOT order-independent — it flips on all four bracket shapes, FPC only on the genuinely ambiguous one). Most of the difference is bug-p-set-literal-elements-are-not-type-checked, filed separately; fix that and content disambiguates as it does in FPC. What is left to decide is the true tie only: `[dTue]`, `[dMon, dWed]`, `[]`. | bug-p-set-literal-elements-are-not-type-checked |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
 | docs-cross-language-qualifier-note-is-wrong | D | 50 | docs | NOT A COMPILER BUG — re-aimed at docs 2026-08-16. The cross-language qualifier exists and always did: `uses './mymath.c' as cmath;` then `cmath.cube(3)`. This ticket only ever measured the UNALIASED form. What is left is the docs fix: docs/language/name-resolution.md ships a Current-status note saying the escape does not exist. | — |
@@ -450,6 +451,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 65] [B] regression-b-power-lost-a-ulp-when-it-got-26x-faster
+- [p 60] [P] bug-p-set-literal-elements-are-not-type-checked (unblocks 1)
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
@@ -570,7 +572,6 @@ _none_
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [A] compat-pascal-writeln-of-a-single-uses-double-width
-- [p 30] [U] decide-set-vs-array-of-const-at-the-same-overload-slot
 - [p 30] [D] docs-publish-the-three-language-rounding-table
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
@@ -640,6 +641,7 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-p-set-literal-elements-are-not-type-checked
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
