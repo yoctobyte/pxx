@@ -4,12 +4,13 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "The duplicate-class-name check added 2026-07-30 uses a FLAT per-unit namespace, so a nested class name that is legally reused in a different enclosing class — or materialized once per specialization of an outer generic — is rejected as a redeclaration. Legal Pascal fails to compile. Two FPC-conformance tests fail on it (tclass13b, tgeneric72); found by Track T while enrolling the battery in the watcher."
+owner: claude-acpn
 ---
 
 # `duplicate class name` is scope-blind: nested classes collide across enclosing scopes
 
 - **Type:** bug (duplicate-declaration detection) — **Track A**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-14
 - **Filed by:** Track T, from `task-t-enroll-pascal-conformance-tier`. T owns the
   tool, never the bug — this is the owning lane's.
@@ -160,3 +161,52 @@ T's, which is why this is a note rather than a commit.
 
 Related: [[task-t-enroll-pascal-conformance-tier]],
 [[bug-p-scope-hiding-covers-routines-but-not-types-and-classes]].
+
+## Fixed 2026-08-16 (Track A+C+P+N session)
+
+Track T's read was right, including the warning about the sibling arm: a fix
+that special-cased nesting without keying on the specialization instance would
+have left `tgeneric72` red. It did not need keying, because the mechanism below
+is per-DECLARING-CLASS and a specialization is its own class.
+
+**Three pieces.**
+
+1. **Scope, recorded.** `ParsingClassBodyCi` is set while a class body is
+   parsed (exactly the shape `ParsingClassConstCi` already had for class
+   consts, `bug-pascal-class-const-visibility`), and every type declared there
+   registers in a nested-type registry: (owning class ci, bare name) -> ci,
+   walked own-then-ancestors like `FindClassConst`.
+
+2. **The duplicate check asks the right question.** Inside a class body a
+   repeated name is not a unit-level redeclaration, so instead of erroring the
+   later type is registered under its QUALIFIED `Outer.Inner` name. The FIRST
+   nested type of a bare name keeps the bare one, so every existing unqualified
+   use resolves exactly as before, and the check's original purpose is
+   untouched at unit scope (`TA = class ... end; TA = class ... end;` is still
+   an error, and `test_object_ref_array_identity.pas` still compiles).
+
+3. **The qualifier now MEANS something.** This is the part that made the fix
+   more than a suppression: with the error removed, `var b: tother.tinner`
+   silently bound to *touter's* — both are classes, and the wrong one simply
+   lacks the fields, so `b.w` was rejected and `b.x` accepted. The two sites
+   that used to strip the qualifier ("it only disambiguates the parse") now
+   consult the registry first: type position (`ParseTypeKind`) and the
+   constructor fast path (`TOuter.TInner.Create`, which previously asked the
+   owner for a method named `tinner`).
+
+**Known remaining gap, filed separately rather than half-built:** a nested
+class's METHOD IMPLEMENTATION cannot be spelled `function touter.tinner.Tag;`
+— the implementation-header parser takes one qualifier. Nested classes with
+methods declared *and implemented* inline are unaffected;
+[[bug-p-a-nested-class-method-implementation-takes-only-one-qualifier]].
+
+## Verified
+
+- `tclass13b.pp` and `tgeneric72.pp` both compile (both are `%norun`, so that
+  IS the test) — no `pxx.skip` entry needed, so Track T's two conformance
+  shards go green and keep their NEW-RED signal for the other ~180 programs.
+- `test/test_nested_class_type_scoping.pas` (new, in the Makefile): two classes
+  each declaring `tinner` with different fields, the forward-stub form the
+  original commit added, and the distinctness of the two instances — `total ok
+  5 / 5` under both FPC 3.2.2 and pxx.
+- `tools/gate.sh quick` GREEN, self-host byte-identical, FPC seed canary green.

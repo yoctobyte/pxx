@@ -3251,6 +3251,27 @@ var
   ParsingClassConstCi  : Integer;
   ParsingClassConstVis : Integer;
 
+  { NESTED TYPES declared inside a class body. Exactly the shape of the class-const
+    registry above, and for the same reason: the class tables are one flat per-unit
+    namespace, so `touter.tinner` and `tother.tinner` — two legal, distinct types —
+    collided, and a generic's nested type re-materialized per specialization read as
+    a redeclaration of the first one's
+    (bug-a-duplicate-class-name-check-is-scope-blind).
+
+    The FIRST nested type of a bare name keeps that bare name, so every existing
+    unqualified use of one resolves exactly as it did; a later same-named one is
+    registered under the qualified `Outer.Inner` instead of being rejected. This
+    registry is what makes both reachable: (owning class ci, bare name) -> ci,
+    consulted for a qualified `TOuter.TInner` and for a bare name inside the
+    declaring class's own body. }
+  NestedTypeOwner : array[0..MAX_TYPEALIAS-1] of Integer;   { owning UClass index }
+  NestedTypeName  : array[0..MAX_TYPEALIAS-1] of AnsiString; { bare declared name }
+  NestedTypeCi    : array[0..MAX_TYPEALIAS-1] of Integer;   { the nested type's own UClass index }
+  NestedTypeCount : Integer;
+  { Set >= 0 (to the class ci) only while a class BODY is being parsed, so a type
+    declared there registers against it. -1 everywhere else. }
+  ParsingClassBodyCi : Integer;
+
   { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
   NDInfoNDims : Integer;
   NDInfoLo    : array[0..MAX_ARR_DIMS-1] of Integer;

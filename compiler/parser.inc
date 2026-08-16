@@ -1577,6 +1577,46 @@ begin
   ClassConstMangle := '$cc$' + GetTokenStrFromRaw(UClsNOff[ownerCi], UClsNLen[ownerCi]) + '.' + nm;
 end;
 
+function FindNestedType(ci: Integer; const nm: AnsiString): Integer;
+{ A type declared inside class `ci`'s body, by its BARE name — walking own ->
+  ancestors, the same order FindClassConst uses, because a nested type is
+  inherited exactly as a class const is. -1 when this class chain declares none.
+  bug-a-duplicate-class-name-check-is-scope-blind }
+var i, c: Integer;
+begin
+  Result := -1;
+  c := ci;
+  while c >= 0 do
+  begin
+    for i := 0 to NestedTypeCount - 1 do
+      if (NestedTypeOwner[i] = c) and CaseEqual(NestedTypeName[i], nm) then
+      begin
+        Result := NestedTypeCi[i];
+        Exit;
+      end;
+    c := UClsParent[c];
+  end;
+end;
+
+{ Register `nm` as a type declared inside class `ownerCi`'s body. Idempotent per
+  (owner, name): a re-parse of the same body must not grow the table. }
+procedure AddNestedType(ownerCi: Integer; const nm: AnsiString; ci: Integer);
+var i: Integer;
+begin
+  if (ownerCi < 0) or (ci < 0) then Exit;
+  for i := 0 to NestedTypeCount - 1 do
+    if (NestedTypeOwner[i] = ownerCi) and CaseEqual(NestedTypeName[i], nm) then
+    begin
+      NestedTypeCi[i] := ci;
+      Exit;
+    end;
+  if NestedTypeCount >= MAX_TYPEALIAS then Error('too many nested class types');
+  NestedTypeOwner[NestedTypeCount] := ownerCi;
+  NestedTypeName[NestedTypeCount]  := nm;
+  NestedTypeCi[NestedTypeCount]    := ci;
+  Inc(NestedTypeCount);
+end;
+
 function FindClassConst(ci: Integer; const nm: AnsiString): Integer;
 { Registry lookup by (class ci, bare name), walking the parent chain (own ->
   ancestors) so a subclass method sees an inherited class const. Returns the
@@ -4719,6 +4759,21 @@ begin
           if not IsMethodNameTok then Error('expected class method name');
           fieldName := GetTokenStr(TokPos - 1);  { keyword-token names carry no SVal }
           Next;
+
+          { `TOuter.TInner.Create` — the middle name is a nested TYPE, i.e. a
+            SCOPE, not a member. Without this the lookup asked touter for a
+            method called `tinner` and said "class method not found", so a
+            nested class could be named in a declaration and never constructed —
+            a half-working feature. Loops, because nesting does.
+            bug-a-duplicate-class-name-check-is-scope-blind }
+          while (CurTok.Kind = tkDot) and (FindNestedType(ci, fieldName) >= 0) do
+          begin
+            ci := FindNestedType(ci, fieldName);
+            Expect(tkDot, '.');
+            if not IsMethodNameTok then Error('expected class method name');
+            fieldName := GetTokenStr(TokPos - 1);
+            Next;
+          end;
 
           { Overload-aware: `TAssert.AssertNotNull(x)` and `TAssert.AssertNotNull(msg, x)`
             are different methods. FindUMeth takes the first NAME match and ignored the
@@ -9674,6 +9729,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
+    nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
@@ -15113,6 +15169,26 @@ begin
         Exit;
       end;
 
+      { `TOuter.TInner.Create` — a nested class constructed through its owner.
+        One extra hop, taken before the fast path below so that path sees the
+        shape it already knows; the resolved nested ci is carried past the flat
+        lookup, which would otherwise bind whichever class of that bare name
+        registered first. bug-a-duplicate-class-name-check-is-scope-blind }
+      nestCtorCi := -1;
+      if (idx < 0) and (procIdx < 0) and IsClassType(name) and
+         (CurTok.Kind = tkIdent) and (TokPos + 3 < TokCount) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+         (Tokens[TokPos+2].Kind = tkDot) and (Tokens[TokPos+3].Kind = tkIdent) and
+         ((GetTokenStr(TokPos+3) = 'Create') or (GetTokenStr(TokPos+3) = 'create')) then
+      begin
+        nestCtorCi := FindNestedType(FindUClass(name), GetTokenStr(TokPos+1));
+        if nestCtorCi >= 0 then
+        begin
+          Next;   { the owning class name }
+          Next;   { '.' — CurTok is now the nested type name }
+          name := GetTokenStr(TokPos - 1);
+        end;
+      end;
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
          (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and
          (Tokens[TokPos+1].Kind = tkIdent) and
@@ -15135,7 +15211,8 @@ begin
           qualifier that names a module rather than the declaring unit behaves
           as before. }
         ctorCi := -1;
-        if qUnit >= 0 then ctorCi := FindUClassInUnit(name, qUnit);
+        if nestCtorCi >= 0 then ctorCi := nestCtorCi;   { the nested hop above }
+        if (ctorCi < 0) and (qUnit >= 0) then ctorCi := FindUClassInUnit(name, qUnit);
         if ctorCi < 0 then ctorCi := FindUClass(name);
         if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual CTOR name=', name,
           ' qunit=', qUnit, ' inunit=', FindUClassInUnit(name, qUnit),
@@ -24140,6 +24217,7 @@ end;
 
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
+    qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
     tnHasAlias: Boolean;   { a source/RTL alias of this name beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
     wasPacked: Boolean;
@@ -24287,9 +24365,20 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
          (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
       begin
+        qtOuter := FindUClass(lo);
         Next;                 { past the class name — CurTok is now '.' }
         Next;                 { past '.'            — CurTok is now the nested type name }
         lo := CurTok.SVal;
+        { …and when THAT class declares a nested type of this name, the qualifier
+          does not merely disambiguate the parse — it picks which type is meant.
+          Two classes may each declare `TInner`, and only the first keeps the bare
+          name, so stripping the qualifier and looking the bare name up bound
+          `tother.tinner` to touter's — silently, since both are classes and the
+          wrong one simply lacks the fields.
+          bug-a-duplicate-class-name-check-is-scope-blind }
+        qtNested := FindNestedType(qtOuter, lo);
+        if qtNested >= 0 then
+          lo := GetTokenStrFromRaw(UClsNOff[qtNested], UClsNLen[qtNested]);
       end;
       if CaseEqual(lo, 'set') then
       begin
@@ -27015,6 +27104,7 @@ var
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   hadParens: Boolean;
   clsSealed, clsAbstract: Boolean;
+  qualNm: AnsiString; savedPCB: Integer;   { nested-type scoping — see AddNestedType }
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
   mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef, mSawConst, mIsUntyped: Boolean;
@@ -27483,12 +27573,37 @@ begin
             read as one. }
           if (ci >= 0) and (UClsUnitIdx[ci] = CurrentUnitIdx) and
              not UClsIsRecord[ci] and
-             not CaseEqual(tname, 'TObject') and not CaseEqual(tname, 'TGuid') then
+             not CaseEqual(tname, 'TObject') and not CaseEqual(tname, 'TGuid') and
+             (ParsingClassBodyCi < 0) then
             Error('duplicate class name ' + tname
                   + ' — one of that name is already declared in this unit, and'
                   + ' every use of the name binds to the FIRST declaration');
-          ci := AddUClass(tnOff, tnLen);
+          { …but INSIDE A CLASS BODY the name is not the unit's, it is that
+            class's: `touter.tinner` and `tother.tinner` are two legal, distinct
+            types, and a generic's nested type is re-materialized once per
+            specialization ON PURPOSE (tgeneric72 exists to assert those two are
+            unique). The flat per-unit class table read both as redeclarations,
+            so legal Pascal did not compile. Register the later one under its
+            QUALIFIED name — the first keeps the bare one, so every existing
+            unqualified use resolves exactly as before — and let the nested-type
+            registry below make it reachable.
+            bug-a-duplicate-class-name-check-is-scope-blind }
+          if (ci >= 0) and (ParsingClassBodyCi >= 0) and
+             (UClsUnitIdx[ci] = CurrentUnitIdx) then
+          begin
+            qualNm := GetTokenStrFromRaw(UClsNOff[ParsingClassBodyCi],
+                                         UClsNLen[ParsingClassBodyCi]) + '.' + tname;
+            ci := AddUClass(TokCharsAppend(qualNm), Length(qualNm));
+          end
+          else
+            ci := AddUClass(tnOff, tnLen);
         end;
+        { Reachable by (owning class, bare name) whether it kept the bare name
+          or was qualified above — one registry, so the qualified `TOuter.TInner`
+          spelling and a bare name inside the owner's own body find the same
+          entry. bug-a-duplicate-class-name-check-is-scope-blind }
+        if ParsingClassBodyCi >= 0 then
+          AddNestedType(ParsingClassBodyCi, tname, ci);
         UClsSealed[ci] := clsSealed;
         UClsAbstractCls[ci] := clsAbstract;
         { `sealed` is a promise that the class has no descendants — so deriving from one
@@ -27525,6 +27640,9 @@ begin
           declaration immediately with an empty body; no `end` needed. }
         if CurTok.Kind <> tkSemicolon then
         begin
+        { types declared from here to the matching `end` belong to THIS class }
+        savedPCB := ParsingClassBodyCi;
+        ParsingClassBodyCi := ci;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
           { `strict private` / `strict protected` (FPC/Delphi): TYPE-scoped variants.
@@ -28328,6 +28446,7 @@ begin
             Next;
         end;
         Expect(tkEnd, 'end');
+        ParsingClassBodyCi := savedPCB;
         end; { end of non-shorthand body block }
         UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
 
@@ -33858,6 +33977,8 @@ begin
   SetConstCount := 0;
   ClassConstCount := 0;
   ParsingClassConstCi  := -1;
+  ParsingClassBodyCi   := -1;
+  NestedTypeCount      := 0;
   ParsingClassConstVis := 0;
   { Decl-order gating defaults: no body active (a high sentinel means "see all"
     outside a routine body — main body + pre-scan), strict by default. }
