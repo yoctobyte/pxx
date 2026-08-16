@@ -7,7 +7,7 @@ owner: claude-AP
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** working
+- **Status:** unfinished — parked 2026-08-16 at the arity-overloaded-class-names wall
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].

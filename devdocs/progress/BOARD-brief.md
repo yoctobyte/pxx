@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:8 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1973 rejected:38`
+`unfinished:9 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1973 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-pascal-corpus-generics` [P] — owner: claude-AP
+_none — no lane is locked._
 
-## unfinished (8) — parked mid-flight; re-claim, do not duplicate
+## unfinished (9) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -21,6 +21,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
+- `feature-pascal-corpus-generics` [P]
 
 ## blocked (3) — has an unmet blocker; do not claim
 
