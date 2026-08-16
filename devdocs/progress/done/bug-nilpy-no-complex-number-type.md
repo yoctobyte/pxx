@@ -127,12 +127,24 @@ float-accuracy rule, and filed as its own low-prio ticket
 [[bug-nilpy-complex-pow-is-a-few-ulp-off-cpython]] rather than chased here. It
 is why that one line is not in the differential test.
 
-### Found on the way, filed separately
+### Found on the way — and already decided six days earlier
 
-[[bug-p-operator-overload-only-inspects-its-first-operand]] — `operator + (a:
-Double; b: TCx)` is refused at the declaration while FPC accepts it. Reached
-from reflected arithmetic; a Pascal frontend bug in its own right, not about
-complex.
+`operator + (a: Double; b: TCx)` is refused at the declaration while FPC accepts
+it. Reached from reflected arithmetic, measured, and written up as a new
+ticket — which was a REDISCOVERY: [[decide-operator-table-keyed-on-one-operand-or-two]]
+settled the same question on 2026-08-10 ("both keys, obviously. single keyed is
+an oversight of ours"), but was never re-filed into the owning lane, so it sat
+in `decided/` where `ready`/`next` do not look. Now filed as
+[[feature-a-operator-table-keyed-on-both-operands]], carrying the decision
+rather than re-proposing one.
+
+The rediscovery's own "fix shape" — accept when EITHER operand is a
+record/class — was **dangerous**, and the decide ticket says why: the table is
+keyed on the LEFT operand, so a scalar-left operator registers under
+`(tkStar, tyInteger, REC_NONE)` and plain `3 * 5` would then match it. Relaxing
+the guard alone turns a wrong refusal into a silent miscompile of arithmetic
+that has nothing to do with the record. Not implemented, which is the only
+reason it cost nothing.
 
 ### Gate
 

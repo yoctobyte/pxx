@@ -8,6 +8,15 @@ blocked-by: []
 ---
 
 
+## IMPLEMENTATION IS FILED — [[feature-a-operator-table-keyed-on-both-operands]]
+
+Added 2026-08-16. This decision sat here for six days with no work ticket behind
+it, and `decided/` is not scanned by `ready`/`next` — so the work was invisible
+to the queue and the same bug was rediscovered from scratch, re-measured and
+re-written-up before a search turned this page up. Track U's own rule (a decided
+item that is plain work gets re-filed into the owning lane) is what was missed.
+The decision below stands unchanged; the implementation ticket carries it.
+
 ## DECIDED 2026-08-10 — key on BOTH operands. Single-keyed was an oversight.
 
 **User's call.**
