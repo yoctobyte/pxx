@@ -1,5 +1,6 @@
 ---
 prio: 70
+track: N
 ---
 
 > **origin/master has advanced 3 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.

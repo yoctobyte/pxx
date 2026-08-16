@@ -32,7 +32,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 198, ranked
 
 - `[p 70] [T]` regression-lib-test-crtl-exp2
-- `[p 70] [T]` regression-test-nilpy-test-nilpy-pow-matches-cpython
+- `[p 70] [N]` regression-test-nilpy-test-nilpy-pow-matches-cpython
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite

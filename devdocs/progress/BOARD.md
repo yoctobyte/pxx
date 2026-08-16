@@ -244,7 +244,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-cascade-343a52551808-triage | T | 40 | regression | triage: the 17-job CASCADE at bad=343a52551808 — its 5 NilPy jobs are GREEN natively at HEAD | — |
 | regression-lib-test-crtl-exp2 | T | 70 | regression | regression: lib-test#src:test/crtl_exp2.c red at 096da361dd93 (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-pow-matches-cpython | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy red at 096da361dd93 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-pow-matches-cpython | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy red at 096da361dd93 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 35 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
@@ -465,7 +465,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-lib-test-crtl-exp2
-- [p 70] [T] regression-test-nilpy-test-nilpy-pow-matches-cpython
+- [p 70] [N] regression-test-nilpy-test-nilpy-pow-matches-cpython
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [N] feature-nilpy-thirdparty-libraries-as-targets
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite

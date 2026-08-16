@@ -2028,11 +2028,21 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # did not, and only the stub path ever files a small-enough red.
         # Formatted BEFORE the file is created, so the same crash can no
         # longer leave a 0-byte suppressor behind (see already_filed).
+        # NOT for a timeout. The source path says what the job COMPILES, not
+        # what went wrong, and a timed-out job did not fail in any of its
+        # sources -- it ran out of budget. Guessing from the path would have
+        # sent lib-test#src:test/crtl_exp2.c to Track C to hunt a C-math
+        # regression that does not exist, which is the precise wrong turn
+        # bug-t-a-timeout-bisects-to-an-innocent-commit was filed to stop. A
+        # timeout is Track T's until someone shows otherwise, and leaving the
+        # track unset does exactly that.
+        guessed = (None if j.get("status") == "timeout"
+                   else guess_track(j.get("src")))
         body = ("""---
 prio: %d
----
+%s---
 
-%s
+%s%s
 # %s: %s red at %s (auto-filed by twatch)
 
 - **Type:** %s (auto-filed by Track T watcher, host %s). Untriaged.
@@ -2053,6 +2063,12 @@ prio: %d
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
 """ % (40 if job in advisory else 70,
+                "track: %s\n" % guessed if guessed else "",
+                ("> **Track guessed as %s** from the test source. The ranker "
+                 "reads frontmatter, so an unset track parks a stub in Track "
+                 "T's queue regardless of what the body says -- correct the "
+                 "`track:` line if this is wrong.\n\n" % guessed)
+                if guessed else "",
                 staleness_note(clone, sha, parent),
                 "advisory" if job in advisory else "regression",
                 job, sha[:12], kind, host, utcnow(),
@@ -2074,6 +2090,39 @@ takes it from the repro line.*
 # Present in every stub file_stub_tickets/file_cascade_ticket writes. Its
 # presence is the test for "still an untriaged stub, safe for the daemon to
 # retire"; a triager who rewrites the body removes it and takes ownership.
+# A stub carries only `prio:` unless we guess a track, and the ranker reads
+# FRONTMATTER, not prose. So a stub about a Pascal test ranked in TRACK T's
+# queue until a human moved it -- four times on 2026-08-16 alone
+# (crtl-reachability, strict-overload-width, local-typed-const, pow), each
+# needing the same hand edit. That is the shape
+# meta-track-w-collision-windows-vs-website describes: the subject matter was in
+# the body while the thing that routes it was absent.
+#
+# Guessed from the SOURCE PATH, which is the one fact a stub always has. A guess
+# can be wrong, so it is written as `track:` plus a visible note saying it was
+# guessed and how to correct it -- a wrong lane a triager can see beats no lane
+# at all, which is what T has been absorbing. Deliberately NOT clever: the
+# frontends own their test prefixes, and anything unrecognised stays unset
+# rather than defaulting to a lane that would then own every mystery.
+TRACK_BY_SRC = (
+    (".npy", "N"), ("test_nilpy", "N"), ("pylib", "N"),
+    ("lib/crtl", "C"), ("crtl_", "C"), (".c", "C"),
+    ("lib/rtl", "B"), ("lib/pcl", "B"), ("lib_", "B"), ("examples/", "B"),
+    ("test/pascal-conformance", "P"), (".pas", "P"),
+)
+
+
+def guess_track(src):
+    """A track letter from a test source path, or None when unsure."""
+    if not src:
+        return None
+    first = src.split()[0]
+    for needle, track in TRACK_BY_SRC:
+        if needle in first:
+            return track
+    return None
+
+
 STUB_MARKER = "auto-filed by twatch"
 
 
