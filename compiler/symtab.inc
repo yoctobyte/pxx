@@ -6027,6 +6027,28 @@ begin
                   tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt];
 end;
 
+function MatchParamExact(paramTk, argTk: TTypeKind): Boolean;
+{ Exact-match test for one argument. `Integer` and `LongInt` are the SAME type
+  -- both 4-byte signed, and FPC declares one as the other's alias -- but they
+  carry distinct kinds here (tyInteger / tyInt32), so a bare kind comparison
+  discriminated on the SPELLING and no exact match was found.
+
+  What that cost: sysutils declares IntToHex for Int64, LongInt and LongWord,
+  precisely so a 32-bit value renders 8 digits and not 16. `li: longint` hit
+  the LongInt overload and printed FFFFFFFF; `i: integer` fell past the exact
+  phase into the compatible ones, bound Int64, and printed FFFFFFFFFFFFFFFF --
+  for the far more common spelling of the same type
+  (bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching).
+
+  A unit cannot legitimately declare both overloads (FPC rejects the pair as
+  duplicate), so treating them as one cannot make a previously-unambiguous call
+  ambiguous. }
+begin
+  MatchParamExact := (paramTk = argTk) or
+                     ((paramTk = tyInteger) and (argTk = tyInt32)) or
+                     ((paramTk = tyInt32) and (argTk = tyInteger));
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
 var i, j: Integer; match: Boolean; cn, nl: AnsiString; demote: Boolean; bIdx: Integer;
     userOnly: Boolean; ownM, anyM: Integer; pass: Integer;
@@ -6116,7 +6138,7 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and
+          if ((not MatchParamExact(Procs[i].Params[j].TypeKind, argTypes[j])) and
              not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
              MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
@@ -6151,7 +6173,7 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and
+          if ((not MatchParamExact(Procs[i].Params[j].TypeKind, argTypes[j])) and
              not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
              MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
