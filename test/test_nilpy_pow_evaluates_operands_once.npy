@@ -1,0 +1,51 @@
+# `1.5 ** f()` called f() TWICE. The float `**` route parks the base in
+# pypow_dom (a negative base with a fractional exponent is complex, and NilPy
+# refuses it by name) and then hands the exponent to BOTH that guard and the
+# RTL's Power — and the AST is a tree, so a node referenced twice is EMITTED
+# twice. Cloning the subtree does not help; a clone is a second call.
+#
+# math.pow's lowering, two thousand lines up in the same file, already parks its
+# exponent in a temp and its comment says exactly why. This arm was written from
+# that one and did not copy the line — the recurring shape in this frontend is
+# one concept with N independent sites.
+# bug-nilpy-the-float-power-operator-evaluates-its-exponent-twice
+import math
+
+n = 0
+
+def f():
+    global n
+    n = n + 1
+    return 2.0
+
+def g():
+    global n
+    n = n + 1
+    return 3.0
+
+# the static float route: this is the one that was wrong
+n = 0
+print(1.5 ** f(), n)
+
+# both operands are calls — one each
+n = 0
+print(f() ** g(), n)
+
+# base only
+n = 0
+print(f() ** 2.0, n)
+
+# augmented, which reaches the same builder
+n = 0
+x = 1.5
+x **= f()
+print(x, n)
+
+# math.pow was already right and must stay so
+n = 0
+print(math.pow(2.0, f()), n)
+
+# a VARIANT receiver dispatches at run time through pypow_v, a different path
+n = 0
+for v in [1.5]:
+    print(v ** f(), n)

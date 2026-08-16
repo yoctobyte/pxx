@@ -4,6 +4,8 @@ prio: 25
 type: bug
 blocked-by: []
 summary: "`2.0 ** 10000` answers +inf where CPython raises OverflowError, and so does `1e300 * 1e300`. A program that catches OverflowError — the documented way to detect this in Python — silently gets an infinity instead and carries on."
+status: working
+owner: claude-acpn
 ---
 
 # Float overflow answers `inf` where CPython raises `OverflowError`

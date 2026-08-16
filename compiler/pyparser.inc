@@ -21010,6 +21010,15 @@ begin
         refusal for it has to survive the move off pypow_v. Without it the RTL's
         Power answers NaN, which is a silent wrong value where there used to be
         a sentence. Same argument-wrapping shape math.sqrt/log/pow already use. }
+      { The exponent reaches BOTH the guard and Power itself, so it is parked
+        in a temp first: the AST is a tree, and a node referenced twice is
+        EMITTED twice — `1.5 ** f()` called f() twice and CPython calls it
+        once. math.pow's site two thousand lines up already does this and its
+        comment says why; this arm was written from that one and did not copy
+        the line. Cloning does not help — a clone is a second subtree, so it is
+        a second call.
+        bug-nilpy-the-float-power-operator-evaluates-its-exponent-twice }
+      ppExp := PyEvalOnce(ppExp);
       ppDomArg2 := AllocNode(AN_ARG);
       ASTLeft[ppDomArg2] := CloneAST(ppExp); ASTRight[ppDomArg2] := -1;
       ppDomArg := AllocNode(AN_ARG);
