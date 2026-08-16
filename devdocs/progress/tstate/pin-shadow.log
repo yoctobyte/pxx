@@ -96,3 +96,4 @@
 2026-08-16T11:44:34Z	plexus	42e147157b60dcab72e7d51391cca2c72b03512c	would NOT pin 42e147157b60 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy
 2026-08-16T12:53:09Z	plexus	7111221470d48e442debaec2419e7c059ef9bfb7	would NOT pin 7111221470d4 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy
 2026-08-16T13:49:13Z	plexus	1a181203b094a9f4c12e12de8a12723c9ff560fa	would NOT pin 1a181203b094 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy
+2026-08-16T14:41:49Z	plexus	ce2ac81770a1f9ea4d8ed48d642a87da3dba54a7	would NOT pin ce2ac81770a1 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy
