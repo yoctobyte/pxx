@@ -102,4 +102,4 @@ Related: [[feature-pasmith-divergence-signature-granularity]] (the other half of
 (the repro-line version of this same lesson).
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit fcea5070c.

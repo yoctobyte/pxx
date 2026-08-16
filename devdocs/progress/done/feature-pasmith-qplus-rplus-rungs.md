@@ -126,4 +126,4 @@ verified byte-identical on five seeds.
   nothing passed explicitly: **51 programs, 0 divergences.**
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit fcea5070c.

@@ -102,4 +102,4 @@ self-host fixedpoint converged, `gate.sh quick` GREEN.
 T's triage was right on both counts and saved the search: the failing step is
 `crtl-map`, not the `crtl_reachability` the job is named after (that step passes),
 and the cause was the generated file, not the headers.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 9860b8bf7.
