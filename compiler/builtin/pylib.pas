@@ -1977,8 +1977,14 @@ type
 var
   PyPowHook: TPyPowFn;
 function pymath_modf(x: Double): TPyList;
-function pymath_prod(l: TPyList): Variant;
-function pymath_fsum(l: TPyList): Double;
+{ VARIANT parameters, not TPyList, for the reason dict.fromkeys carries: the
+  stdlib call site builds these BY NAME and cannot resolve by type, so a str
+  argument went straight into a TPyList slot and was dereferenced as an object.
+  pylist_v is the one bridge from any Python iterable to a list, and it raises a
+  named TypeError for anything else.
+  bug-nilpy-a-str-into-a-by-name-pylib-list-parameter-segfaults }
+function pymath_prod(const src: Variant): Variant;
+function pymath_fsum(const src: Variant): Double;
 function pymath_perm(n, k: Int64): Int64;
 { ---- random ------------------------------------------------------------
   `import random` had nothing behind it at all — `random.random()` was
@@ -1997,8 +2003,8 @@ function pyrandom_random: Double;
 function pyrandom_randint(a, b: Int64): Int64;
 function pyrandom_randrange(n: Int64): Int64;
 function pyrandom_uniform(a, b: Double): Double;
-function pyrandom_choice(l: TPyList): Variant;
-procedure pyrandom_shuffle(l: TPyList);
+function pyrandom_choice(const src: Variant): Variant;
+procedure pyrandom_shuffle(const src: Variant);
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 { `next(x)` / `next(x, default)` where x is whatever the argument turned out to
@@ -6696,10 +6702,11 @@ end;
 { math.prod — the product, and an INT when every element is an int (CPython
   keeps the type: prod([2, 3]) is 6, not 6.0). The variant arithmetic already
   carries that rule, so this is a plain fold over it. }
-function pymath_prod(l: TPyList): Variant;
-var i: Integer; acc: Variant;
+function pymath_prod(const src: Variant): Variant;
+var i: Integer; acc: Variant; l: TPyList;
 begin
   acc := 1;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do acc := acc * l.at(i);
   Result := acc;
@@ -6710,11 +6717,12 @@ end;
   Same algorithm bug-nilpy-sum-of-floats-has-no-compensated-summation wants for
   sum(); when that lands the two should share THIS routine rather than grow a
   second copy of it. }
-function pymath_fsum(l: TPyList): Double;
-var i: Integer; sum, c, t, v: Double;
+function pymath_fsum(const src: Variant): Double;
+var i: Integer; sum, c, t, v: Double; l: TPyList;
 begin
   sum := 0.0;
   c := 0.0;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do
     begin
@@ -6802,8 +6810,10 @@ begin
   Result := a + (b - a) * pyrandom_random;
 end;
 
-function pyrandom_choice(l: TPyList): Variant;
+function pyrandom_choice(const src: Variant): Variant;
+var l: TPyList;
 begin
+  l := pylist_v(src);
   if (l = nil) or (l.count = 0) then
     raise IndexError.Create('Cannot choose from an empty sequence');
   Result := l.at(Integer(pyrandom_randint(0, l.count - 1)));
@@ -6811,10 +6821,22 @@ end;
 
 { Fisher-Yates, in place — `random.shuffle(xs)` returns None and mutates, which
   is the half of the contract a caller most often gets wrong. }
-procedure pyrandom_shuffle(l: TPyList);
-var i, j: Integer; tmp: Variant;
+procedure pyrandom_shuffle(const src: Variant);
+var i, j: Integer; tmp: Variant; o: TObject; l: TPyList;
 begin
-  if l = nil then Exit;
+  { NOT pylist_v here, and that is the whole difference from choice/prod/fsum:
+    pylist_v COPIES, and shuffle's contract is to mutate in place — a copy
+    would shuffle nothing the caller can see. So the real TPyList is taken
+    directly, and everything else is refused by name the way CPython does
+    (`random.shuffle("abc")` is a TypeError there, not a silent no-op). }
+  l := nil;
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if o is TPyList then l := TPyList(o);
+  end;
+  if l = nil then
+    raise TypeError.Create('object does not support item assignment');
   for i := l.count - 1 downto 1 do
   begin
     j := Integer(pyrandom_randint(0, i));

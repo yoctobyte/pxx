@@ -1,0 +1,48 @@
+# `random.choice("abc")` SEGFAULTED, and so did `math.fsum("ab")` and
+# `math.prod("ab")` — all for one reason: the stdlib call site builds these
+# calls BY NAME and cannot resolve overloads by type, so a str went straight
+# into a pylib `TPyList` parameter and was dereferenced as an object.
+#
+# This is the population project_nilpy_byname_findproc_lowerings_are_the_
+# unchecked_population names, swept rather than fixed one report at a time:
+# every by-name lowering that lands on a TPyList parameter is one wrong
+# argument type away from a crash. The cure is in the CALLEE — take a Variant
+# and go through pylist_v, the one bridge from any Python iterable to a list —
+# because a call-site check would have to be repeated per site.
+#
+# `random.shuffle` is the deliberate exception and the reason this is a sweep
+# and not a sed: pylist_v COPIES, and shuffle's contract is to mutate in place,
+# so a copy would shuffle nothing the caller can see. It takes the real list
+# directly and refuses everything else by name, which is also what CPython does
+# (`random.shuffle("abc")` is a TypeError there, not a silent no-op).
+#
+# The random VALUES are not asserted — the generator is not CPython's — so the
+# rows below assert membership and length, which is what the bug was about.
+# bug-nilpy-a-str-into-a-by-name-pylib-list-parameter-segfaults
+import math, random
+
+random.seed(7)
+print(random.choice("abc") in "abc")
+print(random.choice(["x", "y", "z"]) in ["x", "y", "z"])
+print(random.choice(("p", "q")) in ("p", "q"))
+
+xs = [1, 2, 3, 4]
+random.shuffle(xs)
+print(sorted(xs), len(xs))
+
+try:
+    random.shuffle("abc")
+    print("shuffle-str: no error")
+except TypeError:
+    print("shuffle-str TypeError")
+
+# the numeric ones, whose values ARE CPython's
+print(math.fsum([0.1] * 10), math.fsum((1.0, 2.0)))
+print(math.prod([2, 3]), math.prod((2, 3)), math.prod([]))
+
+# a str reaches a real TypeError now instead of a fault; CPython also raises
+# TypeError here, with a different message
+try:
+    print(math.fsum("ab"))
+except TypeError:
+    print("fsum-str TypeError")
