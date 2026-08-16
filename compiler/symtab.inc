@@ -78,6 +78,12 @@ procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitSlotAddrRISCV32(rd, si: Integer); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 procedure EmitLoadConstXtensa(rd: Integer; v: Int32); forward;
+{ The xtensa inline-asm engine (asmtext_xtensa.inc) replays `la reg,@fp/@glob/
+  @data` through these rather than open-coding a second copy: the frame pointer
+  is a7 or a15 depending on XtensaABI, and an out-of-range frame offset needs
+  the L32R literal pool. }
+procedure EmitLoadGlobAddrXtensa(rd: Integer; bssOff: Integer); forward;
+procedure EmitLoadDataRefXtensa(rd: Integer; dataOff: Integer); forward;
 procedure EmitCallProc(procIdx: Integer); forward;
 procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean; forward;

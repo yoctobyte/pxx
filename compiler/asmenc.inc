@@ -1203,6 +1203,8 @@ end;
   target's IR_ASM codegen case replays the lines through its engine. }
 
 function AsmRv32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
+function AsmXtensaRegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
+function AsmXtensaIsLoadStore(const mnem: AnsiString): Boolean; forward;
 function AsmA64RegNum(const opIn: AnsiString; var reg: Integer; var is64: Boolean): Boolean; forward;
 function AsmArm32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
 function AsmArm32CondCode(const condStr: AnsiString; var cond: Integer): Boolean; forward;
@@ -1584,6 +1586,108 @@ begin
   len := InlineAsmLineCount - startOff;
 end;
 
+{ Append one operand-position identifier for the xtensa text path. Registers
+  and branch-line labels pass through. A Pascal variable is legal only as the
+  MEMORY operand of a load/store (`l32i a2, x`) or after `la` — everywhere else
+  it is refused, because xtensa has no operand form to substitute it into: the
+  l32i/s32i offset is an UNSIGNED imm8*4 and frame offsets are negative. The
+  legal positions become an `@fp` / `@glob` / `@data` marker plus an offset
+  hole, and the engine materializes the address at codegen (asmtext_xtensa.inc).
+  A var/ref param yields its SLOT, which holds the address — the same raw-slot
+  rule the other targets' captures use. }
+procedure AsmXtensaAppendIdent(var line: AnsiString; const nm, dir: AnsiString; branchLine: Boolean; var holeN: Integer);
+var rnum, idx: Integer;
+begin
+  if AsmXtensaRegNum(nm, rnum) then begin AppendString(line, nm); Exit; end;
+  if branchLine then begin AppendString(line, nm); Exit; end;
+  idx := FindSym(nm);
+  if idx < 0 then Error('asm: unknown symbol: ' + nm);
+  if not (AsmXtensaIsLoadStore(dir) or CaseEqual(dir, 'la')) then
+    Error('asm: variable "' + nm + '" can only be a load/store operand or `la <reg>, ' + nm
+          + '` on xtensa (no frame-offset operand form)');
+  if Syms[idx].Kind = skGlobal then
+  begin
+    AppendString(line, '@glob');
+    AsmAddInlineHole(Syms[idx].Offset);
+    Inc(holeN);
+    Exit;
+  end;
+  if (Syms[idx].Kind <> skLocal) and (Syms[idx].Kind <> skParam) then
+    Error('asm: operand must be a local, param, global, or register: ' + nm);
+  AppendString(line, '@fp');
+  AsmAddInlineHole(Syms[idx].Offset);
+  Inc(holeN);
+end;
+
+function AsmXtensaIsBranchOrJump(const mn: AnsiString): Boolean;
+begin
+  Result := CaseEqual(mn,'j')
+    or CaseEqual(mn,'beq') or CaseEqual(mn,'bne')
+    or CaseEqual(mn,'blt') or CaseEqual(mn,'bge')
+    or CaseEqual(mn,'bltu') or CaseEqual(mn,'bgeu');
+end;
+
+procedure AsmParseBodyTextXtensa(var startOff, len: Integer);
+var
+  dir, line: AnsiString;
+  dirLine, hole0, holeN: Integer;
+  branchLine: Boolean;
+begin
+  startOff := InlineAsmLineCount;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if not AsmTokIsWordLike(CurTok.Kind) then
+    begin
+      Next;  { skip stray punctuation defensively, same as the x64 path }
+      Continue;
+    end;
+
+    dir := CurTok.SVal;
+    dirLine := CurTok.Line;
+    Next;
+
+    if CurTok.Kind = tkColon then
+    begin
+      line := dir; AppendChar(line, ':');
+      AsmAddInlineLine(line, 0, 0);
+      Next;
+      Continue;
+    end;
+
+    line := dir;
+    AppendChar(line, ' ');
+    branchLine := AsmXtensaIsBranchOrJump(dir);
+    hole0 := InlineAsmHoleCount; holeN := 0;
+    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) and (CurTok.Line = dirLine) do
+    begin
+      if AsmTokIsWordLike(CurTok.Kind) then
+        AsmXtensaAppendIdent(line, CurTok.SVal, dir, branchLine, holeN)
+      else if CurTok.Kind = tkInteger then
+        AppendString(line, AsmEncIntToStr(CurTok.IVal))
+      else if CurTok.Kind = tkComma then AppendChar(line, ',')
+      else if CurTok.Kind = tkMinus then AppendChar(line, '-')
+      else
+        Error('asm: unexpected token in instruction: ' + dir);
+      Next;
+    end;
+    AsmAddInlineLine(line, hole0, holeN);
+  end;
+
+  Expect(tkEnd, 'end');
+
+  { Optional clobber list: ['reg', ...] — parsed and discarded, same as the
+    x86-64 path. }
+  if CurTok.Kind = tkLBrack then
+  begin
+    Next;
+    while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRBrack, ']');
+  end;
+  Eat(tkSemicolon);
+
+  len := InlineAsmLineCount - startOff;
+end;
+
 procedure AsmParseBodyTextRv32(var startOff, len: Integer);
 var
   dir, line, nm: AnsiString;
@@ -1736,8 +1840,13 @@ begin
     AsmParseBodyText386(startOff, len);
     Exit;
   end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    AsmParseBodyTextXtensa(startOff, len);
+    Exit;
+  end;
   if TargetArch <> TARGET_X86_64 then
-    Error('inline asm not yet supported for this target (xtensa is the one remaining; see feature-inline-asm-multi-arch)');
+    Error('inline asm not supported for this target');
   startOff := AsmBytesCount;
   lblCount := 0;
   fixCount := 0;

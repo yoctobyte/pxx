@@ -8820,6 +8820,20 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_largeframe.pas > $(TESTTMP)/test_esp_bare_lf.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_lf.oracle $(TESTTMP)/test_esp_bare_lf.s3; then echo "esp32s3 call0 large-frame ok (>128B frame via ADDMI == x86-64 oracle)"; \
 	  else echo "esp32s3 call0 large-frame MISMATCH"; exit 1; fi; fi
+	# feature-inline-asm-xtensa: `asm ... end` on the last target of the rollout.
+	# Locals/params and globals reach an operand ONLY as a load/store memory
+	# operand or via `la` (xtensa's l32i offset is an unsigned imm8*4, so there
+	# is no negative frame-offset form to substitute into); labels + branches;
+	# and a >128-byte frame that forces the address through the literal pool.
+	@./$(COMPILER) test/test_esp_bare_asm.pas $(TESTTMP)/test_esp_asm_oracle >/dev/null && $(TESTTMP)/test_esp_asm_oracle > $(TESTTMP)/test_esp_asm.oracle
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 inline-asm run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_asm.pas > $(TESTTMP)/test_esp_asm.s3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_asm.oracle $(TESTTMP)/test_esp_asm.s3; then echo "esp32s3 inline asm ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 inline asm MISMATCH"; exit 1; fi; fi
+	# the windowed ABI picks a7 as the frame pointer, not a15 — it must at least
+	# lower (no runner: windowed images link through xtensa-esp-elf-gcc)
+	@./$(COMPILER) --target=xtensa --xtensa-abi=windowed test/test_esp_bare_asm.pas $(TESTTMP)/test_esp_asm_win.o >/dev/null && echo "xtensa windowed inline asm lowers ok"
 	# bug-a-pxx-callee-uses-internal-abi-for-64bit-params-called-from-c: the
 	# xtensa C ABI starts a 64-bit argument at an EVEN word index; pxx now applies
 	# that rule unconditionally on BOTH sides (caller pad + callee spill), so a

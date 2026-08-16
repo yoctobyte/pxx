@@ -2065,6 +2065,20 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_ASM:
+      begin
+        { Inline asm block: replay the parse-time-captured text lines
+          (AsmParseBodyTextXtensa, asmenc.inc) through the xtensa text engine.
+          Emitting here, at final code positions, makes label fixups, the L32R
+          literal pool and @glob/@data relocations natively correct — no
+          AsmBytes-offset rebase like the x86-64 path needs. Labels are scoped
+          to the block. }
+        AsmXtensaBlockBegin;
+        for i := IRA[node] to IRA[node] + IRB[node] - 1 do
+          AsmXtensaProcessInlineLine(i);
+        AsmXtensaBlockResolve;
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> a2 = the routine's absolute code address, via an inline

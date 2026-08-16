@@ -103,6 +103,30 @@ begin
   EmitB((val shr 16) and $FF);
 end;
 
+{ The base+offset memory forms, as one table: `mnem rt, rs, off`. Split out of
+  the mnemonic chain below because the variable-operand path emits the SAME
+  instruction against a materialized address, and two spellings of one table is
+  how the second one stays wrong (normalise-dont-special-case). }
+function AsmXtensaIsLoadStore(const mnem: AnsiString): Boolean;
+begin
+  Result := CaseEqual(mnem, 'l32i') or CaseEqual(mnem, 'l16ui')
+    or CaseEqual(mnem, 'l16si') or CaseEqual(mnem, 'l8ui')
+    or CaseEqual(mnem, 's32i') or CaseEqual(mnem, 's16i')
+    or CaseEqual(mnem, 's8i');
+end;
+
+procedure AsmXtensaEmitLoadStore(const mnem: AnsiString; rt, rs, off: Integer);
+begin
+  if CaseEqual(mnem, 'l32i') then xtensa_l32i(rt, rs, off)
+  else if CaseEqual(mnem, 'l16ui') then xtensa_l16ui(rt, rs, off)
+  else if CaseEqual(mnem, 'l16si') then xtensa_l16si(rt, rs, off)
+  else if CaseEqual(mnem, 'l8ui') then xtensa_l8ui(rt, rs, off)
+  else if CaseEqual(mnem, 's32i') then xtensa_s32i(rt, rs, off)
+  else if CaseEqual(mnem, 's16i') then xtensa_s16i(rt, rs, off)
+  else if CaseEqual(mnem, 's8i') then xtensa_s8i(rt, rs, off)
+  else Error('EmitAsmXtensa: not a load/store: ' + mnem);
+end;
+
 { Assemble one ordinary (non-label, non-jump/branch) instruction line, binding
   its `%` holes from holes[0..nHoles-1]. }
 procedure AsmTextLineXtensa(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
@@ -141,6 +165,26 @@ begin
     directly as encoder arguments — bind them here. r0 is always a register. }
   r0 := AsmXtensaRegOp(op0);
 
+  { A Pascal variable as the MEMORY operand of a load or store: `l32i a2, x`,
+    captured as `l32i a2,@fp` + an offset hole. Xtensa cannot encode it the way
+    every other target's capture does — l32i's offset is an UNSIGNED imm8*4
+    (0..1020) and frame offsets are NEGATIVE, so there is no `<off>(fp)` form to
+    substitute into. The address is materialized into a8, the backend's own
+    address scratch, and the access becomes offset 0; hence a8 is refused as the
+    value register, where a store would otherwise overwrite its own address. }
+  if AsmXtensaIsLoadStore(mnem)
+     and (CaseEqual(op1, '@fp') or CaseEqual(op1, '@glob') or CaseEqual(op1, '@data')) then
+  begin
+    if r0 = reg_xtensa_a8 then
+      Error('EmitAsmXtensa: a8 holds the address of a variable operand — use another register');
+    imm := Integer(AsmXtensaInt('%', holes, holeCur));
+    if CaseEqual(op1, '@fp') then EmitFrameAddrXtensa(reg_xtensa_a8, imm)
+    else if CaseEqual(op1, '@glob') then EmitLoadGlobAddrXtensa(reg_xtensa_a8, imm)
+    else EmitLoadDataRefXtensa(reg_xtensa_a8, imm);
+    AsmXtensaEmitLoadStore(mnem, r0, reg_xtensa_a8, 0);
+    Exit;
+  end;
+
   { three-register ALU: r, s, t }
   if CaseEqual(mnem, 'add') then begin r1 := AsmXtensaRegOp(op1); r2 := AsmXtensaRegOp(op2); xtensa_add(r0, r1, r2); end
   else if CaseEqual(mnem, 'sub') then begin r1 := AsmXtensaRegOp(op1); r2 := AsmXtensaRegOp(op2); xtensa_sub(r0, r1, r2); end
@@ -159,13 +203,25 @@ begin
   else if CaseEqual(mnem, 'mov') then begin r1 := AsmXtensaRegOp(op1); xtensa_mov(r0, r1); end
   else if CaseEqual(mnem, 'movi') then begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); xtensa_movi(r0, imm); end
   else if CaseEqual(mnem, 'addi') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_addi(r0, r1, imm); end
-  else if CaseEqual(mnem, 'l32i') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_l32i(r0, r1, imm); end
-  else if CaseEqual(mnem, 'l16ui') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_l16ui(r0, r1, imm); end
-  else if CaseEqual(mnem, 'l16si') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_l16si(r0, r1, imm); end
-  else if CaseEqual(mnem, 'l8ui') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_l8ui(r0, r1, imm); end
-  else if CaseEqual(mnem, 's32i') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_s32i(r0, r1, imm); end
-  else if CaseEqual(mnem, 's16i') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_s16i(r0, r1, imm); end
-  else if CaseEqual(mnem, 's8i') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_s8i(r0, r1, imm); end
+  else if AsmXtensaIsLoadStore(mnem) then
+    begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); AsmXtensaEmitLoadStore(mnem, r0, r1, imm); end
+
+  { ---- address materialization: `la <reg>, @fp|@glob|@data` + one hole ----
+    The inline-asm capture (AsmParseBodyTextXtensa, asmenc.inc) resolves a
+    Pascal name at PARSE time and leaves the kind as a marker plus an offset
+    hole; the address itself is built HERE, at codegen, where CodeLen is final
+    so EmitGlobRef/EmitDataRef relocations and the L32R literal pool land
+    correctly. @fp goes through the backend's own EmitFrameAddrXtensa, which
+    is what knows the frame pointer is a7 under the windowed ABI and a15 under
+    Call0, and what falls back to the literal pool past addi's +-128. }
+  else if CaseEqual(mnem, 'la') then
+  begin
+    imm := Integer(AsmXtensaInt('%', holes, holeCur));
+    if CaseEqual(op1, '@fp') then EmitFrameAddrXtensa(r0, imm)
+    else if CaseEqual(op1, '@glob') then EmitLoadGlobAddrXtensa(r0, imm)
+    else if CaseEqual(op1, '@data') then EmitLoadDataRefXtensa(r0, imm)
+    else Error('EmitAsmXtensa: expected @fp, @glob or @data after la');
+  end
   else Error('EmitAsmXtensa: unsupported instruction');
 end;
 
@@ -194,119 +250,112 @@ begin
     Error('EmitAsmXtensa: branch target out of range (+-127)');
 end;
 
-procedure EmitAsmXtensa(const items: array of const);
-var
-  i, n, h, nHoles, j, k: Integer;
-  line, trimmed, mnem, rest, target, op0, op1: AnsiString;
-  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
-  r, s, t, branchPos, targetPos, partIdx: Integer;
-  isJ, isBr, defined: Boolean;
+{ Block-scoped label state around AsmXtensaProcessLine calls. EmitAsmXtensa is
+  one begin/lines/resolve cycle; the inline-asm IR_ASM replay in
+  ir_codegen_xtensa.inc is another (labels are scoped to one asm block). }
+procedure AsmXtensaBlockBegin;
 begin
   AsmXtLblCount := 0; AsmXtFwCount := 0;
-  n := Length(items);
-  i := 0;
-  while i < n do
+end;
+
+{ Process one already-hole-resolved line: label definition, `j .label`, a
+  conditional branch to a label (recorded for AsmXtensaBlockResolve when
+  forward), or an ordinary instruction via AsmTextLineXtensa. }
+procedure AsmXtensaProcessLine(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
+var
+  trimmed, mnem, rest, target, op0, op1: AnsiString;
+  j, k, r, s, t, branchPos, targetPos, partIdx: Integer;
+  isJ, isBr, defined: Boolean;
+begin
+  trimmed := AsmXtensaTrim(line);
+
+  { first word = mnemonic }
+  mnem := ''; j := 1;
+  while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
+    begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+
+  isJ := CaseEqual(mnem, 'j');
+  isBr := AsmXtensaBranchCode(mnem, r);
+
+  if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
   begin
-    if items[i].VType <> vtAnsiString then
-      Error('EmitAsmXtensa: expected an instruction string');
-    line := AsmTextCStr(items[i].VAnsiString);
-    trimmed := AsmXtensaTrim(line);
+    { label definition: a bare line ending in ':' }
+    if AsmXtLblCount >= ASM_XT_MAX_LABELS then Error('EmitAsmXtensa: too many labels');
+    AsmXtLblName[AsmXtLblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+    AsmXtLblPos[AsmXtLblCount] := CodeLen;
+    Inc(AsmXtLblCount);
+    Exit;
+  end;
 
-    { first word = mnemonic }
-    mnem := ''; j := 1;
-    while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
-      begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+  if isJ then
+  begin
+    { unconditional jump: sole operand is a label name }
+    target := AsmXtensaTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+    branchPos := CodeLen;
+    defined := False; targetPos := 0;
+    for k := 0 to AsmXtLblCount - 1 do
+      if AsmXtLblName[k] = target then begin defined := True; targetPos := AsmXtLblPos[k]; end;
+    if defined then
+      xtensa_j(targetPos - branchPos)
+    else
+    begin
+      if AsmXtFwCount >= ASM_XT_MAX_LABELS then Error('EmitAsmXtensa: too many forward jumps');
+      AsmXtFwName[AsmXtFwCount] := target;
+      AsmXtFwPatch[AsmXtFwCount] := branchPos;
+      AsmXtFwIsJ[AsmXtFwCount] := True;
+      Inc(AsmXtFwCount);
+      xtensa_j(4);   { placeholder, patched in AsmXtensaBlockResolve }
+    end;
+    Exit;
+  end;
 
-    isJ := CaseEqual(mnem, 'j');
-    isBr := AsmXtensaBranchCode(mnem, r);
-
-    if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
+  if isBr then
+  begin
+    { conditional branch: `bXX as, at, .label` }
+    rest := AsmXtensaTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+    op0 := ''; op1 := ''; target := ''; partIdx := 0;
+    for k := 1 to Length(rest) do
     begin
-      { label definition: a bare line ending in ':' }
-      if AsmXtLblCount >= ASM_XT_MAX_LABELS then Error('EmitAsmXtensa: too many labels');
-      AsmXtLblName[AsmXtLblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
-      AsmXtLblPos[AsmXtLblCount] := CodeLen;
-      Inc(AsmXtLblCount);
-      Inc(i);
-    end
-    else if isJ then
+      if rest[k] = ',' then Inc(partIdx)
+      else if partIdx = 0 then AppendChar(op0, rest[k])
+      else if partIdx = 1 then AppendChar(op1, rest[k])
+      else AppendChar(target, rest[k]);
+    end;
+    s := AsmXtensaRegOp(op0);
+    t := AsmXtensaRegOp(op1);
+    target := AsmXtensaTrim(target);
+    branchPos := CodeLen;
+    defined := False; targetPos := 0;
+    for k := 0 to AsmXtLblCount - 1 do
+      if AsmXtLblName[k] = target then begin defined := True; targetPos := AsmXtLblPos[k]; end;
+    if defined then
     begin
-      { unconditional jump: sole operand is a label name }
-      target := AsmXtensaTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
-      branchPos := CodeLen;
-      defined := False; targetPos := 0;
-      for k := 0 to AsmXtLblCount - 1 do
-        if AsmXtLblName[k] = target then begin defined := True; targetPos := AsmXtLblPos[k]; end;
-      if defined then
-        xtensa_j(targetPos - branchPos)
-      else
-      begin
-        if AsmXtFwCount >= ASM_XT_MAX_LABELS then Error('EmitAsmXtensa: too many forward jumps');
-        AsmXtFwName[AsmXtFwCount] := target;
-        AsmXtFwPatch[AsmXtFwCount] := branchPos;
-        AsmXtFwIsJ[AsmXtFwCount] := True;
-        Inc(AsmXtFwCount);
-        xtensa_j(4);   { placeholder, patched below }
-      end;
-      Inc(i);
-    end
-    else if isBr then
-    begin
-      { conditional branch: `bXX as, at, .label` }
-      rest := AsmXtensaTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
-      op0 := ''; op1 := ''; target := ''; partIdx := 0;
-      for k := 1 to Length(rest) do
-      begin
-        if rest[k] = ',' then Inc(partIdx)
-        else if partIdx = 0 then AppendChar(op0, rest[k])
-        else if partIdx = 1 then AppendChar(op1, rest[k])
-        else AppendChar(target, rest[k]);
-      end;
-      s := AsmXtensaRegOp(op0);
-      t := AsmXtensaRegOp(op1);
-      target := AsmXtensaTrim(target);
-      branchPos := CodeLen;
-      defined := False; targetPos := 0;
-      for k := 0 to AsmXtLblCount - 1 do
-        if AsmXtLblName[k] = target then begin defined := True; targetPos := AsmXtLblPos[k]; end;
-      if defined then
-      begin
-        AsmXtensaCheckBranch(targetPos - branchPos);
-        AsmXtensaEmitBranch(r, s, t, targetPos - branchPos);
-      end
-      else
-      begin
-        if AsmXtFwCount >= ASM_XT_MAX_LABELS then Error('EmitAsmXtensa: too many forward jumps');
-        AsmXtFwName[AsmXtFwCount] := target;
-        AsmXtFwPatch[AsmXtFwCount] := branchPos;
-        AsmXtFwIsJ[AsmXtFwCount] := False;
-        AsmXtFwR[AsmXtFwCount] := r;
-        AsmXtFwS[AsmXtFwCount] := s;
-        AsmXtFwT[AsmXtFwCount] := t;
-        Inc(AsmXtFwCount);
-        AsmXtensaEmitBranch(r, s, t, 4);   { placeholder, patched below }
-      end;
-      Inc(i);
+      AsmXtensaCheckBranch(targetPos - branchPos);
+      AsmXtensaEmitBranch(r, s, t, targetPos - branchPos);
     end
     else
     begin
-      { ordinary instruction: count `%` markers and bind following int holes }
-      nHoles := 0;
-      for h := 1 to Length(line) do
-        if line[h] = '%' then Inc(nHoles);
-      if nHoles > ASM_MAX_HOLES then Error('EmitAsmXtensa: too many holes in one line');
-      for h := 0 to nHoles - 1 do
-      begin
-        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-          Error('EmitAsmXtensa: missing integer hole value');
-        if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
-      end;
-      AsmTextLineXtensa(line, holes, nHoles);
-      i := i + 1 + nHoles;
+      if AsmXtFwCount >= ASM_XT_MAX_LABELS then Error('EmitAsmXtensa: too many forward jumps');
+      AsmXtFwName[AsmXtFwCount] := target;
+      AsmXtFwPatch[AsmXtFwCount] := branchPos;
+      AsmXtFwIsJ[AsmXtFwCount] := False;
+      AsmXtFwR[AsmXtFwCount] := r;
+      AsmXtFwS[AsmXtFwCount] := s;
+      AsmXtFwT[AsmXtFwCount] := t;
+      Inc(AsmXtFwCount);
+      AsmXtensaEmitBranch(r, s, t, 4);   { placeholder, patched in AsmXtensaBlockResolve }
     end;
+    Exit;
   end;
 
-  { resolve forward jumps/branches now that all labels are placed }
+  { ordinary instruction }
+  AsmTextLineXtensa(line, holes, nHoles);
+end;
+
+{ resolve forward jumps/branches now that all labels are placed }
+procedure AsmXtensaBlockResolve;
+var j, k, targetPos: Integer;
+begin
   for k := 0 to AsmXtFwCount - 1 do
   begin
     targetPos := -1;
@@ -321,4 +370,51 @@ begin
       Patch24(AsmXtFwPatch[k], EncodeXtensaBranch(AsmXtFwR[k], AsmXtFwS[k], AsmXtFwT[k], targetPos - AsmXtFwPatch[k]));
     end;
   end;
+end;
+
+{ Replay one parse-time-captured inline-asm line (see AsmParseBodyTextXtensa,
+  asmenc.inc). Hole values come from the InlineAsmHoleVal pool, count stored
+  explicitly per line (NOT derived from '%' — an @fp/@glob operand consumes a
+  hole without one). Caller brackets a block with AsmXtensaBlockBegin/Resolve. }
+procedure AsmXtensaProcessInlineLine(idx: Integer);
+var
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+  k: Integer;
+begin
+  if InlineAsmLineHoleN[idx] > ASM_MAX_HOLES then
+    Error('EmitAsmXtensa: too many holes in one line');
+  for k := 0 to InlineAsmLineHoleN[idx] - 1 do
+    holes[k] := InlineAsmHoleVal[InlineAsmLineHole0[idx] + k];
+  AsmXtensaProcessLine(InlineAsmLine[idx], holes, InlineAsmLineHoleN[idx]);
+end;
+
+procedure EmitAsmXtensa(const items: array of const);
+var
+  i, n, h, nHoles: Integer;
+  line: AnsiString;
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+begin
+  AsmXtensaBlockBegin;
+  n := Length(items);
+  i := 0;
+  while i < n do
+  begin
+    if items[i].VType <> vtAnsiString then
+      Error('EmitAsmXtensa: expected an instruction string');
+    line := AsmTextCStr(items[i].VAnsiString);
+
+    nHoles := 0;
+    for h := 1 to Length(line) do
+      if line[h] = '%' then Inc(nHoles);
+    if nHoles > ASM_MAX_HOLES then Error('EmitAsmXtensa: too many holes in one line');
+    for h := 0 to nHoles - 1 do
+    begin
+      if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
+        Error('EmitAsmXtensa: missing integer hole value');
+      if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
+    end;
+    AsmXtensaProcessLine(line, holes, nHoles);
+    i := i + 1 + nHoles;
+  end;
+  AsmXtensaBlockResolve;
 end;
