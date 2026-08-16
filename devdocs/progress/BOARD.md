@@ -34,7 +34,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (213)
+## backlog (214)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -46,8 +46,9 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
+| bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
-| bug-n-pow-expected-predates-the-complex-type-and-pxx-differs-from-cpython | N | 40 | bug | test_nilpy_pow_matches_cpython.expected still asserts `ValueError` for `(-4) ** 0.5`, recorded before `feat(N): Python's complex type` (ba5a9d987) landed — so the RED is a stale expectation, not a regression, and T's bisect will name the feature commit. Re-recording alone does NOT fix it: pxx answers `(-0+2.8284271247461894j)` where CPython gives `(1.7319121124709868e-16+2.8284271247461903j)`, so the real part and ~1 ulp of the imaginary part still differ. | — |
+| bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-nilpy-a-dict-cannot-be-unpacked-into-a-call | N | 40 | bug | `f(**d)` — unpacking a dict into a call — is a PARSE error (\"expected expression\") for every callee shape: a plain def, a **kwargs def, a method, a constructor. Only the forwarding shape `f(*args, **kwargs)` inside a def that declares them works. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
@@ -415,9 +416,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1970)
+## done (1971)
 
-1970 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1971 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -536,7 +537,6 @@ _none_
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-riscv32-softfloat-has-no-subnormals
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
-- [p 40] [N] bug-n-pow-expected-predates-the-complex-type-and-pxx-differs-from-cpython
 - [p 40] [N] bug-nilpy-a-dict-cannot-be-unpacked-into-a-call
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
@@ -564,6 +564,7 @@ _none_
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 40] [T] regression-cascade-343a52551808-triage
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
+- [p 35] [N] bug-n-abs-of-a-complex-raises-typeerror
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - [p 35] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
@@ -617,6 +618,7 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
 - [p 25] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
+- [p 25] [N] bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers

@@ -28,15 +28,21 @@ for v in [1.0001]:
 
 print([1.0001][0] ** 10000)
 
-# The two REFUSALS the move would otherwise have lost. The RTL's Power answers
-# NaN for a negative base with a fractional exponent and +inf for 0.0 ** -1; a
-# silent wrong number where there used to be a sentence is the wrong trade.
-# CPython answers the first with a COMPLEX, which this language does not have —
-# so ValueError, deliberately, and recorded in nilpy-semantics-divergences.md.
-try:
-    print((-8.0) ** 0.5)
-except ValueError:
-    print("ValueError")
+# The first of the two refusals is GONE, and that is what this block pins now.
+# The RTL's Power answers NaN for a negative base with a fractional exponent, so
+# `**` used to raise a deliberate ValueError saying NilPy had no complex type —
+# a documented divergence. `feat(N): Python's complex type` gave it one, so
+# CPython's answer is now reachable and is what we return. The stale expectation
+# is what made this test read as a regression when the feature landed.
+#
+# Asserted to 12 decimals rather than by repr, deliberately: the real part is
+# nothing but cos(pi/2)'s residual scaled by |z|, and the magnitude goes through
+# exp(b*ln|z|) here where CPython calls pow() directly, because pylib cannot
+# reach the RTL's Power. That is a few ulp on the last digits and is tracked
+# separately; the SEMANTICS are what changed and what belongs in this file.
+z = (-8.0) ** 0.5
+print(type(z).__name__)
+print(round(z.real, 12), round(z.imag, 12))
 
 try:
     print(0.0 ** -1)
