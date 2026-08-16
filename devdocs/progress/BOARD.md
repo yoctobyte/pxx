@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (199)
+## backlog (202)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -48,7 +48,10 @@ _none_
 | bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents | B | 30 | bug | StrToFloat costs 2.6-2.9 ms per value for small-exponent input ('1.2e-320') against 0.72 us in CPython — a ~3600x gap — and 116 us even mid-range. The answer is right; the slow path is a 63-step bit-pattern search whose every step expands a candidate to its EXACT ~1080-digit decimal. Correct by construction and priced accordingly. Found timing a float differential harness, where parsing 121k values took ~60 s and the arithmetic under test took none of it. | — |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
+| bug-nilpy-a-dict-cannot-be-unpacked-into-a-call | N | 40 | bug | `f(**d)` — unpacking a dict into a call — is a PARSE error (\"expected expression\") for every callee shape: a plain def, a **kwargs def, a method, a constructor. Only the forwarding shape `f(*args, **kwargs)` inside a def that declares them works. | — |
+| bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
+| bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 30 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 15 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
@@ -517,6 +520,7 @@ _none_
 - [p 40] [A] bug-a-riscv32-softfloat-has-no-subnormals
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
 - [p 40] [B] bug-b-power-lost-an-ulp-on-a-half-integer-exponent
+- [p 40] [N] bug-nilpy-a-dict-cannot-be-unpacked-into-a-call
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
 - [p 40] [U] decide-nilpy-classmethod-cls-binding
@@ -562,6 +566,7 @@ _none_
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [B] bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents
+- [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
@@ -588,6 +593,7 @@ _none_
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
 - [p 25] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
+- [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
