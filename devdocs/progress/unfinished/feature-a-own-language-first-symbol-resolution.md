@@ -2,9 +2,9 @@
 track: A
 prio: 55
 type: feature
-blocked-by: []
-status: backlog
-owner: agent-an
+blocked-by: [bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]
+status: unfinished
+owner: —
 ---
 
 # Own-language-first symbol resolution: the native language wins
@@ -357,3 +357,68 @@ so this is a clean start, not a resume. The measurement in that entry stands and
 narrows the work: the C -> Pascal direction is already closed (nothing for a C
 name to collide with), so what remains is the Pascal -> C direction plus the
 cheap `lib/crtl` de-prefix experiment, which is Track C's file-ownership.
+
+## 2026-08-16 — RE-MEASURED AT HEAD. The rule is already the behaviour; what is left is one C-side bug.
+
+Measured before building, as the 2026-08-14 entry did. The picture has changed
+enough to re-aim the ticket: **own-language-first already holds for ordinary
+units, order-independently, and the `as` escape already works.** The 2026-08-14
+entry's "Pascal -> C: BROKEN" is true only for the six intrinsic names, and for
+those the breakage is worse than a precedence problem — it is a silent overwrite.
+
+### Own-language-first: already true, and not by import-order luck
+
+A user unit `pcube` exporting `Cube`, a C file defining `cube`:
+
+| form | bare `Cube(3)` | `pcube.Cube(3)` | `cc.cube(3)` |
+| --- | --- | --- | --- |
+| `uses pcube, './ccube.c' as cc` | **27** | 27 | 999 |
+| `uses './ccube.c' as cc, pcube` | **27** | — | 999 |
+| `uses pcube, './ccube.c'` (no alias) | **27** | — | — |
+| `uses './ccube.c', pcube` (no alias) | **27** | — | — |
+
+Pascal's own routine wins in every arrangement, and the C one stays reachable
+through its alias. That is exactly the decided rule — implicit resolution
+prefers your own language, explicit import overrides — with no compiler change
+required.
+
+The same holds inside `math` for a name that is not an intrinsic: `Tanh` vs a C
+`tanh` gives 0.7616 / 0.7616 / 55.0 across bare / `math.Tanh` / `cmath.tanh`.
+All three correct.
+
+### The one broken case, and it is not a precedence bug
+
+`sqrt` `exp` `ln` `sin` `cos` `arctan` — the six names `parser.inc:34716`
+auto-pulls `math` for. A C DEFINITION of one of them binds to the Pascal proc
+entry through case-insensitive `FindProc` (`cparser.inc:9401`) and overwrites
+its `BodyAddr` (`:9558`). Consequences, all measured:
+
+- bare `Sqrt(16.0)` -> 42.0 (the C body)
+- `math.Sqrt(16.0)` -> **42.0** — the Pascal-side qualifier does not protect it
+- `cmath.sqrt(16.0)` -> `undefined variable (sqrt)` — no proc with the C unit's
+  index exists, because the definition never registered one
+- `SqrtSoft(16.0)` -> 4.0 — `math.pas` itself is intact; only the entry is taken
+
+So there is currently **no spelling that reaches Pascal's `Sqrt`** in such a
+program. That is a silent wrong value out of the RTL, which the compat escape
+rule promotes out of a parity/precedence ticket and into a bug in the owning
+lane: filed as
+[[bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]]
+(Track C — `cparser.inc` is C's file, and this session holds A+P).
+
+### What that does to this ticket
+
+1. **The compiler rule needs no new code.** Own-language-first is observably the
+   behaviour for every case that is not the overwrite bug. No `MatchElig`
+   candidate-removal pass, and — pending the C fix — no `ProcLang` parallel
+   array either; the C bug may not need a language tag to fix, since
+   "definition vs declaration" is the discriminator that actually matters.
+2. **The acceptance test moves behind the C bug.** De-prefixing the ten
+   `__crtl_*` names recreates precisely the overwrite: they are `#define`
+   workarounds for it, as their own source comment says. The 2026-08-14 entry
+   judged them "probably vestigial" from C-only programs, which is right for
+   that case and does not cover a MIXED program where the Pascal side is live.
+3. Parked in `unfinished/` with `blocked-by:` the C bug rather than left in
+   `working/` — `working/` is a live lock.
+
+Nothing is half-applied: no code was written this session for this ticket.
