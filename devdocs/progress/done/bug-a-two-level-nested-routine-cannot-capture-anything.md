@@ -154,4 +154,4 @@ refusal at the capture site is unchanged, it can just now be reached from depth
 2 as well.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 40276009a.
