@@ -2,13 +2,13 @@
 summary: "A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table"
 type: bug
 track: C
-prio: 35
+prio: 25
 ---
 
 # A header carrying a body compiles twice across the macro-table reset
 
 - **Type:** bug — Track C (C frontend, preprocessor TU state)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-05
 - **Found by:** the C duplicate-definition warning, after
   [[bug-c-string-h-compiles-stdlib-c-twice]] was fixed. It is the last file in
@@ -121,3 +121,73 @@ either way, so keeping it would only make the next diagnosis harder.
 Still benign (the two bodies are identical) and still the last warning in the C
 corpus: 5 of 369 files, of which 4 are the separate
 `bug-c-static-functions-in-different-crtl-modules-collide`.
+
+## 2026-08-16 — the WARNING is gone; the duplication is not; and the macro avenue is now CLOSED with proof
+
+Three measurements, in order.
+
+### 1. The six warnings no longer fire
+
+`298f2e5fe fix(C): a file-scope static in two crtl modules is not a duplicate`
+(the sibling ticket) attributes a header's `static` to the module that INCLUDED
+it, so the two copies of `__pxx_va_*` land in different modules and the
+duplicate-definition check is right not to complain. Verified: red on `pinned`
+with all six warnings, silent on HEAD.
+
+That silences the symptom this ticket was FOUND by. It does not fix it.
+
+### 2. The duplication is still real, and it is exactly the late crtl pull
+
+| source | code bytes |
+| --- | --- |
+| `#include <stdio.h>` alone | 207787 |
+| `#include <stdarg.h>` + `#include <stdio.h>` | 207787 |
+| `#include <stdarg.h>` + a HAND prototype for printf | **209991** |
+
+Only the hand-prototype route — the one that makes `CPullCrtlForPrototypes`
+synthesise `#include <stdio.h>` — grows, by **2204 bytes**: six helper bodies
+emitted a second time. Two ordinary includes of the same headers cost nothing,
+which is what says the ordinary guard works fine and the pull is the whole
+defect.
+
+### 3. Macro-table carrying CANNOT fix this — proved, not reasoned
+
+The 2026-08-05 attempt was re-run on today's tree (`CPrepKeepMacros` skipping
+the reset, set around the synth `CPreprocess`). Same result as then: **209991
+bytes, unchanged.** So that avenue is not merely unhelpful, it is dead, and the
+reason is now known — the next test says why:
+
+Forcing the guard on by prepending `#define PXX_CRTL_STDARG_H 1` to the
+synthetic buffer makes the pull **fail to compile**:
+
+```
+near: width  va_arg  ap  >>> int
+```
+
+The pulled region NEEDS stdarg.h's declarations and macros. Suppressing the
+header suppresses those too, because a guard is all-or-nothing. **The guard's
+visibility was never the problem: the pull must include stdarg.h, and stdarg.h
+carries bodies.** No amount of macro-table plumbing can separate the two.
+
+### The fix, therefore
+
+Take the bodies out of the header. `lib/crtl/include/stdarg.h` is 146 lines, of
+which six are `static` function DEFINITIONS (`__pxx_va_start_impl`,
+`__pxx_va_arg_gp`, `__pxx_va_arg_fp`, `__pxx_va_arg_cross`, plus the two `32`
+variants). Move them to a crtl source module — `lib/crtl/src/stdarg.c`, which
+the header's auto-pulled sibling mechanism already links — and leave the header
+with the struct, the macros and the declarations. Then including it twice is
+free, which is what a header is supposed to be.
+
+`lib/crtl` is Track C's ground, so this is a C-lane change, not the A-gated
+`parser.inc` edit the original "The fix" section proposed. That section, and the
+save/restore-around-the-nested-invocation plan in it, are superseded by
+measurement 3 above and should not be attempted again.
+
+### Not done here, deliberately
+
+`va_arg` is on the path of every C program that formats anything, the helpers
+have 32-bit cross variants, and the local gate covers x86-64 only. Moving them
+wants a session that can wait for Track T's cross sweep. Re-prioritised 35 → 25:
+with the warning gone the residual cost is ~2.2KB of dead code in one call
+shape, which is a size nit, not a correctness bug.
