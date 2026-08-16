@@ -123,4 +123,4 @@ own bucket.
 - `pasmith_run.py --seeds 90010-90025 --wide`: 16 programs, 0 divergences.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 137a182ad.
