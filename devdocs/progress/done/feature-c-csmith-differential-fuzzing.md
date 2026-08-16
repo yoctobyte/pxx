@@ -6,7 +6,7 @@ owner: claude-acpn
 # C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live
 
 - **Type:** feature / ongoing campaign — Track C (with Track A fixes as they fall out)
-- **Status:** working
+- **Status:** done
   Resume by running the one command below; nothing needs rebuilding or rediscovering.
 - **Origin:** step 4 of [[feature-c-corpus-expansion]] ("csmith differential fuzzing").
 
@@ -284,3 +284,21 @@ listing three of them since July:
    August were both "a struct assignment used as a value", a form hand-written
    code has no reason to write. That is the tell: coverage thins where the
    GENERATOR is shy, not where the corpus is.
+
+### 2026-08-16 — axis 1 done: `-O3` in the mix, still clean
+
+300 seeds from 95000 with `--opts 0,2,3`: **266 agreed with the gcc oracle, 34
+skipped, no findings** — and no `MISCOMPILE_OPT`, which is the part that is new.
+That bucket compares our own -O levels against each other and needs no oracle at
+all, so this is the first time Track O's `-O3` passes have been differentially
+tested against `-O0`/`-O2` on random programs rather than on the suite.
+
+Running total for the campaign's default-shape space: 1000 seeds since the last
+finding. Axis 1 of the three is now spent; **the next findings have to come from
+axis 2 (cross targets under qemu — needs a `--target` pass-through and
+`tools/run_target.sh`) or axis 3 (csmith flags the defaults leave off)**, not
+from more seeds at the same settings. Worth doing axis 2 next: it points the
+same oracle at four backends that have never seen a random program.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

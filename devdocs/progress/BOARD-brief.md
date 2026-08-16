@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:11 blocked:4 backlog:199 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1918 rejected:37`
+`unfinished:11 blocked:4 backlog:199 experimental:20 rainy-day:40 done-followup:3 decided:75 done:1919 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-c-csmith-differential-fuzzing` [C] — owner: claude-acpn
+_none — no lane is locked._
 
 ## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
