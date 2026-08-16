@@ -56,4 +56,4 @@ quick` — GREEN. A `compiler/builtin` change, so `make stabilize-fast && make
 pin` follows.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit a11ceeea5.
