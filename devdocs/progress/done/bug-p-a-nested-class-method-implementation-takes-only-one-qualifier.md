@@ -104,4 +104,4 @@ Self-host fixedpoint converged; `tools/gate.sh quick` GREEN.
 
 ## Log
 - 2026-08-16 — resolved.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit c9614b422.
