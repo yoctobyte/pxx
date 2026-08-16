@@ -1538,6 +1538,42 @@ class Gen:
     # only the exit fold sees is state a trace checkpoint cannot localise, and the
     # divergence then shows up as "the last statement", wherever it really was.
 
+    def teardown_ckpt(self, L, kind):
+        """A trace checkpoint for one END-OF-PROGRAM phase.
+
+        Without these, every teardown divergence looks identical to the driver.
+        Body statements each carry a `{ checkpoint N kind=K }` marker, so a
+        divergence ON one is localised and signed with its construct — but
+        destructors, finalization and refcount releases all run AFTER the last
+        body checkpoint, so a bug in any of them shows only in the final
+        `writeln(cs)`. Every one of them therefore collapsed to the catch-all
+        signature `trace-length`, and the ledger — which suppresses a signature
+        it has already seen — would mark a SECOND, unrelated teardown bug as
+        known and never surface it. That is the over-dedup the ledger exists to
+        prevent, displaced from "too many tickets" to "too few"
+        (feature-pasmith-divergence-signature-granularity).
+
+        PER PHASE, not per object. `dtor:classes` covers all N objects rather
+        than emitting `dtor:o0`, `dtor:o1`, ... — the same "coarse ON PURPOSE"
+        call the ledger's own design note makes. Object COUNT varies with the
+        seed, so a per-object kind would make the signature seed-dependent and
+        split one bug back into hundreds of "distinct" entries. A phase name is
+        stable across every seed that has that phase at all.
+
+        Safe to call after a Free: Snap folds globals, records, strings, enums
+        and sets, and never dereferences a class instance or a disposed heap
+        node. It does read `cs`, which is the point — destructors fold into `cs`
+        on their way out, so the checkpoint captures exactly the contribution
+        the phase made.
+
+        Trace mode only, so the real program the oracles compare is byte-for-byte
+        unchanged.
+        """
+        if not self.trace:
+            return
+        self.ckpt += 1
+        L.append("  Snap;   { checkpoint %d kind=%s }" % (self.ckpt, kind))
+
     def scalar_folds(self):
         """Every integer-ish live value: globals, record fields (incl. through the
         nested record and the inline array), standalone arrays, enum ordinals."""
@@ -1850,6 +1886,7 @@ class Gen:
             L.append("  MixStr(%s);" % n)
         for sv, it in self.set_folds():
             L.append("  for %s in %s do Mix(ord(%s));" % (it, sv, it))
+        self.teardown_ckpt(L, "exitfold")
         for r in self.recs:
             # Free the heap chain: exactly one Dispose per New, in one place, and
             # nothing touches a node afterwards. Same lifetime discipline the class
@@ -1861,12 +1898,16 @@ class Gen:
             L.append("    pv%d := w%d^.next; Dispose(w%d); w%d := pv%d;"
                      % (i, i, i, i, i))
             L.append("  end;")
+        if self.recs:
+            self.teardown_ckpt(L, "final:records")
         for i in range(self.nclasses and self.nobjs):
             # Free each object EXACTLY once and never touch it again. The
             # destructors fold into the checksum on their way out, so the dtor
             # chain (count and order) is part of the observed output -- a missed
             # or doubled destructor call changes the number.
             L.append("  o%d.Free;" % i)
+        if self.nclasses and self.nobjs:
+            self.teardown_ckpt(L, "dtor:classes")
         if self.nintfs:
             # Release every interface ref by niling it, in a fixed order. NEVER
             # Free -- the refcount owns these objects; dropping the last reference
@@ -1876,18 +1917,23 @@ class Gen:
             # deterministic point.
             for k in self.intfs:
                 L.append("  iw%d := nil;" % k)
+            self.teardown_ckpt(L, "release:intfs")
         if self.nhier:
             for ho in self.hobjs:
                 L.append("  %s.Free;" % ho)
+            self.teardown_ckpt(L, "dtor:hier")
         if self.nmptrs:
             for om in self.mpobjs:
                 L.append("  %s.Free;" % om)
+            self.teardown_ckpt(L, "dtor:mptrs")
         if self.nprops:
             for op in self.probjs:
                 L.append("  %s.Free;" % op)
+            self.teardown_ckpt(L, "dtor:props")
         if self.nclsm:
             for oc in self.cmobjs:
                 L.append("  %s.Free;" % oc)
+            self.teardown_ckpt(L, "dtor:clsm")
         L.append("  writeln(cs);")
         L.append("end.")
         return "\n".join(L) + "\n"

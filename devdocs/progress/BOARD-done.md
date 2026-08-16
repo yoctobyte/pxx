@@ -1637,6 +1637,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pascal-typed-metaclass | P | 45 | feature | Typed metaclasses: `class of TFoo`, so a TClass variable can call the class's methods | — |
 | feature-pascal-warn-on-unfulfillable-directive | P | 60 | feature | A routine directive that is accepted but cannot be honored is silently ignored — `iram` on x86-64, `inline` anywhere (the flag is written and never read), `register`, `cdecl` on a routine. Warn: 'directive ignored here', so the source stops claiming something the build does not do. | — |
 | feature-pasmith-deep-oop | T | 60 | feature | pasmith OOP is one linear chain: no interfaces, no is/as, no method pointers, no properties | — |
+| feature-pasmith-divergence-signature-granularity | T | 35 | feature | pasmith divergence signatures are too coarse: end-of-program divergences all collapse to pxx-vs-fpc_trace-length, so distinct bugs can over-dedup and hide each other | — |
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-pascal-program-generator | T | 70 | feature | pasmith — Csmith-style random Object Pascal generator, FPC as differential oracle | — |
 | feature-pasmith-widen-grammar | T | 65 | feature | pasmith is too NARROW: 527 divergences, one bug. Csmith found dozens. | — |
