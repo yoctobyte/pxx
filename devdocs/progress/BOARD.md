@@ -37,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (203)
+## backlog (204)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -148,6 +148,7 @@ _none_
 | feature-nilpy-iter-and-next-over-a-container | N | 35 | feature | `iter(xs)` is undefined — the explicit iterator protocol | — |
 | feature-nilpy-lambda-compiled-closure | N | 45 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-list-sort-inplace-key-reverse | N | 30 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
+| feature-nilpy-map-over-several-iterables | N | 35 | feature | `map(f, xs, ys)` — CPython's N-iterable map — is a PARSE error (\"Expected: )\"). The map arm reads exactly two arguments, and the whole callback path below it (PyCallKey1, pymap_iter_i, pyiter_map_i) is one-argument by construction. | — |
 | feature-nilpy-match-statement | N | 30 | feature | `match` / `case` — structural pattern matching is not parsed | — |
 | feature-nilpy-math-atan2-now-that-arctan2-is-exact | N | 30 | feature | compiler/pyparser.inc deliberately leaves math.atan2 undefined, with a note citing ArcTan2 being 1 ulp off CPython for atan2(0.5, 1). That reason is gone as of 2026-08-15: ArcTan2 now forms the quotient in double-double, matches CPython on that exact value, and is correctly rounded where glibc is not. One table line, plus removing the stale note. | — |
 | feature-nilpy-math-module-twelve-absent-names-measured | N | 25 | feature | The whole `math` surface swept name by name against CPython: 39 of 51 agree, 12 are absent and fail LOUDLY at compile. Four of them (isqrt, isfinite, ldexp, frexp) are EXACT operations with no rounding question and can land today; the other eight inherit the standing 'do not map a 1-ulp-off RTL routine' policy. | — |
@@ -555,6 +556,7 @@ _none_
 - [p 35] [A] feature-nilpy-arc-cross-parity
 - [p 35] [N] feature-nilpy-ascii-flag-fast-path
 - [p 35] [N] feature-nilpy-iter-and-next-over-a-container
+- [p 35] [N] feature-nilpy-map-over-several-iterables
 - [p 35] [N] feature-nilpy-methods-on-int-and-float
 - [p 35] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod

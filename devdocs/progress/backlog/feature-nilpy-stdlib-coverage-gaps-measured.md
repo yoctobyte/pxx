@@ -137,3 +137,20 @@ and `loads` of every scalar type.
 `re.split` is the one worth doing first: it is how a script tokenises a line,
 and it is the only absent name here that a small program is likely to reach for
 before anything else on the list.
+
+## Re-measured 2026-08-16 (a later sweep, same method)
+
+`import copy` is the one new absence found by a broad builtin/stdlib sweep:
+`import: no unit named copy and no shim mimic_copy`. Everything else the sweep
+touched — dict/set/list/str methods, slicing (including negative and strided),
+`%` and `str.format` and f-string mini-languages, `divmod`/`round`/`int(s, base)`,
+comprehensions of all four kinds, closures with `nonlocal`/`global`, `*args`/
+`**kw` definitions, dunder-driven classes (`__repr__`/`__eq__`/`__lt__`/`__add__`/
+`__len__`/`__iter__`/`__contains__`/`__getitem__`), inheritance with `super()`,
+`try/except/finally` including `return`-through-`finally` and nested re-raise,
+`while/for ... else`, and bytes — **matched CPython exactly**.
+
+`copy.copy` / `copy.deepcopy` is the whole surface worth having: a shallow copy
+is the slice/`dict(d)` that already works, so the module is mostly a naming
+shim, and `deepcopy` is the one that needs a real recursive walk over the
+variant container tags.
