@@ -12,21 +12,18 @@ _none_
 
 _none_
 
-## unfinished (11)
+## unfinished (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
-| feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
-| feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | — |
 
 ## blocked (4)
 
@@ -37,7 +34,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (207)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,6 +61,7 @@ _none_
 | bug-p-a-nested-class-method-implementation-takes-only-one-qualifier | P | 35 | bug | `function touter.tinner.Tag: string;` — the implementation header of a method belonging to a NESTED class — is a parse error: the header parser takes one qualifier. Declaring and implementing such a method inline works, so this is the out-of-line spelling only. | — |
 | bug-p-a-system-qualified-call-binds-a-same-named-user-routine | P | 45 | bug | `System.Delete(s,2,3)` binds a unit-level `Delete` instead of the builtin — the documented escape hatch for a shadowed intrinsic does not escape | — |
 | bug-p-set-literal-elements-are-not-type-checked | P | 60 | bug | A set literal's elements are never checked against the set's element type. `TakesSet(['a', 1])` on a `set of TDay` parameter compiles and answers dTue; `[cGreen]` (a DIFFERENT enum) silently becomes dTue; `[True]` works; `[99]` silently produces the empty set with no diagnostic. FPC rejects every one of them. No overloading needed — one procedure, one set parameter. | — |
+| bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right | P | 25 | bug | `--strict-fpc` answers 2147483644 for `-a shr 1` where FPC — and pxx's own DEFAULT dialect — both say 9223372036854775804: the reproduce-FPC flag is the only mode that gets this row wrong | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
@@ -97,6 +95,7 @@ _none_
 | feature-a-expose-rounding-mode-intrinsic-to-pascal | A | 30→35 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
 | feature-a-extended-is-an-alias-for-double | A | 25 | feature | `Extended` is silently an alias for `Double` | — |
 | feature-a-index-an-array-returning-call-directly | A | 40 | feature | Index an array-returning call directly: `MkArr[i]`, `MkR2[i,j].field` | — |
+| feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-rdrand-cpuid-compiler-builtins | A | 35→45 | feature | lib/rtl/random.pas cites `feature-rdrand-cpuid-compiler-builtins` in a source comment for its tier-1 hardware entropy path — and that ticket was never filed. Tiers 2 and 3 ship; tier 1 needs compiler intrinsics for CPUID + RDRAND (x86), MRS RNDR (aarch64) and the ESP RNG register, because the library's design mandate keeps per-arch instructions OUT of the .pas. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
@@ -210,6 +209,7 @@ _none_
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
+| feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 20 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -409,9 +409,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1957)
+## done (1958)
 
-1957 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1958 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -467,6 +467,7 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
+- [p 55] [A] feature-a-own-language-first-symbol-resolution (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
@@ -516,6 +517,7 @@ _none_
 - [p 45] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
+- [p 45] [B] feature-real-dynlib-loader
 - [p 45] [T] feature-t-uforth-benchmark-harness
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
@@ -606,6 +608,7 @@ _none_
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
 - [p 25] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
+- [p 25] [P] bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
@@ -659,7 +662,6 @@ _none_
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
-- **1** — decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-a-own-language-first-symbol-resolution
 - **1** — feature-a-rdrand-cpuid-compiler-builtins

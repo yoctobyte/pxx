@@ -5,25 +5,22 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:207 experimental:20 rainy-day:40 done-followup:3 decided:77 done:1957 rejected:38`
+`unfinished:8 blocked:4 backlog:210 experimental:20 rainy-day:40 done-followup:3 decided:77 done:1958 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (11) — parked mid-flight; re-claim, do not duplicate
+## unfinished (8) — parked mid-flight; re-claim, do not duplicate
 
-- `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
-- `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-pascal-corpus-generics` [P]
-- `feature-real-dynlib-loader` [B]
 
 ## blocked (4) — has an unmet blocker; do not claim
 
@@ -32,7 +29,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 192, ranked
+## Ready — top 30 of 195, ranked
 
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
 - `[p 60] [P]` bug-p-set-literal-elements-are-not-type-checked
@@ -43,6 +40,7 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
+- `[p 55] [A]` feature-a-own-language-first-symbol-resolution (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -63,6 +61,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
 - `[p 48] [P]` feature-pascal-class-management-operators
-- `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
 
-_162 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_165 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

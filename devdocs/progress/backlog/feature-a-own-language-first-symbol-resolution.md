@@ -2,8 +2,8 @@
 track: A
 prio: 55
 type: feature
-blocked-by: [decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language]
-status: unfinished
+blocked-by: []
+status: backlog
 owner: agent-an
 ---
 
@@ -337,3 +337,23 @@ spellings) now has a working escape for the collision it deliberately creates.
 
 Full reasoning, the four measured forms, and the deliberate decision that bare
 `uses './x.c'` stays unbound: [[decide-cross-language-qualifier-syntax]].
+
+
+## 2026-08-16 — UNBLOCKED (board maintenance, no code)
+
+`decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language`
+was **decided on 2026-08-14** (`e0bdf1499`) — a rule SET, not one rule:
+own-language-first as the principle, case must agree for a cross-language match,
+compiler warnings on top, and "a programmer who insists on both math.pas and
+math.c faces the consequences".
+
+This ticket kept the answered `blocked-by:` in its frontmatter AND sat in
+`unfinished/`, so it was hidden from `ready`/`next` twice over — the two
+independent switches described in [[project_parked_tickets_are_invisible_two_independent_ways]].
+Both cleared: `blocked-by: []`, moved to `backlog/`.
+
+Nothing is half-applied — the 2026-08-14 entry above says "No code changed yet",
+so this is a clean start, not a resume. The measurement in that entry stands and
+narrows the work: the C -> Pascal direction is already closed (nothing for a C
+name to collide with), so what remains is the Pascal -> C direction plus the
+cheap `lib/crtl` de-prefix experiment, which is Track C's file-ownership.

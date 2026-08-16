@@ -315,3 +315,20 @@ no `ld-linux*`, no libc — so arm32/aarch64 still cannot RUN a dynamically
 linked binary here. Compile, interpreter string and `NEEDED libc.so.6` remain
 asserted for all four targets; only the run is missing, and it needs a
 different box or a container.
+
+
+## 2026-08-16 — item (d)'s blocker is FIXED (board maintenance, no code)
+
+[[bug-a-dwarf-emission-recurses-forever-on-mutually-referencing-classes]] was
+**resolved 2026-08-15** (`dd193ae6f`, status `done`). This ticket says item (d)
+"should wait for it rather than be investigated blind" — that wait is over, and
+`-g` on a `TTCPBlockSocket` program is available again, which is the tool item
+(d) was missing when it stopped in `SSLDoConnect`.
+
+Moved to `backlog/` so it can be ranked: it is no longer parked-waiting-on-a-fix,
+which is what `unfinished/` means.
+
+**Item (b) is still genuinely host-limited** and does not move: `/usr/arm-linux-gnueabi`
+and `/usr/aarch64-linux-gnu` hold `bin` only — no `ld-linux*`, no libc — so
+arm32/aarch64 cannot RUN a dynamically linked binary on this box. That one needs
+a different machine or a container, not a decision.

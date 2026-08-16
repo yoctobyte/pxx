@@ -3,7 +3,7 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: claude-A
 ---
 
@@ -87,3 +87,33 @@ x86-64 and aarch64. A 64-bit-target test by construction: "native width" is 32
 bits on i386/arm32/riscv32, so the full-width rows cannot hold there and do not
 under the default dialect either. `gate.sh quick` GREEN (self-host
 byte-identical).
+
+
+## RESOLVED 2026-08-16 — closed; the one open row re-filed where it belongs
+
+Every row of the table matches `fpc -O1` under the flag except `-a shr 1` over
+an Integer VARIABLE, and that row was left open here on the grounds that it "is
+not a shift divergence". Re-measured today, and the consequence is sharper than
+this ticket recorded:
+
+| | `-a shr 1`, `a: Integer = 8` |
+| --- | --- |
+| FPC 3.2.2 `-O1` | 9223372036854775804 |
+| pxx **default** | 9223372036854775804 — **matches** |
+| pxx `--strict-fpc` | 2147483644 — **diverges** |
+
+So this is not "a row we cannot reach". It is the one row where turning ON the
+reproduce-FPC-exactly flag makes the answer LESS like FPC, while the default
+dialect already agrees. That inverts what a user would assume the flag does, and
+it is a different fault from the one this ticket is about (shift widths): the
+cause is that FPC's unary minus on an Integer yields Int64, so its operand is
+already 64 bits before any shift rule applies.
+
+Re-filed as [[bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right]]
+so it is ranked as what it is — a unary-minus typing question with its own blast
+radius — rather than sitting behind a shift ticket that is otherwise finished.
+
+The shift work itself is complete and gated: `test/test_strict_fpc_shift_widths.pas`
+matches `fpc -O1` row for row on x86-64 and aarch64, and the Makefile asserts the
+DEFAULT dialect is byte-for-byte unchanged by running the same file with and
+without the flag.
