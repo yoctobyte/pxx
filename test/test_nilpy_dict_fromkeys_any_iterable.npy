@@ -1,0 +1,14 @@
+# `dict.fromkeys("ab")` SEGFAULTED. The stdlib call site builds this call BY
+# NAME and cannot resolve overloads by type, so a str went straight into a
+# TPyList parameter and the callee dereferenced a string as an object.
+#
+# This is the population named in project_nilpy_byname_findproc_lowerings_are_
+# the_unchecked_population: every by-name lowering that lands on a pylib routine
+# with a TPyList parameter is one "wrong argument type = SIGSEGV" away. The cure
+# is the same each time — take a VARIANT and go through pylist_v, the one bridge
+# that turns any Python iterable into a list — not a check at the call site,
+# which would have to be repeated per site.
+#
+# `list(dict.fromkeys(xs))` is the standard order-preserving dedupe, so the str
+# case is not exotic: dedupe the characters of a word and you are here.
+# bug-nilpy-dict-fromkeys-of-a-str-segfaults

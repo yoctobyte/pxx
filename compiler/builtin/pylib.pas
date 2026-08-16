@@ -1824,8 +1824,14 @@ function dict(l: TPyList): TPyDict; overload;
 
 { dict.fromkeys(iterable): a dict with those keys, values None, insertion order
   preserved. `list(dict.fromkeys(xs))` is the standard order-preserving dedupe. }
-function pydict_fromkeys(l: TPyList): TPyDict;
-function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
+{ The parameter is a VARIANT, not a TPyList, and that is the fix rather than a
+  style choice: the stdlib call site builds this call BY NAME and cannot
+  resolve overloads by type, so `dict.fromkeys("ab")` handed a str straight
+  into a TPyList parameter and SEGFAULTED. pylist_v is the one bridge that
+  turns any Python iterable into a list, so it belongs here.
+  bug-nilpy-dict-fromkeys-of-a-str-segfaults }
+function pydict_fromkeys(const src: Variant): TPyDict;
+function pydict_fromkeys(const src: Variant; const v: Variant): TPyDict; overload;
 { `set(iterable)` — Python's set constructor. A set is a TPyList here (see
   PyAnnTypeAt and TPyList.add), so this is "copy, skipping duplicates". The
   iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
@@ -7232,10 +7238,11 @@ begin
   raise TypeError.Create('set() argument must be iterable');
 end;
 
-function pydict_fromkeys(l: TPyList): TPyDict;
-var d: TPyDict; i: Integer;
+function pydict_fromkeys(const src: Variant): TPyDict;
+var d: TPyDict; l: TPyList; i: Integer;
 begin
   d := TPyDict.Create;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do
       d.store(l.at(i), pynone());
@@ -7251,10 +7258,11 @@ end;
   Note CPython shares ONE value object across all the keys — it does not copy
   it — so a mutable fill is aliased by every key. Storing the same variant is
   exactly that behaviour, not a shortcut. }
-function pydict_fromkeys(l: TPyList; const v: Variant): TPyDict; overload;
-var d: TPyDict; i: Integer;
+function pydict_fromkeys(const src: Variant; const v: Variant): TPyDict; overload;
+var d: TPyDict; l: TPyList; i: Integer;
 begin
   d := TPyDict.Create;
+  l := pylist_v(src);
   if l <> nil then
     for i := 0 to l.count - 1 do
       d.store(l.at(i), v);
