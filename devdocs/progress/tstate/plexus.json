@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T14:12:52Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "56c7fd568741b6e8e705fdf845d16ca945da8c66",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-15T14:17:56Z",
    "fixed": [
     "test-core#src:test/test_nilpy_star_methods_and_targets.npy"
@@ -529,6 +521,14 @@
    ],
    "new_red": [],
    "sha": "3b66d2be1f26ed436832bffe185d102a730cc26b",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-16T00:11:51Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9e99986456ab57567e6be98aee110662e76c0901",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1390,6 +1390,7 @@
   "test-core#src:test/test_declared_directive.pas": "native",
   "test-core#src:test/test_default_keyword.pas": "native",
   "test-core#src:test/test_default_params_methods.pas": "native",
+  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "native",
   "test-core#src:test/test_delphi_generics.pas": "native",
   "test-core#src:test/test_deref_managed_string_b302.pas": "native",
   "test-core#src:test/test_dialect_generics_prereqs_b329.pas": "native",
@@ -3889,6 +3890,7 @@
   "test-core#src:test/test_declared_directive.pas": "pass",
   "test-core#src:test/test_default_keyword.pas": "pass",
   "test-core#src:test/test_default_params_methods.pas": "pass",
+  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "pass",
   "test-core#src:test/test_delphi_generics.pas": "pass",
   "test-core#src:test/test_deref_managed_string_b302.pas": "pass",
   "test-core#src:test/test_dialect_generics_prereqs_b329.pas": "pass",
@@ -5525,11 +5527,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-15T23:59:43Z",
-  "sha": "3b66d2be1f26ed436832bffe185d102a730cc26b",
+  "date": "2026-08-16T00:11:51Z",
+  "sha": "9e99986456ab57567e6be98aee110662e76c0901",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 225.9
+  "wall": 215.0
  },
  "last_bench": {
   "conf_rows": 550,
