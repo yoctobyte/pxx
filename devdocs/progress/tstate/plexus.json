@@ -5641,16 +5641,15 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-15T08:22:10Z",
+  "date": "2026-08-16T03:52:12Z",
   "red": [
-   "test-core#1056",
-   "test-nilpy#24",
-   "test-nilpy#203",
-   "test-nilpy#649"
+   "test-core#270",
+   "test-nilpy#225",
+   "test-nilpy#437"
   ],
-  "sha": "f11e0ed9816edc1d57ef8ee6e6ab0e5b9885db6c",
+  "sha": "b4eb7c682fa462851855f61faea728ade853950a",
   "tier": "full",
-  "ver": "v339",
+  "ver": "v340",
   "verdict": "RED"
  },
  "renamed_from": [
