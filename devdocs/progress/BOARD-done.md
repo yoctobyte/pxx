@@ -1298,7 +1298,6 @@ should not read it to find out what to do. Grep it freely._
 | feature-c-cross-target-feature-coverage | C | 65 | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-crtl-bind-hand-declared-prototypes | C | 90 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
 | feature-c-crtl-socket-pal-bridge | B | 50 | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
-| feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |

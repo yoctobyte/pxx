@@ -1,6 +1,5 @@
 ---
 prio: 60
-owner: claude-acpn
 ---
 
 # C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live
