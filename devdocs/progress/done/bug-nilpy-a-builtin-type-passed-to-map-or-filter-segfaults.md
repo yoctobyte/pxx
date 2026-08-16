@@ -64,4 +64,4 @@ diffs clean against CPython's output.
 linked by the compiler, so no re-pin.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 3812f8c5f.
