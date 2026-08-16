@@ -5876,16 +5876,14 @@
    "src": "test/crtl_exp2.c examples/tk/hello.npy +5"
   },
   {
-   "bad": "35249274c6fe28898f321f798d76356f82ffe589",
+   "bad": "ba5a9d9878fab51c0e9711b65c49944669a0effb",
    "good": "1d40d64fa6bf008a8f878c3e0c06ca6ab7b4aa9b",
    "job": "test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy",
    "name": "test-nilpy#504",
    "opened": "2026-08-16T11:09:17Z",
    "range": [
     "79e21ae86b61064b6fc5dad66b0f14a7973a8cee",
-    "ba5a9d9878fab51c0e9711b65c49944669a0effb",
-    "2ea8863f09fb185f67347e9b7324aa5b66e69c60",
-    "35249274c6fe28898f321f798d76356f82ffe589"
+    "ba5a9d9878fab51c0e9711b65c49944669a0effb"
    ],
    "src": "test/test_nilpy_pow_matches_cpython.npy test/test_nilpy_pow_matches_cpython.expected"
   }
