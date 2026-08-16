@@ -3613,6 +3613,9 @@ test-core: $(COMPILER)
 	# string / @var / @proc field values in a typed record constant (global + local)
 	./$(COMPILER) --mimic-fpc test/test_record_const_addr_field.pas $(TESTTMP)/test_rcaddr26
 	test "$$($(TESTTMP)/test_rcaddr26)" = "$$(printf 'hello 42 7\ncalled\nlocal 42 9')"
+	# @TClass.Method — method code address via the type name (expression + record const)
+	./$(COMPILER) --mimic-fpc test/test_class_method_addr.pas $(TESTTMP)/test_cma26
+	test "$$($(TESTTMP)/test_cma26)" = "$$(printf 'inst 11\nvirt 22\ndvirt 33\nconst-inst 11\nconst-dvirt 33\nn 99')"
 	# builtin TGuid (System type) resolves without a uses
 	./$(COMPILER) --mimic-fpc test/test_builtin_tguid.pas $(TESTTMP)/test_tguid26
 	test "$$($(TESTTMP)/test_tguid26)" = "$$(printf '132096 192 70 16')"

@@ -10254,6 +10254,35 @@ begin
         CurASTNode := node;
         LastExprTk := tyPointer;
       end
+      { @TClass.Method — the method's raw CODE address, reached through the TYPE
+        name rather than an instance. No Data half and no VMT lookup: with no
+        object there is nothing to dispatch on, so FPC yields the static address
+        of that class's own implementation even for a virtual method, which is
+        exactly what makes the idiom useful — hand-built VMTs (rtl-generics'
+        Generics.Defaults fills its IComparer VMT records with
+        `@TRawInterface._AddRef` and friends).
+
+        Guarded on idx < 0 so a VARIABLE of the same name keeps the @obj.method
+        path above; a class TYPE is not in the sym table, which is precisely why
+        this used to fall through to ParseLValueAST and get diagnosed as
+        `cannot call non-static method on class type directly` — the @ never
+        reached the decision, so taking an address was read as calling. }
+      else if (idx < 0) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+              (FindUClass(name) >= 0) then
+      begin
+        ci := FindUClass(name);
+        Next;            { consume class name (CurTok = '.') }
+        Next;            { consume '.' (CurTok = method name) }
+        if CurTok.Kind <> tkIdent then Error('expected method name after @' + name + '.');
+        mmi := FindUMeth(ci, CurTok.SVal);
+        if mmi < 0 then Error('@' + name + '.' + CurTok.SVal + ': unknown method');
+        node := AllocNode(AN_PROCADDR);
+        ASTIVal[node] := UMthProc_[mmi];
+        ASTTk[node] := Ord(tyPointer);
+        Next;            { consume method name }
+        CurASTNode := node;
+        LastExprTk := tyPointer;
+      end
       { @proc: not a variable but a known routine → absolute code address }
       else if (idx < 0) and (FindProc(name) >= 0) then
       begin
@@ -18845,7 +18874,7 @@ end;
   Returns True and sets kind/val/aux with the tokens consumed; returns False with
   NOTHING consumed, so the caller falls through to the ordinal path unchanged. }
 function TryParseInitValForm(var kind: Integer; var val: Int64; var aux: Integer): Boolean;
-var pi, si: Integer;
+var pi, si, ci, mi: Integer;
 begin
   TryParseInitValForm := False;
   kind := 0; val := 0; aux := 0;
@@ -18864,6 +18893,25 @@ begin
     name here for the same reason MatchEligBase does: `@F` names the routine. }
   if (CurTok.Kind = tkAt) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
   begin
+    { `@TClass.Method` -- the same raw code address the expression-level @ arm
+      yields, so a hand-built VMT can be a CONSTANT rather than filled in at
+      startup. This is the shape rtl-generics' Generics.Defaults uses. }
+    if (TokPos + 2 < TokCount) and (Tokens[TokPos + 1].Kind = tkDot) and
+       (Tokens[TokPos + 2].Kind = tkIdent) then
+    begin
+      ci := FindUClass(GetTokenStr(TokPos));
+      if ci >= 0 then
+      begin
+        mi := FindUMeth(ci, GetTokenStr(TokPos + 2));
+        if mi >= 0 then
+        begin
+          kind := 2; val := UMthProc_[mi];
+          Next; Next; Next; Next;   { @ Class . Method }
+          TryParseInitValForm := True;
+          Exit;
+        end;
+      end;
+    end;
     pi := FindProc(GetTokenStr(TokPos));
     if pi >= 0 then
     begin
