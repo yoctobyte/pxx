@@ -17,7 +17,12 @@ begin
   Val('1a', v, code);    Writeln(v, ' ', code);   { 0 2    (error at pos 2) }
   Val('-42', v, code);   Writeln(v, ' ', code);   { -42 0 }
   Val('  88', v, code);  Writeln(v, ' ', code);   { 88 0   (leading spaces) }
-  Val('x', v, code);     Writeln(v, ' ', code);   { 0 1    (error at pos 1) }
+  { `x` is FPC's HEX PREFIX, so a bare one stops one PAST itself — measured on
+    FPC 3.2.2, which answers 0 2 here. This line asserted 0 1 while Val
+    accepted no prefixes at all; bug-p-val-rejects-the-radix-prefixes added
+    them and the FPC answer with them. The prefixes themselves are asserted in
+    test/test_val_radix_and_optional_code.pas. }
+  Val('x', v, code);     Writeln(v, ' ', code);   { 0 2    (bare hex prefix) }
   Val('1000000000000', i64, code); Writeln(i64, ' ', code);  { 1000000000000 0 }
   Val('3', d, code);     Writeln(code);           { 0      (float dest) }
 end.

@@ -1860,6 +1860,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-syncobjs | T | 70 | regression | regression: test-core#src:test/test_syncobjs.pas red at 9df868bf3680 (auto-filed by twatch) | — |
 | regression-test-core-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_a.pas red at 1df75aad5458 (auto-filed by twatch) | — |
 | regression-test-core-test-uses-order-pylib-exception-b | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_b.pas red at 60502ed0c353 (auto-filed by twatch) | — |
+| regression-test-core-test-val-builtin | T | 70 | regression | regression: test-core#src:test/test_val_builtin.pas red at 7462448a21bd (auto-filed by twatch) | — |
 | regression-test-core-test-widechar-to-utf8-b319 | T | 70 | regression | regression: test-core#src:test/test_widechar_to_utf8_b319.pas red at d94db8d6b0cc (auto-filed by twatch) | — |
 | regression-test-core-test-writeln-nonfinite-float | T | 70 | regression | regression: test-core#src:test/test_writeln_nonfinite_float.pas red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-tkinter-facade | T | 70 | regression | regression: test-core#src:examples/tk/tkinter_facade.npy red at f8b8a7eb5ed2 (auto-filed by twatch) | — |
