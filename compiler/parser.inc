@@ -11130,7 +11130,22 @@ begin
     begin
       Next;
       if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgCount); CurASTNode := node;
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgCount);
+      { ParamCount is an Integer, and the node has to SAY so. Left unset it
+        defaulted to tyUnknown, and anything that materialises the value into a
+        hidden temp copied that: `for i := 0 to ParamCount do` gave the loop
+        LIMIT temp no type. x86-64 and the other backends do not inspect it and
+        happened to work; i386 checks every symbol it touches, so it refused —
+        which is why `uses pylib` could not be built for i386 AT ALL (pylib's
+        pysys_argv is exactly this loop), taking base64, http and
+        examples/net/httpdemo.pas with it, and every NilPy program besides.
+        The tkArgStr arm below never had the bug because it allocates its
+        destination temp explicitly typed. Hoisting the limit into a variable,
+        or using a USER function as the limit, both worked — that pair is what
+        localised it here rather than to the for-loop lowering.
+        bug-a-paramcount-node-has-no-type-so-i386-refuses-any-pylib-user }
+      ASTTk[node] := Ord(tyInteger);
+      CurASTNode := node;
     end;
     tkArgStr:
     begin

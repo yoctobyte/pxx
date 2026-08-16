@@ -659,6 +659,7 @@ begin
 end;
 
 procedure IREmit386CheckScalarSym(symIdx: Integer; const what: AnsiString);
+var whoSym: AnsiString;
 { "Fat slot" symbol model: the parser still lays out 8-byte slots (BSS and
   frame, 64-bit TypeSize), and i386 code reads/writes only the low 4 bytes.
   Sound because BSS is zeroed and 4-byte stores/loads are paired — the high
@@ -677,7 +678,38 @@ begin
   if not (TypeIsOrdinal(Syms[symIdx].TypeKind) or
           (Syms[symIdx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass,
            tySingle, tyDouble, tyExtended, tyVariant, tyRecord])) then
-    Error('target i386: only ordinal/pointer/string variables supported yet');
+  begin
+    { NAME the variable. Without it the message says only "some variable of some
+      unsupported type", and the reported line belongs to the UNIT being parsed
+      rather than to the file you invoked, so there is nothing to grep for —
+      locating a single refusal in examples/net/httpdemo.pas meant editing this
+      message first. The type kinds this still rejects are the ones absent from
+      the set above: sets, the frozen string kinds, interfaces, and the
+      promotable-int family. }
+    if Syms[symIdx].Name = '' then
+      whoSym := 'a compiler-minted temporary'
+    else
+      whoSym := 'variable ''' + Syms[symIdx].Name + '''';
+    if Syms[symIdx].TypeKind = tySet then
+      Error('target i386: ' + whoSym + ' is a SET, which the i386 fat-slot ' +
+            'model does not carry yet')
+    else if Syms[symIdx].TypeKind = tyShortString then
+      Error('target i386: ' + whoSym + ' is a SHORTSTRING, not supported yet')
+    else if Syms[symIdx].TypeKind = tyFixedString then
+      Error('target i386: ' + whoSym + ' is a string[N], not supported yet')
+    else if Syms[symIdx].TypeKind = tyUnknown then
+      Error('target i386: ' + whoSym + ' reached codegen with an UNRESOLVED ' +
+            'type (tyUnknown) — the type inference, not the backend, is the gap')
+    else if Syms[symIdx].TypeKind = tyAuto then
+      Error('target i386: ' + whoSym + ' reached codegen still tyAuto — its ' +
+            'inferred type was never written back')
+    else if TypeIsPromoInt(Syms[symIdx].TypeKind) then
+      Error('target i386: ' + whoSym + ' is a PROMOTABLE INT, not supported yet')
+    else
+      Error('target i386: ' + whoSym + ' has a type the i386 backend does not ' +
+            'support yet (only ordinals, pointer-sized handles, floats, ' +
+            'variants and records are)');
+  end;
 end;
 
 { ---- 64-bit (Int64/UInt64) value model. Unlike the low-dword fat-slot model

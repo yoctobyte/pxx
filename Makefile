@@ -3824,6 +3824,13 @@ test-core: $(COMPILER)
 	grep -q "a string has no members here" $(TESTTMP)/test_smf.log
 	! ./$(COMPILER) test/test_scalar_member_int_fail.pas $(TESTTMP)/test_smi26 > $(TESTTMP)/test_smi.log 2>&1
 	grep -q "a value of this type has no members" $(TESTTMP)/test_smi.log
+	# ParamCount as a for-loop LIMIT: the node must carry tyInteger, or the hidden
+	# limit temp is untyped and i386 refuses the whole unit. The i386 build is the
+	# half that actually regressed (`uses pylib` could not target i386 at all);
+	# the run pins that typing it did not change the answer.
+	./$(COMPILER) test/test_paramcount_for_limit.pas $(TESTTMP)/test_pcfl26
+	$(TESTTMP)/test_pcfl26 | diff -u test/test_paramcount_for_limit.expected -
+	./$(COMPILER) --target=i386 test/test_paramcount_for_limit.pas $(TESTTMP)/test_pcfl386
 	! ./$(COMPILER) test/test_undefined_field_fail.pas $(TESTTMP)/test_udf26 > $(TESTTMP)/test_udf.log 2>&1
 	grep -q "no such member on this record/class" $(TESTTMP)/test_udf.log
 	# A `procedure` method has no result and cannot be read as a value. It used to
