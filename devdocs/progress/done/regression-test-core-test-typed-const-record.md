@@ -61,4 +61,4 @@ this through.
 Verified: the test passes at HEAD, its four record-constant neighbours re-checked
 by value, output identical to fpc 3.2.2 -O1 -Mobjfpc, self-host fixedpoint
 converged.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit 5e2e470d4.

@@ -72,4 +72,4 @@ as an accusation.
 the PINNED binary keeps the old `-0` real part until the next pin. This test
 builds with `$(COMPILER)`, which is why it is green now. No re-pin was taken for
 it; it should ride whatever pin comes next.
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit cabd1508c.
