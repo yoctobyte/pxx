@@ -1023,3 +1023,4 @@
 {"date": "2026-08-16T07:52:50Z", "fixed": [], "full": false, "new_red": [], "sha": "a9fd2018ac4a6512a3203c1ca6c7c7629d7f7718", "tier": "native", "verdict": "RED", "wall": 237.9}
 {"date": "2026-08-16T08:00:18Z", "fixed": ["test-core#src:test/test_local_typed_const.pas"], "full": false, "new_red": [], "sha": "467a4e5dab2d1bd7ad244bb9375c3a2924ba065c", "tier": "native", "verdict": "GREEN", "wall": 215.3}
 {"date": "2026-08-16T08:04:58Z", "fixed": [], "full": false, "new_red": [], "sha": "e244c8b5d2ff1e344d99e69d8a1fe0f34adb39bc", "tier": "native", "verdict": "GREEN", "wall": 209.6}
+{"date": "2026-08-16T08:23:48Z", "fixed": [], "full": true, "new_red": [], "pin": "v342", "sha": "467a4e5dab2d1bd7ad244bb9375c3a2924ba065c", "tier": "full", "verdict": "RED", "wall": 1117.3}
