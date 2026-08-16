@@ -4,6 +4,7 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "Both strides of a decayed multi-dim array were wrong: `m+1` on `int m[3][4]` stepped 4 bytes instead of a 16-byte ROW, and `m[1]+1` stepped ONE byte instead of an element, so `*(m[1]+1)` answered 0x05000000 for 5. Silent in both directions."
+status: done
 ---
 
 # A multi-dim array decays with the wrong stride, in both shapes
@@ -52,3 +53,6 @@ untouched — returns 42 under both gcc and pxx.
 ## Gate
 
 `make compiler/pascal26` + the test + `tools/gate.sh quick` — GREEN.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
