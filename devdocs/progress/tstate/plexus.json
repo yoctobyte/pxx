@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-15T22:43:49Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "131bfc19999779e25d60f761ecfc855e7cb5efb7",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-15T22:53:42Z",
    "fixed": [],
    "new_red": [],
@@ -435,6 +427,16 @@
    "sha": "3f6d5ca8573c869aee566fa7df5d8de584fbc802",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-16T07:11:28Z",
+   "fixed": [
+    "test-core#src:test/test_strict_overload_width.pas@1"
+   ],
+   "new_red": [],
+   "sha": "c1b4fa782263337a65be24127c76015cc7ea327a",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -4359,7 +4361,7 @@
   "test-core#src:test/test_strict_fpc_shift_widths.pas@1": "pass",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@2": "pass",
   "test-core#src:test/test_strict_overload.pas": "pass",
-  "test-core#src:test/test_strict_overload_width.pas@1": "fail",
+  "test-core#src:test/test_strict_overload_width.pas@1": "pass",
   "test-core#src:test/test_strict_overload_width.pas@2": "pass",
   "test-core#src:test/test_strict_visibility_b262.pas": "pass",
   "test-core#src:test/test_string_array_element_charwrite.pas": "pass",
@@ -5491,11 +5493,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-16T07:06:59Z",
-  "sha": "3f6d5ca8573c869aee566fa7df5d8de584fbc802",
+  "date": "2026-08-16T07:11:28Z",
+  "sha": "c1b4fa782263337a65be24127c76015cc7ea327a",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 230.8
+  "verdict": "GREEN",
+  "wall": 233.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5654,18 +5656,6 @@
     "137a182ad46aef8f5890771d223573832747c033"
    ],
    "src": "tools/crtl_reachability.py tools/gen_crtl_map.py +2"
-  },
-  {
-   "bad": "fea1f33d2f304d829a0422bc36f938edc411bc57",
-   "good": "8938aed7d55be2920d4ef1fa37df9c09a8fb1be0",
-   "job": "test-core#src:test/test_strict_overload_width.pas@1",
-   "name": "test-core#728",
-   "opened": "2026-08-16T07:00:24Z",
-   "range": [
-    "c6b0188dc3d29e4c92b2c92bc951c9a74282e8a1",
-    "fea1f33d2f304d829a0422bc36f938edc411bc57"
-   ],
-   "src": "test/test_strict_overload_width.pas"
   }
  ],
  "pin_shadow": {
