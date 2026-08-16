@@ -26151,8 +26151,10 @@ var
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
   fldNLens: array[0..15] of Integer;
+  vFirstFld, vMaxAlign, vNewBase, vDelta, vfi: Integer;
 begin
   curOff := startOff;
+  vMaxAlign := 1;
   Next;   { consume 'case' }
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkColon) then
   begin
@@ -26177,6 +26179,19 @@ begin
     variantBaseOff := curOff   { packed: branches overlay right after the tag }
   else
     variantBaseOff := AlignTo(curOff, TARGET_PTR_SIZE);
+  { Laid out from a base that satisfies EVERY alignment, then shifted back down
+    to the alignment the branches actually need — because that need is only
+    known once they are parsed, and laying out from an under-aligned base would
+    change the fields' offsets RELATIVE to each other. The shift is a multiple
+    of the branch alignment, so those relative offsets survive it.
+
+    Without the shift the variant part always began on an 8-byte boundary, and
+    `record case k: Integer of 0: (i: Integer) end` measured 12 bytes where FPC
+    says 8 — the tag's own 4 bytes of padding, charged twice. Values were right
+    (the branches do overlay), so this is a LAYOUT divergence: SizeOf, the
+    stride of an array of the record, and anything reading such a record from a
+    file or a C library. bug-p-a-tagged-variant-record-is-padded-to-eight }
+  vFirstFld := UFldCount;
   variantMax := 0;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkRParen) and
         (CurTok.Kind <> tkEOF) do
@@ -26261,12 +26276,25 @@ begin
         branchFieldOff := branchFieldOff + fSize;
       end;
       if fAlign > classAlign then classAlign := fAlign;
+      if fAlign > vMaxAlign then vMaxAlign := fAlign;
       Eat(tkSemicolon);
     end;
     Expect(tkRParen, ')');
     Eat(tkSemicolon);
     if (branchFieldOff - variantBaseOff) > variantMax then
       variantMax := branchFieldOff - variantBaseOff;
+  end;
+  { the shift promised above; a packed record already starts right after the tag }
+  if not isPackedRecord then
+  begin
+    vNewBase := AlignTo(curOff, vMaxAlign);
+    vDelta := variantBaseOff - vNewBase;
+    if vDelta > 0 then
+    begin
+      for vfi := vFirstFld to UFldCount - 1 do
+        UFldOff_[vfi] := UFldOff_[vfi] - vDelta;
+      variantBaseOff := vNewBase;
+    end;
   end;
   Result := variantBaseOff + variantMax;
 end;

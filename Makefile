@@ -4120,6 +4120,9 @@ test-core: $(COMPILER)
 	# called as a function pointer. Both agree with FPC -Mdelphi now.
 	./$(COMPILER) test/test_delphi_bare_alldefaulted_arg.pas $(TESTTMP)/test_delphi_bda26
 	test "$$($(TESTTMP)/test_delphi_bda26 | tail -1)" = "total ok 8 / 8"
+	# FPC-compat: a tagged variant part starts at the BRANCHES' alignment, not always 8
+	./$(COMPILER) test/test_variant_record_tag_padding.pas $(TESTTMP)/test_variant_rec_pad26
+	test "$$($(TESTTMP)/test_variant_rec_pad26 | tail -1)" = "total ok 14 / 14"
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas $(TESTTMP)/test_generic_class_methods26
 	test "$$($(TESTTMP)/test_generic_class_methods26 | tail -1)" = "total ok 5 / 5"
