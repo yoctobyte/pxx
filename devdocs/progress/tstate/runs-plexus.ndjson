@@ -1029,3 +1029,4 @@
 {"date": "2026-08-16T08:54:16Z", "fixed": [], "full": false, "new_red": [], "sha": "459e96f985d1588fac20836b151341cf7e967a61", "tier": "native", "verdict": "GREEN", "wall": 209.9}
 {"date": "2026-08-16T09:13:21Z", "fixed": ["lib-test#src:tools/crtl_reachability.py"], "full": true, "new_red": ["lib-test#src:test/lib_classes_tthread.pas", "lib-test#src:test/lib_tls.pas", "test-i386#src:examples/net/httpdemo.pas", "test-nilpy#src:test/test_nilpy_int_promotion_default.npy"], "sha": "459e96f985d1588fac20836b151341cf7e967a61", "tier": "full", "verdict": "RED", "wall": 1132.9}
 {"date": "2026-08-16T09:18:11Z", "fixed": [], "full": false, "new_red": [], "sha": "459e96f985d1588fac20836b151341cf7e967a61", "tier": "slow", "verdict": "GREEN", "wall": 277.3}
+{"date": "2026-08-16T09:23:28Z", "fixed": [], "full": false, "new_red": [], "sha": "459e96f985d1588fac20836b151341cf7e967a61", "tier": "opt", "verdict": "GREEN", "wall": 304.6}
