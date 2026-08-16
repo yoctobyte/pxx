@@ -135,7 +135,7 @@ class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
                  nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0,
-                 nhier=0, nmptrs=0, nprops=0, nexdtor=0, nclsm=0):
+                 nhier=0, nmptrs=0, nprops=0, nexdtor=0, nclsm=0, nchecks=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -149,6 +149,7 @@ class Gen:
         self.nshorts = nshorts
         self.nexcepts = nexcepts
         self.nmodeprocs = nmodeprocs
+        self.nchecks = nchecks     # {$Q+}/{$R+} checked regions per program
         self.wide_p = wide_p       # P(a statement is one of the widened kinds)
         self.recs = []
         self.arrs = []
@@ -645,6 +646,8 @@ class Gen:
             opts += ["forinarr"]
         if self.nexcepts:
             opts += ["raise", "tryfinally"]
+        if self.nchecks:
+            opts += ["checked"]
         if self.modeprocs:
             opts += ["modecall"]
         if self.shorts:
@@ -748,6 +751,85 @@ class Gen:
                    "%s  on E: Exception do Mix(599);" % pad,
                    "%send;" % pad]
             return self.tagged("raise", out)
+
+        if pick == "checked":
+            # {$Q+}/{$R+}: fuzz the CHECK MACHINERY itself, differentially.
+            # feature-pasmith-qplus-rplus-rungs. Both features were
+            # hand-oracle-verified shape by shape, and twice the assumed
+            # semantics turned out to be wrong until probed -- exactly the
+            # surface a generator should be pinning against FPC.
+            #
+            # The shapes below are the ones MEASURED to agree with FPC 3.2.2
+            # before this rung was written, because a rung built on a
+            # deliberate divergence is a noise generator:
+            #
+            #   a + b / a - b / a * b overflow       -> ERangeError, both
+            #   nested (a * b) + c                   -> ERangeError, both
+            #   implicit narrowing longint->smallint -> ERangeError, both
+            #   array read out of bounds             -> ERangeError, both
+            #   EXPLICIT cast smallint(a), byte(a)   -> silent, both
+            #
+            # Note it is ERangeError, not EIntOverflow, that FPC raises for
+            # arithmetic overflow here -- the handler counts both rather than
+            # assuming, since which one arrives is part of what is being pinned.
+            #
+            # NO SHIFTS in a checked region, deliberately. pxx computes shifts
+            # at native width by design (2026-08-11), so a `shl` that overflows
+            # 32 bits raises under FPC and not under pxx -- a guaranteed false
+            # divergence. That is the same deviation that blinded the whole
+            # fuzzer in bug-t-fpc-probe-reports-the-deliberate-shl-deviation-as-new,
+            # which is why this rung builds its own operand expression instead
+            # of calling self.expr().
+            ints = [(n, t) for (n, t) in scope
+                    if getattr(t, "kind", "int") == "int"]
+            tgts = [(n, t) for (n, t) in assignable
+                    if getattr(t, "kind", "int") == "int"]
+            if ints and tgts:
+                tn, tt = rnd.choice(tgts)
+                same = [n for (n, t) in ints if t.name == tt.name]
+                shapes = ["arith"]
+                if same:
+                    shapes.append("arith")          # weight the common case
+                if self.arrs:
+                    shapes.append("arrread")
+                pickc = rnd.choice(shapes)
+                if pickc == "arrread" and self.arrs:
+                    arr = rnd.choice(self.arrs)
+                    idx, _ = rnd.choice(ints)
+                    # Deliberately UNCLAMPED: an out-of-range index is the whole
+                    # point under {$R+}. Safe to generate because pxx was
+                    # measured to raise here rather than read out of bounds --
+                    # if that ever regresses, the finding is a real one.
+                    body = "%s  Mix(int64(%s[longint(%s) and 7]));" % (
+                        pad, arr["name"], idx)
+                else:
+                    ops = ["+", "-", "*"]
+                    a1 = rnd.choice(same) if same else rnd.choice(ints)[0]
+                    a2 = rnd.choice(same) if same else rnd.choice(ints)[0]
+                    rhs = "%s %s %s" % (a1, rnd.choice(ops), a2)
+                    if rnd.random() < 0.4:
+                        a3 = rnd.choice(same) if same else rnd.choice(ints)[0]
+                        rhs = "(%s) %s %s" % (rhs, rnd.choice(ops), a3)
+                    body = "%s  %s := %s;\n%s  Mix(int64(%s));" % (
+                        pad, tn, rhs, pad, tn)
+                out = ["%s{$Q+}{$R+}" % pad,
+                       "%stry" % pad,
+                       body,
+                       "%sexcept" % pad,
+                       # Count the CLASS, not just the fact: which exception
+                       # arrives is part of the semantics being pinned, so a
+                       # compiler raising the other one is a divergence rather
+                       # than a silent match.
+                       "%s  on E: EIntOverflow do Mix(7001);" % pad,
+                       "%s  on E: ERangeError do Mix(7002);" % pad,
+                       # Keeps the generator's standing invariant: a generated
+                       # program NEVER exits on an uncaught exception.
+                       "%s  on E: Exception do Mix(7099);" % pad,
+                       "%send;" % pad,
+                       # Restore, not push/pop: pasmith never enables these
+                       # globally, so {$Q-}{$R-} is the correct outer state.
+                       "%s{$Q-}{$R-}" % pad]
+                return self.tagged("checked", out)
 
         if pick == "tryfinally":
             # The body never raises (nothing here does but a `raise` statement, and
@@ -1617,12 +1699,31 @@ class Gen:
         # The generation parameters travel WITH the source: a divergence is
         # reproduced from the seed, so the seed alone must be enough to rebuild
         # the identical program (this is what makes a shrinker unnecessary).
-        L.append("  gen-args: --vars %d --funcs %d --stmts %d --depth %d "
-                 "--classes %d --objs %d --strs %d --recs %d --arrs %d --enums %d "
-                 "--shorts %d --excepts %d --modeprocs %d }"
-                 % (self.nvars, self.nfuncs, self.nstmts, self.maxdepth,
-                    self.nclasses, self.nobjs, self.nstrs, self.nrecs, self.narrs,
-                    self.nenums, self.nshorts, self.nexcepts, self.nmodeprocs))
+        # EVERY knob, from one list, so the header cannot drift from the
+        # constructor again. It had: --intfs, --hier, --mptrs, --props,
+        # --exdtor, --clsm and --wide-p were all missing, and four of those are
+        # set by --wide. A rebuild from the recorded args therefore produced a
+        # DIFFERENT program (measured: 1500 lines against the original's 1770),
+        # so localize()'s trace diff was describing a program that was never the
+        # one that diverged -- silently, on every wide seed. Exactly the failure
+        # the UnitSet header's own comment warns about one screen down.
+        #
+        # Hand-maintained format strings are what let that happen: adding a knob
+        # meant remembering a second place. Adding one to this list is the same
+        # edit as adding it to the constructor.
+        L.append("  gen-args: " + " ".join(
+            "%s %s" % (flag, val) for flag, val in (
+                ("--vars", self.nvars), ("--funcs", self.nfuncs),
+                ("--stmts", self.nstmts), ("--depth", self.maxdepth),
+                ("--classes", self.nclasses), ("--objs", self.nobjs),
+                ("--strs", self.nstrs), ("--recs", self.nrecs),
+                ("--arrs", self.narrs), ("--enums", self.nenums),
+                ("--shorts", self.nshorts), ("--excepts", self.nexcepts),
+                ("--modeprocs", self.nmodeprocs), ("--intfs", self.nintfs),
+                ("--hier", self.nhier), ("--mptrs", self.nmptrs),
+                ("--props", self.nprops), ("--exdtor", self.nexdtor),
+                ("--clsm", self.nclsm), ("--checks", self.nchecks),
+                ("--wide-p", self.wide_p))) + " }")
         L.append("{$mode objfpc}")
         if self.nexcepts or self.nexdtor:
             # Exception lives in sysutils in BOTH compilers -- verified: each
@@ -2293,6 +2394,14 @@ def main():
                          "b339 shape. Every raise is caught by construction.")
     ap.add_argument("--modeprocs", type=int, default=None,
                     help="procedures with var/const/out params, called as statements")
+    ap.add_argument("--checks", type=int, default=None,
+                    help="enable {$Q+}/{$R+} checked regions: arithmetic that may "
+                         "overflow and array reads that may go out of range, each "
+                         "wrapped in try/except counting EIntOverflow/ERangeError "
+                         "into the checksum. Differentially pins the check "
+                         "machinery against FPC. Shifts are excluded on purpose -- "
+                         "pxx's native-width shift is a deliberate deviation and "
+                         "would raise under FPC only.")
     ap.add_argument("--units", type=int, default=0,
                     help="emit a PROGRAM PLUS N UNITS instead of one file "
                          "(needs --outdir). Reaches the three order-dependent "
@@ -2328,20 +2437,26 @@ def main():
         # pointer captures static address), so folding either into --wide would make
         # every slice stop on that one divergence (--stop-on-new) and mask other
         # rungs. Opt in explicitly (--intfs N / --mptrs N) until those bugs are fixed.
+        # Keep in step with pasmith_run.WIDE_DEFAULTS -- two --wide
+        # implementations, one meaning. They had already drifted once (this list
+        # gained rungs the header did not, see
+        # bug-t-pasmith-gen-args-header-omits-half-the-rungs), so when adding a
+        # rung, change BOTH.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
                      ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
-                     ("hier", 4), ("props", 3), ("exdtor", 3), ("clsm", 3)):
+                     ("hier", 4), ("props", 3), ("exdtor", 3), ("clsm", 3),
+                     ("checks", 1)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
               "strs", "classes", "intfs", "hier", "mptrs", "props", "exdtor",
-              "clsm"):
+              "clsm", "checks"):
         if getattr(a, f) is None:
             setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
               a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier, a.mptrs,
-              a.props, a.exdtor, a.clsm).gen()
+              a.props, a.exdtor, a.clsm, a.checks).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)

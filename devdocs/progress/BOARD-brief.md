@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:11 blocked:4 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:76 done:1943 rejected:37`
+`unfinished:11 blocked:4 backlog:201 experimental:20 rainy-day:40 done-followup:3 decided:76 done:1945 rejected:37`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,6 +34,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 186, ranked
 
+- `[p 70] [T]` regression-lib-test-crtl-reachability
 - `[p 65] [B]` regression-b-power-lost-a-ulp-when-it-got-26x-faster
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -63,6 +64,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-release-checksums-repro
 - `[p 48] [P]` feature-pascal-class-management-operators
 - `[p 45] [W]` feature-web-track-w-bootstrap (unblocks 2)
-- `[p 45] [A]` feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 
 _156 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
