@@ -4,6 +4,7 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`Val('$ff', v, code)` answered 0 with code=1 — none of FPC's radix prefixes ($ff, xFF, 0xFF, &17, %1011) were accepted, and `$` is how Pascal itself spells hex. `Val(s, v)`, the two-argument form, was refused outright."
+status: done
 ---
 
 # Val rejects the radix prefixes, and its `code` argument is not optional
@@ -53,3 +54,6 @@ optional-code shapes (int, float, QWord, and a failed one) — prints
 `make compiler/pascal26` + the test under both compilers + `tools/gate.sh
 quick` — GREEN. A `compiler/builtin` change, so `make stabilize-fast && make
 pin` follows.
+
+## Log
+- 2026-08-16 — resolved, commit PENDING-COMMIT.
