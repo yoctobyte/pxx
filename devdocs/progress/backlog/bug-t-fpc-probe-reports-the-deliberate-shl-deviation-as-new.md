@@ -38,3 +38,36 @@ means what it says again.
 ## Gate
 
 `tools/fpc_diff_probe.sh` reports `new divergences: 0` on a clean tree.
+
+## The same blind spot costs far more in pasmith (measured 2026-08-16)
+
+`tools/pasmith_run.py --wide --minutes 25 --start 90000` reported **88
+divergences**, every one `pxx-vs-fpc_*`, with pxx self-consistent across
+-O0/-O2/-O3 and FPC self-consistent across its two. That reads as a compiler in
+flames.
+
+It is one thing: the shift deviation, in the checksum of nearly every generated
+program (`--wide` seed 90010 alone has 24 `shl`/`shr` sites). The control —
+rewrite `shl`->`+` and `shr`->`-` in the generated source and run both again:
+
+```
+seed 90010 (shifts neutered)   pxx = 17238490836835624514
+                               fpc = 17238490836835624514   <- exact
+```
+
+So the fuzzer's FPC oracle is unusable as it stands: a real miscompile would
+arrive as divergence number 89. Options, cheapest first:
+
+1. **Generate shift counts that cannot observe the difference** — the deviation
+   is only visible when the count reaches or passes the operand's declared
+   width, so masking the generated count to `width-1` keeps the whole operator
+   in the grammar and makes FPC an oracle for it again.
+2. Emit the shift through a helper that truncates to the declared width when
+   the program is built for the FPC oracle (a `{$ifdef FPC}` shim in the
+   generated preamble).
+3. Give the ledger a known-deviation signature, as the probe's `known/filed`
+   list already does — the weakest, because it can only recognise the shape it
+   has seen.
+
+(1) is the recommendation. Whichever lands, the FPC-probe row above should use
+the same mechanism, since it is the same fact.
