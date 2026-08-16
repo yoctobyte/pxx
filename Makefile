@@ -3783,9 +3783,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) --strict-fpc test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_strictshift26
 	test "$$($(TESTTMP)/test_strictshift26 | tail -1)" = "STRICT FPC SHIFT WIDTHS OK"
 	test "$$($(TESTTMP)/test_strictshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|2048|2048|"
+	# a NEGATED variable is 64-bit in FPC whatever the operand type, so the
+	# narrow-shift asymmetry must NOT apply to it -- strict used to be the one
+	# mode that got these wrong.
+	test "$$($(TESTTMP)/test_strictshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
 	# ...and WITHOUT the flag the same file keeps the native-width answers
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
+	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
 	# ...and it activates its member flags (StrictCase rejects a duplicate label
 	# that the lax default accepts). feature-strict-fpc-umbrella.
 	./$(COMPILER) test/strict_fpc_case_fail.pas $(TESTTMP)/strict_fpc_case_lax26 > $(TESTTMP)/strict_fpc_case_lax.log 2>&1

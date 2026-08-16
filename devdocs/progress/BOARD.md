@@ -61,7 +61,7 @@ _none_
 | bug-nilpy-float-power-is-a-ulp-off-the-rtl-already-has-the-fix | B | 20 | bug | NilPy's `**` with a fractional exponent still uses exp(y*ln(x)), so 2**0.5 != math.sqrt(2); lib/rtl/math.pas's Power was fixed with a double-double kernel for exactly these cases and names 2^0.5 in its own comment | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
-| bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right | P | 25 | bug | `--strict-fpc` answers 2147483644 for `-a shr 1` where FPC — and pxx's own DEFAULT dialect — both say 9223372036854775804: the reproduce-FPC flag is the only mode that gets this row wrong | — |
+| bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 30 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
 | bug-t-a-timeout-bisects-to-an-innocent-commit | T | 45 | bug | `lib-test#src:test/crtl_exp2.c` has been STILL-RED since 096da361dd93 with a `(timeout)` verdict, and the bisect named that commit — which touches nothing the job builds (the job uses the PINNED compiler; the commit's Makefile lines went to test-core). Every step of the job runs clean standalone in seconds. A timeout is a DURATION signal, so bisecting it converges on whichever commit happened to straddle the budget, and the report presents that with the same confidence as a real first-failure. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | bug-t-twatch-status-false-down | T | 45 | bug | bug(T): `twatch --status` / `trackt health` report DOWN for a watcher that is UP | — |
@@ -415,9 +415,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1968)
+## done (1969)
 
-1968 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1969 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -592,6 +592,7 @@ _none_
 - [p 30] [B] bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
+- [p 30] [P] bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits
 - [p 30] [T] bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
@@ -617,7 +618,6 @@ _none_
 - [p 25] [C] bug-c-crtl-utoa-digit-loop-is-unbounded
 - [p 25] [C] bug-c-header-with-a-body-compiles-twice-across-the-macro-reset
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
-- [p 25] [P] bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off

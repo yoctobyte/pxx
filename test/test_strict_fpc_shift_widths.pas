@@ -28,9 +28,9 @@
 
   bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
 program test_strict_fpc_shift_widths;
-var a, b: Integer; q: Int64;
+var a, b: Integer; q: Int64; si: ShortInt; sm: SmallInt;
 begin
-  a := 8; b := 40; q := 8;
+  a := 8; b := 40; q := 8; si := 8; sm := 8;
 
   { the constant FOLDER — full width, both operators }
   WriteLn(1 shl 40);          { 1099511627776 }
@@ -46,5 +46,16 @@ begin
   { Int64 operands are 64-bit either way and have never diverged }
   WriteLn(q shl 40);          { 8796093022208 }
   WriteLn(-q shr 1);          { 9223372036854775804 }
+
+  { A NEGATED VARIABLE. FPC's unary minus yields a 64-bit value — measured,
+    SizeOf(-x) is 8 for every integer operand type — so FPC's operand is already
+    wide and its narrow-shift asymmetry never applies to it. --strict-fpc used to
+    reproduce the asymmetry here anyway, which made it the ONE mode that
+    disagreed with FPC on these rows while the default agreed. Both modes now
+    answer 9223372036854775804, which is FPC's.
+    bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right }
+  WriteLn(-a shr 1);          { 9223372036854775804 }
+  WriteLn(-si shr 1);         { 9223372036854775804 }
+  WriteLn(-sm shr 1);         { 9223372036854775804 }
   WriteLn('STRICT FPC SHIFT WIDTHS OK');
 end.

@@ -3,13 +3,14 @@ summary: "`--strict-fpc` answers 2147483644 for `-a shr 1` where FPC — and pxx
 type: bug
 prio: 25
 track: P
+owner: claude-A-P
 ---
 
 # `--strict-fpc` narrows a negated-Integer shift that the default gets right
 
 - **Type:** bug (dialect flag / unary-minus typing) — Track P, shared
   `parser.inc`.
-- **Status:** backlog. Re-filed 2026-08-16 out of
+- **Status:** done
   [[bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths]], which is otherwise
   complete; this row was parked inside it as "not a shift divergence", which is
   correct and is exactly why it needed its own ticket.
@@ -77,3 +78,60 @@ the existing `test/test_strict_fpc_shift_widths.pas` staying row-for-row green;
 `SizeOf(-a)` — SizeOf of an EXPRESSION — is `error: SizeOf: expected type name`.
 FPC accepts it and answers 8. Noted here because it is how the type above was
 measured; it is not part of this bug.
+
+## Resolution — option (2), and the premise was broader than the ticket knew
+
+Took the ticket's recommended **option (2)**: make `--strict-fpc`'s own premise
+match FPC's, leaving the default dialect alone. Option (3) (adopt FPC's
+unary-minus widening in the default too) stays the owner's call and is now
+carried by a ticket of its own — see below.
+
+The reason this needed no dialect decision: `--strict-fpc` promises to reproduce
+FPC. It was reasoning from a premise — *the operand is a narrow Integer* — that
+is not FPC's, and so produced a non-FPC answer. Correcting the premise inside
+the flag is the flag doing what it says, and it touches nothing outside it.
+
+### Measured first, and FPC's rule is simpler than the ticket states
+
+The ticket says "FPC's unary minus on an **Integer** yields Int64". Measured
+across every integer operand type, it is unconditional:
+
+| operand type | `SizeOf(-x)` under FPC | `-x shr 1` under FPC |
+| --- | --- | --- |
+| Byte, ShortInt, Word, SmallInt, Integer, Cardinal, Int64 | **8, all seven** | **9223372036854775804, all seven** |
+
+So the fix is not "widen a negated Integer" but "a negated operand of ANY shape
+is already 64 bits in FPC, so the narrow-shift asymmetry never applies to it".
+The strict arm's existing carve-out already said this for a negated LITERAL
+(`-8 shr 1`); the condition simply required the thing under the `AN_NEG` to be a
+literal. Dropping that requirement is the whole change.
+
+### Result
+
+`--strict-fpc` now answers 9223372036854775804 for `-a shr 1`, matching FPC and
+the default. Across all seven operand types the two modes are now identical, so
+the flag is no longer worse than leaving it off anywhere on this shape.
+
+`test/test_strict_fpc_shift_widths.pas` is row-for-row unchanged in both modes —
+verified against both existing Makefile assertions before extending it. Extended
+with the negated-VARIABLE rows (Integer, ShortInt, SmallInt), asserted in both
+modes and matching `fpc -O1`.
+
+## The measurement also found a defect in the DEFAULT dialect
+
+The ticket's premise that "pxx default matches FPC" holds for the Integer row it
+measured and fails for three others: **Byte, Word and Cardinal answer 2147483644
+in BOTH modes**. `2147483644` is `$7FFFFFFC` — pxx's unary minus evaluates an
+unsigned operand as unsigned 32-bit (`$FFFFFFF8`) and the sign is gone before any
+widening runs, so the shift path cannot fix it.
+
+Not folded in here: it is unary-minus typing in the DEFAULT dialect, i.e.
+exactly the option-(3) blast radius this ticket set aside for the owner. Filed as
+[[bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits]] with the full
+seven-row table.
+
+Self-host fixedpoint converged; `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-16 — resolved (option 2).
+- 2026-08-16 — resolved, commit PENDING-COMMIT.

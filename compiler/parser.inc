@@ -17476,10 +17476,18 @@ begin
         declared width. Strict mode is documented as copying FPC's bugs, and
         this is one of them.
         bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
+      { …and a NEGATED operand of any shape, not just a negated literal, because
+        FPC's unary minus yields a 64-bit value: measured, `SizeOf(-x)` is 8 for
+        EVERY integer operand type (Byte, ShortInt, Word, SmallInt, Integer,
+        Cardinal, Int64) and all seven answer 9223372036854775804 for
+        `-x shr 1`. So FPC's operand is already wide and its narrow-shift
+        asymmetry never applies to it — reproducing that asymmetry over `-a`
+        made --strict-fpc the ONE mode that disagreed with FPC on this row,
+        while pxx's own default agreed.
+        bug-p-strict-fpc-narrows-a-negated-integer-shift-the-default-gets-right }
       if (not CProgramMode) and
          ((not StrictShiftWidth) or (ASTKind[left] = AN_INT_LIT) or
-          ((ASTKind[left] = AN_NEG) and (ASTLeft[left] >= 0) and
-           (ASTKind[ASTLeft[left]] = AN_INT_LIT))) and
+          (ASTKind[left] = AN_NEG)) and
          TypeIsMachineInt(IntToTypeKind(ASTTk[left])) and
          (TypeSize(IntToTypeKind(ASTTk[left])) < TypeSize(tyNativeInt)) then
       begin
