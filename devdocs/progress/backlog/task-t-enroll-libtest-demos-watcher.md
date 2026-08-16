@@ -211,3 +211,39 @@ rather than continuously (`stabilize-fast` blocks other tracks while it runs),
 so every frontend fix that lib/ depends on has a period where HEAD is green and
 the pin is not. Track T's job is to label that period correctly, not to shorten
 it.
+
+## 2026-08-16 — `lib-test` is GREEN, 167/167, and the onion is fully peeled
+
+```
+testmgr: pin=344 sha256=47836e63248f1404 (lib-test and demos build with THIS, not HEAD)
+  167/167 pass, 2 skip (corpus absent), 1 flaky (passed on retry)
+testmgr: GREEN
+```
+
+First fully green `lib-test` since enrolment. The chain it took, in order, each
+layer invisible until the one above it cleared:
+
+1. **Enrolled** 2026-08-14 — before this, Track B's whole gate ran only when a B
+   agent typed it.
+2. **`crtl-map` stale** — `compiler/crtl_names.inc` had not been regenerated
+   since crtl gained ten functions ([[regression-lib-test-crtl-reachability]],
+   Track C, `9860b8bf7`).
+3. **`contnrs` did not compile** — a class method named `Delete` did not shadow
+   the builtin ([[bug-p-a-class-method-does-not-shadow-a-builtin-of-the-same-name]],
+   Track P, `12c078883`; the same guard shape turned out to affect **eight**
+   soft intrinsics, not one).
+4. **A regression in the fix for something else** —
+   [[regression-test-core-test-local-typed-const]], bisected to `3ed3e2653`,
+   fixed in `467a4e5da`.
+5. **Re-pin** — the fixes were in HEAD while `lib-test` builds against
+   `$(PXX_STABLE)`, so the red survived the fix until the pin moved (the
+   pin-lag section above).
+
+Five layers, four of them real defects, none of which anything else was going to
+surface. That is the enrolment paying for itself, and it is the concrete answer
+to the question this ticket opened with — *the esptimer lib-test step has been
+red for an unknown number of commits and nothing recorded the first bad SHA.*
+
+**The `demos` half remains open** and unchanged: it prints FAIL without exiting
+nonzero, so it needs a gating mode or output parsing, which is a Makefile change
+and not Track T's ground. This ticket stays in backlog until that lands.
