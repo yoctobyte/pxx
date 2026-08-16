@@ -1152,6 +1152,19 @@ begin
                      tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T]);
 end;
 
+{ Index-addressed IsMethodNameTok, for LOOKAHEAD past the current token — same
+  token set, deliberately sharing the predicate above so the two cannot drift.
+  A caller that accepts this must read the name with GetTokenStr(idx): the
+  type-keyword tokens carry an EMPTY SVal. }
+function IsMethodNameTokAt(idx: Integer): Boolean;
+begin
+  IsMethodNameTokAt := (idx >= 0) and (idx < TokCount) and
+    (Tokens[idx].Kind in [tkIdent, tkRead, tkwrite, tkReadln, tkwriteln,
+                          tkArgCount, tkArgStr,
+                          tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T,
+                          tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T]);
+end;
+
 function IsDeclNameTok: Boolean;
 begin
   if IsMemberNameTok then
@@ -9898,6 +9911,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
+    mthName: AnsiString;   { @TClass.Method — name read via GetTokenStr (may be a type keyword) }
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
@@ -10273,9 +10287,13 @@ begin
         ci := FindUClass(name);
         Next;            { consume class name (CurTok = '.') }
         Next;            { consume '.' (CurTok = method name) }
-        if CurTok.Kind <> tkIdent then Error('expected method name after @' + name + '.');
-        mmi := FindUMeth(ci, CurTok.SVal);
-        if mmi < 0 then Error('@' + name + '.' + CurTok.SVal + ': unknown method');
+        { A method may be NAMED after a type keyword (generics.defaults'
+          `TCompare.Single`), and those tokens carry an empty SVal — read the
+          name via GetTokenStr, never SVal. }
+        if not IsMethodNameTok then Error('expected method name after @' + name + '.');
+        mthName := GetTokenStr(TokPos - 1);
+        mmi := FindUMeth(ci, mthName);
+        if mmi < 0 then Error('@' + name + '.' + mthName + ': unknown method');
         node := AllocNode(AN_PROCADDR);
         ASTIVal[node] := UMthProc_[mmi];
         ASTTk[node] := Ord(tyPointer);
@@ -18873,13 +18891,20 @@ end;
 
   Returns True and sets kind/val/aux with the tokens consumed; returns False with
   NOTHING consumed, so the caller falls through to the ordinal path unchanged. }
-function TryParseInitValForm(var kind: Integer; var val: Int64; var aux: Integer): Boolean;
+function TryParseInitValForm(tk: TTypeKind; var kind: Integer; var val: Int64; var aux: Integer): Boolean;
 var pi, si, ci, mi: Integer;
 begin
   TryParseInitValForm := False;
   kind := 0; val := 0; aux := 0;
 
-  if CurTok.Kind = tkString then
+  { The string arm keys on the DESTINATION type, not on the token: a single-char
+    literal in a tyChar field is an ORDINAL, and ConstEvalFactor special-cases it
+    as one. Taking it as a string here compiled fine and stored the wrong bytes —
+    `C: Char = 'Z'` printed garbage (test_typed_const_record). Same hazard the
+    array-of-record path documents a few hundred lines below; it is the token
+    being ambiguous, so only the target can decide. }
+  if (CurTok.Kind = tkString) and
+     (TypeIsFrozenString(tk) or (tk in [tyString, tyAnsiString, tyShortString])) then
   begin
     kind := 1;
     val  := Tokens[TokPos - 1].SOffset;
@@ -18897,7 +18922,7 @@ begin
       yields, so a hand-built VMT can be a CONSTANT rather than filled in at
       startup. This is the shape rtl-generics' Generics.Defaults uses. }
     if (TokPos + 2 < TokCount) and (Tokens[TokPos + 1].Kind = tkDot) and
-       (Tokens[TokPos + 2].Kind = tkIdent) then
+       IsMethodNameTokAt(TokPos + 2) then
     begin
       ci := FindUClass(GetTokenStr(TokPos));
       if ci >= 0 then
@@ -26564,7 +26589,7 @@ begin
               LocalInitElem[LocalInitCount] := -1;
               LocalInitFOff[LocalInitCount] := fNameOff;
               LocalInitFLen[LocalInitCount] := fNameLen;
-              if TryParseInitValForm(fvKind, fvVal, fvAux) then
+              if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
               begin
                 { A LOCAL record const has no ValAux slot, and FLen is already
                   spoken for by the field NAME span the FIELD target reads. A
@@ -26592,7 +26617,7 @@ begin
               PendingInitElem[PendingInitCount] := -1;
               PendingInitFOff[PendingInitCount] := fNameOff;
               PendingInitFLen[PendingInitCount] := fNameLen;
-              if TryParseInitValForm(fvKind, fvVal, fvAux) then
+              if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
               begin
                 PendingInitKind[PendingInitCount]   := fvKind;
                 PendingInitVal[PendingInitCount]    := fvVal;

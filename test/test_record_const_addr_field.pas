@@ -25,6 +25,13 @@ type
     A: Pointer;
     F: TP;
     N: Integer;
+    { Both halves of the single-char ambiguity, deliberately side by side: the
+      SAME literal 'Z' is a string in one field and an ORDINAL in the other, so
+      the value form can only be chosen by the destination type. Keying on the
+      token instead compiled cleanly and stored the wrong bytes in C
+      (test_typed_const_record went red on exactly this). }
+    C: Char;
+    S1: AnsiString;
   end;
 
 var
@@ -36,7 +43,7 @@ begin
 end;
 
 const
-  V: TRec = (S: 'hello'; A: @g; F: @Foo; N: 7);
+  V: TRec = (S: 'hello'; A: @g; F: @Foo; N: 7; C: 'Z'; S1: 'Z');
 
 procedure LocalConst;
 type
@@ -49,6 +56,7 @@ end;
 
 begin
   writeln(V.S, ' ', PInteger(V.A)^, ' ', V.N);
+  writeln('char ', V.C, ' str ', V.S1, ' len ', Length(V.S1));
   V.F();
   LocalConst;
 end.
