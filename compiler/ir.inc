@@ -1865,6 +1865,21 @@ begin
     begin
       elemTk := Syms[ASTIVal[node]].ElemType;
       recId := Syms[ASTIVal[node]].ElemRecName;
+      { A MULTI-dimensional array decays to a pointer to its ROW, not to its
+        scalar element: `int m[3][4]`, `m + 1` steps 16 bytes, and gcc says so.
+        pxx stepped 4 — the element size — so `(char*)(m+1) - (char*)m` was 4
+        and any walk over the rows read the wrong data, silently.
+        bug-c-a-multidim-array-decays-with-the-element-stride }
+      if CProgramMode and (SymArrNDims[ASTIVal[node]] > 1) then
+      begin
+        if elemTk = tyRecord then Result := RecSize(recId)
+        else if elemTk = tyUnknown then Result := 1
+        else Result := TypeSize(elemTk);
+        for aliasIdx := 1 to SymArrNDims[ASTIVal[node]] - 1 do
+          if SymArrDimSpan[ASTIVal[node] * MAX_ARR_DIMS + aliasIdx] > 0 then
+            Result := Result * SymArrDimSpan[ASTIVal[node] * MAX_ARR_DIMS + aliasIdx];
+        Exit;
+      end;
     end
     else
     begin
@@ -1899,6 +1914,16 @@ begin
   end
   else if ASTKind[node] = AN_BINOP then
   begin
+    { A DECAYED ARRAY ROW (`m[1]` on `int m[3][4]`) is built as a raw byte add
+      over a base retagged tyInt64, so neither operand can answer what the
+      result steps by; the partial-index builder stamps it here.
+      bug-c-a-decayed-array-row-steps-one-byte }
+    if CProgramMode and (ASTSLen[node] > 0) and
+       (IntToTypeKind(ASTTk[node]) = tyPointer) then
+    begin
+      Result := ASTSLen[node];
+      Exit;
+    end;
     if IRNodePointerBase(ASTLeft[node]) then
       Result := IRPointerStride(ASTLeft[node])
     else

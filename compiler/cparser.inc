@@ -3144,6 +3144,19 @@ begin
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
           inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
           ASTLeft[inode] := node; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
+          { What this decayed pointer STEPS BY, for arithmetic done on it:
+            `m[1] + 1` on `int m[3][4]` steps 4 bytes (the row's element),
+            not the 16 the row itself measures. Nothing else could answer that
+            downstream — the base ident is retagged tyInt64 here, so
+            IRPointerStride recursed into the byte-offset multiply and got the
+            size-1 default: `*(m[1]+1)` read one byte past the element and
+            answered 0x05000000 for 5. Carried on ASTSLen beside the element
+            record ASTSOffset already carries for the same node shape.
+            bug-c-a-decayed-array-row-steps-one-byte }
+          if NDInfoSpan[nIdx] > 0 then
+            ASTSLen[inode] := rowStride div NDInfoSpan[nIdx]
+          else
+            ASTSLen[inode] := rowStride;
           node := inode;
         end;
       end
