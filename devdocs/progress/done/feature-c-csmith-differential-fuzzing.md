@@ -301,4 +301,4 @@ from more seeds at the same settings. Worth doing axis 2 next: it points the
 same oracle at four backends that have never seen a random program.
 
 ## Log
-- 2026-08-16 — resolved, commit PENDING-COMMIT.
+- 2026-08-16 — resolved, commit e9262d5db.
