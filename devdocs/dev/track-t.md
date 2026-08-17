@@ -184,6 +184,42 @@ Detaching is not the bug and is not going away: `twatch` checks out arbitrary
 shas to test them, which is why it demands its own clone and refuses a dirty
 one. The defect is only ever in readers that assume the tree reflects now.
 
+## Diagnostic: which numbers in your reports have NEVER changed?
+
+A constant in a report is the hardest defect to see, because it reads as a
+**property of the system** rather than as a wound — and it renders identically
+whether the cause is benign or serious.
+
+The worked case. Every `lib-test` verdict from enrolment onward ended:
+
+```
+167/167 pass, 2 skip (corpus absent)
+```
+
+That line was **true every single time it was quoted**, including in handover
+messages. It answered *"how many jobs skipped?"* — while the question that
+mattered was *"why has that number never been zero?"* The two skips were the
+synapse jobs; synapse was absent because testmgr's own corpus message said it
+could not be fetched by script; that message was false the day it was written.
+
+So the loop closed: **the instrument reported the consequence of its own
+documentation.** A measurement system with a path back to its own input is a
+failure mode a watcher is uniquely exposed to, and nothing in the number could
+distinguish "benign" from "two-month coverage hole".
+
+**When the evidence is identical under both readings, the check is in the wrong
+place — not merely too weak.** No amount of reading that line harder would have
+helped; the question had to be asked of a different thing.
+
+So, periodically, of your own reports:
+
+- which figures here have never moved?
+- for each: do I know *why* it is that value, or only *that* it is?
+- would I notice if it were a wound rather than a baseline?
+
+Related: the same shape one level down is a true fact about the wrong subject
+(below); this is a true *measurement* answering the wrong question.
+
 ## Rule: "filed", "done", "already handled" are CLAIMS — and `ls` settles them
 
 Work that exists in prose but not as a rankable ticket is invisible to
