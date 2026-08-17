@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-16T14:22:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ce2ac81770a1f9ea4d8ed48d642a87da3dba54a7",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-16T14:41:49Z",
    "fixed": [],
    "new_red": [],
@@ -414,6 +406,16 @@
    "sha": "0e4ad46330ca3d81a4f2494eae6d4a4cd1182a42",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-17T19:42:49Z",
+   "fixed": [
+    "test-core#src:test/test_procvar_value_context.pas"
+   ],
+   "new_red": [],
+   "sha": "e6f2264d38eaca4d39a5abd1ad3bc230ea2645fe",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -4573,7 +4575,7 @@
   "test-core#src:test/test_procedure_as_value_ok.pas": "pass",
   "test-core#src:test/test_proctype.pas": "pass",
   "test-core#src:test/test_procvar_fpc_mode.pas": "pass",
-  "test-core#src:test/test_procvar_value_context.pas": "fail",
+  "test-core#src:test/test_procvar_value_context.pas": "pass",
   "test-core#src:test/test_promoint.pas": "pass",
   "test-core#src:test/test_promoint_arg_literal_and_result.pas": "pass",
   "test-core#src:test/test_promoint_function_result.pas": "pass",
@@ -5836,11 +5838,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-17T19:25:15Z",
-  "sha": "0e4ad46330ca3d81a4f2494eae6d4a4cd1182a42",
+  "date": "2026-08-17T19:42:49Z",
+  "sha": "e6f2264d38eaca4d39a5abd1ad3bc230ea2645fe",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 213.0
+  "verdict": "GREEN",
+  "wall": 212.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -5897,23 +5899,6 @@
    ],
    "src": "test/crtl_exp2.c examples/tk/hello.npy +5",
    "status": "timeout"
-  },
-  {
-   "bad": "0e4ad46330ca3d81a4f2494eae6d4a4cd1182a42",
-   "good": "77b46c7cc8606c634cf789a7f568b01b4d5815f7",
-   "job": "test-core#src:test/test_procvar_value_context.pas",
-   "name": "test-core#290",
-   "opened": "2026-08-17T19:25:15Z",
-   "pin_built": false,
-   "range": [
-    "4d0ad3812f7c2c9a76bfad21ee668f555396e151",
-    "12771e4a348921e451d1f670d9c44650b0ba1db8",
-    "c061ece2bad3276230119e3cf2c786663cab303b",
-    "2ee660831d17b35d4c9e76e4fa6ef3d8d50ec430",
-    "0e4ad46330ca3d81a4f2494eae6d4a4cd1182a42"
-   ],
-   "src": "test/test_procvar_value_context.pas",
-   "status": "fail"
   }
  ],
  "pin_shadow": {
