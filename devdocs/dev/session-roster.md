@@ -303,6 +303,18 @@ clears it or the check releases it.
 
 ### Check log
 
+- 2026-08-17, hourly check #2 (cron) — **quiet, one open red.** frank2 busy on
+  `test-core#test_procvar_value_context` NEW-RED (still `FAIL 14` at HEAD;
+  its `@procvar` delphi-mode fix `2ee660831` is an ancestor of the red sha, and
+  the test's FPC-measured expectation contradicts the mode table the fix rests
+  on). plexus-T filed the regression ticket itself. No pending clears.
+  **frank3 deliberately left idle, not a dispatch miss:** the B queue is the
+  strtofloat ticket it just returned to backlog, then p20 float work (low
+  priority by standing ruling), `feature-networking` (we already have our own TCP
+  stack and SSL), and a p15 shim no corpus file's wall table names. Nothing worth
+  the shared token budget; dispatching to fill capacity is the failure mode, not
+  idling.
+
 - 2026-08-17, hourly check #1 (cron) — frank3 **busy** (strtofloat). frank2 idle
   with `working/` empty, i.e. between tickets: dispatched to
   `feature-nilpy-tkinter-facade` (p50). plexus-T idle, watcher publishing tstate.
