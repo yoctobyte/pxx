@@ -21,13 +21,19 @@
 # never materialised, so the name read as 0 with no diagnostic. The only flush
 # point was the main program's, and a module has its own body to emit into.
 #
-# Note what is deliberately NOT asserted: a name IMPORTED into __init__.py is
-# not re-exported to the package's own importers (flat unit scope), which is a
-# separate defect with its own ticket. Only names this __init__.py DEFINES are
-# read here — U is computed FROM the alias rather than being it, which is what
-# keeps the two concerns apart.
-from nilpy_relpkg import S, T, U
+# RE-EXPORT is asserted too, and it was the harder half: a name the __init__.py
+# obtained by IMPORTING it (A, B, RENAMED below) is read here through the
+# package, not just names it defines (S, T, U). A from-import now BINDS in the
+# importing module, which is what CPython does; before, flat unit scope stood in
+# for that binding and stopped at the package boundary, so `from pkg import A`
+# found nothing while the aliased spelling worked. That asymmetry is what
+# identified the fix.
+#
+# One level only, on purpose: `from .subdir import X` where subdir is a
+# DIRECTORY with its own __init__.py is still unresolved and has its own ticket.
+from nilpy_relpkg import S, T, U, A, B, RENAMED
 
 print("sum", S)
 print("through-func", T)
 print("through-alias", U)
+print("re-exported", A, B, RENAMED)

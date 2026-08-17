@@ -92,3 +92,69 @@ today deliberately reads only names its `__init__.py` defines, and says so.
 
 Stretch check: a driver doing `from webencodings import lookup` gets past the
 import.
+
+---
+
+## FIXED 2026-08-17 — it was a missing BINDING, not a visibility rule
+
+The "not investigated" fork above is settled, and it did not need a decision
+ticket in the end because a measurement chose between the two options outright.
+
+**The deciding observation:** an *aliased* re-export already worked.
+
+```
+pkg/__init__.py   from .two import A as AA      ->  `from pkg import AA`  WORKS
+pkg/__init__.py   from .two import A           ->  `from pkg import A`   FAILED
+```
+
+Same units, same visibility, opposite results — so visibility was never the
+variable. The alias path desugars to `ALIAS = NAME`, which creates a **real
+symbol in the importing unit**; the plain path creates nothing and leans on flat
+unit scope, which stops at the first module boundary. The name simply was not
+`pkg`'s to publish.
+
+That rules out the second option (searching the units `pkg` itself pulled) on
+its merits rather than on taste: it would have made every import transitively
+public, and it would not have explained why the aliased spelling behaved
+differently. It also avoids touching `VisibilityAllows`, whose non-transitive
+one-hop rule the user set deliberately (2026-08-15) and which is Track A ground.
+
+### The fix
+
+`from mod import NAME` now queues the same binding the `as` form does, so the
+name becomes the importing module's own — which is also exactly CPython's
+semantics: a from-import **binds a name in the importer's namespace**, it does
+not open a window onto the exporter's. Flat unit scope had been standing in for
+that binding all along.
+
+**Scoped to MODULES (`CurrentUnitIdx >= 0`), deliberately.** The main program
+has no importers, so a binding there re-exports to nobody while adding a symbol
+that shadows the flat-scope resolution every existing NilPy program relies on.
+That is blast radius with no measured demand. Recorded as a scope choice, not an
+oversight: if a case ever needs it in the program too, the condition is one term.
+
+Rides on the flush fix from
+[[bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module]] — without a
+module flushing its own alias queue, this would have queued bindings that never
+materialised and turned a loud `undefined variable` into a silent 0. **The order
+mattered; the two are one mechanism and landed together.**
+
+### Verified — nine probes, all matching CPython
+
+The ticket's own five-line repro answers `7`. The control table above holds in
+every row, including the ones that must NOT change (a name DEFINED in
+`__init__.py` still re-exports; the top-level program is untouched). Bare-dot,
+multi-name, `as`, qualified access and two-level packages all agree with
+CPython.
+
+`webencodings/__init__.py` is unmoved at line 50 (`codecs.CodecInfo`), which is
+the expected result — that is the Track B `mimic_codecs` rung, and it confirms
+this fix did not shift the wall it was not aiming at.
+
+### Still open, found by the two-level probe and NOT part of this
+
+`from .subpkg import X` where `subpkg` is a DIRECTORY with its own
+`__init__.py` reports `no unit named inner`. Sub-PACKAGE resolution is a
+separate mechanism from sub-MODULE resolution; html5lib has real subpackages
+(`_trie`, `treebuilders`, `treewalkers`), so this will be the next rung there.
+Filed as [[bug-n-a-subpackage-directory-does-not-resolve-as-a-module]].

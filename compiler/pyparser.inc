@@ -31807,10 +31807,37 @@ begin
             registry, which resolves the alias onto the same class row for var
             decls, ALIAS(), casts and is/as alike. That is the same registry a
             Pascal `TOptionList = TList;` uses. }
-          if impAlias <> impReal then
+          { The SAME binding is needed when there is no `as` at all, and only
+            inside a MODULE. `from .sub import VALUE` in a package's
+            `__init__.py` left VALUE living in unit `sub` and bound nothing in
+            `pkg`, so `from pkg import VALUE` in the importer found nothing —
+            while the *aliased* spelling re-exported fine, because the alias
+            makes a real symbol here. That asymmetry is the whole of
+            bug-n-a-package-does-not-re-export-what-its-init-imports, and
+            binding the plain name closes it with the mechanism that already
+            works rather than by making `uses` transitive (ruled out by the
+            user, 2026-08-15: a clause names units in the namespace of the unit
+            that wrote it and in no other).
+
+            It is also what CPython does: a from-import BINDS a name in the
+            importer's namespace, it does not open a window onto the exporter's.
+            Flat unit scope has been standing in for that binding, and stops at
+            the first module boundary.
+
+            MODULES ONLY, and deliberately: the main program has no importers,
+            so a binding there re-exports to nobody and would only add a symbol
+            that shadows the flat-scope resolution every existing NilPy program
+            already relies on. Widening it to the program is a change with a
+            large blast radius and no measured demand. }
+          if (impAlias <> impReal) or (CurrentUnitIdx >= 0) then
           begin
             aliasCi := FindUClass(impReal);
-            if aliasCi >= 0 then
+            { An UN-aliased class needs neither arm: the registry would map the
+              name onto the name it already has, and the assignment path cannot
+              carry a class at all. }
+            if (aliasCi >= 0) and (impAlias = impReal) then
+              { nothing to do }
+            else if aliasCi >= 0 then
               RegisterUClassAlias(PyStoredName(impAlias), Length(impAlias), aliasCi)
             else if PyImpAliasCount < 64 then
             begin
