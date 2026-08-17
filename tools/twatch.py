@@ -3537,7 +3537,24 @@ def retire_host(repo, old, into=None, tdir=None, renamed=False):
     return 0
 
 
-def status(repo, grace_min, tdir=None, ref="HEAD"):
+# --status exit codes. THREE, not two, and the third is the point of
+# bug-t-twatch-status-false-down: "I cannot tell" and "it is down" authorise
+# opposite actions.
+#
+# CLAUDE.md's per-fix loop has exactly one exception -- "Track T is PROVEN
+# down" -- and that exception is what lets an agent widen past the quick tier.
+# A DOWN computed from data this checkout never fetched is not proof of
+# anything; it is equally consistent with a healthy watcher and a stale reader.
+# Returning 1 for it is how a false DOWN sends every agent into ten-minute
+# sweeps. Returning 2 says so.
+#
+# Callers that test truthiness (`if twatch --status; then offload; else gate;
+# fi`) treat 2 exactly like 1 and run their own gate -- the conservative
+# direction, and correct: when T's health is unknown you cover yourself.
+STATUS_UP, STATUS_DOWN, STATUS_UNKNOWN = 0, 1, 2
+
+
+def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
     some host (a quiet watcher on a quiet repo is indistinguishable from a
@@ -3557,6 +3574,31 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
     is what the daemon actually publishes to. Reported DOWN while the daemon was
     demonstrably mid-run (2026-07-14).
     """
+    # FETCH FIRST, or say we could not. Every earlier false DOWN in this
+    # function's history (2026-07-14, 07-20, 08-01) was the same shape: the
+    # verdict was computed from a ref the reader had not refreshed. Preferring
+    # origin/master over HEAD fixed the WORSE half; it cannot fix a stale
+    # origin/master. This is the remaining half.
+    # "origin/master is known-fresh". False includes being TOLD not to fetch --
+    # not merely "the fetch threw". Getting that wrong made --no-fetch report an
+    # uncaveated UP, i.e. the flag silently asserted the freshness it exists to
+    # decline. Same true-fact-wrong-subject shape as this file's other guards:
+    # `no exception occurred` is true, and is not the question.
+    #
+    # An explicit `tdir` is the caller handing us state it extracted itself, so
+    # freshness is ITS claim to make -- trackt.py fetches before extracting, and
+    # falls back to the no-tdir path (where we fetch) when it cannot.
+    fetched = True if tdir is not None else bool(fetch)
+    if fetch and tdir is None:
+        try:
+            sh(["git", "fetch", "--quiet", "--no-write-fetch-head", "origin",
+                "+refs/heads/master:refs/remotes/origin/master"], cwd=repo)
+        except (RuntimeError, OSError) as e:
+            fetched = False
+            print("tstate: could not fetch (%s) — reading whatever "
+                  "origin/master this checkout already has" %
+                  str(e).splitlines()[0][:80])
+
     # origin/master is truth. A dev checkout drifts behind it constantly, and
     # `git log HEAD` then measures coverage over history this checkout cannot
     # see: 2026-07-20 a checkout 226 commits behind reported UP while the
@@ -3607,9 +3649,17 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
             tested.add(st["last"]["sha"])
         tested.update(h["sha"] for h in st.get("history", []))
     if not hosts:
+        # Deliberately NOT routed through verdict_down: "no state at all" in a
+        # checkout that could not fetch is overwhelmingly a reader problem (a
+        # fresh clone, a wrong path), not a dead fleet.
+        if not fetched:
+            print("tstate: UNKNOWN — no watcher state in %s AND this checkout "
+                  "could not fetch; that is a reader problem far more often "
+                  "than a dead fleet. Run your own gate." % TSTATE_REL)
+            return STATUS_UNKNOWN
         print("tstate: DOWN — no watcher state in %s (run your own full gate)"
               % TSTATE_REL)
-        return 1
+        return STATUS_DOWN
     out = sh(["git", "log", "--format=%H %ct", "-n", "200", ref], cwd=repo)
     now = time.time()
     untested_old = None
@@ -3701,26 +3751,46 @@ def status(repo, grace_min, tdir=None, ref="HEAD"):
             print("tstate:   ... and %d more open regression(s) — see "
                   "devdocs/progress/tstate/TSTATE.md"
                   % (len(regs) - STATUS_REG_CAP))
+    def verdict_down(msg):
+        """DOWN if we know it, UNKNOWN if we only suspect it.
+
+        The difference is whether this checkout could refresh origin/master. An
+        unfetched reader sees the same evidence for "the watcher stopped" and
+        "I stopped looking", and only one of those authorises widening a gate.
+        """
+        if fetched:
+            print("tstate: DOWN — %s; run your own full gate" % msg)
+            return STATUS_DOWN
+        print("tstate: UNKNOWN — %s, but this checkout could NOT fetch, so that "
+              "is equally consistent with a healthy watcher and a stale reader. "
+              "NOT proof of down: do not cite this as the CLAUDE.md 'Track T is "
+              "PROVEN down' exception. Run your own gate to be safe, and re-run "
+              "with a working remote to get an answer." % msg)
+        return STATUS_UNKNOWN
+
     if untested_old:
         age = int((now - untested_old[1]) / 60)
-        print("tstate: DOWN — %s untested for %d min (> %d min grace); "
-              "run your own full gate" % (untested_old[0][:12], age, grace_min))
-        return 1
+        return verdict_down("%s untested for %d min (> %d min grace)"
+                            % (untested_old[0][:12], age, grace_min))
     if live and degraded == live:
         # Every host that is supposed to be publishing is degraded. Coverage
         # WILL lapse; waiting for the grace window to notice would hand out an
         # UP in the meantime, and "T is up → offload the matrix" is precisely
         # the rule that must not fire here.
-        print("tstate: DOWN — all %d live host(s) degraded (cannot build/run); "
-              "run your own full gate" % live)
-        return 1
+        # DEGRADED is self-reported by a host that IS publishing, so this one
+        # does not depend on our fetch being fresh in the same way -- but a
+        # stale read could still be describing a state the host has since left.
+        return verdict_down("all %d live host(s) degraded (cannot build/run)"
+                            % live)
+    stale = "" if fetched else "  [UNFETCHED — based on this checkout's " \
+                                "existing origin/master]"
     if newest_tested:
-        print("tstate: UP — commits through %s tested; offload the matrix to T"
-              % newest_tested[0][:12])
+        print("tstate: UP — commits through %s tested; offload the matrix to T%s"
+              % (newest_tested[0][:12], stale))
     else:
-        print("tstate: UP — only fresh commits pending (within %d min grace)"
-              % grace_min)
-    return 0
+        print("tstate: UP — only fresh commits pending (within %d min grace)%s"
+              % (grace_min, stale))
+    return STATUS_UP
 
 
 def is_ancestor(repo, a, b):
@@ -3844,7 +3914,14 @@ def main():
                                     "required except for --status")
     ap.add_argument("--status", action="store_true",
                     help="report watcher liveness from tstate vs git history "
-                         "(run in any checkout; exit 0 = T up, 1 = run own gate)")
+                         "(run in any checkout; fetches first). "
+                         "exit 0 = T up, offload; 1 = PROVEN down, run own "
+                         "gate; 2 = cannot tell, run own gate but do not cite "
+                         "it as proof")
+    ap.add_argument("--no-fetch", action="store_true",
+                    help="--status: do not refresh origin/master first. Makes "
+                         "a DOWN verdict UNPROVEN (exit 2, not 1), because a "
+                         "stale reader and a dead watcher look identical")
     ap.add_argument("--grace", type=float, default=45,
                     help="--status: minutes a commit may sit untested before "
                          "T counts as down (default 45)")
@@ -3907,7 +3984,7 @@ def main():
                                renamed=args.renamed)
         if args.follow is not None:
             return follow(repo, args.follow, args.poll, args.branch, args.once)
-        return status(repo, args.grace)
+        return status(repo, args.grace, fetch=not args.no_fetch)
     if not args.clone:
         ap.error("--clone is required (except with --status/--follow)")
 

@@ -1212,6 +1212,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-t-three-network-tests-flake-and-cost-real-debugging-time | T | 45 | bug | lib_net_v6only, lib_sockets and lib_platform_esp each pass or fail run-to-run with the SAME compiler, so a gate.sh lib RED and two cross-sweep A/B deltas in one night were all noise that had to be disproved by hand | — |
 | bug-t-tstate-index-conflicts-between-watcher-hosts | T | 70 | bug | TSTATE.md is regenerated wholesale by every host, so two live watchers rebase-conflict on it and silently drop verdicts | — |
 | bug-t-tstate-launders-skip-into-pass | T | 50 | bug | tstate records a SKIPPED job as \"pass\", so a green published state cannot be distinguished from one that actually ran — cross-host coverage differences are invisible exactly when they matter | — |
+| bug-t-twatch-status-false-down | T | 45 | bug | bug(T): `twatch --status` / `trackt health` report DOWN for a watcher that is UP | — |
 | bug-t-watcher-dev-contention-false-newred | T | 45 | bug | Watcher and dev session on one box false-RED slow test-core jobs | — |
 | bug-t-xeon-job-set-covers-only-a-third-of-nilpy-tests | T | 55 | bug | xeon's tracked job set covers only 117 of 352 .npy Makefile invocations, so `make test-nilpy` can be RED while xeon reports the full tier GREEN — observed 2026-08-01 | — |
 | bug-test-core-oversized-job-6gb-flaky | A | 60 | bug | One test-core job needs ~6.8 GB and flakes under load (the recurring `Terminated`) | — |
