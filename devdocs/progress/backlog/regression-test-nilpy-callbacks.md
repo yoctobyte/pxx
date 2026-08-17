@@ -29,3 +29,54 @@ ok: /tmp/testmgr-scratch-793537/test_nilpy_tkcb26  [code=2510321B  data=76272B  
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Coordinator enrichment, 2026-08-17 overnight — NOT REPRODUCIBLE, and the code is identical
+
+Track T's agent is down overnight, so this is the face-2 enrichment the stub is
+missing. **Filed by the watcher, enriched here, not duplicated.**
+
+**Measured at HEAD (`139a4a1f0`), same recipe the job runs:**
+
+    ./compiler/pascal26 examples/tk/callbacks.npy <out>      -> ok, exit 0
+    timeout 120 xvfb-run -a <out> > got 2>&1                 -> exit 0
+    diff -u examples/tk/callbacks.expected got               -> IDENTICAL
+
+**And the code is the same code.** Every commit between the accused sha
+`8f629af38632` and HEAD is tstate, roster, digest or ticket prose — **zero
+`compiler/` or `lib/` changes**. So nothing could have fixed it in between: the
+tree that passes here is materially identical to the tree that failed there.
+
+**The same sha reported both verdicts**, which is the decisive detail:
+
+    db7e583cd  tstate(plexus): 8f629af38632 GREEN (native)
+    474dc9293  tstate(plexus): 8f629af38632 RED  (full)   <- this stub
+
+So the variable is the **run environment**, not the revision.
+
+## Most likely cause, stated as unproven
+
+The recipe is `timeout 120 xvfb-run -a <binary>` — a **GUI program under a virtual
+X server with a 120s ceiling**, executed inside a 2700-job full tier on the
+watcher's box. That is the most timeout-prone shape in the suite.
+
+**Fourth timeout-shaped red on that box tonight**, and the others resolved the same
+way: `crtl_exp2` is a recorded timeout, and `lib-test#117` / `test-nilpy#12` from
+the v347 pin-verify both reproduce as *pass* under every relevant binary
+(`bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label`). One
+transient is noise; four in an evening on one host is a property of the host or the
+tier's parallelism.
+
+Deliberately **not** closed as flake. What would settle it:
+
+- whether the run actually hit the 120s ceiling — the stub records a verdict, not a
+  duration, so the one fact that separates "timed out" from "wrong output" is not in
+  the record;
+- whether `xvfb-run -a` display allocation contends when several GUI jobs run
+  concurrently in the same tier;
+- a re-run of the full tier on an idle box against this same sha.
+
+**Note for the tooling ticket:** a RED whose failure mode is invisible from the
+report is the same family as the positional job names — the record preserves the
+verdict and discards the discriminator. A duration, or an explicit
+`TIMEOUT`-vs-`DIFF` verdict, would have made this stub self-attributing instead of
+needing a manual re-run.
