@@ -98,13 +98,37 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
    because a pin writes `stable_linux_amd64/**` to shared master, a repo-level
    constraint, not a working-tree one.
 
-   **Track T must NOT pin.** CLAUDE.md: "the watcher never pins — it writes only
-   `tstate/`". T is the role that MEASURES health; pinning BLESSES binaries.
-   Keeping them apart means a bad measurement cannot directly produce a bad pin —
-   there is an independent party in between, which has already earned its keep
-   (two of T's own reads needed correcting on 2026-08-17, both caught by the
-   other side checking). "T writes only tstate" is a simple checkable invariant
-   and is not worth trading for seven minutes a week.
+   **There are TWO pins, and they belong to different roles** (human, 2026-08-17
+   — this corrects an earlier flat "Track T must NOT pin" written here):
+
+   - **Quick native pin — the COORDINATOR's.** `make stabilize-fast && make pin`,
+     ~35s, self→next→fixedpoint on this box. Its job is to unblock: a worker needs
+     a builtin change visible to `PXX_STABLE` and cannot wait for a matrix. Proves
+     the one property a bad pin could poison for everyone — that the compiler
+     reproduces itself.
+   - **Full-stack-green pin — TRACK T's**, at the top of its escalation ladder
+     (below). Blesses a binary that the whole cross-target matrix has passed. This
+     is the deep one, and it is why T's stack ends in pinning.
+
+   So the separation-of-concerns argument (measurement vs blessing) applies to the
+   QUICK pin, where nobody has run a matrix and an independent party is the only
+   check. It does not extend to T's full-stack pin, where the matrix IS the
+   evidence. The watcher DAEMON (face 1) still writes only `tstate/`; the pin is
+   the T AGENT's (face 2), and only after a green full stack.
+
+   **Track T's stacked scheme** (human, 2026-08-17) — an escalation ladder, not a
+   prohibition on depth:
+
+   1. A new commit **resets** T to fast native regressions. Fresh work preempts.
+   2. Spare time → cross-platform and full-suite tiers.
+   3. That green → the full-stack pin.
+   4. Still idle → fuzzing.
+
+   "Fast over full" is about ORDERING and PREEMPTION, never a ban: an idle window
+   is exactly when the deep work is meant to happen. T also holds a standing
+   escape from the full-suite hook (`PXX_TRACK=T`, `no-full-suite.sh:29`) because
+   its gate genuinely is the full tier. Do not tell T it needs authorisation for a
+   deep run — the coordinator did on 2026-08-17, having not checked the hook.
 
    Batching is available if B starts waiting: several builtin changes can ride
    one pin, trading a slightly staler `PXX_STABLE` for fewer lock events. Not the
