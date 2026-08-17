@@ -5952,13 +5952,12 @@
   },
   {
    "bad": "5215148bb45482fea46e986e937a594c2211e4e7",
-   "good": "f04f29bb1c60f84c4210ae1a70b207e36cd9a3a9",
+   "good": "5ee0de5ffca91e58cfe3bc01c894534a20c96824",
    "job": "test-nilpy#src:examples/tk/callbacks.npy",
    "name": "test-nilpy#13",
    "opened": "2026-08-17T21:48:59Z",
    "pin_built": false,
    "range": [
-    "5ee0de5ffca91e58cfe3bc01c894534a20c96824",
     "5215148bb45482fea46e986e937a594c2211e4e7"
    ],
    "src": "examples/tk/callbacks.npy",
