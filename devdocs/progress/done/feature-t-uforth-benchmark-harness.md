@@ -207,3 +207,45 @@ now rankable work rather than prose.
 
 ## Log
 - 2026-08-17 — resolved, commit PENDING-COMMIT.
+
+### Attributed 2026-08-17 — the RSS drop is the in-place append fix
+
+Verified independently (shas, dates, subjects, and the pin diff all check out):
+
+| commit | date | what |
+| --- | --- | --- |
+| `9ffbba0bd` | 2026-08-14 | `perf(A): append in place for s := s + x — Pascal accumulation goes linear` |
+| `e0d7b6ca7` | 2026-08-14 | `perf(A): append in place on VARIANT slots too — this is NilPy's actual shape` |
+| `600b676a1` | 2026-08-14 | `docs(O): re-profile — concat 62.5% -> 6.79%, rest is alloc churn` |
+
+`s := s + x` in a loop was quadratic: each iteration allocated a fresh buffer
+and copied. That predicts **both** observations, and the second one is the tell:
+
+- RSS scaling with run length — the dead buffers accumulate;
+- RSS going **flat at 16.7 MB across all three workloads** once the append
+  happens in place. A GC-pressure story would have scaled everything down
+  proportionally, leaving three different numbers. Flatness is structural, which
+  is why it survives the co-tenancy caveat that the wall ratios do not.
+
+**And the first fix alone did nothing for NilPy.** It needed `e0d7b6ca7`,
+because NilPy's loop-carried string is a **Variant** slot rather than
+`tyAnsiString` — the typed arm was fixed while the shape NilPy actually emits
+stayed quadratic. Two stores, one concept, and the obvious one was not the
+load-bearing one. Same shape as
+[[bug-p-a-class-method-does-not-shadow-a-builtin-of-the-same-name]]'s eight soft
+intrinsics: fixing the reported site is not the same as fixing the concept.
+
+**One correction to the attribution as offered:** it noted the pin moved (v299,
+`86da0606d`) "so a `PXX_STABLE`-built benchmark sees them". True, and **not why
+this benchmark saw them** — `uforth_bench.py` defaults `--pxx` to
+`compiler/pascal26` and `make bench-uforth` passes `./$(COMPILER)`, both HEAD-built,
+because the pinned stable cannot lex uforth's char-code literals (recorded above).
+This harness never reads the pin. It picked the fix up on 2026-08-14 because the
+commits were in HEAD, pin or no pin. The attribution is unaffected; the mechanism
+is a true fact about a different benchmark.
+
+**The residual 0.60x is already characterised**, not an open question:
+`600b676a1` re-profiled immediately after and recorded concat down to 6.79% with
+the rest being **alloc churn**. That makes
+[[feature-t-uforth-bench-on-the-watcher-idle-phase]] the right next instrument —
+churn wants an undisturbed series, not one quiet run.
