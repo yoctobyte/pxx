@@ -227,4 +227,4 @@ name, a non-colliding name, the named receiver, and the user's class reached on
 its own.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 95eb242c4.
