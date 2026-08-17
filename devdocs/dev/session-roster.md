@@ -707,3 +707,14 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   `callbacks: fail` vs `crtl_exp2: timeout`) rather than relayed.
   Ticket back in the queue **unclaimed at p55 with both halves written up** — a better
   handoff than a rushed start. Coordinator took no ticket.
+
+- 2026-08-18 hourly check #7 (cron) — **quiet; no change from #6, and no dispatch by
+  design.** No pending clears. `working/` empty, `urgent/` empty, nothing unpushed,
+  no CRITICAL.
+  frank2-f1 busy (`shell`). **plexus-T idle but NOT dispatchable** — its user asked it
+  to wrap for a clean context and the earlier dispatch was withdrawn; an idle row here
+  means "wrapping", not "available", and a fresh check reading only `ListAgents` would
+  get that wrong. frank3 idle, left idle for the same reason as #6: Track B's ready
+  queue is unchanged and still entirely float (p30 `strtofloat`, then p20s), which is
+  a standing low-prio ruling, and moving it to another lane is the human's call.
+  Two idle workers and zero dispatches is the correct state tonight, not a stall.
