@@ -10391,7 +10391,18 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_markdown.pas $(TESTTMP)/lib_markdown
 	test "$$($(TESTTMP)/lib_markdown | grep -c '=ok')" = "17"
 	test "$$($(TESTTMP)/lib_markdown | tail -1)" = "MARKDOWN OK"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	# IntToHex vs FPC 3.2.2. Built TWICE on purpose: the default run asserts the
+	# RTL bodies only (15 rows, flag-independent), and the flagged run adds the
+	# four rows whose answer depends on WHICH overload the resolver picks --
+	# a Track A choice, so it is asserted only where FPC's narrowest-fit rule
+	# is in force. Compiles under FPC too; expectations read off it.
+	$(PXX_STABLE) -Fulib/rtl test/lib_inttohex.pas $(TESTTMP)/lib_inttohex
+	test "$$($(TESTTMP)/lib_inttohex | grep -c '=ok')" = "15"
+	test "$$($(TESTTMP)/lib_inttohex | tail -1)" = "INTTOHEX OK"
+	$(PXX_STABLE) --strict-overload-width -dSTRICT_WIDTH -Fulib/rtl test/lib_inttohex.pas $(TESTTMP)/lib_inttohex_strict
+	test "$$($(TESTTMP)/lib_inttohex_strict | grep -c '=ok')" = "19"
+	test "$$($(TESTTMP)/lib_inttohex_strict | tail -1)" = "INTTOHEX OK"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown + inttohex) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

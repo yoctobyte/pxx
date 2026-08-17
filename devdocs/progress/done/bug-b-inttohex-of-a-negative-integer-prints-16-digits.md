@@ -4,6 +4,8 @@ prio: 40
 type: bug
 blocked-by: []   # the compiler half landed 2026-08-15 as --strict-overload-width
 summary: "`IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used"
+status: done
+owner: frank3
 ---
 
 # `IntToHex` of a negative Integer prints 16 digits, not 8
@@ -156,3 +158,67 @@ the ticket's 14-row `.pas` as a checked test, and if so which mode it asserts.
 The Track A side ships its own two-way assertion already
 (`test/test_strict_overload_width.pas`, run flagged and unflagged), whose last
 row is exactly this `IntToHex` case.
+
+## 2026-08-17 — CLOSED: the 14-row diff is now a checked test (Track B, frank3)
+
+The judgement call the previous note left open — whether to land the FPC diff as
+a test, and in which mode — is resolved. **Both modes, in one program, split by
+what each row actually proves.**
+
+`test/lib_inttohex.pas` (new) is compiled twice by `make lib-test`:
+
+```make
+$(PXX_STABLE) -Fulib/rtl test/lib_inttohex.pas $(TESTTMP)/lib_inttohex
+test "$$($(TESTTMP)/lib_inttohex | grep -c '=ok')" = "15"
+$(PXX_STABLE) --strict-overload-width -dSTRICT_WIDTH -Fulib/rtl test/lib_inttohex.pas $(TESTTMP)/lib_inttohex_strict
+test "$$($(TESTTMP)/lib_inttohex_strict | grep -c '=ok')" = "19"
+```
+
+* **15 rows assert the RTL BODIES and run unflagged.** Explicitly-typed
+  `LongInt` / `LongWord` / `Int64` / `Byte` / `Word` arguments name their body
+  directly, so these hold whatever the resolver does: the `LongInt` mask
+  (`-1`→`FFFFFFFF`, `MinInt`→`80000000`, `digits=16`→`00000000FFFFFFFF`, i.e.
+  zero-padded not sign-extended), `LongWord` zero-extension, `Int64` unchanged,
+  and `digits`-as-a-MINIMUM in every body (`digits=2` on `-1` still prints all
+  eight). **This is the part Track B owns**, and it is now regression-locked.
+* **4 rows assert SELECTION and run only under `--strict-overload-width`**
+  (`Integer`, `Integer` MinInt, `SmallInt`, bare literal `-1`), guarded by
+  `STRICT_WIDTH`. Asserting them unflagged would freeze a **Track A** choice
+  into a Track B test — and the default dialect's widening is intended (user,
+  2026-08-14), so there is no parity contract to lock there.
+
+`{$IFDEF FPC}` sets `STRICT_WIDTH` automatically, so the program compiles and
+prints `INTTOHEX OK` under FPC 3.2.2 unmodified — the expectations were read off
+it, and it stays re-checkable against the oracle.
+
+`make lib-test` green against stable v344.
+
+### Measured: only ONE spelling still widens by default, not four
+
+The 2026-08-14 table in this ticket recorded `Integer`, `SmallInt`, `Byte` and
+literal `-1` all resolving to the `Int64` body. Re-measured today against
+`pinned` (v344), unflagged, the default-run diff against FPC is **one line**:
+
+| spelling | default dialect | FPC / `--strict-overload-width` |
+| --- | --- | --- |
+| `Integer` | `FFFFFFFF` ✓ | `FFFFFFFF` |
+| literal `-1` | `FFFFFFFF` ✓ | `FFFFFFFF` |
+| `SmallInt` | `FFFFFFFFFFFFFFFF` | `FFFFFFFF` |
+
+That looked at first like an inconsistency worth escalating to Track A. It is
+not — measured, `SizeOf(Integer) = 4` and `SizeOf(SmallInt) = 2` in this
+dialect, so `Integer` is an **exact-width match** for the `LongInt` overload
+(nothing to widen) while `SmallInt` is genuinely narrower and widens, which is
+precisely the documented default. The rule is coherent as it stands: exact match
+wins by default; strictly-narrower spellings widen unless the flag is on. **No
+Track A ticket filed.**
+
+The flag was confirmed to be doing real work rather than being silently
+accepted: the two binaries differ (`cmp`), and a bogus `--strict-nonsense-flag`
+is rejected with `unknown option` — the control that stops "the flag had no
+effect" from reading as "the flag fixed it".
+
+Nothing remains in `lib/rtl` for this ticket. Closing.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
