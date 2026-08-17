@@ -31547,14 +31547,27 @@ end;
   (feature-nilpy-thirdparty-libraries-as-targets). webencodings is the worked
   example: `from labels import LABELS` compiles and yields all 214 entries,
   while the `.labels` spelling the package actually ships did not parse. }
-function PyEatRelativeImportDots: Boolean;
+{ How many leading dots a relative import has: 0 = not relative, N = `.`xN.
+  Consumes them.
+
+  This REPLACED a Boolean that answered "is this the bare `from . import x`
+  form" while every caller asked it "was this a relative import?". Those are
+  different questions and the call sites could not tell them apart, so
+  `from .labels import LABELS` — dots, then an identifier — got False back
+  AFTER the dots had already been eaten, and the caller resumed mid-statement
+  with no idea a relative import had been intended. The error surfaced as
+  `undefined variable (from)`, naming neither the dot nor the import.
+
+  A lookahead that consumes on the failing path is the actual defect; the
+  missing feature was downstream of it. There is no ambiguity to resolve here:
+  in Python, dots after `from` mean a relative import and nothing else, so the
+  count is the whole answer and the caller branches on what FOLLOWS the dots —
+  `import` for the bare form, an identifier for `from .mod import X`.
+  bug-n-relative-import-from-a-package-is-not-parsed }
+function PyRelativeImportLevel: Integer;
 begin
-  Result := False;
-  if CurTok.Kind <> tkDot then Exit;
-  while CurTok.Kind = tkDot do Next;
-  { `from . import x` / `from .. import x` — nothing between the dots and the
-    `import`, so the imported names are module names. }
-  Result := CurTok.Kind = tkUses;
+  Result := 0;
+  while CurTok.Kind = tkDot do begin Next; Inc(Result); end;
 end;
 
 function PyImportRootIsConsumedOnly(const root: AnsiString): Boolean;
@@ -31581,7 +31594,12 @@ begin
   if PyIsIdent('from') then
   begin
     Next;
-    if PyEatRelativeImportDots then
+    { level > 0 with an IDENTIFIER after the dots is `from .mod import X`: fall
+      straight through to the ordinary from-import below, which resolves the
+      module with ParseUsesUnit and binds the names through flat unit scope.
+      The relative and absolute forms differ only in how the module NAME is
+      spelled, so there is nothing to duplicate here. }
+    if (PyRelativeImportLevel > 0) and (CurTok.Kind = tkUses) then
     begin
       { `from . import a, b` — the names ARE the modules. }
       Next;                                { past `import` }
@@ -31677,9 +31695,11 @@ begin
     if PyIsIdent('from') then
     begin
       Next;
-      if PyEatRelativeImportDots then
+      { see the sibling above: dots + identifier falls through to the ordinary
+        from-import path rather than growing a second one. }
+      if (PyRelativeImportLevel > 0) and (CurTok.Kind = tkUses) then
       begin
-        { `from . import a, b` — see PyEatRelativeImportDots }
+        { `from . import a, b` — see PyRelativeImportLevel }
         Next;                              { past `import` }
         while CurTok.Kind = tkIdent do
         begin
@@ -31978,7 +31998,8 @@ begin
       tryAt := depth
     else if ((Tokens[i].Kind = tkUses) or
              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
-              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent))) and
+              (i + 1 < MainProgramTokCount) and
+              (Tokens[i + 1].Kind = tkIdent))) and
             ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
     begin
       TokPos := i;

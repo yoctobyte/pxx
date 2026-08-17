@@ -135,3 +135,69 @@ is investigation, and this session has not been cleared. Form 1's parse looks
 like a contained change in `pyparser.inc` (Track N's file); form 2 may reach the
 resolver, so **check whether it lands in `parser.inc` before editing** — that
 half would be Track A and filed, not fixed.
+
+---
+
+## ROOT CAUSE FOUND 2026-08-17 — the PRESCAN never sees a dotted import
+
+`PyPreScanImports` (`pyparser.inc`) decides what is an import by looking one
+token past `from`:
+
+```pascal
+((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
+ (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent))
+```
+
+**`tkIdent` only.** For `from .labels import LABELS` the next token is `tkDot`,
+so the line is invisible to the prescan, is never handed to `PyParseImportRun`,
+and the statement parser later meets a bare `from` and reports
+`undefined variable (from)`. That is the whole first-form failure, and it
+explains why the message names neither the dot nor the import.
+
+### And flipping that condition alone is NOT the fix — measured
+
+Widening it to `[tkIdent, tkDot]` **regresses form 2**: `from . import sub` goes
+from failing at line 2 (`undefined variable (sub)`) to failing at line 1
+(`undefined variable (from)`, with the dot already consumed). Reverted, baseline
+confirmed restored on both forms.
+
+Why: there are **two** import handlers — `PyParseOneImport` (:31583) and
+`PyParseImportRun` (:31688), each with its own `from` handling. Today the
+prescan skips dotted lines, so form 2 reaches `PyParseOneImport`, which copes.
+Widening the prescan reroutes it to `PyParseImportRun`, whose relative-import
+path does not. **So `PyParseImportRun` has to handle the relative forms before
+the prescan may be widened** — that ordering is the finding, and doing it the
+other way round is a regression.
+
+Two handlers for one concept is the `normalise-dont-special-case.md` smell, and
+it is the reason this looks like two bugs.
+
+## LANDED 2026-08-17: the safety half (behaviour-neutral)
+
+`PyEatRelativeImportDots: Boolean` → **`PyRelativeImportLevel: Integer`**,
+returning the dot count. The Boolean answered "is this the bare
+`from . import x` form" while both callers asked "was this a relative import?" —
+different questions, and on the mismatch it returned False **after consuming the
+dots**, leaving the caller mid-statement with no way to know what was intended.
+
+A lookahead that consumes on its failing path is a landmine independent of this
+feature: it will misdiagnose the next bug too. The level collapses the
+conflation at the source (0 = not relative, N = N dots) instead of adding a
+second flag beside it, and makes `from ..pkg import X` reachable later for free.
+
+Verified **behaviour-neutral**: both forms fail exactly as before, `gate.sh
+quick` GREEN with the FPC seed canary PASS.
+
+## What is left
+
+1. Teach `PyParseImportRun` the relative forms (level > 0 with an identifier
+   after the dots → resolve the module and fall through to the ordinary
+   from-import path, which already binds names via `ParseUsesUnit` and flat unit
+   scope — `from sub import VALUE` inside a package `__init__.py` works today,
+   measured).
+2. **Then** widen the prescan to `[tkIdent, tkDot]`.
+3. Make `from . import sub` bind `sub` usably (it parses and pulls the unit;
+   the local binding is what is missing).
+
+Both handlers live in `pyparser.inc` — **Track N's file, no Track A handoff
+needed**, which was an open question and is now answered.
