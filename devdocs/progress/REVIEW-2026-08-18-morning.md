@@ -13,7 +13,7 @@ reports. Updated at each hourly check; the operational detail is in
 | ticket | prio | what changes on your answer |
 | --- | ---: | --- |
 | `decide-week-theme-2026-08-17` | 70 | Largely answered by measurement — finish-NilPy and push-the-corpora turned out to be the same week. Probably now a confirmation rather than a fork. |
-| `decide-what-an-unwired-test-may-assert` | 55 | Whether ~61 compiling-but-unwired test files may record their own current output as `.expected`. Recommendation: never — compile-and-run as the floor, oracle comparison where one exists. |
+| `decide-what-an-unwired-test-may-assert` | 55 | Whether ~61 compiling-but-unwired test files may record their own current output as `.expected`. Recommendation: never. See the sharpened version below — the obvious safe answer has a delayed failure mode. |
 | `decide-staff-track-c-to-unblock-own-language-first` | 50 | Staffing. |
 | `decide-nilpy-exec-injects-a-builtins-key` | 40 | Semantics. |
 | `meta-float-accuracy-policy` | 40 | Policy. |
@@ -236,6 +236,45 @@ corpus campaign twice.
 Worth noting *how* they were found: a lane doing its own work walked into them.
 That is the corpus argument again — the walls are where real code goes, not where
 we looked.
+
+## The test-expectation decision got sharper overnight
+
+Worth reading before you answer it, because the *safe-looking* option turns out to
+fail the same way as the one we rejected.
+
+The ticket offered: (1) record current output as `.expected`, (2) verify against
+the reference implementation first, then record, (3) assert only compile-and-run.
+The objection to (1) was that nothing in the file discloses that its expectation
+was never checked against anything.
+
+**Track B's addition: (2) checks the oracle ONCE, at wiring time, and then records
+the answer — and that answer silently ages.** Nothing re-checks it. If CPython's
+behaviour changes, or our reading of it was wrong, the file looks exactly like a
+verified test forever after. That is (1)'s failure mode on a delay, and it lands on
+the same objection: a once-checked file says nothing either, past the day it was
+written.
+
+**The better instance: make the test dual-runnable.** `test/lib_mimic_warnings.npy`
+runs unmodified under real CPython and its output is compared. That moves the
+oracle from *a step in a procedure* to *a property of the file* — it cannot go
+stale, because it is re-checked every time anyone runs it.
+
+It also forces a useful discipline: you must decide what the two implementations
+genuinely share. That test asserts **stdout only**, because stderr is a documented
+deliberate divergence (CPython prefixes `<file>:<line>:` by walking the call stack;
+we cannot). Asserting stderr would have encoded our format as CPython's — which is
+option 1 smuggled inside option 2.
+
+**Where it stops, stated honestly:** it needs source that is legal input to the
+reference implementation. Natural for NilPy, plausible for C, **unavailable for
+Pascal** — FPC-vs-pxx needs two builds of one source, which is
+`fpc_diff_probe.sh`'s job rather than a property of a file. So it does not replace
+option 2; it is the better instance of it wherever the source is dual-legal, and
+Pascal still gets option 2 proper.
+
+One practical caution from the same session, which cost a red gate: **assert the
+number of `=ok` lines as well as their content**, or a test that silently stops
+emitting half its assertions still passes.
 
 ## Two corrections the workers made to ME, both worth your attention
 
