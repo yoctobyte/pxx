@@ -140,6 +140,70 @@ needs execution rather than investigation, and (c) coordination interrupts win �
 a peer message or a red is handled before the next edit, never after "just one
 more thing". Abandon the ticket, not the role, if those stop holding.
 
+## The periodic check — and the clear-timeout rule
+
+Set up 2026-08-17 at the human's request. **The problem it solves:** a session
+cannot clear itself, only the human can, and the human is asleep or at work. So a
+worker that correctly reports it should be cleared then blocks indefinitely on a
+human who isn't there — the babysitting constraint reappearing as a deadlock.
+
+**The check runs hourly** and is stateless: each firing is a FRESH session, so
+everything it needs is here on disk, not in anyone's context.
+
+Each check, in order:
+
+1. `git pull --rebase`, read this file's *Current assignments* and *Pending
+   clears* below.
+2. `ListAgents` — who is idle.
+3. **Idle worker WITH a ticket?** Nothing to do; it may just be between tool
+   calls.
+4. **Idle worker AWAITING A CLEAR?** Look at its *Pending clears* row.
+   - Under 2 hours: leave it. The human may be minutes away, and a clear is
+     strictly better than a compact.
+   - **2 hours or more: RELEASE IT** — tell it to continue, on auto-compact, with
+     the discipline below. Record the release in its row.
+5. **Idle worker with NO ticket?** Dispatch from `tools/progress.sh ready --track
+   <X>`. Do NOT do the ticket yourself — see the failed experiment above.
+6. Append one line to *Pending clears* with the time and what changed. A check
+   that found nothing still writes a line, so the next firing can tell "quiet" from
+   "never ran".
+
+### Auto-compact is NOT a clear — say so when releasing
+
+This is the part that must not be lost. A clear removes the context; a compact
+**keeps a summary of it**, which is precisely the stale-plan problem the clear was
+wanted for. Releasing on timeout is a DEGRADED mode, deliberately chosen because
+a blocked worker is worse, and it must be stated as such rather than presented as
+equivalent.
+
+So a release message always carries:
+
+- **Re-read the ticket from disk before continuing.** Do not act on your own
+  summary of it. The summary is what compaction preserved and it is the least
+  trustworthy thing you now hold.
+- **Re-establish the baseline by running it**, not by recalling it. Whatever you
+  "know" passes or fails, measure once before building on it.
+- **The plan you had may be the thrash.** If you were reverted or blocked before,
+  the summary preserves the approach that wasn't working. Prefer the ticket's
+  written NEXT steps over your recollection of them.
+
+Cost of getting this wrong is concrete: this is how a session resumes confidently
+down the path it had already measured as broken.
+
+### Pending clears
+
+One row per worker that has asked for a clear. Delete the row once the human
+clears it or the check releases it.
+
+| worker | asked at | released? |
+| --- | --- | --- |
+| frank2-f1 | 2026-08-17, mid-afternoon | released by the human (recovered from context, `38a88a8b8`); row kept as the worked example |
+
+### Check log
+
+- 2026-08-17 — protocol created. frank2 idle and clean, frank3 on B, plexus-T
+  quiet. No releases needed.
+
 ## The rule that makes context-clearing safe
 
 Clearing is not the risk; **unbanked knowledge is**. Anything learned that is not
