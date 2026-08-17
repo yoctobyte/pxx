@@ -1,0 +1,10 @@
+scroll ok True True
+lambda scroll ok True True
+configure 200 100
+lifted 200 100
+trace fired
+str trace fired
+bbox [1, 1, 10, 10]
+hits 1
+scroll ok True True
+lambda scroll ok True True

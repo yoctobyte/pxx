@@ -302,6 +302,24 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) examples/tk/field_class_identity.npy $(TESTTMP)/test_nilpy_fldcls26
 	# callable options: bound method / plain def / lambda, and a variable trace
 	./$(COMPILER) examples/tk/callbacks.npy $(TESTTMP)/test_nilpy_tkcb26
+	# ...and now RUN the three .npy ones under Xvfb and diff their output. They
+	# were compiled and never executed, so the facade's 2400 lines were gated on
+	# "it still parses" alone: a callback that never fires, a canvas that draws
+	# nothing and a widget path built wrong all compile perfectly. The comments
+	# above said "run under Xvfb by hand", which means in practice never.
+	# Output is deterministic (checked over repeated runs). Skipped, not failed,
+	# where Xvfb is absent -- same guard shape as the tkhtmlview oracle below.
+	# feature-nilpy-tkinter-facade
+	@if command -v xvfb-run >/dev/null 2>&1; then \
+	  for t in tkinter_facade:test_nilpy_tkinter26 field_class_identity:test_nilpy_fldcls26 callbacks:test_nilpy_tkcb26; do \
+	    src=$${t%%:*}; bin=$${t##*:}; \
+	    timeout 120 xvfb-run -a $(TESTTMP)/$$bin > $(TESTTMP)/$$src.got 2>&1 \
+	      || { echo "  tk: $$src EXITED NONZERO under Xvfb"; cat $(TESTTMP)/$$src.got; exit 1; }; \
+	    diff -u examples/tk/$$src.expected $(TESTTMP)/$$src.got \
+	      || { echo "  tk: $$src OUTPUT CHANGED"; exit 1; }; \
+	  done; \
+	  echo "  tk: facade, field-class identity and callbacks ran under Xvfb"; \
+	else echo "  tk: no xvfb-run, skipping the facade RUN (compiled only)"; fi
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy $(TESTTMP)/test_nilpy_kwname26
 	test "$$($(TESTTMP)/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	# a unit-qualified class construction (mod.Class(args))

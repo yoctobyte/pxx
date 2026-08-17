@@ -3,13 +3,14 @@ summary: "nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, 
 type: feature
 track: N
 prio: 50
+owner: frank2
 ---
 
 # nilpy: a tkinter façade (object API + callbacks)
 
 - **Type:** feature (Nil-Python frontend / stdlib surface) — **Track N**
   (the Tk binding underneath is Track B and already landed)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-26 — needed now that the songformatter target is scoped to
   its GUI ([[feature-demo-songformatter-pxx-target]]).
 
@@ -75,3 +76,64 @@ the evidence is recorded on the blocker itself, which Track N still owns
 formally closing.
 
 `blocked-by` removed here so the ticket stops hiding from `progress.sh ready`.
+
+## RE-MEASURED 2026-08-17 — the façade is BUILT; the gap was that nothing ran it
+
+Read the ticket, then measured before designing anything, because its plan
+("a façade written in Nil-Python... needs, in order: `**kwargs`, a callback
+story, the widget subset") describes work that has since been done and the
+ticket never said so. Third stale premise of the day.
+
+**`lib/pcl/tkinter.pas` exists: 2453 lines, last touched 2026-08-15**, declaring
+every class this ticket's step 3 lists — `Tk`, `Toplevel`, `Frame`, `Canvas`,
+`Scrollbar`, `Text`, `Menu`, `PanedWindow`, `Notebook`, `Button`, `PhotoImage`,
+plus `Label`, `Entry`, `Separator`, `Checkbutton`, `Event`, `StringVar`,
+`BooleanVar`. Steps 1 and 2 are done too: `bind`/`after`/`after_idle`/
+`after_cancel`/`add_command`/`config` all take a `Variant` **callable**, not the
+Tcl string the ticket's own note describes as the limitation.
+
+So the remaining work was not the façade. It was the **gate**.
+
+### What was actually wrong: 2453 lines gated on "it still parses"
+
+Four tk artifacts were compiled by the suite and **never executed** —
+`tkinter_facade.npy`, `field_class_identity.npy`, `callbacks.npy` and
+`uses_tkinter_and_configparser.pas`. The Makefile said "compiled, not run — it
+needs an X display", and `callbacks.npy`'s own header said "run under Xvfb by
+hand", which in practice means never.
+
+That is the weakest possible gate for this code: **a callback that never fires, a
+canvas that draws nothing, and a widget path built wrong all compile perfectly.**
+Everything this façade exists to do is invisible to a compile check.
+
+### Done: the three `.npy` ones now RUN under Xvfb and their output is diffed
+
+Wired into the same recipe, guarded by `command -v xvfb-run` so a box without it
+**skips rather than fails** — the same shape the tkhtmlview oracle already uses.
+Expected output captured in `examples/tk/*.expected`.
+
+Verified before wiring, because a GUI test that is flaky or that cannot fail is
+worse than none:
+
+- **deterministic** — 5 consecutive runs of `callbacks`, 3 each of the other two,
+  byte-identical every time;
+- **it can actually FAIL** — corrupting an expected file makes the recipe exit 1
+  with a diff. Checked explicitly rather than assumed, which is the check that
+  distinguishes a gate from decoration.
+
+What now actually runs and is asserted: a `<Configure>` binding firing, a lifted
+lambda callback, a bound method and a plain def as callables, two variable
+traces, `Canvas.create_rectangle` + `bbox("all")`, scrollbar↔canvas wiring in
+both directions, and widget path construction (`.w1`, `.w1.w2`).
+
+`uses_tkinter_and_configparser.pas` is left compile-only: it is Pascal, not
+NilPy, and its assertion is a name-resolution one that the compile already makes.
+
+### What is left on this ticket
+
+The widget/option subset is broad but not proven complete against a real
+application — the honest remaining question is songformatter's own surface
+(`tkinter.font` metrics `descent`/`measure`, `Canvas.create_text` anchoring,
+`Notebook`, `PanedWindow`), which this ticket lists and which the examples above
+only partly touch. That is now measurable, because there is finally a harness
+that runs.

@@ -1,0 +1,4 @@
+widget paths: .w1 .w1.w2
+item id: 1
+canvas width: 1
+var: abc
