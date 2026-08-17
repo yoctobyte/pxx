@@ -3,7 +3,7 @@ track: N
 prio: 55
 type: bug
 blocked-by: []
-summary: "`from .inner import X` where `inner` is a DIRECTORY with its own `__init__.py` fails with `no unit named inner`. A sub-MODULE (`inner.py`) resolves fine, so it is sub-PACKAGE resolution that is missing. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung."
+summary: "`from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung."
 ---
 
 # A subpackage DIRECTORY does not resolve as a module
@@ -54,7 +54,36 @@ one library up. Nothing in the fetched corpora is deeper than two levels.
 Not urgent for `webencodings`, which is why it is filed rather than fixed: that
 library is flat, and its remaining wall is `codecs.CodecInfo` (Track B).
 
-## Scope note
+## NARROWED, same day — the ABSOLUTE dotted form already works
+
+Measured at `f5d1aac37`, and it shrinks this ticket considerably. The scope note
+below guessed that `PyConsumeDottedModule` might already handle it. It does:
+
+| spelling | result |
+| --- | --- |
+| `from pkg.inner import IN` (absolute dotted, `inner/` a DIRECTORY) | **works** — `42` |
+| `from pkg.mod import X` (absolute dotted, a plain module — control) | works |
+| `from .inner import IN` (relative, same directory) | `no unit named inner` |
+
+And note what the working case proves: the subpackage's OWN `from .mod import X`
+inside `inner/__init__.py` resolves fine. So directory-as-module resolution is
+**not missing** — the whole mechanism is there and reachable.
+
+So the title overstates it. The defect is that the RELATIVE spelling hands the
+bare name `inner` to the resolver with no package prefix, where the absolute
+spelling hands it the underscore-joined `pkg_inner` the resolver wants. Two
+spellings of one import producing different names for the same unit — the
+`normalise-dont-special-case.md` shape, and the narrow fix is to make the
+relative form compose its level with the current package and then join the
+absolute path, rather than teaching the resolver anything new.
+
+That is also what [[bug-n-relative-import-from-a-package-is-not-parsed]]'s own
+scope notes predicted the shape would be ("translate a level-N relative name to
+the absolute one before handing it to the existing resolver"). The one-level
+case worked without that translation only because a sibling MODULE's bare name
+happens to already be the right unit name; a subpackage's is not.
+
+## Scope note (superseded by the measurement above, kept for the reasoning)
 
 Check both spellings when fixing, since they are separate call paths on today's
 evidence: `from .inner import X` (relative) and `from pkg.inner import X`
