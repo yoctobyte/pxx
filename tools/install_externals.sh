@@ -32,7 +32,22 @@ SYNAPSE_DIR="$EXTERNAL_DIR/synapse"
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# Refuse to run unless external/ is ignored — keeps fetched source out of the
+# repo. git check-ignore exits 0 when the path IS ignored. Deliberately the
+# SAME mechanism as guard_ignored() in tools/install_lib_candidates.sh, not a
+# variant: one concept, one shape. Without it the invariant was only asserted
+# in prose (a PROVENANCE.md line claiming "gitignored, never committed" —
+# written into the very tree it makes the claim about), so an edit to
+# .gitignore would silently turn the next fetch into vendor source staged for
+# commit rather than a refusal.
+guard_ignored() {
+  if ! git -C "$ROOT" check-ignore -q "$EXTERNAL_DIR/"; then
+    die "external/ is NOT gitignored — refusing to fetch (would risk committing third-party source). Add 'external/' to .gitignore first."
+  fi
+}
+
 command -v git >/dev/null 2>&1 || die "git required"
+guard_ignored
 mkdir -p "$EXTERNAL_DIR"
 
 # Shallow-fetch exactly one commit, with no .git left behind: the tree is a

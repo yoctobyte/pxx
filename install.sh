@@ -128,7 +128,12 @@ fi
 # ---------------------------------------------------------------------------
 say "external libraries"
 if [ "$(ask 'Fetch & configure Synapse (networking: HTTP/FTP/SMTP, blocking clients)?' n)" = y ]; then
-  "$ROOT/tools/install_externals.sh" || note "synapse fetch failed (network?) — skipped"
+  # Do not name a cause here. The fetcher fails for at least two reasons that
+  # want different responses -- no network, or its gitignore guard refusing --
+  # and it prints the actual reason to stderr immediately above this line.
+  # Guessing "network?" over a guard refusal sends a first-time installer to
+  # debug their connection over a one-line .gitignore fix.
+  "$ROOT/tools/install_externals.sh" || note "synapse fetch failed (reason above) — skipped"
   if [ -d "$ROOT/external/synapse" ]; then
     # Per-library compile profile. Synapse expects an FPC dialect; PXX compiles it
     # with --mimic-fpc and the synapse dir on the search path. Recorded here so the
