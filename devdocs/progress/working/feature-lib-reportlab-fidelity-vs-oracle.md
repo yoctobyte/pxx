@@ -3,6 +3,8 @@ summary: "The reportlab mimic produces a VALID PDF, never one shown to agree wit
 type: feature
 track: B
 prio: 45
+status: working
+owner: frank3
 ---
 
 # reportlab mimic: fidelity against the real oracle
