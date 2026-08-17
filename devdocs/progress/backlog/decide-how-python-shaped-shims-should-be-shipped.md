@@ -1,10 +1,20 @@
 ---
 track: U
-prio: 45
+prio: 70
 type: decide
 blocked-by: []
 summary: "A shim whose content is Python-level aliases (six: `text_type = str`) cannot be written in the mimic_<name>.pas slot, and the working alternative — a NilPy .py in a library root — silently defeats --no-shims. Three options, recommendation is to let the shim lookup also probe mimic_<name>.py."
 ---
+
+> **RAISED 45 -> 70 (coordinator, 2026-08-17): this is now the critical path for
+> the NilPy corpus campaign.** Track N measured the 58-file ladder at HEAD and the
+> walls are not frontend bugs — they are missing modules: **`six` alone gates 15
+> of 58 files**, webencodings-as-a-unit 7, `xml_dom` 3, `warnings` 3. Three
+> independent measurements now say the same thing: **Track N is not the
+> bottleneck; the shims are.** Three N fixes landed today and the compile count
+> did not move (4 on pinned, 4 at HEAD) — they moved walls deeper rather than
+> past. So nobody can build the shims until this decision lands, and the campaign
+> that the week's theme rests on is waiting on one answer.
 
 # How should a Python-SHAPED shim be shipped?
 
