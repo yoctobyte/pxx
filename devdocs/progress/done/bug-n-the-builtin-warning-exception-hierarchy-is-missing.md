@@ -148,4 +148,4 @@ half of [[feature-nilpy-six-and-warnings-shims]] and is now genuinely writable,
 which it was not this morning.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 45add5588.
