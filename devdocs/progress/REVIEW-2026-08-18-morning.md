@@ -72,6 +72,41 @@ Infrastructure:
 - A wiring checker found **98 test files that no build rule ran**. The ten that
   shipped alongside fixes in the last two days are now wired; the rest are triaged.
 
+## A second bug you may want to look at yourself
+
+`bug-n-a-class-only-module-reads-every-class-attribute-as-zero` (N, p60). Found by
+Track B *while measuring whether to build a shim*, and **reproduced independently
+here** on a fresh build:
+
+    nodemod.py:  class Node: ELEMENT_NODE = 1; TEXT_NODE = 3; DOCUMENT_NODE = 9
+    main.npy:    from nodemod import Node; print(...)
+
+    CPython -> 1 3 9
+    pxx     -> 0 0 0
+
+A module whose body is *nothing but a class* reads every class attribute back as
+zero. Silent, no diagnostic, correct-looking output.
+
+**Why it matters beyond one shim.** A `mimic_xml_dom.py` would have been ~20 lines,
+spec-exact, and complete — `xml.dom.Node` is 12 integer constants and no methods.
+It would have compiled, imported cleanly, and made every `nodeType` comparison in
+html5lib's treewalkers `0 == 0`, so every node takes the first branch and the walker
+emits structurally wrong output with no error anywhere.
+
+That sharpens the rule I gave the worker. I said an overnight *half*-shim looks
+present and fails deep inside a caller. The truth is worse: **a complete, spec-exact
+shim on a broken substrate does it too.** Completeness is not the protection;
+measuring before coding is.
+
+**Caveat, and it may be mine:** the ticket records that *any* module-level statement
+in the file avoids the bug, and that our existing `.py` shims escape by accident
+because they happen to carry module-level assignments. **That row did not reproduce
+here** — I prepended `_x = 0` and still got `0 0 0`. Either my control is wrong, or
+the condition is narrower than stated, or `mimic_six` and `mimic_warnings` escape
+for a different reason — and if it is the third, those two shims are closer to
+silently reading zero than the ticket claims. Sent back for re-measurement; do not
+rely on that row until it is settled.
+
 ## One bug you may want to look at yourself
 
 `bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken`
@@ -301,6 +336,19 @@ Net for the night: my errors were four, all of the same shape as the compiler bu
 we were fixing. Both workers caught the two that would have cost real time. That
 arrangement worked — but it worked because there were two of them awake, and it is
 the honest input to how much of this should run unattended.
+
+## A measurement rule worth keeping
+
+**A ladder row counts transitive victims, not importers.** Three corpus files import
+`xml.dom`; a fourth inherits it through `from . import base`. Both numbers are
+correct, and only the table answers "how many files does fixing this unblock" — a
+source grep would have under-scoped the row.
+
+The companion result: `xml_dom` turned out to be a row *in front of* a wall rather
+than a wall. All four files clear it and land immediately on `digits` or `weakref`,
+so its net unblock is **zero**. That is a measurement that stopped work rather than
+starting it, and it was only visible by writing the shim to scratch and re-running
+the ladder.
 
 ## Housekeeping for the morning (not done overnight, deliberately)
 
