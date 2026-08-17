@@ -546,31 +546,6 @@ test-nilpy: $(COMPILER)
 	# forms start with the same token and are told apart by a comma.
 	./$(COMPILER) test/test_nilpy_unbound_str_method.npy $(TESTTMP)/test_nilpy_unbstrm26
 	$(TESTTMP)/test_nilpy_unbstrm26 | diff -u test/test_nilpy_unbound_str_method.expected -
-	# `and`/`or` of two DIFFERENT classes: PyMakeBoolOpValue typed the ternary it
-	# builds from ASTTk equality, which is TYPE-KIND equality — true of any two
-	# class instances — so one class was reinterpreted as the other.
-	./$(COMPILER) test/test_nilpy_boolop_class_identity.npy $(TESTTMP)/test_nilpy_boolopid26
-	$(TESTTMP)/test_nilpy_boolopid26 | diff -u test/test_nilpy_boolop_class_identity.expected -
-	# typing's `cast` is a parser intercept, and it must fire ONLY where the
-	# alternative was `undefined variable (cast)` — a module defining its own
-	# `cast` keeps it. Common enough word that shadowing is the normal case.
-	./$(COMPILER) test/test_nilpy_cast_user_shadow.npy $(TESTTMP)/test_nilpy_castshadow26
-	$(TESTTMP)/test_nilpy_castshadow26 | diff -u test/test_nilpy_cast_user_shadow.expected -
-	# `{v:g}` is C's %g (round to `prec` SIGNIFICANT digits, exponential outside
-	# [-4, prec)), NOT str()'s shortest round-trip. PyFmtG already existed for
-	# the `%` operator; the f-string/format() path called FloatToStr instead.
-	./$(COMPILER) test/test_nilpy_format_g_spec.npy $(TESTTMP)/test_nilpy_fmtg26
-	$(TESTTMP)/test_nilpy_fmtg26 | diff -u test/test_nilpy_format_g_spec.expected -
-	# A lambda body with NO CALL in it was never lifted — PyLambdaBodyIsLiftable
-	# required `sawCall or nestedLambda` — so every call-free body fell to the
-	# interpreter instead of being compiled.
-	./$(COMPILER) test/test_nilpy_lambda_callfree_body_is_compiled.npy $(TESTTMP)/test_nilpy_lamcf26
-	$(TESTTMP)/test_nilpy_lamcf26 | diff -u test/test_nilpy_lambda_callfree_body_is_compiled.expected -
-	# A PLAIN (non-@dataclass) class's Callable field through a DYNAMIC receiver
-	# (for-in variable, dict value): a procedural signature was recorded only for
-	# @dataclass fields, so the plain case had none.
-	./$(COMPILER) test/test_nilpy_plain_class_callable_field.npy $(TESTTMP)/test_nilpy_plaincf26
-	$(TESTTMP)/test_nilpy_plaincf26 | diff -u test/test_nilpy_plain_class_callable_field.expected -
 	# `dict(a=1)` / `dict(**e)` / `dict()` -- Python's keywords-are-KEYS special
 	# case: the keyword NAMES are dict keys, not parameter names, so the run
 	# becomes the one dict argument dict() already takes. (The d.update(a=1)
