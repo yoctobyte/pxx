@@ -145,4 +145,4 @@ the order matters, see `030ce07ea`, where whichever spelling lost the race was t
 one that broke.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 546c03e02.
