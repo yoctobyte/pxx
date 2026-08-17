@@ -271,7 +271,17 @@ So a release message always carries:
   three sites, the pre-clear session found two, and "the handlers must be taught
   first" explained the failure just as well as "there is a third site" did.
   Re-measuring took minutes. So: inherit facts, re-derive conclusions, and when
-  banking a conclusion say what it rests on. The summary is what compaction preserved and it is the least
+  banking a conclusion say what it rests on.
+
+  **Sharpened 2026-08-17 by Track B, after the fourth stale premise of the day:**
+  *a ticket's CAUSE section ages faster than its SYMPTOM section.* Every symptom
+  reported today reproduced exactly; four diagnoses did not survive contact. The
+  worked example is the strtofloat ticket — it blamed "a 63-step bit-pattern
+  search", instrumentation measured **4.1** comparisons, and the real cost was a
+  quadratic string build inside one step. Acting on the recorded cause would have
+  optimised a term that was not the problem, and it would have helped *slightly*,
+  which is the worst outcome because it reads as confirmation.
+  So: treat the symptom as durable, re-measure the cause before acting on it. The summary is what compaction preserved and it is the least
   trustworthy thing you now hold.
 - **Re-establish the baseline by running it**, not by recalling it. Whatever you
   "know" passes or fails, measure once before building on it.
